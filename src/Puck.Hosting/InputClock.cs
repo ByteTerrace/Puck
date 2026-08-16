@@ -16,8 +16,8 @@ namespace Puck.Hosting;
 /// whole seconds from the sub-second remainder.
 /// </remarks>
 public sealed class InputClock : IInputClock {
-    private readonly long m_originTimestamp;
     private readonly ulong m_frequency;
+    private readonly long m_originTimestamp;
 
     private InputClock(long originTimestamp, ulong frequency) {
         m_frequency = frequency;
@@ -27,14 +27,13 @@ public sealed class InputClock : IInputClock {
     /// <summary>Starts a clock whose origin is the current instant.</summary>
     public static InputClock Start() {
         return new InputClock(
-            frequency: (ulong)Stopwatch.Frequency,
+            frequency: ((ulong)Stopwatch.Frequency),
             originTimestamp: Stopwatch.GetTimestamp()
         );
     }
 
     /// <summary>The Stopwatch frequency this clock scales from, exposed so a backend can build an <see cref="OsTimeCorrelator"/>.</summary>
     public ulong Frequency => m_frequency;
-
     /// <inheritdoc/>
     public ulong NowTicks {
         get {

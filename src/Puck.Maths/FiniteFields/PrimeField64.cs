@@ -48,6 +48,66 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         Modulus = modulus;
     }
 
+    /// <summary>Prints the descriptor's one datum, the modulus.</summary>
+    /// <param name="builder">The builder the record's <c>ToString</c> assembles into.</param>
+    /// <returns><see langword="true"/>, because a member was written.</returns>
+    /// <remarks>Hand-written because the compiler-synthesized body walks every public readable instance property — the guarded identities <see cref="One"/> and <see cref="Zero"/> included — which would make <c>ToString</c> throw on the default value this type promises stays printable, and would render two constants as if they were carried state.</remarks>
+    private bool PrintMembers(StringBuilder builder) {
+        builder.Append(value: "Modulus = ");
+        builder.Append(value: Modulus);
+
+        return true;
+    }
+    /// <summary>Refuses a default-initialized descriptor, which names no field at all.</summary>
+    /// <remarks>The throw itself sits behind a non-inlined helper so the guard an operation carries is one never-taken compare and branch, and the aggressively inlined bodies of <see cref="Add(ulong, ulong)"/>, <see cref="Subtract(ulong, ulong)"/>, <see cref="Negate(ulong)"/>, <see cref="Multiply(ulong, ulong)"/> and <see cref="Reduce(ulong)"/> do not grow a throw path.</remarks>
+    /// <exception cref="InvalidOperationException">The field is default-initialized.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ThrowIfUninitialized() {
+        // Every constructed field has an odd prime modulus, so zero is exactly the uninitialized state; the private
+        // constructor is reachable no other way.
+        if (0UL == Modulus) { ThrowUninitialized(); }
+    }
+    /// <summary>Throws the uninitialized-descriptor diagnosis.</summary>
+    /// <exception cref="InvalidOperationException">Always.</exception>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowUninitialized() =>
+        throw new InvalidOperationException(message: "The prime field is default-initialized; construct it with PrimeField64.Create before using it.");
+
+    /// <summary>Adds two field elements.</summary>
+    /// <param name="left">The first reduced addend.</param>
+    /// <param name="right">The second reduced addend.</param>
+    /// <returns>The reduced sum.</returns>
+    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ulong Add(ulong left, ulong right) {
+        ThrowIfUninitialized();
+
+        var sum = (left + right);
+
+        return ((sum >= Modulus)
+            ? (sum - Modulus)
+            : sum
+        );
+    }
+    /// <summary>Inverts every element of a region in place through a single field inversion.</summary>
+    /// <param name="values">The reduced, non-zero elements to invert; each is overwritten with its inverse.</param>
+    /// <remarks>
+    /// The running-product method: a forward pass accumulates the partial products <c>a_0, a_0 a_1, ...</c>, one
+    /// inversion turns the whole product over, and a backward pass peels each element off that inverse. The cost is one
+    /// inversion plus about three multiplications per element, replacing the <c>n</c> inversions the naive loop would
+    /// perform. The partial-product scratch is stack-allocated for small batches and pooled for large ones, so nothing
+    /// is allocated on the managed heap; a pooled scratch is cleared of the caller-derived partial products before it
+    /// returns to the shared pool.
+    /// </remarks>
+    /// <exception cref="DivideByZeroException">Any element is zero; the shared product is then zero and has no inverse.</exception>
+    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field. The descriptor is read before the span is, so an EMPTY batch is refused too.</exception>
+    public void BatchInverse(Span<ulong> values) {
+        ThrowIfUninitialized();
+        BatchInverseKernel.Invert(
+            ring: this,
+            values: values
+        );
+    }
     /// <summary>Creates the prime field <c>F_<paramref name="modulus"/></c>.</summary>
     /// <param name="modulus">The field's modulus, which must be an odd prime below <see cref="MaximumModulus"/>.</param>
     /// <returns>The described field.</returns>
@@ -62,19 +122,44 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is at or above <see cref="MaximumModulus"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="modulus"/> is even or composite, so the quotient ring is not a field.</exception>
     public static PrimeField64 Create(ulong modulus) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: modulus, other: MaximumModulus);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: modulus,
+            other: MaximumModulus
+        );
 
         // The mask yields zero or one, so the even case is the zero one. Comparing it against two never fired, which let
         // Create(2) through: an even modulus reaches arithmetic that assumes an odd one, where the non-residue walk in
         // TrySqrt does not terminate.
         if (0UL == (modulus & 1UL)) {
-            throw new ArgumentException(message: "The modulus must be an odd prime; two is served by BinaryField.", paramName: nameof(modulus));
+            throw new ArgumentException(
+                message: "The modulus must be an odd prime; two is served by BinaryField.",
+                paramName: nameof(modulus)
+            );
         }
         if (!IsPrime(value: modulus)) {
-            throw new ArgumentException(message: "The modulus must be prime; a composite modulus does not yield a field.", paramName: nameof(modulus));
+            throw new ArgumentException(
+                message: "The modulus must be prime; a composite modulus does not yield a field.",
+                paramName: nameof(modulus)
+            );
         }
 
         return new PrimeField64(modulus: modulus);
+    }
+    /// <summary>Computes the multiplicative inverse of a non-zero field element.</summary>
+    /// <param name="value">The reduced, non-zero element to invert.</param>
+    /// <returns>The unique element whose product with <paramref name="value"/> is <see cref="One"/>.</returns>
+    /// <remarks>The inverse is <c>value^(p - 2)</c>, evaluated by square-and-multiply. The operand must already be reduced; the precondition is not enforced.</remarks>
+    /// <exception cref="DivideByZeroException"><paramref name="value"/> is zero.</exception>
+    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
+    public ulong Inverse(ulong value) {
+        ThrowIfUninitialized();
+
+        if (0UL == value) { throw new DivideByZeroException(message: "Zero has no multiplicative inverse."); }
+
+        return Pow(
+            value: value,
+            exponent: (Modulus - 2UL)
+        );
     }
     /// <summary>Returns a value indicating whether <paramref name="value"/> passes the Baillie–Pomerance–Selfridge–Wagstaff probable-prime test.</summary>
     /// <param name="value">The value to test.</param>
@@ -106,7 +191,10 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     /// </para>
     /// </remarks>
     public static bool IsBaillieProbablePrime(ulong value) =>
-        (IsStrongProbablePrime(value: value, witness: 2UL) && IsStrongLucasProbablePrime(value: value));
+        (IsStrongProbablePrime(
+            value: value,
+            witness: 2UL
+        ) && IsStrongLucasProbablePrime(value: value));
     /// <summary>Returns a value indicating whether <paramref name="value"/> is prime, deciding the question exactly for every <see cref="ulong"/>.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is prime; otherwise <see langword="false"/>.</returns>
@@ -141,14 +229,23 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
             if (0UL == residue) { continue; }
 
-            var power = ring.Power(value: ring.Encode(value: residue), exponent: oddPart);
+            var power = ring.Power(
+                value: ring.Encode(value: residue),
+                exponent: oddPart
+            );
 
-            if ((one == power) || (negativeOne == power)) { continue; }
+            if (
+                (one == power) ||
+                (negativeOne == power)
+            ) { continue; }
 
             var composite = true;
 
             for (var round = 1; (round < twoExponent); ++round) {
-                power = ring.Multiply(left: power, right: power);
+                power = ring.Multiply(
+                    left: power,
+                    right: power
+                );
 
                 if (negativeOne == power) {
                     composite = false;
@@ -224,14 +321,18 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
             // congruent to one modulo four.
             discriminantResidue = (((3UL == (discriminantMagnitude & 3UL)) && (0UL != magnitudeResidue))
                 ? (value - magnitudeResidue)
-                : magnitudeResidue);
+                : magnitudeResidue
+            );
 
             var symbol = discriminantResidue.JacobiSymbol(modulus: value);
 
             if (-1 == symbol) { break; }
             // A vanishing symbol means the value shares a factor with the candidate. That factor is a proper divisor —
             // so the value is composite — unless the value divides the candidate, which leaves the search uninformed.
-            if ((0 == symbol) && (0UL != magnitudeResidue)) { return false; }
+            if (
+                (0 == symbol) &&
+                (0UL != magnitudeResidue)
+            ) { return false; }
 
             discriminantMagnitude += 2UL;
         }
@@ -240,9 +341,16 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         var ring = new ScaledResidueRing64(modulus: value);
         // Q = (1 - D) / 4: the division is exact in either sign class, and Encode folds an argument that is not yet
         // reduced, so the magnitude goes in as it stands and the negation happens in the ring.
-        var q = ring.Encode(value: ((isNegativeDiscriminant ? (discriminantMagnitude + 1UL) : (discriminantMagnitude - 1UL)) >>> 2));
+        var q = ring.Encode(value: ((isNegativeDiscriminant
+            ? (discriminantMagnitude + 1UL)
+            : (discriminantMagnitude - 1UL)) >>> 2));
 
-        if (!isNegativeDiscriminant) { q = ring.Subtract(left: 0UL, right: q); }
+        if (!isNegativeDiscriminant) {
+            q = ring.Subtract(
+                left: 0UL,
+                right: q
+            );
+        }
 
         // The carrier cannot hold value + 1 at its own maximum. The narrow split is in fact indistinguishable there —
         // the wrapped order is zero, whose trailing-zero count is the full width and whose odd part is zero, so the
@@ -258,31 +366,73 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         var v = one; // V_1 = P
 
         for (var bit = (BitOperations.Log2(value: oddPart) - 1); (bit >= 0); --bit) {
-            var doubledU = ring.Multiply(left: u, right: v);
+            var doubledU = ring.Multiply(
+                left: u,
+                right: v
+            );
 
-            v = ring.Subtract(left: ring.Multiply(left: v, right: v), right: ring.Add(left: qPower, right: qPower));
+            v = ring.Subtract(
+                left: ring.Multiply(
+                    left: v,
+                    right: v
+                ),
+                right: ring.Add(
+                    left: qPower,
+                    right: qPower
+                )
+            );
             u = doubledU;
-            qPower = ring.Multiply(left: qPower, right: qPower);
+            qPower = ring.Multiply(
+                left: qPower,
+                right: qPower
+            );
 
             if (0UL != ((oddPart >>> bit) & 1UL)) {
-                var incrementedU = ring.Halve(value: ring.Add(left: u, right: v));
+                var incrementedU = ring.Halve(value: ring.Add(
+                    left: u,
+                    right: v
+                ));
 
-                v = ring.Halve(value: ring.Add(left: ring.Multiply(left: discriminant, right: u), right: v));
+                v = ring.Halve(value: ring.Add(
+                    left: ring.Multiply(
+                        left: discriminant,
+                        right: u
+                    ),
+                    right: v
+                ));
                 u = incrementedU;
-                qPower = ring.Multiply(left: qPower, right: q);
+                qPower = ring.Multiply(
+                    left: qPower,
+                    right: q
+                );
             }
         }
 
-        if ((0UL == u) || (0UL == v)) { return true; }
+        if (
+            (0UL == u) ||
+            (0UL == v)
+        ) { return true; }
 
         // The remaining acceptances are the V terms at the doubled indices d * 2^r; each doubling consumes the current
         // Q^(d * 2^r) before squaring it for the next.
         for (var round = 1; (round < twoExponent); ++round) {
-            v = ring.Subtract(left: ring.Multiply(left: v, right: v), right: ring.Add(left: qPower, right: qPower));
+            v = ring.Subtract(
+                left: ring.Multiply(
+                    left: v,
+                    right: v
+                ),
+                right: ring.Add(
+                    left: qPower,
+                    right: qPower
+                )
+            );
 
             if (0UL == v) { return true; }
 
-            qPower = ring.Multiply(left: qPower, right: qPower);
+            qPower = ring.Multiply(
+                left: qPower,
+                right: qPower
+            );
         }
 
         return false;
@@ -315,81 +465,26 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         var ring = new ScaledResidueRing64(modulus: value);
         var negativeOne = ring.NegativeOne;
-        var power = ring.Power(value: ring.Encode(value: residue), exponent: oddPart);
+        var power = ring.Power(
+            value: ring.Encode(value: residue),
+            exponent: oddPart
+        );
 
-        if ((ring.One == power) || (negativeOne == power)) { return true; }
+        if (
+            (ring.One == power) ||
+            (negativeOne == power)
+        ) { return true; }
 
         for (var round = 1; (round < twoExponent); ++round) {
-            power = ring.Multiply(left: power, right: power);
+            power = ring.Multiply(
+                left: power,
+                right: power
+            );
 
             if (negativeOne == power) { return true; }
         }
 
         return false;
-    }
-
-    /// <summary>Gets the field's modulus, so that the field has <c>Modulus</c> elements.</summary>
-    public ulong Modulus { get; }
-    /// <summary>Gets the multiplicative identity.</summary>
-    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
-    public ulong One {
-        get {
-            ThrowIfUninitialized();
-
-            return 1UL;
-        }
-    }
-    /// <summary>Gets the additive identity.</summary>
-    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
-    public ulong Zero {
-        get {
-            ThrowIfUninitialized();
-
-            return 0UL;
-        }
-    }
-
-    /// <summary>Adds two field elements.</summary>
-    /// <param name="left">The first reduced addend.</param>
-    /// <param name="right">The second reduced addend.</param>
-    /// <returns>The reduced sum.</returns>
-    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ulong Add(ulong left, ulong right) {
-        ThrowIfUninitialized();
-
-        var sum = (left + right);
-
-        return ((sum >= Modulus) ? (sum - Modulus) : sum);
-    }
-    /// <summary>Inverts every element of a region in place through a single field inversion.</summary>
-    /// <param name="values">The reduced, non-zero elements to invert; each is overwritten with its inverse.</param>
-    /// <remarks>
-    /// The running-product method: a forward pass accumulates the partial products <c>a_0, a_0 a_1, ...</c>, one
-    /// inversion turns the whole product over, and a backward pass peels each element off that inverse. The cost is one
-    /// inversion plus about three multiplications per element, replacing the <c>n</c> inversions the naive loop would
-    /// perform. The partial-product scratch is stack-allocated for small batches and pooled for large ones, so nothing
-    /// is allocated on the managed heap; a pooled scratch is cleared of the caller-derived partial products before it
-    /// returns to the shared pool.
-    /// </remarks>
-    /// <exception cref="DivideByZeroException">Any element is zero; the shared product is then zero and has no inverse.</exception>
-    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field. The descriptor is read before the span is, so an EMPTY batch is refused too.</exception>
-    public void BatchInverse(Span<ulong> values) {
-        ThrowIfUninitialized();
-        BatchInverseKernel.Invert(ring: this, values: values);
-    }
-    /// <summary>Computes the multiplicative inverse of a non-zero field element.</summary>
-    /// <param name="value">The reduced, non-zero element to invert.</param>
-    /// <returns>The unique element whose product with <paramref name="value"/> is <see cref="One"/>.</returns>
-    /// <remarks>The inverse is <c>value^(p - 2)</c>, evaluated by square-and-multiply. The operand must already be reduced; the precondition is not enforced.</remarks>
-    /// <exception cref="DivideByZeroException"><paramref name="value"/> is zero.</exception>
-    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
-    public ulong Inverse(ulong value) {
-        ThrowIfUninitialized();
-
-        if (0UL == value) { throw new DivideByZeroException(message: "Zero has no multiplicative inverse."); }
-
-        return Pow(value: value, exponent: (Modulus - 2UL));
     }
     /// <summary>Computes the quadratic character of a field element by the exponentiation criterion.</summary>
     /// <param name="value">The reduced element to test.</param>
@@ -401,9 +496,15 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         if (0UL == value) { return 0; }
 
-        var power = Pow(value: value, exponent: ((Modulus - 1UL) >>> 1));
+        var power = Pow(
+            value: value,
+            exponent: ((Modulus - 1UL) >>> 1)
+        );
 
-        return ((1UL == power) ? 1 : -1);
+        return ((1UL == power)
+            ? 1
+            : -1
+        );
     }
     /// <summary>Multiplies two field elements.</summary>
     /// <param name="left">The first reduced factor.</param>
@@ -429,7 +530,10 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     public ulong Negate(ulong value) {
         ThrowIfUninitialized();
 
-        return ((0UL == value) ? 0UL : (Modulus - value));
+        return ((0UL == value)
+            ? 0UL
+            : (Modulus - value)
+        );
     }
     /// <summary>Raises a field element to a power.</summary>
     /// <param name="value">The reduced element to raise.</param>
@@ -447,7 +551,10 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         var ring = new ScaledResidueRing64(modulus: Modulus);
 
-        return ring.Decode(value: ring.Power(value: ring.Encode(value: value), exponent: exponent));
+        return ring.Decode(value: ring.Power(
+            value: ring.Encode(value: value),
+            exponent: exponent
+        ));
     }
     /// <summary>Reduces an arbitrary unsigned value into the field.</summary>
     /// <param name="value">The value to reduce.</param>
@@ -468,7 +575,10 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         var folded = (value % ((long)Modulus));
 
-        return ((folded < 0L) ? ((ulong)(folded + ((long)Modulus))) : ((ulong)folded));
+        return ((folded < 0L)
+            ? ((ulong)(folded + ((long)Modulus)))
+            : ((ulong)folded)
+        );
     }
     /// <summary>Subtracts one field element from another.</summary>
     /// <param name="left">The reduced minuend.</param>
@@ -479,7 +589,10 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
     public ulong Subtract(ulong left, ulong right) {
         ThrowIfUninitialized();
 
-        return ((left >= right) ? (left - right) : ((left + Modulus) - right));
+        return ((left >= right)
+            ? (left - right)
+            : ((left + Modulus) - right)
+        );
     }
     /// <summary>Attempts to compute a square root of a field element.</summary>
     /// <param name="value">The reduced element to take the root of.</param>
@@ -518,7 +631,10 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         var subject = ring.Encode(value: value);
         var halfOrder = ((Modulus - 1UL) >>> 1);
 
-        if (one != ring.Power(value: subject, exponent: halfOrder)) {
+        if (one != ring.Power(
+            exponent: halfOrder,
+            value: subject
+        )) {
             root = 0UL;
 
             return false;
@@ -526,7 +642,10 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
 
         // p ≡ 3 (mod 4): the root is a single power, with no descent needed.
         if (3UL == (Modulus & 3UL)) {
-            root = ring.Decode(value: ring.Power(value: subject, exponent: ((Modulus + 1UL) >>> 2)));
+            root = ring.Decode(value: ring.Power(
+                value: subject,
+                exponent: ((Modulus + 1UL) >>> 2)
+            ));
 
             return true;
         }
@@ -540,11 +659,23 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         var negativeOne = ring.NegativeOne;
         var nonResidue = 2UL;
 
-        while (negativeOne != ring.Power(value: ring.Encode(value: nonResidue), exponent: halfOrder)) { ++nonResidue; }
+        while (negativeOne != ring.Power(
+            value: ring.Encode(value: nonResidue),
+            exponent: halfOrder
+        )) { ++nonResidue; }
 
-        var rootOfUnity = ring.Power(value: ring.Encode(value: nonResidue), exponent: oddPart);
-        var candidate = ring.Power(value: subject, exponent: ((oddPart + 1UL) >>> 1));
-        var residue = ring.Power(value: subject, exponent: oddPart);
+        var rootOfUnity = ring.Power(
+            value: ring.Encode(value: nonResidue),
+            exponent: oddPart
+        );
+        var candidate = ring.Power(
+            exponent: ((oddPart + 1UL) >>> 1),
+            value: subject
+        );
+        var residue = ring.Power(
+            exponent: oddPart,
+            value: subject
+        );
         var order = twoExponent;
 
         while (one != residue) {
@@ -552,17 +683,34 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
             var lowest = 0;
 
             while (one != squares) {
-                squares = ring.Multiply(left: squares, right: squares);
+                squares = ring.Multiply(
+                    left: squares,
+                    right: squares
+                );
                 ++lowest;
             }
 
             var lift = rootOfUnity;
 
-            for (var step = 0; (step < ((order - lowest) - 1)); ++step) { lift = ring.Multiply(left: lift, right: lift); }
+            for (var step = 0; (step < ((order - lowest) - 1)); ++step) {
+                lift = ring.Multiply(
+                    left: lift,
+                    right: lift
+                );
+            }
 
-            candidate = ring.Multiply(left: candidate, right: lift);
-            rootOfUnity = ring.Multiply(left: lift, right: lift);
-            residue = ring.Multiply(left: residue, right: rootOfUnity);
+            candidate = ring.Multiply(
+                left: candidate,
+                right: lift
+            );
+            rootOfUnity = ring.Multiply(
+                left: lift,
+                right: lift
+            );
+            residue = ring.Multiply(
+                left: residue,
+                right: rootOfUnity
+            );
             order = lowest;
         }
 
@@ -571,30 +719,24 @@ public readonly record struct PrimeField64 : IBatchInvertible<ulong> {
         return true;
     }
 
-    /// <summary>Prints the descriptor's one datum, the modulus.</summary>
-    /// <param name="builder">The builder the record's <c>ToString</c> assembles into.</param>
-    /// <returns><see langword="true"/>, because a member was written.</returns>
-    /// <remarks>Hand-written because the compiler-synthesized body walks every public readable instance property — the guarded identities <see cref="One"/> and <see cref="Zero"/> included — which would make <c>ToString</c> throw on the default value this type promises stays printable, and would render two constants as if they were carried state.</remarks>
-    private bool PrintMembers(StringBuilder builder) {
-        builder.Append(value: "Modulus = ");
-        builder.Append(value: Modulus);
+    /// <summary>Gets the field's modulus, so that the field has <c>Modulus</c> elements.</summary>
+    public ulong Modulus { get; }
+    /// <summary>Gets the multiplicative identity.</summary>
+    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
+    public ulong One {
+        get {
+            ThrowIfUninitialized();
 
-        return true;
+            return 1UL;
+        }
     }
-    /// <summary>Refuses a default-initialized descriptor, which names no field at all.</summary>
-    /// <remarks>The throw itself sits behind a non-inlined helper so the guard an operation carries is one never-taken compare and branch, and the aggressively inlined bodies of <see cref="Add(ulong, ulong)"/>, <see cref="Subtract(ulong, ulong)"/>, <see cref="Negate(ulong)"/>, <see cref="Multiply(ulong, ulong)"/> and <see cref="Reduce(ulong)"/> do not grow a throw path.</remarks>
-    /// <exception cref="InvalidOperationException">The field is default-initialized.</exception>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfUninitialized() {
-        // Every constructed field has an odd prime modulus, so zero is exactly the uninitialized state; the private
-        // constructor is reachable no other way.
-        if (0UL == Modulus) { ThrowUninitialized(); }
+    /// <summary>Gets the additive identity.</summary>
+    /// <exception cref="InvalidOperationException">The field is default-initialized and names no field.</exception>
+    public ulong Zero {
+        get {
+            ThrowIfUninitialized();
+
+            return 0UL;
+        }
     }
-    /// <summary>Throws the uninitialized-descriptor diagnosis.</summary>
-    /// <exception cref="InvalidOperationException">Always.</exception>
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ThrowUninitialized() =>
-        throw new InvalidOperationException(
-            message: "The prime field is default-initialized; construct it with PrimeField64.Create before using it."
-        );
 }

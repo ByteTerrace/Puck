@@ -97,55 +97,6 @@ internal static class AddonAbiRustPort {
         return sb.ToString();
     }
 
-    // Generic mirror for the addon ABI's plain byte-discriminant enums: every member emits as-is, in
-    // Enum.GetValues declaration order (already the ascending wire-value order for each of these types, so
-    // this is deterministic run-to-run without an extra sort).
-    private static void AppendByteEnum<TEnum>(StringBuilder sb, string csharpTypeName, string rustName) where TEnum : struct, Enum {
-        sb.Append(value: "/// Mirrors `Puck.Scripting.").Append(value: csharpTypeName).Append(value: "` (`src/Puck.Scripting/").Append(value: csharpTypeName).Append(value: ".cs`).\n");
-        sb.Append(value: "#[repr(u8)]\n");
-        sb.Append(value: "#[derive(Clone, Copy, Debug, Eq, PartialEq)]\n");
-        sb.Append(value: "pub enum ").Append(value: rustName).Append(value: " {\n");
-
-        foreach (var value in Enum.GetValues<TEnum>()) {
-            var name = value.ToString();
-            var raw = Convert.ToByte(
-                value: value,
-                provider: CultureInfo.InvariantCulture
-            );
-
-            sb.Append(value: "    /// `Puck.Scripting.").Append(value: csharpTypeName).Append(value: '.').Append(value: name).Append(value: "` (`").Append(value: raw).Append(value: "`).\n");
-            sb.Append(value: "    ").Append(value: name).Append(value: " = ").Append(value: raw).Append(value: ",\n");
-        }
-
-        sb.Append(value: "}\n\n");
-    }
-
-    // Generated FROM AddonVerdicts.IsAllowed by iterating the live enum, never hand-listed — the predicate
-    // moving in either language flows straight through the next regeneration.
-    private static void AppendVerdictIsAllowed(StringBuilder sb) {
-        var allowedNames = Enum.GetValues<AddonVerdict>()
-            .Where(predicate: static value => AddonVerdicts.IsAllowed(verdict: value))
-            .Select(selector: static value => value.ToString());
-
-        sb.Append(value: "impl Verdict {\n");
-        sb.Append(value: "    /// Mirrors `Puck.Scripting.AddonVerdicts.IsAllowed`, generated from the live predicate.\n");
-        sb.Append(value: "    pub fn is_allowed(self) -> bool {\n");
-        sb.Append(value: "        matches!(self, ").Append(value: string.Join(
-            separator: " | ",
-            values: allowedNames.Select(selector: static name => $"Verdict::{name}")
-        )).Append(value: ")\n");
-        sb.Append(value: "    }\n");
-        sb.Append(value: "}\n\n");
-    }
-    private static void AppendCapabilityMask(StringBuilder sb) {
-        AppendConstGroup(
-            comment: "`Puck.Scripting.AddonCapabilityMask` (`src/Puck.Scripting/AddonCapabilityMask.cs`) — the addon ABI's Ask capability-mask bit values.",
-            csharpTypeName: "AddonCapabilityMask",
-            rustPrefix: "CAP",
-            sb: sb,
-            type: typeof(AddonCapabilityMask)
-        );
-    }
     private static void AppendAbiConstants(StringBuilder sb) {
         AppendConstGroup(
             comment: "`Puck.Scripting.AddonAbi` constants (`src/Puck.Scripting/AddonAbi.cs`).",
@@ -190,7 +141,37 @@ internal static class AddonAbiRustPort {
             type: typeof(AddonAbi.ObservationVerbs)
         );
     }
+    // Generic mirror for the addon ABI's plain byte-discriminant enums: every member emits as-is, in
+    // Enum.GetValues declaration order (already the ascending wire-value order for each of these types, so
+    // this is deterministic run-to-run without an extra sort).
+    private static void AppendByteEnum<TEnum>(StringBuilder sb, string csharpTypeName, string rustName) where TEnum : struct, Enum {
+        sb.Append(value: "/// Mirrors `Puck.Scripting.").Append(value: csharpTypeName).Append(value: "` (`src/Puck.Scripting/").Append(value: csharpTypeName).Append(value: ".cs`).\n");
+        sb.Append(value: "#[repr(u8)]\n");
+        sb.Append(value: "#[derive(Clone, Copy, Debug, Eq, PartialEq)]\n");
+        sb.Append(value: "pub enum ").Append(value: rustName).Append(value: " {\n");
 
+        foreach (var value in Enum.GetValues<TEnum>()) {
+            var name = value.ToString();
+            var raw = Convert.ToByte(
+                value: value,
+                provider: CultureInfo.InvariantCulture
+            );
+
+            sb.Append(value: "    /// `Puck.Scripting.").Append(value: csharpTypeName).Append(value: '.').Append(value: name).Append(value: "` (`").Append(value: raw).Append(value: "`).\n");
+            sb.Append(value: "    ").Append(value: name).Append(value: " = ").Append(value: raw).Append(value: ",\n");
+        }
+
+        sb.Append(value: "}\n\n");
+    }
+    private static void AppendCapabilityMask(StringBuilder sb) {
+        AppendConstGroup(
+            comment: "`Puck.Scripting.AddonCapabilityMask` (`src/Puck.Scripting/AddonCapabilityMask.cs`) — the addon ABI's Ask capability-mask bit values.",
+            csharpTypeName: "AddonCapabilityMask",
+            rustPrefix: "CAP",
+            sb: sb,
+            type: typeof(AddonCapabilityMask)
+        );
+    }
     // Reflects every public const field declared directly on `type` (never a base member, never a nested
     // type's own fields) and emits one Rust `pub const` per field, sorted by name for a reflection-order-
     // independent, byte-identical-on-every-run result. `rustPrefix` (e.g. "CAP") is prepended to every emitted
@@ -224,7 +205,23 @@ internal static class AddonAbiRustPort {
 
         sb.Append(value: '\n');
     }
+    // Generated FROM AddonVerdicts.IsAllowed by iterating the live enum, never hand-listed — the predicate
+    // moving in either language flows straight through the next regeneration.
+    private static void AppendVerdictIsAllowed(StringBuilder sb) {
+        var allowedNames = Enum.GetValues<AddonVerdict>()
+            .Where(predicate: static value => AddonVerdicts.IsAllowed(verdict: value))
+            .Select(selector: static value => value.ToString());
 
+        sb.Append(value: "impl Verdict {\n");
+        sb.Append(value: "    /// Mirrors `Puck.Scripting.AddonVerdicts.IsAllowed`, generated from the live predicate.\n");
+        sb.Append(value: "    pub fn is_allowed(self) -> bool {\n");
+        sb.Append(value: "        matches!(self, ").Append(value: string.Join(
+            separator: " | ",
+            values: allowedNames.Select(selector: static name => $"Verdict::{name}")
+        )).Append(value: ")\n");
+        sb.Append(value: "    }\n");
+        sb.Append(value: "}\n\n");
+    }
     // `AddonAbi.AbiVersion` crosses the ABI as the `i32` every `puck_abi_version` export returns; `long`
     // constants (`DefaultFuelPerTick`/`One`) cross as `i64`; `ulong` constants (`AddonCapabilityMask`'s bits)
     // cross as `u64`; every other integral constant here is a byte count, offset, count, or cap, which this
@@ -248,7 +245,6 @@ internal static class AddonAbiRustPort {
 
         return "usize";
     }
-
     // PascalCase -> SCREAMING_SNAKE_CASE: an underscore before every uppercase letter that isn't the first
     // character, then uppercase the whole thing. "VerbTablePtr" -> "VERB_TABLE_PTR", "A" -> "A".
     private static string ToScreamingSnakeCase(string pascal) {

@@ -23,7 +23,6 @@ public sealed class PlanarImpulseUnitDirectionLawTests {
         Assert.Contains(expectedSubstring: "bodyDirection", actualString: reason, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "magnitude 5", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void UnitBodyDirectionValidates() {
         var control = DashDocument(bodyDirection: new Vector3(x: 0f, y: 0f, z: 1f));

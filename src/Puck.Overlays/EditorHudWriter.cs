@@ -12,19 +12,21 @@ namespace Puck.Overlays;
 /// fidelity.
 /// </summary>
 public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
+    private const float MinRegionExtent = 0.05f;
+    private const string Title = "EDITOR";
+
+    /// <summary>The character clamp on every readout line.</summary>
+    public const int MaxLineChars = 46;
     /// <summary>The readout lines one seat's strip draws: the selection, the context hint, the session-honesty line
     /// and the drag line.</summary>
     public const int MaxLines = 4;
-    /// <summary>The character clamp on every readout line.</summary>
-    public const int MaxLineChars = 46;
     /// <summary>The <see cref="Title"/> literal's character count — the ONE source <see cref="OverlayChannelLeases"/>
     /// reads for its text-word reservation. The <c>WriteText</c> call for <see cref="Title"/> clamps to this
     /// constant, so an edit to <see cref="Title"/> that forgets to update it truncates (reported, never silent)
     /// instead of quietly overrunning the reservation.</summary>
     public const int TitleChars = 6;
 
-    private const float MinRegionExtent = 0.05f;
-    private const string Title = "EDITOR";
+    private readonly IEditorHudSource m_source;
 
     static EditorHudWriter() {
         System.Diagnostics.Debug.Assert(
@@ -32,8 +34,6 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
             message: "EditorHudWriter.Title's length drifted from TitleChars — update TitleChars (and OverlayChannelLeases' EditorHudTextWordsPerSeat, which reads it) to match."
         );
     }
-
-    private readonly IEditorHudSource m_source;
 
     /// <summary>Initializes a new instance of the <see cref="EditorHudWriter"/> class.</summary>
     /// <param name="source">The editor-HUD snapshot source.</param>
@@ -44,27 +44,33 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
         m_source = source;
     }
 
-    /// <summary>Emits this frame's per-seat HUD panels, when a snapshot has been published.</summary>
-    /// <param name="builder">The frame builder.</param>
-    /// <exception cref="InvalidOperationException">The published frame carries more seats than
-    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
-    public void Emit(OverlayFrameBuilder builder) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
+    void IOverlaySeatEmitter<OverlayEditorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayEditorSeat seat) =>
+        EmitSeat(
+            builder: builder,
+            seat: in seat
+        );
 
-        if (!m_source.TrySnapshot(frame: out var frame)) {
-            return;
+    private static int CountPresent(string text) => ((text.Length > 0)
+        ? 1
+        : 0
+    );
+    private static float EmitLine(OverlayFrameBuilder builder, string text, OverlayColorRole role, float x, float y, int cellHeight, float lineStep) {
+        if (text.Length == 0) {
+            return y;
         }
 
-        var seats = frame.Seats.Span;
-
-        OverlaySeatLoop.Emit(
-            builder: builder,
-            seats: seats,
-            writerName: nameof(EditorHudWriter),
-            writer: this
+        builder.WriteText(
+            alpha: 1f,
+            cellHeight: cellHeight,
+            maxChars: MaxLineChars,
+            role: role,
+            text: text,
+            x: x,
+            y: y
         );
-    }
 
+        return (y + lineStep);
+    }
     // One seat's panel: sized to its longest line, anchored at the seat region's top-left with the standard gutter,
     // and CLIPPED to the region (a 46-char line can outgrow a narrow split viewport; the boundary wins).
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayEditorSeat seat) {
@@ -108,8 +114,8 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
             )
         );
         var panelWidth = ((DesignTokens.Space.Space3 * 2f) + builder.TextWidth(
-            chars: widestChars,
-            cellHeight: monoCell
+            cellHeight: monoCell,
+            chars: widestChars
         ));
         var bandHeight = (microCell + DesignTokens.Space.Space2);
         var panelHeight = ((bandHeight + DesignTokens.Space.Space2) + (lineCount * lineStep));
@@ -180,31 +186,24 @@ public sealed class EditorHudWriter : IOverlaySeatEmitter<OverlayEditorSeat> {
         builder.EndClip();
     }
 
-    void IOverlaySeatEmitter<OverlayEditorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayEditorSeat seat) =>
-        EmitSeat(
-            builder: builder,
-            seat: in seat
-        );
+    /// <summary>Emits this frame's per-seat HUD panels, when a snapshot has been published.</summary>
+    /// <param name="builder">The frame builder.</param>
+    /// <exception cref="InvalidOperationException">The published frame carries more seats than
+    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
+    public void Emit(OverlayFrameBuilder builder) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
 
-    private static float EmitLine(OverlayFrameBuilder builder, string text, OverlayColorRole role, float x, float y, int cellHeight, float lineStep) {
-        if (text.Length == 0) {
-            return y;
+        if (!m_source.TrySnapshot(frame: out var frame)) {
+            return;
         }
 
-        builder.WriteText(
-            alpha: 1f,
-            cellHeight: cellHeight,
-            maxChars: MaxLineChars,
-            role: role,
-            text: text,
-            x: x,
-            y: y
-        );
+        var seats = frame.Seats.Span;
 
-        return (y + lineStep);
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: seats,
+            writerName: nameof(EditorHudWriter),
+            writer: this
+        );
     }
-    private static int CountPresent(string text) => ((text.Length > 0)
-        ? 1
-        : 0
-    );
 }

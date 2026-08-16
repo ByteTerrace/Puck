@@ -4,8 +4,8 @@ namespace Puck.Maths;
 /// Converts a fixed-point duration in seconds to a whole count of engine ticks, rounding UP so a positive duration
 /// is never rounded away to zero ticks. Single-sourced here (rather than beside either caller) because both
 /// <c>Puck.World.Server.WorldBody</c> (the per-tick effect-duration consumer) and the world-document's kit-effect
-/// compile path (<c>Puck.World.WorldKit</c>'s <c>ActionEffect</c> compilation, in <c>Puck.World.Data</c>) need the
-/// IDENTICAL rounding rule, and Puck.World.Data must not reference Puck.World.Server — the two projects calling the
+/// compile path (<c>Puck.World.WorldKit</c>'s <c>ActionEffect</c> compilation, in <c>Puck.World.Schema</c>) need the
+/// IDENTICAL rounding rule, and Puck.World.Schema must not reference Puck.World.Server — the two projects calling the
 /// same Puck.Maths member is what dissolves that cycle, rather than one project reaching into the other for it.
 /// </summary>
 public static class FixedTickConversion {
@@ -27,11 +27,10 @@ public static class FixedTickConversion {
             return 0UL;
         }
 
-        var scaled = ((Int128)seconds.Value * TicksPerSecond);
+        var scaled = (((Int128)seconds.Value) * TicksPerSecond);
 
-        return checked((ulong)scaled.CeilingDivide(divisor: (Int128)(1L << FixedQ4816.FractionBitCount)));
+        return checked((ulong)scaled.CeilingDivide(divisor: ((Int128)(1L << FixedQ4816.FractionBitCount))));
     }
-
     /// <summary>Converts a duration to an EXACT whole engine-tick count — the non-rounding sibling of
     /// <see cref="DurationEngineTicks(FixedQ4816)"/>, for a caller that must REFUSE an inexact duration rather than
     /// silently round it. <paramref name="seconds"/> is <see cref="decimal"/> — base-10, exact for any terminating
@@ -59,8 +58,8 @@ public static class FixedTickConversion {
         }
 
         var bits = decimal.GetBits(d: seconds);
-        var scale = (int)(((uint)bits[3] >> 16) & 0xFFU);
-        var unscaled = (((UInt128)(uint)bits[2] << 64) | ((UInt128)(uint)bits[1] << 32) | (uint)bits[0]);
+        var scale = ((int)((((uint)bits[3]) >> 16) & 0xFFU));
+        var unscaled = (((UInt128)((uint)bits[2])) << 64) | (((UInt128)((uint)bits[1])) << 32) | ((uint)bits[0]);
         var denominator = UInt128.One;
 
         for (var index = 0; (index < scale); index++) {
@@ -71,13 +70,16 @@ public static class FixedTickConversion {
         var numerator = (unscaled * TicksPerSecond);
         var wholeTicks = (numerator / denominator);
 
-        if (((numerator % denominator) != UInt128.Zero) || (wholeTicks > ulong.MaxValue)) {
+        if (
+            ((numerator % denominator) != UInt128.Zero) ||
+            (wholeTicks > ulong.MaxValue)
+        ) {
             ticks = 0UL;
 
             return false;
         }
 
-        ticks = (ulong)wholeTicks;
+        ticks = ((ulong)wholeTicks);
 
         return true;
     }

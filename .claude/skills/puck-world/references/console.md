@@ -176,9 +176,9 @@ Arming a second capture while one is still pending is REFUSED by name
 chain holds exactly ONE pending path, so arming over it would silently drop a
 file the caller was already promised. Any Simulation-routed line between two
 shots fences a composed frame for free (the drain barrier), which is why
-back-to-back shots separated by an ordinary write never trip it (the pattern
-the now-QUARANTINED `docs/verification/hud-document` battery exercised — see
-[hud.md](hud.md)'s "Verifying" section).
+back-to-back shots separated by an ordinary write never trip it (see
+[hud.md](hud.md)'s "Verifying" section for the live recipe this once
+exercised as a committed battery).
 
 ## The document has ONE door — do not add a per-section verb
 

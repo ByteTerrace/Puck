@@ -26,15 +26,13 @@ public sealed class FixedStepPumpTests {
         public uint RatePerSecond => 240U;
 
         public void Step(in FixedStepContext context, in CommandSnapshot commands) {
-            Steps.Add(context);
+            Steps.Add(item: context);
         }
     }
-
     // Binds nothing — every Advance call in these tests drives zero captured input, so no source needs a mapping.
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
-
     // One fixed slot, one fixed principal — the tests probe tick/elapsed-tick bookkeeping, not principal routing.
     private sealed class SingleSlotPrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
@@ -44,7 +42,7 @@ public sealed class FixedStepPumpTests {
         var registry = new CommandRegistry(modules: []);
         var inputRouter = new InputRouter(registry: registry, bindings: new EmptyBindings(), principalResolver: new SingleSlotPrincipal());
         var simulation = new RecordingSimulation();
-        var pump = new FixedStepPump(simulation: simulation, inputRouter: inputRouter, registry: registry, captureOriginTicks: 0UL);
+        var pump = new FixedStepPump(captureOriginTicks: 0UL, inputRouter: inputRouter, registry: registry, simulation: simulation);
 
         return (pump, simulation);
     }
@@ -72,7 +70,7 @@ public sealed class FixedStepPumpTests {
 
         for (var index = 0; (index < simulation.Steps.Count); index++) {
             var step = simulation.Steps[index];
-            var expectedTick = (ulong)index;
+            var expectedTick = ((ulong)index);
             var expectedElapsedTicks = ((expectedTick + 1UL) * StepTicks240Hz);
 
             Assert.Equal(expected: expectedTick, actual: step.Tick);
@@ -82,7 +80,6 @@ public sealed class FixedStepPumpTests {
 
         Assert.Equal(expected: (4UL * StepTicks240Hz), actual: pump.ElapsedTicks);
     }
-
     /// <summary>The step-size-change case: a live rate swap between two <see cref="FixedStepPump.Advance"/> calls —
     /// unreachable today (the rate is a compile-time constant) but exactly what a portal crossing into a
     /// differently-rated world would exercise. Before this fix, <c>Tick</c> was re-derived as
@@ -107,7 +104,8 @@ public sealed class FixedStepPumpTests {
         // NEW stepTicks (420) = 1 — colliding with the tick already assigned to the second step above. Recorded here
         // as the oracle this test refutes, not as code under test.
         var legacyBuggyFirstTick = (previousElapsedTicksBeforeRateChange / StepTicks120Hz);
-        Assert.Equal(expected: 1UL, actual: legacyBuggyFirstTick); // sanity: the bug is real for these inputs
+
+        Assert.Equal(actual: legacyBuggyFirstTick, expected: 1UL); // sanity: the bug is real for these inputs
 
         // Second call: rate changes to 120 Hz mid-life. 2 steps' worth of wall time is due.
         pump.Advance(deltaTicks: (StepTicks120Hz * 2UL), maxFrameTicks: 10_000UL, stepTicks: StepTicks120Hz);

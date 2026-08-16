@@ -16,6 +16,7 @@ public sealed class SystemMemory : ISnapshotable {
     private readonly byte[] m_objectAttributeMemory;
     private readonly byte[] m_videoRam;
     private readonly byte[] m_workRam;
+
     private int m_videoRamBank;
     private int m_workRamBank;
 
@@ -46,7 +47,7 @@ public sealed class SystemMemory : ISnapshotable {
 
     /// <summary>Repages the switchable RAM windows to their DMG-equivalent banks (VRAM bank 0, work RAM bank 1) — the
     /// live-swap fixup when a running Color game is demoted to monochrome. 0xD000–0xDFFF at work RAM bank 1 is the SAME
-    /// slab a real DMG's fixed second work-RAM half occupies, so the shared game state a GB-compatible cartridge keeps
+    /// slab a real DMG's fixed second work-RAM half occupies, so the shared game state an SM83-compatible cartridge keeps
     /// there stays addressable to its now-monochrome code. The banked bytes themselves are NOT cleared or moved — the
     /// Color banks 2–7 and VRAM bank 1 simply stop being paged in (cartridge-move semantics), so a later promotion back
     /// to Color finds them intact.</summary>
@@ -78,7 +79,6 @@ public sealed class SystemMemory : ISnapshotable {
             );
         }
     }
-
     /// <summary>Reads a byte of video RAM at an absolute address in the VRAM region, honoring the selected bank.</summary>
     /// <param name="address">An address in <c>[0x8000, 0x9FFF]</c>.</param>
     /// <returns>The byte at that address in the current VRAM bank.</returns>

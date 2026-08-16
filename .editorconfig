@@ -17,6 +17,8 @@ csharp_new_line_before_finally = false
 csharp_new_line_before_open_brace = none
 # Require braces around all control-flow bodies, even single statements.
 csharp_prefer_braces = true:warning
+# Lock on System.Threading.Lock, never a plain object (IDE0330 enforces this).
+csharp_prefer_system_threading_lock = true
 # Prefer expression-bodied property/event accessors.
 csharp_style_expression_bodied_accessors = true:suggestion
 # Prefer block bodies (not expression bodies) for methods.
@@ -45,6 +47,12 @@ dotnet_diagnostic.CA1505.severity = suggestion
 dotnet_diagnostic.CA1506.severity = suggestion
 # IDE0005: flag unnecessary using directives.
 dotnet_diagnostic.IDE0005.severity = warning
+# IDE0044: a field only assigned in its declaration or constructor must be readonly.
+dotnet_diagnostic.IDE0044.severity = error
+# IDE0330: a lock taken on a plain object must become System.Threading.Lock —
+# Lock.EnterScope() is allocation-honest, refuses Monitor.Wait/Pulse misuse at
+# the type, and warns (CS9216) if the Lock is ever boxed back to object.
+dotnet_diagnostic.IDE0330.severity = error
 # VER001/VER002/VER003/VER004/VER005 (Puck.Analyzers): a [VerifiedCode]-branded declaration's fingerprint drifted
 # from VerifiedCode.json, a manifest entry's brand was never encountered, a branded declaration is a shape
 # (partial, or carrying a preprocessor directive) the fingerprint refuses to cover, a brand's Basis disagrees with
@@ -59,35 +67,35 @@ dotnet_diagnostic.VER003.severity = error
 dotnet_diagnostic.VER004.severity = error
 dotnet_diagnostic.VER005.severity = error
 # Rule: const fields must be PascalCase.
-dotnet_naming_rule.constant_fields_pascal_case.severity = warning
+dotnet_naming_rule.constant_fields_pascal_case.severity = error
 dotnet_naming_rule.constant_fields_pascal_case.style = pascal_case_style
 dotnet_naming_rule.constant_fields_pascal_case.symbols = constant_fields
 # Rule: interfaces must be prefixed with `I`.
-dotnet_naming_rule.interfaces_i_prefix.severity = warning
+dotnet_naming_rule.interfaces_i_prefix.severity = error
 dotnet_naming_rule.interfaces_i_prefix.style = interface_prefix_style
 dotnet_naming_rule.interfaces_i_prefix.symbols = interfaces
 # Rule: local constants must be PascalCase.
-dotnet_naming_rule.local_constants_pascal_case.severity = warning
+dotnet_naming_rule.local_constants_pascal_case.severity = error
 dotnet_naming_rule.local_constants_pascal_case.style = pascal_case_style
 dotnet_naming_rule.local_constants_pascal_case.symbols = local_constants
 # Rule: parameters and locals must be camelCase.
-dotnet_naming_rule.parameters_and_locals_camel_case.severity = warning
+dotnet_naming_rule.parameters_and_locals_camel_case.severity = error
 dotnet_naming_rule.parameters_and_locals_camel_case.style = camel_case_style
 dotnet_naming_rule.parameters_and_locals_camel_case.symbols = parameters_and_locals
 # Rule: private instance fields must be prefixed with `m_`.
-dotnet_naming_rule.private_instance_fields_m_prefix.severity = warning
+dotnet_naming_rule.private_instance_fields_m_prefix.severity = error
 dotnet_naming_rule.private_instance_fields_m_prefix.style = m_camel_case_style
 dotnet_naming_rule.private_instance_fields_m_prefix.symbols = private_instance_fields
 # Rule: private static fields must be PascalCase.
-dotnet_naming_rule.private_static_fields_pascal_case.severity = warning
+dotnet_naming_rule.private_static_fields_pascal_case.severity = error
 dotnet_naming_rule.private_static_fields_pascal_case.style = pascal_case_style
 dotnet_naming_rule.private_static_fields_pascal_case.symbols = private_static_fields
 # Rule: type parameters must be prefixed with `T`.
-dotnet_naming_rule.type_parameters_t_prefix.severity = warning
+dotnet_naming_rule.type_parameters_t_prefix.severity = error
 dotnet_naming_rule.type_parameters_t_prefix.style = type_parameter_style
 dotnet_naming_rule.type_parameters_t_prefix.symbols = type_parameters
 # Rule: types and members must be PascalCase.
-dotnet_naming_rule.types_and_members_pascal_case.severity = warning
+dotnet_naming_rule.types_and_members_pascal_case.severity = error
 dotnet_naming_rule.types_and_members_pascal_case.style = pascal_case_style
 dotnet_naming_rule.types_and_members_pascal_case.symbols = types_and_members
 # Style definition: camelCase.

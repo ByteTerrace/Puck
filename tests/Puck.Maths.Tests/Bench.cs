@@ -22,7 +22,6 @@ internal static class Bench {
 
         return $"{processor} x{Environment.ProcessorCount}";
     }
-
     /// <summary>Measures a fixed spin-calibration loop, best-of-five, in nanoseconds — the busy-machine proxy.</summary>
     /// <returns>The best observed wall time of the calibration work.</returns>
     public static double Calibrate() {
@@ -34,7 +33,7 @@ internal static class Bench {
             var accumulator = 0L;
 
             for (var i = 0L; (i < Iterations); ++i) {
-                accumulator = unchecked((accumulator * 6364136223846793005L) + 1L);
+                accumulator = unchecked(((accumulator * 6364136223846793005L) + 1L));
             }
 
             Sink ^= accumulator;
@@ -44,7 +43,6 @@ internal static class Bench {
 
         return best;
     }
-
     /// <summary>Best-of-N nanoseconds per operation for a loop returning a guard value.</summary>
     /// <param name="ops">The operation count the loop performs.</param>
     /// <param name="runs">The number of measured runs; the best is taken.</param>
@@ -70,7 +68,6 @@ internal static class Bench {
 
         return (best / ops);
     }
-
     /// <summary>The median of a sample.</summary>
     /// <param name="values">The sample.</param>
     /// <returns>The median.</returns>
@@ -79,10 +76,9 @@ internal static class Bench {
         var count = sorted.Length;
 
         return (((count & 1) == 1)
-            ? sorted[count / 2]
-            : (0.5 * (sorted[(count / 2) - 1] + sorted[count / 2])));
+            ? sorted[(count / 2)]
+            : (0.5 * (sorted[((count / 2) - 1)] + sorted[(count / 2)])));
     }
-
     /// <summary>The median absolute deviation of a sample.</summary>
     /// <param name="values">The sample.</param>
     /// <returns>The MAD.</returns>
@@ -92,7 +88,6 @@ internal static class Bench {
         return Median(values: [.. values.Select(selector: value => Math.Abs(value: (value - median)))]);
     }
 }
-
 /// <summary>One machine's recorded baseline for a bench: the median ratio, the recorded per-run ratios, and their MAD.</summary>
 internal sealed class BenchEntry {
     /// <summary>Gets or sets the bench id.</summary>
@@ -104,7 +99,6 @@ internal sealed class BenchEntry {
     /// <summary>Gets or sets the median absolute deviation of <see cref="Runs"/>.</summary>
     public double Mad { get; set; }
 }
-
 /// <summary>The recorded baseline for one machine fingerprint.</summary>
 internal sealed class MachineBaseline {
     /// <summary>Gets or sets the machine fingerprint.</summary>
@@ -114,16 +108,14 @@ internal sealed class MachineBaseline {
     /// <summary>Gets or sets the per-bench baselines.</summary>
     public List<BenchEntry> Benches { get; set; } = [];
 }
-
 /// <summary>The committed per-machine bench baselines.</summary>
 internal sealed class BaselineModel {
     /// <summary>Gets the machine baselines, ordered by fingerprint.</summary>
     public List<MachineBaseline> Machines { get; init; } = [];
 }
-
 /// <summary>Collects bench observations for the RESULTS ledger. Populated only when the bench tier runs.</summary>
 internal static class BenchState {
-    private static readonly object Gate = new();
+    private static readonly Lock Gate = new();
     private static readonly List<Observation> ObservationList = [];
 
     /// <summary>Gets whether the bench tier ran this session.</summary>
@@ -139,10 +131,9 @@ internal static class BenchState {
         lock (Gate) {
             Ran = true;
 
-            ObservationList.Add(item: new Observation(Id: id, Median: median, BaselineMedian: baselineMedian, Band: band, Status: status));
+            ObservationList.Add(item: new Observation(Band: band, BaselineMedian: baselineMedian, Id: id, Median: median, Status: status));
         }
     }
-
     /// <summary>Gets the recorded observations.</summary>
     /// <returns>A snapshot of the observations.</returns>
     public static IReadOnlyList<Observation> Observations() {
@@ -159,7 +150,6 @@ internal static class BenchState {
     /// <param name="Status">The outcome status.</param>
     public sealed record Observation(string Id, double Median, double BaselineMedian, double Band, string Status);
 }
-
 /// <summary>The measured latency loops for the seeded bench, kept out of line so the JIT cannot fold the by-parameter
 /// algebra descriptor to a constant.</summary>
 internal static class BenchLoops {
@@ -179,7 +169,6 @@ internal static class BenchLoops {
 
         return sink;
     }
-
     /// <summary>The generic <see cref="QuadraticAlgebra{TScalar}"/> multiply chain for the same rotation.</summary>
     /// <param name="algebra">The by-parameter algebra descriptor.</param>
     /// <param name="seed">The chain seed.</param>

@@ -54,7 +54,6 @@ public sealed partial class AgbCartridge : ISnapshotable {
         writer.WriteInt32(value: m_tiltX);
         writer.WriteInt32(value: m_tiltY);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

@@ -75,7 +75,7 @@ public sealed partial class Sm83 {
     private byte ReadNextByte() {
         var value = ReadCycle(address: m_programCounter);
 
-        m_programCounter = (ushort)(m_programCounter + 1);
+        m_programCounter = ((ushort)(m_programCounter + 1));
 
         return value;
     }
@@ -83,30 +83,30 @@ public sealed partial class Sm83 {
         var low = ReadNextByte();
         var high = ReadNextByte();
 
-        return (ushort)((high << 8) | low);
+        return ((ushort)((high << 8) | low));
     }
     private void PushWord(ushort value) {
-        m_stackPointer = (ushort)(m_stackPointer - 1);
+        m_stackPointer = ((ushort)(m_stackPointer - 1));
         WriteCycle(
             address: m_stackPointer,
-            value: (byte)(value >> 8)
+            value: ((byte)(value >> 8))
         );
-        m_stackPointer = (ushort)(m_stackPointer - 1);
+        m_stackPointer = ((ushort)(m_stackPointer - 1));
         WriteCycle(
             address: m_stackPointer,
-            value: (byte)value
+            value: ((byte)value)
         );
     }
     private ushort PopWord() {
         var low = ReadCycle(address: m_stackPointer);
 
-        m_stackPointer = (ushort)(m_stackPointer + 1);
+        m_stackPointer = ((ushort)(m_stackPointer + 1));
 
         var high = ReadCycle(address: m_stackPointer);
 
-        m_stackPointer = (ushort)(m_stackPointer + 1);
+        m_stackPointer = ((ushort)(m_stackPointer + 1));
 
-        return (ushort)((high << 8) | low);
+        return ((ushort)((high << 8) | low));
     }
     private byte ReadOperand(int index) =>
         index switch {
@@ -233,7 +233,7 @@ public sealed partial class Sm83 {
         }
 
         if ((opcode & 0xC7) == 0xC7) {
-            Restart(vector: (ushort)(opcode & 0x38));
+            Restart(vector: ((ushort)(opcode & 0x38)));
 
             return;
         }
@@ -266,10 +266,10 @@ public sealed partial class Sm83 {
                 ); break;
             case 0x0A: m_a = ReadCycle(address: Bc); break;
             case 0x1A: m_a = ReadCycle(address: De); break;
-            case 0x03: Bc = (ushort)(Bc + 1); InternalCycle(); break;
-            case 0x13: De = (ushort)(De + 1); InternalCycle(); break;
-            case 0x0B: Bc = (ushort)(Bc - 1); InternalCycle(); break;
-            case 0x1B: De = (ushort)(De - 1); InternalCycle(); break;
+            case 0x03: Bc = ((ushort)(Bc + 1)); InternalCycle(); break;
+            case 0x13: De = ((ushort)(De + 1)); InternalCycle(); break;
+            case 0x0B: Bc = ((ushort)(Bc - 1)); InternalCycle(); break;
+            case 0x1B: De = ((ushort)(De - 1)); InternalCycle(); break;
             case 0x07: RotateAccumulatorLeftCircular(); break;
             case 0x0F: RotateAccumulatorRightCircular(); break;
             case 0x17: RotateAccumulatorLeft(); break;
@@ -288,18 +288,18 @@ public sealed partial class Sm83 {
                 WriteCycle(
                     address: Hl,
                     value: m_a
-                ); Hl = (ushort)(Hl + 1); break;
+                ); Hl = ((ushort)(Hl + 1)); break;
             case 0x32:
                 WriteCycle(
                     address: Hl,
                     value: m_a
-                ); Hl = (ushort)(Hl - 1); break;
-            case 0x2A: m_a = ReadCycle(address: Hl); Hl = (ushort)(Hl + 1); break;
-            case 0x3A: m_a = ReadCycle(address: Hl); Hl = (ushort)(Hl - 1); break;
-            case 0x23: Hl = (ushort)(Hl + 1); InternalCycle(); break;
-            case 0x33: m_stackPointer = (ushort)(m_stackPointer + 1); InternalCycle(); break;
-            case 0x2B: Hl = (ushort)(Hl - 1); InternalCycle(); break;
-            case 0x3B: m_stackPointer = (ushort)(m_stackPointer - 1); InternalCycle(); break;
+                ); Hl = ((ushort)(Hl - 1)); break;
+            case 0x2A: m_a = ReadCycle(address: Hl); Hl = ((ushort)(Hl + 1)); break;
+            case 0x3A: m_a = ReadCycle(address: Hl); Hl = ((ushort)(Hl - 1)); break;
+            case 0x23: Hl = ((ushort)(Hl + 1)); InternalCycle(); break;
+            case 0x33: m_stackPointer = ((ushort)(m_stackPointer + 1)); InternalCycle(); break;
+            case 0x2B: Hl = ((ushort)(Hl - 1)); InternalCycle(); break;
+            case 0x3B: m_stackPointer = ((ushort)(m_stackPointer - 1)); InternalCycle(); break;
             case 0x27: DecimalAdjustAccumulator(); break;
             case 0x2F: ComplementAccumulator(); break;
             case 0x37: SetCarryFlag(); break;
@@ -329,20 +329,20 @@ public sealed partial class Sm83 {
         switch (opcode) {
             case 0xE0:
                 WriteCycle(
-                    address: (ushort)(0xFF00 + ReadNextByte()),
+                    address: ((ushort)(0xFF00 + ReadNextByte())),
                     value: m_a
                 ); break;
-            case 0xF0: m_a = ReadCycle(address: (ushort)(0xFF00 + ReadNextByte())); break;
+            case 0xF0: m_a = ReadCycle(address: ((ushort)(0xFF00 + ReadNextByte()))); break;
             case 0xE1: Hl = PopWord(); break;
             case 0xF1: Af = PopWord(); break;
             case 0xE5: InternalCycle(); PushWord(value: Hl); break;
             case 0xF5: InternalCycle(); PushWord(value: Af); break;
             case 0xE2:
                 WriteCycle(
-                    address: (ushort)(0xFF00 + m_c),
+                    address: ((ushort)(0xFF00 + m_c)),
                     value: m_a
                 ); break;
-            case 0xF2: m_a = ReadCycle(address: (ushort)(0xFF00 + m_c)); break;
+            case 0xF2: m_a = ReadCycle(address: ((ushort)(0xFF00 + m_c))); break;
             case 0xE9: m_programCounter = Hl; break;
             case 0xEA:
                 WriteCycle(
@@ -350,8 +350,8 @@ public sealed partial class Sm83 {
                     value: m_a
                 ); break;
             case 0xFA: m_a = ReadCycle(address: ReadNextWord()); break;
-            case 0xE8: m_stackPointer = AddStackPointerOffset(offset: (sbyte)ReadNextByte()); InternalCycle(); InternalCycle(); break;
-            case 0xF8: Hl = AddStackPointerOffset(offset: (sbyte)ReadNextByte()); InternalCycle(); break;
+            case 0xE8: m_stackPointer = AddStackPointerOffset(offset: ((sbyte)ReadNextByte())); InternalCycle(); InternalCycle(); break;
+            case 0xF8: Hl = AddStackPointerOffset(offset: ((sbyte)ReadNextByte())); InternalCycle(); break;
             case 0xF9: m_stackPointer = Hl; InternalCycle(); break;
             // DI clears IME immediately (undelayed, even on Color) and cancels any in-flight EI enable, so EI;DI leaves
             // interrupts disabled. One hardware-derived reference implementation clears IME only and lets a pending
@@ -408,14 +408,14 @@ public sealed partial class Sm83 {
             case 2: // RES b, r
                 WriteOperand(
                     index: index,
-                    value: (byte)(ReadOperand(index: index) & ~(1 << operation))
+                    value: ((byte)(ReadOperand(index: index) & ~(1 << operation)))
                 );
 
                 break;
             default: // SET b, r
                 WriteOperand(
                     index: index,
-                    value: (byte)(ReadOperand(index: index) | (1 << operation))
+                    value: ((byte)(ReadOperand(index: index) | (1 << operation)))
                 );
 
                 break;
@@ -426,18 +426,18 @@ public sealed partial class Sm83 {
 
         WriteCycle(
             address: address,
-            value: (byte)m_stackPointer
+            value: ((byte)m_stackPointer)
         );
         WriteCycle(
-            address: (ushort)(address + 1),
-            value: (byte)(m_stackPointer >> 8)
+            address: ((ushort)(address + 1)),
+            value: ((byte)(m_stackPointer >> 8))
         );
     }
     private void JumpRelative(bool taken) {
-        var offset = (sbyte)ReadNextByte();
+        var offset = ((sbyte)ReadNextByte());
 
         if (taken) {
-            m_programCounter = (ushort)(m_programCounter + offset);
+            m_programCounter = ((ushort)(m_programCounter + offset));
 
             InternalCycle();
         }

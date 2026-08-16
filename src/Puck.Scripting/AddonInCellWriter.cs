@@ -18,7 +18,7 @@ public static class AddonInCellWriter {
             );
         }
 
-        destination[AddonAbi.InCellOffsets.Kind] = (byte)cell.Kind;
+        destination[AddonAbi.InCellOffsets.Kind] = ((byte)cell.Kind);
         destination[AddonAbi.InCellOffsets.Channel] = cell.Channel;
         BinaryPrimitives.WriteUInt16LittleEndian(
             destination: destination[AddonAbi.InCellOffsets.Ordinal..],
@@ -32,7 +32,7 @@ public static class AddonInCellWriter {
             destination: destination[AddonAbi.InCellOffsets.HandleGeneration..],
             value: cell.HandleGeneration
         );
-        destination[AddonAbi.InCellOffsets.Verdict] = (byte)cell.Verdict;
+        destination[AddonAbi.InCellOffsets.Verdict] = ((byte)cell.Verdict);
         destination[AddonAbi.InCellOffsets.Verb] = cell.Verb;
         BinaryPrimitives.WriteUInt16LittleEndian(
             destination: destination[AddonAbi.InCellOffsets.Reserved0..],

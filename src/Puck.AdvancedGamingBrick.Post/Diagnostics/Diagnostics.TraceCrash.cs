@@ -40,8 +40,8 @@ internal static partial class Diagnostics {
 
                 Console.WriteLine(value: $"  CRASH at step {i}: branched to 0x{pc:X8}");
                 Console.WriteLine(value: $"  culprit instruction @0x{culprit:X8} = 0x{machine.Bus.Read32(
-                    address: culprit,
-                    access: BusAccessType.NonSequential
+                    access: BusAccessType.NonSequential,
+                    address: culprit
                 ):X8} (thumb={thumb})");
 
                 for (var r = 0; (r < 16); r += 4) {

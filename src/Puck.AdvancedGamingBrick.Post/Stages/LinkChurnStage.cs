@@ -31,7 +31,6 @@ internal sealed class LinkChurnStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "link-churn";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -67,8 +66,8 @@ internal sealed class LinkChurnStage : IPostStage {
         );
 
         if (Difference(
-            expected: reference,
             actual: replay,
+            expected: reference,
             leg: "replay"
         ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
@@ -82,8 +81,8 @@ internal sealed class LinkChurnStage : IPostStage {
         );
 
         if (Difference(
-            expected: reference,
             actual: churned,
+            expected: reference,
             leg: "churn"
         ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
@@ -138,8 +137,8 @@ internal sealed class LinkChurnStage : IPostStage {
         try {
             for (var step = 0; (step < StepCount); ++step) {
                 probes.Add(item: Probe(
-                    parent: parent,
-                    child: child
+                    child: child,
+                    parent: parent
                 ));
 
                 if (Array.IndexOf(
@@ -147,8 +146,8 @@ internal sealed class LinkChurnStage : IPostStage {
                     value: step
                 ) >= 0) {
                     if (!IsTransferIdle(
-                        parent: parent,
-                        child: child
+                        child: child,
+                        parent: parent
                     )) {
                         throw new InvalidOperationException(message: $"the churn boundary at budget step {step} is not transfer-idle on both consoles.");
                     }
@@ -207,15 +206,14 @@ internal sealed class LinkChurnStage : IPostStage {
 
         return console;
     }
-
     // A budget-boundary snapshot of the exchange's progress: whether both consoles are transfer-idle right now, and
     // how many of the parent's round records have landed in IWRAM (a round's low word is never zero once the parent
     // has written it, so a non-zero slot is proof the round completed — no protocol change needed to observe it).
     private static BoundaryProbe Probe(AgbMachineInstance parent, AgbMachineInstance child) =>
         new(
         Idle: IsTransferIdle(
-            parent: parent,
-            child: child
+            child: child,
+            parent: parent
         ),
         RecordedRounds: CountRecordedRounds(console: parent)
     );
@@ -223,12 +221,12 @@ internal sealed class LinkChurnStage : IPostStage {
         (((DebugReadSioCnt(console: parent) & SioCntStartMask) == 0)
             && ((DebugReadSioCnt(console: child) & SioCntStartMask) == 0));
     private static int CountRecordedRounds(AgbMachineInstance console) {
-        var bus = (AgbBus)console.Machine.Bus;
+        var bus = ((AgbBus)console.Machine.Bus);
         var count = 0;
 
         while (
             (count < MicroRoms.LinkRounds) &&
-            (bus.DebugRead32(address: (MicroRoms.LinkRecordAddress + ((uint)count * 8u))) != 0u)
+            (bus.DebugRead32(address: (MicroRoms.LinkRecordAddress + (((uint)count) * 8u))) != 0u)
         ) {
             ++count;
         }
@@ -237,7 +235,6 @@ internal sealed class LinkChurnStage : IPostStage {
     }
     private static ushort DebugReadSioCnt(AgbMachineInstance console) =>
         ((AgbBus)console.Machine.Bus).DebugRead16(address: SioCntAddress);
-
     // The first two budget boundaries that are transfer-idle mid-exchange (at least one round recorded, not all of
     // them, at a STRICTLY increasing recorded-round count) — two genuine, distinct severable instants.
     private static (int First, int Second) PickChurnSteps(List<BoundaryProbe> probes) {
@@ -269,7 +266,6 @@ internal sealed class LinkChurnStage : IPostStage {
 
         return (first, -1);
     }
-
     // The first budget boundary that is NOT transfer-idle (SIOCNT's start/busy bit set on the parent, the child, or
     // both) — the M-04 probe's mid-transfer instant.
     private static int PickBusyStep(List<BoundaryProbe> probes) {
@@ -281,7 +277,6 @@ internal sealed class LinkChurnStage : IPostStage {
 
         return -1;
     }
-
     // M-03 probe (a): a resume token bound to (parent, child) applied to (child, parent) — a reordering that changes
     // every slot's expected identity, since the two ROMs differ — must be rejected by AgbMachineIdentity binding, and
     // rejection must leave both consoles fully unlinked: a fresh, non-resume session over the very same pair (in the
@@ -307,8 +302,8 @@ internal sealed class LinkChurnStage : IPostStage {
             session.Run(cycles: BudgetStep);
 
             if (!IsTransferIdle(
-                parent: parent,
-                child: child
+                child: child,
+                parent: parent
             )) {
                 return "the reordered-resume probe's suspend point is not transfer-idle; pick a different budget";
             }
@@ -364,7 +359,6 @@ internal sealed class LinkChurnStage : IPostStage {
             child.Dispose();
         }
     }
-
     // M-03 probe (b): a null ("default"/absent) resume token, and a token whose credit count does not match the
     // console count, are both rejected with a clean ArgumentException family (never an NRE), and both leave every
     // console unlinked.
@@ -415,8 +409,8 @@ internal sealed class LinkChurnStage : IPostStage {
             session.Run(cycles: BudgetStep);
 
             if (!IsTransferIdle(
-                parent: parent,
-                child: child
+                child: child,
+                parent: parent
             )) {
                 return "the mismatched-token probe's suspend point is not transfer-idle; pick a different budget";
             }
@@ -461,7 +455,6 @@ internal sealed class LinkChurnStage : IPostStage {
             child.Dispose();
         }
     }
-
     // M-04 probe (c): Suspend() at a busy (non-transfer-idle) budget boundary — found from the reference run's own
     // probe schedule, so it is a genuine, reproducible mid-transfer instant, not a fabricated one — must throw
     // InvalidOperationException, and the session must be left fully live: driving the SAME session on to completion
@@ -494,8 +487,8 @@ internal sealed class LinkChurnStage : IPostStage {
             }
 
             if (IsTransferIdle(
-                parent: parent,
-                child: child
+                child: child,
+                parent: parent
             )) {
                 return $"the mid-transfer probe step {busyStep} is transfer-idle on replay; the round schedule is not reproducible";
             }
@@ -527,8 +520,8 @@ internal sealed class LinkChurnStage : IPostStage {
             );
 
             return Difference(
-                expected: reference,
                 actual: actual,
+                expected: reference,
                 leg: "mid-transfer-suspend"
             );
         } finally {
@@ -537,7 +530,6 @@ internal sealed class LinkChurnStage : IPostStage {
             child.Dispose();
         }
     }
-
     // Judges the reference run: both sides completed every round with the right IRQ count and daisy-chain id, and
     // every round's recorded slots prove data actually crossed the cable.
     private static string? Verify(LinkChurnScenarioResult result) =>
@@ -551,7 +543,6 @@ internal sealed class LinkChurnStage : IPostStage {
         side: "child",
         expectedControl: ExpectedChildControl
     ));
-
     // Compares a later run against the reference: both protocol verdicts and both final snapshots must match.
     // Snapshot equality also checks Identity (free rigor). Probes are the schedule's own instrument, not compared.
     private static string? Difference(LinkChurnScenarioResult expected, LinkChurnScenarioResult actual, string leg) {

@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using Xunit;
 
 using Puck.Attestation;
+using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -38,7 +39,6 @@ public sealed class AdmissionSecurityLawTests {
         Assert.False(condition: allowed.Refused, userMessage: $"an Observe/body:4 peer was refused player.where: {allowed.Text}");
         Assert.Contains(expectedSubstring: "player.where: p5", actualString: allowed.Text);
     }
-
     /// <summary>Finding 1 (P1): a peer's admission-minted grant, explicitly revoked live, must stay revoked across
     /// <c>world.reset</c> — the rebuild's re-authorization must consult the CURRENT admission policy and the
     /// pre-wipe live grant table, never blindly replay the connection-time templates. The control is the SAME
@@ -57,7 +57,6 @@ public sealed class AdmissionSecurityLawTests {
             deniedOutcome: static () => RunRevokeAcrossResetScenarioAsync(revoke: true).GetAwaiter().GetResult(),
             controlOutcome: static () => RunRevokeAcrossResetScenarioAsync(revoke: false).GetAwaiter().GetResult());
     }
-
     /// <summary>Finding 4 (P2): an <c>admission</c> entry whose <c>publicKey</c> base64-decodes but does not import
     /// as a usable key on the algorithm's own curve must refuse AT BOOT, by name — never merely at the first live
     /// connection attempt. The control is the identical document with a REAL, freshly generated P-256 key in the
@@ -69,7 +68,6 @@ public sealed class AdmissionSecurityLawTests {
             deniedOutcome: static () => TryBoot(bytes: MalformedSpkiDocumentBytes()),
             controlOutcome: static () => TryBoot(bytes: ValidSpkiDocumentBytes()));
     }
-
     /// <summary>Finding 3 (P1): a connection that completes the Hello version door but then withholds its identity
     /// frame entirely must be closed by the server's OWN handshake deadline — never held open indefinitely. The
     /// control, run first against the SAME host, is an ordinary connection that completes the whole handshake
@@ -82,7 +80,7 @@ public sealed class AdmissionSecurityLawTests {
         var identity = GenerateIdentity(subject: "deadline-peer");
 
         try {
-            var entry = BuildEntry(identity: identity, grants: []);
+            var entry = BuildEntry(grants: [], identity: identity);
             var document = BuildAdmissionDocument(entry: entry);
 
             using var fixture = Fixtures.FreshServer(definition: document);
@@ -113,9 +111,9 @@ public sealed class AdmissionSecurityLawTests {
 
                 var stallingStream = stalling.GetStream();
 
-                await WorldTcpWireFormat.WriteHelloAsync(stream: stallingStream, key: WorldProtocol.WireProtocolKey, ct: testCt);
+                await HandshakeWireFormat.WriteHelloAsync(stream: stallingStream, key: WorldProtocol.WireProtocolKey, ct: testCt);
 
-                var challenge = await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stallingStream, ct: testCt);
+                var challenge = await WorldTcpWireFormat.TryReadDownstreamAsync(ct: testCt, stream: stallingStream);
 
                 Assert.NotNull(@object: challenge);
                 Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge, actual: challenge!.Value.Kind);
@@ -147,7 +145,6 @@ public sealed class AdmissionSecurityLawTests {
             identity.Key.Dispose();
         }
     }
-
     /// <summary>The same deadline must cover the handoff from completed identity verification to tick-thread
     /// population admission. A paused/rate-0 host may never drain that queue; expiry must close the connection and a
     /// later drain must skip the orphaned work rather than admitting a body with no socket.</summary>
@@ -156,7 +153,7 @@ public sealed class AdmissionSecurityLawTests {
         var identity = GenerateIdentity(subject: "queued-deadline-peer");
 
         try {
-            var document = BuildAdmissionDocument(entry: BuildEntry(identity: identity, grants: []));
+            var document = BuildAdmissionDocument(entry: BuildEntry(grants: [], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
             using var host = new WorldTcpHost(server: fixture.Server);
@@ -172,12 +169,12 @@ public sealed class AdmissionSecurityLawTests {
 
             var stream = client.GetStream();
 
-            await WorldTcpWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: testCts.Token);
+            await HandshakeWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: testCts.Token);
 
-            var challenge = (await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: testCts.Token))
-                ?? throw new InvalidOperationException(message: "connection closed before the challenge");
+            var challenge = ((await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: testCts.Token))
+                ?? throw new InvalidOperationException(message: "connection closed before the challenge"));
 
-            Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge, actual: challenge.Kind);
+            Assert.Equal(actual: challenge.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge);
 
             await WriteIdentityResponseAsync(stream: stream, identity: identity, challenge: challenge.Body, ct: testCts.Token);
 
@@ -195,7 +192,6 @@ public sealed class AdmissionSecurityLawTests {
             identity.Key.Dispose();
         }
     }
-
     /// <summary>A wire-shape-malformed HelloIdentity frame must draw a named "identity-refused: …" reply, never a
     /// silent close — the door's own comment claims every refusal here is spelled by name, and a malformed frame is
     /// exactly the case a shared null-for-everything read used to miss (a malformed frame and a genuine disconnect
@@ -215,21 +211,20 @@ public sealed class AdmissionSecurityLawTests {
         var malformedBody = new byte[] { 5 }.Concat(second: System.Text.Encoding.UTF8.GetBytes(s: marker)).ToArray();
 
         using (var malformedClient = new TcpClient()) {
-            var reply = await SendRawIdentityFrameAsync(host: host, client: malformedClient, body: malformedBody, ct: testCt);
+            var reply = await SendRawIdentityFrameAsync(body: malformedBody, client: malformedClient, ct: testCt, host: host);
             var text = WorldTcpWireFormat.DecodeText(body: reply.Body);
 
-            Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloRefused, actual: reply.Kind);
-            Assert.Contains(expectedSubstring: "identity-refused: ", actualString: text, comparisonType: StringComparison.Ordinal);
-            Assert.DoesNotContain(expectedSubstring: marker, actualString: text);
+            Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
+            Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: ");
+            Assert.DoesNotContain(actualString: text, expectedSubstring: marker);
         }
 
         using (var cleanClient = new TcpClient()) {
-            var closedSilently = await DisconnectAfterChallengeAsync(host: host, client: cleanClient, ct: testCt);
+            var closedSilently = await DisconnectAfterChallengeAsync(client: cleanClient, ct: testCt, host: host);
 
             Assert.True(condition: closedSilently, userMessage: "a genuine disconnect while awaiting the HelloIdentity frame drew a reply instead of closing silently");
         }
     }
-
     /// <summary>A HelloIdentity frame that decodes cleanly — a zero-length chain and a well-formed claim attestation —
     /// but carries extra bytes after the claim must draw the same named "identity-refused: …" reply as any other
     /// grammar violation, never reach identity verification with the trailing bytes silently ignored.</summary>
@@ -243,9 +238,9 @@ public sealed class AdmissionSecurityLawTests {
         using var testCts = Laws.SocketDeadline();
         var testCt = testCts.Token;
         var claim = new byte[] { 1, 2, 3, 4 };
-        var claimEnvelope = new byte[sizeof(uint) + claim.Length];
+        var claimEnvelope = new byte[(sizeof(uint) + claim.Length)];
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: claimEnvelope, value: (uint)claim.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: claimEnvelope, value: ((uint)claim.Length));
         claim.CopyTo(array: claimEnvelope, index: sizeof(uint));
 
         var trailing = new byte[] { 0xAA, 0xBB, 0xCC };
@@ -254,13 +249,12 @@ public sealed class AdmissionSecurityLawTests {
         var body = new byte[] { 0 }.Concat(second: claimEnvelope).Concat(second: trailing).ToArray();
 
         using var client = new TcpClient();
-        var reply = await SendRawIdentityFrameAsync(host: host, client: client, body: body, ct: testCt);
+        var reply = await SendRawIdentityFrameAsync(body: body, client: client, ct: testCt, host: host);
         var text = WorldTcpWireFormat.DecodeText(body: reply.Body);
 
-        Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloRefused, actual: reply.Kind);
-        Assert.Contains(expectedSubstring: "identity-refused: the frame carries trailing bytes after the claim attestation", actualString: text, comparisonType: StringComparison.Ordinal);
+        Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
+        Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: the frame carries trailing bytes after the claim attestation");
     }
-
     /// <summary>A length prefix that declares a HelloIdentity frame, followed by a half-close before the body
     /// completes, must draw the same named "identity-refused: …" reply as any other malformed frame — the peer
     /// committed to a frame and then abandoned it, which is not the clean pre-frame disconnect the door's own
@@ -276,13 +270,12 @@ public sealed class AdmissionSecurityLawTests {
         var testCt = testCts.Token;
 
         using var client = new TcpClient();
-        var reply = await SendTruncatedIdentityFrameAsync(host: host, client: client, declaredBodyLength: 10, actualBodyBytes: 4, ct: testCt);
+        var reply = await SendTruncatedIdentityFrameAsync(actualBodyBytes: 4, client: client, ct: testCt, declaredBodyLength: 10, host: host);
         var text = WorldTcpWireFormat.DecodeText(body: reply.Body);
 
-        Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloRefused, actual: reply.Kind);
-        Assert.Contains(expectedSubstring: "identity-refused: the connection closed before the declared frame's body completed", actualString: text, comparisonType: StringComparison.Ordinal);
+        Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloRefused);
+        Assert.Contains(actualString: text, comparisonType: StringComparison.Ordinal, expectedSubstring: "identity-refused: the connection closed before the declared frame's body completed");
     }
-
     /// <summary>A policy-added grant becomes part of the next rebuild's revocation baseline. Otherwise a live revoke
     /// after the first rebuild is invisible to the connection-time-only baseline and the second rebuild resurrects
     /// it.</summary>
@@ -294,7 +287,7 @@ public sealed class AdmissionSecurityLawTests {
             var body = GrantSubject.Body(index: PeerBodyIndex);
             var drive = new WorldAdmissionGrant(Capability: WorldCapability.Drive, Subject: body, Budget: 100);
             var observe = new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: body, Budget: 100);
-            var initial = BuildAdmissionDocument(entry: BuildEntry(identity: identity, grants: [drive]));
+            var initial = BuildAdmissionDocument(entry: BuildEntry(grants: [drive], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: initial);
             using var host = new WorldTcpHost(server: fixture.Server);
@@ -316,7 +309,7 @@ public sealed class AdmissionSecurityLawTests {
 
             using (admitted.Client) {
                 var peer = WorldPrincipal.Peer(index: admitted.PeerIndex, generation: admitted.Generation);
-                var widened = BuildAdmissionDocument(entry: BuildEntry(identity: identity, grants: [drive, observe]));
+                var widened = BuildAdmissionDocument(entry: BuildEntry(grants: [drive, observe], identity: identity));
                 var widenedHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: widened));
 
                 fixture.Server.EnqueueRebuild(
@@ -341,7 +334,6 @@ public sealed class AdmissionSecurityLawTests {
             identity.Key.Dispose();
         }
     }
-
     /// <summary>An admission row rejected by the live grant table was never held and therefore was never explicitly
     /// revoked. Once the conflicting exclusive reservation disappears, the next rebuild must retry the CURRENT
     /// admission policy and install it. Treating every baseline absence as a revoke makes this stay denied forever.</summary>
@@ -352,7 +344,7 @@ public sealed class AdmissionSecurityLawTests {
         try {
             var body = GrantSubject.Body(index: PeerBodyIndex);
             var observe = new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: body, Budget: 100);
-            var document = BuildAdmissionDocument(entry: BuildEntry(identity: identity, grants: [observe]));
+            var document = BuildAdmissionDocument(entry: BuildEntry(grants: [observe], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
             using var host = new WorldTcpHost(server: fixture.Server);
@@ -389,7 +381,6 @@ public sealed class AdmissionSecurityLawTests {
             identity.Key.Dispose();
         }
     }
-
     /// <summary>The persisted peer-admission event must restore verified identity during offline replay. The recorded
     /// reset re-authorizes that peer, after which a peer-principal SnapPose proves the grant still exists on both live
     /// and replay sides. Omitting identity metadata makes the replay drop Drive at reset and diverge on the command.</summary>
@@ -403,11 +394,11 @@ public sealed class AdmissionSecurityLawTests {
         try {
             var body = GrantSubject.Body(index: PeerBodyIndex);
             var drive = new WorldAdmissionGrant(Capability: WorldCapability.Drive, Subject: body, Budget: 100);
-            var document = BuildAdmissionDocument(entry: BuildEntry(identity: identity, grants: [drive]));
+            var document = BuildAdmissionDocument(entry: BuildEntry(grants: [drive], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
             var transport = new LoopbackTransport(server: fixture.Server);
-            var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+            var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
             using var host = new WorldTcpHost(server: fixture.Server);
 
             Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm admission replay: {refusal}");
@@ -462,7 +453,7 @@ public sealed class AdmissionSecurityLawTests {
             var grants = (observe
                 ? new[] { new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.Body(index: PeerBodyIndex), Budget: 100) }
                 : []);
-            var document = BuildAdmissionDocument(entry: BuildEntry(identity: identity, grants: grants));
+            var document = BuildAdmissionDocument(entry: BuildEntry(grants: grants, identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
             using var host = new WorldTcpHost(server: fixture.Server);
@@ -487,32 +478,32 @@ public sealed class AdmissionSecurityLawTests {
             identity.Key.Dispose();
         }
     }
-
     private static async Task<QueryAnswer> SubmitQueryAsync(NetworkStream stream, WorldQuery query, CancellationToken ct) {
         Assert.True(condition: WorldFrameCodec.TryEncode(payload: new WorldSubmissionPayload.Query(Value: query), frame: out var frame, failure: out var failure), userMessage: $"query codec refused: {failure}");
 
         await stream.WriteAsync(buffer: frame, cancellationToken: ct);
         await stream.FlushAsync(cancellationToken: ct);
 
-        var reply = (await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: ct))
-            ?? throw new InvalidOperationException(message: "connection closed before the query reply");
+        var reply = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream))
+            ?? throw new InvalidOperationException(message: "connection closed before the query reply"));
 
-        Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.Query, actual: reply.Kind);
+        Assert.Equal(actual: reply.Kind, expected: WorldTcpWireFormat.DownstreamKind.Query);
 
         var offset = 1;
         var refused = (reply.Body[0] != 0);
-        var text = WorldTcpWireFormat.ReadLengthPrefixedString(body: reply.Body, offset: ref offset);
+        var text = WorldTcpWireFormat.ReadLengthPrefixedString(body: reply.Body, offset: ref offset, ok: out var ok);
+
+        Assert.True(condition: ok, userMessage: "the query reply's length-prefixed text field is truncated");
 
         return new QueryAnswer(Text: text, Refused: refused);
     }
-
     /// <summary>Connects, completes the Hello version door, reads the identity challenge, then writes
     /// <paramref name="body"/> as a raw length-prefixed HelloIdentity frame (bypassing
-    /// <see cref="WorldTcpWireFormat.WriteHelloIdentityAsync"/>'s own grammar so a deliberately malformed shape can
+    /// <see cref="HandshakeWireFormat.WriteHelloIdentityAsync"/>'s own grammar so a deliberately malformed shape can
     /// be sent) and returns the door's downstream reply.</summary>
     private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)> SendRawIdentityFrameAsync(WorldTcpHost host, TcpClient client, byte[] body, CancellationToken ct) {
-        var stream = await ConnectPastChallengeAsync(host: host, client: client, ct: ct);
-        var frame = new byte[checked(sizeof(uint) + body.Length)];
+        var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
+        var frame = new byte[checked((sizeof(uint) + body.Length))];
 
         BinaryPrimitives.WriteUInt32LittleEndian(destination: frame, value: checked((uint)body.Length));
         body.CopyTo(array: frame, index: sizeof(uint));
@@ -520,21 +511,20 @@ public sealed class AdmissionSecurityLawTests {
         await stream.WriteAsync(buffer: frame, cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
         await stream.FlushAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
 
-        var reply = (await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false))
-            ?? throw new InvalidOperationException(message: "connection closed with no reply to the malformed HelloIdentity frame");
+        var reply = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+            ?? throw new InvalidOperationException(message: "connection closed with no reply to the malformed HelloIdentity frame"));
 
         return (reply.Kind, reply.Body);
     }
-
     /// <summary>Connects, completes the Hello version door, reads the identity challenge, then writes a length
     /// prefix declaring <paramref name="declaredBodyLength"/> bytes, writes only
     /// <paramref name="actualBodyBytes"/> of that body, and half-closes the send side — a peer that commits to a
     /// frame and then abandons it. Returns the door's downstream reply.</summary>
     private static async Task<(WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)> SendTruncatedIdentityFrameAsync(WorldTcpHost host, TcpClient client, int declaredBodyLength, int actualBodyBytes, CancellationToken ct) {
-        var stream = await ConnectPastChallengeAsync(host: host, client: client, ct: ct);
+        var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
         var prefix = new byte[sizeof(uint)];
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: prefix, value: (uint)declaredBodyLength);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: prefix, value: ((uint)declaredBodyLength));
         await stream.WriteAsync(buffer: prefix, cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
 
         var partialBody = new byte[actualBodyBytes];
@@ -544,23 +534,21 @@ public sealed class AdmissionSecurityLawTests {
 
         client.Client.Shutdown(how: SocketShutdown.Send);
 
-        var reply = (await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false))
-            ?? throw new InvalidOperationException(message: "connection closed with no reply to the truncated HelloIdentity frame");
+        var reply = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+            ?? throw new InvalidOperationException(message: "connection closed with no reply to the truncated HelloIdentity frame"));
 
         return (reply.Kind, reply.Body);
     }
-
     /// <summary>Connects, completes the Hello version door, reads the identity challenge, then half-closes the send
     /// side without ever writing an identity frame — a genuine disconnect. Returns whether the server closed the
     /// connection with no bytes sent back.</summary>
     private static async Task<bool> DisconnectAfterChallengeAsync(WorldTcpHost host, TcpClient client, CancellationToken ct) {
-        var stream = await ConnectPastChallengeAsync(host: host, client: client, ct: ct);
+        var stream = await ConnectPastChallengeAsync(client: client, ct: ct, host: host);
 
         client.Client.Shutdown(how: SocketShutdown.Send);
 
-        return await WaitForCloseAsync(stream: stream, ct: ct);
+        return await WaitForCloseAsync(ct: ct, stream: stream);
     }
-
     private static async Task<NetworkStream> ConnectPastChallengeAsync(WorldTcpHost host, TcpClient client, CancellationToken ct) {
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
@@ -568,22 +556,21 @@ public sealed class AdmissionSecurityLawTests {
 
         var stream = client.GetStream();
 
-        await WorldTcpWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+        await HandshakeWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
-        var challenge = (await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false))
-            ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived");
+        var challenge = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+            ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived"));
 
-        Assert.Equal(expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge, actual: challenge.Kind);
+        Assert.Equal(actual: challenge.Kind, expected: WorldTcpWireFormat.DownstreamKind.HelloChallenge);
 
         return stream;
     }
-
     private static async Task<bool> WaitForCloseAsync(NetworkStream stream, CancellationToken ct) {
         var probe = new byte[1];
 
         try {
             return (await stream.ReadAsync(buffer: probe, cancellationToken: ct) == 0);
-        } catch (Exception exception) when (exception is IOException or SocketException) {
+        } catch (Exception exception) when ((exception is IOException or SocketException)) {
             return true;
         }
     }
@@ -591,7 +578,6 @@ public sealed class AdmissionSecurityLawTests {
     // ---- Shared scaffolding ----
 
     private readonly record struct TestIdentity(ECDsa Key, string Domain, string Subject, byte[] Spki);
-
     private readonly record struct AdmittedPeer(TcpClient Client, int PeerIndex, int Generation);
 
     private static TestIdentity GenerateIdentity(string subject) {
@@ -599,9 +585,8 @@ public sealed class AdmissionSecurityLawTests {
         var spki = key.ExportSubjectPublicKeyInfo();
         var domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: spki);
 
-        return new TestIdentity(Key: key, Domain: domain, Subject: subject, Spki: spki);
+        return new TestIdentity(Domain: domain, Key: key, Spki: spki, Subject: subject);
     }
-
     private static WorldAdmissionEntry BuildEntry(TestIdentity identity, IReadOnlyList<WorldAdmissionGrant> grants) =>
         new(
             Domain: identity.Domain,
@@ -611,7 +596,6 @@ public sealed class AdmissionSecurityLawTests {
             PublicKey: Convert.ToBase64String(inArray: identity.Spki),
             Grants: grants
         );
-
     /// <summary>Overlays ONE admission entry onto <see cref="Fixtures.BuildDocument"/>'s shared shape, widening
     /// population capacity by exactly one peer slot (body index 4) and admitting exactly one remote human — the
     /// smallest document every law in this file needs. Every other section is the compiler-maintained fixture's own
@@ -644,17 +628,15 @@ public sealed class AdmissionSecurityLawTests {
 
         return WorldDefinitionSerialization.Serialize(definition: BuildAdmissionDocument(entry: entry));
     }
-
     private static byte[] ValidSpkiDocumentBytes() {
         var identity = GenerateIdentity(subject: "valid-peer");
 
         try {
-            return WorldDefinitionSerialization.Serialize(definition: BuildAdmissionDocument(entry: BuildEntry(identity: identity, grants: [])));
+            return WorldDefinitionSerialization.Serialize(definition: BuildAdmissionDocument(entry: BuildEntry(grants: [], identity: identity)));
         } finally {
             identity.Key.Dispose();
         }
     }
-
     private static bool TryBoot(byte[] bytes) {
         try {
             _ = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
@@ -664,14 +646,13 @@ public sealed class AdmissionSecurityLawTests {
             return false;
         }
     }
-
     private static async Task<bool> RunRevokeAcrossResetScenarioAsync(bool revoke) {
         var identity = GenerateIdentity(subject: "reset-peer");
 
         try {
             var subject = GrantSubject.Body(index: PeerBodyIndex);
             var grant = new WorldAdmissionGrant(Capability: WorldCapability.Drive, Subject: subject, Budget: 100);
-            var entry = BuildEntry(identity: identity, grants: [grant]);
+            var entry = BuildEntry(grants: [grant], identity: identity);
             var document = BuildAdmissionDocument(entry: entry);
 
             using var fixture = Fixtures.FreshServer(definition: document);
@@ -713,7 +694,6 @@ public sealed class AdmissionSecurityLawTests {
             identity.Key.Dispose();
         }
     }
-
     /// <summary>Drains <see cref="WorldTcpHost"/>'s tick-thread work queue and steps the fixture at a short, fixed
     /// cadence — the SAME pairing the composition root's own per-tick loop performs
     /// (<see cref="WorldTcpHost.DrainPending"/>'s own remarks: "MUST run on the tick thread, before
@@ -734,7 +714,6 @@ public sealed class AdmissionSecurityLawTests {
             // Expected teardown — the caller cancelled ct once it no longer needs the pump.
         }
     }
-
     /// <summary>Drives the REAL wire door end to end: connects a raw <see cref="TcpClient"/> to
     /// <paramref name="host"/>, completes <see cref="WorldHelloDoor"/>'s version check, answers
     /// <see cref="WorldAdmissionDoor"/>'s challenge with a genuine <see cref="AttestationSigner.SignClaim"/> claim
@@ -750,10 +729,10 @@ public sealed class AdmissionSecurityLawTests {
 
             var stream = client.GetStream();
 
-            await WorldTcpWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+            await HandshakeWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
 
-            var challengeFrame = (await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false))
-                ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived");
+            var challengeFrame = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+                ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived"));
 
             if (challengeFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloChallenge) {
                 throw new InvalidOperationException(message: $"expected HelloChallenge, got {challengeFrame.Kind}: {WorldTcpWireFormat.DecodeText(body: challengeFrame.Body)}");
@@ -761,10 +740,10 @@ public sealed class AdmissionSecurityLawTests {
 
             var challenge = challengeFrame.Body;
 
-            await WriteIdentityResponseAsync(stream: stream, identity: identity, challenge: challenge, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+            await WriteIdentityResponseAsync(challenge: challenge, ct: ct, identity: identity, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
 
-            var acceptedFrame = (await WorldTcpWireFormat.TryReadDownstreamAsync(stream: stream, ct: ct).ConfigureAwait(continueOnCapturedContext: false))
-                ?? throw new InvalidOperationException(message: "connection closed before the admission verdict arrived");
+            var acceptedFrame = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
+                ?? throw new InvalidOperationException(message: "connection closed before the admission verdict arrived"));
 
             if (acceptedFrame.Kind != WorldTcpWireFormat.DownstreamKind.HelloAccepted) {
                 throw new InvalidOperationException(message: $"admission refused: {WorldTcpWireFormat.DecodeText(body: acceptedFrame.Body)}");
@@ -777,12 +756,11 @@ public sealed class AdmissionSecurityLawTests {
 
             client = null!;
 
-            return new AdmittedPeer(Client: admitted, PeerIndex: peerIndex, Generation: generation);
+            return new AdmittedPeer(Client: admitted, Generation: generation, PeerIndex: peerIndex);
         } finally {
             client?.Dispose();
         }
     }
-
     private static Task WriteIdentityResponseAsync(NetworkStream stream, TestIdentity identity, byte[] challenge, CancellationToken ct) {
         var codec = new CborAttestationCodec();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -800,6 +778,6 @@ public sealed class AdmissionSecurityLawTests {
             claimBytes: challenge
         );
 
-        return WorldTcpWireFormat.WriteHelloIdentityAsync(stream: stream, chain: [], claim: codec.EncodeAttestation(attestation: claim), ct: ct);
+        return HandshakeWireFormat.WriteHelloIdentityAsync(stream: stream, chain: [], claim: codec.EncodeAttestation(attestation: claim), ct: ct);
     }
 }

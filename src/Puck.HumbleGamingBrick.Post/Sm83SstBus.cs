@@ -34,7 +34,6 @@ internal sealed class Sm83SstBus : ISystemBus {
     /// <returns>The stored byte.</returns>
     public byte Peek(ushort address) =>
         m_memory[address];
-
     /// <inheritdoc/>
     public byte ReadByte(ushort address) {
         var value = m_memory[address];

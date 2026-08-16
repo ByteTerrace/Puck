@@ -25,9 +25,12 @@ internal sealed class WorldRulesCommandModule(IServerLink link) : ICommandModule
             handler: _ => {
                 var result = default(CommandResult);
 
-                link.Query(query: new WorldQuery.Rules(), completion: answer => {
-                    result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
-                });
+                link.Query(
+                    query: new WorldQuery.Rules(),
+                    completion: answer => {
+                        result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
+                    }
+                );
 
                 return result;
             },

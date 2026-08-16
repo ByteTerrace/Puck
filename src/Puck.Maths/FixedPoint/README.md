@@ -139,10 +139,13 @@ give each type its full contract.
 | `FixedRateAccumulator` | `struct` | Exact-tick integration of a Q48.16 per-second rate. The part of the division too small to represent is kept as a remainder across calls, so a constant rate advances by exactly one unit after `ticksPerSecond` one-tick steps. That remainder is authoritative simulation state. |
 | `FixedVector3RateAccumulator` | `struct` | Three independent axes of the same integration under one shared time base, bound once. Four readers, four selective resets. |
 | `FixedVectorMath` | `internal static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
-| `FusedArithmetic` (with `LimbBig`) | `internal static` | **Substrate.** The fused one-rounding kernels: branchless raw magnitude, sign-plus-`UInt128` product sums, the exact restoring division that rounds a ratio to Q16 once (and its generalized sibling, `TryDivideMagnitudeRounded`, at any caller-supplied fraction bit count), power-of-two scaling, and the Q48 → Q16 narrowing (`FixedQ4816.RoundProduct` at shift 32). `LimbBig`, sharing the file, is the exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes — no `FusedArithmetic` kernel calls it. |
-| `FixedSymmetricSolve` | `internal static` | **Substrate.** Scale-free 2×2/3×3 symmetric linear solve and invert — `TrySolveSymmetric2/3` and `TryInvertSymmetric2/3` — for the effective-mass matrices a rigid-body solver inverts. Raw-`long` operands at any shared caller scale; preconditions by one common power of two, forms the determinant and adjugate as exact sign-plus-`UInt128` triple and double products, and rounds each returned component exactly once through `FusedArithmetic.TryDivideMagnitudeRounded`. Refuses (returns `false`, every `out` at zero) on an exactly singular matrix or an unrepresentable result; Invert additionally refuses in a narrow large-magnitude corner its own remarks document. Kept `internal` deliberately — the solve is transient and never stored, so there is no persisted format for a caller to confuse it with. |
+| `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, and the generalized `TryDivideMagnitudeRounded` divider. Their sign-plus-`UInt128` accumulation and wrapping siblings remain internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
+| `FixedSymmetricSolve` | `public static` | Scale-free 2×2/3×3 symmetric apply, solve, and invert for the effective-mass matrices a rigid-body solver uses. `TryApplySymmetric3`, `TryApplySymmetric2` and `TryInvertSymmetric2` are public; the 2×2/3×3 solve kernels and `TryInvertSymmetric3` stay internal until a consumer needs them. Raw-`long` operands may use any shared caller scale; each output rounds exactly once and every refusing call clears its outputs. |
+| `FixedMassProperties` | `public static` | Volume, mass and centroidal inertia for the solid primitives (sphere, box, capsule bodies; all four volumes), the parallel-axis transfer, compound accumulation, and mass/inertia inversion. `TrySphereBody`, `TryBoxBody`, `TryCapsuleBody`, `TryTranslateInertia`, `TryInvertMass` and `TryInvertInertia` are public — the construction path a rigid body needs from a collider; the four `Try*Volume` overloads, `TryCylinderBody`/`TryCylinderVolume` and `TryCompound` stay internal until a consumer needs volume alone, a cylinder collider, or a compound body. |
+| `FixedPointRounding` | `public static` | The shared nearest-result decision for integer kernels: compare the exact distance to the truncated result with the exact distance to its next neighbour, then resolve an equal-distance tie toward the even raw. `TryRoundRational` applies that decision to a whole exact `BigInteger` rational — the scale shift folded onto the numerator, one division, one rounding, refusing rather than wrapping — and is where both the mass-property chain here and Physics's softness chain round, so simulation subsystems cannot drift onto different tie rules. |
+| `SignedFixedPointArithmetic` | `internal static` | **Substrate.** The common signed-raw division, fused interpolation, and magnitude selection for Q48.16, Q32.32 and Q16.48. The binary-point count is an input where the operation depends on it; the x64 division fast path, `UInt128` fallback, tie comparison, sign application, checked narrowing, and shared generic-math tie rules each live once. |
 | `FixedPointText` | `internal static` | **Substrate.** Exact decimal parsing and rendering shared by all six formattable carriers. Rendering is always allocation-free. Parsing is allocation-free too, in `UInt128`, for every carrier at or below thirty-seven fraction bits — `FixedQ4816`, `UFixedQ4816`, `UnitFraction16`, `UnitFraction32` and `FixedQ3232` all sit under that today. Only `FixedQ1648`'s Q16.48 crosses it: a format reads `F + 1` decimal digits, and forty-nine of them no longer fit `UInt128`, so its accumulation and rounding alone route through `BigInteger` (and therefore allocate) — a strict generalization of the narrow path that changes no result where both could run. The platform parser validates the culture syntax and supplies only the sign; the original digits are then quantized directly, so an arbitrarily long run of digits sitting on a midpoint cannot get rounded twice. On the rendering side it owns the format-specifier check and terminating fraction digits for every carrier, plus the raw prefix, exact length check, and culture-token splicing shared by the four Q formats as an unsigned magnitude plus a sign flag. |
-| `FixedPointConvert` | `internal static` | **Substrate.** The recognized-source predicates the two Q48.16 carriers' generic conversion hooks dispatch on, and the exact scaling step their *truncating* conversions are defined on: a known BCL numeric's exact value at the target's scale, produced as an `Int128` with no range clamp anywhere, so the caller reduces it to its own carrier's width. A `decimal` source is read from its own bits and rounded once — the same single rounding `FixedQ4816`'s checked and saturating decimal lanes share, each applying its own range policy — and an integer source keeps its low 128 bits, which is always enough because nothing above `2¹²⁸` can reach a 64-bit raw. |
+| `FixedPointConvert` | `internal static` | **Substrate.** The single `INumberBase<T>` conversion body for all three signed Q formats, including their signed/unsigned or cross-width peer seams, plus the recognized-source predicates and exact scaling steps. A known BCL numeric is expressed at the target scale with no range clamp before the requested checked, saturating or truncating policy is applied. Decimal sources are read from their own bits and rounded once; Q16.48 and Q32.32 use the wide `BigInteger` lane their fraction counts require, while Q48.16 stays on `Int128`. |
 
 ## Choosing a scalar
 
@@ -825,16 +828,20 @@ wrap-parity argument below covers both.
 the rounded `UInt128` magnitude unnarrowed (so the caller decides how — and
 whether — to fit it into its own carrier) and refusing outright on a zero
 denominator or on a shift that would overflow `UInt128` before it starts.
-`FixedSymmetricSolve` is its one caller outside this file's own fixed-16 use.
+The public `TryMixedScaleProduct`, `TryMixedScaleDotProduct`, and
+`TryScaledReciprocal` faces keep mixed-scale callers on the same exact
+accumulation and one-rounding rule without exposing those sign-magnitude
+building blocks.
 
 ### `FixedSymmetricSolve`
 
-Scale-free symmetric linear-solve and -invert kernels for 2×2 and 3×3 systems,
-`TrySolveSymmetric2/3` and `TryInvertSymmetric2/3` — the shape a rigid-body
-solver forms when it inverts an effective-mass matrix. `internal`
-deliberately: the solve is transient and never stored, so unlike
-`FixedQ1648` there is no persisted format for a caller to confuse it with, and
-wrapping it in a type would fight the property that makes it work.
+Scale-free symmetric apply, solve, and invert kernels for 2×2 and 3×3 systems,
+the shapes a rigid-body solver needs when applying or inverting an
+effective-mass matrix. `TryApplySymmetric3`, `TryApplySymmetric2` and
+`TryInvertSymmetric2` are public; the 2×2/3×3 solve kernels and
+`TryInvertSymmetric3` stay internal until a consumer needs them. The
+raw-`long` API keeps the scale explicit at every call, and a refusing
+operation clears all of its outputs.
 
 Every kernel preconditions its operands by one common power-of-two shift
 (mirroring `FixedVectorMath`'s own shape, but with its OWN target bit — reusing
@@ -1162,7 +1169,7 @@ or by nothing:
 | `vector.*` | Componentwise algebra, the fused plane and space products, norms, normalization, and the divergence canaries that prove the fused discipline is load-bearing. |
 | `position.*` | Canonicalization, `Delta`, `Translate`, the group structure, and the render-relative ladder. |
 | `rate.*` | Scalar and vector integration against an exact `BigInteger` ledger, the unit-advance closure, and both refusal ladders. |
-| `symmetric-solve.*` | `FixedSymmetricSolve` (internal): the 2×2 and 3×3 solve and invert kernels against an independent `BigInteger` Cramer's-rule oracle, the six-term-determinant bit budget at hand-picked extreme operands, the singularity refusal, and Invert's own large-magnitude refusal envelope. |
+| `symmetric-solve.*` | `FixedSymmetricSolve`: the 2×2/3×3 solve kernels and `TryInvertSymmetric3` (internal), and the public `TryApplySymmetric3`, `TryApplySymmetric2` and `TryInvertSymmetric2`, against independent `BigInteger` Cramer's-rule and Bareiss-elimination oracles, the six-term-determinant bit budget at hand-picked extreme operands, the singularity refusal, and Invert's own large-magnitude refusal envelope. |
 | `smoke.*` | The fast mirrors — a ties-to-even witness for four of the five rounding carriers (`FixedQ4816`'s multiply and its divide, `UFixedQ4816`, `UnitFraction32`, `UnitInterval32`), a fused-product witness, and the twin spot checks. `UnitFraction16` has **no** smoke witness; its only mirror is `deep.unit-fraction16-exhaustive`, which lives in the Deep tier. |
 | `deep.*` | The exhaustive and full-range mirrors of everything above, including the complete `UnitFraction16` sweep. |
 

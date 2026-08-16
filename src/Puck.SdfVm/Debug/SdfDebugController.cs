@@ -34,6 +34,7 @@ public sealed class SdfDebugController {
     private bool m_prevCarveButton;
     private bool m_exitRequested;
     private Vector3? m_carveRequest; // a pad-chord carve center awaiting consume (computed at the chord edge from the live pose)
+
     // The orbit pose itself: the subject sits at the world origin, so the rig's target starts there and pans from it.
     private readonly OrbitRig m_rig = new() { Distance = 4f, Pitch = 0.5f };
 
@@ -51,7 +52,7 @@ public sealed class SdfDebugController {
     /// <param name="target">The orbit target (world units); null keeps the current target.</param>
     public void SetPose(float? pitch, float? yaw, float? distance, Vector3? target) {
         if (pitch is { } p) {
-            m_rig.Pitch = Math.Clamp(value: p, min: MinPitch, max: MaxPitch);
+            m_rig.Pitch = Math.Clamp(max: MaxPitch, min: MinPitch, value: p);
         }
 
         if (yaw is { } y) {
@@ -59,14 +60,13 @@ public sealed class SdfDebugController {
         }
 
         if (distance is { } d) {
-            m_rig.Distance = Math.Clamp(value: d, min: MinDistance, max: MaxDistance);
+            m_rig.Distance = Math.Clamp(max: MaxDistance, min: MinDistance, value: d);
         }
 
         if (target is { } t) {
             m_rig.Target = t;
         }
     }
-
     /// <summary>Clears the edge tracking and any pending exit/carve — call when the mode toggles so a held button never
     /// fires a stale edge into the other mode. Leaves the framing (so re-entering keeps the last camera pose).</summary>
     public void Reset() {
@@ -75,7 +75,6 @@ public sealed class SdfDebugController {
         m_prevExitButton = false;
         m_prevCarveButton = false;
     }
-
     /// <summary>Returns whether the EXIT verb fired since the last consume (and clears it).</summary>
     public bool ConsumeExitRequest() {
         var requested = m_exitRequested;
@@ -84,7 +83,6 @@ public sealed class SdfDebugController {
 
         return requested;
     }
-
     /// <summary>Returns the pending pad-chord carve center (world units) if the carve chord fired since the last consume,
     /// else null — and clears it. The center was computed at the chord edge from the live orbit pose (deterministic:
     /// pure yaw/pitch/target, no field evaluation), so a pad carve appends the same data a scripted <c>sdf.carve</c> does.</summary>
@@ -95,7 +93,6 @@ public sealed class SdfDebugController {
 
         return request;
     }
-
     /// <summary>Advances one frame of orbit input: left stick orbits, triggers zoom, right stick pans, the exit
     /// button exits.</summary>
     /// <param name="raw">The neutral orbit input this frame.</param>

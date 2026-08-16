@@ -12,7 +12,6 @@ public enum WorldAudioEmitterKind {
     /// <summary>An ambient region (wind in a valley, a creek's reach) — presence, not position.</summary>
     Bed,
 }
-
 /// <summary>The fixed-point point-emitter attenuation law.</summary>
 public enum WorldAudioAttenuationCurve : byte {
     /// <summary>Smoothstep over squared distance.</summary>
@@ -20,7 +19,6 @@ public enum WorldAudioAttenuationCurve : byte {
     /// <summary>Linear falloff over distance.</summary>
     Linear,
 }
-
 /// <summary>Selects which channel of a stereo source an emitter taps. Mono sources (the synth) degenerate every
 /// selector to <see cref="Mix"/> — documented, never rejected.</summary>
 public enum WorldAudioChannel {
@@ -31,7 +29,6 @@ public enum WorldAudioChannel {
     /// <summary>The right channel only.</summary>
     Right,
 }
-
 /// <summary>The signal kinds an emitter can bind (sources are shared identities, never inline
 /// payloads — two emitters naming the same source share ONE per-block pull).</summary>
 public enum WorldAudioSourceKind {
@@ -44,7 +41,6 @@ public enum WorldAudioSourceKind {
     /// <summary>The world voice synth, identified by patch id; voices arrive via <see cref="WorldSynthTrigger"/>.</summary>
     Synth,
 }
-
 /// <summary>One source identity — the key the mixer's per-block single-pull dedupes on and the seam live hosting
 /// binds to. <see cref="Slot"/> carries machine identity; <see cref="Id"/> carries tune/patch identity;
 /// the unused member is zero/null so value equality is exact.</summary>
@@ -55,19 +51,35 @@ public readonly record struct WorldAudioSourceKey(WorldAudioSourceKind Kind, int
     /// <summary>Creates a machine-source key.</summary>
     /// <param name="slot">The screen slot hosting the machine.</param>
     /// <returns>The key.</returns>
-    public static WorldAudioSourceKey Machine(int slot) => new(Kind: WorldAudioSourceKind.Machine, Slot: slot, Id: null);
-    /// <summary>Creates a tune-source key.</summary>
-    /// <param name="id">The tune id.</param>
-    /// <returns>The key.</returns>
-    public static WorldAudioSourceKey Tune(string id) => new(Kind: WorldAudioSourceKind.Tune, Slot: 0, Id: id);
+    public static WorldAudioSourceKey Machine(int slot) => new(
+        Id: null,
+        Kind: WorldAudioSourceKind.Machine,
+        Slot: slot
+    );
     /// <summary>Creates a synth-source key.</summary>
     /// <param name="patchId">The patch id voices on this emitter default to.</param>
     /// <returns>The key.</returns>
-    public static WorldAudioSourceKey Synth(string patchId) => new(Kind: WorldAudioSourceKind.Synth, Slot: 0, Id: patchId);
-    /// <summary>The silent source.</summary>
-    public static WorldAudioSourceKey None => new(Kind: WorldAudioSourceKind.None, Slot: 0, Id: null);
-}
+    public static WorldAudioSourceKey Synth(string patchId) => new(
+        Id: patchId,
+        Kind: WorldAudioSourceKind.Synth,
+        Slot: 0
+    );
+    /// <summary>Creates a tune-source key.</summary>
+    /// <param name="id">The tune id.</param>
+    /// <returns>The key.</returns>
+    public static WorldAudioSourceKey Tune(string id) => new(
+        Id: id,
+        Kind: WorldAudioSourceKind.Tune,
+        Slot: 0
+    );
 
+    /// <summary>The silent source.</summary>
+    public static WorldAudioSourceKey None => new(
+        Id: null,
+        Kind: WorldAudioSourceKind.None,
+        Slot: 0
+    );
+}
 /// <summary>The listener pose the mixer spatializes against: a world position plus a yaw rotor. The mixer's frame
 /// convention: the ground plane is world X/Z with Y up; <paramref name="Yaw"/> rotates LISTENER-LOCAL (X = right,
 /// Y = forward) into world (X, Z), so <c>Yaw.Conjugate().Rotate(worldDelta)</c> yields the local direction pan
@@ -75,7 +87,6 @@ public readonly record struct WorldAudioSourceKey(WorldAudioSourceKind Kind, int
 /// <param name="Position">The listener's world position.</param>
 /// <param name="Yaw">The unit rotor taking listener-local (right, forward) into world (X, Z).</param>
 public readonly record struct WorldAudioListener(FixedVector3 Position, FixedComplex Yaw);
-
 /// <summary>One row of the snapshot's emitter table — everything the mixer needs to spatialize one feed, already
 /// resolved to world space (anchors resolve producer-side; the mixer never queries the world).</summary>
 /// <param name="Id">The stable emitter id — the key the mixer's coefficient-ramp state carries across blocks. An
@@ -103,7 +114,6 @@ public readonly record struct WorldAudioEmitter(
     WorldAudioChannel Channel,
     WorldAudioSourceKey Source
 );
-
 /// <summary>One seeded synth trigger event. Sequence numbers make triggers once-only under snapshot hold: the
 /// producer assigns strictly increasing values, the mixer fires only sequences above its high-water mark — a
 /// snapshot mixed for several blocks (or a skipped snapshot) can never double- or drop-fire.</summary>
@@ -114,7 +124,6 @@ public readonly record struct WorldAudioEmitter(
 /// <param name="EmitterId">The emitter the voice spatializes through (its source must be
 /// <see cref="WorldAudioSourceKind.Synth"/>).</param>
 public readonly record struct WorldSynthTrigger(ulong Sequence, string PatchId, ulong Seed, int GainQ16, int EmitterId);
-
 /// <summary>
 /// The immutable per-frame record the mixer consumes: listener pose, a fixed-capacity emitter table, and seeded
 /// synth trigger events. Built for the <c>PublishBuffer&lt;WorldAudioSnapshot&gt;</c> slab-rotation contract:
@@ -132,6 +141,7 @@ public sealed class WorldAudioSnapshot {
 
     private readonly WorldAudioEmitter[] m_emitters;
     private readonly WorldSynthTrigger[] m_triggers;
+
     private int m_emitterCount;
     private int m_triggerCount;
 
@@ -145,12 +155,18 @@ public sealed class WorldAudioSnapshot {
         m_triggers = new WorldSynthTrigger[maxTriggers];
     }
 
+    /// <summary>Gets the emitter table.</summary>
+    public ReadOnlySpan<WorldAudioEmitter> Emitters => m_emitters.AsSpan(
+        length: m_emitterCount,
+        start: 0
+    );
     /// <summary>Gets the listener pose.</summary>
     public WorldAudioListener Listener { get; private set; }
-    /// <summary>Gets the emitter table.</summary>
-    public ReadOnlySpan<WorldAudioEmitter> Emitters => m_emitters.AsSpan(start: 0, length: m_emitterCount);
     /// <summary>Gets the trigger events.</summary>
-    public ReadOnlySpan<WorldSynthTrigger> Triggers => m_triggers.AsSpan(start: 0, length: m_triggerCount);
+    public ReadOnlySpan<WorldSynthTrigger> Triggers => m_triggers.AsSpan(
+        length: m_triggerCount,
+        start: 0
+    );
 
     /// <summary>Clears the tables and sets the listener — the start of one produce pass.</summary>
     /// <param name="listener">The listener pose for this frame.</param>
@@ -159,7 +175,6 @@ public sealed class WorldAudioSnapshot {
         m_emitterCount = 0;
         m_triggerCount = 0;
     }
-
     /// <summary>Appends an emitter row; refuses (never grows) past capacity.</summary>
     /// <param name="emitter">The row to append.</param>
     /// <returns><see langword="true"/> when the row was appended.</returns>
@@ -172,7 +187,6 @@ public sealed class WorldAudioSnapshot {
 
         return true;
     }
-
     /// <summary>Appends a trigger event; refuses (never grows) past capacity.</summary>
     /// <param name="trigger">The event to append.</param>
     /// <returns><see langword="true"/> when the event was appended.</returns>

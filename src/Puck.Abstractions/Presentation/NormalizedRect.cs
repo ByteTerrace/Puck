@@ -14,6 +14,10 @@ public readonly record struct NormalizedRect(float X, float Y, float Width, floa
         Y: 0.5f
     );
 
+    private static float Interpolate(float from, float to, float t) {
+        return (from + ((to - from) * t));
+    }
+
     /// <summary>Linearly interpolates every rectangle component. <paramref name="t"/> is not clamped.</summary>
     public static NormalizedRect Lerp(NormalizedRect from, NormalizedRect to, float t) {
         return new NormalizedRect(
@@ -38,9 +42,5 @@ public readonly record struct NormalizedRect(float X, float Y, float Width, floa
                 t: t
             )
         );
-    }
-
-    private static float Interpolate(float from, float to, float t) {
-        return (from + ((to - from) * t));
     }
 }

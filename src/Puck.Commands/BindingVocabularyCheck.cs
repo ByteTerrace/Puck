@@ -22,6 +22,52 @@ namespace Puck.Commands;
 /// and eligibility are always checked. Empty sources/commands are skipped entirely — they are the structural gate's
 /// findings, not this one's.</para></remarks>
 public static class BindingVocabularyCheck {
+    private static void CheckChannel(
+        ChannelRef channel,
+        Func<ChannelRef, bool>? channelBinary,
+        Func<ChannelRef, bool>? channelExists,
+        List<string> errors,
+        string prefix,
+        float? scale
+    ) {
+        if (
+            (channelExists is not null) &&
+            !channelExists(arg: channel)
+        ) {
+            errors.Add(item: $"{prefix} {channel.Describe()}, which resolves no declared channel");
+        } else if (
+            (scale is { } value) &&
+            (value != 1f) &&
+            (channelBinary?.Invoke(arg: channel) ?? false)
+        ) {
+            errors.Add(item: $"{prefix} {channel.Describe()} with scale {value}, but a binary channel's scale is always the default (+1)");
+        }
+    }
+    private static void CheckCommand(
+        Func<string, CommandMetadata?> command,
+        string commandName,
+        CommandValueKind? dispatched,
+        List<string> errors,
+        string unknownError,
+        string unbindableError,
+        Func<CommandValueKind, CommandValueKind, string> mismatchError
+    ) {
+        if (command(arg: commandName) is not { } declared) {
+            errors.Add(item: unknownError);
+        } else if (declared.Bindability != CommandBindability.Bindable) {
+            errors.Add(item: unbindableError);
+        } else if (
+            (dispatched is { } actual) &&
+            (actual != declared.ValueKind)
+        ) {
+            errors.Add(item: mismatchError(
+                arg1: actual,
+                arg2: declared.ValueKind
+            ));
+        }
+    }
+    private static string Word(CommandValueKind kind) => kind.ToString().ToLowerInvariant();
+
     /// <summary>Appends one error per unresolvable, unbindable, or kind-mismatched command or channel reference in
     /// <paramref name="document"/>.</summary>
     /// <param name="document">The binding document to check.</param>
@@ -67,7 +113,7 @@ public static class BindingVocabularyCheck {
             if (row.Page is { } page) {
                 var entries = (page.Entries ?? []);
 
-                for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++) {
+                for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
                     var entry = entries[entryIndex];
 
                     if (entry is null) {
@@ -128,9 +174,9 @@ public static class BindingVocabularyCheck {
                         (entry.Source is { } rawSource) &&
                         (sourceKind is not null) &&
                         BindingSourceComponent.TrySplit(
-                        source: rawSource,
                         baseSource: out var baseSource,
-                        component: out var component
+                        component: out var component,
+                        source: rawSource
                     ) &&
                         (component is not null)
                     ) {
@@ -165,12 +211,12 @@ public static class BindingVocabularyCheck {
 
                     var dispatched = (entry.Value?.Kind ?? ((entry.Activator is not null)
                         ? CompiledBindingProfile.PressValue(
-                        channelScale: null,
-                        explicitValue: null
-                    ).Kind
+                            channelScale: null,
+                            explicitValue: null
+                        ).Kind
                         : ((entry.Source is { } sourceForKind)
-                        ? sourceKind?.Invoke(arg: sourceForKind)
-                        : null)));
+                            ? sourceKind?.Invoke(arg: sourceForKind)
+                            : null)));
 
                     CheckCommand(
                         command: command,
@@ -189,7 +235,10 @@ public static class BindingVocabularyCheck {
                     !string.IsNullOrEmpty(value: chordSource) &&
                     !(sourceAddressable?.Invoke(arg: chordSource) ?? true)
                 ) {
-                    errors.Add(item: $"chord [{string.Join(separator: '+', values: (row.Chord ?? []))}] (group \"{row.Group}\") names unaddressable control \"{chordSource}\"");
+                    errors.Add(item: $"chord [{string.Join(
+                        separator: '+',
+                        values: (row.Chord ?? [])
+                    )}] (group \"{row.Group}\") names unaddressable control \"{chordSource}\"");
                 }
             }
 
@@ -278,53 +327,5 @@ public static class BindingVocabularyCheck {
             }
         }
     }
-
-    private static void CheckCommand(
-        Func<string, CommandMetadata?> command,
-        string commandName,
-        CommandValueKind? dispatched,
-        List<string> errors,
-        string unknownError,
-        string unbindableError,
-        Func<CommandValueKind, CommandValueKind, string> mismatchError
-    ) {
-        if (command(arg: commandName) is not { } declared) {
-            errors.Add(item: unknownError);
-        } else if (declared.Bindability != CommandBindability.Bindable) {
-            errors.Add(item: unbindableError);
-        } else if (
-            (dispatched is { } actual) &&
-            (actual != declared.ValueKind)
-        ) {
-            errors.Add(item: mismatchError(
-                arg1: actual,
-                arg2: declared.ValueKind
-            ));
-        }
-    }
-
-    private static void CheckChannel(
-        ChannelRef channel,
-        Func<ChannelRef, bool>? channelBinary,
-        Func<ChannelRef, bool>? channelExists,
-        List<string> errors,
-        string prefix,
-        float? scale
-    ) {
-        if (
-            (channelExists is not null) &&
-            !channelExists(arg: channel)
-        ) {
-            errors.Add(item: $"{prefix} {channel.Describe()}, which resolves no declared channel");
-        } else if (
-            (scale is { } value) &&
-            (value != 1f) &&
-            (channelBinary?.Invoke(arg: channel) ?? false)
-        ) {
-            errors.Add(item: $"{prefix} {channel.Describe()} with scale {value}, but a binary channel's scale is always the default (+1)");
-        }
-    }
-
-    private static string Word(CommandValueKind kind) => kind.ToString().ToLowerInvariant();
 
 }

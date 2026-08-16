@@ -4,7 +4,7 @@ namespace Puck.Abstractions.Recording;
 
 /// <summary>
 /// A configured video encoder producing timestamped compressed packets from CPU-pixel frames — the platform
-/// half of the recording graph's video lane. Implementations own format conversion (the capture tap delivers
+/// half of the recording graph's video lane. Implementations own format conversion (frame capture delivers
 /// RGBA/BGRA; the codec consumes what it consumes) and their device/session resources.
 /// </summary>
 /// <remarks>Single-threaded: the recording session calls <see cref="EncodeFrame"/> and <see cref="Drain"/>
@@ -13,7 +13,6 @@ namespace Puck.Abstractions.Recording;
 public interface IVideoEncoder : IDisposable {
     /// <summary>The Matroska codec id of the produced stream (<c>V_AV1</c>, <c>V_MPEG4/ISO/AVC</c>).</summary>
     string CodecId { get; }
-
     /// <summary>The Matroska <c>CodecPrivate</c> payload (<c>av1C</c> / <c>avcC</c>), or empty when the codec
     /// carries its configuration in-band. Guaranteed populated once <see cref="EncodeFrame"/> has returned at
     /// least one packet.</summary>
@@ -27,11 +26,9 @@ public interface IVideoEncoder : IDisposable {
     /// <param name="timestampNanoseconds">The presentation timestamp on the session clock.</param>
     /// <returns>The packets ready after this frame, oldest first.</returns>
     IReadOnlyList<RecordedPacket> EncodeFrame(ReadOnlySpan<byte> pixels, SurfaceFormat format, int width, int height, long timestampNanoseconds);
-
     /// <summary>Flushes the pipeline at end of session; returns every remaining packet, oldest first.</summary>
     IReadOnlyList<RecordedPacket> Drain();
 }
-
 /// <summary>
 /// Creates the best available <see cref="IVideoEncoder"/> for an ordered codec preference ladder — the seam
 /// that keeps codec policy DATA (the recording document's ladder) while hardware reality stays a platform

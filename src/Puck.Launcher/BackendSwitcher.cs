@@ -9,14 +9,14 @@ namespace Puck.Launcher;
 /// no-op. It is backend-neutral (it knows only <see cref="ISurfacePresenter"/> + a display name), so it lives in the
 /// generic launcher; the composition root supplies the concrete presenters via <see cref="SurfacePresenterDescriptor"/>.
 /// </summary>
-public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable {
+public sealed class BackendSwitcher : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable {
+    private NativeSurfaceBinding m_binding;
     private ISurfacePresenter m_current;
     private string m_currentName;
-    private ISurfacePresenter? m_other;
-    private string? m_otherName;
-    private NativeSurfaceBinding m_binding;
     private uint m_height;
     private bool m_initialized;
+    private ISurfacePresenter? m_other;
+    private string? m_otherName;
     private uint m_width;
 
     /// <summary>Initializes a new instance of the <see cref="BackendSwitcher"/> class.</summary>
@@ -38,7 +38,6 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback,
 
     /// <summary>Gets the active backend's display name.</summary>
     public string ActiveBackendName => m_currentName;
-
     /// <inheritdoc/>
     /// <remarks>Forwards to the active backend when it reports present timing (closed-loop pacing); a backend that does
     /// not implement <see cref="IPresentTimingFeedback"/> yields <see cref="PresentTimingSample.Unavailable"/>, so the
@@ -46,18 +45,8 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback,
     public PresentTimingSample LastPresentTiming =>
         ((m_current is IPresentTimingFeedback feedback)
             ? feedback.LastPresentTiming
-            : PresentTimingSample.Unavailable);
-
-    /// <inheritdoc/>
-    /// <remarks>Forwards to the active backend when it can recover; throws otherwise so the host treats the loss as
-    /// unrecoverable (a backend without the capability cannot rebuild its device).</remarks>
-    public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
-        if (m_current is not IDeviceLostRecoverable recoverable) {
-            throw new NotSupportedException(message: $"The active backend '{m_currentName}' cannot recover from device loss.");
-        }
-
-        recoverable.RecoverFromDeviceLoss(binding: binding, height: height, width: width);
-    }
+            : PresentTimingSample.Unavailable
+        );
 
     /// <inheritdoc/>
     public void Activate(NativeSurfaceBinding binding, uint width, uint height) {
@@ -65,7 +54,20 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback,
         m_width = width;
         m_height = height;
         m_initialized = true;
-        m_current.Activate(binding: binding, width: width, height: height);
+        m_current.Activate(
+            binding: binding,
+            height: height,
+            width: width
+        );
+    }
+    /// <inheritdoc/>
+    public void BeginFrame(uint width, uint height) {
+        m_width = width;
+        m_height = height;
+        m_current.BeginFrame(
+            height: height,
+            width: width
+        );
     }
     /// <inheritdoc/>
     public void Deactivate() {
@@ -74,20 +76,43 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback,
         }
     }
     /// <inheritdoc/>
-    public void BeginFrame(uint width, uint height) {
-        m_width = width;
-        m_height = height;
-        m_current.BeginFrame(width: width, height: height);
+    public void Dispose() {
+        Deactivate();
     }
     /// <inheritdoc/>
     public void Present(Surface surface) {
         m_current.Present(surface: surface);
     }
+    /// <inheritdoc/>
+    public Surface ReadSurface(Surface surface) {
+        if (m_current is not IPresentSurfaceReadback readback) {
+            throw new NotSupportedException(message: $"The active backend '{m_currentName}' does not support surface readback.");
+        }
+
+        return readback.ReadSurface(surface: surface);
+    }
+    /// <inheritdoc/>
+    /// <remarks>Forwards to the active backend when it can recover; throws otherwise so the host treats the loss as
+    /// unrecoverable (a backend without the capability cannot rebuild its device).</remarks>
+    public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
+        if (m_current is not IDeviceLostRecoverable recoverable) {
+            throw new NotSupportedException(message: $"The active backend '{m_currentName}' cannot recover from device loss.");
+        }
+
+        recoverable.RecoverFromDeviceLoss(
+            binding: binding,
+            height: height,
+            width: width
+        );
+    }
     /// <summary>Swaps the active backend, deactivating the current one and activating the other; a no-op when no
     /// alternative is available or the presenter has not been activated. On activation failure the previous
     /// backend is restored and the exception rethrown.</summary>
     public void Switch() {
-        if (!m_initialized || (m_other is null)) {
+        if (
+            !m_initialized ||
+            (m_other is null)
+        ) {
             return;
         }
 
@@ -95,15 +120,19 @@ public sealed class BackendSwitcher : ISurfacePresenter, IPresentTimingFeedback,
         (m_current, m_currentName, m_other, m_otherName) = (m_other, m_otherName!, m_current, m_currentName);
 
         try {
-            m_current.Activate(binding: m_binding, width: m_width, height: m_height);
+            m_current.Activate(
+                binding: m_binding,
+                height: m_height,
+                width: m_width
+            );
         } catch {
             (m_current, m_currentName, m_other, m_otherName) = (m_other, m_otherName!, m_current, m_currentName);
-            m_current.Activate(binding: m_binding, width: m_width, height: m_height);
+            m_current.Activate(
+                binding: m_binding,
+                height: m_height,
+                width: m_width
+            );
             throw;
         }
-    }
-    /// <inheritdoc/>
-    public void Dispose() {
-        Deactivate();
     }
 }

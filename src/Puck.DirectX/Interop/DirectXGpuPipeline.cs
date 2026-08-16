@@ -12,6 +12,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuPipeline : IGpuPipeline, IGpuComputePipeline {
     private readonly GCHandle m_token;
+
     private bool m_disposed;
 
     /// <summary>Initializes a new instance wrapping the given layout.</summary>
@@ -36,7 +37,7 @@ public sealed class DirectXGpuPipeline : IGpuPipeline, IGpuComputePipeline {
 
         m_disposed = true;
 
-        var layout = (DirectXPipelineLayout)m_token.Target!;
+        var layout = ((DirectXPipelineLayout)m_token.Target!);
 
         layout.Dispose();
         m_token.Free();

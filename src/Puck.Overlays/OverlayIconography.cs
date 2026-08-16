@@ -39,7 +39,6 @@ public enum OverlayGlyphId : ushort {
     /// <summary>The right-stick-press pictogram glyph.</summary>
     StickRight = 14,
 }
-
 /// <summary>
 /// Procedural action-icon ids for the symbol drawn on an icon element's plate (KEEP IN SYNC with the shader);
 /// <see cref="Number1"/> through <see cref="Number12"/> render as the icon grammar's hairline drafting digits for
@@ -120,7 +119,6 @@ public enum OverlayIconId : ushort {
     /// <summary>An ambient bed (concentric presence rings around the focal dot — a region, not a position).</summary>
     AudioBed = 36,
 }
-
 /// <summary>
 /// Resolves physical buttons and opaque binding icon strings to shader ids, on the CPU — the shader never knows
 /// about controller families or icon names. Face buttons resolve to the NEUTRAL four-position diamond glyphs
@@ -128,6 +126,21 @@ public enum OverlayIconId : ushort {
 /// badge artwork is family-invariant; the family parameter remains the seam a future themed atlas tier keys on.
 /// </summary>
 public static class OverlayGamepadGlyphs {
+    /// <summary>The short ASCII label for a physical-button badge, or <see langword="null"/> for the iconographic
+    /// glyphs (d-pad arrows, the face-position diamonds) that read better as procedural symbols. A present label
+    /// routes the badge to shared-atlas text; its absence leaves the procedural glyph path.</summary>
+    /// <param name="glyph">The badge glyph.</param>
+    /// <returns>The label, at most two characters, or <see langword="null"/>.</returns>
+    public static string? BadgeLabel(OverlayGlyphId glyph) =>
+        glyph switch {
+            OverlayGlyphId.BumperLeft => "LB",
+            OverlayGlyphId.BumperRight => "RB",
+            OverlayGlyphId.TriggerLeft => "LT",
+            OverlayGlyphId.TriggerRight => "RT",
+            OverlayGlyphId.StickLeft => "LS",
+            OverlayGlyphId.StickRight => "RS",
+            _ => null,
+        };
     /// <summary>Resolves a physical button to its badge glyph.</summary>
     /// <param name="button">The physical button (one flag).</param>
     /// <param name="family">The connected controller family — reserved for a future themed (atlas) glyph tier; the
@@ -152,20 +165,6 @@ public static class OverlayGamepadGlyphs {
             _ => OverlayGlyphId.None,
         };
     }
-
-    /// <summary>Resolves a modifier's input source id to its badge glyph.</summary>
-    /// <param name="source">The provider-neutral input source id.</param>
-    /// <returns>The glyph id.</returns>
-    public static OverlayGlyphId ResolveModifierSource(string source) {
-        return source switch {
-            Puck.Input.InputSources.Gamepad.LeftTrigger => OverlayGlyphId.TriggerLeft,
-            Puck.Input.InputSources.Gamepad.RightTrigger => OverlayGlyphId.TriggerRight,
-            Puck.Input.InputSources.Gamepad.LeftShoulder => OverlayGlyphId.BumperLeft,
-            Puck.Input.InputSources.Gamepad.RightShoulder => OverlayGlyphId.BumperRight,
-            _ => OverlayGlyphId.None,
-        };
-    }
-
     /// <summary>Resolves a binding entry's opaque icon string (e.g. <c>action.jump</c>, <c>action.7</c>) to its icon id.</summary>
     /// <param name="icon">The icon string, or <see langword="null"/>.</param>
     /// <returns>The icon id; <see cref="OverlayIconId.Generic"/> when the string is unrecognized or absent.</returns>
@@ -195,8 +194,8 @@ public static class OverlayGamepadGlyphs {
             "edit.bed" => OverlayIconId.AudioBed,
             _ => (((icon is not null) &&
                 icon.StartsWith(
-            value: "action.",
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            value: "action."
         ) &&
                 int.TryParse(
             s: icon.AsSpan(start: "action.".Length),
@@ -207,20 +206,16 @@ public static class OverlayGamepadGlyphs {
             : OverlayIconId.Generic),
         };
     }
-
-    /// <summary>The short ASCII label for a physical-button badge, or <see langword="null"/> for the iconographic
-    /// glyphs (d-pad arrows, the face-position diamonds) that read better as procedural symbols. A present label
-    /// routes the badge to shared-atlas text; its absence leaves the procedural glyph path.</summary>
-    /// <param name="glyph">The badge glyph.</param>
-    /// <returns>The label, at most two characters, or <see langword="null"/>.</returns>
-    public static string? BadgeLabel(OverlayGlyphId glyph) =>
-        glyph switch {
-            OverlayGlyphId.BumperLeft => "LB",
-            OverlayGlyphId.BumperRight => "RB",
-            OverlayGlyphId.TriggerLeft => "LT",
-            OverlayGlyphId.TriggerRight => "RT",
-            OverlayGlyphId.StickLeft => "LS",
-            OverlayGlyphId.StickRight => "RS",
-            _ => null,
+    /// <summary>Resolves a modifier's input source id to its badge glyph.</summary>
+    /// <param name="source">The provider-neutral input source id.</param>
+    /// <returns>The glyph id.</returns>
+    public static OverlayGlyphId ResolveModifierSource(string source) {
+        return source switch {
+            Puck.Input.InputSources.Gamepad.LeftTrigger => OverlayGlyphId.TriggerLeft,
+            Puck.Input.InputSources.Gamepad.RightTrigger => OverlayGlyphId.TriggerRight,
+            Puck.Input.InputSources.Gamepad.LeftShoulder => OverlayGlyphId.BumperLeft,
+            Puck.Input.InputSources.Gamepad.RightShoulder => OverlayGlyphId.BumperRight,
+            _ => OverlayGlyphId.None,
         };
+    }
 }

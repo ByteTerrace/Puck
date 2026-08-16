@@ -39,7 +39,6 @@ public readonly ref struct WireArgs {
         m_ranges = ranges;
         Echo = echo;
     }
-
     /// <summary>Array-mode constructor (b): the trailing tokens are the elements of <paramref name="array"/>.</summary>
     /// <param name="array">The trailing tokens as already-materialized strings (the System.CommandLine fallback).</param>
     /// <param name="echo">Whether a success echo will be surfaced — see <see cref="Echo"/>.</param>
@@ -50,12 +49,18 @@ public readonly ref struct WireArgs {
         Echo = echo;
     }
 
+    /// <summary>The number of trailing tokens (the verb token is not counted).</summary>
+    public int Count => (m_array?.Length ?? m_ranges.Length);
+    /// <summary>
+    /// Whether a success echo produced by this dispatch will actually be surfaced (acks on, or a query verb). A wire
+    /// handler should gate its success-string construction on this — <c>args.Echo ? new CommandResult(...) : CommandResult.None</c>
+    /// — so that in quiet mode the string is never even built. Errors ignore this flag: a handler always builds its error
+    /// string and marks the result <see cref="CommandResult.IsError"/>, and errors are never suppressed.
+    /// </summary>
+    public bool Echo { get; }
     /// <summary>An empty argument list — the explicit "this call site supplies no tokens" value for a helper that takes
     /// <see cref="WireArgs"/> but is being reached from a path that has none.</summary>
     public static WireArgs Empty => default;
-
-    /// <summary>The number of trailing tokens (the verb token is not counted).</summary>
-    public int Count => (m_array?.Length ?? m_ranges.Length);
 
     /// <summary>
     /// Gets the trailing token at <paramref name="index"/> as a span slicing directly into the underlying line or token
@@ -65,15 +70,8 @@ public readonly ref struct WireArgs {
     /// <returns>The token's characters.</returns>
     public ReadOnlySpan<char> this[int index] => ((m_array is { } array)
         ? array[index].AsSpan()
-        : m_line[m_ranges[index]]);
-
-    /// <summary>
-    /// Whether a success echo produced by this dispatch will actually be surfaced (acks on, or a query verb). A wire
-    /// handler should gate its success-string construction on this — <c>args.Echo ? new CommandResult(...) : CommandResult.None</c>
-    /// — so that in quiet mode the string is never even built. Errors ignore this flag: a handler always builds its error
-    /// string and marks the result <see cref="CommandResult.IsError"/>, and errors are never suppressed.
-    /// </summary>
-    public bool Echo { get; }
+        : m_line[m_ranges[index]]
+    );
 
     /// <summary>Whether the token at <paramref name="index"/> equals <paramref name="value"/> case-insensitively — the
     /// allocation-free replacement for the <c>args[i].ToUpperInvariant() switch</c> idiom. An out-of-range index is
@@ -81,12 +79,11 @@ public readonly ref struct WireArgs {
     /// <param name="index">The zero-based trailing-token index.</param>
     /// <param name="value">The word to compare against.</param>
     /// <returns>Whether the token exists and matches.</returns>
-    public bool Is(int index, string value) => (((uint)index < (uint)Count) &&
+    public bool Is(int index, string value) => ((((uint)index) < ((uint)Count)) &&
         this[index].Equals(
-        other: value,
-        comparisonType: StringComparison.OrdinalIgnoreCase
+        comparisonType: StringComparison.OrdinalIgnoreCase,
+        other: value
     ));
-
     /// <summary>Joins the tokens from <paramref name="start"/> onward with single spaces — the one place a verb whose
     /// argument is free text (a path, a name, a message) or a whitespace-split inline-JSON payload rebuilds its tail.
     /// Reproduces <c>string.Join(' ', args[start..])</c>: interior whitespace runs collapse to one space, exactly as
@@ -110,7 +107,8 @@ public readonly ref struct WireArgs {
         // short inline-JSON row), a heap array only for a genuinely long tail.
         var destination = ((length <= MaxStackTail)
             ? stackalloc char[MaxStackTail]
-            : new char[length]);
+            : new char[length]
+        );
         var offset = 0;
 
         for (var index = start; (index < count); index++) {
@@ -127,7 +125,6 @@ public readonly ref struct WireArgs {
 
         return new string(value: destination[..length]);
     }
-
     /// <summary>Parses the token at <paramref name="index"/> as a finite invariant-culture <see cref="float"/> straight
     /// from its span, through <see cref="CommandArgs.TryParseFloat(ReadOnlySpan{char}, out float)"/>.</summary>
     /// <param name="index">The zero-based trailing-token index.</param>
@@ -137,7 +134,6 @@ public readonly ref struct WireArgs {
         text: this[index],
         value: out value
     );
-
     /// <summary>Parses the token at <paramref name="index"/> as an invariant-culture <see cref="int"/> straight from its
     /// span, through <see cref="CommandArgs.TryParseInt(ReadOnlySpan{char}, out int)"/>.</summary>
     /// <param name="index">The zero-based trailing-token index.</param>

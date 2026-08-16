@@ -50,19 +50,23 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
     /// quaternion is zero follows <see cref="Normalize"/>'s <see cref="Identity"/> answer.</returns>
     public static FixedRigidTransform ComposeNormalized(FixedRigidTransform left, FixedRigidTransform right) =>
         (left * right).Normalize();
-
     /// <summary>Creates a normalized rigid transform from a nondegenerate, rotation-scale dual quaternion.</summary>
     /// <param name="value">The dual quaternion to normalize.</param>
     /// <returns>The normalized rigid transform.</returns>
     /// <exception cref="ArgumentException">The real quaternion is zero.</exception>
     public static FixedRigidTransform FromDualQuaternion(FixedDual<FixedQuaternion> value) {
-        if (!TryFromDualQuaternion(value: value, result: out var result)) {
-            throw new ArgumentException(message: "A rigid transform requires a non-zero real quaternion.", paramName: nameof(value));
+        if (!TryFromDualQuaternion(
+            result: out var result,
+            value: value
+        )) {
+            throw new ArgumentException(
+                message: "A rigid transform requires a non-zero real quaternion.",
+                paramName: nameof(value)
+            );
         }
 
         return result;
     }
-
     /// <summary>Attempts to normalize a rotation-scale dual quaternion into a rigid transform.</summary>
     /// <param name="value">The dual quaternion to normalize.</param>
     /// <param name="result">The normalized transform on success; otherwise <see cref="Identity"/>.</param>
@@ -84,7 +88,6 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
 
         return true;
     }
-
     /// <summary>Creates the transform that rotates by <paramref name="rotation"/> and then translates by <paramref name="translation"/>.</summary>
     /// <param name="rotation">The rotation; normalized before it is encoded. A zero quaternion follows
     /// <see cref="FixedQuaternion.Normalize"/>'s identity convention.</param>
@@ -107,17 +110,21 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             Real: rotation,
             Dual: new FixedQuaternion(
                 X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-                    product: ((((Int128)tx * qw) + ((Int128)ty * qz)) - ((Int128)tz * qy)),
-                    fractionBitCount: HalvedFractionBitCount)),
+                    fractionBitCount: HalvedFractionBitCount,
+                    product: (((((Int128)tx) * qw) + (((Int128)ty) * qz)) - (((Int128)tz) * qy))
+                )),
                 Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-                    product: ((((Int128)ty * qw) + ((Int128)tz * qx)) - ((Int128)tx * qz)),
-                    fractionBitCount: HalvedFractionBitCount)),
+                    fractionBitCount: HalvedFractionBitCount,
+                    product: (((((Int128)ty) * qw) + (((Int128)tz) * qx)) - (((Int128)tx) * qz))
+                )),
                 Z: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-                    product: ((((Int128)tz * qw) + ((Int128)tx * qy)) - ((Int128)ty * qx)),
-                    fractionBitCount: HalvedFractionBitCount)),
+                    fractionBitCount: HalvedFractionBitCount,
+                    product: (((((Int128)tz) * qw) + (((Int128)tx) * qy)) - (((Int128)ty) * qx))
+                )),
                 W: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-                    product: (-((((Int128)tx * qx) + ((Int128)ty * qy)) + ((Int128)tz * qz))),
-                    fractionBitCount: HalvedFractionBitCount))
+                    fractionBitCount: HalvedFractionBitCount,
+                    product: (-(((((Int128)tx) * qx) + (((Int128)ty) * qy)) + (((Int128)tz) * qz)))
+                ))
             )
         ));
     }
@@ -165,8 +172,15 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         // fractional bits, and a large θ cannot underflow the quotient against a full-magnitude dual. The
         // perpendicular part is never materialized in the Q16 carrier (its components can exceed it even when the
         // scaled result is representable).
-        var halfSlide = DotOverAngle(real: real, dual: dual, angleRaw: angle);
-        var scaleQ62 = SinOverAngleQ62(sinRaw: sin.Value, angleRaw: angle);
+        var halfSlide = DotOverAngle(
+            angleRaw: angle,
+            dual: dual,
+            real: real
+        );
+        var scaleQ62 = SinOverAngleQ62(
+            sinRaw: sin.Value,
+            angleRaw: angle
+        );
         // Both dual terms share the 2^78 product scale (raw·Q62 and rawSlide·Q32·Q46), so each component fuses into
         // ONE ties-even rounding; the summed Int128 magnitudes stay below 2^127.
         var diffQ46 = ((long)((((Int128)cos.Value) << 30) - (scaleQ62 >> 16)));
@@ -181,14 +195,17 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             ),
             Dual: new(
                 X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-                    product: unchecked((((Int128)dual.X.Value * scaleQ62) + (unitX * slideDiff))),
-                    fractionBitCount: 62)),
+                    product: unchecked(((((Int128)dual.X.Value) * scaleQ62) + (unitX * slideDiff))),
+                    fractionBitCount: 62
+                )),
                 Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-                    product: unchecked((((Int128)dual.Y.Value * scaleQ62) + (unitY * slideDiff))),
-                    fractionBitCount: 62)),
+                    product: unchecked(((((Int128)dual.Y.Value) * scaleQ62) + (unitY * slideDiff))),
+                    fractionBitCount: 62
+                )),
                 Z: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
-                    product: unchecked((((Int128)dual.Z.Value * scaleQ62) + (unitZ * slideDiff))),
-                    fractionBitCount: 62)),
+                    product: unchecked(((((Int128)dual.Z.Value) * scaleQ62) + (unitZ * slideDiff))),
+                    fractionBitCount: 62
+                )),
                 W: FixedQ4816.FromRawBits(value: unchecked(-FixedQ4816.RoundProductSum(productSum: (halfSlide * sin.Value))))
             )
         ));
@@ -218,9 +235,9 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         } else {
             var positive = UInt128.Zero;
             var negativeSum = UInt128.Zero;
-            var px = ((UInt128)FixedVectorMath.RawMagnitude(value: real.X.Value) * FixedVectorMath.RawMagnitude(value: dual.X.Value));
-            var py = ((UInt128)FixedVectorMath.RawMagnitude(value: real.Y.Value) * FixedVectorMath.RawMagnitude(value: dual.Y.Value));
-            var pz = ((UInt128)FixedVectorMath.RawMagnitude(value: real.Z.Value) * FixedVectorMath.RawMagnitude(value: dual.Z.Value));
+            var px = (((UInt128)FixedVectorMath.RawMagnitude(value: real.X.Value)) * FixedVectorMath.RawMagnitude(value: dual.X.Value));
+            var py = (((UInt128)FixedVectorMath.RawMagnitude(value: real.Y.Value)) * FixedVectorMath.RawMagnitude(value: dual.Y.Value));
+            var pz = (((UInt128)FixedVectorMath.RawMagnitude(value: real.Z.Value)) * FixedVectorMath.RawMagnitude(value: dual.Z.Value));
 
             if ((real.X.Value ^ dual.X.Value) < 0L) { negativeSum += px; } else { positive += px; }
             if ((real.Y.Value ^ dual.Y.Value) < 0L) { negativeSum += py; } else { positive += py; }
@@ -245,9 +262,16 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
 
             remainder = (((ulong)magnitude) - (narrowQuotient * angleRaw));
             quotient = narrowQuotient;
-        } else if (X86Base.X64.IsSupported && (high < angleRaw)) {
+        } else if (
+            X86Base.X64.IsSupported &&
+            (high < angleRaw)
+        ) {
 #pragma warning disable SYSLIB5004
-            var (wideQuotient, wideRemainder) = X86Base.X64.DivRem(lower: ((ulong)magnitude), upper: high, divisor: angleRaw);
+            var (wideQuotient, wideRemainder) = X86Base.X64.DivRem(
+                divisor: angleRaw,
+                lower: ((ulong)magnitude),
+                upper: high
+            );
 #pragma warning restore SYSLIB5004
 
             quotient = wideQuotient;
@@ -261,15 +285,18 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
 
         var distanceToNext = (angleRaw - remainder);
 
-        if ((remainder > distanceToNext) || ((remainder == distanceToNext) && ((quotient & UInt128.One) != UInt128.Zero))) {
+        if (
+            (remainder > distanceToNext) ||
+            ((remainder == distanceToNext) && ((quotient & UInt128.One) != UInt128.Zero))
+        ) {
             ++quotient;
         }
 
         return (negative
             ? (-((Int128)quotient))
-            : ((Int128)quotient));
+            : ((Int128)quotient)
+        );
     }
-
     // sin θ / θ at Q62 (|sin| ≤ θ keeps the ratio within [−1, 1]), ties to even. |sin raw| ≤ angleRaw keeps the
     // shifted numerator's high word below the divisor, and the hardware arm tests that precondition itself — the
     // sibling shape DotOverAngle and FixedQ4816.operator / carry — rather than resting on SinCosRaw's accuracy: an
@@ -280,9 +307,16 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         ulong quotient;
         ulong remainder;
 
-        if (X86Base.X64.IsSupported && ((magnitude >> 2) < angleRaw)) {
+        if (
+            X86Base.X64.IsSupported &&
+            ((magnitude >> 2) < angleRaw)
+        ) {
 #pragma warning disable SYSLIB5004
-            (quotient, remainder) = X86Base.X64.DivRem(lower: (magnitude << 62), upper: (magnitude >> 2), divisor: angleRaw);
+            (quotient, remainder) = X86Base.X64.DivRem(
+                divisor: angleRaw,
+                lower: (magnitude << 62),
+                upper: (magnitude >> 2)
+            );
 #pragma warning restore SYSLIB5004
         } else {
             var numerator = (((UInt128)magnitude) << 62);
@@ -294,14 +328,19 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
 
         var distanceToNext = (angleRaw - remainder);
 
-        if ((remainder > distanceToNext) || ((remainder == distanceToNext) && ((quotient & 1UL) != 0UL))) {
+        if (
+            (remainder > distanceToNext) ||
+            ((remainder == distanceToNext) && ((quotient & 1UL) != 0UL))
+        ) {
             ++quotient;
         }
 
         return ((sign == 0L)
             ? ((Int128)quotient)
-            : (-((Int128)quotient)));
+            : (-((Int128)quotient))
+        );
     }
+
     /// <summary>Interpolates along the screw axis between two unit transforms (screw linear interpolation),
     /// <c>from * Exp(amount · Log(from⁻¹ · to))</c>.</summary>
     /// <param name="from">The transform at <paramref name="amount"/> zero.</param>
@@ -347,8 +386,8 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         var (logReal, logDual) = delta.LogCore(sine: sine);
 
         return new FixedRigidTransform(Value: (from.Value * Exp(
-            real: (logReal * amount),
-            dual: (logDual * amount)
+            dual: (logDual * amount),
+            real: (logReal * amount)
         ).Value)).Normalize();
     }
 
@@ -371,9 +410,9 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
     /// <returns>The transform with both quaternion parts conjugated.</returns>
     public FixedRigidTransform Inverse() =>
         new(Value: new(
-        Real: Value.Real.Conjugate(),
-        Dual: Value.Dual.Conjugate()
-    ));
+            Real: Value.Real.Conjugate(),
+            Dual: Value.Dual.Conjugate()
+        ));
     /// <summary>Computes the logarithm — the screw (dual bivector) generating this transform, which must be
     /// unit.</summary>
     /// <returns><c>Real</c> = the rotation bivector (the axis times θ/2, matching
@@ -417,43 +456,54 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
         var s = sine.Value;
         var tilt = (((1L << FixedQ4816.FractionBitCount) * s) - (Value.Real.W.Value * h));
         var dualScalar = Value.Dual.W.Value;
-        var sSquared = ((Int128)s * s);
-        var realDenominator = (((UInt128)(ulong)s) << FixedQ4816.FractionBitCount);
-        var dualDenominator = ((((UInt128)(ulong)s) * ((ulong)(s * s))) << FixedQ4816.FractionBitCount);
+        var sSquared = (((Int128)s) * s);
+        var realDenominator = (((UInt128)((ulong)s)) << FixedQ4816.FractionBitCount);
+        var dualDenominator = ((((UInt128)((ulong)s)) * ((ulong)(s * s))) << FixedQ4816.FractionBitCount);
 
         return (
             new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: RoundLogLane(numerator: ((Int128)Value.Real.X.Value * h), denominator: realDenominator)),
-                Y: FixedQ4816.FromRawBits(value: RoundLogLane(numerator: ((Int128)Value.Real.Y.Value * h), denominator: realDenominator)),
-                Z: FixedQ4816.FromRawBits(value: RoundLogLane(numerator: ((Int128)Value.Real.Z.Value * h), denominator: realDenominator))
-            ),
+            X: FixedQ4816.FromRawBits(value: RoundLogLane(
+                numerator: (((Int128)Value.Real.X.Value) * h),
+                denominator: realDenominator
+            )),
+            Y: FixedQ4816.FromRawBits(value: RoundLogLane(
+                numerator: (((Int128)Value.Real.Y.Value) * h),
+                denominator: realDenominator
+            )),
+            Z: FixedQ4816.FromRawBits(value: RoundLogLane(
+                numerator: (((Int128)Value.Real.Z.Value) * h),
+                denominator: realDenominator
+            ))
+        ),
             new FixedVector3(
-                X: FixedQ4816.FromRawBits(value: RoundLogLane(
-                    numerator: ((((Int128)Value.Dual.X.Value * h) * sSquared) - (((Int128)Value.Real.X.Value * dualScalar) * tilt)),
-                    denominator: dualDenominator
-                )),
-                Y: FixedQ4816.FromRawBits(value: RoundLogLane(
-                    numerator: ((((Int128)Value.Dual.Y.Value * h) * sSquared) - (((Int128)Value.Real.Y.Value * dualScalar) * tilt)),
-                    denominator: dualDenominator
-                )),
-                Z: FixedQ4816.FromRawBits(value: RoundLogLane(
-                    numerator: ((((Int128)Value.Dual.Z.Value * h) * sSquared) - (((Int128)Value.Real.Z.Value * dualScalar) * tilt)),
-                    denominator: dualDenominator
-                ))
-            )
+            X: FixedQ4816.FromRawBits(value: RoundLogLane(
+                numerator: (((((Int128)Value.Dual.X.Value) * h) * sSquared) - ((((Int128)Value.Real.X.Value) * dualScalar) * tilt)),
+                denominator: dualDenominator
+            )),
+            Y: FixedQ4816.FromRawBits(value: RoundLogLane(
+                numerator: (((((Int128)Value.Dual.Y.Value) * h) * sSquared) - ((((Int128)Value.Real.Y.Value) * dualScalar) * tilt)),
+                denominator: dualDenominator
+            )),
+            Z: FixedQ4816.FromRawBits(value: RoundLogLane(
+                numerator: (((((Int128)Value.Dual.Z.Value) * h) * sSquared) - ((((Int128)Value.Real.Z.Value) * dualScalar) * tilt)),
+                denominator: dualDenominator
+            ))
+        )
         );
     }
-
     // The denominator carries the extra K so DivideProductSum's built-in ·2¹⁶ cancels: the result is
     // round(numerator / (denominator >> 16)), ties to even, in one narrowing.
     private static long RoundLogLane(Int128 numerator, UInt128 denominator) {
         var negative = (numerator < Int128.Zero);
 
         return FusedArithmetic.DivideProductSum(
-            numerator: (negative, unchecked((UInt128)(negative ? -numerator : numerator))),
-            denominator: denominator
+            denominator: denominator,
+            numerator: (negative, unchecked((UInt128)(negative
+            ? -numerator
+            : numerator)))
         );
     }
+
     /// <summary>Returns the unit-normalized transform: unit rotation, dual part re-orthogonalized against it.</summary>
     /// <returns>The normalized transform. A transform whose real quaternion is zero has no direction to scale and
     /// answers <see cref="Identity"/>, discarding the dual part — the value <see cref="FromDualQuaternion"/> refuses
@@ -496,6 +546,7 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             )))
         ));
     }
+
     /// <summary>Applies the transform to a point: rotate, then translate.</summary>
     /// <param name="point">The point to transform.</param>
     /// <returns>The transformed point.</returns>

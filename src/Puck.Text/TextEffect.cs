@@ -27,7 +27,13 @@ public readonly record struct TextEffect(
     Vector4? TintColor = null
 ) {
     /// <summary>The inert effect — <see cref="TextEffectKind.None"/> — that resolves to the identity channel.</summary>
-    public static readonly TextEffect None = new(TextEffectKind.None, new(0.0f), new(0.0f), new(0.0f), new(1.0f));
+    public static readonly TextEffect None = new(
+        TextEffectKind.None,
+        new(0.0f),
+        new(0.0f),
+        new(0.0f),
+        new(1.0f)
+    );
 
     /// <summary>Whether this effect animates a glyph's transform over time and is therefore gated by the reduced-motion
     /// setting. Static kinds (<see cref="TextEffectKind.Color"/>, <see cref="TextEffectKind.Weight"/>) and the reveal

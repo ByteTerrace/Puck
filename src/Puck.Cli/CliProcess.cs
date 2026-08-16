@@ -21,9 +21,8 @@ internal static class CliProcess {
 
         return process.ExitCode;
     }
-
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
-        RunCapturedAsync(fileName: fileName, arguments: arguments, input: input, timeout: timeout).GetAwaiter().GetResult();
+        RunCapturedAsync(arguments: arguments, fileName: fileName, input: input, timeout: timeout).GetAwaiter().GetResult();
 
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) {
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -78,7 +77,6 @@ internal static class CliProcess {
             TimedOut: timedOut
         );
     }
-
     private static async Task<string> PumpAsync(
         StreamReader reader,
         CliProcessOutputStream stream,
@@ -98,7 +96,6 @@ internal static class CliProcess {
 
         return text.ToString();
     }
-
     private static async Task WriteInputAsync(StreamWriter writer, string input, CancellationToken cancellationToken) {
         try {
             if (input.Length != 0) {
@@ -112,14 +109,11 @@ internal static class CliProcess {
         }
     }
 }
-
 internal enum CliProcessOutputStream {
     Stdout,
     Stderr,
 }
-
 internal sealed record CliProcessOutputLine(string Line, long Sequence, CliProcessOutputStream Stream);
-
 internal sealed record CliProcessResult(
     int ExitCode,
     IReadOnlyList<CliProcessOutputLine> OutputLines,

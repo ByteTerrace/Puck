@@ -1,92 +1,133 @@
 using Puck.Abstractions.Capture;
-using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.Hosting.Tests;
 
 public sealed class HostingContractTests {
     [Fact]
-    public void CapturingRenderNodeKeepsFractionalCadence() {
-        using var inner = new TestRenderNode(cpuPixels: true);
+    public void ExternalClocksAcceptZeroTimestampAndUnregister() {
+        var clock = new ExternalPresentClock();
+
+        clock.Publish(arrivalTimestamp: 0, frameVersion: 7);
+        Assert.True(condition: clock.TryRead(arrivalTimestamp: out var timestamp, frameVersion: out var version));
+        Assert.Equal(actual: timestamp, expected: 0);
+        Assert.Equal(actual: version, expected: 7);
+
+        var registry = new ExternalClockRegistry();
+        var source = registry.RegisterSource(sourceId: "camera:0");
+
+        source.Publish(arrivalTimestamp: 11, frameVersion: 1);
+        Assert.True(condition: registry.PacerClock.TryRead(arrivalTimestamp: out timestamp, frameVersion: out version));
+        source.Dispose();
+        Assert.Empty(collection: registry.SourceIds);
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => source.Publish(arrivalTimestamp: 12, frameVersion: 2));
+    }
+    [Fact]
+    public void FrameCaptureControllerKeepsFractionalCadence() {
         using var sink = new CountingCaptureSink();
-        using var node = new CapturingRenderNode(
-            inner: inner,
+        using var controller = new FrameCaptureController();
+
+        controller.Arm(
             sink: sink,
-            options: new CaptureOptions { FrameRate = 24, SourceFrameRate = 60 }
+            options: new CaptureOptions { FrameRate = 24 }
         );
-        var context = FrameContext();
+        var surface = Surface.CpuPixels(
+            format: SurfaceFormat.R8G8B8A8Unorm,
+            height: 1U,
+            pixels: new byte[4],
+            width: 1U
+        );
 
         for (var frame = 0; (frame < 60); ++frame) {
-            _ = node.ProduceFrame(context: in context);
+            var context = FrameContext(elapsedTicks: (((ulong)frame) * EngineTicks.PerRate(ratePerSecond: 60U)));
+
+            controller.Capture(
+                context: in context,
+                readback: null,
+                surface: surface
+            );
         }
 
         Assert.Equal(expected: 24, actual: sink.Count);
     }
-
     [Fact]
-    public void CapturingRenderNodeContainsCaptureCallbackFaults() {
-        using var gateInner = new TestRenderNode(cpuPixels: true);
-        using var gateSink = new CountingCaptureSink();
-        var gateCalls = 0;
-        using var gateNode = new CapturingRenderNode(
-            inner: gateInner,
-            sink: gateSink,
-            options: new CaptureOptions(),
-            captureGate: () => {
-                ++gateCalls;
-
-                throw new InvalidOperationException(message: "gate fault");
-            }
+    public void FrameCaptureControllerContainsReadbackFaults() {
+        using var sink = new CountingCaptureSink();
+        using var controller = new FrameCaptureController();
+        var readback = new FaultingReadback();
+        var surface = Surface.SameDeviceImage(
+            format: SurfaceFormat.R8G8B8A8Unorm,
+            height: 1U,
+            imageHandle: 1,
+            imageViewHandle: 2,
+            width: 1U
         );
         var context = FrameContext();
 
-        _ = gateNode.ProduceFrame(context: in context);
-        _ = gateNode.ProduceFrame(context: in context);
-
-        Assert.Equal(expected: 1, actual: gateCalls);
-        Assert.Equal(expected: 0, actual: gateSink.Count);
-
-        using var readbackInner = new TestRenderNode(cpuPixels: false);
-        using var readbackSink = new CountingCaptureSink();
-        var readbackCalls = 0;
-        using var readbackNode = new CapturingRenderNode(
-            inner: readbackInner,
-            sink: readbackSink,
-            options: new CaptureOptions(),
-            cpuReadback: () => {
-                ++readbackCalls;
-
-                throw new InvalidOperationException(message: "readback fault");
-            }
+        controller.Arm(
+            sink: sink,
+            options: new CaptureOptions()
         );
+        controller.Capture(context: in context, readback: readback, surface: surface);
+        controller.Capture(context: in context, readback: readback, surface: surface);
 
-        _ = readbackNode.ProduceFrame(context: in context);
-        _ = readbackNode.ProduceFrame(context: in context);
-
-        Assert.Equal(expected: 1, actual: readbackCalls);
-        Assert.Equal(expected: 0, actual: readbackSink.Count);
+        Assert.Equal(expected: 1, actual: readback.CallCount);
+        Assert.Equal(expected: 0, actual: sink.Count);
+        Assert.False(condition: controller.WantsFrames);
+        Assert.IsType<InvalidOperationException>(@object: controller.Fault);
+        Assert.Same(expected: sink, actual: controller.Disarm());
     }
-
+    [InlineData(0, 0)]
+    [InlineData(30, -1)]
     [Theory]
-    [InlineData(0, 60, 0)]
-    [InlineData(30, 0, 0)]
-    [InlineData(30, 60, -1)]
-    public void CapturingRenderNodeRejectsInvalidCadence(int frameRate, int sourceFrameRate, int maxFrames) {
-        using var inner = new TestRenderNode(cpuPixels: true);
+    public void FrameCaptureControllerRejectsInvalidCadence(int frameRate, int maxFrames) {
         using var sink = new CountingCaptureSink();
+        using var controller = new FrameCaptureController();
         var options = new CaptureOptions {
             FrameRate = frameRate,
-            SourceFrameRate = sourceFrameRate,
             MaxFrames = maxFrames,
         };
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new CapturingRenderNode(
-            inner: inner,
-            sink: sink,
-            options: options
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => controller.Arm(
+            options: options,
+            sink: sink
         ));
     }
+    [Fact]
+    public void FrameCaptureControllerReadsTheExactGpuSurfaceAndResetsSessionIndex() {
+        using var firstSink = new CountingCaptureSink();
+        using var secondSink = new CountingCaptureSink();
+        using var controller = new FrameCaptureController();
+        var readback = new RecordingReadback();
+        var surface = Surface.SameDeviceImage(
+            format: SurfaceFormat.B8G8R8A8Unorm,
+            height: 1U,
+            imageHandle: 11,
+            imageViewHandle: 12,
+            width: 1U
+        );
+        var context = FrameContext(elapsedTicks: 42UL);
 
+        controller.Arm(
+            sink: firstSink,
+            options: new CaptureOptions { MaxFrames = 1 }
+        );
+        controller.Capture(context: in context, readback: readback, surface: surface);
+
+        Assert.False(condition: controller.WantsFrames);
+        Assert.Equal(expected: 0L, actual: firstSink.LastFrame.FrameIndex);
+        Assert.Equal(expected: 42UL, actual: firstSink.LastFrame.TimestampTicks);
+        Assert.Equal(expected: surface, actual: readback.LastSurface);
+        Assert.Same(expected: firstSink, actual: controller.Disarm());
+
+        controller.Arm(
+            sink: secondSink,
+            options: new CaptureOptions { MaxFrames = 1 }
+        );
+        controller.Capture(context: in context, readback: readback, surface: surface);
+
+        Assert.Equal(expected: 0L, actual: secondSink.LastFrame.FrameIndex);
+    }
     [Fact]
     public void CapabilityRevocationCascadesThroughIrrevocableSubgrant() {
         ITestCapability capability = new TestCapability();
@@ -111,42 +152,24 @@ public sealed class HostingContractTests {
         Assert.False(condition: parent.HoldsCapability<ITestCapability>(capability: out _));
         Assert.False(condition: child.HoldsCapability<ITestCapability>(capability: out _));
     }
-
-    [Fact]
-    public void QueuedMachineWorkerRejectsLoadAfterDisposal() {
-        using var core = new TestQueuedCore();
-        var worker = new QueuedMachineWorker(
-            width: 1,
-            height: 1,
-            maximumPendingSteps: 1,
-            workerName: "hosting-contract-test"
-        );
-
-        worker.Dispose();
-
-        _ = Assert.Throws<ObjectDisposedException>(testCode: () => worker.Load(core: core));
-        Assert.False(condition: worker.IsAssigned);
-        Assert.Equal(expected: 0, actual: core.DisposeCount);
-    }
-
     [Fact]
     public void OsTimeCorrelatorRejectsZeroAndDefaultFrequency() {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => OsTimeCorrelator.Pin(
-            osReference: 0U,
             engineReference: 0UL,
-            osFrequency: 0UL
+            osFrequency: 0UL,
+            osReference: 0U
         ));
         var correlator = default(OsTimeCorrelator);
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => correlator.ToEngineTicks(
-            osStamp: 0U,
-            engineCeiling: 0UL
+            engineCeiling: 0UL,
+            osStamp: 0U
         ));
     }
 
-    private static FrameContext FrameContext() => new(
+    private static FrameContext FrameContext(ulong elapsedTicks = 0UL) => new(
         Host: HostContext.Empty,
-        ElapsedTicks: 0UL,
+        ElapsedTicks: elapsedTicks,
         DeltaTicks: 0UL,
         FrameDeltaTicks: 0UL,
         AccumulatorTicks: 0UL,
@@ -156,44 +179,40 @@ public sealed class HostingContractTests {
     );
 
     private interface ITestCapability { }
-
     private sealed class TestCapability : ITestCapability { }
-
     private sealed class CountingCaptureSink : ICaptureSink {
         public int Count { get; private set; }
+        public CaptureFrame LastFrame { get; private set; }
 
-        public void Consume(in CaptureFrame frame) => ++Count;
+        public void Consume(in CaptureFrame frame) {
+            LastFrame = frame;
+            ++Count;
+        }
         public void Dispose() { }
     }
+    private sealed class FaultingReadback : IPresentSurfaceReadback {
+        public int CallCount { get; private set; }
 
-    private sealed class TestRenderNode(bool cpuPixels) : IRenderNode {
+        public Surface ReadSurface(Surface surface) {
+            ++CallCount;
+
+            throw new InvalidOperationException(message: "readback fault");
+        }
+    }
+    private sealed class RecordingReadback : IPresentSurfaceReadback {
         private readonly byte[] m_pixels = [0, 0, 0, 255];
 
-        public NodeDescriptor Descriptor => new(Name: "test", SurfaceId: default);
+        public Surface LastSurface { get; private set; }
 
-        public Surface ProduceFrame(in FrameContext context) => (cpuPixels
-            ? Surface.CpuPixels(pixels: m_pixels, width: 1U, height: 1U, format: SurfaceFormat.R8G8B8A8Unorm)
-            : Surface.SameDeviceImage(imageViewHandle: 1, width: 1U, height: 1U, format: SurfaceFormat.R8G8B8A8Unorm));
-        public void Dispose() { }
-    }
+        public Surface ReadSurface(Surface surface) {
+            LastSurface = surface;
 
-    private sealed class TestQueuedCore : IQueuedMachineCore {
-        private readonly uint[] m_framebuffer = [0U];
-
-        public int DisposeCount { get; private set; }
-        public ulong CyclesPerSecond => 1UL;
-        public long CycleCount => 0L;
-        public long NativeFrameIndex => 0L;
-        public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
-
-        public void ConfigureAudio(int sampleRate) { }
-        public int DrainAudioSamples(Span<short> destination) => 0;
-        public void FlushSave(bool force) { }
-        public int CaptureState(ref byte[] buffer) => 0;
-        public void RestoreState(byte[] buffer, int length) { }
-        public void ApplyInput(in MachinePadState input) { }
-        public void RunCycles(long cycles) { }
-        public ITimeTravelLookahead<MachinePadState> CreateLookahead() => throw new NotSupportedException();
-        public void Dispose() => ++DisposeCount;
+            return Surface.CpuPixels(
+                pixels: m_pixels,
+                width: surface.Width,
+                height: surface.Height,
+                format: surface.Format
+            );
+        }
     }
 }

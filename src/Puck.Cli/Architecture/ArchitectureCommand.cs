@@ -138,7 +138,6 @@ internal static class ArchitectureCommand {
 
         return output.ToString();
     }
-
     /// <summary>Emits one layering row, wrapping its members under a hanging indent past 79 columns.</summary>
     private static void AppendRow(string label, string[] members, StringBuilder output, int width) {
         var line = new StringBuilder(value: label.PadRight(totalWidth: width));
@@ -212,7 +211,7 @@ internal static class ArchitectureCommand {
         // proves less than it appears. Rather than print that caveat unconditionally, MEASURE it: a caveat
         // that is always emitted teaches a reader to skip it.
         var conditional = model.Projects.Values
-            .Where(predicate: p => (File.ReadAllText(path: p.File).Contains(value: "<ProjectReference", comparisonType: StringComparison.Ordinal) && ConditionalReferenceIn(file: p.File)))
+            .Where(predicate: p => (File.ReadAllText(path: p.File).Contains(comparisonType: StringComparison.Ordinal, value: "<ProjectReference") && ConditionalReferenceIn(file: p.File)))
             .Select(selector: p => p.Name)
             .ToArray();
 
@@ -259,7 +258,7 @@ internal static class ArchitectureCommand {
                 path: Path.GetDirectoryName(path: project.File)!,
                 searchPattern: $"{project.Name}.dll",
                 searchOption: SearchOption.AllDirectories)
-                .FirstOrDefault(predicate: p => p.Contains(value: $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}{configuration}{Path.DirectorySeparatorChar}", comparisonType: StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(predicate: p => p.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}{configuration}{Path.DirectorySeparatorChar}"));
             var declared = (model.Friends.TryGetValue(key: project.Name, value: out var listed) ? listed : []);
 
             if (assembly is null) {
@@ -342,7 +341,7 @@ internal static class ArchitectureCommand {
     }
     private static bool ConditionalReferenceIn(string file) {
         foreach (var line in File.ReadLines(path: file)) {
-            if (line.Contains(value: "<ProjectReference", comparisonType: StringComparison.Ordinal) && line.Contains(value: "Condition=", comparisonType: StringComparison.Ordinal)) {
+            if (line.Contains(comparisonType: StringComparison.Ordinal, value: "<ProjectReference") && line.Contains(comparisonType: StringComparison.Ordinal, value: "Condition=")) {
                 return true;
             }
         }

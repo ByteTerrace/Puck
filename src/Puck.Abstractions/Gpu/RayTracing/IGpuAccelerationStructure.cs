@@ -14,6 +14,7 @@ public interface IGpuAccelerationStructure : IDisposable {
     /// <c>VkAccelerationStructureKHR</c> handle, or a Direct3D 12 TLAS GPU virtual address. Valid after
     /// <see cref="EnsureCreated"/>.</summary>
     nint TlasReference { get; }
+
     /// <summary>Creates the shared unit-AABB bottom-level structure, the per-frame top-level structure, and the
     /// persistently mapped instance buffer (capacity <paramref name="maxInstanceCount"/>). Idempotent.</summary>
     /// <param name="maxInstanceCount">The instance-buffer / top-level structure instance capacity.</param>

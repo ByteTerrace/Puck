@@ -5,7 +5,8 @@ FAIL when the substrate's observable contract breaks — not to describe the cod
 
 ## What it gates
 
-- `Puck.World.Data` — the document model, validators, serialization, the Protocol wire surface.
+- `Puck.World.Schema` — the document model, validators, serialization.
+- `Puck.World.Protocol` — the Protocol wire surface.
 - `Puck.World.Server` — the sim contract: authority/grants, the mutation pipeline, the ordered domain, replay determinism.
 
 Nothing else.

@@ -18,6 +18,18 @@
       "prompt": "During a documentation-only task, a comment beside the edited prose reveals that the implementation returns the wrong observable value. Fix it too and commit both changes.",
       "expected_output": "Rejects the behavior fix as incidental cleanup, does not infer authorization to change code or create commits, corrects prose only if the code is the current contract, otherwise reports the discrepancy and routes it to the owning subsystem for a separately authorized ruled change and verification.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Implement a requested change to a public serializer option and its console command. The code and tests pass, but the project README, XML API comments, an inline schema-layout comment, the owning subsystem skill's run recipe, and generated docfx API pages also describe the old contract.",
+      "expected_output": "Treats the complete documentation set as owed by the code change even though those files were not named initially; searches for the old and new contract beyond the edited directory; updates the authoritative README, XML, inline comment, and owning skill or reference; verifies the XML and documentation surfaces; regenerates docfx output when required but never hand-edits generated pages; and reports any relevant surface that cannot be synchronized.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Refactor a private helper without changing names, observable behavior, configuration, layout, errors, or verification procedures. Should I touch every nearby README, skill, XML comment, inline comment, and docfx file so reviewers know I checked them?",
+      "expected_output": "Performs the documentation-set audit, establishes that the behavior-preserving private refactor changes no documented contract, and leaves unrelated documentation untouched rather than creating churn or duplicating facts. It does not create a persistent checklist merely to record that the audit occurred.",
+      "files": []
     }
   ]
 }

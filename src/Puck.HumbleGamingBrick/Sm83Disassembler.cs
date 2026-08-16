@@ -25,9 +25,9 @@ public static class Sm83Disassembler {
         ArgumentNullException.ThrowIfNull(argument: read);
 
         var opcode = read(address);
-        var byte1 = read((ushort)(address + 1));
-        var byte2 = read((ushort)(address + 2));
-        var word = (ushort)((byte2 << 8) | byte1);
+        var byte1 = read(((ushort)(address + 1)));
+        var byte2 = read(((ushort)(address + 2)));
+        var word = ((ushort)((byte2 << 8) | byte1));
 
         // The same dispatch order Execute() uses: the CB prefix, then the four regular bit-field blocks, then the four
         // 32-entry range groups for the remainder.
@@ -68,20 +68,20 @@ public static class Sm83Disassembler {
         }
 
         if ((opcode & 0xC7) == 0xC7) {
-            return (1, $"RST {Hex8(value: (byte)(opcode & 0x38))}");
+            return (1, $"RST {Hex8(value: ((byte)(opcode & 0x38)))}");
         }
 
         return opcode switch {
             < 0x20 => DecodeLowGroup0(
-            opcode: opcode,
             address: address,
             byte1: byte1,
+            opcode: opcode,
             word: word
         ),
             < 0x40 => DecodeLowGroup1(
-            opcode: opcode,
             address: address,
             byte1: byte1,
+            opcode: opcode,
             word: word
         ),
             < 0xE0 => DecodeControlGroup(
@@ -89,8 +89,8 @@ public static class Sm83Disassembler {
             word: word
         ),
             _ => DecodeHighPageGroup(
-            opcode: opcode,
             byte1: byte1,
+            opcode: opcode,
             word: word
         ),
         };
@@ -190,18 +190,17 @@ public static class Sm83Disassembler {
             _ => $"SET {(opcode >> 3) & 7},{index}",
         });
     }
-
     // The absolute target of a relative jump: PC-after-the-2-byte-instruction plus the signed offset — what a reader
     // wants to see, not the raw displacement.
     private static string RelativeTarget(ushort address, byte offset) =>
-        Hex16(value: (ushort)((address + 2) + (sbyte)offset));
+        Hex16(value: ((ushort)((address + 2) + ((sbyte)offset))));
     private static string HighPage(byte value) =>
         $"0xFF{value.ToString(
         format: "X2",
         provider: CultureInfo.InvariantCulture
     )}";
     private static string SignedByte(byte value) {
-        var signed = (sbyte)value;
+        var signed = ((sbyte)value);
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,

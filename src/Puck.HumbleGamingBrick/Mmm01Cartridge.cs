@@ -17,6 +17,7 @@ public sealed class Mmm01Cartridge : CartridgeBase {
 
     private readonly int m_ramBankWrapMask;
     private readonly int m_romBankWrapMask;
+
     private bool m_locked;
     private bool m_mbc1Mode;
     private bool m_mbc1ModeDisable;

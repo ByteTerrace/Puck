@@ -9,6 +9,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanLogicalDevice : IDisposable {
     private bool m_disposed;
+
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
 
     /// <summary>Gets the graphics queue of the device.</summary>

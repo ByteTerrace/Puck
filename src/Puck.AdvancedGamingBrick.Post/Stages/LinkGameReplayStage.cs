@@ -30,14 +30,11 @@ namespace Puck.AdvancedGamingBrick.Post;
 internal sealed class LinkGameReplayStage : IPostStage {
     /// <summary>The environment variable naming the commercial multiplayer ROM this stage links two consoles on.</summary>
     private const string RomEnvironmentVariable = "PUCK_AGB_LINK_GAME";
-
     // The dev-box path the ROM lives at, echoed into the skip message so the stage is discoverable without hunting.
     private const string DevBoxRomPath = @"D:\Source\ByteTerrace\Silo\ROMS\Mario Kart - Super Circuit (USA).gba";
-
     // Frames to advance the linked pair: enough to cover the game's boot-time link-probe window (empirically frames
     // ~30-270 for the captured link-session cart) with margin.
     private const int Frames = 300;
-
     // Sub-frame budget the session advances per step. Fine enough that a ~2k-cycle normal-mode transfer's start bit is
     // observed before it clears (a whole-frame poll misses it, since a cable-completed transfer clears fast), yet a
     // fixed schedule — identical across both determinism runs, so the interleave (and every snapshot) replays.
@@ -46,7 +43,6 @@ internal sealed class LinkGameReplayStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "link-game-replay";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -114,8 +110,7 @@ internal sealed class LinkGameReplayStage : IPostStage {
         var reacted = (first.ParentFrameHash != solo);
         var handshake = (first.ParentProbe.SawMultiplayerRound || first.ChildProbe.SawMultiplayerRound);
 
-        return PostStageOutcome.Pass(detail: (((($"{Path.GetFileName(path: romPath)}: both consoles ran the game's SIO link probe over the cable "
-                + $"(multiplayer-mode setup + {first.ParentProbe.NormalTransfers}/{first.ChildProbe.NormalTransfers} cable-completed normal transfers P/C), ")
+        return PostStageOutcome.Pass(detail: (((((string)$"{Path.GetFileName(path: romPath)}: both consoles ran the game's SIO link probe over the cable (multiplayer-mode setup + {first.ParentProbe.NormalTransfers}/{first.ChildProbe.NormalTransfers} cable-completed normal transfers P/C), ")
                 + $"replay-identical across two runs ({first.ParentState.Size}+{first.ChildState.Size} state bytes over {Frames} frames); ")
                 + $"no multiplayer round completed and the linked screen is {(reacted
             ? "DIFFERENT from"
@@ -138,8 +133,8 @@ internal sealed class LinkGameReplayStage : IPostStage {
             rom: rom
         );
 
-        var parentBus = (AgbBus)parent.Machine.Bus;
-        var childBus = (AgbBus)child.Machine.Bus;
+        var parentBus = ((AgbBus)parent.Machine.Bus);
+        var childBus = ((AgbBus)child.Machine.Bus);
         var parentProbe = new ProbeEvidence();
         var childProbe = new ProbeEvidence();
 
@@ -165,7 +160,6 @@ internal sealed class LinkGameReplayStage : IPostStage {
             ChildState: child.Machine.Snapshot()
         );
     }
-
     // A lone console (no cable) full-booted and advanced the same number of frames — the control the linked parent's
     // screen is compared against to see whether the game reacted to the detected partner.
     private static ulong RunSoloControl(ReadOnlyMemory<byte> bios, byte[] rom) {
@@ -180,21 +174,19 @@ internal sealed class LinkGameReplayStage : IPostStage {
 
         return FrameHash(machine: console.Machine);
     }
-
     // Builds a console and full-BIOS-boots it (Cpu.Reset), the real boot path a commercial game's link probe needs —
     // NOT the HLE direct boot, on which the game mis-boots and never runs its link stack.
     private static AgbMachineInstance CreateConsole(ReadOnlyMemory<byte> bios, byte[] rom) {
         // Each console gets its own ROM copy: a shared array would let one console's cartridge writes corrupt the other.
         var console = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
             bios: bios,
-            rom: (byte[])rom.Clone()
+            rom: ((byte[])rom.Clone())
         ));
 
         console.Machine.Cpu.Reset();
 
         return console;
     }
-
     // Both consoles must have engaged the game's link stack: Multiplayer-mode setup AND a real cable-completed normal
     // transfer. Null means the evidence held.
     private static string? Verify(LinkGameResult result) =>
@@ -233,12 +225,10 @@ internal sealed class LinkGameReplayStage : IPostStage {
 
         /// <summary>Whether the console entered SIO Multiplayer mode (SIOCNT bits 12-13 = 2) at any sample.</summary>
         public bool SawMultiplayerMode { get; private set; }
-
         /// <summary>The count of normal-mode transfers observed completing (a start-bit set then cleared) — real
         /// cable-completed exchanges under the linked session (a lone console leaves an external-clock transfer
         /// pending).</summary>
         public int NormalTransfers { get; private set; }
-
         /// <summary>Whether a Multiplayer round ever completed with an assigned player id or partner-slot data — the
         /// completed-handshake signal (observed to stay false: the game never clocks a round during detection).</summary>
         public bool SawMultiplayerRound { get; private set; }

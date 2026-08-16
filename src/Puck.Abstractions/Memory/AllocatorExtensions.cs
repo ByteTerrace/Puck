@@ -15,15 +15,14 @@ public static unsafe class AllocatorExtensions {
         ArgumentNullException.ThrowIfNull(allocator);
         ArgumentOutOfRangeException.ThrowIfNegative(size);
 
-        return ((nint)allocator.Allocate(size: (nuint)size));
+        return ((nint)allocator.Allocate(size: ((nuint)size)));
     }
-
     /// <summary>Frees a block addressed by an <see cref="nint"/>.</summary>
     /// <param name="allocator">The allocator.</param>
     /// <param name="ptr">The block to free.</param>
     public static void Free(this IAllocator allocator, nint ptr) {
         ArgumentNullException.ThrowIfNull(allocator);
 
-        allocator.Free(ptr: (void*)ptr);
+        allocator.Free(ptr: ((void*)ptr));
     }
 }

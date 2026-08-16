@@ -10,6 +10,7 @@ internal sealed class LinearResampler {
     private const int OutputSampleRate = 48000;
 
     private readonly double m_step;
+
     private double m_fraction;
     private bool m_hasPrevious;
     private float m_previousLeft;
@@ -19,8 +20,14 @@ internal sealed class LinearResampler {
     /// <param name="inputSampleRate">The source sample rate in hertz.</param>
     /// <param name="inputChannels">The source interleaved channel count.</param>
     public LinearResampler(int inputSampleRate, int inputChannels) {
-        InputChannels = Math.Max(val1: 1, val2: inputChannels);
-        m_step = ((double)Math.Max(val1: 1, val2: inputSampleRate) / OutputSampleRate);
+        InputChannels = Math.Max(
+            val1: 1,
+            val2: inputChannels
+        );
+        m_step = (((double)Math.Max(
+            val1: 1,
+            val2: inputSampleRate
+        )) / OutputSampleRate);
     }
 
     /// <summary>Gets the source interleaved channel count.</summary>
@@ -38,7 +45,8 @@ internal sealed class LinearResampler {
             var left = input[baseIndex];
             var right = ((InputChannels >= 2)
                 ? input[(baseIndex + 1)]
-                : left);
+                : left
+            );
 
             if (!m_hasPrevious) {
                 m_hasPrevious = true;
@@ -49,7 +57,7 @@ internal sealed class LinearResampler {
             }
 
             while (m_fraction < 1.0) {
-                var t = (float)m_fraction;
+                var t = ((float)m_fraction);
 
                 emitted[0] = (m_previousLeft + ((left - m_previousLeft) * t));
                 emitted[1] = (m_previousRight + ((right - m_previousRight) * t));

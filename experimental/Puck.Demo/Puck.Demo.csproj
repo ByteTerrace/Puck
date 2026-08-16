@@ -54,10 +54,10 @@
         <!-- Ship the committed creation-review SCENARIOS next to the demo so the scenario flag resolves
              scenarios/name.json from the output directory (see ScenarioCliSeams). -->
         <Content Include="scenarios\**\*.json" CopyToOutputDirectory="PreserveNewest" />
-        <!-- Ship the pre-baked MTSDF font atlas (one combined PNG + a layout/kerning JSON per face) -
-             see tools/font-atlas/README.md for the bake pipeline that produces these. -->
-        <Content Include="Assets\Fonts\**\*.png" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="Assets\Fonts\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <!-- The retired demo reads Puck.Text's one shared pre-baked MTSDF atlas rather than carrying a second copy.
+             See experimental/tools/font-atlas/README.md for the retained oracle sources. -->
+        <Content Include="..\..\src\Puck.Text\Assets\Fonts\**\*.png" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <Content Include="..\..\src\Puck.Text\Assets\Fonts\**\*.json" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

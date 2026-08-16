@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.GamingBricks;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -15,7 +15,6 @@ internal sealed class QueuedHostAudioStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-audio";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

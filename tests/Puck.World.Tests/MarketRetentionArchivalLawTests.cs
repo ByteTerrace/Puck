@@ -13,6 +13,7 @@ namespace Puck.World.Tests;
 /// live ones.</summary>
 public sealed class MarketRetentionArchivalLawTests {
     private static readonly WorldPrincipal Seller = WorldPrincipal.Seat(slot: 0);
+
     private const int FillCount = WorldMarketCapacity.MaxListings;
 
     // A bespoke document, not MarketFixtures.BuildDocument(): filling 256 listings needs a seller apple balance far
@@ -85,7 +86,7 @@ public sealed class MarketRetentionArchivalLawTests {
             fixture.Step();
         }
 
-        Assert.True(condition: (fixture.Server.Definition.Market?.Listings?.Count ?? int.MaxValue) < FillCount, userMessage: "the retention sweep was expected to have archived every terminal row by now");
+        Assert.True(condition: ((fixture.Server.Definition.Market?.Listings?.Count ?? int.MaxValue) < FillCount), userMessage: "the retention sweep was expected to have archived every terminal row by now");
 
         // The next listing now fits — proving the archived rows actually freed capacity.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
@@ -105,9 +106,8 @@ public sealed class MarketRetentionArchivalLawTests {
 
         Assert.NotNull(@object: next);
         // Listing ids stay monotonic — archival never reissues a pruned id.
-        Assert.Equal(expected: (long)(FillCount + 1), actual: next!.Id);
+        Assert.Equal(expected: ((long)(FillCount + 1)), actual: next!.Id);
     }
-
     [Fact]
     public void ActiveRowsNeverPrune_TheCapStillRefusesEvenPastRetention() {
         // A tiny retention window — if the sweep were (wrongly) pruning active rows, this would expose it fastest.

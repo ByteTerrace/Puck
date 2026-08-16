@@ -20,9 +20,9 @@ public sealed class GradientCameraSensor : ICameraSensor {
             for (var x = 0; (x < SensorImage.Width); ++x) {
                 var value = (((x * 252) / (SensorImage.Width - 1)) + rowBias);
 
-                destination[(rowStart + x)] = (byte)((value > 255)
+                destination[(rowStart + x)] = ((byte)((value > 255)
                     ? 255
-                    : value);
+                    : value));
             }
         }
     }

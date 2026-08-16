@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick;
@@ -27,8 +26,7 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
 
     /// <inheritdoc/>
     public long NativeFrameIndex =>
-        (long)(m_instance.Machine.Clock.CycleCount / m_oneFrameCycles);
-
+        ((long)(m_instance.Machine.Clock.CycleCount / m_oneFrameCycles));
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_framebuffer.Pixels;
@@ -37,10 +35,9 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
     public void RestoreState(byte[] buffer, int length) =>
         m_instance.Machine.RestoreState(reader: new StateReader(
         buffer: buffer,
-        start: 0,
-        length: length
+        length: length,
+        start: 0
     ));
-
     /// <inheritdoc/>
     public void ApplyInput(in MachinePadState input) {
         m_joypad.SetButtons(pressed: BrickPad.ToJoypad(pad: in input));
@@ -53,11 +50,9 @@ internal sealed class HumbleGamingBrickLookahead : ITimeTravelLookahead<MachineP
             y: input.Tilt.Y
         );
     }
-
     /// <inheritdoc/>
     public void RunFrame() =>
         m_instance.Machine.Run(tCycles: m_oneFrameCycles);
-
     /// <inheritdoc/>
     public void Dispose() =>
         m_instance.Dispose();

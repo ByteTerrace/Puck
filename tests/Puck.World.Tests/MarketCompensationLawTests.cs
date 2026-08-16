@@ -45,7 +45,6 @@ public sealed class MarketCompensationLawTests {
         Assert.Equal(expected: MarketFixtures.SellerStartingGold, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: Seller));
         Assert.Equal(expected: MarketFixtures.BidderStartingGold, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: Bidder));
     }
-
     [Fact]
     public void UnbidListing_ExpiresAndReturnsTheEscrowedItem() {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());

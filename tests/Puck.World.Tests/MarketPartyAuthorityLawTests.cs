@@ -79,7 +79,6 @@ public sealed class MarketPartyAuthorityLawTests {
         Assert.NotNull(@object: consoleListing);
         Assert.Equal(expected: (applesBefore - 5), actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.AppleRow, principal: Victim));
     }
-
     [Fact]
     public void PlaceMarketBid_ImpersonationRefused_SelfAndConsoleOnBehalfSucceed() {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
@@ -121,7 +120,6 @@ public sealed class MarketPartyAuthorityLawTests {
         Assert.Equal(expected: 20L, actual: MarketFixtures.FindListing(definition: fixture.Server.Definition, id: listingId)!.CurrentBid);
         Assert.Equal(expected: (goldBefore - 20), actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: ThirdParty));
     }
-
     [Fact]
     public void BuyoutMarketListing_ImpersonationRefused_SelfAndConsoleOnBehalfSucceed() {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
@@ -155,7 +153,6 @@ public sealed class MarketPartyAuthorityLawTests {
         Assert.Equal(expected: WorldMarketListingStatus.Settled, actual: MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1)!.Status);
         Assert.Equal(expected: (goldBefore - 30), actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: ThirdParty));
     }
-
     [Fact]
     public void CancelMarketListing_ImpersonationRefused_SelfSucceeds() {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());

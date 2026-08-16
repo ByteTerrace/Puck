@@ -12,13 +12,12 @@ public enum ConsoleModel {
     /// <c>inc b</c> is what cartridges probe to detect Advanced hardware.</summary>
     Agb = 2,
 }
-
 /// <summary>The capability questions components ask of a model, so a gate reads as the capability it means rather
 /// than an equality against one model.</summary>
 public static class ConsoleModelExtensions {
     /// <summary>Whether the model has Color hardware (palette RAM, HDMA, double-speed, the Color I/O block). True for
-    /// <see cref="ConsoleModel.Cgb"/> and <see cref="ConsoleModel.Agb"/> — the Advance plays GB/GBC cartridges on its
-    /// Color-compatible silicon.</summary>
+    /// <see cref="ConsoleModel.Cgb"/> and <see cref="ConsoleModel.Agb"/> — the Advanced machine plays DMG/CGB cartridges
+    /// on its Color-compatible silicon.</summary>
     /// <param name="model">The model to interrogate.</param>
     /// <returns><see langword="true"/> when the model has Color hardware.</returns>
     public static bool SupportsColor(this ConsoleModel model) =>

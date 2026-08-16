@@ -21,7 +21,6 @@ public sealed class ParserLaxityTests {
 
         Assert.Null(@object: exception);
     }
-
     [Fact]
     public void TrailingGarbage_OneByteAppended_Refuses() {
         var codec = new CborAttestationCodec();
@@ -31,7 +30,6 @@ public sealed class ParserLaxityTests {
 
         Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     // Every proper prefix of a valid attestation must refuse, and must refuse as a FormatException rather than
     // by indexing off the end — the "never trust a length beyond the bytes that arrived" claim, checked
     // over every possible truncation instead of asserted for one.
@@ -43,7 +41,7 @@ public sealed class ParserLaxityTests {
 
         for (var length = 0; (length < wire.Length); length += 1) {
             try {
-                _ = codec.DecodeAttestation(wire: wire.AsSpan(start: 0, length: length));
+                _ = codec.DecodeAttestation(wire: wire.AsSpan(length: length, start: 0));
                 misbehaved.Add(item: $"length {length} decoded instead of refusing");
             } catch (FormatException) {
                 // Expected.
@@ -54,7 +52,6 @@ public sealed class ParserLaxityTests {
 
         Assert.Empty(collection: misbehaved);
     }
-
     [Fact]
     public void NonCanonical_OuterArrayReencodedAsIndefiniteLength_Refuses() {
         var codec = new CborAttestationCodec();
@@ -65,7 +62,6 @@ public sealed class ParserLaxityTests {
 
         Assert.Contains(expectedSubstring: "indefinite-length", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     // 0x82 (array, 2 elements, minimally encoded) rewritten as 0x98 0x02 (array, count in a following byte).
     // Well-formed CBOR, accepted by Strict conformance, and a different byte string for the same attestation.
     [Fact]
@@ -78,7 +74,6 @@ public sealed class ParserLaxityTests {
 
         Assert.Contains(expectedSubstring: "not canonically encoded", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void FingerprintWidth_ThirtyOneByteDomain_Refuses() {
         var codec = new CborAttestationCodec();
@@ -87,7 +82,6 @@ public sealed class ParserLaxityTests {
 
         Assert.Contains(expectedSubstring: "fingerprint field is exactly 32", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void FingerprintWidth_ThirtyTwoByteDomainControl_Decodes() {
         var codec = new CborAttestationCodec();
@@ -96,7 +90,6 @@ public sealed class ParserLaxityTests {
 
         Assert.Null(@object: exception);
     }
-
     // 258 truncates to 2 (key binding) in a byte-wide model, so a decoder that casts rather than checks
     // would hand the verifier a chain hop dressed as a claim.
     [Fact]

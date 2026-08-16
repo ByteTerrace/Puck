@@ -42,7 +42,6 @@ public sealed class PortalSweepOriginLawTests {
         Assert.Equal(expected: afterFirstStep, actual: body.FixedPreviousPosition);
         Assert.NotEqual(expected: afterFirstStep, actual: body.FixedPosition);
     }
-
     [Fact]
     public void Pose_HardTeleport_CollapsesSweptSegmentToLandingPosition() {
         using var fixture = Fixtures.FreshServer();
@@ -69,7 +68,6 @@ public sealed class PortalSweepOriginLawTests {
         // body used to be.
         Assert.Equal(expected: landing, actual: body.FixedPreviousPosition);
     }
-
     [Fact]
     public void Reconcile_HardCorrection_CollapsesSweptSegmentToLandingPosition() {
         using var fixture = Fixtures.FreshServer();
@@ -84,7 +82,7 @@ public sealed class PortalSweepOriginLawTests {
 
         Assert.NotEqual(expected: body.FixedPreviousPosition, actual: body.FixedPosition);
 
-        _ = body.Reconcile(x: 7f, z: 2f, yawRadians: 0f, seconds: 0.25f);
+        _ = body.Reconcile(seconds: 0.25f, x: 7f, yawRadians: 0f, z: 2f);
 
         // Reconcile is the OTHER hard-write site the brief names (CommitTeleport runs regardless of whether the
         // continuity kind it reports afterward is Teleport or Correction) — same reset, same reason.

@@ -9,13 +9,11 @@ namespace Puck.AdvancedGamingBrick;
 public interface IArmCpu {
     /// <summary>Resets the core to its power-on state and reloads the pipeline from the reset vector.</summary>
     void Reset();
-
     /// <summary>Initialises the core to the post-BIOS "direct boot" state — System mode with the standard stack
     /// pointers the BIOS leaves behind (SP_sys, SP_irq, SP_svc) — and begins execution at
     /// <paramref name="entryPoint"/>. Used to launch a cartridge without running the BIOS.</summary>
     /// <param name="entryPoint">The address to begin executing from (typically the cartridge entry, 0x08000000).</param>
     void SetupDirectBoot(uint entryPoint);
-
     /// <summary>Executes one instruction, charging its cycles to the machine through the bus.</summary>
     void Step();
 
@@ -27,7 +25,6 @@ public interface IArmCpu {
     /// <param name="index">The register number, 0–15 (15 is the program counter).</param>
     /// <returns>The register value.</returns>
     uint GetRegister(int index);
-
     /// <summary>Writes a general-purpose register in the currently visible mode bank. Writing R15 does not
     /// reload the pipeline; use it only for test setup, not to model a branch.</summary>
     /// <param name="index">The register number, 0–15.</param>

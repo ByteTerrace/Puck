@@ -17,6 +17,7 @@ public sealed class WasmModuleLoader {
 
     // The WebAssembly binary preamble: the four bytes '\0', 'a', 's', 'm'. Anything else is treated as WAT text.
     private static readonly byte[] WasmMagic = [0x00, 0x61, 0x73, 0x6D];
+
     private readonly IAssetSource m_assetSource;
     private readonly ScriptingEngine m_engine;
     private readonly ContentAddressedLruCache<Module> m_moduleCache;
@@ -31,7 +32,6 @@ public sealed class WasmModuleLoader {
         maxCachedModules: DefaultMaxCachedModules
     ) {
     }
-
     /// <summary>Initializes a loader over the given engine and asset source.</summary>
     /// <param name="engine">The engine compiled modules bind to.</param>
     /// <param name="assetSource">The source module bytes are read from.</param>
@@ -53,6 +53,24 @@ public sealed class WasmModuleLoader {
         m_assetSource = assetSource;
         m_engine = engine;
         m_moduleCache = new ContentAddressedLruCache<Module>(capacity: maxCachedModules);
+    }
+
+    private Module Compile(ReadOnlyMemory<byte> content, string name) {
+        var span = content.Span;
+
+        if (span.StartsWith(value: WasmMagic)) {
+            return Module.FromBytes(
+                bytes: span,
+                engine: m_engine.Engine,
+                name: name
+            );
+        }
+
+        return Module.FromText(
+            engine: m_engine.Engine,
+            name: name,
+            text: Encoding.UTF8.GetString(bytes: span)
+        );
     }
 
     /// <summary>Reads, compiles (or returns a cached), and identifies the addon module at <paramref name="path"/>.</summary>
@@ -101,24 +119,6 @@ public sealed class WasmModuleLoader {
             ContentHash: contentHash,
             Module: module,
             Path: fullPath
-        );
-    }
-
-    private Module Compile(ReadOnlyMemory<byte> content, string name) {
-        var span = content.Span;
-
-        if (span.StartsWith(value: WasmMagic)) {
-            return Module.FromBytes(
-                bytes: span,
-                engine: m_engine.Engine,
-                name: name
-            );
-        }
-
-        return Module.FromText(
-            engine: m_engine.Engine,
-            name: name,
-            text: Encoding.UTF8.GetString(bytes: span)
         );
     }
 }

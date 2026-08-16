@@ -111,7 +111,7 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
             return VkResult.Success;
         }
 
-        if ((uint)results.Length < queryCount) {
+        if (((uint)results.Length) < queryCount) {
             throw new ArgumentException(
                 message: "Result span is smaller than the requested query count.",
                 paramName: nameof(results)
@@ -126,9 +126,9 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
                 queryPoolHandle,
                 firstQuery,
                 queryCount,
-                (nuint)(queryCount * (uint)sizeof(ulong)),
-                (nint)pData,
-                (ulong)sizeof(ulong),
+                ((nuint)(queryCount * ((uint)sizeof(ulong)))),
+                ((nint)pData),
+                ((ulong)sizeof(ulong)),
                 QueryResult64Bit | QueryResultWaitBit
             );
         }
@@ -148,11 +148,11 @@ public unsafe sealed class VulkanNativeQueryPoolApi : IVulkanQueryPoolApi {
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateQueryPool = (delegate* unmanaged[Cdecl]<nint, in VkQueryPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateQueryPool"u8),
-                DestroyQueryPool = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyQueryPool"u8),
-                CmdResetQueryPool = (delegate* unmanaged[Cdecl]<nint, nint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdResetQueryPool"u8),
-                CmdWriteTimestamp = (delegate* unmanaged[Cdecl]<nint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdWriteTimestamp"u8),
-                GetQueryPoolResults = (delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nuint, nint, ulong, uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetQueryPoolResults"u8),
+                CreateQueryPool = ((delegate* unmanaged[Cdecl]<nint, in VkQueryPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateQueryPool"u8)),
+                DestroyQueryPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyQueryPool"u8)),
+                CmdResetQueryPool = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdResetQueryPool"u8)),
+                CmdWriteTimestamp = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdWriteTimestamp"u8)),
+                GetQueryPoolResults = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nuint, nint, ulong, uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetQueryPoolResults"u8)),
             }
         );
     }

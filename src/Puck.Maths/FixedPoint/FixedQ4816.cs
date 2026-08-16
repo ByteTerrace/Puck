@@ -41,9 +41,14 @@ public readonly partial record struct FixedQ4816(long Value)
     private const double ScaledMaximum = 9223372036854774784d;
     private const double ScaledMinimum = -9223372036854775808d;
 
-    // Atan2 constants: half/full turns at Q61 for the octant fold-back.
+    // Atan2 constant: the half turn at Q61 for the octant fold-back; the full turn is the public <see cref="PiQ61"/>.
     internal const long Atan2HalfPiQ61 = 3622009729038561421L;  // round(π/2 · 2^61)
-    internal const long Atan2PiQ61 = 7244019458077122842L;      // round(π · 2^61)
+
+    /// <summary>The number of fraction bits <see cref="PiQ61"/> is carried at (<c>61</c>).</summary>
+    public const int PiQ61FractionBitCount = 61;
+    /// <summary>The correctly rounded π at <see cref="PiQ61FractionBitCount"/> fraction bits — the same constant the
+    /// atan2 octant fold-back reads.</summary>
+    public const long PiQ61 = 7244019458077122842L;             // round(π · 2^61)
 
     // SinCos constants. Reduction runs in turns (2^64 raw = one turn): the two's-complement wrap of the 128-bit
     // reduction product is the exact mod-2π. The kernels are odd/even Taylor polynomials at Q60 over |θ| ≤ π/2
@@ -52,7 +57,6 @@ public readonly partial record struct FixedQ4816(long Value)
     internal const long SinCosInvTwoPiQ64 = 2935890503282001226L;  // round(2^64 / 2π)
     internal const long SinCosQuarterTurnQ64 = (1L << 62);
     internal const long SinCosTwoPiQ60 = 7244019458077122842L;     // round(2π · 2^60)
-
     // sin θ = θ·Σ (−1)ᵏ θ²ᵏ/(2k+1)!, coefficients at Q60 for k = 0..6.
     internal const long SinPolyC0Q60 = 1152921504606846976L;
     internal const long SinPolyC1Q60 = -192153584101141163L;
@@ -61,7 +65,6 @@ public readonly partial record struct FixedQ4816(long Value)
     internal const long SinPolyC4Q60 = 3177142594265L;
     internal const long SinPolyC5Q60 = -28883114493L;
     internal const long SinPolyC6Q60 = 185148170L;
-
     // cos θ = Σ (−1)ᵏ θ²ᵏ/(2k)!, coefficients at Q60 for k = 0..7.
     internal const long CosPolyC0Q60 = 1152921504606846976L;
     internal const long CosPolyC1Q60 = -576460752303423488L;
@@ -71,13 +74,11 @@ public readonly partial record struct FixedQ4816(long Value)
     internal const long CosPolyC5Q60 = -317714259426L;
     internal const long CosPolyC6Q60 = 2406926208L;
     internal const long CosPolyC7Q60 = -13224869L;
-
     // log2(1 + r) ≈ r·(c1 + r·(c2 + r·(c3 + r·c4))), r ≤ 2⁻⁷: log2(e)/k alternating, at Q61 (truncation ≤ 2⁻³⁶).
     internal const long Log2PolyC1Q61 = 3326628274461080623L;
     internal const long Log2PolyC2Q61 = -1663314137230540311L;
     internal const long Log2PolyC3Q61 = 1108876091487026874L;
     internal const long Log2PolyC4Q61 = -831657068615270156L;
-
     // 2^r ≈ 1 + r·(c1 + r·(c2 + r·(c3 + r·c4))), r ≤ 2⁻⁷: (ln 2)^k/k! at Q62 (truncation ≤ 2⁻⁴⁵).
     internal const long Exp2PolyC1Q62 = 3196577161300663915L;
     internal const long Exp2PolyC2Q62 = 1107849223398934356L;
@@ -154,7 +155,6 @@ public readonly partial record struct FixedQ4816(long Value)
         2200226891723076266UL, 2213613743890823949UL, 2226946941196521597UL, 2240226912024014907UL,
         2253454079647176014UL, 2266628862310854103UL, 2279751673310229346UL, 2292822921068607810UL,
     ];
-
     // Exp2 interval table: round(2^(i/128) · 2^62) for i = 0..127.
     internal static ReadOnlySpan<ulong> Exp2TableQ62 => [
         4611686018427387904UL, 4636727017470743990UL, 4661903986662671290UL, 4687217664307630838UL,
@@ -190,7 +190,6 @@ public readonly partial record struct FixedQ4816(long Value)
         8832331321595618838UL, 8880290007267394103UL, 8928509103859867100UL, 8976990025378585914UL,
         9025734193507008925UL, 9074743037648195108UL, 9124017994966720698UL, 9173560510430823462UL,
     ];
-
     // Atan2 interval tables over z = min/max ∈ [0, 1] at Q62, 128 intervals z_i = i/128: atan(z_i) and the Taylor
     // coefficients f'(z_i), f''(z_i)/2, f'''(z_i)/6, all at Q61 (cubic truncation ≤ 2⁻³¹ over h ≤ 2⁻⁷).
     internal static ReadOnlySpan<long> AtanTableQ61 => [
@@ -360,7 +359,7 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <exception cref="OverflowException">The result exceeds <see cref="MaxValue"/>.</exception>
     [VerifiedCode("fixed-q4816.increment-checked", Basis = "exact-by-construction")]
     public static FixedQ4816 operator checked ++(FixedQ4816 value) =>
-        new(Value: checked(value.Value + RawOne));
+        new(Value: checked((value.Value + RawOne)));
     /// <summary>Returns <paramref name="value"/> decreased by one, wrapping on underflow.</summary>
     /// <param name="value">The value to decrement.</param>
     /// <returns><paramref name="value"/> minus <c>1.0</c>.</returns>
@@ -373,7 +372,7 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <exception cref="OverflowException">The result is less than <see cref="MinValue"/>.</exception>
     [VerifiedCode("fixed-q4816.decrement-checked", Basis = "exact-by-construction")]
     public static FixedQ4816 operator checked --(FixedQ4816 value) =>
-        new(Value: checked(value.Value - RawOne));
+        new(Value: checked((value.Value - RawOne)));
     /// <summary>Adds two values, wrapping on overflow.</summary>
     /// <param name="x">The first addend.</param>
     /// <param name="y">The second addend.</param>
@@ -388,7 +387,7 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <exception cref="OverflowException">The sum is outside the representable range.</exception>
     [VerifiedCode("fixed-q4816.add-checked", Basis = "exact-by-construction")]
     public static FixedQ4816 operator checked +(FixedQ4816 x, FixedQ4816 y) =>
-        new(Value: checked(x.Value + y.Value));
+        new(Value: checked((x.Value + y.Value)));
     /// <summary>Subtracts <paramref name="y"/> from <paramref name="x"/>, wrapping on underflow.</summary>
     /// <param name="x">The minuend.</param>
     /// <param name="y">The subtrahend.</param>
@@ -403,7 +402,7 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <exception cref="OverflowException">The difference is outside the representable range.</exception>
     [VerifiedCode("fixed-q4816.subtract-checked", Basis = "exact-by-construction")]
     public static FixedQ4816 operator checked -(FixedQ4816 x, FixedQ4816 y) =>
-        new(Value: checked(x.Value - y.Value));
+        new(Value: checked((x.Value - y.Value)));
     /// <summary>Multiplies two values in fixed point, rounding the result to nearest with ties to even and wrapping on overflow.</summary>
     /// <param name="x">The multiplicand.</param>
     /// <param name="y">The multiplier.</param>
@@ -413,20 +412,19 @@ public readonly partial record struct FixedQ4816(long Value)
         // and re-applying the sign equals rounding the signed value (the integer neighbors share parity).
         // Measured 2026-07 (.NET 10): this Int128 form is ~2x faster than both Math.BigMul rewrites; re-measure
         // before replacing.
-        var product = ((Int128)x.Value * y.Value);
+        var product = (((Int128)x.Value) * y.Value);
         var negative = (product < Int128.Zero);
-        var magnitude = (UInt128)(negative
+        var magnitude = ((UInt128)(negative
             ? -product
-            : product);
+            : product));
         var truncated = ((ulong)(magnitude >> FractionBitCount));
-        var remainder = (ulong)magnitude & FractionBitMask;
+        var remainder = ((ulong)magnitude) & FractionBitMask;
 
-        if (
-            (remainder > RawHalf) ||
-            ((remainder == RawHalf) && ((truncated & 1UL) != 0UL))
-        ) {
-            ++truncated;
-        }
+        truncated = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: ((1UL << FractionBitCount) - remainder),
+            distanceToTruncated: remainder,
+            truncated: truncated
+        );
 
         var result = ((long)truncated);
 
@@ -440,109 +438,49 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <returns>The rounded product <c><paramref name="x"/> × <paramref name="y"/></c>.</returns>
     /// <exception cref="OverflowException">The rounded product is outside the representable range.</exception>
     public static FixedQ4816 operator checked *(FixedQ4816 x, FixedQ4816 y) {
-        var product = ((Int128)x.Value * y.Value);
+        var product = (((Int128)x.Value) * y.Value);
         var negative = (product < Int128.Zero);
-        var magnitude = (UInt128)(negative
+        var magnitude = ((UInt128)(negative
             ? -product
-            : product);
+            : product));
         var roundedMagnitude = (magnitude >> FractionBitCount);
-        var remainder = ((ulong)magnitude & FractionBitMask);
+        var remainder = ((ulong)magnitude) & FractionBitMask;
 
-        if (
-            (remainder > RawHalf) ||
-            ((remainder == RawHalf) && ((roundedMagnitude & UInt128.One) != UInt128.Zero))
-        ) {
-            ++roundedMagnitude;
-        }
+        roundedMagnitude = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: ((((UInt128)1UL) << FractionBitCount) - remainder),
+            distanceToTruncated: remainder,
+            truncated: roundedMagnitude
+        );
 
-        return FromCheckedMagnitude(magnitude: roundedMagnitude, negative: negative);
+        return new(Value: SignedFixedPointArithmetic.FromCheckedMagnitude(
+            magnitude: roundedMagnitude,
+            negative: negative
+        ));
     }
     /// <summary>Divides <paramref name="x"/> by <paramref name="y"/> in fixed point, rounding the result to nearest with ties to even and wrapping on overflow.</summary>
     /// <param name="x">The dividend.</param>
     /// <param name="y">The divisor.</param>
     /// <returns>The rounded quotient <c><paramref name="x"/> ÷ <paramref name="y"/></c>.</returns>
     /// <exception cref="DivideByZeroException"><paramref name="y"/> is zero.</exception>
-    public static FixedQ4816 operator /(FixedQ4816 x, FixedQ4816 y) {
-        // result = round((x.Value << 16) / y.Value), ties to even. Magnitude divide at 128-bit width: hardware
-        // 128-by-64 division when the quotient fits 64 bits (dividend high word below the divisor), UInt128
-        // otherwise. The 2r vs d rounding compare is evaluated as r vs d − r, which cannot overflow; the combined
-        // sign is re-applied afterward (parity-symmetric, so both signs round identically).
-        var signX = (x.Value >> 63);
-        var signY = (y.Value >> 63);
-        var xMagnitude = unchecked((ulong)((x.Value ^ signX) - signX));
-        var yMagnitude = unchecked((ulong)((y.Value ^ signY) - signY));
-        var high = (xMagnitude >> IntegerBitCount);
-        ulong quotient;
-        ulong remainder;
-
-        if (
-            X86Base.X64.IsSupported &&
-            (high < yMagnitude)
-        ) {
-#pragma warning disable SYSLIB5004
-            (quotient, remainder) = X86Base.X64.DivRem(
-                lower: unchecked((xMagnitude << FractionBitCount)),
-                upper: high,
-                divisor: yMagnitude
-            );
-#pragma warning restore SYSLIB5004
-        } else {
-            var dividend = (((UInt128)xMagnitude) << FractionBitCount);
-            var quotient128 = (dividend / yMagnitude);
-
-            quotient = unchecked((ulong)quotient128);
-            remainder = ((ulong)(dividend - (quotient128 * yMagnitude)));
-        }
-
-        if (
-            (remainder > (yMagnitude - remainder)) ||
-            ((remainder == (yMagnitude - remainder)) && ((quotient & 1UL) != 0UL))
-        ) {
-            ++quotient;
-        }
-
-        var result = unchecked((long)quotient);
-        var resultSign = signX ^ signY;
-
-        return new(Value: unchecked(((result ^ resultSign) - resultSign)));
-    }
+    public static FixedQ4816 operator /(FixedQ4816 x, FixedQ4816 y) =>
+        new(Value: SignedFixedPointArithmetic.Divide(
+            x: x.Value,
+            y: y.Value,
+            fractionBitCount: FractionBitCount,
+            integerBitCount: IntegerBitCount
+        ));
     /// <summary>Divides two values in fixed point, rounding to nearest with ties to even and throwing when the rounded result is not representable.</summary>
     /// <param name="x">The dividend.</param>
     /// <param name="y">The divisor.</param>
     /// <returns>The rounded quotient <c><paramref name="x"/> ÷ <paramref name="y"/></c>.</returns>
     /// <exception cref="DivideByZeroException"><paramref name="y"/> is zero.</exception>
     /// <exception cref="OverflowException">The rounded quotient is outside the representable range.</exception>
-    public static FixedQ4816 operator checked /(FixedQ4816 x, FixedQ4816 y) {
-        var signX = (x.Value >> 63);
-        var signY = (y.Value >> 63);
-        var xMagnitude = unchecked((ulong)((x.Value ^ signX) - signX));
-        var yMagnitude = unchecked((ulong)((y.Value ^ signY) - signY));
-        var dividend = (((UInt128)xMagnitude) << FractionBitCount);
-        var quotient = (dividend / yMagnitude);
-        var remainder = ((ulong)(dividend - (quotient * yMagnitude)));
-
-        if (
-            (remainder > (yMagnitude - remainder)) ||
-            ((remainder == (yMagnitude - remainder)) && ((quotient & UInt128.One) != UInt128.Zero))
-        ) {
-            ++quotient;
-        }
-
-        return FromCheckedMagnitude(magnitude: quotient, negative: ((signX ^ signY) != 0L));
-    }
-
-    private static FixedQ4816 FromCheckedMagnitude(UInt128 magnitude, bool negative) {
-        var negativeLimit = (UInt128.One << 63);
-
-        if (negative) {
-            if (magnitude > negativeLimit) { throw new OverflowException(); }
-            if (magnitude == negativeLimit) { return MinValue; }
-
-            return new(Value: -checked((long)magnitude));
-        }
-
-        return new(Value: checked((long)magnitude));
-    }
+    public static FixedQ4816 operator checked /(FixedQ4816 x, FixedQ4816 y) =>
+        new(Value: SignedFixedPointArithmetic.DivideChecked(
+            x: x.Value,
+            y: y.Value,
+            fractionBitCount: FractionBitCount
+        ));
     /// <summary>Returns the remainder of dividing the raw storage of <paramref name="x"/> by that of <paramref name="y"/>.</summary>
     /// <param name="x">The dividend.</param>
     /// <param name="y">The divisor.</param>
@@ -551,7 +489,10 @@ public readonly partial record struct FixedQ4816(long Value)
     public static FixedQ4816 operator %(FixedQ4816 x, FixedQ4816 y) {
         // Every integer is exactly divisible by ±1. Bypass the CLR's signed-division overflow trap for
         // long.MinValue % -1 while preserving the ordinary divide-by-zero exception for a zero divisor.
-        if ((y.Value == 1L) || (y.Value == -1L)) {
+        if (
+            (y.Value == 1L) ||
+            (y.Value == -1L)
+        ) {
             return Zero;
         }
 
@@ -586,8 +527,10 @@ public readonly partial record struct FixedQ4816(long Value)
     public static FixedQ4816 AdditiveIdentity => default;
     /// <summary>Gets the smallest representable positive value, one unit in the last place (<c>2⁻¹⁶</c>).</summary>
     public static FixedQ4816 Epsilon => new(Value: RawEpsilon);
+
     /// <summary>Gets <c>log2(e)</c> — the factor converting a natural-base argument into the base-2 argument <see cref="Exp2"/> consumes.</summary>
     internal static FixedQ4816 Log2E => new(Value: RawLog2E);
+
     /// <summary>Gets the largest representable value.</summary>
     public static FixedQ4816 MaxValue => new(Value: long.MaxValue);
     /// <summary>Gets the smallest (most negative) representable value.</summary>
@@ -598,8 +541,10 @@ public readonly partial record struct FixedQ4816(long Value)
     public static FixedQ4816 NegativeOne => new(Value: -RawOne);
     /// <summary>Gets the value one.</summary>
     public static FixedQ4816 One => new(Value: RawOne);
+
     /// <summary>Gets the value one half, which the format represents exactly.</summary>
     internal static FixedQ4816 OneHalf => new(Value: RawOneHalf);
+
     /// <summary>Gets the value zero.</summary>
     public static FixedQ4816 Zero => default;
 
@@ -618,7 +563,7 @@ public readonly partial record struct FixedQ4816(long Value)
     public static FixedQ4816 Ceiling(FixedQ4816 value) {
         var floor = value.Value & IntegerBitMask;
 
-        return new(Value: (((value.Value & (long)FractionBitMask) != 0L)
+        return new(Value: (((value.Value & ((long)FractionBitMask)) != 0L)
             ? checked((floor + RawOne))
             : floor));
     }
@@ -631,10 +576,10 @@ public readonly partial record struct FixedQ4816(long Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ4816 Clamp(FixedQ4816 value, FixedQ4816 minimum, FixedQ4816 maximum) =>
         new(Value: Math.Clamp(
-        value: value.Value,
-        max: maximum.Value,
-        min: minimum.Value
-    ));
+            value: value.Value,
+            max: maximum.Value,
+            min: minimum.Value
+        ));
     /// <summary>Returns the magnitude of <paramref name="value"/> carrying the sign of <paramref name="sign"/>.</summary>
     /// <param name="value">The value whose magnitude is taken.</param>
     /// <param name="sign">The value whose sign is applied; a zero <paramref name="sign"/> counts as non-negative.</param>
@@ -642,7 +587,10 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <exception cref="OverflowException"><paramref name="value"/> is <see cref="MinValue"/> and <paramref name="sign"/> is non-negative, so the requested positive magnitude is unrepresentable.</exception>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ4816 CopySign(FixedQ4816 value, FixedQ4816 sign) {
-        if ((value.Value == long.MinValue) && (sign.Value >= 0L)) {
+        if (
+            (value.Value == long.MinValue) &&
+            (sign.Value >= 0L)
+        ) {
             throw new OverflowException(message: $"The positive magnitude of {nameof(FixedQ4816)}.{nameof(MinValue)} is not representable.");
         }
 
@@ -664,15 +612,15 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <returns>A value in <c>[0, 1)</c> equal to <c><paramref name="value"/> − Floor(<paramref name="value"/>)</c>.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ4816 Fractional(FixedQ4816 value) =>
-        new(Value: value.Value & (long)FractionBitMask);
+        new(Value: value.Value & ((long)FractionBitMask));
     /// <summary>Converts a <see cref="double"/> to a <see cref="FixedQ4816"/>, rounding to nearest with ties to even.</summary>
     /// <param name="value">The value to convert.</param>
     /// <returns>The nearest representable <see cref="FixedQ4816"/>, clamped to <c>[<see cref="MinValue"/>, <see cref="MaxValue"/>]</c>. Not-a-number clamps to zero.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ4816 FromDouble(double value) {
         var scaled = double.Round(
-            x: (value * RawOne),
-            mode: MidpointRounding.ToEven
+            mode: MidpointRounding.ToEven,
+            x: (value * RawOne)
         );
 
         // Saturate to the exact extremes rather than casting the nearest-representable clamp: the largest double below
@@ -722,7 +670,7 @@ public readonly partial record struct FixedQ4816(long Value)
 
         // 2^(k + f) = 2^k · 2^(i/128) · 2^r with f's top seven bits selecting the interval and r < 2^-7 residual.
         var k = (value.Value >> FractionBitCount);
-        var f = value.Value & (long)FractionBitMask;
+        var f = value.Value & ((long)FractionBitMask);
         var index = ((int)(f >> 9));
         var r = ((f & 0x1FFL) << 46);
         var acc = Exp2PolyC4Q62;
@@ -761,6 +709,7 @@ public readonly partial record struct FixedQ4816(long Value)
             ? mantissa
             : ((long)((((ulong)mantissa) + (1UL << (((int)shift) - 1))) >> ((int)shift)))));
     }
+
     /// <summary>Returns the hyperbolic cosine and sine of <paramref name="argument"/>.</summary>
     /// <param name="argument">The hyperbolic angle.</param>
     /// <returns>The pair <c>(cosh, sinh)</c>. Both saturate to <see cref="MaxValue"/> once the true value leaves the
@@ -780,9 +729,9 @@ public readonly partial record struct FixedQ4816(long Value)
         var limit = (((Int128)RawCoshSinhExponentLimit) << FractionBitCount);
         var scaled = RoundProduct(
             product: Int128.Clamp(
-                value: product,
+                max: limit,
                 min: -limit,
-                max: limit
+                value: product
             ),
             fractionBitCount: FractionBitCount
         );
@@ -794,6 +743,7 @@ public readonly partial record struct FixedQ4816(long Value)
             Sinh: (forward - backward)
         );
     }
+
     /// <summary>Returns the base-2 logarithm of <paramref name="value"/>.</summary>
     /// <param name="value">The value whose logarithm is returned.</param>
     /// <returns>The base-2 logarithm rounded to the nearest representable value, in the closed range <c>[−16, 47]</c> — both ends are attained exactly, <see cref="Epsilon"/> at −16 and <see cref="MaxValue"/> at 47; non-positive inputs yield <see cref="MinValue"/>.</returns>
@@ -840,13 +790,19 @@ public readonly partial record struct FixedQ4816(long Value)
                 ? One
                 : ((y.Value > 0L)
                     ? Zero
-                    : MaxValue));
+                    : MaxValue
+            ));
         }
 
-        var whole = ((y.Value & (long)FractionBitMask) == 0L);
+        var whole = ((y.Value & ((long)FractionBitMask)) == 0L);
 
         if (x.Value > 0L) {
-            return PowMagnitude(x: x, y: y, whole: whole, negativeResult: false);
+            return PowMagnitude(
+                negativeResult: false,
+                whole: whole,
+                x: x,
+                y: y
+            );
         }
 
         if (!whole) {
@@ -857,7 +813,12 @@ public readonly partial record struct FixedQ4816(long Value)
         var negativeResult = ((exponent & 1L) != 0L);
 
         if (x.Value != long.MinValue) {
-            return PowMagnitude(x: new(Value: -x.Value), y: y, whole: true, negativeResult: negativeResult);
+            return PowMagnitude(
+                x: new(Value: -x.Value),
+                y: y,
+                whole: true,
+                negativeResult: negativeResult
+            );
         }
 
         // MinValue's magnitude is exactly 2^47 — one raw past MaxValue — so it cannot be routed through Abs. It does
@@ -870,7 +831,10 @@ public readonly partial record struct FixedQ4816(long Value)
                 ? Zero
                 : ((exponent == 1L)
                     ? MinValue
-                    : (negativeResult ? MinValue : MaxValue))));
+                    : (negativeResult
+                        ? MinValue
+                        : MaxValue
+        ))));
     }
 
     // The magnitude kernel: x is strictly positive, and negativeResult carries the sign the caller's base and exponent
@@ -888,7 +852,8 @@ public readonly partial record struct FixedQ4816(long Value)
             if (exponent == 1L) {
                 return (negativeResult
                     ? new(Value: -x.Value)
-                    : x);
+                    : x
+                );
             }
 
             if (exponent == -1L) {
@@ -896,7 +861,8 @@ public readonly partial record struct FixedQ4816(long Value)
 
                 return (negativeResult
                     ? new(Value: -inverse.Value)
-                    : inverse);
+                    : inverse
+                );
             }
         }
 
@@ -921,41 +887,58 @@ public readonly partial record struct FixedQ4816(long Value)
             var result = ((ulong)RawOne);
             var baseMagnitude = ((exponent < 0L)
                 ? ((ulong)(One / x).Value)
-                : ((ulong)x.Value));
+                : ((ulong)x.Value)
+            );
             var remaining = ((exponent < 0L)
                 ? -exponent
-                : exponent);
+                : exponent
+            );
 
             while (remaining > 0L) {
                 if ((remaining & 1L) != 0L) {
-                    if (!TryMultiplyMagnitude(x: result, y: baseMagnitude, result: out result)) {
-                        return (negativeResult ? MinValue : MaxValue);
+                    if (!TryMultiplyMagnitude(
+                        result: out result,
+                        x: result,
+                        y: baseMagnitude
+                    )) {
+                        return (negativeResult
+                            ? MinValue
+                            : MaxValue
+                        );
                     }
                 }
 
                 remaining >>= 1;
 
                 if (remaining > 0L) {
-                    if (!TryMultiplyMagnitude(x: baseMagnitude, y: baseMagnitude, result: out baseMagnitude)) {
-                        return (negativeResult ? MinValue : MaxValue);
+                    if (!TryMultiplyMagnitude(
+                        result: out baseMagnitude,
+                        x: baseMagnitude,
+                        y: baseMagnitude
+                    )) {
+                        return (negativeResult
+                            ? MinValue
+                            : MaxValue
+                        );
                     }
                 }
             }
 
             return (negativeResult
                 ? new(Value: -((long)result))
-                : new(Value: ((long)result)));
+                : new(Value: ((long)result))
+            );
         }
 
         // Form and round y·log2(x) at full width before applying Exp2's saturation gates. Using the public
         // wrapping multiplication here can turn an exponent outside the Q48.16 range into an arbitrary value.
-        var exponentProduct = ((Int128)y.Value * log.Value);
+        var exponentProduct = (((Int128)y.Value) * log.Value);
         var exponentNegative = (exponentProduct < Int128.Zero);
-        var exponentMagnitude = (UInt128)(exponentNegative
+        var exponentMagnitude = ((UInt128)(exponentNegative
             ? -exponentProduct
-            : exponentProduct);
+            : exponentProduct));
         var roundedExponentMagnitude = (exponentMagnitude >> FractionBitCount);
-        var exponentRemainder = ((ulong)exponentMagnitude & FractionBitMask);
+        var exponentRemainder = ((ulong)exponentMagnitude) & FractionBitMask;
 
         if (
             (exponentRemainder > RawHalf) ||
@@ -965,33 +948,37 @@ public readonly partial record struct FixedQ4816(long Value)
         }
 
         var exponentRaw = (exponentNegative
-            ? -(Int128)roundedExponentMagnitude
-            : (Int128)roundedExponentMagnitude);
+            ? -((Int128)roundedExponentMagnitude)
+            : (Int128)roundedExponentMagnitude
+        );
 
         if (exponentRaw >= (47L << FractionBitCount)) {
-            return (negativeResult ? MinValue : MaxValue);
+            return (negativeResult
+                ? MinValue
+                : MaxValue
+            );
         }
 
         if (exponentRaw <= (-18L << FractionBitCount)) {
             return Zero;
         }
 
-        var scaled = Exp2(value: new(Value: (long)exponentRaw));
+        var scaled = Exp2(value: new(Value: ((long)exponentRaw)));
 
         return (negativeResult
             ? new(Value: -scaled.Value)
-            : scaled);
+            : scaled
+        );
     }
-
     // One squaring-ladder step: the multiply operator's exact product and ties-to-even Q16 rounding, on magnitudes,
     // reporting instead of wrapping when the rounded magnitude leaves the carrier. This is where the whole-exponent
     // path's overflow decision is taken — on the ladder's own value, exactly, rather than estimated from the rounded
     // logarithm. A magnitude of exactly 2^63 also reports: it is representable only as MinValue, which is precisely
     // the saturation answer the negative caller returns.
     private static bool TryMultiplyMagnitude(ulong x, ulong y, out ulong result) {
-        var magnitude = ((UInt128)x * y);
+        var magnitude = (((UInt128)x) * y);
         var truncated = (magnitude >> FractionBitCount);
-        var remainder = ((ulong)magnitude & FractionBitMask);
+        var remainder = ((ulong)magnitude) & FractionBitMask;
 
         if (
             (remainder > RawHalf) ||
@@ -1010,6 +997,7 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return true;
     }
+
     /// <summary>Linearly interpolates from <paramref name="from"/> to <paramref name="to"/> by <paramref name="amount"/>.</summary>
     /// <param name="from">The value returned when <paramref name="amount"/> is zero.</param>
     /// <param name="to">The value returned when <paramref name="amount"/> is one.</param>
@@ -1022,28 +1010,13 @@ public readonly partial record struct FixedQ4816(long Value)
     /// representable, the final sum wraps to the signed 64-bit carrier — the same policy every other unchecked operator on this type states; there is
     /// no checked or saturating sibling.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static FixedQ4816 Lerp(FixedQ4816 from, FixedQ4816 to, FixedQ4816 amount) {
-        // from·2^16 (exact, scale 2^32) plus (to·amount − from·amount) (exact, scale 2^32) — the same (to − from)·amount
-        // term, just formed as a difference of two products rather than a product of a difference, so it never routes
-        // through a standalone raw subtraction that could leave FixedQ4816's range before the multiply even runs. One
-        // combine, one round-and-shift back to Q48.16 (ScaleProductSum), so the whole expression rounds once.
-        var scaledFrom = FusedArithmetic.Product(left: from.Value, right: RawOne);
-        var delta = FusedArithmetic.AddProducts(
-            firstLeft: to.Value,
-            firstRight: amount.Value,
-            secondLeft: from.Value,
-            secondRight: amount.Value,
-            subtractSecond: true
-        );
-        var sum = FusedArithmetic.CombineSigned(
-            firstNegative: scaledFrom.Negative,
-            firstMagnitude: scaledFrom.Magnitude,
-            secondNegative: delta.Negative,
-            secondMagnitude: delta.Magnitude
-        );
-
-        return new(Value: FusedArithmetic.ScaleProductSum(value: sum, shift: -FractionBitCount));
-    }
+    public static FixedQ4816 Lerp(FixedQ4816 from, FixedQ4816 to, FixedQ4816 amount) =>
+        new(Value: SignedFixedPointArithmetic.Lerp(
+            from: from.Value,
+            to: to.Value,
+            amount: amount.Value,
+            fractionBitCount: FractionBitCount
+        ));
     /// <summary>Returns the greater of two values.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>
@@ -1051,9 +1024,9 @@ public readonly partial record struct FixedQ4816(long Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ4816 Max(FixedQ4816 x, FixedQ4816 y) =>
         new(Value: Math.Max(
-        val1: x.Value,
-        val2: y.Value
-    ));
+            val1: x.Value,
+            val2: y.Value
+        ));
     /// <summary>Returns the lesser of two values.</summary>
     /// <param name="x">The first value to compare.</param>
     /// <param name="y">The second value to compare.</param>
@@ -1061,9 +1034,9 @@ public readonly partial record struct FixedQ4816(long Value)
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public static FixedQ4816 Min(FixedQ4816 x, FixedQ4816 y) =>
         new(Value: Math.Min(
-        val1: x.Value,
-        val2: y.Value
-    ));
+            val1: x.Value,
+            val2: y.Value
+        ));
     /// <summary>Rounds <paramref name="value"/> to the nearest integral value, with ties rounded to the nearest even integer.</summary>
     /// <param name="value">The value to round.</param>
     /// <returns><paramref name="value"/> rounded to a whole number using banker's rounding.</returns>
@@ -1073,19 +1046,21 @@ public readonly partial record struct FixedQ4816(long Value)
         // Floor + round the [0,1) fraction (ties to even); for two's-complement the low 16 bits are the fraction
         // above the floor for both signs, so a single path handles negatives correctly.
         var integerPart = value.Value & IntegerBitMask;
-        var fraction = (ulong)value.Value & FractionBitMask;
+        var fraction = ((ulong)value.Value) & FractionBitMask;
         var roundUp = ((fraction > RawHalf) || ((fraction == RawHalf) && (((integerPart >> FractionBitCount) & 1L) != 0L)));
 
         return new(Value: (roundUp
             ? checked((integerPart + RawOne))
             : integerPart));
     }
+
     /// <summary>Returns whether a raw storage bit pattern denotes an exact integer — a multiple of <c>2¹⁶</c>, at any magnitude the format holds.</summary>
     /// <param name="raw">The raw storage bit pattern to classify.</param>
     /// <returns><see langword="true"/> when <paramref name="raw"/> has no fractional bits set.</returns>
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static bool IsExactInteger(long raw) =>
         (raw == ((raw >> FractionBitCount) << FractionBitCount));
+
     /// <summary>Returns an integer that indicates the sign of <paramref name="value"/>.</summary>
     /// <param name="value">The value whose sign is returned.</param>
     /// <returns><c>-1</c>, <c>0</c>, or <c>1</c> according to whether <paramref name="value"/> is negative, zero, or positive — the sign of the raw storage, which the <c>2¹⁶</c> scale preserves.</returns>
@@ -1110,7 +1085,7 @@ public readonly partial record struct FixedQ4816(long Value)
             return new(Value: unchecked((long)(((ulong)value.Value) << FractionBitCount).SquareRoot()));
         }
 
-        var scaled = (((UInt128)(ulong)value.Value) << FractionBitCount);
+        var scaled = (((UInt128)((ulong)value.Value)) << FractionBitCount);
 
         return new(Value: unchecked((long)scaled.SquareRoot()));
     }
@@ -1137,18 +1112,20 @@ public readonly partial record struct FixedQ4816(long Value)
         var swapped = (yMagnitude > xMagnitude);
         var numerator = (swapped
             ? xMagnitude
-            : yMagnitude);
+            : yMagnitude
+        );
         var denominator = (swapped
             ? yMagnitude
-            : xMagnitude);
+            : xMagnitude
+        );
         ulong z;
 
         if (X86Base.X64.IsSupported) {
 #pragma warning disable SYSLIB5004
             (z, _) = X86Base.X64.DivRem(
+                divisor: denominator,
                 lower: (numerator << 62),
-                upper: (numerator >> 2),
-                divisor: denominator
+                upper: (numerator >> 2)
             );
 #pragma warning restore SYSLIB5004
         } else {
@@ -1185,7 +1162,7 @@ public readonly partial record struct FixedQ4816(long Value)
         }
 
         if (signX != 0L) {
-            angle = (Atan2PiQ61 - angle);
+            angle = (PiQ61 - angle);
         }
 
         var raw = ((angle + (1L << 44)) >> 45);
@@ -1225,7 +1202,7 @@ public readonly partial record struct FixedQ4816(long Value)
     // Full-range norm overload: phases a non-negative raw Q16 magnitude that may exceed the signed carrier (a
     // three-component norm always roots within 64 unsigned bits). Same turn-domain wrap as SinCos.
     internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosRaw(ulong rawAngle) {
-        var product = ((UInt128)rawAngle * ((ulong)SinCosInvTwoPiQ64));
+        var product = (((UInt128)rawAngle) * ((ulong)SinCosInvTwoPiQ64));
 
         return SinCosFromTurns(fractionalTurns: unchecked((long)((ulong)(product >> FractionBitCount))));
     }
@@ -1234,16 +1211,16 @@ public readonly partial record struct FixedQ4816(long Value)
         var (cosQ60, sinQ60, folded) = SinCosCore(fractionalTurns: fractionalTurns);
 
         // Q60 → Q16: round to nearest (ties toward +∞), clamp to ±1.
-        const int narrowingShift = (SinCosFractionBitCount - FractionBitCount);
+        const int NarrowingShift = (SinCosFractionBitCount - FractionBitCount);
         var sinRaw = Math.Clamp(
-            value: ((sinQ60 + (1L << (narrowingShift - 1))) >> narrowingShift),
+            max: RawOne,
             min: -RawOne,
-            max: RawOne
+            value: ((sinQ60 + (1L << (NarrowingShift - 1))) >> NarrowingShift)
         );
         var cosRaw = Math.Clamp(
-            value: ((cosQ60 + (1L << (narrowingShift - 1))) >> narrowingShift),
+            max: RawOne,
             min: -RawOne,
-            max: RawOne
+            value: ((cosQ60 + (1L << (NarrowingShift - 1))) >> NarrowingShift)
         );
 
         return (new(Value: sinRaw), new(Value: (folded
@@ -1257,10 +1234,13 @@ public readonly partial record struct FixedQ4816(long Value)
         var sign = (product >> 127);
         var magnitude = unchecked((UInt128)((product ^ sign) - sign));
         var truncated = ((ulong)(magnitude >> fractionBitCount));
-        var remainder = (magnitude & ((UInt128.One << fractionBitCount) - UInt128.One));
+        var remainder = magnitude & ((UInt128.One << fractionBitCount) - UInt128.One);
         var half = (UInt128.One << (fractionBitCount - 1));
 
-        if ((remainder > half) || ((remainder == half) && ((truncated & 1UL) != 0UL))) {
+        if (
+            (remainder > half) ||
+            ((remainder == half) && ((truncated & 1UL) != 0UL))
+        ) {
             ++truncated;
         }
 
@@ -1269,7 +1249,6 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return unchecked(((result ^ resultSign) - resultSign));
     }
-
     // Fast rotation-scale overload. Callers are responsible for keeping the raw Q32 sum in signed 64-bit range.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static long RoundProductSum(long productSum) {
@@ -1289,15 +1268,14 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return unchecked(((result ^ sign) - sign));
     }
-
     // Full-width overload. Rounds a sum of raw Q32 products to raw Q16, once, to nearest with ties to even. Callers
     // widen EACH product to Int128 before accumulating. Unchecked Int128 accumulation is sufficient when an exact sum exceeds
     // 128 bits: wrapping changes the Q32 sum by k·2^128, hence the rounded Q16 result by k·2^112, which vanishes under
     // the public raw operators' final 64-bit wrapping policy without changing tie parity.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static long RoundProductSum(Int128 productSum) => RoundProduct(
-        product: productSum,
-        fractionBitCount: FractionBitCount
+        fractionBitCount: FractionBitCount,
+        product: productSum
     );
 
     // Signed (x·y) >> 62 via one 64×64→128 multiply; |x·y| must stay below 2^125.
@@ -1354,7 +1332,6 @@ public readonly partial record struct FixedQ4816(long Value)
             y: acc
         ));
     }
-
     // Polynomial core on fractional turns (2^64 raw = one turn). Returns the un-narrowed Q60 cosine/sine of the
     // folded residual plus the fold flag; the true cosine is negated when folded. Internal so the Gaussian sampler
     // can feed full-resolution turns (2^-32 granularity) without the radian round-trip.
@@ -1439,6 +1416,7 @@ public readonly partial record struct FixedQ4816(long Value)
             y: sinAcc
         ), folded);
     }
+
     /// <summary>Returns the integral part of <paramref name="value"/>, discarding the fraction (rounding toward zero).</summary>
     /// <param name="value">The value to truncate.</param>
     /// <returns><paramref name="value"/> with its fractional part removed toward zero.</returns>
@@ -1447,7 +1425,7 @@ public readonly partial record struct FixedQ4816(long Value)
         var floor = value.Value & IntegerBitMask;
 
         // Floor rounds toward −∞; for a negative value with a fraction, truncation toward zero is one step higher.
-        return new(Value: (((value.Value < 0L) && ((value.Value & (long)FractionBitMask) != 0L))
+        return new(Value: (((value.Value < 0L) && ((value.Value & ((long)FractionBitMask)) != 0L))
             ? unchecked((floor + RawOne))
             : floor));
     }
@@ -1473,5 +1451,8 @@ public readonly partial record struct FixedQ4816(long Value)
     /// <summary>Returns the exact decimal string representation of this value.</summary>
     /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2¹⁶</c> fraction always terminates within sixteen digits).</returns>
     public override string ToString() =>
-        FixedPointText.FormatSignedRaw(rawValue: Value, fractionBitCount: FractionBitCount);
+        FixedPointText.FormatSignedRaw(
+            rawValue: Value,
+            fractionBitCount: FractionBitCount
+        );
 }

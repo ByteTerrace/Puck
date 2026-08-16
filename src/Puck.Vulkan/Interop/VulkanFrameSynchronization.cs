@@ -9,7 +9,9 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanFrameSynchronization : IDisposable {
     private bool m_disposed;
+
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
+
     private nint[] m_renderFinishedSemaphoreHandles;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the primitives.</summary>
@@ -61,7 +63,7 @@ public sealed class VulkanFrameSynchronization : IDisposable {
             (renderFinishedSemaphoreHandles.Length == 0) ||
             (Array.IndexOf(
                 array: renderFinishedSemaphoreHandles,
-                value: (nint)0
+                value: ((nint)0)
             ) >= 0)
         ) {
             throw new ArgumentException(

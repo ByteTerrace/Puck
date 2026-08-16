@@ -5,8 +5,8 @@ namespace Puck.Maths.Tests;
 /// <summary>Claims for <see cref="FixedContributionFold"/>. Sampled claims receive all operands from
 /// <see cref="Domains"/>; only the explicitly exhaustive grids and hand-derived boundary witnesses live here.</summary>
 internal static class FixedContributionFoldClaims {
-    private const long OneRaw = (1L << FixedQ4816.FractionBitCount);
     private const long HalfRaw = (OneRaw >> 1);
+    private const long OneRaw = (1L << FixedQ4816.FractionBitCount);
 
     /// <summary>Checks a small exact grid across both optional stages against the shared-nothing oracle.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the grid agrees.</returns>
@@ -25,11 +25,11 @@ internal static class FixedContributionFoldClaims {
                             foreach (var threshold in thresholds) {
                                 if (CompareWithOracle(
                                     baselineRaw: baseline,
-                                    poolDeltaRaw: poolDelta,
-                                    outsidePoolDeltaRaw: outsideDelta,
-                                    poolRadiusRaw: radius,
-                                    minimumRaw: minimum,
                                     maximumRaw: maximum,
+                                    minimumRaw: minimum,
+                                    outsidePoolDeltaRaw: outsideDelta,
+                                    poolDeltaRaw: poolDelta,
+                                    poolRadiusRaw: radius,
                                     thresholdRaw: threshold
                                 ) is { } failure) {
                                     return $"grid {failure}";
@@ -43,7 +43,6 @@ internal static class FixedContributionFoldClaims {
 
         return null;
     }
-
     /// <summary>Maps a full-width edge/random/frontier sample to a valid fold configuration and checks the oracle.</summary>
     /// <param name="left">The first four domain raws.</param>
     /// <param name="right">The second four domain raws.</param>
@@ -64,7 +63,6 @@ internal static class FixedContributionFoldClaims {
             thresholdRaw: threshold
         );
     }
-
     /// <summary>Checks the baseline-zero, no-pool specialization over a small exact grid.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the grid agrees.</returns>
     public static string? NoPoolExactGrid() {
@@ -74,10 +72,10 @@ internal static class FixedContributionFoldClaims {
             foreach (var outsideDelta in operands) {
                 foreach (var threshold in new long?[] { null, 0L, HalfRaw, OneRaw }) {
                     if (CompareNoPoolSpecialization(
-                        poolDeltaRaw: poolDelta,
-                        outsidePoolDeltaRaw: outsideDelta,
-                        minimumRaw: 0L,
                         maximumRaw: OneRaw,
+                        minimumRaw: 0L,
+                        outsidePoolDeltaRaw: outsideDelta,
+                        poolDeltaRaw: poolDelta,
                         thresholdRaw: threshold
                     ) is { } failure) {
                         return $"grid {failure}";
@@ -88,7 +86,6 @@ internal static class FixedContributionFoldClaims {
 
         return null;
     }
-
     /// <summary>Checks the no-pool specialization over a full-width edge/random/frontier sample.</summary>
     /// <param name="left">The first two domain raws.</param>
     /// <param name="right">The second two domain raws.</param>
@@ -106,35 +103,34 @@ internal static class FixedContributionFoldClaims {
             thresholdRaw: threshold
         );
     }
-
     /// <summary>Checks every permutation of a modest contribution set and the three-term boundary discriminator.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when raw-once accumulation is order independent.</returns>
     public static string? RawSumEveryPermutation() {
         long[] contributions = [HalfRaw, (HalfRaw - 1L), -HalfRaw, (HalfRaw / 2L), -((HalfRaw / 2L) - 1L)];
-        var expectedRawSum = contributions.Aggregate(seed: 0L, func: static (sum, contribution) => checked(sum + contribution));
+        var expectedRawSum = contributions.Aggregate(func: static (sum, contribution) => checked((sum + contribution)), seed: 0L);
         var expected = Evaluate(
             baselineRaw: 0L,
-            poolDeltaRaw: expectedRawSum,
-            outsidePoolDeltaRaw: 0L,
-            poolRadiusRaw: HalfRaw,
-            minimumRaw: -OneRaw,
             maximumRaw: OneRaw,
-            thresholdRaw: null,
-            poolClamped: out var expectedClamped
+            minimumRaw: -OneRaw,
+            outsidePoolDeltaRaw: 0L,
+            poolClamped: out var expectedClamped,
+            poolDeltaRaw: expectedRawSum,
+            poolRadiusRaw: HalfRaw,
+            thresholdRaw: null
         );
         var permutations = 0;
 
         foreach (var permutation in Permutations(values: contributions)) {
-            var sum = permutation.Aggregate(seed: 0L, func: static (total, contribution) => checked(total + contribution));
+            var sum = permutation.Aggregate(func: static (total, contribution) => checked((total + contribution)), seed: 0L);
             var actual = Evaluate(
                 baselineRaw: 0L,
-                poolDeltaRaw: sum,
-                outsidePoolDeltaRaw: 0L,
-                poolRadiusRaw: HalfRaw,
-                minimumRaw: -OneRaw,
                 maximumRaw: OneRaw,
-                thresholdRaw: null,
-                poolClamped: out var clamped
+                minimumRaw: -OneRaw,
+                outsidePoolDeltaRaw: 0L,
+                poolClamped: out var clamped,
+                poolDeltaRaw: sum,
+                poolRadiusRaw: HalfRaw,
+                thresholdRaw: null
             );
 
             ++permutations;
@@ -161,11 +157,10 @@ internal static class FixedContributionFoldClaims {
         );
         var perAdd = PoolClampPerAdd(baselineRaw: 0L, contributions: discriminator, radiusRaw: HalfRaw);
 
-        return ((rawOnce == HalfRaw) && (perAdd == 0L))
+        return (((rawOnce == HalfRaw) && (perAdd == 0L))
             ? null
-            : $"the boundary discriminator [+0.5,+0.5,-0.5] produced raw-once={rawOnce}, per-add={perAdd}; expected {HalfRaw} and 0";
+            : $"the boundary discriminator [+0.5,+0.5,-0.5] produced raw-once={rawOnce}, per-add={perAdd}; expected {HalfRaw} and 0");
     }
-
     /// <summary>Checks longer contribution lists supplied by the edge/random/frontier domain in several orders.</summary>
     /// <param name="left">The first eight contribution sources.</param>
     /// <param name="right">The second eight contribution sources.</param>
@@ -175,13 +170,13 @@ internal static class FixedContributionFoldClaims {
         var expectedSum = Sum(values: contributions);
         var expected = Evaluate(
             baselineRaw: 0L,
-            poolDeltaRaw: expectedSum,
-            outsidePoolDeltaRaw: 0L,
-            poolRadiusRaw: OneRaw,
-            minimumRaw: (-4L * OneRaw),
             maximumRaw: (4L * OneRaw),
-            thresholdRaw: null,
-            poolClamped: out var expectedClamped
+            minimumRaw: (-4L * OneRaw),
+            outsidePoolDeltaRaw: 0L,
+            poolClamped: out var expectedClamped,
+            poolDeltaRaw: expectedSum,
+            poolRadiusRaw: OneRaw,
+            thresholdRaw: null
         );
         long[][] orders = [
             contributions,
@@ -194,13 +189,13 @@ internal static class FixedContributionFoldClaims {
             var sum = Sum(values: order);
             var actual = Evaluate(
                 baselineRaw: 0L,
-                poolDeltaRaw: sum,
-                outsidePoolDeltaRaw: 0L,
-                poolRadiusRaw: OneRaw,
-                minimumRaw: (-4L * OneRaw),
                 maximumRaw: (4L * OneRaw),
-                thresholdRaw: null,
-                poolClamped: out var clamped
+                minimumRaw: (-4L * OneRaw),
+                outsidePoolDeltaRaw: 0L,
+                poolClamped: out var clamped,
+                poolDeltaRaw: sum,
+                poolRadiusRaw: OneRaw,
+                thresholdRaw: null
             );
 
             if ((sum != expectedSum) || (actual != expected) || (clamped != expectedClamped)) {
@@ -210,7 +205,6 @@ internal static class FixedContributionFoldClaims {
 
         return null;
     }
-
     /// <summary>Checks the continuous pool bound for a shape-valid baseline and zero outside-pool sum.</summary>
     /// <param name="left">Baseline and pooled-delta sources.</param>
     /// <param name="right">Radius and spare domain sources.</param>
@@ -221,21 +215,20 @@ internal static class FixedContributionFoldClaims {
         var radius = NonNegative(raw: right[0]);
         var result = Evaluate(
             baselineRaw: baseline,
-            poolDeltaRaw: poolDelta,
-            outsidePoolDeltaRaw: 0L,
-            poolRadiusRaw: radius,
-            minimumRaw: long.MinValue,
             maximumRaw: long.MaxValue,
-            thresholdRaw: null,
-            poolClamped: out _
+            minimumRaw: long.MinValue,
+            outsidePoolDeltaRaw: 0L,
+            poolClamped: out _,
+            poolDeltaRaw: poolDelta,
+            poolRadiusRaw: radius,
+            thresholdRaw: null
         );
-        var difference = BigInteger.Abs(value: ((BigInteger)result - baseline));
+        var difference = BigInteger.Abs(value: (((BigInteger)result) - baseline));
 
-        return (difference <= radius)
+        return ((difference <= radius)
             ? null
-            : $"baseline={baseline}, poolDelta={poolDelta}, radius={radius}, result={result}, difference={difference}";
+            : $"baseline={baseline}, poolDelta={poolDelta}, radius={radius}, result={result}, difference={difference}");
     }
-
     /// <summary>Checks the exact binary non-flip bound and one-raw sharpness at every legal threshold.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the bound is exact.</returns>
     public static string? BinaryFlipBoundAndSharpness() {
@@ -246,13 +239,13 @@ internal static class FixedContributionFoldClaims {
                 var adverseDelta = ((baseline == 0L) ? long.MaxValue : long.MinValue);
                 var held = Evaluate(
                     baselineRaw: baseline,
-                    poolDeltaRaw: adverseDelta,
-                    outsidePoolDeltaRaw: 0L,
-                    poolRadiusRaw: bound,
-                    minimumRaw: 0L,
                     maximumRaw: OneRaw,
-                    thresholdRaw: threshold,
-                    poolClamped: out _
+                    minimumRaw: 0L,
+                    outsidePoolDeltaRaw: 0L,
+                    poolClamped: out _,
+                    poolDeltaRaw: adverseDelta,
+                    poolRadiusRaw: bound,
+                    thresholdRaw: threshold
                 );
 
                 if (held != baseline) {
@@ -265,13 +258,13 @@ internal static class FixedContributionFoldClaims {
             var sharpDelta = ((sharpBaseline == 0L) ? long.MaxValue : long.MinValue);
             var flipped = Evaluate(
                 baselineRaw: sharpBaseline,
-                poolDeltaRaw: sharpDelta,
-                outsidePoolDeltaRaw: 0L,
-                poolRadiusRaw: sharpRadius,
-                minimumRaw: 0L,
                 maximumRaw: OneRaw,
-                thresholdRaw: threshold,
-                poolClamped: out _
+                minimumRaw: 0L,
+                outsidePoolDeltaRaw: 0L,
+                poolClamped: out _,
+                poolDeltaRaw: sharpDelta,
+                poolRadiusRaw: sharpRadius,
+                thresholdRaw: threshold
             );
 
             if (flipped == sharpBaseline) {
@@ -281,7 +274,6 @@ internal static class FixedContributionFoldClaims {
 
         return null;
     }
-
     /// <summary>Checks per-site preservation as an induction over a sequence of independently bounded sites.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when every prefix preserves its base bit.</returns>
     public static string? BinaryCompositionByInduction() {
@@ -294,7 +286,7 @@ internal static class FixedContributionFoldClaims {
                 var inductionValue = baseBit;
 
                 for (var site = 0; (site < deltas.Length); ++site) {
-                    var radius = ((site % 3) == 0) ? 0L : (((site % 3) == 1) ? bound : (bound / 2L));
+                    var radius = (((site % 3) == 0) ? 0L : (((site % 3) == 1) ? bound : (bound / 2L)));
 
                     inductionValue = Evaluate(
                         baselineRaw: inductionValue,
@@ -316,7 +308,6 @@ internal static class FixedContributionFoldClaims {
 
         return null;
     }
-
     /// <summary>Checks that applying terminal quantization to its own output is idempotent.</summary>
     /// <param name="left">Range and input sources.</param>
     /// <param name="right">Threshold and spare domain sources.</param>
@@ -337,20 +328,19 @@ internal static class FixedContributionFoldClaims {
         );
         var second = Evaluate(
             baselineRaw: first,
-            poolDeltaRaw: 0L,
-            outsidePoolDeltaRaw: 0L,
-            poolRadiusRaw: null,
-            minimumRaw: minimum,
             maximumRaw: maximum,
-            thresholdRaw: threshold,
-            poolClamped: out _
+            minimumRaw: minimum,
+            outsidePoolDeltaRaw: 0L,
+            poolClamped: out _,
+            poolDeltaRaw: 0L,
+            poolRadiusRaw: null,
+            thresholdRaw: threshold
         );
 
-        return (second == first)
+        return ((second == first)
             ? null
-            : $"input={left[0]}, range=[{minimum},{maximum}], threshold={threshold}, first={first}, second={second}";
+            : $"input={left[0]}, range=[{minimum},{maximum}], threshold={threshold}, first={first}, second={second}");
     }
-
     /// <summary>Checks the exact raw accumulator boundary and the widened intermediate envelope.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when both exact claims hold.</returns>
     public static string? OverflowBoundaryExact() {
@@ -394,11 +384,11 @@ internal static class FixedContributionFoldClaims {
         foreach (var (baseline, pool, outside, radius) in extremes) {
             if (CompareWithOracle(
                 baselineRaw: baseline,
-                poolDeltaRaw: pool,
-                outsidePoolDeltaRaw: outside,
-                poolRadiusRaw: radius,
-                minimumRaw: long.MinValue,
                 maximumRaw: long.MaxValue,
+                minimumRaw: long.MinValue,
+                outsidePoolDeltaRaw: outside,
+                poolDeltaRaw: pool,
+                poolRadiusRaw: radius,
                 thresholdRaw: null
             ) is { } failure) {
                 return $"extreme {failure}";
@@ -407,7 +397,6 @@ internal static class FixedContributionFoldClaims {
 
         return null;
     }
-
     /// <summary>Checks all three named configuration refusals and the legal zero-radius boundary.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when every refusal names its parameter.</returns>
     public static string? ConfigurationRefusals() {
@@ -443,7 +432,7 @@ internal static class FixedContributionFoldClaims {
             return radiusFailure;
         }
 
-        foreach (var threshold in new[] { FixedQ4816.NegativeOne, FixedQ4816.One + FixedQ4816.Epsilon }) {
+        foreach (var threshold in new[] { FixedQ4816.NegativeOne, (FixedQ4816.One + FixedQ4816.Epsilon) }) {
             if (Refusal<ArgumentOutOfRangeException>(
                 action: () => FixedContributionFold.Evaluate(
                     baseline: FixedQ4816.Zero,
@@ -472,11 +461,10 @@ internal static class FixedContributionFoldClaims {
             poolClamped: out var zeroRadiusClamped
         );
 
-        return ((zeroRadius.Value == 7L) && zeroRadiusClamped)
+        return (((zeroRadius.Value == 7L) && zeroRadiusClamped)
             ? null
-            : $"zero radius was not admitted as a clamping pool: result={zeroRadius.Value}, clamped={zeroRadiusClamped}";
+            : $"zero radius was not admitted as a clamping pool: result={zeroRadius.Value}, clamped={zeroRadiusClamped}");
     }
-
     /// <summary>Runs the three hand-derived cases used to compare this primitive with the pre-existing raw-once rule.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when all three land on their derived raws.</returns>
     public static string? DiscriminatingExamples() {
@@ -503,45 +491,45 @@ internal static class FixedContributionFoldClaims {
         var perAdd = PoolClampPerAdd(baselineRaw: 0L, contributions: cancelAcrossBoundary, radiusRaw: HalfRaw);
         var negative = Evaluate(
             baselineRaw: (OneRaw / 4L),
-            poolDeltaRaw: -HalfRaw,
-            outsidePoolDeltaRaw: -(OneRaw / 4L),
-            poolRadiusRaw: ((3L * OneRaw) / 4L),
-            minimumRaw: -OneRaw,
             maximumRaw: OneRaw,
-            thresholdRaw: null,
-            poolClamped: out _
+            minimumRaw: -OneRaw,
+            outsidePoolDeltaRaw: -(OneRaw / 4L),
+            poolClamped: out _,
+            poolDeltaRaw: -HalfRaw,
+            poolRadiusRaw: ((3L * OneRaw) / 4L),
+            thresholdRaw: null
         );
         var currentNegative = CurrentRawOnceRule(
             baselineRaw: (OneRaw / 4L),
-            poolDeltaRaw: -HalfRaw,
-            outsidePoolDeltaRaw: -(OneRaw / 4L),
-            poolRadiusRaw: ((3L * OneRaw) / 4L),
-            minimumRaw: -OneRaw,
             maximumRaw: OneRaw,
+            minimumRaw: -OneRaw,
+            outsidePoolDeltaRaw: -(OneRaw / 4L),
+            poolDeltaRaw: -HalfRaw,
+            poolRadiusRaw: ((3L * OneRaw) / 4L),
             thresholdRaw: null
         );
         var atThreshold = Evaluate(
             baselineRaw: 0L,
-            poolDeltaRaw: (OneRaw / 4L),
-            outsidePoolDeltaRaw: (OneRaw / 4L),
-            poolRadiusRaw: HalfRaw,
-            minimumRaw: 0L,
             maximumRaw: OneRaw,
-            thresholdRaw: HalfRaw,
-            poolClamped: out _
+            minimumRaw: 0L,
+            outsidePoolDeltaRaw: (OneRaw / 4L),
+            poolClamped: out _,
+            poolDeltaRaw: (OneRaw / 4L),
+            poolRadiusRaw: HalfRaw,
+            thresholdRaw: HalfRaw
         );
         var currentAtThreshold = CurrentRawOnceRule(
             baselineRaw: 0L,
-            poolDeltaRaw: (OneRaw / 4L),
-            outsidePoolDeltaRaw: (OneRaw / 4L),
-            poolRadiusRaw: HalfRaw,
-            minimumRaw: 0L,
             maximumRaw: OneRaw,
+            minimumRaw: 0L,
+            outsidePoolDeltaRaw: (OneRaw / 4L),
+            poolDeltaRaw: (OneRaw / 4L),
+            poolRadiusRaw: HalfRaw,
             thresholdRaw: HalfRaw
         );
-        var strictGreaterAlternative = StrictGreaterQuantize(raw: HalfRaw, thresholdRaw: HalfRaw, minimumRaw: 0L, maximumRaw: OneRaw);
+        var strictGreaterAlternative = StrictGreaterQuantize(maximumRaw: OneRaw, minimumRaw: 0L, raw: HalfRaw, thresholdRaw: HalfRaw);
 
-        return (
+        return ((
             (rawOnce == HalfRaw) &&
             (currentRawOnce == HalfRaw) &&
             (perAdd == 0L) &&
@@ -552,9 +540,8 @@ internal static class FixedContributionFoldClaims {
             (strictGreaterAlternative == 0L)
         )
             ? null
-            : $"derived raws were cancel/primitive={rawOnce}, cancel/current={currentRawOnce}, cancel/per-add={perAdd}, negative/primitive={negative}, negative/current={currentNegative}, at-threshold/primitive={atThreshold}, at-threshold/current={currentAtThreshold}, at-threshold/strict-greater={strictGreaterAlternative}";
+            : $"derived raws were cancel/primitive={rawOnce}, cancel/current={currentRawOnce}, cancel/per-add={perAdd}, negative/primitive={negative}, negative/current={currentNegative}, at-threshold/primitive={atThreshold}, at-threshold/current={currentAtThreshold}, at-threshold/strict-greater={strictGreaterAlternative}");
     }
-
     /// <summary>Records a concrete counterexample to distributing terminal folding over site composition.</summary>
     /// <returns>The counterexample text when the known-false equality unexpectedly holds; otherwise <see langword="null"/>.</returns>
     public static string? SiteCompositionDoesNotDistribute() {
@@ -562,38 +549,38 @@ internal static class FixedContributionFoldClaims {
         var b = -HalfRaw;
         var firstSite = Evaluate(
             baselineRaw: a,
-            poolDeltaRaw: 0L,
-            outsidePoolDeltaRaw: 0L,
-            poolRadiusRaw: null,
-            minimumRaw: 0L,
             maximumRaw: OneRaw,
-            thresholdRaw: null,
-            poolClamped: out _
+            minimumRaw: 0L,
+            outsidePoolDeltaRaw: 0L,
+            poolClamped: out _,
+            poolDeltaRaw: 0L,
+            poolRadiusRaw: null,
+            thresholdRaw: null
         );
         var left = Evaluate(
             baselineRaw: firstSite,
-            poolDeltaRaw: b,
-            outsidePoolDeltaRaw: 0L,
-            poolRadiusRaw: null,
-            minimumRaw: 0L,
             maximumRaw: OneRaw,
-            thresholdRaw: null,
-            poolClamped: out _
+            minimumRaw: 0L,
+            outsidePoolDeltaRaw: 0L,
+            poolClamped: out _,
+            poolDeltaRaw: b,
+            poolRadiusRaw: null,
+            thresholdRaw: null
         );
         var right = Evaluate(
             baselineRaw: a,
-            poolDeltaRaw: b,
-            outsidePoolDeltaRaw: 0L,
-            poolRadiusRaw: null,
-            minimumRaw: 0L,
             maximumRaw: OneRaw,
-            thresholdRaw: null,
-            poolClamped: out _
+            minimumRaw: 0L,
+            outsidePoolDeltaRaw: 0L,
+            poolClamped: out _,
+            poolDeltaRaw: b,
+            poolRadiusRaw: null,
+            thresholdRaw: null
         );
 
-        return (left != right)
+        return ((left != right)
             ? null
-            : $"known-false equality unexpectedly held at a={a}, b={b}: Q(Q(a)+b)={left}, Q(a+b)={right}";
+            : $"known-false equality unexpectedly held at a={a}, b={b}: Q(Q(a)+b)={left}, Q(a+b)={right}");
     }
 
     private static string? CompareWithOracle(
@@ -607,53 +594,51 @@ internal static class FixedContributionFoldClaims {
     ) {
         var actual = Evaluate(
             baselineRaw: baselineRaw,
-            poolDeltaRaw: poolDeltaRaw,
-            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
-            poolRadiusRaw: poolRadiusRaw,
-            minimumRaw: minimumRaw,
             maximumRaw: maximumRaw,
-            thresholdRaw: thresholdRaw,
-            poolClamped: out var actualClamped
+            minimumRaw: minimumRaw,
+            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
+            poolClamped: out var actualClamped,
+            poolDeltaRaw: poolDeltaRaw,
+            poolRadiusRaw: poolRadiusRaw,
+            thresholdRaw: thresholdRaw
         );
         var expected = Oracles.FixedContributionFold(
             baselineRaw: baselineRaw,
-            poolDeltaRaw: poolDeltaRaw,
-            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
-            poolRadiusRaw: poolRadiusRaw,
-            minimumRaw: minimumRaw,
             maximumRaw: maximumRaw,
+            minimumRaw: minimumRaw,
+            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
+            poolDeltaRaw: poolDeltaRaw,
+            poolRadiusRaw: poolRadiusRaw,
             thresholdRaw: thresholdRaw
         );
 
-        return ((actual == expected.ResultRaw) && (actualClamped == expected.PoolClamped))
+        return (((actual == expected.ResultRaw) && (actualClamped == expected.PoolClamped))
             ? null
-            : $"baseline={baselineRaw}, pool={poolDeltaRaw}, outside={outsidePoolDeltaRaw}, radius={Render(nullable: poolRadiusRaw)}, range=[{minimumRaw},{maximumRaw}], threshold={Render(nullable: thresholdRaw)} produced ({actual},{actualClamped}), oracle ({expected.ResultRaw},{expected.PoolClamped})";
+            : $"baseline={baselineRaw}, pool={poolDeltaRaw}, outside={outsidePoolDeltaRaw}, radius={Render(nullable: poolRadiusRaw)}, range=[{minimumRaw},{maximumRaw}], threshold={Render(nullable: thresholdRaw)} produced ({actual},{actualClamped}), oracle ({expected.ResultRaw},{expected.PoolClamped})");
     }
-
     private static string? CompareNoPoolSpecialization(long poolDeltaRaw, long outsidePoolDeltaRaw, long minimumRaw, long maximumRaw, long? thresholdRaw) {
         var actual = Evaluate(
             baselineRaw: 0L,
-            poolDeltaRaw: poolDeltaRaw,
-            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
-            poolRadiusRaw: null,
-            minimumRaw: minimumRaw,
             maximumRaw: maximumRaw,
-            thresholdRaw: thresholdRaw,
-            poolClamped: out var clamped
+            minimumRaw: minimumRaw,
+            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
+            poolClamped: out var clamped,
+            poolDeltaRaw: poolDeltaRaw,
+            poolRadiusRaw: null,
+            thresholdRaw: thresholdRaw
         );
         var expected = Oracles.FixedContributionFoldNoPool(
-            poolDeltaRaw: poolDeltaRaw,
-            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
-            minimumRaw: minimumRaw,
             maximumRaw: maximumRaw,
+            minimumRaw: minimumRaw,
+            outsidePoolDeltaRaw: outsidePoolDeltaRaw,
+            poolDeltaRaw: poolDeltaRaw,
             thresholdRaw: thresholdRaw
         );
 
-        return ((actual == expected) && !clamped)
+        return (((actual == expected) && !clamped)
             ? null
-            : $"no-pool pool={poolDeltaRaw}, outside={outsidePoolDeltaRaw}, range=[{minimumRaw},{maximumRaw}], threshold={Render(nullable: thresholdRaw)} produced ({actual},{clamped}), direct oracle ({expected},false)";
+            : $"no-pool pool={poolDeltaRaw}, outside={outsidePoolDeltaRaw}, range=[{minimumRaw},{maximumRaw}], threshold={Render(nullable: thresholdRaw)} produced ({actual},{clamped}), direct oracle ({expected},false)");
     }
-
     private static long Evaluate(
         long baselineRaw,
         long poolDeltaRaw,
@@ -668,33 +653,29 @@ internal static class FixedContributionFoldClaims {
             baseline: FixedQ4816.FromRawBits(value: baselineRaw),
             poolDeltaRaw: poolDeltaRaw,
             outsidePoolDeltaRaw: outsidePoolDeltaRaw,
-            poolRadius: (poolRadiusRaw is { } radius ? FixedQ4816.FromRawBits(value: radius) : null),
+            poolRadius: ((poolRadiusRaw is { } radius) ? FixedQ4816.FromRawBits(value: radius) : null),
             minimum: FixedQ4816.FromRawBits(value: minimumRaw),
             maximum: FixedQ4816.FromRawBits(value: maximumRaw),
-            threshold: (thresholdRaw is { } threshold ? FixedQ4816.FromRawBits(value: threshold) : null),
+            threshold: ((thresholdRaw is { } threshold) ? FixedQ4816.FromRawBits(value: threshold) : null),
             poolClamped: out poolClamped
         ).Value;
-
     private static long FoldIntoRange(long raw, long minimum, long maximum) {
-        var width = ((BigInteger)maximum - minimum + BigInteger.One);
+        var width = ((((BigInteger)maximum) - minimum) + BigInteger.One);
         var residue = (new BigInteger(value: raw) % width);
 
         if (residue.Sign < 0) { residue += width; }
 
         return ((long)(minimum + residue));
     }
-
     private static long NonNegative(long raw) =>
-        ((long)((ulong)raw & long.MaxValue));
-
+        ((long)(((ulong)raw) & long.MaxValue));
     private static long Sum(ReadOnlySpan<long> values) {
         var sum = 0L;
 
-        foreach (var value in values) { sum = checked(sum + value); }
+        foreach (var value in values) { sum = checked((sum + value)); }
 
         return sum;
     }
-
     private static IEnumerable<long[]> Permutations(long[] values) {
         var working = values.ToArray();
 
@@ -716,19 +697,17 @@ internal static class FixedContributionFoldClaims {
             }
         }
     }
-
     private static long PoolClampPerAdd(long baselineRaw, ReadOnlySpan<long> contributions, long radiusRaw) {
         var minimum = (baselineRaw - radiusRaw);
         var maximum = (baselineRaw + radiusRaw);
         var accumulator = baselineRaw;
 
         foreach (var contribution in contributions) {
-            accumulator = Math.Clamp(value: (accumulator + contribution), min: minimum, max: maximum);
+            accumulator = Math.Clamp(max: maximum, min: minimum, value: (accumulator + contribution));
         }
 
         return accumulator;
     }
-
     // The pre-existing fold's arithmetic only, expanded locally for the three compatibility controls above. All three
     // are deliberately far from long overflow, so its original narrow additions and the new widened ones denote the
     // same integers; this is a compatibility witness, not an oracle (the BigInteger laws carry the absolute evidence).
@@ -743,34 +722,31 @@ internal static class FixedContributionFoldClaims {
     ) {
         var rawPooled = (baselineRaw + poolDeltaRaw);
         var pooled = Math.Clamp(
-            value: rawPooled,
+            max: (baselineRaw + poolRadiusRaw),
             min: (baselineRaw - poolRadiusRaw),
-            max: (baselineRaw + poolRadiusRaw)
+            value: rawPooled
         );
-        var ranged = Math.Clamp(value: (pooled + outsidePoolDeltaRaw), min: minimumRaw, max: maximumRaw);
+        var ranged = Math.Clamp(max: maximumRaw, min: minimumRaw, value: (pooled + outsidePoolDeltaRaw));
 
-        return thresholdRaw is { } threshold
+        return ((thresholdRaw is { } threshold)
             ? ((ranged >= threshold) ? maximumRaw : minimumRaw)
-            : ranged;
+            : ranged);
     }
-
     private static long StrictGreaterQuantize(long raw, long thresholdRaw, long minimumRaw, long maximumRaw) =>
         ((raw > thresholdRaw) ? maximumRaw : minimumRaw);
-
     private static string? Refusal<TException>(Action action, string parameterName) where TException : ArgumentException {
         try {
             action();
 
             return $"accepted invalid configuration instead of throwing {typeof(TException).Name} naming '{parameterName}'";
         } catch (TException exception) {
-            return (exception.ParamName == parameterName)
+            return ((exception.ParamName == parameterName)
                 ? null
-                : $"threw {typeof(TException).Name} naming '{exception.ParamName}' rather than '{parameterName}'";
+                : $"threw {typeof(TException).Name} naming '{exception.ParamName}' rather than '{parameterName}'");
         } catch (Exception exception) {
             return $"threw {exception.GetType().Name} rather than {typeof(TException).Name} naming '{parameterName}'";
         }
     }
-
     private static string Render(long? nullable) =>
         (nullable?.ToString() ?? "null");
 }

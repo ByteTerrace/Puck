@@ -21,6 +21,19 @@ namespace Puck.Overlays;
 /// would page glyphs (non-Latin), not extend this one.
 /// </remarks>
 public sealed class OverlayGlyphSdfPack {
+    private const int PackHashBytes = 32;
+    private const int PackHeaderBytes = (((sizeof(uint) * 5) + sizeof(float)) + (PackHashBytes * 2));
+    // ---- the prepacked artifact ---------------------------------------------------------------------------------
+    // The pack is ~1.4 MiB of already-flattened cells, but building it from the atlas decodes the WHOLE combined
+    // MTSDF PNG (4435x4440 RGBA ≈ 79 MiB, ≥150 MiB transient with the decoder's scanlines) at every startup. The
+    // binary artifact below persists the finished pack beside the atlas, keyed by the SHA-256 of the source PNG and
+    // mono-layout JSON bytes, so a warm start reads 1.4 MiB and never touches the image decoder. Written on first
+    // run (a rebake changes the key and rebuilds); OverlayGlyphAtlasSet.LoadOverlayPack orchestrates.
+
+    // 'P','O','G','P' + format version. Bump the version on any layout change — the key check then misses cleanly.
+    private const uint PackMagic = 0x50474F50u;
+    private const uint PackVersion = 1u;
+
     /// <summary>The first code point in the pack (space).</summary>
     public const int FirstChar = 0x20;
     /// <summary>The number of glyphs (printable ASCII 0x20-0x7E).</summary>
@@ -49,120 +62,6 @@ public sealed class OverlayGlyphSdfPack {
     public IReadOnlyList<uint> PackedSdf => m_packedSdf;
     /// <summary>The packed SDF words as a span — the storage-buffer upload view.</summary>
     public ReadOnlySpan<uint> SdfWords => m_packedSdf;
-
-    /// <summary>Flattens a shared SDF atlas into the per-glyph cell pack, or returns <see langword="null"/> when
-    /// <paramref name="monoFont"/> is <see langword="null"/> or carries no usable glyph bounds.</summary>
-    /// <param name="monoFont">The source atlas — a uniform-grid mono atlas (typically
-    /// <see cref="OverlayGlyphAtlasSet.MonoFont"/>).</param>
-    public static OverlayGlyphSdfPack? TryCreate(FontAtlas? monoFont) {
-        if (monoFont is not { ImageData: { } image } font) {
-            return null;
-        }
-
-        // Probe the first glyph that HAS atlas bounds for the uniform cell size — SPACE carries no bounds in the
-        // committed atlas (no ink, no cell); boundless glyphs stay blank cells in the pack.
-        FontAtlasBounds? probed = null;
-
-        for (var unicode = FirstChar; ((unicode < (FirstChar + GlyphCount)) && (probed is null)); unicode++) {
-            if (
-                font.TryGetGlyph(
-                unicode: unicode,
-                glyph: out var probe
-            ) &&
-                (probe.AtlasBounds is { } bounds)
-            ) {
-                probed = bounds;
-            }
-        }
-
-        if (probed is not { } probeBounds) {
-            return null;
-        }
-
-        var atlasCellWidth = Math.Max(
-            val1: 1,
-            val2: ((int)MathF.Round(x: (probeBounds.Right - probeBounds.Left)))
-        );
-        var atlasCellHeight = Math.Max(
-            val1: 1,
-            val2: ((int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top)))
-        );
-        var cellStride = (atlasCellWidth * atlasCellHeight);
-        var packedSdf = new uint[(GlyphCount * cellStride)];
-        var pixels = image.RgbaPixels;
-        var imageWidth = image.Width;
-        var imageHeight = image.Height;
-
-        for (var index = 0; (index < GlyphCount); index++) {
-            if (
-                (!font.TryGetGlyph(
-                unicode: (FirstChar + index),
-                glyph: out var glyph
-            )) ||
-                (glyph.AtlasBounds is not { } bounds)
-            ) {
-                continue;
-            }
-
-            var left = ((int)MathF.Round(x: bounds.Left));
-            var top = ((int)MathF.Round(x: bounds.Top));
-            var glyphBase = (index * cellStride);
-
-            for (var y = 0; (y < atlasCellHeight); y++) {
-                var sourceY = Math.Clamp(
-                    value: (top + y),
-                    max: (imageHeight - 1),
-                    min: 0
-                );
-
-                for (var x = 0; (x < atlasCellWidth); x++) {
-                    var sourceX = Math.Clamp(
-                        value: (left + x),
-                        max: (imageWidth - 1),
-                        min: 0
-                    );
-                    var sourceBase = (((sourceY * imageWidth) + sourceX) * 4);
-
-                    // All four channels ride along (little-endian R|G|B|A): the overlays median RGB at shade time,
-                    // and a runtime exact-EDT fallback atlas replicates its single channel so its median IS the
-                    // channel value.
-                    packedSdf[((glyphBase + (y * atlasCellWidth)) + x)] =
-                        pixels[sourceBase]
-                        | (((uint)pixels[(sourceBase + 1)]) << 8)
-                        | (((uint)pixels[(sourceBase + 2)]) << 16)
-                        | (((uint)pixels[(sourceBase + 3)]) << 24);
-                }
-            }
-        }
-
-        return new OverlayGlyphSdfPack(
-            atlasCellHeight: atlasCellHeight,
-            atlasCellWidth: atlasCellWidth,
-            distanceRange: font.DistanceRange,
-            packedSdf: packedSdf
-        );
-    }
-
-    /// <summary>The glyph index of a code point within this pack, or -1 when it is outside the printable-ASCII
-    /// range.</summary>
-    public static int GlyphIndex(int codePoint) =>
-        (((codePoint >= FirstChar) && (codePoint < (FirstChar + GlyphCount)))
-            ? (codePoint - FirstChar)
-            : -1
-        );
-
-    // ---- the prepacked artifact ---------------------------------------------------------------------------------
-    // The pack is ~1.4 MiB of already-flattened cells, but building it from the atlas decodes the WHOLE combined
-    // MTSDF PNG (4435x4440 RGBA ≈ 79 MiB, ≥150 MiB transient with the decoder's scanlines) at every startup. The
-    // binary artifact below persists the finished pack beside the atlas, keyed by the SHA-256 of the source PNG and
-    // mono-layout JSON bytes, so a warm start reads 1.4 MiB and never touches the image decoder. Written on first
-    // run (a rebake changes the key and rebuilds); OverlayGlyphAtlasSet.LoadOverlayPack orchestrates.
-
-    // 'P','O','G','P' + format version. Bump the version on any layout change — the key check then misses cleanly.
-    private const uint PackMagic = 0x50474F50u;
-    private const int PackHashBytes = 32;
-    private const int PackHeaderBytes = (((sizeof(uint) * 5) + sizeof(float)) + (PackHashBytes * 2));
-    private const uint PackVersion = 1u;
 
     /// <summary>Reads a prepacked artifact, returning <see langword="null"/> when the file is absent, malformed, a
     /// different format version, or keyed to different source bytes (a rebaked atlas).</summary>
@@ -204,12 +103,12 @@ public sealed class OverlayGlyphSdfPack {
 
         if (
             !span.Slice(
-            start: 24,
-            length: PackHashBytes
+            length: PackHashBytes,
+            start: 24
         ).SequenceEqual(other: pngHash) ||
             !span.Slice(
-            start: (24 + PackHashBytes),
-            length: PackHashBytes
+            length: PackHashBytes,
+            start: (24 + PackHashBytes)
         ).SequenceEqual(other: jsonHash)
         ) {
             return null;
@@ -238,7 +137,6 @@ public sealed class OverlayGlyphSdfPack {
             packedSdf: words
         );
     }
-
     /// <summary>Writes this pack as the prepacked artifact (atomic temp-then-move, so a concurrent reader never sees
     /// a torn file). A write failure is narrated once and swallowed — the cache is an optimization, never a gate.</summary>
     /// <param name="path">The artifact path.</param>
@@ -273,12 +171,12 @@ public sealed class OverlayGlyphSdfPack {
             value: m_packedSdf.Length
         );
         pngHash.CopyTo(destination: span.Slice(
-            start: 24,
-            length: PackHashBytes
+            length: PackHashBytes,
+            start: 24
         ));
         jsonHash.CopyTo(destination: span.Slice(
-            start: (24 + PackHashBytes),
-            length: PackHashBytes
+            length: PackHashBytes,
+            start: (24 + PackHashBytes)
         ));
 
         var payload = span[PackHeaderBytes..];
@@ -294,16 +192,116 @@ public sealed class OverlayGlyphSdfPack {
             var temporary = (path + $".{Environment.ProcessId}.tmp");
 
             File.WriteAllBytes(
-                path: temporary,
-                bytes: bytes
+                bytes: bytes,
+                path: temporary
             );
             File.Move(
-                sourceFileName: temporary,
                 destFileName: path,
-                overwrite: true
+                overwrite: true,
+                sourceFileName: temporary
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[Puck.Overlays] could not persist the overlay glyph pack '{path}' ({exception.Message}); the next start decodes the full atlas again.");
         }
+    }
+
+    /// <summary>The glyph index of a code point within this pack, or -1 when it is outside the printable-ASCII
+    /// range.</summary>
+    public static int GlyphIndex(int codePoint) =>
+        (((codePoint >= FirstChar) && (codePoint < (FirstChar + GlyphCount)))
+            ? (codePoint - FirstChar)
+            : -1
+        );
+    /// <summary>Flattens a shared SDF atlas into the per-glyph cell pack, or returns <see langword="null"/> when
+    /// <paramref name="monoFont"/> is <see langword="null"/> or carries no usable glyph bounds.</summary>
+    /// <param name="monoFont">The source atlas — a uniform-grid mono atlas (typically
+    /// <see cref="OverlayGlyphAtlasSet.MonoFont"/>).</param>
+    public static OverlayGlyphSdfPack? TryCreate(FontAtlas? monoFont) {
+        if (monoFont is not { ImageData: { } image } font) {
+            return null;
+        }
+
+        // Probe the first glyph that HAS atlas bounds for the uniform cell size — SPACE carries no bounds in the
+        // committed atlas (no ink, no cell); boundless glyphs stay blank cells in the pack.
+        FontAtlasBounds? probed = null;
+
+        for (var unicode = FirstChar; ((unicode < (FirstChar + GlyphCount)) && (probed is null)); unicode++) {
+            if (
+                font.TryGetGlyph(
+                glyph: out var probe,
+                unicode: unicode
+            ) &&
+                (probe.AtlasBounds is { } bounds)
+            ) {
+                probed = bounds;
+            }
+        }
+
+        if (probed is not { } probeBounds) {
+            return null;
+        }
+
+        var atlasCellWidth = Math.Max(
+            val1: 1,
+            val2: ((int)MathF.Round(x: (probeBounds.Right - probeBounds.Left)))
+        );
+        var atlasCellHeight = Math.Max(
+            val1: 1,
+            val2: ((int)MathF.Round(x: (probeBounds.Bottom - probeBounds.Top)))
+        );
+        var cellStride = (atlasCellWidth * atlasCellHeight);
+        var packedSdf = new uint[(GlyphCount * cellStride)];
+        var pixels = image.RgbaPixels;
+        var imageWidth = image.Width;
+        var imageHeight = image.Height;
+
+        for (var index = 0; (index < GlyphCount); index++) {
+            if (
+                (!font.TryGetGlyph(
+                glyph: out var glyph,
+                unicode: (FirstChar + index)
+            )) ||
+                (glyph.AtlasBounds is not { } bounds)
+            ) {
+                continue;
+            }
+
+            var left = ((int)MathF.Round(x: bounds.Left));
+            var top = ((int)MathF.Round(x: bounds.Top));
+            var glyphBase = (index * cellStride);
+
+            for (var y = 0; (y < atlasCellHeight); y++) {
+                var sourceY = Math.Clamp(
+                    max: (imageHeight - 1),
+                    min: 0,
+                    value: (top + y)
+                );
+
+                for (var x = 0; (x < atlasCellWidth); x++) {
+                    var sourceX = Math.Clamp(
+                        max: (imageWidth - 1),
+                        min: 0,
+                        value: (left + x)
+                    );
+                    var sourceBase = (((sourceY * imageWidth) + sourceX) * 4);
+
+                    // All four channels ride along (little-endian R|G|B|A): the overlays median RGB at shade time,
+                    // and a runtime exact-EDT fallback atlas replicates its single channel so its median IS the
+                    // channel value.
+                    packedSdf[((glyphBase + (y * atlasCellWidth)) + x)] =
+                        pixels[sourceBase]
+                        | (((uint)pixels[(sourceBase + 1)]) << 8)
+                        | (((uint)pixels[(sourceBase + 2)]) << 16)
+                        | (((uint)pixels[(sourceBase + 3)]) << 24);
+                }
+            }
+        }
+
+        return new OverlayGlyphSdfPack(
+            atlasCellHeight: atlasCellHeight,
+            atlasCellWidth: atlasCellWidth,
+            distanceRange: font.DistanceRange,
+            packedSdf: packedSdf
+        );
     }
 }

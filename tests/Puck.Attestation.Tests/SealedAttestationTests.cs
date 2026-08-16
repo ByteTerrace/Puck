@@ -38,7 +38,6 @@ public sealed class SealedAttestationTests {
 
         Assert.True(condition: plaintext.AsSpan().SequenceEqual(other: recovered));
     }
-
     [Fact]
     public void SealedPayloadKnownAnswer_NewAttestationLabelsOpenExactly() {
         const string HeaderBase64 = "iQFYIB5ktJpRgBkcKhwVPH4Q9Hf0BOmkv7HX6rnHJ/xGF2r4eCF3ZWIuZnVuY3Rpb25zOmludGVyY2hhbmdlLXN1YmplY3RxZWNkc2EtcDI1Ni1zaGEyNTZ4HmF0dGVzdGF0aW9uLmNyb3NzLWNoZWNrLnNlYWxlZBpqfQKSGmqknaJxd29ybGQ6aW50ZXJjaGFuZ2X2";
@@ -56,9 +55,9 @@ public sealed class SealedAttestationTests {
         );
 
         var plaintext = SealedAttestation.Unseal(
-            recipientPrivateKey: recipientKey,
+            associatedData: headerBytes,
             payload: payload,
-            associatedData: headerBytes
+            recipientPrivateKey: recipientKey
         );
 
         Assert.Equal(
@@ -66,14 +65,13 @@ public sealed class SealedAttestationTests {
             actual: Encoding.UTF8.GetString(bytes: plaintext)
         );
     }
-
-    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
+    [Theory]
     public void AadTamper_FlippingAHeaderByte_BreaksDecryption(int offsetFromEnd) {
         var (_, keys, _, headerBytes, _, sealedPayload) = BuildFixture();
         var offset = ((offsetFromEnd >= 0) ? offsetFromEnd : (headerBytes.Length + offsetFromEnd));
-        var tampered = (byte[])headerBytes.Clone();
+        var tampered = ((byte[])headerBytes.Clone());
 
         tampered[offset] ^= 0xFF;
 
@@ -81,7 +79,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "tag", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void CiphertextTamper_FlippingOneByte_BreaksDecryption() {
         var (_, keys, _, headerBytes, _, sealedPayload) = BuildFixture();
@@ -93,7 +90,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "tag", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void WrongRecipient_AnotherIdentitysSealingKeyIsRefusedBeforeDecryption() {
         var (_, _, _, headerBytes, _, sealedPayload) = BuildFixture();
@@ -103,11 +99,10 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "does not identify", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void RecipientSpki_TrailingBytesAreRefusedBeforeSealing() {
         var (_, keys, _, headerBytes, plaintext, _) = BuildFixture();
-        var tailedRecipientSpki = (byte[])[.. keys.SubjectSealingSpki, 0x00];
+        var tailedRecipientSpki = ((byte[])[.. keys.SubjectSealingSpki, 0x00]);
         var tailedRecipientId = KeyId.ForSubject(
             domain: keys.Domain,
             subject: keys.Subject,
@@ -116,15 +111,14 @@ public sealed class SealedAttestationTests {
         );
 
         var exception = Assert.Throws<FormatException>(testCode: () => _ = SealedAttestation.Seal(
-            recipientId: tailedRecipientId,
-            recipientPublicKeySubjectPublicKeyInfo: tailedRecipientSpki,
             associatedData: headerBytes,
-            plaintext: plaintext
+            plaintext: plaintext,
+            recipientId: tailedRecipientId,
+            recipientPublicKeySubjectPublicKeyInfo: tailedRecipientSpki
         ));
 
         Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void RoleSeparation_ASigningAlgorithmIdCannotBePresentedAsARecipientSealingKey() {
         var (_, keys, _, headerBytes, plaintext, _) = BuildFixture();
@@ -133,7 +127,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "rather than a sealing algorithm", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void RecipientContextTamper_ChangingTheRecipientSubject_BreaksTheAeadTag() {
         var (_, keys, _, headerBytes, _, sealedPayload) = BuildFixture();
@@ -142,7 +135,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "tag", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void InvalidCurve_AP384EphemeralKeyOfferedAgainstAP256Recipient_IsRefused() {
         var (_, keys, _, headerBytes, _, sealedPayload) = BuildFixture();
@@ -153,11 +145,10 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "not on P-256", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void EphemeralSpki_TrailingBytesAreRefusedBeforeAgreement() {
         var (_, keys, _, headerBytes, _, sealedPayload) = BuildFixture();
-        var tailedEphemeralSpki = (byte[])[.. sealedPayload.EphemeralPublicKeySubjectPublicKeyInfo.Span, 0x00];
+        var tailedEphemeralSpki = ((byte[])[.. sealedPayload.EphemeralPublicKeySubjectPublicKeyInfo.Span, 0x00]);
 
         var exception = Assert.Throws<FormatException>(testCode: () => _ = SealedAttestation.Unseal(
             recipientPrivateKey: keys.SubjectSealingKey,
@@ -167,7 +158,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     // An SPKI names a key TYPE before it names a curve; an RSA SPKI has no curve to ask about at all, so
     // the type check (the AlgorithmIdentifier OID) has to come first.
     [Fact]
@@ -180,7 +170,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "does not import as an EC public key", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     // An EC SPKI carries id-ecPublicKey whether its holder means to sign or to agree, so a P-256 SIGNING
     // key's SPKI imports cleanly as an agreement key and fails only at the AEAD tag.
     [Fact]
@@ -191,7 +180,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "tag", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void MalformedNonce_AnElevenByteNonce_IsRefusedAsAFormatError() {
         var (_, keys, _, headerBytes, _, sealedPayload) = BuildFixture();
@@ -200,7 +188,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "nonce must be", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void EncodeDecodeSymmetry_AnInvalidRecipientFingerprint_IsRefusedByTheEncoder() {
         var (codec, _, _, _, _, sealedPayload) = BuildFixture();
@@ -209,7 +196,6 @@ public sealed class SealedAttestationTests {
 
         Assert.Contains(expectedSubstring: "fingerprint", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     // The nonce is random per seal AND the AEAD key is fresh per seal (ephemeral agreement), so two seals of
     // the same plaintext under the same header share neither.
     [Fact]
@@ -224,7 +210,8 @@ public sealed class SealedAttestationTests {
     private static (CborAttestationCodec Codec, DomainKeys Keys, SignedAttestation[] Chain, TrustList Trust, AttestationHeader Header, byte[] Plaintext) BuildAttestationFixture() {
         var codec = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:mira");
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+
+        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notAfter: (Epoch + (86_400L * 30)), notBefore: (Epoch - 30));
         var chain = new[] { rootToIssuing, issuingToSubject };
         var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
         var header = new AttestationHeader(
@@ -253,7 +240,6 @@ public sealed class SealedAttestationTests {
 
         AssertAccepted(result: result);
     }
-
     [Fact]
     public void SealedAttestationValidation_AuthenticatedButMalformedPayload_IsRefusedDuringClaimVerification() {
         var (codec, keys, chain, trust, header, _) = BuildAttestationFixture();
@@ -261,9 +247,8 @@ public sealed class SealedAttestationTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: malformed, chain: chain, trustList: trust, now: Now, expectedPurpose: "test.sealed", expectedAudience: "world:vault");
 
-        AssertRefused(result: result, reasonMustContain: "sealed claim payload is malformed");
+        AssertRefused(reasonMustContain: "sealed claim payload is malformed", result: result);
     }
-
     [Fact]
     public void SealedAttestationValidationOrder_MalformedNestedBytesUnderABadSignature_StopsAtAuthentication() {
         var (codec, keys, chain, trust, header, _) = BuildAttestationFixture();
@@ -274,9 +259,8 @@ public sealed class SealedAttestationTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: (malformed with { Signature = badSignature }), chain: chain, trustList: trust, now: Now, expectedPurpose: "test.sealed", expectedAudience: "world:vault");
 
-        AssertRefused(result: result, reasonMustContain: "claim signature");
+        AssertRefused(reasonMustContain: "claim signature", result: result);
     }
-
     [Fact]
     public void SealedAttestation_DecodedPayloadOpensToTheOriginalPlaintext() {
         var (codec, keys, _, _, header, plaintext) = BuildAttestationFixture();
@@ -288,7 +272,6 @@ public sealed class SealedAttestationTests {
 
         Assert.True(condition: plaintext.AsSpan().SequenceEqual(other: recovered));
     }
-
     [Fact]
     public void SealedAttestationAadControl_SameCiphertextUnderAOneFieldDifferentHeader_IsRefused() {
         var (codec, keys, _, _, header, plaintext) = BuildAttestationFixture();

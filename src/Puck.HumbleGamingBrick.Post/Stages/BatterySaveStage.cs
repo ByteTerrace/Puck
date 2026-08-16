@@ -19,7 +19,6 @@ internal sealed class BatterySaveStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "battery-save";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -61,8 +60,8 @@ internal sealed class BatterySaveStage : IPostStage {
 
         for (var index = 0; (index < PatternLength); index++) {
             cartridge.WriteRam(
-                address: (ushort)(0xA000 + index),
-                value: (byte)(0xA5 ^ index)
+                address: ((ushort)(0xA000 + index)),
+                value: ((byte)(0xA5 ^ index))
             );
         }
 
@@ -106,8 +105,8 @@ internal sealed class BatterySaveStage : IPostStage {
         );
 
         for (var index = 0; (index < PatternLength); index++) {
-            var expected = (byte)(0xA5 ^ index);
-            var actual = rebootCartridge.ReadRam(address: (ushort)(0xA000 + index));
+            var expected = ((byte)(0xA5 ^ index));
+            var actual = rebootCartridge.ReadRam(address: ((ushort)(0xA000 + index)));
 
             if (actual != expected) {
                 return PostStageOutcome.Fail(detail: $"the imported save diverged at offset {index}: expected 0x{expected:X2}, read 0x{actual:X2}");
@@ -200,7 +199,7 @@ internal sealed class BatterySaveStage : IPostStage {
             value: 0x0B
         );
 
-        foreach (var command in (byte[])[0x40, 0x50, 0x32, 0x3D, 0x34, 0x3C, 0x3B, 0x3A, 0x30]) {
+        foreach (var command in ((byte[])[0x40, 0x50, 0x32, 0x3D, 0x34, 0x3C, 0x3B, 0x3A, 0x30])) {
             cartridge.WriteRam(
                 address: 0xA000,
                 value: command
@@ -249,11 +248,11 @@ internal sealed class BatterySaveStage : IPostStage {
         }
 
         if (!footer.AsSpan(
-            start: 0,
-            length: 8
+            length: 8,
+            start: 0
         ).SequenceEqual(other: rebootCartridge.ExportPersistentClock(unixTimestampSeconds: InteropTimestamp).AsSpan(
-            start: 0,
-            length: 8
+            length: 8,
+            start: 0
         ))) {
             return "the imported HuC3 clock's re-exported minutes/days diverged from the original footer";
         }

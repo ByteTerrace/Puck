@@ -279,7 +279,7 @@ per-pixel interpreter fast.
   [`docs/sdf-wiki/lipschitz-and-field-correctness.md`](../sdf-wiki/lipschitz-and-field-correctness.md).
 - Field scopes (`PushField`/`PopField`) and the margin rule:
   the `SdfOp.PushField`/`PopField` doc comments in
-  [`src/Puck.SdfVm/SdfOp.cs`](../../src/Puck.SdfVm/SdfOp.cs).
+  [`src/Puck.SignedDistance/SdfOp.cs`](../../src/Puck.SignedDistance/SdfOp.cs).
 - The ISA admission rule and current instruction inventory: the sync-pair
   preamble in [`.claude/skills/sdf-world/SKILL.md`](../../.claude/skills/sdf-world/SKILL.md).
 - Parked-instance cost tracking and the capacity-probe envelope: the

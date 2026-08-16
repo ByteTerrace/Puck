@@ -30,7 +30,6 @@ public enum InputLaneMode {
     /// input), register the lane with its real mode and call <see cref="IInputArbiter.SuppressLane"/> instead.</summary>
     Suppressed,
 }
-
 /// <summary>
 /// A lane's routing policy, fixed at <see cref="IInputArbiter.RegisterLane"/> time. <see cref="PlayerIndex"/> is
 /// read only when <see cref="Mode"/> is <see cref="InputLaneMode.PerPlayer"/>; every other mode ignores it (kept at
@@ -43,11 +42,22 @@ public readonly record struct InputLanePolicy {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is undefined, or a per-player policy has a negative <paramref name="playerIndex"/>.</exception>
     public InputLanePolicy(InputLaneMode mode, int playerIndex = 0) {
         if (!Enum.IsDefined(value: mode)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(mode), actualValue: mode, message: "The lane mode is undefined.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(mode),
+                actualValue: mode,
+                message: "The lane mode is undefined."
+            );
         }
 
-        if ((mode == InputLaneMode.PerPlayer) && (playerIndex < 0)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(playerIndex), actualValue: playerIndex, message: "The player index must be non-negative.");
+        if (
+            (mode == InputLaneMode.PerPlayer) &&
+            (playerIndex < 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(playerIndex),
+                actualValue: playerIndex,
+                message: "The player index must be non-negative."
+            );
         }
 
         Mode = mode;
@@ -73,9 +83,11 @@ public readonly record struct InputLanePolicy {
     /// <returns>The per-player lane policy.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="playerIndex"/> is negative.</exception>
     public static InputLanePolicy ForPlayer(int playerIndex) =>
-        new(mode: InputLaneMode.PerPlayer, playerIndex: playerIndex);
+        new(
+            mode: InputLaneMode.PerPlayer,
+            playerIndex: playerIndex
+        );
 }
-
 /// <summary>
 /// The engine-owned single-drainer mechanism: registrants that want a gamepad's per-frame state go through a
 /// registered LANE instead of touching <see cref="GamepadManager.Drain"/> themselves, so the manager's destructive
@@ -118,12 +130,10 @@ public interface IInputArbiter {
     /// <param name="policy">The lane's routing policy.</param>
     /// <returns>An opaque token identifying the lane for every other member on this interface.</returns>
     object RegisterLane(InputLanePolicy policy);
-
     /// <summary>Releases a registered lane and its retained routing state.</summary>
     /// <param name="laneToken">A token returned by <see cref="RegisterLane"/>.</param>
     /// <exception cref="ArgumentException"><paramref name="laneToken"/> was not returned by this arbiter's <see cref="RegisterLane"/>.</exception>
     void UnregisterLane(object laneToken);
-
     /// <summary>
     /// Performs the run's one destructive <see cref="GamepadManager.Drain"/> for this produced frame, if it has not
     /// already run for <paramref name="frameKey"/>. Idempotent: any number of registrants may call this with the
@@ -136,7 +146,6 @@ public interface IInputArbiter {
     /// interpret it beyond equality).
     /// </param>
     void DrainFrame(ulong frameKey);
-
     /// <summary>Reads a lane's current <see cref="GamepadState"/>, per its <see cref="InputLaneMode"/> and current
     /// suppression flag. Safe to call before the first <see cref="DrainFrame"/> (reads neutral) and for a lane whose
     /// device has disconnected or never resolved (also neutral) — a lane never throws for "nothing to read".</summary>
@@ -146,7 +155,6 @@ public interface IInputArbiter {
     /// <exception cref="ArgumentException"><paramref name="laneToken"/> was not returned by this arbiter's
     /// <see cref="RegisterLane"/>.</exception>
     GamepadState Sample(object laneToken);
-
     /// <summary>Explicitly binds (or clears) the device an <see cref="InputLaneMode.Owned"/> lane reads — the
     /// proximity-takeover seam. Meaningless (silently ignored) for a lane registered under any other mode, since
     /// their routing already has its own resolution rule.</summary>
@@ -156,7 +164,6 @@ public interface IInputArbiter {
     /// <exception cref="ArgumentException"><paramref name="laneToken"/> was not returned by this arbiter's
     /// <see cref="RegisterLane"/>.</exception>
     void SetLaneDevice(object laneToken, InputDeviceId device);
-
     /// <summary>Mutes (or unmutes) a lane, independent of its <see cref="InputLaneMode"/>: while suppressed,
     /// <see cref="Sample"/> reads neutral regardless of what the lane's mode would otherwise resolve. The lane
     /// keeps its policy/bound device underneath — unsuppressing resumes exactly where routing left off.</summary>
@@ -165,7 +172,6 @@ public interface IInputArbiter {
     /// <exception cref="ArgumentException"><paramref name="laneToken"/> was not returned by this arbiter's
     /// <see cref="RegisterLane"/>.</exception>
     void SuppressLane(object laneToken, bool suppressed);
-
     /// <summary>Returns a value indicating whether a lane is currently muted — either explicitly via <see cref="SuppressLane"/>, or because it
     /// was registered under <see cref="InputLaneMode.Suppressed"/>. Lets a registrant that keeps its own
     /// higher-level policy on top of a lane (a shared/mirror routing fallback, say) ask "would this lane read
@@ -175,22 +181,22 @@ public interface IInputArbiter {
     /// <exception cref="ArgumentException"><paramref name="laneToken"/> was not returned by this arbiter's
     /// <see cref="RegisterLane"/>.</exception>
     bool IsLaneSuppressed(object laneToken);
-
     /// <summary>Copies the current frame's full per-device drain into caller-owned reusable storage.</summary>
     /// <param name="destination">The list to clear and fill with the last frame passed to <see cref="DrainFrame"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="destination"/> is <see langword="null"/>.</exception>
     void CopyDrainedDevices(List<GamepadDrain> destination);
 }
-
 /// <summary>
 /// The <see cref="IInputArbiter"/> implementation: owns exactly one <see cref="GamepadManager"/> and provides the
 /// canonical single-drainer mechanism for all gamepad consumers.
 /// </summary>
 public sealed class InputArbiter : IInputArbiter {
-    private readonly GamepadManager m_manager;
     private readonly List<GamepadDrain> m_drainBuffer = [];
+    private readonly Lock m_gate = new();
     private readonly List<Lane> m_lanes = [];
-    private readonly object m_gate = new();
+
+    private readonly GamepadManager m_manager;
+
     private ulong? m_drainedFrame;
 
     /// <summary>Initializes a new instance of the <see cref="InputArbiter"/> class.</summary>
@@ -202,108 +208,28 @@ public sealed class InputArbiter : IInputArbiter {
         m_manager = manager;
     }
 
-    /// <inheritdoc/>
-    public object RegisterLane(InputLanePolicy policy) {
-        var lane = new Lane(policy: policy);
+    private static bool HasStickOrTriggerInput(in GamepadState state) =>
+        ((state.LeftStick != Vector2.Zero) || (state.RightStick != Vector2.Zero) || (0f < state.LeftTrigger) || (0f < state.RightTrigger));
+    // Called only while m_gate is held so validation and the following lane operation are one atomic action: a
+    // concurrent unregister can never slip between them and let an already-released token mutate stale state.
+    private Lane ResolveLocked(object laneToken) {
+        ArgumentNullException.ThrowIfNull(laneToken);
 
-        lock (m_gate) {
-            m_lanes.Add(item: lane);
+        if (laneToken is not Lane lane) {
+            throw new ArgumentException(
+                message: "The lane token was not returned by this arbiter's RegisterLane.",
+                paramName: nameof(laneToken)
+            );
+        }
+
+        if (!m_lanes.Contains(item: lane)) {
+            throw new ArgumentException(
+                message: "The lane token was not returned by this arbiter's RegisterLane.",
+                paramName: nameof(laneToken)
+            );
         }
 
         return lane;
-    }
-
-    /// <inheritdoc/>
-    public void UnregisterLane(object laneToken) {
-        lock (m_gate) {
-            var lane = ResolveLocked(laneToken: laneToken);
-
-            _ = m_lanes.Remove(item: lane);
-        }
-    }
-
-    /// <inheritdoc/>
-    public void DrainFrame(ulong frameKey) {
-        lock (m_gate) {
-            // Idempotent: a second call for the same produced frame (any number of registrants may each call this
-            // defensively before sampling) is a deliberate no-op, not a re-drain — GamepadManager.Drain is
-            // destructive per device, so draining twice would silently discard whatever arrived between the calls.
-            if (m_drainedFrame == frameKey) {
-                return;
-            }
-
-            m_drainedFrame = frameKey;
-            m_manager.Drain(buffer: m_drainBuffer);
-        }
-    }
-
-    /// <inheritdoc/>
-    public GamepadState Sample(object laneToken) {
-        lock (m_gate) {
-            var lane = ResolveLocked(laneToken: laneToken);
-
-            if (lane.Suppressed || (lane.Policy.Mode == InputLaneMode.Suppressed)) {
-                return GamepadState.Neutral;
-            }
-
-            return (lane.Policy.Mode switch {
-                InputLaneMode.PerPlayer => SamplePerPlayerLocked(playerIndex: lane.Policy.PlayerIndex),
-                InputLaneMode.Owned => SampleDeviceLocked(deviceId: lane.Device),
-                InputLaneMode.Multicast => SampleMulticastLocked(),
-                _ => GamepadState.Neutral,
-            });
-        }
-    }
-
-    /// <inheritdoc/>
-    public void SetLaneDevice(object laneToken, InputDeviceId device) {
-        lock (m_gate) {
-            var lane = ResolveLocked(laneToken: laneToken);
-
-            lane.Device = device;
-        }
-    }
-
-    /// <inheritdoc/>
-    public void SuppressLane(object laneToken, bool suppressed) {
-        lock (m_gate) {
-            var lane = ResolveLocked(laneToken: laneToken);
-
-            lane.Suppressed = suppressed;
-        }
-    }
-
-    /// <inheritdoc/>
-    public bool IsLaneSuppressed(object laneToken) {
-        lock (m_gate) {
-            var lane = ResolveLocked(laneToken: laneToken);
-
-            return (lane.Suppressed || (lane.Policy.Mode == InputLaneMode.Suppressed));
-        }
-    }
-
-    /// <inheritdoc/>
-    public void CopyDrainedDevices(List<GamepadDrain> destination) {
-        ArgumentNullException.ThrowIfNull(destination);
-
-        lock (m_gate) {
-            destination.Clear();
-            destination.AddRange(collection: m_drainBuffer);
-        }
-    }
-
-    // playerIndex resolution rides GamepadManager.TryGetPlayerIndex against the just-drained device set, exactly
-    // like every hand-rolled per-player rebuild this type replaces — a device that hot-unplugged this frame is
-    // absent from the drain and never contributes, and a device that reconnects into the same slot resolves again
-    // with no lane-side bookkeeping at all.
-    private GamepadState SamplePerPlayerLocked(int playerIndex) {
-        foreach (var drain in m_drainBuffer) {
-            if (m_manager.TryGetPlayerIndex(deviceId: drain.DeviceId, playerIndex: out var resolved) && (resolved == playerIndex)) {
-                return drain.Latest;
-            }
-        }
-
-        return GamepadState.Neutral;
     }
     private GamepadState SampleDeviceLocked(InputDeviceId deviceId) {
         if (deviceId == default) {
@@ -335,7 +261,10 @@ public sealed class InputArbiter : IInputArbiter {
 
             buttons |= latest.Buttons;
 
-            if ((axesSource is null) && HasStickOrTriggerInput(state: in latest)) {
+            if (
+                (axesSource is null) &&
+                HasStickOrTriggerInput(state: in latest)
+            ) {
                 axesSource = latest;
             }
         }
@@ -344,22 +273,113 @@ public sealed class InputArbiter : IInputArbiter {
 
         return (baseState with { Buttons = buttons });
     }
-    private static bool HasStickOrTriggerInput(in GamepadState state) =>
-        ((state.LeftStick != Vector2.Zero) || (state.RightStick != Vector2.Zero) || (0f < state.LeftTrigger) || (0f < state.RightTrigger));
-    // Called only while m_gate is held so validation and the following lane operation are one atomic action: a
-    // concurrent unregister can never slip between them and let an already-released token mutate stale state.
-    private Lane ResolveLocked(object laneToken) {
-        ArgumentNullException.ThrowIfNull(laneToken);
-
-        if (laneToken is not Lane lane) {
-            throw new ArgumentException(message: "The lane token was not returned by this arbiter's RegisterLane.", paramName: nameof(laneToken));
+    // playerIndex resolution rides GamepadManager.TryGetPlayerIndex against the just-drained device set, exactly
+    // like every hand-rolled per-player rebuild this type replaces — a device that hot-unplugged this frame is
+    // absent from the drain and never contributes, and a device that reconnects into the same slot resolves again
+    // with no lane-side bookkeeping at all.
+    private GamepadState SamplePerPlayerLocked(int playerIndex) {
+        foreach (var drain in m_drainBuffer) {
+            if (
+                m_manager.TryGetPlayerIndex(
+                deviceId: drain.DeviceId,
+                playerIndex: out var resolved
+            ) &&
+                (resolved == playerIndex)
+            ) {
+                return drain.Latest;
+            }
         }
 
-        if (!m_lanes.Contains(item: lane)) {
-            throw new ArgumentException(message: "The lane token was not returned by this arbiter's RegisterLane.", paramName: nameof(laneToken));
+        return GamepadState.Neutral;
+    }
+
+    /// <inheritdoc/>
+    public void CopyDrainedDevices(List<GamepadDrain> destination) {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        lock (m_gate) {
+            destination.Clear();
+            destination.AddRange(collection: m_drainBuffer);
+        }
+    }
+    /// <inheritdoc/>
+    public void DrainFrame(ulong frameKey) {
+        lock (m_gate) {
+            // Idempotent: a second call for the same produced frame (any number of registrants may each call this
+            // defensively before sampling) is a deliberate no-op, not a re-drain — GamepadManager.Drain is
+            // destructive per device, so draining twice would silently discard whatever arrived between the calls.
+            if (m_drainedFrame == frameKey) {
+                return;
+            }
+
+            m_drainedFrame = frameKey;
+            m_manager.Drain(buffer: m_drainBuffer);
+        }
+    }
+    /// <inheritdoc/>
+    public bool IsLaneSuppressed(object laneToken) {
+        lock (m_gate) {
+            var lane = ResolveLocked(laneToken: laneToken);
+
+            return (
+                lane.Suppressed ||
+                (lane.Policy.Mode == InputLaneMode.Suppressed)
+            );
+        }
+    }
+    /// <inheritdoc/>
+    public object RegisterLane(InputLanePolicy policy) {
+        var lane = new Lane(policy: policy);
+
+        lock (m_gate) {
+            m_lanes.Add(item: lane);
         }
 
         return lane;
+    }
+    /// <inheritdoc/>
+    public GamepadState Sample(object laneToken) {
+        lock (m_gate) {
+            var lane = ResolveLocked(laneToken: laneToken);
+
+            if (
+                lane.Suppressed ||
+                (lane.Policy.Mode == InputLaneMode.Suppressed)
+            ) {
+                return GamepadState.Neutral;
+            }
+
+            return (lane.Policy.Mode switch {
+                InputLaneMode.PerPlayer => SamplePerPlayerLocked(playerIndex: lane.Policy.PlayerIndex),
+                InputLaneMode.Owned => SampleDeviceLocked(deviceId: lane.Device),
+                InputLaneMode.Multicast => SampleMulticastLocked(),
+                _ => GamepadState.Neutral,
+            });
+        }
+    }
+    /// <inheritdoc/>
+    public void SetLaneDevice(object laneToken, InputDeviceId device) {
+        lock (m_gate) {
+            var lane = ResolveLocked(laneToken: laneToken);
+
+            lane.Device = device;
+        }
+    }
+    /// <inheritdoc/>
+    public void SuppressLane(object laneToken, bool suppressed) {
+        lock (m_gate) {
+            var lane = ResolveLocked(laneToken: laneToken);
+
+            lane.Suppressed = suppressed;
+        }
+    }
+    /// <inheritdoc/>
+    public void UnregisterLane(object laneToken) {
+        lock (m_gate) {
+            var lane = ResolveLocked(laneToken: laneToken);
+
+            _ = m_lanes.Remove(item: lane);
+        }
     }
 
     // The opaque token IS the lane's own state holder — reference-stable by construction (a class instance), and

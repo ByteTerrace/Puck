@@ -5,19 +5,16 @@ using Puck.Hosting;
 namespace Puck.Launcher;
 
 /// <summary>Optional per-step timing accumulators, filled only while [frame-timing] is armed (see
-/// <c>Puck.Abstractions.Gpu.GpuTimingControl</c>). A caller that does not care about the sub-bucket breakdown passes
+/// <c>Puck.Hosting.GpuTimingControl</c>). A caller that does not care about the sub-bucket breakdown passes
 /// <see langword="null"/> to <see cref="FixedStepPump.Advance"/> and pays nothing for it.</summary>
 public sealed class FixedStepTimingAccumulator {
-    /// <summary>Total ticks spent inside every <c>InputRouter.SnapshotForTick</c> call this iteration.</summary>
-    public long InputSnapshotTicks;
-
     /// <summary>Total ticks spent inside every <c>CommandRegistry.ApplySnapshot</c> call this iteration.</summary>
     public long CommandApplyTicks;
-
+    /// <summary>Total ticks spent inside every <c>InputRouter.SnapshotForTick</c> call this iteration.</summary>
+    public long InputSnapshotTicks;
     /// <summary>Total ticks spent inside every <c>IFixedStepSimulation.Step</c> call this iteration.</summary>
     public long SimulationStepTicks;
 }
-
 /// <summary>
 /// The shared deterministic fixed-step accumulator both boot shapes drive: the windowed run loop
 /// (<c>LauncherWindowHostedService</c>) and a headless tick host (<c>HeadlessTickHostedService</c>). It owns the
@@ -42,12 +39,13 @@ public sealed class FixedStepTimingAccumulator {
 /// and stepping it on its own width, so every instance keeps its own tick ordinal. This pump drives only that master
 /// cadence they bank against, never one rate they all share.</para></remarks>
 public sealed class FixedStepPump {
-    private readonly CommandRegistry m_registry;
     private readonly InputRouter m_inputRouter;
+    private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation m_simulation;
+
     private ulong m_accumulatorTicks;
-    private ulong m_elapsedTicks;
     private ulong m_completedStepCount;
+    private ulong m_elapsedTicks;
 
     /// <summary>Initializes the pump over one simulation/router/registry triple and wires the Simulation-phase console
     /// drain — the ONE place either boot shape registers it, so neither can wire it differently.</summary>
@@ -72,17 +70,15 @@ public sealed class FixedStepPump {
         m_registry.RouteSimulationTo(sink: m_inputRouter.ConsoleTextSink);
     }
 
+    /// <summary>The sub-step remainder held since the last whole step — the render-side interpolation alpha's
+    /// numerator (<c>Puck.Hosting.FrameContext.AccumulatorTicks</c>).</summary>
+    public ulong AccumulatorTicks => m_accumulatorTicks;
     /// <summary>The input clock's tick origin newly captured input is measured against — rebased by
     /// <see cref="Advance"/> whenever a runaway wall-clock delta is clamped, so newly captured input stays due now
     /// rather than waiting out simulation time the pump deliberately discarded.</summary>
     public ulong CaptureOriginTicks { get; private set; }
-
     /// <summary>The exact engine time this pump has advanced the simulation by.</summary>
     public ulong ElapsedTicks => m_elapsedTicks;
-
-    /// <summary>The sub-step remainder held since the last whole step — the render-side interpolation alpha's
-    /// numerator (<c>Puck.Hosting.FrameContext.AccumulatorTicks</c>).</summary>
-    public ulong AccumulatorTicks => m_accumulatorTicks;
 
     /// <summary>Consumes one sampled wall-clock delta: clamps a runaway frame to <paramref name="maxFrameTicks"/>
     /// (rebasing <see cref="CaptureOriginTicks"/> by the dropped remainder), accumulates it, and runs every whole
@@ -125,14 +121,23 @@ public sealed class FixedStepPump {
             // step-size change between Advance calls breaks.
             var stepElapsedTicks = (previousElapsedTicks + ((stepIndex + 1UL) * stepTicks));
             var windowEndTick = (CaptureOriginTicks + stepElapsedTicks);
-            var snapshotStart = ((timing is not null) ? Stopwatch.GetTimestamp() : 0L);
-            var commands = m_inputRouter.SnapshotForTick(tick: tick, windowEndTick: windowEndTick);
+            var snapshotStart = ((timing is not null)
+                ? Stopwatch.GetTimestamp()
+                : 0L
+            );
+            var commands = m_inputRouter.SnapshotForTick(
+                tick: tick,
+                windowEndTick: windowEndTick
+            );
 
             if (timing is not null) {
                 timing.InputSnapshotTicks += (Stopwatch.GetTimestamp() - snapshotStart);
             }
 
-            var applyStart = ((timing is not null) ? Stopwatch.GetTimestamp() : 0L);
+            var applyStart = ((timing is not null)
+                ? Stopwatch.GetTimestamp()
+                : 0L
+            );
 
             m_registry.ApplySnapshot(snapshot: in commands);
 
@@ -145,15 +150,21 @@ public sealed class FixedStepPump {
                 StepTicks: stepTicks,
                 Tick: tick
             );
-            var stepStart = ((timing is not null) ? Stopwatch.GetTimestamp() : 0L);
+            var stepStart = ((timing is not null)
+                ? Stopwatch.GetTimestamp()
+                : 0L
+            );
 
-            m_simulation.Step(context: in fixedStep, commands: in commands);
+            m_simulation.Step(
+                commands: in commands,
+                context: in fixedStep
+            );
 
             if (timing is not null) {
                 timing.SimulationStepTicks += (Stopwatch.GetTimestamp() - stepStart);
             }
         }
 
-        return (int)stepCount;
+        return ((int)stepCount);
     }
 }

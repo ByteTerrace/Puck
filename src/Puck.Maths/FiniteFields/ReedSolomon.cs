@@ -72,7 +72,10 @@ public static class ReedSolomon {
         generator[degree] = field.One;
 
         for (var index = 0; (index < degree); index++) {
-            var root = field.Exponentiate(value: rootBase, exponent: ((ulong)(firstRootExponent + index)));
+            var root = field.Exponentiate(
+                exponent: ((ulong)(firstRootExponent + index)),
+                value: rootBase
+            );
 
             // Multiplying by (t + root) sends coefficient c_m to c_m·root + c_(m-1), and c_(m-1) is exactly the slot
             // being written while c_m sits one slot to its right. Sweeping left to right therefore reads each old
@@ -80,7 +83,10 @@ public static class ReedSolomon {
             // same expression: the new leading slot still holds zero, so its scaled term vanishes, and the slot past the
             // old constant term reads as zero, so the last write is the constant term times the root.
             for (var slot = ((degree - index) - 1); (slot < count); slot++) {
-                var shifted = (((slot + 1) < count) ? generator[(slot + 1)] : T.Zero);
+                var shifted = (((slot + 1) < count)
+                    ? generator[(slot + 1)]
+                    : T.Zero
+                );
 
                 generator[slot] = shifted ^ BinaryFieldKernels.Multiply(
                     left: generator[slot],
@@ -91,7 +97,6 @@ public static class ReedSolomon {
             }
         }
     }
-
     /// <summary>Computes a message's check symbols — the remainder of its division by the generator.</summary>
     /// <typeparam name="T">The packed element carrier.</typeparam>
     /// <param name="field">The field the symbols live in.</param>
@@ -137,11 +142,22 @@ public static class ReedSolomon {
 
         var length = message.Length;
         var total = (length + degree);
-        var pooled = ((total > StackThreshold) ? ArrayPool<T>.Shared.Rent(minimumLength: total) : null);
+        var pooled = ((total > StackThreshold)
+            ? ArrayPool<T>.Shared.Rent(minimumLength: total)
+            : null
+        );
         // Sized to the codeword rather than to the threshold: the assembly compiles without SkipLocalsInit, so the
         // localloc zeroes what it reserves and a fixed reservation would memset the ceiling for every short block.
-        Span<T> stackScratch = stackalloc T[((pooled is null) ? total : 0)];
-        var working = ((pooled is null) ? stackScratch : pooled.AsSpan(start: 0, length: total));
+        Span<T> stackScratch = stackalloc T[((pooled is null)
+            ? total
+            : 0)];
+        var working = ((pooled is null)
+            ? stackScratch
+            : pooled.AsSpan(
+                length: total,
+                start: 0
+            )
+        );
 
         try {
             var fieldDegree = field.Degree;
@@ -163,7 +179,10 @@ public static class ReedSolomon {
 
                 if (T.Zero != coefficient) {
                     BinaryFieldKernels.MultiplyAccumulateRegion(
-                        destination: working.Slice(start: (index + 1), length: degree),
+                        destination: working.Slice(
+                            length: degree,
+                            start: (index + 1)
+                        ),
                         source: tail,
                         scalar: coefficient,
                         accumulate: true,
@@ -173,17 +192,22 @@ public static class ReedSolomon {
                 }
             }
 
-            working.Slice(start: length, length: degree).CopyTo(destination: checkSymbols);
+            working.Slice(
+                length: degree,
+                start: length
+            ).CopyTo(destination: checkSymbols);
         } finally {
             if (pooled is not null) {
                 // Only the first total slots were written; clear exactly those before the array re-enters the shared
                 // pool, so one caller's message cannot be read back by an unrelated renter.
-                pooled.AsSpan(start: 0, length: total).Clear();
+                pooled.AsSpan(
+                    length: total,
+                    start: 0
+                ).Clear();
                 ArrayPool<T>.Shared.Return(array: pooled);
             }
         }
     }
-
     /// <summary>Evaluates a codeword at each of the generator's roots.</summary>
     /// <typeparam name="T">The packed element carrier.</typeparam>
     /// <param name="field">The field the symbols live in.</param>
@@ -211,14 +235,17 @@ public static class ReedSolomon {
         var fieldTail = field.ReductionTail;
 
         for (var index = 0; (index < syndromes.Length); index++) {
-            var root = field.Exponentiate(value: rootBase, exponent: ((ulong)(firstRootExponent + index)));
+            var root = field.Exponentiate(
+                exponent: ((ulong)(firstRootExponent + index)),
+                value: rootBase
+            );
             var accumulator = seed;
 
             foreach (var symbol in codeword) {
                 accumulator = BinaryFieldKernels.Multiply(
+                    degree: fieldDegree,
                     left: accumulator,
                     right: root,
-                    degree: fieldDegree,
                     tail: fieldTail
                 ) ^ symbol;
             }

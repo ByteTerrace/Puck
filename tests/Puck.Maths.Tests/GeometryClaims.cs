@@ -24,11 +24,10 @@ internal static class GeometryClaims {
         if ((remainder > half) || ((remainder == half) && !truncated.IsEven)) { ++truncated; }
 
         var signed = (negative ? -truncated : truncated);
-        var wrapped = (signed & ((BigInteger.One << 64) - BigInteger.One));
+        var wrapped = signed & ((BigInteger.One << 64) - BigInteger.One);
 
         return ((wrapped >= (BigInteger.One << 63)) ? (long)(wrapped - (BigInteger.One << 64)) : (long)wrapped);
     }
-
     /// <summary>One ties-to-even rounding of an exact rational numerator/denominator onto the Q16 grid, then wrapped
     /// to the signed 64-bit carrier.</summary>
     private static long RoundRatioQ16(BigInteger numerator, BigInteger denominator) {
@@ -39,11 +38,10 @@ internal static class GeometryClaims {
         if ((remainder > distanceToNext) || ((remainder == distanceToNext) && !quotient.IsEven)) { ++quotient; }
         if (negative) { quotient = -quotient; }
 
-        var wrapped = (quotient & ((BigInteger.One << 64) - BigInteger.One));
+        var wrapped = quotient & ((BigInteger.One << 64) - BigInteger.One);
 
         return ((wrapped >= (BigInteger.One << 63)) ? (long)(wrapped - (BigInteger.One << 64)) : (long)wrapped);
     }
-
     /// <summary>The exact Hamilton (quaternion) product of two raw [X,Y,Z,W] lane quads, one <see
     /// cref="RoundProductSumOracle"/> rounding per lane.</summary>
     private static long[] HamiltonProductOracle(long[] left, long[] right) {
@@ -51,13 +49,12 @@ internal static class GeometryClaims {
         var (rx, ry, rz, rw) = (right[0], right[1], right[2], right[3]);
 
         return [
-            RoundProductSumOracle(sum: ((((BigInteger)lw * rx) + ((BigInteger)lx * rw) + ((BigInteger)ly * rz)) - ((BigInteger)lz * ry))),
-            RoundProductSumOracle(sum: (((((BigInteger)lw * ry) - ((BigInteger)lx * rz)) + ((BigInteger)ly * rw)) + ((BigInteger)lz * rx))),
-            RoundProductSumOracle(sum: ((((BigInteger)lw * rz) + ((BigInteger)lx * ry)) - ((BigInteger)ly * rx) + ((BigInteger)lz * rw))),
-            RoundProductSumOracle(sum: ((((BigInteger)lw * rw) - ((BigInteger)lx * rx)) - ((BigInteger)ly * ry) - ((BigInteger)lz * rz))),
+            RoundProductSumOracle(sum: ((((((BigInteger)lw) * rx) + (((BigInteger)lx) * rw)) + (((BigInteger)ly) * rz)) - (((BigInteger)lz) * ry))),
+            RoundProductSumOracle(sum: ((((((BigInteger)lw) * ry) - (((BigInteger)lx) * rz)) + (((BigInteger)ly) * rw)) + (((BigInteger)lz) * rx))),
+            RoundProductSumOracle(sum: ((((((BigInteger)lw) * rz) + (((BigInteger)lx) * ry)) - (((BigInteger)ly) * rx)) + (((BigInteger)lz) * rw))),
+            RoundProductSumOracle(sum: ((((((BigInteger)lw) * rw) - (((BigInteger)lx) * rx)) - (((BigInteger)ly) * ry)) - (((BigInteger)lz) * rz))),
         ];
     }
-
     /// <summary>A BigInteger bisection search for the nearest ties-to-even Q16 raw to <c>|component|·|vector|⁻¹</c>,
     /// signed back at the end.</summary>
     private static long[] NormalizeOracle(long[] values) {
@@ -82,12 +79,12 @@ internal static class GeometryClaims {
             while ((low + 1L) < high) {
                 var middle = ((low + high) >> 1);
 
-                if (((BigInteger)middle * middle * squaredSum) <= numeratorSquared) { low = middle; } else { high = middle; }
+                if (((((BigInteger)middle) * middle) * squaredSum) <= numeratorSquared) { low = middle; } else { high = middle; }
             }
 
             var doubledNumeratorSquared = (4 * numeratorSquared);
-            var midpoint = ((2 * (BigInteger)low) + BigInteger.One);
-            var midpointSquared = (midpoint * midpoint * squaredSum);
+            var midpoint = ((2 * ((BigInteger)low)) + BigInteger.One);
+            var midpointSquared = ((midpoint * midpoint) * squaredSum);
 
             if ((doubledNumeratorSquared > midpointSquared) || ((doubledNumeratorSquared == midpointSquared) && ((low & 1L) != 0L))) { ++low; }
 
@@ -96,7 +93,6 @@ internal static class GeometryClaims {
 
         return result;
     }
-
     // ---- exact enclosure plumbing for the axis-angle, Exp/Log and dual-derivative ladders below: EVERY expected
     // value in those three claims comes from Oracles.EncloseSinCos / EncloseAtan2 (for the transcendentals),
     // Oracles.NearestIntegerRoot / IntegerSquareRoot (for the exact magnitude and square-root pieces beneath them)
@@ -109,12 +105,10 @@ internal static class GeometryClaims {
     // as an established fact rather than re-derived.
     private static BigInteger GuardUlpUnits(int numerator, int denominator) =>
         (((BigInteger.One << Oracles.GuardBitCount) * numerator) / denominator);
-
     // Scales a guard-unit tolerance by a raw factor's own magnitude (a genuine multiplication the claim performs
     // scales its propagated error the same way), rounding UP so the scaled tolerance never understates it.
     private static BigInteger ScaleToleranceByRawFactor(BigInteger toleranceUnits, long factorRawMagnitude) =>
         ((((toleranceUnits * BigInteger.Abs(value: new BigInteger(value: factorRawMagnitude))) + 65535) / 65536));
-
     // Attenuates (or, for a sub-unit divisor, amplifies) a guard-unit tolerance by dividing by a raw factor's own
     // magnitude — the mirror of ScaleToleranceByRawFactor for a claim step that DIVIDES rather than multiplies.
     // Rounds UP, so it never understates the propagated tolerance either.
@@ -123,7 +117,6 @@ internal static class GeometryClaims {
 
         return ((((toleranceUnits << FixedQ4816.FractionBitCount) + magnitude) - 1) / magnitude);
     }
-
     // The floor, respectively ceiling, of an exact BigInteger ratio for a POSITIVE denominator — BigInteger's own
     // division truncates toward zero, which floors a non-negative numerator but NOT a negative one (a sine
     // enclosure bound can be negative), so every directed rounding below routes through one of these two rather than
@@ -138,7 +131,6 @@ internal static class GeometryClaims {
 
         return ((remainder > 0) ? (quotient + 1) : quotient);
     }
-
     // A raw lies within a BigInteger enclosure (at guard scale) widened by a raw-ULP tolerance, also at guard scale.
     private static string? WithinGuardEnvelope(string name, long subjectRaw, Oracles.Enclosure enclosure, BigInteger toleranceUnits) {
         var scaled = (new BigInteger(value: subjectRaw) << Oracles.GuardBitCount);
@@ -148,19 +140,18 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     // The exact enclosure of "multiplierRaw · (the enclosed value)" — both bounds narrowed by the multiplier's own
     // Q48.16 scale with directed rounding, so this is the IDEAL (never rounded) product, not the kernel's own
     // rounded one.
     private static Oracles.Enclosure ScaleByRawFactor(Oracles.Enclosure enclosure, long multiplierRaw) {
         var multiplier = new BigInteger(value: multiplierRaw);
+
         var (loProduct, hiProduct) = ((multiplier.Sign >= 0)
-            ? (multiplier * enclosure.Low, multiplier * enclosure.High)
-            : (multiplier * enclosure.High, multiplier * enclosure.Low));
+            ? ((multiplier * enclosure.Low), (multiplier * enclosure.High))
+            : ((multiplier * enclosure.High), (multiplier * enclosure.Low)));
 
-        return new(Low: (loProduct >> FixedQ4816.FractionBitCount), High: -((-hiProduct) >> FixedQ4816.FractionBitCount));
+        return new(High: -((-hiProduct) >> FixedQ4816.FractionBitCount), Low: (loProduct >> FixedQ4816.FractionBitCount));
     }
-
     // The exact enclosure of "(the enclosed value) / divisorRaw" for a POSITIVE divisor raw — the division mirror of
     // ScaleByRawFactor, both bounds narrowed with directed rounding so the IDEAL (never rounded) quotient is bracketed.
     private static Oracles.Enclosure DivideEnclosureByRawFactor(Oracles.Enclosure enclosure, long divisorRaw) {
@@ -171,27 +162,24 @@ internal static class GeometryClaims {
             High: CeilingDivide(numerator: (enclosure.High << FixedQ4816.FractionBitCount), positiveDenominator: divisor)
         );
     }
-
     // Interval arithmetic on two independently-bracketed enclosures at the SAME scale: the widest possible sum,
     // respectively difference, so the result still brackets the true value whichever operand realizes its extreme.
     private static Oracles.Enclosure AddEnclosures(Oracles.Enclosure left, Oracles.Enclosure right) =>
         new(Low: (left.Low + right.Low), High: (left.High + right.High));
     private static Oracles.Enclosure SubtractEnclosures(Oracles.Enclosure left, Oracles.Enclosure right) =>
         new(Low: (left.Low - right.High), High: (left.High - right.Low));
-
     // Widens an enclosure by a flat additive tolerance on both sides — the standard way an ADDITIONAL rounding (a
     // kernel's own ULP envelope, or one more fixed-point operation's single rounding) enters a propagated bound.
     private static Oracles.Enclosure WidenEnclosure(Oracles.Enclosure enclosure, BigInteger toleranceUnits) =>
         new(Low: (enclosure.Low - toleranceUnits), High: (enclosure.High + toleranceUnits));
-
     /// <summary>The largest exact component of the 3-D cross product of two raw triples, taken in <see
     /// cref="BigInteger"/> so no product can leave the carrier — the alignment check <c>FixedQuaternion.FromTo</c>
     /// and <c>FixedComplex.FromTo</c> both satisfy by definition (image aligned with target ⇔ cross ≈ 0, dot ≥ 0),
     /// transcribed from the same technique already independently used by <c>Subjects.QuaternionFromToShortestArc</c>
     /// in this project — re-derived here rather than called, so this file still shares no code with it.</summary>
     private static BigInteger MaxAbsCross3(long ix, long iy, long iz, long tx, long ty, long tz) {
-        var (bix, biy, biz) = ((BigInteger)ix, (BigInteger)iy, (BigInteger)iz);
-        var (btx, bty, btz) = ((BigInteger)tx, (BigInteger)ty, (BigInteger)tz);
+        var (bix, biy, biz) = (((BigInteger)ix), ((BigInteger)iy), ((BigInteger)iz));
+        var (btx, bty, btz) = (((BigInteger)tx), ((BigInteger)ty), ((BigInteger)tz));
 
         return BigInteger.Max(
             left: BigInteger.Abs(value: ((biy * btz) - (biz * bty))),
@@ -202,15 +190,12 @@ internal static class GeometryClaims {
     // uses for the identical alignment check — an independently re-derived choice that happens to land on the same
     // honest number, not a shared constant.
     private static readonly BigInteger AlignmentBound = (new BigInteger(value: 1024L) << 16);
-
     // The nine-raw edge battery every full-width quad/pair oracle below sweeps: both carrier extremes with the raw
     // next to each, one raw ULP at both signs, Q16 one at both signs, and zero.
     private static readonly long[] LongEdges9 = [long.MinValue, (long.MinValue + 1L), -65536L, -1L, 0L, 1L, 65536L, (long.MaxValue - 1L), long.MaxValue];
-
     // The ten-raw edge battery the complex division/multiply oracle sweeps: both carrier extremes, two intermediate
     // powers of two at both signs, one raw ULP at both signs, and zero.
     private static readonly long[] ComplexEdges10 = [long.MinValue, (long.MinValue + 1L), -(1L << 62), -(1L << 32), -1L, 0L, 1L, (1L << 32), (1L << 62), long.MaxValue];
-
     // A curated 14-row quaternion edge set (one lane at an extreme with the rest zero, all-extreme rows, and a few
     // mixed rows) crossed against itself: 196 combinations spanning the carrier's boundary behavior without the 9^8
     // cost a literal exhaustive cross product over four lanes on each side would carry.
@@ -220,7 +205,6 @@ internal static class GeometryClaims {
         [long.MinValue, long.MinValue, long.MinValue, long.MinValue], [long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue],
         [long.MinValue, long.MaxValue, long.MinValue, long.MaxValue], [1L, -1L, 1L, -1L], [65536L, 65536L, 65536L, 65536L], [-65536L, 32768L, -32768L, 65536L],
     ];
-
     // A curated 10-row vector3 edge set, crossed against itself: 100 combinations, the same reduced-cost tradeoff as
     // QuaternionEdgeQuads above.
     private static readonly long[][] Vector3EdgeTriples = [
@@ -229,7 +213,6 @@ internal static class GeometryClaims {
         [long.MinValue, long.MinValue, long.MinValue], [long.MaxValue, long.MaxValue, long.MaxValue],
         [1L, -1L, 65536L], [-65536L, 32768L, -1L],
     ];
-
     // A safely-bounded relative of Vector3EdgeTriples for the sandwich-product witness in
     // QuaternionRotateScheduleTranscriptionSurface below: forming the INTERMEDIATE quaternion q⊗(0,v) puts v's
     // magnitude into the scalar (W) lane too — as up to THREE summed lane products rather than one — so the
@@ -280,11 +263,11 @@ internal static class GeometryClaims {
     /// pole.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? QuaternionFromAxisAngleLadderSurface() {
-        var kernelUlp = GuardUlpUnits(numerator: 3, denominator: 4);
+        var kernelUlp = GuardUlpUnits(denominator: 4, numerator: 3);
 
         foreach (var (axis, angleRaw) in AxisAngleLadder) {
             var half = HalfRawTiesToEven(raw: angleRaw);
-            var enclosure = Oracles.EncloseSinCos(raw: half, guardBitCount: Oracles.GuardBitCount);
+            var enclosure = Oracles.EncloseSinCos(guardBitCount: Oracles.GuardBitCount, raw: half);
             var value = FixedQuaternion.FromAxisAngle(axis: Vector3Of(lanes: axis), angle: Raw(value: angleRaw));
 
             // W = cos(half) directly, with no further rounding, so it stands against the kernel's own committed
@@ -298,7 +281,7 @@ internal static class GeometryClaims {
             var names = new[] { "X", "Y", "Z" };
 
             for (var lane = 0; (lane < 3); ++lane) {
-                var laneTolerance = (ScaleToleranceByRawFactor(toleranceUnits: kernelUlp, factorRawMagnitude: axis[lane]) + GuardUlpUnits(numerator: 1, denominator: 2));
+                var laneTolerance = (ScaleToleranceByRawFactor(toleranceUnits: kernelUlp, factorRawMagnitude: axis[lane]) + GuardUlpUnits(denominator: 2, numerator: 1));
                 var expected = ScaleByRawFactor(enclosure: enclosure.Sin, multiplierRaw: axis[lane]);
 
                 if (WithinGuardEnvelope(name: $"{names[lane]} of FromAxisAngle(axis=[{axis[0]},{axis[1]},{axis[2]}], angleRaw={angleRaw})", subjectRaw: lanes[lane], enclosure: expected, toleranceUnits: laneTolerance) is { } laneDetail) { return laneDetail; }
@@ -324,7 +307,6 @@ internal static class GeometryClaims {
         [0L, 0L, 205887L],
         [29717L, 29717L, 29717L],
     ];
-
     private static readonly long[][] LogLadder = [
         [0L, 0L, 46341L, 46341L],
         [0L, 0L, 65536L, 0L],
@@ -349,13 +331,13 @@ internal static class GeometryClaims {
         if (FixedQuaternion.Identity.Log() != FixedVector3.Zero) { return "Log(Identity) is not the zero bivector"; }
         if ((-FixedQuaternion.Identity).Log() != FixedVector3.Zero) { return "Log(-Identity) is not the zero bivector"; }
 
-        var kernelUlp = GuardUlpUnits(numerator: 3, denominator: 4);
+        var kernelUlp = GuardUlpUnits(denominator: 4, numerator: 3);
         var laneNames = new[] { "X", "Y", "Z" };
 
         foreach (var bivector in ExpLadder) {
-            var squaredSum = ((((BigInteger)bivector[0] * bivector[0]) + ((BigInteger)bivector[1] * bivector[1])) + ((BigInteger)bivector[2] * bivector[2]));
+            var squaredSum = (((((BigInteger)bivector[0]) * bivector[0]) + (((BigInteger)bivector[1]) * bivector[1])) + (((BigInteger)bivector[2]) * bivector[2]));
             var idealMagnitude = Oracles.NearestIntegerRoot(value: squaredSum);
-            var enclosure = Oracles.EncloseSinCos(raw: (long)idealMagnitude, guardBitCount: Oracles.GuardBitCount);
+            var enclosure = Oracles.EncloseSinCos(guardBitCount: Oracles.GuardBitCount, raw: ((long)idealMagnitude));
             var idealAxis = NormalizeOracle(values: bivector);
             var value = FixedQuaternion.Exp(bivector: Vector3Of(lanes: bivector));
 
@@ -366,7 +348,7 @@ internal static class GeometryClaims {
             var lanes = new[] { value.X.Value, value.Y.Value, value.Z.Value };
 
             for (var lane = 0; (lane < 3); ++lane) {
-                var laneTolerance = (ScaleToleranceByRawFactor(toleranceUnits: kernelUlp, factorRawMagnitude: idealAxis[lane]) + GuardUlpUnits(numerator: 1, denominator: 1));
+                var laneTolerance = (ScaleToleranceByRawFactor(toleranceUnits: kernelUlp, factorRawMagnitude: idealAxis[lane]) + GuardUlpUnits(denominator: 1, numerator: 1));
                 var expected = ScaleByRawFactor(enclosure: enclosure.Sin, multiplierRaw: idealAxis[lane]);
 
                 if (WithinGuardEnvelope(name: $"{laneNames[lane]} of Exp([{bivector[0]},{bivector[1]},{bivector[2]}])", subjectRaw: lanes[lane], enclosure: expected, toleranceUnits: laneTolerance) is { } laneDetail) { return laneDetail; }
@@ -375,12 +357,12 @@ internal static class GeometryClaims {
 
         foreach (var quaternion in LogLadder) {
             var (qx, qy, qz, qw) = (quaternion[0], quaternion[1], quaternion[2], quaternion[3]);
-            var squaredSum = ((((BigInteger)qx * qx) + ((BigInteger)qy * qy)) + ((BigInteger)qz * qz));
+            var squaredSum = (((((BigInteger)qx) * qx) + (((BigInteger)qy) * qy)) + (((BigInteger)qz) * qz));
             var vectorLength = Oracles.NearestIntegerRoot(value: squaredSum);
 
             if (vectorLength.IsZero) { continue; }
 
-            var thetaEnclosure = Oracles.EncloseAtan2(yRaw: (long)vectorLength, xRaw: qw, guardBitCount: Oracles.GuardBitCount);
+            var thetaEnclosure = Oracles.EncloseAtan2(guardBitCount: Oracles.GuardBitCount, xRaw: qw, yRaw: ((long)vectorLength));
             var idealAxis = NormalizeOracle(values: [qx, qy, qz]);
             var value = QuaternionOf(lanes: quaternion).Log();
             var lanes = new[] { value.X.Value, value.Y.Value, value.Z.Value };
@@ -388,10 +370,10 @@ internal static class GeometryClaims {
             // normalize step), so a raw ULP of Atan2/division error is attenuated by the SAME factor a component's
             // own magnitude is bounded by (≤ vectorLength) — this bounds it the OTHER, more generous, way: by how
             // much a sub-unit vectorLength AMPLIFIES the division alone, never relying on that cancellation.
-            var amplification = (((65536L + (long)vectorLength) - 1L) / (long)vectorLength);
+            var amplification = (((65536L + ((long)vectorLength)) - 1L) / ((long)vectorLength));
 
             for (var lane = 0; (lane < 3); ++lane) {
-                var laneTolerance = ((amplification * (kernelUlp + GuardUlpUnits(numerator: 1, denominator: 2))) + GuardUlpUnits(numerator: 1, denominator: 2));
+                var laneTolerance = ((amplification * (kernelUlp + GuardUlpUnits(denominator: 2, numerator: 1))) + GuardUlpUnits(denominator: 2, numerator: 1));
                 var expected = ScaleByRawFactor(enclosure: thetaEnclosure, multiplierRaw: idealAxis[lane]);
 
                 if (WithinGuardEnvelope(name: $"{laneNames[lane]} of Log([{qx},{qy},{qz},{qw}])", subjectRaw: lanes[lane], enclosure: expected, toleranceUnits: laneTolerance) is { } laneDetail) { return laneDetail; }
@@ -403,12 +385,12 @@ internal static class GeometryClaims {
         var quarter = FixedQuaternion.Exp(bivector: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: Raw(value: 51472L)));
         var wrapped = FixedQuaternion.Exp(bivector: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: Raw(value: (51472L + 411775L))));
 
-        if (Math.Abs(wrapped.Z.Value - quarter.Z.Value) > WrapTolerance) { return $"the wrapped bivector's Z lane is {wrapped.Z.Value}, expected {quarter.Z.Value}"; }
-        if (Math.Abs(wrapped.W.Value - quarter.W.Value) > WrapTolerance) { return $"the wrapped bivector's W lane is {wrapped.W.Value}, expected {quarter.W.Value}"; }
+        if (Math.Abs(value: (wrapped.Z.Value - quarter.Z.Value)) > WrapTolerance) { return $"the wrapped bivector's Z lane is {wrapped.Z.Value}, expected {quarter.Z.Value}"; }
+        if (Math.Abs(value: (wrapped.W.Value - quarter.W.Value)) > WrapTolerance) { return $"the wrapped bivector's W lane is {wrapped.W.Value}, expected {quarter.W.Value}"; }
 
         var enormous = FixedQuaternion.Exp(bivector: new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue));
 
-        if (!enormous.TryLength(length: out var enormousLength) || (Math.Abs(enormousLength.Value - FixedQ4816.One.Value) > 8L)) {
+        if (!enormous.TryLength(length: out var enormousLength) || (Math.Abs(value: (enormousLength.Value - FixedQ4816.One.Value)) > 8L)) {
             return "a bivector at the carrier's extreme did not exponentiate to a unit rotation";
         }
 
@@ -458,45 +440,46 @@ internal static class GeometryClaims {
         // (the remainder against the RoundProductSum divisor is zero), so this is exact — not merely enclosed —
         // matching RoundProductSumOracle's transcription of FixedQuaternion.Dot's own rounding rule, already
         // established as classical evidence for Dot elsewhere in this file (quaternion.hamilton-product-dot-inverse-full-width).
-        var dotRaw = RoundProductSumOracle(sum: ((BigInteger)FixedQuaternion.Identity.W.Value * quarter.W.Value));
+        var dotRaw = RoundProductSumOracle(sum: (((BigInteger)FixedQuaternion.Identity.W.Value) * quarter.W.Value));
         // sinTheta² = One − dot·dot: the ONE further multiply rounds (RoundProductSumOracle again, exact match), and
         // the subtraction from One is exact (no rounding for same-scale addition/subtraction).
-        var sinThetaSquaredRaw = (FixedQ4816.One.Value - RoundProductSumOracle(sum: ((BigInteger)dotRaw * dotRaw)));
+        var sinThetaSquaredRaw = (FixedQ4816.One.Value - RoundProductSumOracle(sum: (((BigInteger)dotRaw) * dotRaw)));
         // sinTheta = Sqrt(sinTheta²): EXACT, per FixedQ4816.Sqrt's own documented ⌊√(raw·2¹⁶)⌋ — bit for bit the
         // same value Oracles.IntegerSquareRoot computes, so this carries no envelope of its own.
-        var sinThetaRaw = (long)Oracles.IntegerSquareRoot(value: ((BigInteger)sinThetaSquaredRaw << FixedQ4816.FractionBitCount));
+        var sinThetaRaw = ((long)Oracles.IntegerSquareRoot(value: (((BigInteger)sinThetaSquaredRaw) << FixedQ4816.FractionBitCount)));
         // The established Atan2/SinCos kernel ULP envelope this file already reuses (see QuaternionFromAxisAngleLadderSurface
         // and QuaternionExpLogSurface) rather than re-deriving it.
-        var kernelUlp = GuardUlpUnits(numerator: 3, denominator: 4);
-        var halfUlp = GuardUlpUnits(numerator: 1, denominator: 2);
+        var kernelUlp = GuardUlpUnits(denominator: 4, numerator: 3);
+        var halfUlp = GuardUlpUnits(denominator: 2, numerator: 1);
         // theta = Atan2(sinTheta, dot): both operands exact, so the enclosure needs widening only by the kernel's
         // own established envelope, not by any operand uncertainty.
-        var thetaEnclosure = WidenEnclosure(enclosure: Oracles.EncloseAtan2(yRaw: sinThetaRaw, xRaw: dotRaw, guardBitCount: Oracles.GuardBitCount), toleranceUnits: kernelUlp);
+        var thetaEnclosure = WidenEnclosure(enclosure: Oracles.EncloseAtan2(guardBitCount: Oracles.GuardBitCount, xRaw: dotRaw, yRaw: sinThetaRaw), toleranceUnits: kernelUlp);
         // Normalize's OWN established ±1-raw-per-lane quantization (quaternion.normalize-unit-direction), entering
         // the cross term additively: each lane's quantization multiplies the OTHER near-unit-magnitude lane (bounded
         // by FixedQ4816.One, since the pre-normalize interpolant of two near-unit quaternions stays near unit), so
         // two guard units — one per lane — safely covers both without dividing by anything.
-        var normalizeSlop = GuardUlpUnits(numerator: 2, denominator: 1);
+        var normalizeSlop = GuardUlpUnits(denominator: 1, numerator: 2);
 
         foreach (var amountRaw in SlerpLadderAmounts) {
             // angleArg = amount·theta: amount is exact, theta only enclosed, so the enclosure scales exactly and
             // then widens by one more half-ULP for THIS multiply's own rounding.
             var angleArgEnclosure = WidenEnclosure(enclosure: ScaleByRawFactor(enclosure: thetaEnclosure, multiplierRaw: amountRaw), toleranceUnits: halfUlp);
             var midpoint = ((angleArgEnclosure.Low + angleArgEnclosure.High) / 2);
-            var representativeRaw = (long)(midpoint >> Oracles.GuardBitCount);
+            var representativeRaw = ((long)(midpoint >> Oracles.GuardBitCount));
             // The gap between the representative integer raw EncloseSinCos needs and the true (interval-valued)
             // angleArg: the interval's own width, plus the floor-rounding slop turning its midpoint into an
             // integer. Sin and cosine each have derivative magnitude at most one (in these consistent guard-scale
             // units, since both angle and sin/cos share the same 2^(16+guard) scale), so this gap widens their
             // enclosures by exactly that much — no amplification, a flat Lipschitz addition.
-            var representativeGap = ((angleArgEnclosure.High - angleArgEnclosure.Low) + GuardUlpUnits(numerator: 1, denominator: 1));
-            var (sinBase, cosBase) = Oracles.EncloseSinCos(raw: representativeRaw, guardBitCount: Oracles.GuardBitCount);
+            var representativeGap = ((angleArgEnclosure.High - angleArgEnclosure.Low) + GuardUlpUnits(denominator: 1, numerator: 1));
+
+            var (sinBase, cosBase) = Oracles.EncloseSinCos(guardBitCount: Oracles.GuardBitCount, raw: representativeRaw);
             var sinEnclosure = WidenEnclosure(enclosure: sinBase, toleranceUnits: (kernelUlp + representativeGap));
             var cosEnclosure = WidenEnclosure(enclosure: cosBase, toleranceUnits: (kernelUlp + representativeGap));
 
             // toWeight = sinScaled/sinTheta: sinTheta is exact, sinScaled only enclosed; one more half-ULP for this
             // division's own rounding.
-            var toWeightEnclosure = WidenEnclosure(enclosure: DivideEnclosureByRawFactor(enclosure: sinEnclosure, divisorRaw: sinThetaRaw), toleranceUnits: halfUlp);
+            var toWeightEnclosure = WidenEnclosure(enclosure: DivideEnclosureByRawFactor(divisorRaw: sinThetaRaw, enclosure: sinEnclosure), toleranceUnits: halfUlp);
             // fromWeight = cosScaled − dot·toWeight: dot is exact, the multiply rounds once more (half-ULP), the
             // subtraction of two same-scale enclosures is exact interval arithmetic.
             var fromWeightEnclosure = WidenEnclosure(enclosure: SubtractEnclosures(left: cosEnclosure, right: ScaleByRawFactor(enclosure: toWeightEnclosure, multiplierRaw: dotRaw)), toleranceUnits: halfUlp);
@@ -537,7 +520,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     /// <summary>Proves the quaternion algebraic sanity checks: <c>q·conj(q)</c> is the
     /// identity within a small tolerance, rotation preserves length, and <see
     /// cref="FixedQuaternion.FromTo(FixedVector3,FixedVector3)"/>'s antiparallel fallback and zero-input poles hold
@@ -548,12 +530,12 @@ internal static class GeometryClaims {
             var q = FixedQuaternion.FromAxisAngle(axis: Vector3Of(lanes: axis), angle: Raw(value: angleRaw));
             var idProbe = (q * q.Conjugate());
 
-            if (Math.Abs(idProbe.W.Value - FixedQ4816.One.Value) > 8L) { return $"q*conj(q) at axis=[{axis[0]},{axis[1]},{axis[2]}] angleRaw={angleRaw} has W={idProbe.W.Value}, expected near {FixedQ4816.One.Value}"; }
-            if (Math.Abs(idProbe.X.Value) > 8L) { return $"q*conj(q) at axis=[{axis[0]},{axis[1]},{axis[2]}] angleRaw={angleRaw} has non-zero X={idProbe.X.Value}"; }
+            if (Math.Abs(value: (idProbe.W.Value - FixedQ4816.One.Value)) > 8L) { return $"q*conj(q) at axis=[{axis[0]},{axis[1]},{axis[2]}] angleRaw={angleRaw} has W={idProbe.W.Value}, expected near {FixedQ4816.One.Value}"; }
+            if (Math.Abs(value: idProbe.X.Value) > 8L) { return $"q*conj(q) at axis=[{axis[0]},{axis[1]},{axis[2]}] angleRaw={angleRaw} has non-zero X={idProbe.X.Value}"; }
 
             var lengthProbe = q.Rotate(vector: new FixedVector3(X: FixedQ4816.FromInteger(value: 3L), Y: FixedQ4816.FromInteger(value: 4L), Z: FixedQ4816.Zero));
 
-            if (Math.Abs(lengthProbe.Length.Value - (5L * FixedQ4816.One.Value)) > 16L) { return $"rotation by axis=[{axis[0]},{axis[1]},{axis[2]}] angleRaw={angleRaw} did not preserve length: {lengthProbe.Length.Value}"; }
+            if (Math.Abs(value: (lengthProbe.Length.Value - (5L * FixedQ4816.One.Value))) > 16L) { return $"rotation by axis=[{axis[0]},{axis[1]},{axis[2]}] angleRaw={angleRaw} did not preserve length: {lengthProbe.Length.Value}"; }
         }
 
         // All three arms of the least-aligned-axis antiparallel fallback, reached rather than believed reachable.
@@ -583,7 +565,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     /// <summary>Proves <see cref="FixedQuaternion.FromTo(FixedVector3,FixedVector3)"/>'s DEFINING property — the
     /// rotor really takes the start direction onto the end direction — over the curated full-width triple set, by an
     /// exact <see cref="BigInteger"/> alignment inequality rather than any angle or trig comparison.</summary>
@@ -601,7 +582,7 @@ internal static class GeometryClaims {
                 var rotation = FixedQuaternion.FromTo(from: fromVector, to: toVector);
                 var image = rotation.Rotate(vector: fromDirection);
                 var cross = MaxAbsCross3(ix: image.X.Value, iy: image.Y.Value, iz: image.Z.Value, tx: toDirection.X.Value, ty: toDirection.Y.Value, tz: toDirection.Z.Value);
-                var dot = ((((BigInteger)image.X.Value * toDirection.X.Value) + ((BigInteger)image.Y.Value * toDirection.Y.Value)) + ((BigInteger)image.Z.Value * toDirection.Z.Value));
+                var dot = (((((BigInteger)image.X.Value) * toDirection.X.Value) + (((BigInteger)image.Y.Value) * toDirection.Y.Value)) + (((BigInteger)image.Z.Value) * toDirection.Z.Value));
 
                 if (cross > AlignmentBound) { return $"from=[{from[0]},{from[1]},{from[2]}] to=[{to[0]},{to[1]},{to[2]}]: the rotated start direction is off the end direction (cross={cross})"; }
                 if (dot.Sign < 0) { return $"from=[{from[0]},{from[1]},{from[2]}] to=[{to[0]},{to[1]},{to[2]}]: the rotated start direction points away from the end direction"; }
@@ -626,10 +607,11 @@ internal static class GeometryClaims {
     /// exactly <c>¼</c>.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? DualDerivativeSurface() {
-        var kernelUlp = GuardUlpUnits(numerator: 3, denominator: 4);
+        var kernelUlp = GuardUlpUnits(denominator: 4, numerator: 3);
 
         foreach (var xRaw in DualChainRuleXRaws) {
             var x = FixedDual.Variable(value: Raw(value: xRaw));
+
             var (sinD, _) = FixedDual.SinCos(angle: x);
             var f = ((FixedDual.Sqrt(value: x) * sinD) + FixedDual.Divide(left: (x * x), right: (x + FixedDual.Constant(value: FixedQ4816.One))));
 
@@ -637,7 +619,7 @@ internal static class GeometryClaims {
             // Matches FixedQ4816.Sqrt(x) bit for bit: both are the exact floor of sqrt(xRaw << 16).
             var idealRoot = Oracles.IntegerSquareRoot(value: (xBig << FixedQ4816.FractionBitCount));
             var doubledRoot = (idealRoot * 2);
-            var enclosure = Oracles.EncloseSinCos(raw: xRaw, guardBitCount: Oracles.GuardBitCount);
+            var enclosure = Oracles.EncloseSinCos(guardBitCount: Oracles.GuardBitCount, raw: xRaw);
 
             // term1 = sin(x)/(2*idealRoot): an exact-interval division of the sine enclosure by the exact doubled
             // root. The sine enclosure sits at guard scale (raw · 2^32) but doubledRoot is a plain RAW magnitude
@@ -649,7 +631,7 @@ internal static class GeometryClaims {
             var term1High = CeilingDivide(numerator: (enclosure.Sin.High << FixedQ4816.FractionBitCount), positiveDenominator: doubledRoot);
 
             // term2 = idealRoot*cos(x): the cosine enclosure scaled by the exact root.
-            var term2 = ScaleByRawFactor(enclosure: enclosure.Cos, multiplierRaw: (long)idealRoot);
+            var term2 = ScaleByRawFactor(enclosure: enclosure.Cos, multiplierRaw: ((long)idealRoot));
 
             // term3 = (x^2+2x)/(x+1)^2: an EXACT rational, no oracle involved at all — bounded directly at guard
             // scale by directed rounding on the one division.
@@ -671,9 +653,9 @@ internal static class GeometryClaims {
             // Dual division, the sqrt(x)*sinD product's fused Dual rounding, x*x's Real rounding propagated into the
             // quotient's numerator, and the quotient's own fused Dual rounding) — every one of the four is a flat
             // half-ULP contribution at its OWN output scale, never amplified, so a whole ULP each is a safe margin.
-            var tolerance = ((DivideToleranceByRawFactor(toleranceUnits: kernelUlp, divisorRawMagnitude: (long)doubledRoot)
-                + ScaleToleranceByRawFactor(toleranceUnits: kernelUlp, factorRawMagnitude: (long)idealRoot))
-                + GuardUlpUnits(numerator: 2, denominator: 1));
+            var tolerance = ((DivideToleranceByRawFactor(divisorRawMagnitude: ((long)doubledRoot), toleranceUnits: kernelUlp)
+                + ScaleToleranceByRawFactor(factorRawMagnitude: ((long)idealRoot), toleranceUnits: kernelUlp))
+                + GuardUlpUnits(denominator: 1, numerator: 2));
 
             if (WithinGuardEnvelope(name: $"d/dx[sqrt(x)*sin(x)+x^2/(x+1)] at xRaw={xRaw}", subjectRaw: f.Dual.Value, enclosure: idealEnclosure, toleranceUnits: tolerance) is { } detail) {
                 return detail;
@@ -690,7 +672,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     // ==== "vector2 wedge/dot" banner ======================================================================
 
     /// <summary>Proves <see cref="FixedQuaternion"/>'s Hamilton product, <see cref="FixedQuaternion.Dot"/> and <see
@@ -709,23 +690,23 @@ internal static class GeometryClaims {
                     return $"left=[{left[0]},{left[1]},{left[2]},{left[3]}] right=[{right[0]},{right[1]},{right[2]},{right[3]}]: the Hamilton product is ({product.X.Value},{product.Y.Value},{product.Z.Value},{product.W.Value}), expected ({expectedProduct[0]},{expectedProduct[1]},{expectedProduct[2]},{expectedProduct[3]})";
                 }
 
-                var expectedDot = RoundProductSumOracle(sum: ((((BigInteger)left[0] * right[0]) + ((BigInteger)left[1] * right[1])) + ((BigInteger)left[2] * right[2]) + ((BigInteger)left[3] * right[3])));
+                var expectedDot = RoundProductSumOracle(sum: ((((((BigInteger)left[0]) * right[0]) + (((BigInteger)left[1]) * right[1])) + (((BigInteger)left[2]) * right[2])) + (((BigInteger)left[3]) * right[3])));
 
                 if (FixedQuaternion.Dot(left: l, right: r).Value != expectedDot) {
                     return $"left=[{left[0]},{left[1]},{left[2]},{left[3]}] right=[{right[0]},{right[1]},{right[2]},{right[3]}]: Dot is {FixedQuaternion.Dot(left: l, right: r).Value}, expected {expectedDot}";
                 }
             }
 
-            var squaredNorm = ((((BigInteger)left[0] * left[0]) + ((BigInteger)left[1] * left[1])) + ((BigInteger)left[2] * left[2]) + ((BigInteger)left[3] * left[3]));
+            var squaredNorm = ((((((BigInteger)left[0]) * left[0]) + (((BigInteger)left[1]) * left[1])) + (((BigInteger)left[2]) * left[2])) + (((BigInteger)left[3]) * left[3]));
 
             if (squaredNorm.IsZero) { continue; }
 
             var subject = QuaternionOf(lanes: left);
             var expectedInverse = new long[] {
-                RoundRatioQ16(numerator: -((BigInteger)left[0] << FixedQ4816.FractionBitCount), denominator: squaredNorm),
-                RoundRatioQ16(numerator: -((BigInteger)left[1] << FixedQ4816.FractionBitCount), denominator: squaredNorm),
-                RoundRatioQ16(numerator: -((BigInteger)left[2] << FixedQ4816.FractionBitCount), denominator: squaredNorm),
-                RoundRatioQ16(numerator: ((BigInteger)left[3] << FixedQ4816.FractionBitCount), denominator: squaredNorm),
+                RoundRatioQ16(numerator: -(((BigInteger)left[0]) << FixedQ4816.FractionBitCount), denominator: squaredNorm),
+                RoundRatioQ16(numerator: -(((BigInteger)left[1]) << FixedQ4816.FractionBitCount), denominator: squaredNorm),
+                RoundRatioQ16(numerator: -(((BigInteger)left[2]) << FixedQ4816.FractionBitCount), denominator: squaredNorm),
+                RoundRatioQ16(numerator: (((BigInteger)left[3]) << FixedQ4816.FractionBitCount), denominator: squaredNorm),
             };
             var inverse = subject.Inverse();
 
@@ -751,8 +732,8 @@ internal static class GeometryClaims {
     // so |cross| ≤ |actual−sandwich|·|sandwich| ≤ (flatBound + εBound·|v|)·|sandwich| — squared and expanded, using
     // |v|²≈|sandwich|² (rotation preserves length) to keep every term a product of SQUARED norms.
     private const long RotateScheduleFlatBudget = 64L;
-    private const long RotateScheduleEpsilonNumerator = 16L;
     private const long RotateScheduleEpsilonDenominator = 65536L;
+    private const long RotateScheduleEpsilonNumerator = 16L;
 
     /// <summary>Proves <see cref="FixedQuaternion.Rotate"/> against a transcription of its own intermediate rounding
     /// schedule (<c>t = u×v + w·v</c> rounded once per component, then <c>u×t</c> rounded again, then <c>r + 2d</c>)
@@ -768,16 +749,16 @@ internal static class GeometryClaims {
                 var (rx, ry, rz) = (right[0], right[1], right[2]);
                 var rotor = QuaternionOf(lanes: left);
                 var vector = Vector3Of(lanes: right);
-                var tx = RoundProductSumOracle(sum: ((((BigInteger)ly * rz) - ((BigInteger)lz * ry)) + ((BigInteger)lw * rx)));
-                var ty = RoundProductSumOracle(sum: ((((BigInteger)lz * rx) - ((BigInteger)lx * rz)) + ((BigInteger)lw * ry)));
-                var tz = RoundProductSumOracle(sum: ((((BigInteger)lx * ry) - ((BigInteger)ly * rx)) + ((BigInteger)lw * rz)));
-                var dx = RoundProductSumOracle(sum: (((BigInteger)ly * tz) - ((BigInteger)lz * ty)));
-                var dy = RoundProductSumOracle(sum: (((BigInteger)lz * tx) - ((BigInteger)lx * tz)));
-                var dz = RoundProductSumOracle(sum: (((BigInteger)lx * ty) - ((BigInteger)ly * tx)));
+                var tx = RoundProductSumOracle(sum: (((((BigInteger)ly) * rz) - (((BigInteger)lz) * ry)) + (((BigInteger)lw) * rx)));
+                var ty = RoundProductSumOracle(sum: (((((BigInteger)lz) * rx) - (((BigInteger)lx) * rz)) + (((BigInteger)lw) * ry)));
+                var tz = RoundProductSumOracle(sum: (((((BigInteger)lx) * ry) - (((BigInteger)ly) * rx)) + (((BigInteger)lw) * rz)));
+                var dx = RoundProductSumOracle(sum: ((((BigInteger)ly) * tz) - (((BigInteger)lz) * ty)));
+                var dy = RoundProductSumOracle(sum: ((((BigInteger)lz) * tx) - (((BigInteger)lx) * tz)));
+                var dz = RoundProductSumOracle(sum: ((((BigInteger)lx) * ty) - (((BigInteger)ly) * tx)));
                 var expected = new FixedVector3(
-                    X: Raw(value: unchecked(rx + (dx << 1))),
-                    Y: Raw(value: unchecked(ry + (dy << 1))),
-                    Z: Raw(value: unchecked(rz + (dz << 1))));
+                    X: Raw(value: unchecked((rx + (dx << 1)))),
+                    Y: Raw(value: unchecked((ry + (dy << 1)))),
+                    Z: Raw(value: unchecked((rz + (dz << 1)))));
                 var actual = rotor.Rotate(vector: vector);
 
                 if (actual != expected) {
@@ -811,8 +792,8 @@ internal static class GeometryClaims {
                 // from Rotate's fused "t, then d, then v+2d" schedule: this one rounds a FOURTH (scalar) lane twice
                 // that Rotate's schedule never forms at all.
                 var sandwich = HamiltonProductOracle(left: HamiltonProductOracle(left: q, right: vectorAsQuaternion), right: conjugateQ);
-                var sandwichSquaredNorm = ((((BigInteger)sandwich[0] * sandwich[0]) + ((BigInteger)sandwich[1] * sandwich[1])) + ((BigInteger)sandwich[2] * sandwich[2]));
-                var vectorSquaredNorm = ((((BigInteger)right[0] * right[0]) + ((BigInteger)right[1] * right[1])) + ((BigInteger)right[2] * right[2]));
+                var sandwichSquaredNorm = (((((BigInteger)sandwich[0]) * sandwich[0]) + (((BigInteger)sandwich[1]) * sandwich[1])) + (((BigInteger)sandwich[2]) * sandwich[2]));
+                var vectorSquaredNorm = (((((BigInteger)right[0]) * right[0]) + (((BigInteger)right[1]) * right[1])) + (((BigInteger)right[2]) * right[2]));
                 var actual = rotor.Rotate(vector: vector);
                 var cross = MaxAbsCross3(ix: actual.X.Value, iy: actual.Y.Value, iz: actual.Z.Value, tx: sandwich[0], ty: sandwich[1], tz: sandwich[2]);
                 // |cross(actual, sandwich)| ≤ (flatBudget + (εNum/εDen)·|v|)·|sandwich| — squared, and multiplied
@@ -825,7 +806,7 @@ internal static class GeometryClaims {
                     return $"rotor=[{left[0]},{left[1]},{left[2]},{left[3]}] (normalized) vector=[{right[0]},{right[1]},{right[2]}]: Rotate is ({actual.X.Value},{actual.Y.Value},{actual.Z.Value}), off the sandwich-product direction ({sandwich[0]},{sandwich[1]},{sandwich[2]}) by more than the schedule-plus-normalize budget allows";
                 }
 
-                var dot = ((((BigInteger)actual.X.Value * sandwich[0]) + ((BigInteger)actual.Y.Value * sandwich[1])) + ((BigInteger)actual.Z.Value * sandwich[2]));
+                var dot = (((((BigInteger)actual.X.Value) * sandwich[0]) + (((BigInteger)actual.Y.Value) * sandwich[1])) + (((BigInteger)actual.Z.Value) * sandwich[2]));
 
                 if (dot.Sign < 0) {
                     return $"rotor=[{left[0]},{left[1]},{left[2]},{left[3]}] (normalized) vector=[{right[0]},{right[1]},{right[2]}]: Rotate points away from the sandwich-product direction";
@@ -835,7 +816,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     /// <summary>Proves <see cref="FixedVector2.Dot"/> and <see cref="FixedVector2.Wedge"/> against an exact <see
     /// cref="BigInteger"/> oracle over the full 9⁴ edge grid, the antisymmetry/symmetry algebraic identities, and the
     /// norm policy at the extremes (<see cref="FixedQ4816.Epsilon"/> length, full-range <see
@@ -860,8 +840,8 @@ internal static class GeometryClaims {
                     foreach (var by in LongEdges9) {
                         var a = new FixedVector2(X: Raw(value: ax), Y: Raw(value: ay));
                         var b = new FixedVector2(X: Raw(value: bx), Y: Raw(value: by));
-                        var expectedDot = RoundProductSumOracle(sum: (((BigInteger)ax * bx) + ((BigInteger)ay * by)));
-                        var expectedWedge = RoundProductSumOracle(sum: (((BigInteger)ax * by) - ((BigInteger)ay * bx)));
+                        var expectedDot = RoundProductSumOracle(sum: ((((BigInteger)ax) * bx) + (((BigInteger)ay) * by)));
+                        var expectedWedge = RoundProductSumOracle(sum: ((((BigInteger)ax) * by) - (((BigInteger)ay) * bx)));
 
                         if (FixedVector2.Dot(left: a, right: b).Value != expectedDot) { return $"Dot(({ax},{ay}),({bx},{by})) is {FixedVector2.Dot(left: a, right: b).Value}, expected {expectedDot}"; }
                         if (FixedVector2.Wedge(left: a, right: b).Value != expectedWedge) { return $"Wedge(({ax},{ay}),({bx},{by})) is {FixedVector2.Wedge(left: a, right: b).Value}, expected {expectedWedge}"; }
@@ -875,7 +855,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     /// <summary>Proves <see cref="FixedVector3.Dot"/> and <see cref="FixedVector3.Cross"/> against an exact <see
     /// cref="BigInteger"/> oracle over the curated full-width triple set, antisymmetry of the cross product, and the
     /// length-overflow policy: <see cref="FixedVector3.TryLength"/> is exact where representable and refuses (with
@@ -887,15 +866,15 @@ internal static class GeometryClaims {
             foreach (var b in Vector3EdgeTriples) {
                 var av = Vector3Of(lanes: a);
                 var bv = Vector3Of(lanes: b);
-                var expectedDot = RoundProductSumOracle(sum: ((((BigInteger)a[0] * b[0]) + ((BigInteger)a[1] * b[1])) + ((BigInteger)a[2] * b[2])));
+                var expectedDot = RoundProductSumOracle(sum: (((((BigInteger)a[0]) * b[0]) + (((BigInteger)a[1]) * b[1])) + (((BigInteger)a[2]) * b[2])));
                 var expectedCross = new FixedVector3(
-                    X: Raw(value: RoundProductSumOracle(sum: (((BigInteger)a[1] * b[2]) - ((BigInteger)a[2] * b[1])))),
-                    Y: Raw(value: RoundProductSumOracle(sum: (((BigInteger)a[2] * b[0]) - ((BigInteger)a[0] * b[2])))),
-                    Z: Raw(value: RoundProductSumOracle(sum: (((BigInteger)a[0] * b[1]) - ((BigInteger)a[1] * b[0])))));
+                    X: Raw(value: RoundProductSumOracle(sum: ((((BigInteger)a[1]) * b[2]) - (((BigInteger)a[2]) * b[1])))),
+                    Y: Raw(value: RoundProductSumOracle(sum: ((((BigInteger)a[2]) * b[0]) - (((BigInteger)a[0]) * b[2])))),
+                    Z: Raw(value: RoundProductSumOracle(sum: ((((BigInteger)a[0]) * b[1]) - (((BigInteger)a[1]) * b[0])))));
                 var cross = FixedVector3.Cross(left: av, right: bv);
 
                 if (FixedVector3.Dot(left: av, right: bv).Value != expectedDot) { return $"a=[{a[0]},{a[1]},{a[2]}] b=[{b[0]},{b[1]},{b[2]}]: Dot is {FixedVector3.Dot(left: av, right: bv).Value}, expected {expectedDot}"; }
-                if (cross != expectedCross) { return $"a=[{a[0]},{a[1]},{a[2]}] b=[{b[0]},{b[1]},{b[2]}]: Cross is ({cross.X.Value},{cross.Y.Value},{cross.Z.Value}), expected ({expectedCross.X.Value},{expectedCross.Y.Value},{expectedCross.Z.Value})";}
+                if (cross != expectedCross) { return $"a=[{a[0]},{a[1]},{a[2]}] b=[{b[0]},{b[1]},{b[2]}]: Cross is ({cross.X.Value},{cross.Y.Value},{cross.Z.Value}), expected ({expectedCross.X.Value},{expectedCross.Y.Value},{expectedCross.Z.Value})"; }
                 if (cross != -FixedVector3.Cross(left: bv, right: av)) { return $"a=[{a[0]},{a[1]},{a[2]}] b=[{b[0]},{b[1]},{b[2]}]: Cross is not antisymmetric"; }
             }
         }
@@ -912,7 +891,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     // ==== "complex / rigid transform" banner ==============================================================
 
     /// <summary>Proves <see cref="FixedComplex"/> division and multiplication against exact <see
@@ -926,8 +904,8 @@ internal static class GeometryClaims {
                     foreach (var bi in ComplexEdges10) {
                         var a = new FixedComplex(Real: Raw(value: ar), Imaginary: Raw(value: ai));
                         var b = new FixedComplex(Real: Raw(value: br), Imaginary: Raw(value: bi));
-                        var expectedProductReal = RoundProductSumOracle(sum: (((BigInteger)ar * br) - ((BigInteger)ai * bi)));
-                        var expectedProductImaginary = RoundProductSumOracle(sum: (((BigInteger)ar * bi) + ((BigInteger)ai * br)));
+                        var expectedProductReal = RoundProductSumOracle(sum: ((((BigInteger)ar) * br) - (((BigInteger)ai) * bi)));
+                        var expectedProductImaginary = RoundProductSumOracle(sum: ((((BigInteger)ar) * bi) + (((BigInteger)ai) * br)));
                         var product = (a * b);
 
                         if ((product.Real.Value != expectedProductReal) || (product.Imaginary.Value != expectedProductImaginary)) {
@@ -936,9 +914,9 @@ internal static class GeometryClaims {
 
                         if ((br | bi) == 0L) { continue; }
 
-                        var denominator = (((BigInteger)br * br) + ((BigInteger)bi * bi));
-                        var expectedQuotientReal = RoundRatioQ16(numerator: (((BigInteger)ar * br) + ((BigInteger)ai * bi)), denominator: denominator);
-                        var expectedQuotientImaginary = RoundRatioQ16(numerator: (((BigInteger)ai * br) - ((BigInteger)ar * bi)), denominator: denominator);
+                        var denominator = ((((BigInteger)br) * br) + (((BigInteger)bi) * bi));
+                        var expectedQuotientReal = RoundRatioQ16(denominator: denominator, numerator: ((((BigInteger)ar) * br) + (((BigInteger)ai) * bi)));
+                        var expectedQuotientImaginary = RoundRatioQ16(denominator: denominator, numerator: ((((BigInteger)ai) * br) - (((BigInteger)ar) * bi)));
                         var quotient = (a / b);
 
                         if ((quotient.Real.Value != expectedQuotientReal) || (quotient.Imaginary.Value != expectedQuotientImaginary)) {
@@ -961,7 +939,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     /// <summary>Proves <see cref="FixedComplex.FromTo"/>'s DEFINING property over the curated full-width edge set by
     /// an exact <see cref="BigInteger"/> alignment inequality, and the two scale-safety poles: negation commutes with
     /// <see cref="FixedComplex.Normalize"/>, and an epsilon-component complex normalizes to the multiplicative
@@ -985,8 +962,8 @@ internal static class GeometryClaims {
                         var fromDirection = new FixedVector2(X: (from.X / fromLength), Y: (from.Y / fromLength));
                         var toDirection = new FixedVector2(X: (to.X / toLength), Y: (to.Y / toLength));
                         var image = rotor.Rotate(vector: fromDirection);
-                        var cross = BigInteger.Abs(value: ((((BigInteger)image.X.Value * toDirection.Y.Value) - ((BigInteger)image.Y.Value * toDirection.X.Value))));
-                        var dot = ((((BigInteger)image.X.Value * toDirection.X.Value) + ((BigInteger)image.Y.Value * toDirection.Y.Value)));
+                        var cross = BigInteger.Abs(value: (((((BigInteger)image.X.Value) * toDirection.Y.Value) - (((BigInteger)image.Y.Value) * toDirection.X.Value))));
+                        var dot = (((((BigInteger)image.X.Value) * toDirection.X.Value) + (((BigInteger)image.Y.Value) * toDirection.Y.Value)));
 
                         if (cross > AlignmentBound) { return $"from=({fx},{fy}) to=({tx},{ty}): the rotated start direction is off the end direction (cross={cross})"; }
                         if (dot.Sign < 0) { return $"from=({fx},{fy}) to=({tx},{ty}): the rotated start direction points away from the end direction"; }
@@ -1010,7 +987,6 @@ internal static class GeometryClaims {
 
         return null;
     }
-
     /// <summary>Proves <see cref="FixedVector3.Normalize"/> and <see cref="FixedQuaternion.Normalize"/> against a
     /// <see cref="BigInteger"/> bisection oracle over the curated full-width set, gated at 1 raw ULP, plus the
     /// four-square carry at the all-<see cref="FixedQ4816.MinValue"/> quaternion.</summary>
@@ -1020,23 +996,23 @@ internal static class GeometryClaims {
             var vector = Vector3Of(lanes: triple).Normalize();
             var expected = NormalizeOracle(values: triple);
 
-            if (Math.Abs(vector.X.Value - expected[0]) > 1L) { return $"X of Normalize([{triple[0]},{triple[1]},{triple[2]}]) is {vector.X.Value}, expected {expected[0]}"; }
-            if (Math.Abs(vector.Y.Value - expected[1]) > 1L) { return $"Y of Normalize([{triple[0]},{triple[1]},{triple[2]}]) is {vector.Y.Value}, expected {expected[1]}"; }
-            if (Math.Abs(vector.Z.Value - expected[2]) > 1L) { return $"Z of Normalize([{triple[0]},{triple[1]},{triple[2]}]) is {vector.Z.Value}, expected {expected[2]}"; }
+            if (Math.Abs(value: (vector.X.Value - expected[0])) > 1L) { return $"X of Normalize([{triple[0]},{triple[1]},{triple[2]}]) is {vector.X.Value}, expected {expected[0]}"; }
+            if (Math.Abs(value: (vector.Y.Value - expected[1])) > 1L) { return $"Y of Normalize([{triple[0]},{triple[1]},{triple[2]}]) is {vector.Y.Value}, expected {expected[1]}"; }
+            if (Math.Abs(value: (vector.Z.Value - expected[2])) > 1L) { return $"Z of Normalize([{triple[0]},{triple[1]},{triple[2]}]) is {vector.Z.Value}, expected {expected[2]}"; }
         }
 
         foreach (var quad in QuaternionEdgeQuads) {
-            var squaredNorm = ((((BigInteger)quad[0] * quad[0]) + ((BigInteger)quad[1] * quad[1])) + ((BigInteger)quad[2] * quad[2]) + ((BigInteger)quad[3] * quad[3]));
+            var squaredNorm = ((((((BigInteger)quad[0]) * quad[0]) + (((BigInteger)quad[1]) * quad[1])) + (((BigInteger)quad[2]) * quad[2])) + (((BigInteger)quad[3]) * quad[3]));
 
             if (squaredNorm.IsZero) { continue; }
 
             var quaternion = QuaternionOf(lanes: quad).Normalize();
             var expected = NormalizeOracle(values: quad);
 
-            if (Math.Abs(quaternion.X.Value - expected[0]) > 1L) { return $"X of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.X.Value}, expected {expected[0]}"; }
-            if (Math.Abs(quaternion.Y.Value - expected[1]) > 1L) { return $"Y of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.Y.Value}, expected {expected[1]}"; }
-            if (Math.Abs(quaternion.Z.Value - expected[2]) > 1L) { return $"Z of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.Z.Value}, expected {expected[2]}"; }
-            if (Math.Abs(quaternion.W.Value - expected[3]) > 1L) { return $"W of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.W.Value}, expected {expected[3]}"; }
+            if (Math.Abs(value: (quaternion.X.Value - expected[0])) > 1L) { return $"X of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.X.Value}, expected {expected[0]}"; }
+            if (Math.Abs(value: (quaternion.Y.Value - expected[1])) > 1L) { return $"Y of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.Y.Value}, expected {expected[1]}"; }
+            if (Math.Abs(value: (quaternion.Z.Value - expected[2])) > 1L) { return $"Z of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.Z.Value}, expected {expected[2]}"; }
+            if (Math.Abs(value: (quaternion.W.Value - expected[3])) > 1L) { return $"W of quaternion Normalize([{quad[0]},{quad[1]},{quad[2]},{quad[3]}]) is {quaternion.W.Value}, expected {expected[3]}"; }
         }
 
         // The all-MinValue quaternion: −2⁶³ has no positive counterpart in two's complement, so the four-square sum
@@ -1082,22 +1058,22 @@ internal static class GeometryClaims {
 
             var extracted = transforms[i].Translation;
 
-            if (Math.Abs(extracted.X.Value - translation.X.Value) > 32L) { return $"row {i}: Translation X is {extracted.X.Value}, expected near {translation.X.Value}"; }
-            if (Math.Abs(extracted.Y.Value - translation.Y.Value) > 32L) { return $"row {i}: Translation Y is {extracted.Y.Value}, expected near {translation.Y.Value}"; }
-            if (Math.Abs(extracted.Z.Value - translation.Z.Value) > 32L) { return $"row {i}: Translation Z is {extracted.Z.Value}, expected near {translation.Z.Value}"; }
+            if (Math.Abs(value: (extracted.X.Value - translation.X.Value)) > 32L) { return $"row {i}: Translation X is {extracted.X.Value}, expected near {translation.X.Value}"; }
+            if (Math.Abs(value: (extracted.Y.Value - translation.Y.Value)) > 32L) { return $"row {i}: Translation Y is {extracted.Y.Value}, expected near {translation.Y.Value}"; }
+            if (Math.Abs(value: (extracted.Z.Value - translation.Z.Value)) > 32L) { return $"row {i}: Translation Z is {extracted.Z.Value}, expected near {translation.Z.Value}"; }
 
             var back = transforms[i].Inverse().TransformPoint(point: transforms[i].TransformPoint(point: probe));
 
-            if (Math.Abs(back.X.Value - probe.X.Value) > 64L) { return $"row {i}: inverse round trip X is {back.X.Value}, expected near {probe.X.Value}"; }
-            if (Math.Abs(back.Y.Value - probe.Y.Value) > 64L) { return $"row {i}: inverse round trip Y is {back.Y.Value}, expected near {probe.Y.Value}"; }
-            if (Math.Abs(back.Z.Value - probe.Z.Value) > 64L) { return $"row {i}: inverse round trip Z is {back.Z.Value}, expected near {probe.Z.Value}"; }
+            if (Math.Abs(value: (back.X.Value - probe.X.Value)) > 64L) { return $"row {i}: inverse round trip X is {back.X.Value}, expected near {probe.X.Value}"; }
+            if (Math.Abs(value: (back.Y.Value - probe.Y.Value)) > 64L) { return $"row {i}: inverse round trip Y is {back.Y.Value}, expected near {probe.Y.Value}"; }
+            if (Math.Abs(value: (back.Z.Value - probe.Z.Value)) > 64L) { return $"row {i}: inverse round trip Z is {back.Z.Value}, expected near {probe.Z.Value}"; }
 
             var (screwReal, screwDual) = transforms[i].Log();
-            var expBack = FixedRigidTransform.Exp(real: screwReal, dual: screwDual);
-            var realDiff = Math.Max(Math.Max(Math.Abs(expBack.Value.Real.X.Value - transforms[i].Value.Real.X.Value), Math.Abs(expBack.Value.Real.Y.Value - transforms[i].Value.Real.Y.Value)),
-                Math.Max(Math.Abs(expBack.Value.Real.Z.Value - transforms[i].Value.Real.Z.Value), Math.Abs(expBack.Value.Real.W.Value - transforms[i].Value.Real.W.Value)));
-            var dualDiff = Math.Max(Math.Max(Math.Abs(expBack.Value.Dual.X.Value - transforms[i].Value.Dual.X.Value), Math.Abs(expBack.Value.Dual.Y.Value - transforms[i].Value.Dual.Y.Value)),
-                Math.Max(Math.Abs(expBack.Value.Dual.Z.Value - transforms[i].Value.Dual.Z.Value), Math.Abs(expBack.Value.Dual.W.Value - transforms[i].Value.Dual.W.Value)));
+            var expBack = FixedRigidTransform.Exp(dual: screwDual, real: screwReal);
+            var realDiff = Math.Max(val1: Math.Max(val1: Math.Abs(value: (expBack.Value.Real.X.Value - transforms[i].Value.Real.X.Value)), val2: Math.Abs(value: (expBack.Value.Real.Y.Value - transforms[i].Value.Real.Y.Value))),
+                val2: Math.Max(val1: Math.Abs(value: (expBack.Value.Real.Z.Value - transforms[i].Value.Real.Z.Value)), val2: Math.Abs(value: (expBack.Value.Real.W.Value - transforms[i].Value.Real.W.Value))));
+            var dualDiff = Math.Max(val1: Math.Max(val1: Math.Abs(value: (expBack.Value.Dual.X.Value - transforms[i].Value.Dual.X.Value)), val2: Math.Abs(value: (expBack.Value.Dual.Y.Value - transforms[i].Value.Dual.Y.Value))),
+                val2: Math.Max(val1: Math.Abs(value: (expBack.Value.Dual.Z.Value - transforms[i].Value.Dual.Z.Value)), val2: Math.Abs(value: (expBack.Value.Dual.W.Value - transforms[i].Value.Dual.W.Value))));
 
             if (realDiff > 16L) { return $"row {i}: the screw exp/log round trip's rotation part differs by {realDiff}"; }
             if (dualDiff > 16L) { return $"row {i}: the screw exp/log round trip's translation part differs by {dualDiff}"; }
@@ -1107,7 +1083,7 @@ internal static class GeometryClaims {
             for (var j = 0; (j < transforms.Length); ++j) {
                 var composed = (transforms[i] * transforms[j]).TransformPoint(point: probe);
                 var sequential = transforms[i].TransformPoint(point: transforms[j].TransformPoint(point: probe));
-                var diff = Math.Max(Math.Abs(composed.X.Value - sequential.X.Value), Math.Max(Math.Abs(composed.Y.Value - sequential.Y.Value), Math.Abs(composed.Z.Value - sequential.Z.Value)));
+                var diff = Math.Max(val1: Math.Abs(value: (composed.X.Value - sequential.X.Value)), val2: Math.Max(val1: Math.Abs(value: (composed.Y.Value - sequential.Y.Value)), val2: Math.Abs(value: (composed.Z.Value - sequential.Z.Value))));
 
                 if (diff > 64L) { return $"rows ({i},{j}): (A∘B)(p) differs from A(B(p)) by {diff}"; }
             }
@@ -1117,10 +1093,11 @@ internal static class GeometryClaims {
         var pureTranslation = FixedRigidTransform.FromRotationTranslation(
             rotation: FixedQuaternion.Identity,
             translation: new FixedVector3(X: FixedQ4816.FromInteger(value: 2L), Y: FixedQ4816.FromInteger(value: -3L), Z: FixedQ4816.FromInteger(value: 1L)));
+
         var (pureReal, pureDual) = pureTranslation.Log();
 
         if (pureReal != FixedVector3.Zero) { return "pure translation's Log has a non-zero rotation part"; }
-        if (FixedRigidTransform.Exp(real: pureReal, dual: pureDual) != pureTranslation) { return "pure translation did not round-trip through Exp(Log(...)) bit-for-bit"; }
+        if (FixedRigidTransform.Exp(dual: pureDual, real: pureReal) != pureTranslation) { return "pure translation did not round-trip through Exp(Log(...)) bit-for-bit"; }
 
         // ScLerp endpoints return the operands.
         var atZero = FixedRigidTransform.ScLerp(from: transforms[0], to: transforms[1], amount: FixedQ4816.Zero).TransformPoint(point: probe);
@@ -1128,8 +1105,8 @@ internal static class GeometryClaims {
         var expectedZero = transforms[0].TransformPoint(point: probe);
         var expectedOne = transforms[1].TransformPoint(point: probe);
 
-        if (Math.Abs(atZero.X.Value - expectedZero.X.Value) > 32L) { return "ScLerp at amount zero did not return the start transform"; }
-        if (Math.Abs(atOne.X.Value - expectedOne.X.Value) > 32L) { return "ScLerp at amount one did not return the end transform"; }
+        if (Math.Abs(value: (atZero.X.Value - expectedZero.X.Value)) > 32L) { return "ScLerp at amount zero did not return the start transform"; }
+        if (Math.Abs(value: (atOne.X.Value - expectedOne.X.Value)) > 32L) { return "ScLerp at amount one did not return the end transform"; }
 
         return null;
     }

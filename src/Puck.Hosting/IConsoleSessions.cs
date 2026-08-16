@@ -7,7 +7,6 @@ public interface IConsoleSessions {
 
     /// <summary>Reads one seat session's open state.</summary>
     bool TryGetVisible(int slot, out bool visible);
-
     /// <summary>Sets or toggles one seat session's open state.</summary>
     /// <param name="slot">The zero-based local seat.</param>
     /// <param name="visible">The requested side, or <see langword="null"/> to toggle.</param>

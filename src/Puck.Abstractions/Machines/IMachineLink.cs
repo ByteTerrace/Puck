@@ -12,7 +12,6 @@ public interface IMachineLink : IDisposable {
     /// <summary>Gets the linked machines, in cable order — the same instances handed to
     /// <see cref="IMachineLinkingEngine.TryLink"/>. A host that steps a link skips these from its per-machine step loop.</summary>
     IReadOnlyList<IScreenMachine> Machines { get; }
-
     /// <summary>Gets the number of serial bytes exchanged across the cable since the link formed — the pipe-assertable
     /// liveness signal a host echoes (a live link's count climbs; a dormant one never advances). Nothing depends on the
     /// bytes themselves.</summary>

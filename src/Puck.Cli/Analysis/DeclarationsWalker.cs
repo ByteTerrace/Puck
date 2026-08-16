@@ -89,14 +89,13 @@ internal static class DeclarationsWalker {
                 break;
         }
     }
-
     // `<see cref="..."/>` and `<seealso cref="..."/>` targets. Documentation lives in trivia, so the walk
     // has to descend into it — a tree walk that does not will call a doc-referenced symbol unmentioned.
     private static void CollectCrefs(ParsedFile file, DeclarationsOptions options, List<AnalysisRecord> records) {
         foreach (var attribute in file.Root.DescendantNodes(descendIntoTrivia: true).OfType<XmlCrefAttributeSyntax>()) {
             var target = Flatten(node: attribute.Cref);
 
-            if ((options.Name is { } fragment) && !target.Contains(value: fragment, comparisonType: StringComparison.Ordinal)) {
+            if ((options.Name is { } fragment) && !target.Contains(comparisonType: StringComparison.Ordinal, value: fragment)) {
                 continue;
             }
 
@@ -126,17 +125,17 @@ internal static class DeclarationsWalker {
             return;
         }
 
-        if ((options.Name is { } nameFragment) && !simpleName.Contains(value: nameFragment, comparisonType: StringComparison.Ordinal)) {
+        if ((options.Name is { } nameFragment) && !simpleName.Contains(comparisonType: StringComparison.Ordinal, value: nameFragment)) {
             return;
         }
 
         var bases = Bases(node: node);
 
-        if ((options.Base is { } baseFragment) && ((bases is null) || !bases.Contains(value: baseFragment, comparisonType: StringComparison.Ordinal))) {
+        if ((options.Base is { } baseFragment) && ((bases is null) || !bases.Contains(comparisonType: StringComparison.Ordinal, value: baseFragment))) {
             return;
         }
 
-        if ((options.Attribute is { } attributeFragment) && !HasAttribute(node: node, fragment: attributeFragment)) {
+        if ((options.Attribute is { } attributeFragment) && !HasAttribute(fragment: attributeFragment, node: node)) {
             return;
         }
 
@@ -152,14 +151,12 @@ internal static class DeclarationsWalker {
                 Name: QualifiedName(node: node, simpleName: (simpleName + Signature(node: node))),
                 Detail: bases));
     }
-
     // The base list a type declares, each entry flattened and joined canonically — the emitter supplies
     // the leading colon. Null when the declaration has no base list.
     private static string? Bases(SyntaxNode node) =>
         (((node as BaseTypeDeclarationSyntax)?.BaseList is { } list)
             ? string.Join(separator: ", ", values: list.Types.Select(selector: static type => Flatten(node: type)))
             : null);
-
     // A record is one line; the syntax it renders (a base list, parameter list, or cref) may span several
     // source lines with comments between tokens. Flatten renders tokens only, collapsing any original
     // separation to exactly one space, so `--name`/`--base` filtering matches what a record actually prints.
@@ -175,9 +172,8 @@ internal static class DeclarationsWalker {
             _ = builder.Append(value: tokens[index].Text);
         }
 
-        return string.Join(separator: ' ', values: builder.ToString().Split(separator: default(char[]), options: StringSplitOptions.RemoveEmptyEntries));
+        return string.Join(separator: ' ', values: builder.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: default(char[])));
     }
-
     // Whether the trivia between two tokens stands for a space. An empty gap does not. Neither does one
     // holding the `///` exterior of a documentation comment: that marker opens a CONTINUED line, so a cref
     // broken across two of them names one dotted path, not two words.
@@ -192,7 +188,7 @@ internal static class DeclarationsWalker {
 
         foreach (var list in member.AttributeLists) {
             foreach (var attribute in list.Attributes) {
-                if (attribute.Name.ToString().Contains(value: fragment, comparisonType: StringComparison.Ordinal)) {
+                if (attribute.Name.ToString().Contains(comparisonType: StringComparison.Ordinal, value: fragment)) {
                     return true;
                 }
             }
@@ -216,7 +212,6 @@ internal static class DeclarationsWalker {
             PropertyDeclarationSyntax or IndexerDeclarationSyntax => "property",
             _ => "method",
         };
-
     // The declared simple name, spelled the way the declaration does: an operator keeps its keyword, an
     // indexer is `this`, a finalizer keeps its tilde.
     private static string SimpleName(SyntaxNode node) =>
@@ -227,7 +222,6 @@ internal static class DeclarationsWalker {
             DestructorDeclarationSyntax destructor => $"~{destructor.Identifier.Text}",
             _ => Identifier(node: node).Text,
         };
-
     // The token a record's line and column point at — the name, not the modifiers or the doc comment.
     private static SyntaxToken Identifier(SyntaxNode node) =>
         node switch {
@@ -243,7 +237,6 @@ internal static class DeclarationsWalker {
             IndexerDeclarationSyntax indexer => indexer.ThisKeyword,
             _ => node.GetFirstToken(),
         };
-
     // Type parameters and, for the callable forms, the parameter types as written — enough to tell two
     // overloads apart without a semantic model.
     private static string Signature(SyntaxNode node) {
@@ -267,11 +260,9 @@ internal static class DeclarationsWalker {
 
         return ((typeParameters ?? string.Empty) + rendered);
     }
-
     // `<T, U>` as written, flattened. Null when the declaration takes no type parameters.
     private static string? TypeParameters(TypeParameterListSyntax? list) =>
         ((list is null) ? null : Flatten(node: list));
-
     // The declaration's dotted path: enclosing namespaces, then enclosing types, then the name itself.
     private static string QualifiedName(SyntaxNode node, string simpleName) {
         var parts = new List<string> { simpleName };

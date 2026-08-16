@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>The shared SM83 machine across the DMG, CGB, and AGB compatibility costumes: CPU, PPU, APU, timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer link, hosted through the IScreenMachineEngine adapter over Puck.GamingBricks. Console differences are expressed as capability gates on one core, never as forked implementations.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.HumbleGamingBrick</PackageId>
+        <PackageTags>agb;cgb;determinism;dmg;emulation;sm83</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
@@ -18,12 +22,11 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*,)" />
     </ItemGroup>
     <ItemGroup>
-        <Using Include="Puck.Snapshots" />
+        <Using Include="Puck.GamingBricks" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.GamingBricks\Puck.GamingBricks.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Snapshots\Puck.Snapshots.csproj" />
     </ItemGroup>
 </Project>

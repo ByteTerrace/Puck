@@ -55,7 +55,6 @@ public sealed class MarketSelfRaiseBidLawTests {
         Assert.Equal(expected: 115L, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: Bidder));
         Assert.Equal(expected: (MarketFixtures.BidderStartingGold - 200), actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: ThirdParty));
     }
-
     // Gold's holder-"1" cell (the Bidder fixture) carries an advancing base of 1000 at rate 1/tick from epoch 0 —
     // the same shape MarketAdvanceCellRebaseLawTests uses, so a self-raise against an advancing cell exercises the
     // SAME rebase machinery a first bid already proves, but through the compose-time double-read this law targets.
@@ -107,7 +106,6 @@ public sealed class MarketSelfRaiseBidLawTests {
         Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, rowName: MarketFixtures.GoldRow.Value, key: "1", tick: 91UL, row: out _, rawValue: out var oneTickLater, text: out _));
         Assert.Equal(expected: 641L, actual: oneTickLater);
     }
-
     [Fact]
     public void AMaximumStandingBid_HasNoWrappedSuccessor() {
         // Market prices are long-shaped independently of state-cell balances, so an authored/resumed ledger may

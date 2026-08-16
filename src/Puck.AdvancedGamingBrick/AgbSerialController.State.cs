@@ -47,7 +47,6 @@ public sealed partial class AgbSerialController : ISnapshotable {
         writer.WriteBoolean(value: m_transferEvent.Scheduled);
         writer.WriteInt64(value: m_transferEvent.When);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

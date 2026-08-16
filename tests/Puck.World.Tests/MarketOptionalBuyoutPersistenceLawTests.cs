@@ -31,7 +31,7 @@ public sealed class MarketOptionalBuyoutPersistenceLawTests {
         var bytes = WorldDefinitionSerialization.Serialize(definition: document);
         var json = Encoding.UTF8.GetString(bytes: bytes);
 
-        Assert.DoesNotContain(expectedSubstring: "\"buyoutPrice\"", actualString: json, comparisonType: StringComparison.Ordinal);
+        Assert.DoesNotContain(actualString: json, comparisonType: StringComparison.Ordinal, expectedSubstring: "\"buyoutPrice\"");
 
         var roundTripped = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
         var listing = Assert.Single(collection: roundTripped.Market!.Listings!);

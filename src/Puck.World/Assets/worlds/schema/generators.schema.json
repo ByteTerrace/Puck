@@ -20,7 +20,9 @@
         "type": "object",
         "properties": {
           "source": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorSource"
+            "$ref": "./common.schema.json#/$defs/WorldGeneratorSource",
+            "description": "Which draw shape this source fires.",
+            "default": "Markov"
           },
           "start": {
             "description": "Markov only: the context every emission begins from. Must name a declared context.",
@@ -36,10 +38,14 @@
             "default": 1
           },
           "contexts": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorContextList"
+            "$ref": "./common.schema.json#/$defs/WorldGeneratorContextList",
+            "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
+            "default": null
           },
           "mode": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorMode"
+            "$ref": "./common.schema.json#/$defs/WorldGeneratorMode",
+            "description": "Markov only: how alternatives are consumed (see WorldGeneratorMode).",
+            "default": "WithReplacement"
           },
           "rangeMin": {
             "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
@@ -58,7 +64,9 @@
             "default": null
           },
           "weighted": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorWeightedNumericList"
+            "$ref": "./common.schema.json#/$defs/WorldGeneratorWeightedNumericList",
+            "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight.",
+            "default": null
           }
         },
         "additionalProperties": false

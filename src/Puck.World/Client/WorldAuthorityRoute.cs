@@ -10,11 +10,11 @@ namespace Puck.World.Client;
 /// direct-player authorities all use this exact shape; placement is not part of a consumer's decision.
 /// </summary>
 internal sealed class WorldAuthorityEndpoint : IDisposable {
-    private readonly Func<IClientSink, IDisposable> m_observe;
     private readonly Func<IWorldAdjacencySource?> m_adjacencies;
-    private readonly Func<ulong> m_nextInputTick;
     private readonly WorldSessionMirror m_mirror;
+    private readonly Func<ulong> m_nextInputTick;
     private readonly IDisposable m_observationLease;
+    private readonly Func<IClientSink, IDisposable> m_observe;
 
     public WorldAuthorityEndpoint(
         string identity,
@@ -46,48 +46,33 @@ internal sealed class WorldAuthorityEndpoint : IDisposable {
         m_observationLease = observe(m_mirror);
     }
 
-    /// <summary>The stable runtime identity of this authority endpoint. It is never inferred from its transport.</summary>
-    public string Identity { get; }
-
-    /// <summary>The endpoint's current delivered definition.</summary>
-    public WorldDefinition Definition => m_mirror.Definition;
-
+    /// <summary>The live adjacency source belonging to this endpoint, when reachable.</summary>
+    public IWorldAdjacencySource? Adjacencies => m_adjacencies();
     /// <summary>The identity stamped on this authority's delivered entity addresses.</summary>
     public string Authority => m_mirror.Authority;
+    /// <summary>Whether this process advances the endpoint's authoritative clock.</summary>
+    public bool ClockOwnedHere { get; }
+    /// <summary>The endpoint's current delivered definition.</summary>
+    public WorldDefinition Definition => m_mirror.Definition;
+    /// <summary>The stable runtime identity of this authority endpoint. It is never inferred from its transport.</summary>
+    public string Identity { get; }
+    /// <summary>The endpoint's next authoritative input coordinate.</summary>
+    public ulong NextInputTick => m_nextInputTick();
+    /// <summary>The endpoint's ordinary submission door.</summary>
+    public IServerLink Submissions { get; }
 
-    /// <summary>Reads one entity directly in this authority's coordinate frame. Movement composition uses this
-    /// instead of consulting the boot client's table, so a body-relative camera keeps the same semantics after an
-    /// authority handoff.</summary>
-    public bool TryEntityPose(int index, out Vector3 position, out Quaternion orientation) {
-        if (((uint)index < WorldClient.EntityCapacity) && m_mirror.IsActive(index: index)) {
-            position = m_mirror.CurrentPosition(index: index);
-            orientation = m_mirror.CurrentOrientation(index: index);
-            return true;
-        }
-
-        position = default;
-        orientation = Quaternion.Identity;
-        return false;
-    }
-
-    /// <summary>Reads a pose only when the complete generation-addressed identity is still the active occupant.</summary>
-    public bool TryEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
-        if (((uint)entity.Index < WorldClient.EntityCapacity) && m_mirror.IsActive(index: entity.Index) &&
-            (m_mirror.Address(index: entity.Index) == entity)) {
-            position = m_mirror.CurrentPosition(index: entity.Index);
-            orientation = m_mirror.CurrentOrientation(index: entity.Index);
-            return true;
-        }
-
-        position = default;
-        orientation = Quaternion.Identity;
-        return false;
-    }
-
+    public void Dispose() => m_observationLease.Dispose();
+    /// <summary>Attaches an ordinary observation sink.</summary>
+    public IDisposable Observe(IClientSink sink) => m_observe(sink);
+    /// <summary>Atomically seeds a newly discovered committed route before publishing its new seat epoch.</summary>
+    public void SeedRoute(in WorldAuthorityRouteDescription route) => m_mirror.SeedRoute(route: in route);
     /// <summary>Reads the render identity belonging to the same complete entity claim as <see cref="TryEntityPose(in WorldEntityAddress, out Vector3, out Quaternion)"/>.</summary>
     public bool TryEntityAppearance(in WorldEntityAddress entity, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
-        if (((uint)entity.Index < WorldClient.EntityCapacity) && m_mirror.IsActive(index: entity.Index) &&
-            (m_mirror.Address(index: entity.Index) == entity)) {
+        if (
+            (((uint)entity.Index) < WorldClient.EntityCapacity) &&
+            m_mirror.IsActive(index: entity.Index) &&
+            (m_mirror.Address(index: entity.Index) == entity)
+        ) {
             bodyColor = m_mirror.BodyColor(index: entity.Index);
             look = m_mirror.Look(index: entity.Index);
             catalogRig = m_mirror.CatalogRig(index: entity.Index);
@@ -99,28 +84,40 @@ internal sealed class WorldAuthorityEndpoint : IDisposable {
         catalogRig = 0;
         return false;
     }
+    /// <summary>Reads one entity directly in this authority's coordinate frame. Movement composition uses this
+    /// instead of consulting the boot client's table, so a body-relative camera keeps the same semantics after an
+    /// authority handoff.</summary>
+    public bool TryEntityPose(int index, out Vector3 position, out Quaternion orientation) {
+        if (
+            (((uint)index) < WorldClient.EntityCapacity) &&
+            m_mirror.IsActive(index: index)
+        ) {
+            position = m_mirror.CurrentPosition(index: index);
+            orientation = m_mirror.CurrentOrientation(index: index);
+            return true;
+        }
 
-    /// <summary>Atomically seeds a newly discovered committed route before publishing its new seat epoch.</summary>
-    public void SeedRoute(in WorldAuthorityRouteDescription route) => m_mirror.SeedRoute(route: in route);
+        position = default;
+        orientation = Quaternion.Identity;
+        return false;
+    }
+    /// <summary>Reads a pose only when the complete generation-addressed identity is still the active occupant.</summary>
+    public bool TryEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
+        if (
+            (((uint)entity.Index) < WorldClient.EntityCapacity) &&
+            m_mirror.IsActive(index: entity.Index) &&
+            (m_mirror.Address(index: entity.Index) == entity)
+        ) {
+            position = m_mirror.CurrentPosition(index: entity.Index);
+            orientation = m_mirror.CurrentOrientation(index: entity.Index);
+            return true;
+        }
 
-    /// <summary>The endpoint's ordinary submission door.</summary>
-    public IServerLink Submissions { get; }
-
-    /// <summary>Whether this process advances the endpoint's authoritative clock.</summary>
-    public bool ClockOwnedHere { get; }
-
-    /// <summary>The endpoint's next authoritative input coordinate.</summary>
-    public ulong NextInputTick => m_nextInputTick();
-
-    /// <summary>Attaches an ordinary observation sink.</summary>
-    public IDisposable Observe(IClientSink sink) => m_observe(sink);
-
-    /// <summary>The live adjacency source belonging to this endpoint, when reachable.</summary>
-    public IWorldAdjacencySource? Adjacencies => m_adjacencies();
-
-    public void Dispose() => m_observationLease.Dispose();
+        position = default;
+        orientation = Quaternion.Identity;
+        return false;
+    }
 }
-
 /// <summary>
 /// One seat's immutable authority claim: endpoint, entity index within that authority, and monotonically increasing
 /// epoch. <see cref="WorldSeatAuthorityRouter"/> publishes the whole value with one CAS, so every consumer observes

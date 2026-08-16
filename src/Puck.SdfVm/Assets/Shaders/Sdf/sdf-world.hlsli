@@ -92,9 +92,9 @@ uint worldTileFarBoundIndex(uint tileIndex) {
 }
 
 #ifdef SDF_SCREEN_SOURCES
-// A declared ScreenSlab instance's world-space front-face frame (see Puck.SdfVm.SdfScreenSurface) — Stage 1 ONLY
+// A declared ScreenSlab instance's world-space front-face frame (see Puck.SignedDistance.SdfScreenSurface) — Stage 1 ONLY
 // (binding 10/11 are not part of the beam prepass or Stage 2's descriptor sets). Indexed DIRECTLY by screen index
-// (0..7, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
+// (0..31, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
 // surface with no search; an unfilled slot's entry is never read (no material id can address it: the host packs an
 // entry only when SdfProgramBuilder registers that screen index).
 struct ScreenSurfaceData {

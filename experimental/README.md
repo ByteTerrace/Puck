@@ -13,10 +13,10 @@ regression to repair.
 |---|---|---|
 | `Puck.Demo` | `src/Puck.Demo` | 2026-08-01 |
 | `Puck.Post` | `src/Puck.Post` | 2026-08-02 |
-| `tools` | `tools/` | 2026-08-02 |
 | `scripts/world` | `src/Puck.World/scripts/` | 2026-08-02 |
 | `scripts/recording` | `src/Puck.Recording/scripts/` | 2026-08-02 |
 | `Puck.BareMetal` | (never in the build) | — |
+| `Puck.Platform.Switch` | `src/Puck.Platform/Switch/` | — |
 
 None are in `Puck.slnx`; none are reached by the root build. Each carries a
 **firewall pair** — `Directory.Build.props` AND `Directory.Build.targets`,

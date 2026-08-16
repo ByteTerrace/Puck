@@ -32,25 +32,42 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, Worl
     private int m_seenRevision = -1;
     private OverlayHudPanel[] m_worldPanels = [];
 
-    /// <summary>Reconciles the world-scope structure snapshot if the definition revision moved since the last call,
-    /// recomposes the player-scope seat panels unconditionally, and publishes both together. Cheap to call every
-    /// produced frame (the render thread's <c>FeedTick</c>).</summary>
-    public void Tick() {
-        var revision = m_client.DefinitionRevision;
+    private static OverlayHudElement[] BuildElements(IReadOnlyList<WorldHudElement> elements) {
+        var built = new OverlayHudElement[elements.Count];
 
-        if (revision != m_seenRevision) {
-            m_seenRevision = revision;
+        for (var index = 0; (index < elements.Count); index++) {
+            var element = elements[index];
 
-            var section = m_client.Definition.Hud;
-
-            m_worldPanels = (section.Defaults.Enabled ? BuildPanels(panels: section.Panels) : []);
+            built[index] = new OverlayHudElement(
+                Kind: ToKind(kind: element.Kind),
+                Rect: ToOverlayRect(rect: element.Rect),
+                Role: ToRole(token: element.Style),
+                Text: element.Text,
+                Binding: element.Binding,
+                Template: BuildTemplate(template: element.Template)
+            );
         }
 
-        var seatCount = BuildSeatPanels();
-
-        m_store.Publish(frame: new OverlayHudFrame(Panels: m_worldPanels, SeatPanels: m_seatPanels.AsMemory(start: 0, length: seatCount)));
+        return built;
     }
+    private static OverlayHudPanel BuildPanel(WorldHudPanel panel) {
+        return new OverlayHudPanel(
+            Id: panel.Id,
+            Rect: ToOverlayRect(rect: panel.Rect),
+            Band: ToBand(layer: panel.Layer),
+            Style: ToStyle(style: panel.Style),
+            Elements: BuildElements(elements: panel.Elements)
+        );
+    }
+    private static OverlayHudPanel[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
+        var built = new OverlayHudPanel[panels.Count];
 
+        for (var index = 0; (index < panels.Count); index++) {
+            built[index] = BuildPanel(panel: panels[index]);
+        }
+
+        return built;
+    }
     // Walks the joined roster in view order (the SAME order WorldOverlayFeed lays seats out in — LayoutRegion is a
     // pure function of (count, view index), so calling it here with identical arguments reproduces the exact rect a
     // seat's binding bar/editor HUD already renders in, with no cross-feed dependency), publishing one entry per
@@ -74,59 +91,35 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, Worl
                 continue;
             }
 
-            var viewport = WorldFrameSource.LayoutRegion(count: joined, index: localViewIndex, soleEditorIndex: soleEditorViewIndex, workbenchFraction: workbenchFraction);
+            var viewport = WorldFrameSource.LayoutRegion(
+                count: joined,
+                index: localViewIndex,
+                soleEditorIndex: soleEditorViewIndex,
+                workbenchFraction: workbenchFraction
+            );
 
-            if (!ReferenceEquals(objA: m_seatSources[slot], objB: panel)) {
+            if (!ReferenceEquals(
+                objA: m_seatSources[slot],
+                objB: panel
+            )) {
                 m_seatSources[slot] = panel;
                 m_seatBuilds[slot] = BuildPanel(panel: panel);
             }
 
             m_seatPanels[count++] = new OverlayHudSeatPanel(
-                Viewport: new OverlayHudRect(X: viewport.X, Y: viewport.Y, Width: viewport.Width, Height: viewport.Height),
+                Viewport: new OverlayHudRect(
+                    X: viewport.X,
+                    Y: viewport.Y,
+                    Width: viewport.Width,
+                    Height: viewport.Height
+                ),
                 Panel: m_seatBuilds[slot]
             );
         }
 
         return count;
     }
-    private static OverlayHudPanel[] BuildPanels(IReadOnlyList<WorldHudPanel> panels) {
-        var built = new OverlayHudPanel[panels.Count];
-
-        for (var index = 0; (index < panels.Count); index++) {
-            built[index] = BuildPanel(panel: panels[index]);
-        }
-
-        return built;
-    }
-    private static OverlayHudPanel BuildPanel(WorldHudPanel panel) {
-        return new OverlayHudPanel(
-            Id: panel.Id,
-            Rect: ToOverlayRect(rect: panel.Rect),
-            Band: ToBand(layer: panel.Layer),
-            Style: ToStyle(style: panel.Style),
-            Elements: BuildElements(elements: panel.Elements)
-        );
-    }
-    private static OverlayHudElement[] BuildElements(IReadOnlyList<WorldHudElement> elements) {
-        var built = new OverlayHudElement[elements.Count];
-
-        for (var index = 0; (index < elements.Count); index++) {
-            var element = elements[index];
-
-            built[index] = new OverlayHudElement(
-                Kind: ToKind(kind: element.Kind),
-                Rect: ToOverlayRect(rect: element.Rect),
-                Role: ToRole(token: element.Style),
-                Text: element.Text,
-                Binding: element.Binding,
-                Template: BuildTemplate(template: element.Template)
-            );
-        }
-
-        return built;
-    }
-
-    // The one place a template string is parsed on the way to the screen: HudTemplate (Puck.World.Data) owns the
+    // The one place a template string is parsed on the way to the screen: HudTemplate (Puck.World.Schema) owns the
     // brace/escape grammar, and Puck.Overlays — which cannot reference that project — receives RUNS, never a
     // grammar to restate. Parsing here also moves the cost off the per-frame render path onto this structure
     // rebuild. A template that reaches a live document has already been proven well formed by
@@ -137,30 +130,33 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, Worl
             return default;
         }
 
-        if (!HudTemplate.TryParse(template: template, segments: out var segments, error: out _)) {
-            return new[] { new OverlayHudTemplateSegment(IsPlaceholder: false, Text: template) };
+        if (!HudTemplate.TryParse(
+            error: out _,
+            segments: out var segments,
+            template: template
+        )) {
+            return new[] { new OverlayHudTemplateSegment(
+                IsPlaceholder: false,
+                Text: template
+            ) };
         }
 
         var built = new OverlayHudTemplateSegment[segments.Count];
 
         for (var index = 0; (index < segments.Count); index++) {
-            built[index] = new OverlayHudTemplateSegment(IsPlaceholder: segments[index].IsPlaceholder, Text: segments[index].Text);
+            built[index] = new OverlayHudTemplateSegment(
+                IsPlaceholder: segments[index].IsPlaceholder,
+                Text: segments[index].Text
+            );
         }
 
         return built;
     }
-    private static OverlayHudRect ToOverlayRect(WorldHudRect rect) => new(X: rect.X, Y: rect.Y, Width: rect.Width, Height: rect.Height);
     private static OverlayHudBand ToBand(WorldHudLayer layer) => layer switch {
         WorldHudLayer.Under => OverlayHudBand.Under,
         WorldHudLayer.Over => OverlayHudBand.Over,
         WorldHudLayer.Replace => OverlayHudBand.Replace,
         _ => OverlayHudBand.Under,
-    };
-    private static OverlayPanelStyle ToStyle(WorldHudPanelStyle style) => style switch {
-        WorldHudPanelStyle.Panel => OverlayPanelStyle.Panel,
-        WorldHudPanelStyle.Strip => OverlayPanelStyle.Strip,
-        WorldHudPanelStyle.Chip => OverlayPanelStyle.Chip,
-        _ => OverlayPanelStyle.Panel,
     };
     private static OverlayHudElementKind ToKind(WorldHudElementKind kind) => kind switch {
         WorldHudElementKind.Rect => OverlayHudElementKind.Rect,
@@ -168,6 +164,12 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, Worl
         WorldHudElementKind.Gauge => OverlayHudElementKind.Gauge,
         _ => OverlayHudElementKind.Rect,
     };
+    private static OverlayHudRect ToOverlayRect(WorldHudRect rect) => new(
+        X: rect.X,
+        Y: rect.Y,
+        Width: rect.Width,
+        Height: rect.Height
+    );
     private static OverlayColorRole ToRole(WorldHudStyleToken token) => token switch {
         WorldHudStyleToken.Primary => OverlayColorRole.TextPrimary,
         WorldHudStyleToken.Dim => OverlayColorRole.TextDim,
@@ -177,4 +179,38 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, Worl
         WorldHudStyleToken.Danger => OverlayColorRole.Danger,
         _ => OverlayColorRole.TextPrimary,
     };
+    private static OverlayPanelStyle ToStyle(WorldHudPanelStyle style) => style switch {
+        WorldHudPanelStyle.Panel => OverlayPanelStyle.Panel,
+        WorldHudPanelStyle.Strip => OverlayPanelStyle.Strip,
+        WorldHudPanelStyle.Chip => OverlayPanelStyle.Chip,
+        _ => OverlayPanelStyle.Panel,
+    };
+
+    /// <summary>Reconciles the world-scope structure snapshot if the definition revision moved since the last call,
+    /// recomposes the player-scope seat panels unconditionally, and publishes both together. Cheap to call every
+    /// produced frame (the render thread's <c>FeedTick</c>).</summary>
+    public void Tick() {
+        var revision = m_client.DefinitionRevision;
+
+        if (revision != m_seenRevision) {
+            m_seenRevision = revision;
+
+            var section = m_client.Definition.Hud;
+
+            m_worldPanels = (section.Defaults.Enabled
+                ? BuildPanels(panels: section.Panels)
+                : []
+            );
+        }
+
+        var seatCount = BuildSeatPanels();
+
+        m_store.Publish(frame: new OverlayHudFrame(
+            Panels: m_worldPanels,
+            SeatPanels: m_seatPanels.AsMemory(
+                length: seatCount,
+                start: 0
+            )
+        ));
+    }
 }

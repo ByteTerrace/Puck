@@ -28,6 +28,7 @@ public sealed class SurfaceCompositor : IDisposable {
     private const string VertexShaderFileName = "fullscreen.vert.spv";
 
     private static readonly byte[] FullscreenTriangleVertexData = CreateFullscreenTriangleVertexData();
+
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
     private readonly VulkanDescriptorAllocator m_descriptorAllocator;
@@ -42,13 +43,16 @@ public sealed class SurfaceCompositor : IDisposable {
     private readonly IVulkanShaderModuleFactory m_shaderModuleFactory;
     private readonly IVulkanStorageBufferFactory m_storageBufferFactory;
     private readonly IVulkanVertexBufferFactory m_vertexBufferFactory;
+
     private VulkanSurfaceUpload? m_rootUpload;
     private VulkanSurfaceImport? m_sharedImport;
     private VulkanShaderModule? m_blitFragmentShader;
     private VulkanGraphicsPipeline? m_blitPipeline;
     private AssetContentHash m_blitPipelineId;
     private nint m_descriptorPool;
+
     private readonly nint[] m_descriptorSets = new nint[DescriptorSetRingSize];
+
     private int m_descriptorSetIndex;
     private VulkanDrawCommand[][]? m_drawCommandsPerSet;
     private Dictionary<AssetContentHash, VulkanGraphicsPipeline>? m_graphicsPipelines;
@@ -117,7 +121,6 @@ public sealed class SurfaceCompositor : IDisposable {
         m_renderer.PresentationResourcesRecreated += OnPresentationResourcesRecreated;
         m_initialized = true;
     }
-
     /// <summary>Blits the surface fullscreen onto the swapchain. A no-op until presentation resources
     /// exist or when the surface is empty (a skipped frame).</summary>
     public void Blit(Surface surface) {
@@ -225,7 +228,7 @@ public sealed class SurfaceCompositor : IDisposable {
         // The blit binds one sampled source texture per ring set. This single count drives BOTH the pipeline's
         // descriptor-set layout and the pool's capacity, so they cannot drift out of sync (a pool undersized for
         // the layout would fail vkAllocateDescriptorSets).
-        const uint textureSamplerCount = 1;
+        const uint TextureSamplerCount = 1;
 
         m_blitPipeline = m_graphicsPipelineFactory.Create(
             enableStorageBuffer: false,
@@ -234,7 +237,7 @@ public sealed class SurfaceCompositor : IDisposable {
             pushConstantBinding: null,
             renderPass: m_renderer.RenderPass,
             swapchain: m_renderer.Swapchain,
-            textureSamplerCount: textureSamplerCount,
+            textureSamplerCount: TextureSamplerCount,
             vertexShaderModule: m_vertexShader!
         );
         m_descriptorPool = m_descriptorAllocator.CreatePool(
@@ -243,7 +246,7 @@ public sealed class SurfaceCompositor : IDisposable {
             poolSizes: new VulkanDescriptorPoolSize[]
             {
                 new(
-                    DescriptorCount: (textureSamplerCount * DescriptorSetRingSize),
+                    DescriptorCount: (TextureSamplerCount * DescriptorSetRingSize),
                     DescriptorType: VulkanDescriptorType.CombinedImageSampler
                 ),
             }

@@ -12,7 +12,6 @@ namespace Puck.AdvancedGamingBrick;
 public interface IAgbLink {
     /// <summary>Gets the number of consoles on the link, including this one (1 = no cable attached).</summary>
     int PlayerCount { get; }
-
     /// <summary>Gets a value indicating whether a real partner is attached (more than one console on the link).</summary>
     bool HasPartner => (PlayerCount > 1);
 
@@ -23,7 +22,6 @@ public interface IAgbLink {
     /// <returns>The node representing this console's endpoint on the link.</returns>
     IAgbLinkNode Connect(IAgbLinkClient client);
 }
-
 /// <summary>One console's endpoint on an <see cref="IAgbLink"/>. The serial controller exchanges words through it.</summary>
 public interface IAgbLinkNode {
     /// <summary>Gets this console's player id on the link (0 = parent).</summary>
@@ -35,7 +33,6 @@ public interface IAgbLinkNode {
     /// <param name="word">True for a 32-bit transfer, false for 8-bit.</param>
     /// <returns>The word shifted in from the partner (all ones if none).</returns>
     uint NormalExchange(uint outgoing, bool word);
-
     /// <summary>Performs a multiplayer exchange: every console latches its <c>SIOMLT_SEND</c> word, the parent
     /// clocks the round, and all four slots are returned (unused/absent slots read 0xFFFF).</summary>
     /// <param name="send">This console's outgoing 16-bit word.</param>
@@ -43,7 +40,6 @@ public interface IAgbLinkNode {
     /// <returns>True if the round completed against real partners; false for a lone console.</returns>
     bool MultiplayerExchange(ushort send, out ushort[] slots);
 }
-
 /// <summary>
 /// The console-side half of the link seam: the callbacks a link drives back into a serial controller when the console
 /// that clocks a transfer completes it. Where <see cref="IAgbLinkNode"/> is the direction a console pushes its own
@@ -59,7 +55,6 @@ public interface IAgbLinkClient {
     /// <param name="word">This console's current <c>SIOMLT_SEND</c> word.</param>
     /// <returns><see langword="true"/> if the console participates in the round.</returns>
     bool TryLatchMultiplayerWord(out ushort word);
-
     /// <summary>Delivers a completed multiplayer round: all four players' words land in <c>SIOMULTI0..3</c>, the
     /// assigned daisy-chain id lands in the SIOCNT id bits, the busy (start) bit clears, and the serial IRQ is
     /// requested if enabled — exactly what hardware does on every connected console when the parent's clock finishes
@@ -67,7 +62,6 @@ public interface IAgbLinkClient {
     /// <param name="slots">The four players' words (slot index = player id; absent slots 0xFFFF).</param>
     /// <param name="playerId">This console's assigned daisy-chain position (0 = parent).</param>
     void CompleteMultiplayerRound(ReadOnlySpan<ushort> slots, int playerId);
-
     /// <summary>Attempts to complete a pending normal-mode slave transfer against a master's shift: if this console
     /// has an external-clock transfer of the matching width armed (start bit held), the exchange swaps —
     /// <paramref name="incoming"/> lands in its data register, its outgoing word is returned to the master, the busy

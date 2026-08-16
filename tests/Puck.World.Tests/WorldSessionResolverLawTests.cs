@@ -14,7 +14,6 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class WorldSessionResolverLawTests {
     private const string DestinationReference = "ref";
-
     // The referenced-document identity every law in this suite that does NOT itself exercise the identity threads
     // through unchanged (adversarial-review finding 3: the cache key now carries a THIRD component,
     // referencedDocument — see WorldSessionResolver's own m_active remarks). Holding it constant across a law
@@ -46,22 +45,16 @@ public sealed class WorldSessionResolverLawTests {
 
         return Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Kinds: [kind], Groups: groups, Ownership: []) };
     }
-
     private static WorldDestination GlobalDestination(string name = "camp") =>
         new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral);
-
     private static WorldDestination PersistedGlobalDestination(string name = "camp") =>
         new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Persisted);
-
     private static WorldDestination UserDestination(string name = "workshop") =>
         new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral, Scope: WorldDestinationScope.User);
-
     private static WorldDestination NamedGroupDestination(string groupId, string name = "hall", WorldDestinationDurability durability = WorldDestinationDurability.Ephemeral) =>
         new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: durability, Scope: WorldDestinationScope.Group, Selector: new WorldGroupSelector.Named(Group: groupId));
-
     private static WorldDestination TaggedGroupDestination(string tag, string name = "lodge") =>
         new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral, Scope: WorldDestinationScope.Group, Selector: new WorldGroupSelector.Tagged(Tag: tag));
-
     private static WorldSessionResolver.CohortMember[] Cohort(params (int Slot, string? IdentityId)[] members) {
         var result = new WorldSessionResolver.CohortMember[members.Length];
 
@@ -87,7 +80,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.Equal(expected: first.GenerationId, actual: second.GenerationId);
         Assert.Equal(expected: first.InstanceName, actual: second.InstanceName);
     }
-
     [Fact]
     public void GenerationLifecycle_AfterRetirement_NextResolveMintsANewGeneration() {
         var resolver = new WorldSessionResolver();
@@ -109,7 +101,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.NotEqual(expected: first.GenerationId, actual: second.GenerationId);
         Assert.NotEqual(expected: first.InstanceName, actual: second.InstanceName);
     }
-
     [Fact]
     public void UserScope_AnonymousSeatRefused_IdentifiedSeatResolves() {
         var resolver = new WorldSessionResolver();
@@ -121,7 +112,6 @@ public sealed class WorldSessionResolverLawTests {
             deniedOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, null)), resolved: out _, reason: out _),
             controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, "amber-identity")), resolved: out _, reason: out _));
     }
-
     [Fact]
     public void UserScope_MultiUserCohortRefused_SingleIdentityResolves() {
         var resolver = new WorldSessionResolver();
@@ -133,7 +123,6 @@ public sealed class WorldSessionResolverLawTests {
             deniedOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, "amber-identity"), (2, "ember-identity")), resolved: out _, reason: out _),
             controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, "amber-identity"), (3, "amber-identity")), resolved: out _, reason: out _));
     }
-
     [Fact]
     public void GroupNamedScope_NonMemberRefused_MemberResolves() {
         var resolver = new WorldSessionResolver();
@@ -147,7 +136,6 @@ public sealed class WorldSessionResolverLawTests {
             // Seat 1 is "alpha"'s one authored member.
             controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, null)), resolved: out _, reason: out _));
     }
-
     [Fact]
     public void GroupTaggedScope_AmbiguousMembershipRefused_UniqueMembershipResolves() {
         var resolver = new WorldSessionResolver();
@@ -156,16 +144,15 @@ public sealed class WorldSessionResolverLawTests {
         Laws.RefusalWithControl(
             lawId: "resolver.group-tagged-ambiguous-refused",
             // Seat 4 holds TWO memberships ("delta"/"epsilon") both tagged "explorers" — ambiguous, refused by name.
-            deniedOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: TaggedGroupDestination(tag: "explorers", name: "lodge-ambiguous"), referencedDocument: RefDoc, cohort: Cohort((4, null)), resolved: out _, reason: out _),
+            deniedOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: TaggedGroupDestination(name: "lodge-ambiguous", tag: "explorers"), referencedDocument: RefDoc, cohort: Cohort((4, null)), resolved: out _, reason: out _),
             // Seat 3 holds exactly ONE membership ("gamma") tagged "raiders" — unique, resolves.
-            controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: TaggedGroupDestination(tag: "raiders", name: "lodge-unique"), referencedDocument: RefDoc, cohort: Cohort((3, null)), resolved: out _, reason: out _));
+            controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: TaggedGroupDestination(name: "lodge-unique", tag: "raiders"), referencedDocument: RefDoc, cohort: Cohort((3, null)), resolved: out _, reason: out _));
     }
-
     [Fact]
     public void GroupTaggedScope_NoMatchingMembershipRefused_MatchingMembershipResolves() {
         var resolver = new WorldSessionResolver();
         var definition = BuildDocumentWithGroups();
-        var destination = TaggedGroupDestination(tag: "raiders", name: "lodge-zero-or-one");
+        var destination = TaggedGroupDestination(name: "lodge-zero-or-one", tag: "raiders");
 
         Laws.RefusalWithControl(
             lawId: "resolver.group-tagged-zero-refused",
@@ -174,7 +161,6 @@ public sealed class WorldSessionResolverLawTests {
             // Seat 3 holds exactly one membership tagged "raiders".
             controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((3, null)), resolved: out _, reason: out _));
     }
-
     [Fact]
     public void GroupTaggedScope_CohortResolvingDifferentGroupsRefused_SameGroupResolves() {
         var resolver = new WorldSessionResolver();
@@ -186,7 +172,7 @@ public sealed class WorldSessionResolverLawTests {
             new(Id: WorldSafeName.Parse(candidate: "south"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)], Tags: ["shared"]),
         };
         var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Kinds: [kind], Groups: groups, Ownership: []) };
-        var destination = TaggedGroupDestination(tag: "shared", name: "lodge-cohort");
+        var destination = TaggedGroupDestination(name: "lodge-cohort", tag: "shared");
 
         Laws.RefusalWithControl(
             lawId: "resolver.group-tagged-cohort-disagreement-refused",
@@ -195,7 +181,6 @@ public sealed class WorldSessionResolverLawTests {
             // The SAME two seats, but only Seat 1 travels (a `body` crossing) — one member, no disagreement possible.
             controlOutcome: () => resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, null)), resolved: out _, reason: out _));
     }
-
     // G1 — SCOPED INSTANCE NAMES ARE INJECTIVE BY CONSTRUCTION. Before the fix, MintInstanceName joined
     // destinationName + '~' + a hand-sanitized scope key: the sanitizer only folded WorldSafeName's OWN reserved
     // characters (quote/angle-brackets/pipe/colon/asterisk/question-mark/both-slashes), never '~' itself, so a
@@ -243,7 +228,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.True(condition: firstAgain.IsNewGeneration);
         Assert.NotEqual(expected: first.GenerationId, actual: firstAgain.GenerationId);
     }
-
     // P0 — CROSS-ARM NAME COLLISION (adversarial review, post-G1). G1 above made the SCOPED branch injective within
     // itself, but the GLOBAL branch used to emit `destinationName` RAW, unwrapped, into the SAME name space the
     // scoped branch's netstring OUTPUT lives in. Destination 'a' + scope key 'user:b' netstring-encodes to
@@ -277,7 +261,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.False(condition: scopedAgain.IsNewGeneration, userMessage: "retiring the crafted global instance must never have touched the scoped pair's independent cache entry");
         Assert.Equal(expected: scoped.GenerationId, actual: scopedAgain.GenerationId);
     }
-
     // G2 — COHORT TOCTOU: TryDeriveScopeKey is the primitive Puck.World.WorldInstanceHost.ApplyTransfer uses at
     // drain time to re-verify a FROZEN resolution's scope key against LIVE membership before applying it (this
     // project never references Puck.World — see this file's own class remarks — so the resolver-level primitive is
@@ -305,7 +288,6 @@ public sealed class WorldSessionResolverLawTests {
 
         Assert.False(condition: (driftedResolved && string.Equals(a: driftedScopeKey, b: frozenScopeKey, comparisonType: StringComparison.Ordinal)), userMessage: "a cohort that no longer proves the frozen destination's membership must not silently re-agree with the frozen scope key");
     }
-
     // G3 — GENERATIONS ACTIVATE BEFORE THEIR INSTANCE EXISTS: AbortGeneration is the primitive
     // Puck.World.WorldInstanceHost.ApplyTransfer calls on every drain-time failure after a resolve that never
     // reaches a running instance (see that method's own remarks) — retiring a generation exactly like
@@ -342,7 +324,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.False(condition: stillReused.IsNewGeneration);
         Assert.Equal(expected: reused.GenerationId, actual: stillReused.GenerationId);
     }
-
     // RETURN MEANS HOME (docs/vision.md): TryAdopt/TryGetActive are the cache-install half of the seam
     // Puck.World.WorldInstanceHost's own origin scan drives — this resolver carries no notion of "running instances"
     // at all (see this file's own class remarks), so what a law here can prove is exactly TryAdopt's OWN documented
@@ -371,7 +352,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.False(condition: resolved.IsNewGeneration);
         Assert.Equal(expected: adopted.GenerationId, actual: resolved.GenerationId);
     }
-
     // The precedence rule stated in TryAdopt's own remarks: the resolver's cache ALWAYS wins once a generation is
     // active — an origin match discovered AFTER a genuine mint must never silently displace it. Refusal/control
     // shape adapted: "refusal" here is TryAdopt reporting the EXISTING (already-minted) generation rather than
@@ -397,7 +377,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: Cohort((1, null)), resolved: out var stillMinted, reason: out var stillMintedReason), userMessage: stillMintedReason);
         Assert.Equal(expected: minted.InstanceName, actual: stillMinted.InstanceName);
     }
-
     // FINDING 3 — RESOLVER IDENTITY KEYED TOO NARROWLY (adversarial review). Before this fix the cache key was bare
     // (destination name, scope key): two UNRELATED documents authoring an identically-spelled destination row (both
     // naming a 'home' global row, say) collided in this ONE process-wide resolver, and cache-first precedence (see
@@ -443,7 +422,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.True(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: documentY, resolved: out var stillActiveY));
         Assert.Equal(expected: fromY.GenerationId, actual: stillActiveY.GenerationId);
     }
-
     // The "return means home" seam's OWN mechanism, proven at the layer this project can reach: TryGetActive gates
     // origin-adoption BEFORE TryAdopt ever runs (WorldInstanceHost.EnqueueCoalescedGroup's own call order) — a
     // referenced document identical to an already-adopted generation's own sees it and reuses; a DIFFERENT
@@ -481,7 +459,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.True(condition: minted.IsNewGeneration);
         Assert.NotEqual(expected: "boot", actual: minted.InstanceName);
     }
-
     // FINDING 3's N:1 REVERSE INDEX: origin adoption can install MORE THAN ONE (destination, scope key, referenced
     // document) key against the SAME already-running instance (two persisted destinations that both happen to
     // resolve to the boot instance's own document, say) — the old one-to-one reverse index could represent only the
@@ -506,7 +483,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.False(condition: resolver.TryGetActive(destinationName: "home-a", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, resolved: out _), userMessage: "retiring an instance adopted by TWO destinations must clear BOTH keys, not just the last one installed");
         Assert.False(condition: resolver.TryGetActive(destinationName: "home-b", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, resolved: out _), userMessage: "retiring an instance adopted by TWO destinations must clear BOTH keys, not just the last one installed");
     }
-
     // CANONICAL IDENTITY, NOT THE VERBATIM LOCATOR (Codex follow-up to adversarial-review finding 3). The resolver
     // itself is I/O-free by construction (this type's own class remarks: "no dependency on the composition root at
     // all") — resolving "dive.world.json" and "Assets/worlds/dive.world.json" to the SAME underlying file is
@@ -537,7 +513,6 @@ public sealed class WorldSessionResolverLawTests {
         Assert.Equal(expected: first.GenerationId, actual: second.GenerationId);
         Assert.Equal(expected: first.InstanceName, actual: second.InstanceName);
     }
-
     // DURABILITY IS PART OF THE IDENTITY (Codex follow-up to adversarial-review finding 3). An ephemeral and a
     // persisted destination row sharing name+scope+document are NOT the same identity: ephemeral's contract is
     // "mint fresh, reap when empty" while persisted's is "retained until an explicit world.instance.stop" — sharing

@@ -41,7 +41,6 @@ public static class AdvancedGamingBrickServiceRegistration {
 
         return services;
     }
-
     /// <summary>Registers the open-source replacement BIOS as the default <see cref="IBios"/>. Registered with
     /// <c>TryAdd</c>, so a real dumped BIOS registered earlier takes precedence.</summary>
     /// <param name="services">The service collection.</param>

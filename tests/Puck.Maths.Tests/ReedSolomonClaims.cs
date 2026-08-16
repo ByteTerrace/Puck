@@ -24,7 +24,6 @@ internal static class ReedSolomonClaims {
     /// <summary>The root runs the sweep starts at — zero is the convention the QR standard uses and one is the other
     /// common choice, and an off-by-one between them is exactly what the root law is built to see.</summary>
     private static readonly int[] FirstRootExponents = [0, 1];
-
     /// <summary>ISO/IEC 18004 Annex I's worked example: the sixteen data codewords of the numeric-mode string
     /// <c>01234567</c> at version 1, error-correction level M.</summary>
     private static readonly byte[] PublishedMessage = [0x10, 0x20, 0x0C, 0x56, 0x61, 0x80, 0xEC, 0x11, 0xEC, 0x11, 0xEC, 0x11, 0xEC, 0x11, 0xEC, 0x11];
@@ -41,12 +40,11 @@ internal static class ReedSolomonClaims {
         var message = new byte[length];
 
         for (var index = 0; (index < length); ++index) {
-            message[index] = ((byte)(((index * 61) + (salt * 29) + 7) & mask));
+            message[index] = ((byte)((((index * 61) + (salt * 29)) + 7) & mask));
         }
 
         return message;
     }
-
     /// <summary>Widens a span of byte-carried field elements into the oracle's arbitrary-width coefficients.</summary>
     /// <param name="values">The elements.</param>
     /// <returns>The same elements as <see cref="BigInteger"/> coefficients.</returns>
@@ -76,7 +74,7 @@ internal static class ReedSolomonClaims {
                 foreach (var count in CheckCounts) {
                     var generator = new byte[(count + 1)];
 
-                    ReedSolomon.BuildGenerator(field: field, rootBase: rootBase, firstRootExponent: first, generator: generator);
+                    ReedSolomon.BuildGenerator(field: field, firstRootExponent: first, generator: generator, rootBase: rootBase);
 
                     if (1 != generator[0]) {
                         return $"generator of degree {count} at degree {degree}/tail 0x{tail:X2} is not monic; its leading coefficient is 0x{generator[0]:X2}";
@@ -86,8 +84,8 @@ internal static class ReedSolomonClaims {
                     var roots = new HashSet<BigInteger>();
 
                     for (var index = 0; (index < count); ++index) {
-                        var root = Oracles.BinaryFieldRepeatedProduct(value: rootBase, exponent: (first + index), degree: degree, reductionTail: tail);
-                        var value = Oracles.BinaryFieldPolynomialValue(coefficients: coefficients, point: root, degree: degree, reductionTail: tail);
+                        var root = Oracles.BinaryFieldRepeatedProduct(degree: degree, exponent: (first + index), reductionTail: tail, value: rootBase);
+                        var value = Oracles.BinaryFieldPolynomialValue(coefficients: coefficients, degree: degree, point: root, reductionTail: tail);
 
                         _ = roots.Add(item: root);
 
@@ -103,10 +101,10 @@ internal static class ReedSolomonClaims {
                     // is the assertion an off-by-one root run fails. Where the field is small enough that the power has
                     // already appeared as a root, the generator legitimately vanishes and the check is skipped rather
                     // than turned into a false counterexample.
-                    var beyond = Oracles.BinaryFieldRepeatedProduct(value: rootBase, exponent: (first + count), degree: degree, reductionTail: tail);
+                    var beyond = Oracles.BinaryFieldRepeatedProduct(degree: degree, exponent: (first + count), reductionTail: tail, value: rootBase);
 
                     if (!roots.Contains(item: beyond)) {
-                        var beyondValue = Oracles.BinaryFieldPolynomialValue(coefficients: coefficients, point: beyond, degree: degree, reductionTail: tail);
+                        var beyondValue = Oracles.BinaryFieldPolynomialValue(coefficients: coefficients, degree: degree, point: beyond, reductionTail: tail);
 
                         if (beyondValue.IsZero) {
                             return string.Create(
@@ -121,7 +119,6 @@ internal static class ReedSolomonClaims {
 
         return null;
     }
-
     /// <summary>Proves <see cref="ReedSolomon.ComputeCheckSymbols{T}(BinaryField{T}, ReadOnlySpan{T}, ReadOnlySpan{T}, Span{T})"/>
     /// reproduces the ten error-correction codewords ISO/IEC 18004 Annex I publishes for its worked example, over the
     /// field and root convention that standard specifies. The constant is authored outside this tree and outside this
@@ -134,8 +131,8 @@ internal static class ReedSolomonClaims {
         var generator = new byte[(PublishedCheckSymbols.Length + 1)];
         var produced = new byte[PublishedCheckSymbols.Length];
 
-        ReedSolomon.BuildGenerator(field: field, rootBase: ((byte)2), firstRootExponent: 0, generator: generator);
-        ReedSolomon.ComputeCheckSymbols(field: field, generator: generator, message: PublishedMessage, checkSymbols: produced);
+        ReedSolomon.BuildGenerator(field: field, firstRootExponent: 0, generator: generator, rootBase: ((byte)2));
+        ReedSolomon.ComputeCheckSymbols(checkSymbols: produced, field: field, generator: generator, message: PublishedMessage);
 
         for (var index = 0; (index < PublishedCheckSymbols.Length); ++index) {
             if (produced[index] != PublishedCheckSymbols[index]) {
@@ -149,8 +146,8 @@ internal static class ReedSolomonClaims {
         var neighbourGenerator = new byte[(PublishedCheckSymbols.Length + 1)];
         var neighbourProduced = new byte[PublishedCheckSymbols.Length];
 
-        ReedSolomon.BuildGenerator(field: neighbour, rootBase: ((byte)2), firstRootExponent: 0, generator: neighbourGenerator);
-        ReedSolomon.ComputeCheckSymbols(field: neighbour, generator: neighbourGenerator, message: PublishedMessage, checkSymbols: neighbourProduced);
+        ReedSolomon.BuildGenerator(field: neighbour, firstRootExponent: 0, generator: neighbourGenerator, rootBase: ((byte)2));
+        ReedSolomon.ComputeCheckSymbols(checkSymbols: neighbourProduced, field: neighbour, generator: neighbourGenerator, message: PublishedMessage);
 
         if (neighbourProduced.AsSpan().SequenceEqual(other: PublishedCheckSymbols)) {
             return "the degree-8 modulus 0x11B reproduces the remainder ISO/IEC 18004 publishes for 0x11D, so this claim cannot be reading the modulus at all";
@@ -158,7 +155,6 @@ internal static class ReedSolomonClaims {
 
         return null;
     }
-
     /// <summary>Proves the systematic codeword a message and its check symbols form is divisible by the generator —
     /// every syndrome vanishes — that the remainder occupies exactly the generator's degree, and that
     /// <see cref="ReedSolomon.ComputeSyndromes{T}(BinaryField{T}, T, int, ReadOnlySpan{T}, Span{T})"/> agrees with the
@@ -175,13 +171,13 @@ internal static class ReedSolomonClaims {
                 foreach (var count in CheckCounts) {
                     var generator = new byte[(count + 1)];
 
-                    ReedSolomon.BuildGenerator(field: field, rootBase: rootBase, firstRootExponent: first, generator: generator);
+                    ReedSolomon.BuildGenerator(field: field, firstRootExponent: first, generator: generator, rootBase: rootBase);
 
                     foreach (var length in MessageLengths) {
-                        var message = Message(length: length, salt: (count + first), degree: degree);
+                        var message = Message(degree: degree, length: length, salt: (count + first));
                         var check = new byte[count];
 
-                        ReedSolomon.ComputeCheckSymbols(field: field, generator: generator, message: message, checkSymbols: check);
+                        ReedSolomon.ComputeCheckSymbols(checkSymbols: check, field: field, generator: generator, message: message);
 
                         var codeword = new byte[(length + count)];
 
@@ -191,11 +187,11 @@ internal static class ReedSolomonClaims {
                         var coefficients = Widen(values: codeword);
                         var syndromes = new byte[count];
 
-                        ReedSolomon.ComputeSyndromes(field: field, rootBase: rootBase, firstRootExponent: first, codeword: codeword, syndromes: syndromes);
+                        ReedSolomon.ComputeSyndromes(codeword: codeword, field: field, firstRootExponent: first, rootBase: rootBase, syndromes: syndromes);
 
                         for (var index = 0; (index < count); ++index) {
-                            var root = Oracles.BinaryFieldRepeatedProduct(value: rootBase, exponent: (first + index), degree: degree, reductionTail: tail);
-                            var expected = Oracles.BinaryFieldPolynomialValue(coefficients: coefficients, point: root, degree: degree, reductionTail: tail);
+                            var root = Oracles.BinaryFieldRepeatedProduct(degree: degree, exponent: (first + index), reductionTail: tail, value: rootBase);
+                            var expected = Oracles.BinaryFieldPolynomialValue(coefficients: coefficients, degree: degree, point: root, reductionTail: tail);
 
                             if (!expected.IsZero) {
                                 return string.Create(
@@ -221,11 +217,11 @@ internal static class ReedSolomonClaims {
                         var damagedSyndromes = new byte[count];
                         var disturbed = false;
 
-                        ReedSolomon.ComputeSyndromes(field: field, rootBase: rootBase, firstRootExponent: first, codeword: damaged, syndromes: damagedSyndromes);
+                        ReedSolomon.ComputeSyndromes(codeword: damaged, field: field, firstRootExponent: first, rootBase: rootBase, syndromes: damagedSyndromes);
 
                         for (var index = 0; (index < count); ++index) {
-                            var root = Oracles.BinaryFieldRepeatedProduct(value: rootBase, exponent: (first + index), degree: degree, reductionTail: tail);
-                            var expected = Oracles.BinaryFieldPolynomialValue(coefficients: damagedCoefficients, point: root, degree: degree, reductionTail: tail);
+                            var root = Oracles.BinaryFieldRepeatedProduct(degree: degree, exponent: (first + index), reductionTail: tail, value: rootBase);
+                            var expected = Oracles.BinaryFieldPolynomialValue(coefficients: damagedCoefficients, degree: degree, point: root, reductionTail: tail);
 
                             if (expected != damagedSyndromes[index]) {
                                 return $"ComputeSyndromes gave 0x{damagedSyndromes[index]:X2} at root index {index} for a corrupted codeword; the definition-form evaluation gives {expected}";
@@ -247,7 +243,6 @@ internal static class ReedSolomonClaims {
 
         return null;
     }
-
     /// <summary>Proves the surface's refusals and its two carrier-width statements: every argument the three members
     /// reject is rejected by the documented exception type AND parameter name, a default-initialized descriptor refuses
     /// all three rather than answering, and the whole surface runs at the sixteen-bit carrier as well as the byte one —
@@ -257,19 +252,19 @@ internal static class ReedSolomonClaims {
         var field = BinaryField<byte>.Create(degree: 8, reductionTail: 0x1D);
         var generator = new byte[11];
 
-        ReedSolomon.BuildGenerator(field: field, rootBase: ((byte)2), firstRootExponent: 0, generator: generator);
+        ReedSolomon.BuildGenerator(field: field, firstRootExponent: 0, generator: generator, rootBase: ((byte)2));
 
-        var refusal = (Refuses(action: () => ReedSolomon.BuildGenerator(field: field, rootBase: ((byte)2), firstRootExponent: 0, generator: new byte[1]), type: typeof(ArgumentOutOfRangeException), parameterName: "generator", what: "BuildGenerator with a one-coefficient generator") ??
-                       Refuses(action: () => ReedSolomon.BuildGenerator(field: field, rootBase: ((byte)2), firstRootExponent: 0, generator: []), type: typeof(ArgumentOutOfRangeException), parameterName: "generator", what: "BuildGenerator with an empty generator") ??
-                       Refuses(action: () => ReedSolomon.BuildGenerator(field: field, rootBase: ((byte)2), firstRootExponent: -1, generator: new byte[3]), type: typeof(ArgumentOutOfRangeException), parameterName: "firstRootExponent", what: "BuildGenerator with a negative first root exponent") ??
-                       Refuses(action: () => ReedSolomon.ComputeCheckSymbols(field: field, generator: new byte[1], message: [], checkSymbols: []), type: typeof(ArgumentOutOfRangeException), parameterName: "generator", what: "ComputeCheckSymbols with a one-coefficient generator") ??
-                       Refuses(action: () => ReedSolomon.ComputeCheckSymbols(field: field, generator: generator, message: [], checkSymbols: new byte[9]), type: typeof(ArgumentOutOfRangeException), parameterName: "checkSymbols", what: "ComputeCheckSymbols with a check span shorter than the generator's degree") ??
-                       Refuses(action: () => ReedSolomon.ComputeCheckSymbols(field: field, generator: new byte[] { 2, 1, 1 }, message: [], checkSymbols: new byte[2]), type: typeof(ArgumentException), parameterName: "generator", what: "ComputeCheckSymbols with a non-monic generator") ??
-                       Refuses(action: () => ReedSolomon.ComputeSyndromes(field: field, rootBase: ((byte)2), firstRootExponent: -1, codeword: [], syndromes: new byte[1]), type: typeof(ArgumentOutOfRangeException), parameterName: "firstRootExponent", what: "ComputeSyndromes with a negative first root exponent") ??
-                       Refuses(action: () => ReedSolomon.BuildGenerator(field: default, rootBase: ((byte)2), firstRootExponent: 0, generator: new byte[3]), type: typeof(InvalidOperationException), parameterName: null, what: "BuildGenerator on a default-initialized field") ??
-                       Refuses(action: () => ReedSolomon.ComputeCheckSymbols(field: default, generator: generator, message: [], checkSymbols: new byte[10]), type: typeof(InvalidOperationException), parameterName: null, what: "ComputeCheckSymbols on a default-initialized field") ??
-                       Refuses(action: () => ReedSolomon.ComputeSyndromes(field: default, rootBase: ((byte)2), firstRootExponent: 0, codeword: [], syndromes: new byte[2]), type: typeof(InvalidOperationException), parameterName: null, what: "ComputeSyndromes on a default-initialized field") ??
-                       Refuses(action: () => ReedSolomon.ComputeSyndromes(field: default, rootBase: ((byte)2), firstRootExponent: 0, codeword: [], syndromes: []), type: typeof(InvalidOperationException), parameterName: null, what: "ComputeSyndromes on a default-initialized field with no syndromes requested"));
+        var refusal = (Refuses(action: () => ReedSolomon.BuildGenerator(field: field, firstRootExponent: 0, generator: new byte[1], rootBase: ((byte)2)), type: typeof(ArgumentOutOfRangeException), parameterName: "generator", what: "BuildGenerator with a one-coefficient generator") ??
+                       (Refuses(action: () => ReedSolomon.BuildGenerator(field: field, firstRootExponent: 0, generator: [], rootBase: ((byte)2)), type: typeof(ArgumentOutOfRangeException), parameterName: "generator", what: "BuildGenerator with an empty generator") ??
+                       (Refuses(action: () => ReedSolomon.BuildGenerator(field: field, firstRootExponent: -1, generator: new byte[3], rootBase: ((byte)2)), type: typeof(ArgumentOutOfRangeException), parameterName: "firstRootExponent", what: "BuildGenerator with a negative first root exponent") ??
+                       (Refuses(action: () => ReedSolomon.ComputeCheckSymbols(checkSymbols: [], field: field, generator: new byte[1], message: []), type: typeof(ArgumentOutOfRangeException), parameterName: "generator", what: "ComputeCheckSymbols with a one-coefficient generator") ??
+                       (Refuses(action: () => ReedSolomon.ComputeCheckSymbols(checkSymbols: new byte[9], field: field, generator: generator, message: []), type: typeof(ArgumentOutOfRangeException), parameterName: "checkSymbols", what: "ComputeCheckSymbols with a check span shorter than the generator's degree") ??
+                       (Refuses(action: () => ReedSolomon.ComputeCheckSymbols(checkSymbols: new byte[2], field: field, generator: new byte[] { 2, 1, 1 }, message: []), type: typeof(ArgumentException), parameterName: "generator", what: "ComputeCheckSymbols with a non-monic generator") ??
+                       (Refuses(action: () => ReedSolomon.ComputeSyndromes(codeword: [], field: field, firstRootExponent: -1, rootBase: ((byte)2), syndromes: new byte[1]), type: typeof(ArgumentOutOfRangeException), parameterName: "firstRootExponent", what: "ComputeSyndromes with a negative first root exponent") ??
+                       (Refuses(action: () => ReedSolomon.BuildGenerator(field: default, firstRootExponent: 0, generator: new byte[3], rootBase: ((byte)2)), type: typeof(InvalidOperationException), parameterName: null, what: "BuildGenerator on a default-initialized field") ??
+                       (Refuses(action: () => ReedSolomon.ComputeCheckSymbols(checkSymbols: new byte[10], field: default, generator: generator, message: []), type: typeof(InvalidOperationException), parameterName: null, what: "ComputeCheckSymbols on a default-initialized field") ??
+                       (Refuses(action: () => ReedSolomon.ComputeSyndromes(codeword: [], field: default, firstRootExponent: 0, rootBase: ((byte)2), syndromes: new byte[2]), type: typeof(InvalidOperationException), parameterName: null, what: "ComputeSyndromes on a default-initialized field") ??
+                       Refuses(action: () => ReedSolomon.ComputeSyndromes(codeword: [], field: default, firstRootExponent: 0, rootBase: ((byte)2), syndromes: []), type: typeof(InvalidOperationException), parameterName: null, what: "ComputeSyndromes on a default-initialized field with no syndromes requested")))))))))));
 
         if (refusal is not null) { return refusal; }
 
@@ -277,7 +272,7 @@ internal static class ReedSolomonClaims {
         var untouched = new byte[10];
 
         Array.Fill(array: untouched, value: ((byte)0xAB));
-        ReedSolomon.ComputeCheckSymbols(field: field, generator: generator, message: [], checkSymbols: untouched);
+        ReedSolomon.ComputeCheckSymbols(checkSymbols: untouched, field: field, generator: generator, message: []);
 
         foreach (var symbol in untouched) {
             if (0 != symbol) { return $"the check symbols of an empty message are not all zero; one is 0x{symbol:X2}"; }
@@ -296,8 +291,8 @@ internal static class ReedSolomonClaims {
             wideMessage[index] = ((ushort)((index * 4093) + 11));
         }
 
-        ReedSolomon.BuildGenerator(field: wideField, rootBase: ((ushort)2), firstRootExponent: 0, generator: wideGenerator);
-        ReedSolomon.ComputeCheckSymbols(field: wideField, generator: wideGenerator, message: wideMessage, checkSymbols: wideCheck);
+        ReedSolomon.BuildGenerator(field: wideField, firstRootExponent: 0, generator: wideGenerator, rootBase: ((ushort)2));
+        ReedSolomon.ComputeCheckSymbols(checkSymbols: wideCheck, field: wideField, generator: wideGenerator, message: wideMessage);
 
         var wideCodeword = new ushort[(wideMessage.Length + wideCheck.Length)];
 
@@ -312,11 +307,11 @@ internal static class ReedSolomonClaims {
 
         var wideSyndromes = new ushort[wideCheck.Length];
 
-        ReedSolomon.ComputeSyndromes(field: wideField, rootBase: ((ushort)2), firstRootExponent: 0, codeword: wideCodeword, syndromes: wideSyndromes);
+        ReedSolomon.ComputeSyndromes(codeword: wideCodeword, field: wideField, firstRootExponent: 0, rootBase: ((ushort)2), syndromes: wideSyndromes);
 
         for (var index = 0; (index < wideCheck.Length); ++index) {
-            var root = Oracles.BinaryFieldRepeatedProduct(value: 2, exponent: index, degree: WideDegree, reductionTail: WideTail);
-            var expected = Oracles.BinaryFieldPolynomialValue(coefficients: wideCoefficients, point: root, degree: WideDegree, reductionTail: WideTail);
+            var root = Oracles.BinaryFieldRepeatedProduct(degree: WideDegree, exponent: index, reductionTail: WideTail, value: 2);
+            var expected = Oracles.BinaryFieldPolynomialValue(coefficients: wideCoefficients, degree: WideDegree, point: root, reductionTail: WideTail);
 
             if (!expected.IsZero) {
                 return string.Create(
@@ -342,15 +337,13 @@ internal static class ReedSolomonClaims {
     private static string? Refuses(Action action, Type type, string? parameterName, string what) {
         try {
             action();
-        }
-        catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
+        } catch (Exception thrown) when (type.IsInstanceOfType(o: thrown)) {
             if (parameterName is null) { return null; }
 
-            return ((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
+            return (((thrown is ArgumentException argument) && (argument.ParamName == parameterName))
                 ? null
-                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'";
-        }
-        catch (Exception thrown) {
+                : $"{what} threw {thrown.GetType().Name} naming '{(thrown as ArgumentException)?.ParamName}' rather than '{parameterName}'");
+        } catch (Exception thrown) {
             return $"{what} threw {thrown.GetType().Name} rather than {type.Name}";
         }
 

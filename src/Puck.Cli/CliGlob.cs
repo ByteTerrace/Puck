@@ -12,7 +12,7 @@ internal sealed class CliGlob {
     public bool BasenameOnly { get; }
 
     public CliGlob(string glob) {
-        var normalized = glob.Replace(oldChar: '\\', newChar: '/');
+        var normalized = glob.Replace(newChar: '/', oldChar: '\\');
 
         BasenameOnly = !normalized.Contains(value: '/');
         m_regex = new Regex(pattern: GlobToRegex(glob: normalized), options: ResharpOptions.HighThroughputDefaults);

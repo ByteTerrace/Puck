@@ -101,7 +101,8 @@ public static class UnsignedNumberFunctions {
 
         return ((value <= T.CreateTruncating(value: ulong.MaxValue))
             ? WordFactors(value: value)
-            : WideFactors(value: value));
+            : WideFactors(value: value)
+        );
     }
 
     /// <summary>Factors a value that fits a machine word through the shared word-sized kernel.</summary>
@@ -126,6 +127,7 @@ public static class UnsignedNumberFunctions {
             yield return T.CreateChecked(value: factor);
         }
     }
+
     /// <summary>Computes the Jacobi symbol of <paramref name="value"/> over an odd <paramref name="modulus"/>.</summary>
     /// <typeparam name="T">The unsigned binary integer type.</typeparam>
     /// <param name="value">The upper argument. Every value is legal — it is reduced modulo <paramref name="modulus"/> before the descent begins.</param>
@@ -160,7 +162,10 @@ public static class UnsignedNumberFunctions {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is even, zero included; the symbol is defined only over an odd modulus.</exception>
     public static int JacobiSymbol<T>(this T value, T modulus) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         if (!T.IsOddInteger(value: modulus)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(modulus), message: "The Jacobi symbol requires an odd modulus.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(modulus),
+                message: "The Jacobi symbol requires an odd modulus."
+            );
         }
 
         var lower = modulus;
@@ -184,7 +189,8 @@ public static class UnsignedNumberFunctions {
         // A descent that ends anywhere but one found a shared factor, and the symbol is zero however the parity landed.
         return ((T.One == lower)
             ? (1 - (int.CreateTruncating(value: parity) << 1))
-            : 0);
+            : 0
+        );
     }
     /// <summary>Computes the multiplicative inverse of an odd <paramref name="value"/> modulo <c>2^w</c>, where <c>w</c> is the bit width of <typeparamref name="T"/>.</summary>
     /// <typeparam name="T">The unsigned binary integer type.</typeparam>
@@ -332,9 +338,9 @@ public static class UnsignedNumberFunctions {
             ) {
 #pragma warning disable SYSLIB5004
                 var (quotient, _) = X86Base.X64.DivRem(
+                    divisor: seed,
                     lower: ((ulong)value),
-                    upper: high,
-                    divisor: seed
+                    upper: high
                 );
 #pragma warning restore SYSLIB5004
 

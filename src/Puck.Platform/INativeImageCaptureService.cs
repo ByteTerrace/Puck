@@ -25,7 +25,6 @@ public interface INativeImageCaptureService {
         [NotNullWhen(true)] out INativeImageCaptureFeed? feed,
         long? adapterLuid = null
     );
-
     /// <summary>Opens whole-monitor capture for the monitor at <paramref name="monitorIndex"/>.</summary>
     /// <param name="monitorIndex">The 0-based monitor index, where 0 is the primary monitor and the rest follow in enumeration order.</param>
     /// <param name="width">The fixed output width in pixels.</param>

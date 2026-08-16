@@ -12,20 +12,16 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <!-- PngEncoder for the capture readback. -->
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
-        <!-- PngEncoder for the capture readback. -->
-        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <!-- The pre-baked MTSDF glyph assets OverlayGlyphAtlasSet loads (the mono voice + the ONE combined image it is
-             a view of) — copied from the tools/font-atlas bake output so a ProjectReference consumer (Puck.World)
-             receives them in its own output directory with zero fonts of its own. Rebake via tools/font-atlas. -->
-        <Content Include="Assets\Fonts\**\*.png" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="Assets\Fonts\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Puck.Text owns and propagates the shared pre-baked MTSDF image and layout JSON. -->
         <!-- The prepacked overlay glyph artifact (OverlayGlyphSdfPack) — committed so every consumer's FIRST run
              takes the ~19 ms warm path instead of the ~2 s full-atlas decode. Keyed to the PNG+JSON hashes: a rebake
              invalidates it and the next run rebuilds+rewrites it in place (commit the refreshed file with the bake). -->

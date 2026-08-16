@@ -36,9 +36,11 @@ public interface ICartridge : ISnapshotable {
     /// <summary>Marks the external RAM clean — the host acknowledges a completed flush of the bytes a preceding
     /// <see cref="ExportExternalRam"/> returned.</summary>
     void MarkExternalRamClean();
+
     /// <summary>Gets the byte length of this cartridge's persistent-clock footer in a battery save (the bytes a save
     /// file appends after the external RAM), or zero for a cartridge without battery-backed timed hardware.</summary>
     int PersistentClockByteCount { get; }
+
     /// <summary>Exports the persistent-clock footer (<see cref="PersistentClockByteCount"/> bytes; empty when zero).
     /// The cartridge owns the FORMAT; the host owns wall time — <paramref name="unixTimestampSeconds"/> is stamped
     /// into the footer purely for FOREIGN-emulator interop (tools that fast-forward a real-time clock by elapsed
@@ -52,7 +54,6 @@ public interface ICartridge : ISnapshotable {
     /// shorter than <see cref="PersistentClockByteCount"/> is ignored whole.</summary>
     /// <param name="source">The persisted clock footer.</param>
     void ImportPersistentClock(ReadOnlySpan<byte> source);
-
     /// <summary>Reads a byte from the ROM region, honoring the current bank selection.</summary>
     /// <param name="address">An address in <c>[0x0000, 0x7FFF]</c>.</param>
     /// <returns>The ROM byte.</returns>
@@ -75,6 +76,7 @@ public interface ICartridge : ISnapshotable {
     /// <see cref="ComputeRomWindows"/> has resolved the current bank offsets, bypassing <see cref="ReadRom"/> and the
     /// slot indirection on the hot fetch path.</summary>
     byte[] RomImage { get; }
+
     /// <summary>Computes the ROM byte offsets the fixed (<c>0x0000</c>) and switchable (<c>0x4000</c>) windows
     /// currently resolve to, honoring the same bank-wrap semantics as <see cref="ReadRom"/>. The bus calls this after
     /// any <see cref="WriteControl"/> that can move a bank, and after every point the machine already re-derives
@@ -85,9 +87,11 @@ public interface ICartridge : ISnapshotable {
     /// <param name="bankNOffset">The absolute offset into <see cref="RomImage"/> the switchable
     /// <c>0x4000</c>-<c>0x7FFF</c> window currently reads from.</param>
     void ComputeRomWindows(out int bank0Offset, out int bankNOffset);
+
     /// <summary>Gets the live external (save) RAM array bank offsets resolve against — the SAME array
     /// <see cref="ReadRam"/>/<see cref="WriteRam"/> mutate, not a copy.</summary>
     byte[] RamImage { get; }
+
     /// <summary>Attempts to compute the currently-banked external RAM window as a pure array offset, for a mapper whose
     /// <c>0xA000</c>-<c>0xBFFF</c> window is unconditional array access with no side effects and no mode routing.
     /// Mappers with a side-effectful or mode-selected window (an RTC register, an EEPROM/accelerometer protocol, an IR
@@ -104,6 +108,7 @@ public interface ICartridge : ISnapshotable {
     /// <summary>Marks the external RAM dirty without an address-decoded write — the counterpart a cached-window write
     /// calls, since it bypasses <see cref="WriteRam"/>'s own dirty-flag set.</summary>
     void MarkExternalRamDirty();
+
     /// <summary>Gets the cartridge's current rumble motor level, 0..1 — host-facing feedback state a queued host
     /// samples each step and forwards to controller haptics. Zero on every mapper except a rumble-variant MBC5
     /// (<see cref="CartridgeHeader.HasRumble"/>), whose latched motor bit this hardware only supports on/off (never a

@@ -40,7 +40,6 @@ internal static partial class Diagnostics {
 
         return false;
     }
-
     // Reads the value following a named flag (e.g. "--frames 600" -> "600"), or null when the flag is absent — the
     // same lookup Program.cs uses for its own knobs, duplicated here since local functions don't cross class scopes.
     private static bool TryLoad(string romPath, string name, out AgbMachineInstance instance) {

@@ -340,7 +340,7 @@ evaluator — are not. Syndromes are the honest boundary: they answer "is this
 codeword intact" on their own, which is the half a consumer needs before it needs
 a decoder, and a decoder is a separate arc rather than an omission.
 
-**A consumer names its own field.** `QrReedSolomon` in `Puck.World.Data`
+**A consumer names its own field.** `QrReedSolomon` in `Puck.World.Schema`
 constructs `GF(256)` under `0x11D` at its point of use, because that modulus is
 ISO/IEC 18004's choice rather than a canonical minimum-weight one, and
 `BinaryFields` catalogs one canonical field per accelerated width rather than one

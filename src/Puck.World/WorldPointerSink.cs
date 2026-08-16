@@ -15,7 +15,6 @@ internal interface IWorldPointerConsumer {
     /// <param name="slot">The 0-based seat slot the pointer currently rides.</param>
     void OnPointer(int slot);
 }
-
 /// <summary>Marks an <see cref="IWorldPointerConsumer"/> that reads <see cref="WorldPointer.TakeWheel"/>, so
 /// <see cref="WorldPointerSink"/> knows a real reader exists and must not drain-and-discard the wheel accumulator on
 /// its behalf. <see cref="WorldWheelFeed"/> is the one implementation — the radial action menu's ring cycling is
@@ -23,7 +22,6 @@ internal interface IWorldPointerConsumer {
 /// structural.</summary>
 internal interface IWorldWheelConsumer : IWorldPointerConsumer {
 }
-
 /// <summary>
 /// The one <see cref="IWindowInputObserver"/> the pointer has. It writes every raw pointer event into
 /// <see cref="WorldPointer"/> and then drives each registered <see cref="IWorldPointerConsumer"/>, so the whole
@@ -71,7 +69,10 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
         m_pointer = pointer;
         m_roster = roster;
         m_consumers = consumers.ToArray();
-        m_hasWheelConsumer = Array.Exists(array: m_consumers, match: static consumer => (consumer is IWorldWheelConsumer));
+        m_hasWheelConsumer = Array.Exists(
+            array: m_consumers,
+            match: static consumer => (consumer is IWorldWheelConsumer)
+        );
         pointer.SetWheelConsumerRegistered(registered: m_hasWheelConsumer);
 
         roster.DeviceSlotChanging += OnDeviceSlotChanging;
@@ -92,20 +93,33 @@ internal sealed class WorldPointerSink : IWindowInputObserver {
 
         switch (inputEvent.Kind) {
             case WindowInputKind.PointerMove:
-                m_pointer.AddMotion(slot: slot, delta: inputEvent.Vector);
+                m_pointer.AddMotion(
+                    slot: slot,
+                    delta: inputEvent.Vector
+                );
 
                 break;
             case WindowInputKind.PointerPosition:
-                m_pointer.SetPosition(slot: slot, position: inputEvent.Vector);
+                m_pointer.SetPosition(
+                    slot: slot,
+                    position: inputEvent.Vector
+                );
 
                 break;
             case WindowInputKind.PointerButton:
-                m_pointer.SetButton(slot: slot, button: inputEvent.ButtonIndex, down: (inputEvent.Phase == CommandPhase.Started));
+                m_pointer.SetButton(
+                    slot: slot,
+                    button: inputEvent.ButtonIndex,
+                    down: (inputEvent.Phase == CommandPhase.Started)
+                );
 
                 break;
             case WindowInputKind.PointerWheel:
                 // Vector.Y carries the rotation in notches, positive away from the user.
-                m_pointer.AddWheel(slot: slot, notches: inputEvent.Vector.Y);
+                m_pointer.AddWheel(
+                    slot: slot,
+                    notches: inputEvent.Vector.Y
+                );
 
                 if (!m_hasWheelConsumer) {
                     // A composition without a wheel consumer (none exists in the shipped one — WorldWheelFeed is

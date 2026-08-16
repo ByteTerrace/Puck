@@ -78,7 +78,10 @@ internal readonly struct ScaledResidueRing64 {
     /// <remarks>One REDC against the ordinary one strips exactly one factor of the radix, which is the whole conversion.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ulong Decode(ulong value) =>
-        Multiply(left: value, right: 1UL);
+        Multiply(
+            left: value,
+            right: 1UL
+        );
     /// <summary>Converts an ordinary residue into Montgomery form.</summary>
     /// <param name="value">The residue to convert.</param>
     /// <returns>The reduced Montgomery form of <paramref name="value"/>.</returns>
@@ -89,7 +92,10 @@ internal readonly struct ScaledResidueRing64 {
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ulong Encode(ulong value) =>
-        Multiply(left: value, right: RadixSquared);
+        Multiply(
+            left: value,
+            right: RadixSquared
+        );
     /// <summary>Halves a ring element.</summary>
     /// <param name="value">The reduced element to halve, in Montgomery form.</param>
     /// <returns>The reduced product of <paramref name="value"/> and the inverse of two.</returns>
@@ -144,11 +150,21 @@ internal readonly struct ScaledResidueRing64 {
         var result = One;
 
         while (0UL != exponent) {
-            if (0UL != (exponent & 1UL)) { result = Multiply(left: result, right: power); }
+            if (0UL != (exponent & 1UL)) {
+                result = Multiply(
+                    left: result,
+                    right: power
+                );
+            }
 
             exponent >>>= 1;
 
-            if (0UL != exponent) { power = Multiply(left: power, right: power); }
+            if (0UL != exponent) {
+                power = Multiply(
+                    left: power,
+                    right: power
+                );
+            }
         }
 
         return result;

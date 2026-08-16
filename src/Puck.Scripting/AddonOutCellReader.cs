@@ -8,6 +8,38 @@ namespace Puck.Scripting;
 /// is the Simulation adapter's sealed writer, not this core's concern; every other field decodes unconditionally.
 /// A malformed cell refuses the whole batch.</summary>
 public static class AddonOutCellReader {
+    private static bool TryDecodeCell(ReadOnlySpan<byte> cell, int channelCount, out AddonOutCell decoded, out string error) {
+        decoded = default;
+        error = "";
+
+        var kindByte = cell[AddonAbi.OutCellOffsets.Kind];
+        var kind = ((AddonOutCellKind)kindByte);
+
+        if (!Enum.IsDefined(value: kind)) {
+            error = $"kind {kindByte} is not defined";
+            return false;
+        }
+
+        var channel = cell[AddonAbi.OutCellOffsets.Channel];
+
+        if (channel >= channelCount) {
+            error = $"channel {channel} out of range [0, {channelCount})";
+            return false;
+        }
+
+        decoded = new AddonOutCell(
+            A: BinaryPrimitives.ReadInt64LittleEndian(source: cell[AddonAbi.OutCellOffsets.A..]),
+            B: BinaryPrimitives.ReadInt64LittleEndian(source: cell[AddonAbi.OutCellOffsets.B..]),
+            C: BinaryPrimitives.ReadInt64LittleEndian(source: cell[AddonAbi.OutCellOffsets.C..]),
+            Channel: channel,
+            HandleGeneration: BinaryPrimitives.ReadUInt16LittleEndian(source: cell[AddonAbi.OutCellOffsets.HandleGeneration..]),
+            HandleIndex: BinaryPrimitives.ReadUInt16LittleEndian(source: cell[AddonAbi.OutCellOffsets.HandleIndex..]),
+            Kind: kind,
+            Verb: BinaryPrimitives.ReadUInt16LittleEndian(source: cell[AddonAbi.OutCellOffsets.Verb..])
+        );
+        return true;
+    }
+
     /// <summary>Validates and decodes <paramref name="count"/> output cells from <paramref name="source"/>.</summary>
     /// <param name="source">The packed cell bytes (at least <paramref name="count"/> × <see cref="AddonAbi.OutCellBytes"/> bytes).</param>
     /// <param name="count">The number of cells the guest returned.</param>
@@ -35,13 +67,13 @@ public static class AddonOutCellReader {
 
         for (var index = 0; (index < count); ++index) {
             var cell = source.Slice(
-                start: (index * AddonAbi.OutCellBytes),
-                length: AddonAbi.OutCellBytes
+                length: AddonAbi.OutCellBytes,
+                start: (index * AddonAbi.OutCellBytes)
             );
 
             if (!TryDecodeCell(
-                channelCount: channelCount,
                 cell: cell,
+                channelCount: channelCount,
                 decoded: out var decoded,
                 error: out var cellError
             )) {
@@ -53,38 +85,6 @@ public static class AddonOutCellReader {
             destination[index] = decoded;
         }
 
-        return true;
-    }
-
-    private static bool TryDecodeCell(ReadOnlySpan<byte> cell, int channelCount, out AddonOutCell decoded, out string error) {
-        decoded = default;
-        error = "";
-
-        var kindByte = cell[AddonAbi.OutCellOffsets.Kind];
-        var kind = (AddonOutCellKind)kindByte;
-
-        if (!Enum.IsDefined(value: kind)) {
-            error = $"kind {kindByte} is not defined";
-            return false;
-        }
-
-        var channel = cell[AddonAbi.OutCellOffsets.Channel];
-
-        if (channel >= channelCount) {
-            error = $"channel {channel} out of range [0, {channelCount})";
-            return false;
-        }
-
-        decoded = new AddonOutCell(
-            A: BinaryPrimitives.ReadInt64LittleEndian(source: cell[AddonAbi.OutCellOffsets.A..]),
-            B: BinaryPrimitives.ReadInt64LittleEndian(source: cell[AddonAbi.OutCellOffsets.B..]),
-            C: BinaryPrimitives.ReadInt64LittleEndian(source: cell[AddonAbi.OutCellOffsets.C..]),
-            Channel: channel,
-            HandleGeneration: BinaryPrimitives.ReadUInt16LittleEndian(source: cell[AddonAbi.OutCellOffsets.HandleGeneration..]),
-            HandleIndex: BinaryPrimitives.ReadUInt16LittleEndian(source: cell[AddonAbi.OutCellOffsets.HandleIndex..]),
-            Kind: kind,
-            Verb: BinaryPrimitives.ReadUInt16LittleEndian(source: cell[AddonAbi.OutCellOffsets.Verb..])
-        );
         return true;
     }
 }

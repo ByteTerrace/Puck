@@ -19,14 +19,8 @@ public sealed class ScriptingEngine : IDisposable {
 
     /// <summary>Gets the shared configured engine addon modules compile and instantiate against.</summary>
     public Engine Engine => m_engine;
-
     /// <summary>Gets the resolved Wasmtime assembly version, which is the pinned native engine version, for gate assertions.</summary>
     public static string PinnedWasmtimeVersion => typeof(Wasmtime.Engine).Assembly.GetName().Version!.ToString();
-
-    /// <summary>Disposes the underlying engine and its native resources.</summary>
-    public void Dispose() {
-        m_engine.Dispose();
-    }
 
     private static Config BuildConfig(ScriptingEngineOptions options) {
         return new Config()
@@ -41,5 +35,10 @@ public sealed class ScriptingEngine : IDisposable {
             .WithCompilerStrategy(strategy: CompilerStrategy.Cranelift)
             .WithOptimizationLevel(level: OptimizationLevel.Speed)
             .WithMaximumStackSize(size: options.MaxStackBytes);
+    }
+
+    /// <summary>Disposes the underlying engine and its native resources.</summary>
+    public void Dispose() {
+        m_engine.Dispose();
     }
 }

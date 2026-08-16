@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.World.Server;
 
 namespace Puck.World.Client;
@@ -8,26 +8,61 @@ namespace Puck.World.Client;
 /// placement rows come from the candidate definition while avatar colors come from the live mirror; every catalog
 /// avatar/rig is emitted, matching the renderer's construction probe.</summary>
 internal static class WorldSessionRenderEnvelope {
-    // (See WorldSessionWindowLeases below for the WINDOW projection's own render-cost lease — a distinct concern
-    // from this type's program-capacity measurement, kept in the same file because both answer "what does this
-    // session render cost.")
+    // Reserves every currently-authored slab, the whole derived-face band, and the document's authored screen
+    // headroom. The hidden headroom slabs are capacity probes only; live emission adds them if and when an authored
+    // mutation consumes those rows. Indices are chosen from the same free range as WorldSceneEmitter's boot probe.
+    private static void EmitScreenReservation(SdfProgramBuilder builder, WorldDefinition candidate) {
+        var facets = WorldCreationFacets.Derive(
+            definition: candidate,
+            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            derivedFaceScreens: candidate.Authoring.DerivedFaceScreens
+        );
+        var used = new HashSet<int>();
 
-    /// <summary>Measures a candidate definition against the same program shape the offscreen renderer probed.</summary>
-    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, bool includeScreens = false, bool includeAdjacencies = false) {
-        ArgumentNullException.ThrowIfNull(argument: candidate);
-        ArgumentNullException.ThrowIfNull(argument: bodyColor);
-
-        var builder = new SdfProgramBuilder();
-
-        EmitProbe(builder: builder, candidate: candidate, bodyColor: bodyColor, slotBase: 0, includeScreens: includeScreens);
-
-        if (includeAdjacencies) {
-            WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand));
+        foreach (var screen in candidate.Screens) {
+            _ = used.Add(item: screen.Index);
+            WorldScreenStamper.Emit(
+                builder: builder,
+                screen: screen
+            );
         }
 
-        var measured = builder.Build();
+        foreach (var face in facets.Faces) {
+            _ = used.Add(item: face.Index);
+            WorldScreenStamper.Emit(
+                builder: builder,
+                screen: face
+            );
+        }
 
-        return (Words: measured.Words.Length, Instances: measured.Instances.Count);
+        var reserved = 0;
+
+        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (reserved < candidate.Authoring.AuthoringHeadroomScreens)); index++) {
+            if (!used.Add(item: index)) {
+                continue;
+            }
+
+            WorldScreenStamper.Emit(
+                builder: builder,
+                screen: new WorldScreen(
+                    Index: index,
+                    Origin: new Vector3(
+                        x: 0f,
+                        y: -1000f,
+                        z: 0f
+                    ),
+                    Right: Vector3.UnitX,
+                    Up: Vector3.UnitY,
+                    HalfWidth: 0.01f,
+                    HalfHeight: 0.01f,
+                    HalfDepth: 0.01f,
+                    Round: 0f,
+                    Source: new WorldScreenSource.None(),
+                    Route: WorldScreenRoute.Passive
+                )
+            );
+            reserved++;
+        }
     }
 
     /// <summary>Emits the construction/candidate probe into an existing composition builder.</summary>
@@ -36,12 +71,21 @@ internal static class WorldSessionRenderEnvelope {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
-        var reserved = WorldPlacementStamper.StaticStampInstances(creations: candidate.Creations, placements: candidate.Placements);
+        var reserved = WorldPlacementStamper.StaticStampInstances(
+            creations: candidate.Creations,
+            placements: candidate.Placements
+        );
 
-        WorldPlacementStamper.EmitProbe(builder: builder, reservedCount: reserved);
+        WorldPlacementStamper.EmitProbe(
+            builder: builder,
+            reservedCount: reserved
+        );
 
         if (includeScreens) {
-            EmitScreenReservation(builder: builder, candidate: candidate);
+            EmitScreenReservation(
+                builder: builder,
+                candidate: candidate
+            );
         }
 
         var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
@@ -64,52 +108,37 @@ internal static class WorldSessionRenderEnvelope {
             slotBase: slotBase
         );
     }
+    // (See WorldSessionWindowLeases below for the WINDOW projection's own render-cost lease — a distinct concern
+    // from this type's program-capacity measurement, kept in the same file because both answer "what does this
+    // session render cost.")
 
-    // Reserves every currently-authored slab, the whole derived-face band, and the document's authored screen
-    // headroom. The hidden headroom slabs are capacity probes only; live emission adds them if and when an authored
-    // mutation consumes those rows. Indices are chosen from the same free range as WorldSceneEmitter's boot probe.
-    private static void EmitScreenReservation(SdfProgramBuilder builder, WorldDefinition candidate) {
-        var facets = WorldCreationFacets.Derive(
-            definition: candidate,
-            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
-            derivedFaceScreens: candidate.Authoring.DerivedFaceScreens
+    /// <summary>Measures a candidate definition against the same program shape the offscreen renderer probed.</summary>
+    public static (int Words, int Instances) MeasureCandidate(WorldDefinition candidate, Func<int, Vector3> bodyColor, bool includeScreens = false, bool includeAdjacencies = false) {
+        ArgumentNullException.ThrowIfNull(argument: candidate);
+        ArgumentNullException.ThrowIfNull(argument: bodyColor);
+
+        var builder = new SdfProgramBuilder();
+
+        EmitProbe(
+            bodyColor: bodyColor,
+            builder: builder,
+            candidate: candidate,
+            includeScreens: includeScreens,
+            slotBase: 0
         );
-        var used = new HashSet<int>();
 
-        foreach (var screen in candidate.Screens) {
-            _ = used.Add(item: screen.Index);
-            WorldScreenStamper.Emit(builder: builder, screen: screen);
+        if (includeAdjacencies) {
+            WorldPlacementStamper.EmitProbe(
+                builder: builder,
+                reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
+            );
         }
 
-        foreach (var face in facets.Faces) {
-            _ = used.Add(item: face.Index);
-            WorldScreenStamper.Emit(builder: builder, screen: face);
-        }
+        var measured = builder.Build();
 
-        var reserved = 0;
-
-        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (reserved < candidate.Authoring.AuthoringHeadroomScreens)); index++) {
-            if (!used.Add(item: index)) {
-                continue;
-            }
-
-            WorldScreenStamper.Emit(builder: builder, screen: new WorldScreen(
-                Index: index,
-                Origin: new Vector3(x: 0f, y: -1000f, z: 0f),
-                Right: Vector3.UnitX,
-                Up: Vector3.UnitY,
-                HalfWidth: 0.01f,
-                HalfHeight: 0.01f,
-                HalfDepth: 0.01f,
-                Round: 0f,
-                Source: new WorldScreenSource.None(),
-                Route: WorldScreenRoute.Passive
-            ));
-            reserved++;
-        }
+        return (Words: measured.Words.Length, Instances: measured.Instances.Count);
     }
 }
-
 /// <summary>The runtime accounting for <see cref="WorldScreenProjection.Window"/> sessions' true, ALWAYS-PAID render
 /// cost — one live count <c>world.faces</c> reads and echoes, so a decision the document already made
 /// (<c>WorldDefinitionValidator</c> refuses an over-budget document BY NAME at boot/mutation time — see
@@ -122,10 +151,10 @@ internal static class WorldSessionRenderEnvelope {
 /// state, and a spawned instance carries neither a client nor a machine host to bind one from) — so there is no
 /// second binder whose leases this counter could conflate with.</remarks>
 internal static class WorldSessionWindowLeases {
-    private static int s_liveCount;
+    private static int LiveLeaseCount;
 
     /// <summary>How many window sessions are live right now, process-wide.</summary>
-    public static int LiveCount => s_liveCount;
+    public static int LiveCount => LiveLeaseCount;
 
     /// <summary>Acquires one window lease, incrementing <see cref="LiveCount"/> until disposed.</summary>
     /// <param name="width">The window's resolved render width, pixels — carried on the lease purely for a future
@@ -133,9 +162,12 @@ internal static class WorldSessionWindowLeases {
     /// <param name="height">The window's resolved render height, pixels.</param>
     /// <returns>A disposable that releases the lease exactly once (idempotent past the first <c>Dispose</c>).</returns>
     public static IDisposable Acquire(int width, int height) {
-        s_liveCount++;
+        LiveLeaseCount++;
 
-        return new Lease(width: width, height: height);
+        return new Lease(
+            height: height,
+            width: width
+        );
     }
 
     private sealed class Lease(int width, int height) : IDisposable {
@@ -150,7 +182,7 @@ internal static class WorldSessionWindowLeases {
             }
 
             m_disposed = true;
-            s_liveCount--;
+            LiveLeaseCount--;
         }
     }
 }

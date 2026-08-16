@@ -4,8 +4,8 @@ using Puck.Abstractions.Machines;
 namespace Puck.World;
 
 /// <summary>
-/// Wires every Puck.World.Data injection seam the instant this assembly loads — before <c>Main</c>, before the DI
-/// container, before any validator can run. Puck.World.Data cannot reference Puck.Input (the architecture gate's
+/// Wires every Puck.World.Schema injection seam the instant this assembly loads — before <c>Main</c>, before the DI
+/// container, before any validator can run. Puck.World.Schema cannot reference Puck.Input (the architecture gate's
 /// structural denial), so <see cref="WorldDefinitionValidator"/> and identity-owned world validation reaches the
 /// engine-default binding document and the live vocabulary check through <see cref="BindingVocabularyHook"/> rather
 /// than naming <see cref="WorldDefaultBindings"/>/<see cref="WorldAffordances"/> directly.
@@ -20,12 +20,18 @@ namespace Puck.World;
 /// never disagree. Unlike the vocabulary check, that hook is required: leaving it unwired does not degrade the
 /// registered-key refusal, it fails the document (see the hook's own remarks), which is why it is installed here with
 /// the unconditional pair rather than anywhere later.
+/// <see cref="Protocol.MutationKindVocabularyHook.Describe"/>/<see cref="Protocol.MutationKindVocabularyHook.TryParse"/>
+/// forward to <see cref="Protocol.WorldMutationKindCatalog"/> — Puck.World.Schema cannot reference
+/// Puck.World.Protocol (the mutation-kind vocabulary lives downstream of the document model a mask is a field on),
+/// so a mask's name round-trip crosses the same seam shape as the binding/extension hooks above.
 /// </summary>
 internal static class WorldDataHookInstaller {
     [ModuleInitializer]
     internal static void Install() {
         BindingVocabularyHook.DefaultDocument = WorldDefaultBindings.BuildDocument;
         BindingVocabularyHook.VocabularyCheck = WorldAffordances.Validate;
+        Protocol.MutationKindVocabularyHook.Describe = Protocol.WorldMutationKindCatalog.DescribeMask;
+        Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
 
         var screenMachineEngines = new WorldExtensionRegistry<IScreenMachineEngine>(
             extensions: WorldScreenMachineEngines.All,

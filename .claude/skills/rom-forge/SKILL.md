@@ -1,6 +1,6 @@
 ---
 name: rom-forge
-description: Working on the ROM forge — src/Puck.Forge (the SM83 game framework in Framework/, the authoring document families and sculpt model in Authoring/, Sm83Emitter, HgbImage, AudioDocumentCompiler, the Tune cart, VerifyMachineSettle). Use whenever hand-authoring SM83 cartridge ROMs, touching the game framework (kernel, WRAM map, saves, PRNG, input, text, OAM, sound), or the cart/save/title-art seams.
+description: Working on the ROM forge — src/Puck.World.Forge (the SM83 game framework in Framework/, the authoring document families and sculpt model in Authoring/, Sm83Emitter, HgbImage, AudioDocumentCompiler, the Tune cart, VerifyMachineSettle). Use whenever hand-authoring SM83 cartridge ROMs, touching the game framework (kernel, WRAM map, saves, PRNG, input, text, OAM, sound), or the cart/save/title-art seams.
 ---
 
 # The ROM forge: hand-authored games onto real brick hardware
@@ -11,7 +11,7 @@ change, it is stale; update it in the same change.
 
 ## What exists, and what does not
 
-**`src/Puck.Forge` is a normal solution project and it is live.**
+**`src/Puck.World.Forge` is a normal solution project and it is live.**
 `src/Puck.World` carries a `ProjectReference` to it, and
 `src/Puck.World/Audio/TuneMachineSource.cs` calls `TuneRom.Build` to synthesize
 a CGB cartridge that a Humble core steps cycle-exactly for world audio. That is
@@ -35,7 +35,7 @@ art; never build it, run it, or revive a capability in place:
 "forge" something, say plainly that the CLI does not exist rather than looking
 for it.
 
-**Hand-authored games are NOT gone, though.** `src/Puck.Forge/Games/` holds
+**Hand-authored games are NOT gone, though.** `src/Puck.World.Forge/Games/` holds
 `ArcadeQuest*` (`ArcadeQuestGame`, `ArcadeQuestRom`, `ArcadeQuestProtocol`,
 `ArcadeQuestVerify`, plus its own README), and its built 32 KiB cartridge is
 committed at `src/Puck.World/Assets/roms/arcade-quest.gbc`. That is the live
@@ -48,7 +48,7 @@ produce a PBAK blob any more** — the baker was the only producer.
 have no reachable input. The code is correct and unreachable; treat baked art as
 an absent capability.
 
-## The map (`src/Puck.Forge`)
+## The map (`src/Puck.World.Forge`)
 
 - `Framework/` — the SM83 game framework in `Puck.Forge.Framework`, dependent
   only on `Sm83Emitter` + the `HgbImage` encoders: `FrameworkCartridge`,

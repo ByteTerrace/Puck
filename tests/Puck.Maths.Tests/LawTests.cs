@@ -18,9 +18,8 @@ public sealed class LawTests {
             new TheoryDataRow<string>(p1: lawCase.Id)
                 .WithTrait(name: "tier", value: lawCase.Tier.ToString())
                 .WithTestDisplayName(testDisplayName: lawCase.Id));
-
-    [Theory]
     [MemberData(nameof(Cases))]
+    [Theory]
     public void Law(string id) {
         var lawCase = LawRegistry.ById[id];
 
@@ -35,7 +34,7 @@ public sealed class LawTests {
             var observed = LawShapes.Observe(run: lawCase.Run);
 
             Assert.True(condition: (LegLedger.ShapeViolation(lawCase: lawCase, observed: observed) is null), userMessage: $"{id} {LegLedger.ShapeViolation(lawCase: lawCase, observed: observed)}");
-        } catch (Exception exception) when (exception is not Xunit.Sdk.SkipException) {
+        } catch (Exception exception) when ((exception is not Xunit.Sdk.SkipException)) {
             LedgerState.RecordLawFailure();
 
             throw;

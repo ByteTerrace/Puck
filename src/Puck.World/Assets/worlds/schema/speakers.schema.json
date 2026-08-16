@@ -25,10 +25,13 @@
             "type": "string"
           },
           "feed": {
-            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed"
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed",
+            "description": "The feed it plays (source \u002B channel \u002B gain)."
           },
           "attenuation": {
-            "$ref": "./common.schema.json#/$defs/WorldSpeakerAttenuation"
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerAttenuation",
+            "description": "The point-attenuation policy, or null to coalesce to the WorldAudioDefaults section. Beds carry their own radii instead and leave this null.",
+            "default": null
           }
         },
         "required": [
@@ -52,16 +55,16 @@
             ],
             "anyOf": [
               {
-                "$ref": "./common.schema.json#/$defs/Entity"
+                "$ref": "./common.schema.json#/$defs/WorldAnchorEntity"
               },
               {
-                "$ref": "./common.schema.json#/$defs/EntityPart"
+                "$ref": "./common.schema.json#/$defs/WorldAnchorEntityPart"
               },
               {
-                "$ref": "./common.schema.json#/$defs/Placement"
+                "$ref": "./common.schema.json#/$defs/WorldAnchorPlacement"
               },
               {
-                "$ref": "./common.schema.json#/$defs/Group"
+                "$ref": "./common.schema.json#/$defs/WorldAnchorGroup"
               }
             ]
           },
@@ -73,10 +76,13 @@
             "type": "string"
           },
           "feed": {
-            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed"
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed",
+            "description": "The feed it plays (source \u002B channel \u002B gain)."
           },
           "attenuation": {
-            "$ref": "./common.schema.json#/$defs/WorldSpeakerAttenuation"
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerAttenuation",
+            "description": "The point-attenuation policy, or null to coalesce to the WorldAudioDefaults section. Beds carry their own radii instead and leave this null.",
+            "default": null
           }
         },
         "required": [
@@ -116,32 +122,12 @@
             "type": "string"
           },
           "feed": {
-            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed"
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerFeed",
+            "description": "The feed it plays (source \u002B channel \u002B gain)."
           },
           "attenuation": {
-            "description": "The point-attenuation policy, or null to coalesce to the WorldAudioDefaults section. Beds carry their own radii instead and leave this null.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "radius": {
-                "description": "The finite audible support radius in world units \u2014 at or beyond it the emitter is culled (finite support is the cull).",
-                "type": "number"
-              },
-              "curve": {
-                "description": "The falloff curve token (CurveSmoothstep or CurveLinear), or null for the audio-defaults curve.",
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "radius",
-              "curve"
-            ],
-            "additionalProperties": false
+            "$ref": "./common.schema.json#/$defs/WorldSpeakerAttenuation",
+            "description": "The point-attenuation policy, or null to coalesce to the WorldAudioDefaults section. Beds carry their own radii instead and leave this null."
           }
         },
         "required": [

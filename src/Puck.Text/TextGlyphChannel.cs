@@ -25,7 +25,76 @@ public readonly record struct TextGlyphChannel(
     bool HasTint
 ) {
     /// <summary>The identity channel: no offset, unit scale, full coverage, no weight bias, no tint.</summary>
-    public static readonly TextGlyphChannel Identity = new(Coverage: 1.0f, HasTint: false, Offset: Vector2.Zero, Scale: 1.0f, Tint: Vector4.Zero, WeightBias: 0.0f);
+    public static readonly TextGlyphChannel Identity = new(
+        Coverage: 1.0f,
+        HasTint: false,
+        Offset: Vector2.Zero,
+        Scale: 1.0f,
+        Tint: Vector4.Zero,
+        WeightBias: 0.0f
+    );
+
+    private static float CreateGlyphSeed(float effectPhase, float glyphPhase, int glyphIndex) =>
+        HashWave(
+            salt: 91.733f,
+            value: (((glyphIndex * 0.173f) + (glyphPhase * 0.019f)) + effectPhase)
+        );
+    private static float Fract(float value) =>
+        (value - MathF.Floor(x: value));
+    private static float HashWave(float value, float salt) =>
+        Fract(value: (MathF.Sin(x: ((value + salt) * 43758.5453f)) * 143.759f));
+    private static TextGlyphChannel ResolveDissolve(TextEffect effect, float seconds, float glyphPhase, int glyphIndex, IReadOnlyList<TextEnrichmentVariable>? variables) {
+        var duration = MathF.Max(
+            x: 0.001f,
+            y: effect.DurationSeconds.Evaluate(variables: variables)
+        );
+        var effectPhase = effect.Phase.Evaluate(variables: variables);
+        var progress = ((seconds % duration) / duration);
+        var style = ((effect.DissolveStyle == TextEffectDissolveStyle.None)
+            ? TextEffectDissolveStyle.Devilish
+            : effect.DissolveStyle
+        );
+        var seed = CreateGlyphSeed(
+            effectPhase: effectPhase,
+            glyphIndex: glyphIndex,
+            glyphPhase: glyphPhase
+        );
+        var stagger = ((style == TextEffectDissolveStyle.Sickly)
+            ? Fract(value: (((seed * 0.53f) + (glyphIndex * 0.071f)) + (glyphPhase * 0.0037f)))
+            : Fract(value: (((seed * 0.41f) + (glyphIndex * 0.113f)) + (glyphPhase * 0.0029f)))
+        );
+        var localProgress = ((style == TextEffectDissolveStyle.Sickly)
+            ? Math.Clamp(
+                max: 1.0f,
+                min: 0.0f,
+                value: (progress + ((stagger - 0.35f) * 0.34f))
+            )
+            : Math.Clamp(
+                max: 1.0f,
+                min: 0.0f,
+                value: (progress + ((stagger - 0.5f) * 0.24f))
+            )
+        );
+
+        return Identity with { Coverage = localProgress };
+    }
+    private static TextGlyphChannel ResolveJitter(float amplitude, float cycle) {
+        var x = ((HashWave(
+            salt: 12.9898f,
+            value: cycle
+        ) * 2.0f) - 1.0f);
+        var y = ((HashWave(
+            salt: 78.233f,
+            value: cycle
+        ) * 2.0f) - 1.0f);
+
+        return Identity with {
+            Offset = new Vector2(
+            x: (amplitude * x),
+            y: (amplitude * y)
+        ),
+        };
+    }
 
     /// <summary>
     /// Resolves an effect into a per-glyph channel at a deterministic content tick. This is the one place time enters
@@ -57,7 +126,10 @@ public readonly record struct TextGlyphChannel(
         }
 
         // The animation clock: content seconds derived purely from the caller's content tick (deterministic).
-        var seconds = ((ticksPerSecond > 0.0f) ? (contentTick / ticksPerSecond) : contentTick);
+        var seconds = ((ticksPerSecond > 0.0f)
+            ? (contentTick / ticksPerSecond)
+            : contentTick
+        );
 
         // Static, always-applied enrichment (the delight layer that reduced-motion keeps).
         switch (effect.Kind) {
@@ -68,12 +140,26 @@ public readonly record struct TextGlyphChannel(
                     return Identity with { WeightBias = effect.AmplitudePixels.Evaluate(variables: variables) };
                 }
             case TextEffectKind.Reveal: {
-                    var duration = MathF.Max(x: 0.0001f, y: effect.DurationSeconds.Evaluate(variables: variables));
-                    var stagger = MathF.Max(x: 0.0f, y: effect.Phase.Evaluate(variables: variables));
+                    var duration = MathF.Max(
+                        x: 0.0001f,
+                        y: effect.DurationSeconds.Evaluate(variables: variables)
+                    );
+                    var stagger = MathF.Max(
+                        x: 0.0f,
+                        y: effect.Phase.Evaluate(variables: variables)
+                    );
                     // Deterministic typewriter (rollback-safe): each glyph materializes on a staggered schedule.
-                    var localProgress = Math.Clamp(value: ((seconds - (glyphIndex * stagger)) / duration), max: 1.0f, min: 0.0f);
+                    var localProgress = Math.Clamp(
+                        max: 1.0f,
+                        min: 0.0f,
+                        value: ((seconds - (glyphIndex * stagger)) / duration)
+                    );
 
-                    return Identity with { Coverage = (motionEnabled ? localProgress : 1.0f) };
+                    return Identity with {
+                        Coverage = (motionEnabled
+                        ? localProgress
+                        : 1.0f),
+                    };
                 }
             default: {
                     break;
@@ -89,45 +175,44 @@ public readonly record struct TextGlyphChannel(
         var frequency = effect.FrequencyHz.Evaluate(variables: variables);
         var effectPhase = effect.Phase.Evaluate(variables: variables);
         var phase = (effectPhase + (glyphPhase * 0.17f));
-        var cycle = ((seconds * MathF.Max(x: 0.0f, y: frequency)) + phase);
+        var cycle = ((seconds * MathF.Max(
+            x: 0.0f,
+            y: frequency
+        )) + phase);
         var wave = MathF.Sin(x: (MathF.Tau * cycle));
         var secondaryWave = MathF.Cos(x: (MathF.Tau * (cycle * 1.37f)));
 
         return effect.Kind switch {
-            TextEffectKind.Shake => Identity with { Offset = new Vector2(x: (amplitude * wave), y: (amplitude * secondaryWave)) },
-            TextEffectKind.Wave => Identity with { Offset = new Vector2(x: 0.0f, y: (amplitude * wave)) },
-            TextEffectKind.Pulse => Identity with { Scale = MathF.Max(x: 0.01f, y: (1.0f + (amplitude * wave))) },
-            TextEffectKind.Jitter => ResolveJitter(amplitude: amplitude, cycle: cycle),
-            TextEffectKind.Dissolve => ResolveDissolve(effect: effect, seconds: seconds, glyphPhase: glyphPhase, glyphIndex: glyphIndex, variables: variables),
+            TextEffectKind.Shake => Identity with {
+                Offset = new Vector2(
+            x: (amplitude * wave),
+            y: (amplitude * secondaryWave)
+        ),
+            },
+            TextEffectKind.Wave => Identity with {
+                Offset = new Vector2(
+            x: 0.0f,
+            y: (amplitude * wave)
+        ),
+            },
+            TextEffectKind.Pulse => Identity with {
+                Scale = MathF.Max(
+            x: 0.01f,
+            y: (1.0f + (amplitude * wave))
+        ),
+            },
+            TextEffectKind.Jitter => ResolveJitter(
+            amplitude: amplitude,
+            cycle: cycle
+        ),
+            TextEffectKind.Dissolve => ResolveDissolve(
+            effect: effect,
+            glyphIndex: glyphIndex,
+            glyphPhase: glyphPhase,
+            seconds: seconds,
+            variables: variables
+        ),
             _ => Identity
         };
     }
-
-    private static TextGlyphChannel ResolveJitter(float amplitude, float cycle) {
-        var x = ((HashWave(value: cycle, salt: 12.9898f) * 2.0f) - 1.0f);
-        var y = ((HashWave(value: cycle, salt: 78.233f) * 2.0f) - 1.0f);
-
-        return Identity with { Offset = new Vector2(x: (amplitude * x), y: (amplitude * y)) };
-    }
-    private static TextGlyphChannel ResolveDissolve(TextEffect effect, float seconds, float glyphPhase, int glyphIndex, IReadOnlyList<TextEnrichmentVariable>? variables) {
-        var duration = MathF.Max(x: 0.001f, y: effect.DurationSeconds.Evaluate(variables: variables));
-        var effectPhase = effect.Phase.Evaluate(variables: variables);
-        var progress = ((seconds % duration) / duration);
-        var style = ((effect.DissolveStyle == TextEffectDissolveStyle.None) ? TextEffectDissolveStyle.Devilish : effect.DissolveStyle);
-        var seed = CreateGlyphSeed(effectPhase: effectPhase, glyphPhase: glyphPhase, glyphIndex: glyphIndex);
-        var stagger = ((style == TextEffectDissolveStyle.Sickly)
-            ? Fract(value: (((seed * 0.53f) + (glyphIndex * 0.071f)) + (glyphPhase * 0.0037f)))
-            : Fract(value: (((seed * 0.41f) + (glyphIndex * 0.113f)) + (glyphPhase * 0.0029f))));
-        var localProgress = ((style == TextEffectDissolveStyle.Sickly)
-            ? Math.Clamp(value: (progress + ((stagger - 0.35f) * 0.34f)), max: 1.0f, min: 0.0f)
-            : Math.Clamp(value: (progress + ((stagger - 0.5f) * 0.24f)), max: 1.0f, min: 0.0f));
-
-        return Identity with { Coverage = localProgress };
-    }
-    private static float CreateGlyphSeed(float effectPhase, float glyphPhase, int glyphIndex) =>
-        HashWave(value: (((glyphIndex * 0.173f) + (glyphPhase * 0.019f)) + effectPhase), salt: 91.733f);
-    private static float Fract(float value) =>
-        (value - MathF.Floor(x: value));
-    private static float HashWave(float value, float salt) =>
-        Fract(value: (MathF.Sin(x: ((value + salt) * 43758.5453f)) * 143.759f));
 }

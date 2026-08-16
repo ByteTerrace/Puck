@@ -46,13 +46,13 @@ public sealed class TrustListOwnershipTests {
             text: "the verifier owns its validated snapshot"
         );
         var result = AttestationProfile.Base.VerifyChain(
-            codec: codec,
-            claim: claim,
             chain: [],
-            trustList: trust,
-            now: Now,
+            claim: claim,
+            codec: codec,
+            expectedAudience: "world:home",
             expectedPurpose: "test.ownership",
-            expectedAudience: "world:home"
+            now: Now,
+            trustList: trust
         );
 
         Assert.True(condition: result.Admits(slot: "slot:wallet"), userMessage: result.RefusalReason);

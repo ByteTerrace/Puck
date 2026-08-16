@@ -39,7 +39,7 @@ public sealed class VulkanRenderer(
     // and never fire in a normal run. Set PUCK_VULKAN_DEBUG=1 to load the layer and surface validation messages to the
     // console. The debug-utils EXTENSION (and the command-buffer labels it carries) is enabled independently of this —
     // see VulkanInstanceFactory — so GPU-capture debug groups survive a validation-off run.
-    private static readonly bool s_validationEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_VULKAN_DEBUG") is not null);
+    private static readonly bool ValidationEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_VULKAN_DEBUG") is not null);
 
     /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
     /// <see cref="WaitForFrameSlot"/> blocks. Each slot owns a full <see cref="VulkanFrameSynchronization"/>
@@ -54,6 +54,7 @@ public sealed class VulkanRenderer(
     // image's buffer be re-recorded while its prior blit (the OTHER slot's present) was still executing
     // (VUID-vkBeginCommandBuffer-commandBuffer-00049, caught by the validation layer under VRR present churn).
     private readonly VulkanCommandResources?[] m_commandResources = new VulkanCommandResources?[PresentFrameRingSize];
+
     private VulkanLogicalDevice? m_device;
     private VulkanFramebufferSet? m_framebufferSet;
     private int m_frameSlot;
@@ -64,7 +65,9 @@ public sealed class VulkanRenderer(
     private VulkanRenderPass? m_renderPass;
     private VulkanSurface? m_surface;
     private VulkanSwapchain? m_swapchain;
+
     private readonly VulkanFrameSynchronization?[] m_synchronizations = new VulkanFrameSynchronization?[PresentFrameRingSize];
+
     private uint m_width;
     private ulong m_skippedPresentCount;
 
@@ -75,23 +78,17 @@ public sealed class VulkanRenderer(
 
     /// <summary>The Vulkan instance, valid after <see cref="Initialize"/>.</summary>
     public VulkanInstance Instance => (m_instance ?? throw new InvalidOperationException(message: "The renderer must be initialized before its instance is used."));
-
     /// <summary>The logical device, valid after <see cref="Initialize"/>.</summary>
     public VulkanLogicalDevice Device => (m_device ?? throw new InvalidOperationException(message: "The renderer must be initialized before its device is used."));
-
     /// <summary>The logical device as the shared device-context view (alias of <see cref="Device"/>).</summary>
     public VulkanLogicalDevice LogicalDevice => Device;
-
     /// <summary>The selected physical device; valid after <see cref="Initialize"/>.</summary>
     public VkPhysicalDevice PhysicalDevice => m_physicalDevice;
-
     /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>
     public VulkanSurface Surface => (m_surface ?? throw new InvalidOperationException(message: "The renderer must be initialized before its surface is used."));
-
     /// <summary>The current render pass; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanRenderPass RenderPass => (m_renderPass ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
-
     /// <summary>The current swapchain; valid after the first <see cref="BeginFrame"/> and replaced on
     /// resize (see <see cref="PresentationResourcesRecreated"/>).</summary>
     public VulkanSwapchain Swapchain => (m_swapchain ?? throw new InvalidOperationException(message: "Presentation resources are not available until the first BeginFrame."));
@@ -128,7 +125,7 @@ public sealed class VulkanRenderer(
             m_instance = instanceFactory.Create(
                 applicationName: options.ApplicationName,
                 displayKind: binding.DisplayKind,
-                enableValidation: s_validationEnabled
+                enableValidation: ValidationEnabled
             );
             m_surface = surfaceFactory.Create(
                 binding: binding,
@@ -152,7 +149,6 @@ public sealed class VulkanRenderer(
             throw;
         }
     }
-
     /// <summary>Prepares the next frame: (re)creates presentation resources when this is the first frame, the
     /// target size changed, or the last present reported the swapchain out of date.</summary>
     /// <param name="width">The current render-target width in pixels.</param>
@@ -183,7 +179,6 @@ public sealed class VulkanRenderer(
             m_needsRecreate = false;
         }
     }
-
     /// <summary>Records and presents one frame from caller-supplied draw commands and the pipelines they
     /// reference. A no-op until the first successful <see cref="BeginFrame"/>.</summary>
     public void Present(
@@ -209,7 +204,7 @@ public sealed class VulkanRenderer(
                 drawCommands: drawCommands,
                 framebufferSet: m_framebufferSet!,
                 graphicsPipelines: graphicsPipelines,
-                imageIndex: (int)imageIndex,
+                imageIndex: ((int)imageIndex),
                 renderPass: m_renderPass!,
                 swapchain: m_swapchain
             ),
@@ -237,6 +232,7 @@ public sealed class VulkanRenderer(
             }
         }
     }
+
     /// <summary>The running total of <see cref="VulkanFramePresentationResult.Skipped"/> outcomes since this renderer
     /// was created — the backing read for <see cref="IPresentationSkipFeedback.SkippedPresentCount"/>.</summary>
     public ulong SkippedPresentCount => m_skippedPresentCount;
@@ -297,7 +293,7 @@ public sealed class VulkanRenderer(
             m_instance = instanceFactory.Create(
                 applicationName: options.ApplicationName,
                 displayKind: binding.DisplayKind,
-                enableValidation: s_validationEnabled
+                enableValidation: ValidationEnabled
             );
             m_surface = surfaceFactory.Create(
                 binding: binding,
@@ -353,6 +349,7 @@ public sealed class VulkanRenderer(
             // Device already lost; there is no in-flight work to wait on.
         }
     }
+
     /// <summary>Forwards the closed-loop present-timing sample (from VK_KHR_present_wait) for the host pacer to phase-lock to.</summary>
     /// <param name="presentCount">When this returns <see langword="true"/>, the monotonic confirmed-present count.</param>
     /// <param name="presentTimestampTicks">When this returns <see langword="true"/>, the present's timestamp in <see cref="System.Diagnostics.Stopwatch"/> ticks.</param>
@@ -380,14 +377,14 @@ public sealed class VulkanRenderer(
         // surface format to whichever supported (format, color-space) pair matches the desired VkFormat. Both are
         // passed as preferences — the factory falls back (mailbox/immediate/FIFO; formats[0]) when unsupported.
         var preferredPresentMode = presentationOptions.PresentMode switch {
-            PresentMode.Vsync => (uint?)VulkanPresentMode.Fifo,
+            PresentMode.Vsync => ((uint?)VulkanPresentMode.Fifo),
             PresentMode.Mailbox => VulkanPresentMode.Mailbox,
             PresentMode.Immediate => VulkanPresentMode.Immediate,
             PresentMode.Adaptive => VulkanPresentMode.FifoRelaxed,
             _ => null,
         };
         var desiredVkFormat = presentationOptions.SurfaceFormat switch {
-            SurfaceFormat.R8G8B8A8Unorm => (uint?)VulkanFormat.R8G8B8A8Unorm,
+            SurfaceFormat.R8G8B8A8Unorm => ((uint?)VulkanFormat.R8G8B8A8Unorm),
             SurfaceFormat.B8G8R8A8Unorm => VulkanFormat.B8G8R8A8Unorm,
             _ => null,
         };
@@ -426,7 +423,7 @@ public sealed class VulkanRenderer(
         // slot 0 with every rebuilt chain.
         for (var slot = 0; (slot < PresentFrameRingSize); slot++) {
             m_commandResources[slot] = commandResourcesFactory.Create(
-                commandBufferCount: (uint)m_framebufferSet.FramebufferHandles.Count,
+                commandBufferCount: ((uint)m_framebufferSet.FramebufferHandles.Count),
                 logicalDevice: device
             );
             m_synchronizations[slot] = frameSynchronizationFactory.Create(

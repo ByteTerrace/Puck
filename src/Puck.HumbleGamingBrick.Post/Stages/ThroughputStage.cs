@@ -15,7 +15,6 @@ internal sealed class ThroughputStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "throughput";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -28,15 +27,15 @@ internal sealed class ThroughputStage : IPostStage {
         );
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: WarmFrames
+            frames: WarmFrames,
+            instance: machine
         );
 
         var stopwatch = Stopwatch.StartNew();
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: BenchFrames
+            frames: BenchFrames,
+            instance: machine
         );
         stopwatch.Stop();
 

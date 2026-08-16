@@ -16,13 +16,12 @@ internal sealed class SourceCorpus {
     // The scan and format roots: a working-directory-relative (or absolute) directory, artifact
     // directories pruned.
     public static SourceCorpus? TryLoad(string rootArgument) {
-        if (!SourceFiles.TryEnumerate(rootArgument: rootArgument, scanRoot: out var scanRoot, files: out var files)) {
+        if (!SourceFiles.TryEnumerate(files: out var files, rootArgument: rootArgument, scanRoot: out var scanRoot)) {
             return null;
         }
 
         return Parse(files: files, relativeTo: scanRoot);
     }
-
     // An already-enumerated file set, with the base its display paths are shown against.
     public static SourceCorpus Parse(IReadOnlyList<string> files, string relativeTo) {
         var parsed = new List<ParsedFile>(capacity: files.Count);
@@ -31,7 +30,7 @@ internal sealed class SourceCorpus {
             var text = File.ReadAllText(path: file);
             var root = CSharpSyntaxTree.ParseText(text: text).GetRoot();
 
-            parsed.Add(item: new ParsedFile(Relative: CliPaths.ToDisplay(relativeTo: relativeTo, fullPath: file), Root: root, Text: text));
+            parsed.Add(item: new ParsedFile(Relative: CliPaths.ToDisplay(fullPath: file, relativeTo: relativeTo), Root: root, Text: text));
         }
 
         return new SourceCorpus(files: parsed);

@@ -30,10 +30,187 @@ public static class SealedAttestation {
     private const int DerivedKeyLength = 32;
     private const int NonceLength = 12;
     private const int TagLength = 16;
+
     // These v1 domain-separation labels are wire constants. They use the package's release name so the
     // protocol has one vocabulary from its first published version onward.
     private static readonly byte[] AeadContextLabel = "puck.attestation.sealed.aad.v1"u8.ToArray();
+    /// <summary>The fixed ASCII prefix of HKDF info. The codec-independent recipient-id context follows it, binding the derived key to the named sealing key.</summary>
+    private static readonly byte[] HkdfInfoLabel = "puck.attestation.sealed.v1"u8.ToArray();
 
+    /// <summary>
+    /// Validates all structure a verifier can check without holding the recipient private key. A verifier
+    /// calls this only after authenticating the attestation, so an attacker-controlled EC point is not imported
+    /// before its signature verifies.
+    /// </summary>
+    internal static void ValidatePayloadStructure(SealedPayload payload) {
+        ArgumentNullException.ThrowIfNull(argument: payload);
+
+        ValidateSealingAlgorithm(recipientId: payload.RecipientId);
+        var recipientContext = EncodeRecipientContext(recipientId: payload.RecipientId);
+
+        if (payload.Nonce.Length != NonceLength) {
+            throw new FormatException(message: $"A sealed payload's nonce must be {NonceLength} bytes, but {payload.Nonce.Length} arrived.");
+        }
+
+        if (payload.Tag.Length != TagLength) {
+            throw new FormatException(message: $"A sealed payload's tag must be {TagLength} bytes, but {payload.Tag.Length} arrived.");
+        }
+
+        if (payload.EphemeralPublicKeySubjectPublicKeyInfo.Length > AttestationResourceLimits.SubjectPublicKeyInfoBytes) {
+            throw new FormatException(message: $"A sealed payload's ephemeral SPKI is {payload.EphemeralPublicKeySubjectPublicKeyInfo.Length} bytes; the base profile permits at most {AttestationResourceLimits.SubjectPublicKeyInfoBytes}.");
+        }
+
+        using var ephemeralKey = ImportAgreementKey(
+            subjectPublicKeyInfo: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span,
+            what: "ephemeral sender key"
+        );
+    }
+
+    private static byte[] BindAssociatedData(ReadOnlySpan<byte> associatedData, ReadOnlySpan<byte> recipientContext) {
+        var bound = new byte[(((AeadContextLabel.Length + sizeof(ulong)) + associatedData.Length) + recipientContext.Length)];
+        var offset = 0;
+
+        AeadContextLabel.CopyTo(
+            array: bound,
+            index: offset
+        );
+        offset += AeadContextLabel.Length;
+        BinaryPrimitives.WriteUInt64BigEndian(
+            destination: bound.AsSpan(start: offset),
+            value: ((ulong)associatedData.Length)
+        );
+        offset += sizeof(ulong);
+        associatedData.CopyTo(destination: bound.AsSpan(start: offset));
+        offset += associatedData.Length;
+        recipientContext.CopyTo(destination: bound.AsSpan(start: offset));
+
+        return bound;
+    }
+    private static byte[] DecodeFingerprint(string value, string what) {
+        byte[] bytes;
+
+        try {
+            bytes = Convert.FromHexString(s: value);
+        } catch (FormatException exception) {
+            throw new FormatException(
+                innerException: exception,
+                message: $"The sealed attestation recipient {what} is not a SHA-256 fingerprint."
+            );
+        }
+
+        if (
+            (bytes.Length != 32) ||
+            !string.Equals(
+            a: value,
+            b: Convert.ToHexStringLower(bytes: bytes),
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            throw new FormatException(message: $"The sealed attestation recipient {what} must be a 32-byte lowercase hexadecimal SHA-256 fingerprint.");
+        }
+
+        return bytes;
+    }
+    /// <summary>
+    /// Derives the AES-256-GCM key from an ECDH agreement, by four of the five values
+    /// README.md §14 fixes: the raw secret agreement (the shared point's X coordinate,
+    /// unhashed) as HKDF input keying material, HKDF-SHA256 with an absent salt, the ASCII info-label prefix
+    /// <c>puck.attestation.sealed.v1</c> followed by recipient-id context, and an output length of 32 bytes. The fifth — the 16-byte AEAD tag
+    /// length — is a construction input to <see cref="AesGcm"/> rather than to the derivation, and lives at
+    /// both call sites as <see cref="TagLength"/>.
+    /// </summary>
+    /// <remarks>
+    /// All five have to be normative or nothing interoperates: none of them is visible in the ciphertext,
+    /// and every disagreement about any one of them surfaces only as
+    /// <see cref="AuthenticationTagMismatchException"/> at the far end — the same failure a tampered
+    /// payload produces, with no way to tell an interoperability bug from an attack. Note that .NET's
+    /// <c>DeriveKeyFromHmac</c>/<c>DeriveKeyMaterial</c> helpers hash the agreement first; this uses
+    /// <see cref="ECDiffieHellman.DeriveRawSecretAgreement"/> precisely so the IKM is the raw value the
+    /// specification names.
+    /// </remarks>
+    private static byte[] DeriveAeadKey(ECDiffieHellman privateAgreementKey, ECDiffieHellmanPublicKey otherPartyPublicKey, ReadOnlySpan<byte> recipientContext) {
+        var sharedSecret = privateAgreementKey.DeriveRawSecretAgreement(otherPartyPublicKey: otherPartyPublicKey);
+
+        try {
+            var info = new byte[(HkdfInfoLabel.Length + recipientContext.Length)];
+
+            HkdfInfoLabel.CopyTo(
+                array: info,
+                index: 0
+            );
+            recipientContext.CopyTo(destination: info.AsSpan(start: HkdfInfoLabel.Length));
+
+            return HKDF.DeriveKey(
+                hashAlgorithmName: HashAlgorithmName.SHA256,
+                ikm: sharedSecret,
+                outputLength: DerivedKeyLength,
+                salt: null,
+                info: info
+            );
+        } finally {
+            CryptographicOperations.ZeroMemory(buffer: sharedSecret);
+        }
+    }
+    /// <summary>A codec-independent, length-delimited encoding used in both HKDF info and AEAD associated data.</summary>
+    private static byte[] EncodeRecipientContext(KeyId recipientId) {
+        var domain = DecodeFingerprint(
+            value: recipientId.Domain,
+            what: "domain"
+        );
+        var keyHash = DecodeFingerprint(
+            value: recipientId.KeyHash,
+            what: "key hash"
+        );
+        var subject = ((recipientId.Subject is null)
+            ? null
+            : Encoding.UTF8.GetBytes(s: recipientId.Subject)
+        );
+        var algorithm = Encoding.UTF8.GetBytes(s: recipientId.Algorithm);
+        var result = new byte[(((((domain.Length + 1) + ((subject is null)
+            ? 0
+            : (sizeof(uint) + subject.Length))) + sizeof(uint)) + algorithm.Length) + keyHash.Length)];
+        var offset = 0;
+
+        domain.CopyTo(
+            array: result,
+            index: offset
+        );
+        offset += domain.Length;
+        result[offset++] = ((subject is null)
+            ? (byte)0
+            : (byte)1
+        );
+
+        if (subject is not null) {
+            BinaryPrimitives.WriteUInt32BigEndian(
+                destination: result.AsSpan(start: offset),
+                value: checked((uint)subject.Length)
+            );
+            offset += sizeof(uint);
+            subject.CopyTo(
+                array: result,
+                index: offset
+            );
+            offset += subject.Length;
+        }
+
+        BinaryPrimitives.WriteUInt32BigEndian(
+            destination: result.AsSpan(start: offset),
+            value: checked((uint)algorithm.Length)
+        );
+        offset += sizeof(uint);
+        algorithm.CopyTo(
+            array: result,
+            index: offset
+        );
+        offset += algorithm.Length;
+        keyHash.CopyTo(
+            array: result,
+            index: offset
+        );
+
+        return result;
+    }
     /// <summary>
     /// Imports exactly one agreement public key from SPKI bytes, refusing trailing data and anything that is
     /// not an EC public key on the curve the sealing algorithm names. The ephemeral key travels on the wire
@@ -58,12 +235,12 @@ public static class SealedAttestation {
 
         try {
             key.ImportSubjectPublicKeyInfo(
-                source: subjectPublicKeyInfo,
-                bytesRead: out var bytesRead
+                bytesRead: out var bytesRead,
+                source: subjectPublicKeyInfo
             );
 
             if (bytesRead != subjectPublicKeyInfo.Length) {
-                throw new FormatException(message: $"The sealed attestation {what} contains {subjectPublicKeyInfo.Length - bytesRead} trailing byte(s) after its SubjectPublicKeyInfo value.");
+                throw new FormatException(message: $"The sealed attestation {what} contains {(subjectPublicKeyInfo.Length - bytesRead)} trailing byte(s) after its SubjectPublicKeyInfo value.");
             }
 
             if (!AttestationCurves.IsNistP256(curve: key.ExportParameters(includePrivateParameters: false).Curve)) {
@@ -73,8 +250,8 @@ public static class SealedAttestation {
             key.Dispose();
 
             throw new FormatException(
-                message: $"The sealed attestation {what} does not import as an EC public key.",
-                innerException: exception
+                innerException: exception,
+                message: $"The sealed attestation {what} does not import as an EC public key."
             );
         } catch {
             key.Dispose();
@@ -83,6 +260,43 @@ public static class SealedAttestation {
         }
 
         return key;
+    }
+    private static void ValidateRecipientId(KeyId recipientId, ReadOnlySpan<byte> recipientPublicKeySubjectPublicKeyInfo) {
+        ValidateSealingAlgorithm(recipientId: recipientId);
+
+        if (!string.Equals(
+            a: recipientId.KeyHash,
+            b: KeyId.ComputeKeyHash(subjectPublicKeyInfo: recipientPublicKeySubjectPublicKeyInfo),
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new FormatException(message: "The sealed attestation recipient id does not identify the supplied recipient key.");
+        }
+    }
+    private static void ValidateSealingAlgorithm(KeyId recipientId) {
+        ArgumentNullException.ThrowIfNull(argument: recipientId);
+
+        AttestationAlgorithmDescriptor descriptor;
+
+        try {
+            descriptor = AttestationAlgorithms.Resolve(algorithm: recipientId.Algorithm);
+        } catch (NotSupportedException exception) {
+            throw new FormatException(
+                message: $"The sealed attestation recipient id names unsupported algorithm '{recipientId.Algorithm}'.",
+                innerException: exception
+            );
+        }
+
+        if (descriptor.Role != AttestationKeyRole.Sealing) {
+            throw new FormatException(message: $"The sealed attestation recipient id names '{recipientId.Algorithm}', which is a {descriptor.Role.ToString().ToLowerInvariant()} algorithm rather than a sealing algorithm.");
+        }
+
+        if (!string.Equals(
+            a: descriptor.Name,
+            b: AttestationAlgorithms.EcdhP256HkdfSha256Aes256Gcm,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw new FormatException(message: $"The sealed attestation implementation does not support recipient sealing algorithm '{descriptor.Name}'.");
+        }
     }
 
     /// <summary>Encrypts <paramref name="plaintext"/> to a named recipient sealing key, binding its id and <paramref name="associatedData"/> into the AEAD operation.</summary>
@@ -126,11 +340,11 @@ public static class SealedAttestation {
                 tagSizeInBytes: TagLength
             )) {
                 gcm.Encrypt(
+                    associatedData: boundAssociatedData,
+                    ciphertext: ciphertext,
                     nonce: nonce,
                     plaintext: plaintext,
-                    ciphertext: ciphertext,
-                    tag: tag,
-                    associatedData: boundAssociatedData
+                    tag: tag
                 );
             }
 
@@ -145,7 +359,6 @@ public static class SealedAttestation {
             CryptographicOperations.ZeroMemory(buffer: derivedKey);
         }
     }
-
     /// <summary>
     /// Decrypts a sealed payload. Fails closed: any tamper to <paramref name="associatedData"/> (the
     /// header), the ciphertext, or the tag changes what the GCM tag check authenticates, so
@@ -206,198 +419,5 @@ public static class SealedAttestation {
         } finally {
             CryptographicOperations.ZeroMemory(buffer: derivedKey);
         }
-    }
-
-    /// <summary>The fixed ASCII prefix of HKDF info. The codec-independent recipient-id context follows it, binding the derived key to the named sealing key.</summary>
-    private static readonly byte[] HkdfInfoLabel = "puck.attestation.sealed.v1"u8.ToArray();
-
-    /// <summary>
-    /// Derives the AES-256-GCM key from an ECDH agreement, by four of the five values
-    /// README.md §14 fixes: the raw secret agreement (the shared point's X coordinate,
-    /// unhashed) as HKDF input keying material, HKDF-SHA256 with an absent salt, the ASCII info-label prefix
-    /// <c>puck.attestation.sealed.v1</c> followed by recipient-id context, and an output length of 32 bytes. The fifth — the 16-byte AEAD tag
-    /// length — is a construction input to <see cref="AesGcm"/> rather than to the derivation, and lives at
-    /// both call sites as <see cref="TagLength"/>.
-    /// </summary>
-    /// <remarks>
-    /// All five have to be normative or nothing interoperates: none of them is visible in the ciphertext,
-    /// and every disagreement about any one of them surfaces only as
-    /// <see cref="AuthenticationTagMismatchException"/> at the far end — the same failure a tampered
-    /// payload produces, with no way to tell an interoperability bug from an attack. Note that .NET's
-    /// <c>DeriveKeyFromHmac</c>/<c>DeriveKeyMaterial</c> helpers hash the agreement first; this uses
-    /// <see cref="ECDiffieHellman.DeriveRawSecretAgreement"/> precisely so the IKM is the raw value the
-    /// specification names.
-    /// </remarks>
-    private static byte[] DeriveAeadKey(ECDiffieHellman privateAgreementKey, ECDiffieHellmanPublicKey otherPartyPublicKey, ReadOnlySpan<byte> recipientContext) {
-        var sharedSecret = privateAgreementKey.DeriveRawSecretAgreement(otherPartyPublicKey: otherPartyPublicKey);
-
-        try {
-            var info = new byte[(HkdfInfoLabel.Length + recipientContext.Length)];
-
-            HkdfInfoLabel.CopyTo(array: info, index: 0);
-            recipientContext.CopyTo(destination: info.AsSpan(start: HkdfInfoLabel.Length));
-
-            return HKDF.DeriveKey(
-                hashAlgorithmName: HashAlgorithmName.SHA256,
-                ikm: sharedSecret,
-                outputLength: DerivedKeyLength,
-                salt: null,
-                info: info
-            );
-        } finally {
-            CryptographicOperations.ZeroMemory(buffer: sharedSecret);
-        }
-    }
-
-    /// <summary>
-    /// Validates all structure a verifier can check without holding the recipient private key. A verifier
-    /// calls this only after authenticating the attestation, so an attacker-controlled EC point is not imported
-    /// before its signature verifies.
-    /// </summary>
-    internal static void ValidatePayloadStructure(SealedPayload payload) {
-        ArgumentNullException.ThrowIfNull(argument: payload);
-
-        ValidateSealingAlgorithm(recipientId: payload.RecipientId);
-        var recipientContext = EncodeRecipientContext(recipientId: payload.RecipientId);
-
-        if (payload.Nonce.Length != NonceLength) {
-            throw new FormatException(message: $"A sealed payload's nonce must be {NonceLength} bytes, but {payload.Nonce.Length} arrived.");
-        }
-
-        if (payload.Tag.Length != TagLength) {
-            throw new FormatException(message: $"A sealed payload's tag must be {TagLength} bytes, but {payload.Tag.Length} arrived.");
-        }
-
-        if (payload.EphemeralPublicKeySubjectPublicKeyInfo.Length > AttestationResourceLimits.SubjectPublicKeyInfoBytes) {
-            throw new FormatException(message: $"A sealed payload's ephemeral SPKI is {payload.EphemeralPublicKeySubjectPublicKeyInfo.Length} bytes; the base profile permits at most {AttestationResourceLimits.SubjectPublicKeyInfoBytes}.");
-        }
-
-        using var ephemeralKey = ImportAgreementKey(
-            subjectPublicKeyInfo: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span,
-            what: "ephemeral sender key"
-        );
-    }
-
-    private static void ValidateRecipientId(KeyId recipientId, ReadOnlySpan<byte> recipientPublicKeySubjectPublicKeyInfo) {
-        ValidateSealingAlgorithm(recipientId: recipientId);
-
-        if (!string.Equals(
-            a: recipientId.KeyHash,
-            b: KeyId.ComputeKeyHash(subjectPublicKeyInfo: recipientPublicKeySubjectPublicKeyInfo),
-            comparisonType: StringComparison.Ordinal
-        )) {
-            throw new FormatException(message: "The sealed attestation recipient id does not identify the supplied recipient key.");
-        }
-    }
-
-    private static void ValidateSealingAlgorithm(KeyId recipientId) {
-        ArgumentNullException.ThrowIfNull(argument: recipientId);
-
-        AttestationAlgorithmDescriptor descriptor;
-
-        try {
-            descriptor = AttestationAlgorithms.Resolve(algorithm: recipientId.Algorithm);
-        } catch (NotSupportedException exception) {
-            throw new FormatException(
-                message: $"The sealed attestation recipient id names unsupported algorithm '{recipientId.Algorithm}'.",
-                innerException: exception
-            );
-        }
-
-        if (descriptor.Role != AttestationKeyRole.Sealing) {
-            throw new FormatException(message: $"The sealed attestation recipient id names '{recipientId.Algorithm}', which is a {descriptor.Role.ToString().ToLowerInvariant()} algorithm rather than a sealing algorithm.");
-        }
-
-        if (!string.Equals(
-            a: descriptor.Name,
-            b: AttestationAlgorithms.EcdhP256HkdfSha256Aes256Gcm,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            throw new FormatException(message: $"The sealed attestation implementation does not support recipient sealing algorithm '{descriptor.Name}'.");
-        }
-    }
-
-    private static byte[] BindAssociatedData(ReadOnlySpan<byte> associatedData, ReadOnlySpan<byte> recipientContext) {
-        var bound = new byte[(AeadContextLabel.Length + sizeof(ulong) + associatedData.Length + recipientContext.Length)];
-        var offset = 0;
-
-        AeadContextLabel.CopyTo(
-            array: bound,
-            index: offset
-        );
-        offset += AeadContextLabel.Length;
-        BinaryPrimitives.WriteUInt64BigEndian(
-            destination: bound.AsSpan(start: offset),
-            value: (ulong)associatedData.Length
-        );
-        offset += sizeof(ulong);
-        associatedData.CopyTo(destination: bound.AsSpan(start: offset));
-        offset += associatedData.Length;
-        recipientContext.CopyTo(destination: bound.AsSpan(start: offset));
-
-        return bound;
-    }
-
-    /// <summary>A codec-independent, length-delimited encoding used in both HKDF info and AEAD associated data.</summary>
-    private static byte[] EncodeRecipientContext(KeyId recipientId) {
-        var domain = DecodeFingerprint(value: recipientId.Domain, what: "domain");
-        var keyHash = DecodeFingerprint(value: recipientId.KeyHash, what: "key hash");
-        var subject = ((recipientId.Subject is null)
-            ? null
-            : Encoding.UTF8.GetBytes(s: recipientId.Subject));
-        var algorithm = Encoding.UTF8.GetBytes(s: recipientId.Algorithm);
-        var result = new byte[(domain.Length + 1 + ((subject is null) ? 0 : (sizeof(uint) + subject.Length)) + sizeof(uint) + algorithm.Length + keyHash.Length)];
-        var offset = 0;
-
-        domain.CopyTo(array: result, index: offset);
-        offset += domain.Length;
-        result[offset++] = ((subject is null) ? (byte)0 : (byte)1);
-
-        if (subject is not null) {
-            BinaryPrimitives.WriteUInt32BigEndian(
-                destination: result.AsSpan(start: offset),
-                value: checked((uint)subject.Length)
-            );
-            offset += sizeof(uint);
-            subject.CopyTo(array: result, index: offset);
-            offset += subject.Length;
-        }
-
-        BinaryPrimitives.WriteUInt32BigEndian(
-            destination: result.AsSpan(start: offset),
-            value: checked((uint)algorithm.Length)
-        );
-        offset += sizeof(uint);
-        algorithm.CopyTo(array: result, index: offset);
-        offset += algorithm.Length;
-        keyHash.CopyTo(array: result, index: offset);
-
-        return result;
-    }
-
-    private static byte[] DecodeFingerprint(string value, string what) {
-        byte[] bytes;
-
-        try {
-            bytes = Convert.FromHexString(s: value);
-        } catch (FormatException exception) {
-            throw new FormatException(
-                message: $"The sealed attestation recipient {what} is not a SHA-256 fingerprint.",
-                innerException: exception
-            );
-        }
-
-        if (
-            (bytes.Length != 32) ||
-            !string.Equals(
-                a: value,
-                b: Convert.ToHexStringLower(bytes: bytes),
-                comparisonType: StringComparison.Ordinal
-            )
-        ) {
-            throw new FormatException(message: $"The sealed attestation recipient {what} must be a 32-byte lowercase hexadecimal SHA-256 fingerprint.");
-        }
-
-        return bytes;
     }
 }

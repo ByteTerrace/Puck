@@ -28,15 +28,15 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
     private static DirectXDevice CreateDevice(IUnknown* adapter, DirectXFeatureLevel minimumFeatureLevel) {
         void* device;
         var result = PInvoke.D3D12CreateDevice(
+            MinimumFeatureLevel: ((D3D_FEATURE_LEVEL)minimumFeatureLevel),
             pAdapter: adapter,
-            MinimumFeatureLevel: (D3D_FEATURE_LEVEL)minimumFeatureLevel,
-            riid: ID3D12Device.IID_Guid,
-            ppDevice: &device
+            ppDevice: &device,
+            riid: ID3D12Device.IID_Guid
         );
 
         result.ThrowIfFailed(operation: "D3D12CreateDevice");
         return new DirectXDevice(
-            deviceHandle: (nint)device,
+            deviceHandle: ((nint)device),
             featureLevel: minimumFeatureLevel
         );
     }
@@ -84,7 +84,7 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
 
             try {
                 return CreateDevice(
-                    adapter: (IUnknown*)adapter,
+                    adapter: ((IUnknown*)adapter),
                     minimumFeatureLevel: minimumFeatureLevel
                 );
             } finally {
@@ -102,15 +102,15 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             void* adapterPointer;
 
             factory->EnumWarpAdapter(
-                riid: IDXGIAdapter1.IID_Guid,
-                ppvAdapter: out adapterPointer
+                ppvAdapter: out adapterPointer,
+                riid: IDXGIAdapter1.IID_Guid
             );
 
-            var adapter = (IDXGIAdapter1*)adapterPointer;
+            var adapter = ((IDXGIAdapter1*)adapterPointer);
 
             try {
                 return CreateDevice(
-                    adapter: (IUnknown*)adapter,
+                    adapter: ((IUnknown*)adapter),
                     minimumFeatureLevel: minimumFeatureLevel
                 );
             } finally {
@@ -133,8 +133,8 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
         // adapter description yields a value directly comparable to a Vulkan physical device's reported LUID. Like the
         // descriptor-handle getters it returns a struct by value through the hidden-pointer x64 COM ABI the CsWin32
         // wrapper omits, so invoke the vtable slot directly with the return-by-pointer signature.
-        var device = (ID3D12Device*)deviceHandle;
-        var vtable = *(void***)device;
+        var device = ((ID3D12Device*)deviceHandle);
+        var vtable = *((void***)device);
         LUID luid;
 
         ((delegate* unmanaged[Stdcall]<ID3D12Device*, LUID*, void>)vtable[DirectXConstants.GetAdapterLuidSlot])(
@@ -152,8 +152,8 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
 
         // CsWin32 maps GetDeviceRemovedReason's HRESULT into a throwing void-returning friendly overload, discarding the
         // exact reason — so invoke the vtable slot directly to read the raw HRESULT (e.g. DXGI_ERROR_DEVICE_HUNG).
-        var device = (ID3D12Device*)deviceHandle;
-        var vtable = *(void***)device;
+        var device = ((ID3D12Device*)deviceHandle);
+        var vtable = *((void***)device);
 
         return ((delegate* unmanaged[Stdcall]<ID3D12Device*, int>)vtable[DirectXConstants.GetDeviceRemovedReasonSlot])(device);
     }
@@ -179,10 +179,10 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
                 // returning success (S_FALSE) when the adapter meets the requested minimum feature level.
                 foreach (var level in FeatureLevelsHighToLow) {
                     var result = PInvoke.D3D12CreateDevice(
-                        pAdapter: (IUnknown*)adapter,
-                        MinimumFeatureLevel: (D3D_FEATURE_LEVEL)level,
-                        riid: ID3D12Device.IID_Guid,
-                        ppDevice: null
+                        MinimumFeatureLevel: ((D3D_FEATURE_LEVEL)level),
+                        pAdapter: ((IUnknown*)adapter),
+                        ppDevice: null,
+                        riid: ID3D12Device.IID_Guid
                     );
 
                     if (result.Succeeded) {

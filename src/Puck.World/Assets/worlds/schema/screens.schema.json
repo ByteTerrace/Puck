@@ -38,40 +38,8 @@
         "type": "number"
       },
       "source": {
-        "description": "The signal the lit face carries.",
-        "type": "object",
-        "required": [
-          "$type"
-        ],
-        "anyOf": [
-          {
-            "$ref": "./common.schema.json#/$defs/None"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/TestPattern"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/Machine"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/Camera"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/View"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/Capture"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/Console"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/Qr"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/Session"
-          }
-        ]
+        "$ref": "./common.schema.json#/$defs/WorldScreenSource",
+        "description": "The signal the lit face carries."
       },
       "route": {
         "description": "The engage-route policy.",
@@ -161,21 +129,8 @@
         "additionalProperties": false
       },
       "solid": {
+        "$ref": "./common.schema.json#/$defs/WorldSolid",
         "description": "The screen slab\u0027s solidity facet (a box collider derived from the slab\u0027s oriented frame \u002B Margin by Server.WorldColliderSet), or null for a decorative screen. Omitted from the wire when null.",
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "margin": {
-            "description": "The signed skin added to the shape for contact purposes. Positive fattens the collider past the drawn surface; negative lets a body sink in. Compensates the smooth-union blend.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "margin"
-        ],
-        "additionalProperties": false,
         "default": null
       },
       "magazine": {
@@ -199,31 +154,34 @@
               ],
               "anyOf": [
                 {
-                  "$ref": "./common.schema.json#/$defs/None"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceNone"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/TestPattern"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceTestPattern"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/Machine"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceMachine"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/Camera"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceCamera"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/View"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceView"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/Capture"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceCapture"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/Console"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceConsole"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/Qr"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceQr"
                 },
                 {
-                  "$ref": "./common.schema.json#/$defs/Session"
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceSession"
+                },
+                {
+                  "$ref": "./common.schema.json#/$defs/WorldScreenSourceText"
                 }
               ]
             }

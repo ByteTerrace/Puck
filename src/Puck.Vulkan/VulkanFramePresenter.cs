@@ -33,6 +33,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
 
     private readonly IVulkanFramePresentationApi m_framePresentationApi;
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
+
     // Closed-loop present timing (VK_KHR_present_wait). All accessed only on the single pump thread that presents.
     private bool? m_presentWaitSupported;    // resolved per-device (re-resolved when m_presentWaitResolvedForDevice changes); null = not yet probed
     private nint m_presentWaitResolvedForDevice; // the device handle m_presentWaitSupported was resolved for; 0 = none yet
@@ -155,9 +156,9 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         // The render-finished semaphore is the acquired IMAGE's: vkQueuePresentKHR's wait
         // on it is not fence-observable, so it may only be reused once the presentation
         // engine hands this image back through a future acquire.
-        var renderFinishedSemaphoreHandle = frameSynchronization.RenderFinishedSemaphoreHandles[(int)imageIndex];
+        var renderFinishedSemaphoreHandle = frameSynchronization.RenderFinishedSemaphoreHandles[((int)imageIndex)];
         var submitRequest = new VulkanFrameSubmitRequest(
-            CommandBufferHandle: commandResources.CommandBufferHandles[(int)imageIndex],
+            CommandBufferHandle: commandResources.CommandBufferHandles[((int)imageIndex)],
             DeviceHandle: logicalDevice.Handle,
             FenceHandle: frameSynchronization.InFlightFenceHandle,
             GraphicsQueueHandle: logicalDevice.GraphicsQueue.Handle,
@@ -234,7 +235,6 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
 
         return VulkanFramePresentationOutcome.Presented(imageIndex: imageIndex);
     }
-
     /// <inheritdoc/>
     public bool TryGetPresentTiming(out uint presentCount, out long presentTimestampTicks) {
         presentCount = m_presentCount;

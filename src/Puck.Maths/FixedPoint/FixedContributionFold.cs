@@ -41,6 +41,14 @@ namespace Puck.Maths;
 /// </para>
 /// </remarks>
 public static class FixedContributionFold {
+    private static Int128 Clamp(Int128 value, Int128 minimum, Int128 maximum) =>
+        ((value < minimum)
+            ? minimum
+            : ((value > maximum)
+                ? maximum
+                : value
+        ));
+
     /// <summary>Evaluates the fixed-point contribution fold.</summary>
     /// <param name="baseline">The value around which a present pool is centered.</param>
     /// <param name="poolDeltaRaw">The completed raw Q48.16 contribution sum subject to the optional pool.</param>
@@ -67,32 +75,56 @@ public static class FixedContributionFold {
         out bool poolClamped
     ) {
         if (minimum > maximum) {
-            throw new ArgumentException(message: "The minimum cannot be greater than the maximum.", paramName: nameof(minimum));
+            throw new ArgumentException(
+                message: "The minimum cannot be greater than the maximum.",
+                paramName: nameof(minimum)
+            );
         }
 
-        if ((poolRadius is { } radius) && (radius < FixedQ4816.Zero)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(poolRadius), message: "The pool radius cannot be negative.");
+        if (
+            (poolRadius is { } radius) &&
+            (radius < FixedQ4816.Zero)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(poolRadius),
+                message: "The pool radius cannot be negative."
+            );
         }
 
-        if ((threshold is { } crossing) && ((crossing < minimum) || (crossing > maximum))) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(threshold), message: "The threshold must lie within the inclusive range.");
+        if (
+            (threshold is { } crossing) &&
+            ((crossing < minimum) || (crossing > maximum))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(threshold),
+                message: "The threshold must lie within the inclusive range."
+            );
         }
 
-        var rawPooled = ((Int128)baseline.Value + poolDeltaRaw);
+        var rawPooled = (((Int128)baseline.Value) + poolDeltaRaw);
         var pooled = ((poolRadius is { } presentRadius)
-            ? Clamp(value: rawPooled, minimum: ((Int128)baseline.Value - presentRadius.Value), maximum: ((Int128)baseline.Value + presentRadius.Value))
-            : rawPooled);
+            ? Clamp(
+                value: rawPooled,
+                minimum: (((Int128)baseline.Value) - presentRadius.Value),
+                maximum: (((Int128)baseline.Value) + presentRadius.Value)
+            )
+            : rawPooled
+        );
 
         poolClamped = (pooled != rawPooled);
 
-        var ranged = Clamp(value: (pooled + outsidePoolDeltaRaw), minimum: minimum.Value, maximum: maximum.Value);
+        var ranged = Clamp(
+            value: (pooled + outsidePoolDeltaRaw),
+            minimum: minimum.Value,
+            maximum: maximum.Value
+        );
         var rangedRaw = ((long)ranged);
 
         return ((threshold is { } presentThreshold)
-            ? ((rangedRaw >= presentThreshold.Value) ? maximum : minimum)
-            : FixedQ4816.FromRawBits(value: rangedRaw));
+            ? ((rangedRaw >= presentThreshold.Value)
+                ? maximum
+                : minimum)
+            : FixedQ4816.FromRawBits(value: rangedRaw)
+        );
     }
-
-    private static Int128 Clamp(Int128 value, Int128 minimum, Int128 maximum) =>
-        ((value < minimum) ? minimum : ((value > maximum) ? maximum : value));
 }

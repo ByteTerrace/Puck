@@ -15,7 +15,6 @@ public interface ITiltSensor {
     /// <param name="x">The horizontal-axis reading.</param>
     /// <param name="y">The vertical-axis reading.</param>
     void Read(out int x, out int y);
-
     /// <summary>Records one host-supplied tilt sample, each axis -1..1, held constant until the next call — the
     /// per-segment input a queued host's <c>ApplyInput</c> feeds every step. A no-op on an implementation that does
     /// not accept host input (a fixed test double).</summary>

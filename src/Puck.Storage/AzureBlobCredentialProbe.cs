@@ -9,7 +9,6 @@ namespace Puck.Storage;
 /// <param name="Detail">The credential type that answered, or the first line of why none could.</param>
 /// <param name="ExpiresOn">The token's expiry when one was issued; <see langword="null"/> otherwise.</param>
 public readonly record struct AzureBlobCredentialStatus(bool Available, string Detail, DateTimeOffset? ExpiresOn);
-
 /// <summary>
 /// Asks the ambient Azure credential — the same <c>DefaultAzureCredential</c> chain
 /// <see cref="AzureBlobObjectBlobStoreBackend"/> authenticates its service-URI targets with — whether it can issue a
@@ -30,6 +29,21 @@ public static class AzureBlobCredentialProbe {
     private const int DetailLengthLimit = 240;
 
     private static readonly string[] StorageScopes = ["https://storage.azure.com/.default"];
+
+    private static string Summarize(string message) {
+        var lineBreak = message.AsSpan().IndexOfAny(
+            value0: '\r',
+            value1: '\n'
+        );
+        var line = ((lineBreak >= 0)
+            ? message[..lineBreak]
+            : message).Trim();
+
+        return ((line.Length <= DetailLengthLimit)
+            ? line
+            : $"{line[..DetailLengthLimit]}…"
+        );
+    }
 
     /// <summary>Probes the ambient credential for a blob-storage token, bounded by <paramref name="timeout"/>.</summary>
     /// <param name="timeout">How long to wait before giving up — the caller is on a frame loop, so this is short.</param>
@@ -56,8 +70,8 @@ public static class AzureBlobCredentialProbe {
             return new AzureBlobCredentialStatus(
                 Available: false,
                 Detail: (cancellationToken.IsCancellationRequested
-                    ? "canceled"
-                    : $"timed out after {timeout.TotalSeconds:0}s"),
+                ? "canceled"
+                : $"timed out after {timeout.TotalSeconds:0}s"),
                 ExpiresOn: null
             );
         } catch (Exception exception) {
@@ -73,12 +87,5 @@ public static class AzureBlobCredentialProbe {
                 disposable.Dispose();
             }
         }
-    }
-
-    private static string Summarize(string message) {
-        var lineBreak = message.AsSpan().IndexOfAny(value0: '\r', value1: '\n');
-        var line = ((lineBreak >= 0) ? message[..lineBreak] : message).Trim();
-
-        return ((line.Length <= DetailLengthLimit) ? line : $"{line[..DetailLengthLimit]}…");
     }
 }

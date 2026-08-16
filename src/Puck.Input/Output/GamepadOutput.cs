@@ -8,12 +8,13 @@ namespace Puck.Input.Output;
 /// it never touches the native handle directly, so callers on any thread are safe.
 /// </summary>
 public sealed class GamepadOutput : IGamepadOutput {
-    private const int Suspended = 0;
     private const int Accepting = 1;
     private const int Killed = 2;
+    private const int Suspended = 0;
 
-    private readonly object m_gate = new();
+    private readonly Lock m_gate = new();
     private readonly GamepadOutputQueue m_queue;
+
     private int m_state;
 
     /// <summary>Initializes output control for one connected gamepad.</summary>
@@ -33,7 +34,10 @@ public sealed class GamepadOutput : IGamepadOutput {
         Capabilities = capabilities;
         DeviceId = deviceId;
         m_queue = queue;
-        m_state = (accepting ? Accepting : Suspended);
+        m_state = (accepting
+            ? Accepting
+            : Suspended
+        );
     }
 
     /// <inheritdoc />
@@ -41,14 +45,14 @@ public sealed class GamepadOutput : IGamepadOutput {
     /// <inheritdoc />
     public InputDeviceId DeviceId { get; }
 
-    /// <summary>Marks the handle dead after the device disconnects; further requests are rejected.</summary>
-    public void Kill() {
+    /// <summary>Resumes output after a wireless receiver slot begins streaming again.</summary>
+    internal void Resume() {
         lock (m_gate) {
-            m_state = Killed;
-            m_queue.Clear();
+            if (m_state == Suspended) {
+                m_state = Accepting;
+            }
         }
     }
-
     /// <summary>Temporarily rejects and clears output while a wireless receiver slot is empty.</summary>
     internal void Suspend() {
         lock (m_gate) {
@@ -60,18 +64,12 @@ public sealed class GamepadOutput : IGamepadOutput {
         }
     }
 
-    /// <summary>Resumes output after a wireless receiver slot begins streaming again.</summary>
-    internal void Resume() {
-        lock (m_gate) {
-            if (m_state == Suspended) {
-                m_state = Accepting;
-            }
-        }
-    }
-
     private bool TryEnqueue(GamepadOutputCapabilities required, in GamepadOutputCommand command) {
         lock (m_gate) {
-            if ((m_state != Accepting) || !Capabilities.HasFlag(flag: required)) {
+            if (
+                (m_state != Accepting) ||
+                !Capabilities.HasFlag(flag: required)
+            ) {
                 return false;
             }
 
@@ -79,6 +77,13 @@ public sealed class GamepadOutput : IGamepadOutput {
         }
     }
 
+    /// <summary>Marks the handle dead after the device disconnects; further requests are rejected.</summary>
+    public void Kill() {
+        lock (m_gate) {
+            m_state = Killed;
+            m_queue.Clear();
+        }
+    }
     /// <inheritdoc />
     public bool Rumble(in RumbleEffect effect) {
         return TryEnqueue(
@@ -103,6 +108,19 @@ public sealed class GamepadOutput : IGamepadOutput {
                 TriggerRumble: effect
             ),
             required: GamepadOutputCapabilities.TriggerRumble
+        );
+    }
+    /// <inheritdoc />
+    public bool SendEffect(ReadOnlySpan<byte> data) {
+        return TryEnqueue(
+            command: new GamepadOutputCommand(
+                Kind: GamepadOutputKind.Raw,
+                Led: default,
+                Raw: data.ToArray(),
+                Rumble: default,
+                TriggerRumble: default
+            ),
+            required: GamepadOutputCapabilities.RawEffect
         );
     }
     /// <inheritdoc />
@@ -141,25 +159,12 @@ public sealed class GamepadOutput : IGamepadOutput {
                 Led: default,
                 Raw: null,
                 Rumble: default,
-                TriggerRumble: default,
+                ScheduleTick: fireAtTick,
                 TriggerEffectLeft: left,
                 TriggerEffectRight: right,
-                ScheduleTick: fireAtTick
-            ),
-            required: GamepadOutputCapabilities.TriggerEffect
-        );
-    }
-    /// <inheritdoc />
-    public bool SendEffect(ReadOnlySpan<byte> data) {
-        return TryEnqueue(
-            command: new GamepadOutputCommand(
-                Kind: GamepadOutputKind.Raw,
-                Led: default,
-                Raw: data.ToArray(),
-                Rumble: default,
                 TriggerRumble: default
             ),
-            required: GamepadOutputCapabilities.RawEffect
+            required: GamepadOutputCapabilities.TriggerEffect
         );
     }
 }

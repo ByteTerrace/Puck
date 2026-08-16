@@ -6,7 +6,7 @@ using Xunit;
 
 using Puck.Forge.Authoring;
 using Puck.Hosting;
-using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -27,9 +27,10 @@ internal static class Fixtures {
     private const uint SimulationRateHz = 240U;
 
     /// <summary>The engine screen-surface index the code-built test-pattern screen occupies — the ENGAGE target
-    /// <see cref="EngageAuthorityLawTests"/> routes against. <see cref="Puck.SdfVm.SdfProgramBuilder"/> is out of
-    /// reach here (Puck.SdfVm is not referenced by this project), so this simply names index 0, comfortably below
-    /// any reserved derived-face band.</summary>
+    /// <see cref="EngageAuthorityLawTests"/> routes against. The GPU-side <c>Puck.SdfVm.SdfWorldEngine</c> that
+    /// actually enforces <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> is out of reach here (Puck.SdfVm is not
+    /// referenced by this project), so this simply names index 0, comfortably below any reserved derived-face
+    /// band.</summary>
     public const int TestPatternScreenIndex = 0;
 
     /// <summary>Builds the <c>admission</c> row that authorizes travelers from any authenticated federation
@@ -46,7 +47,6 @@ internal static class Fixtures {
             new WorldAdmissionGrant(Capability: WorldCapability.Drive, Exclusive: true, Budget: 64),
             new WorldAdmissionGrant(Capability: WorldCapability.Observe, Budget: 64),
         ]);
-
     /// <summary>Builds a minimal, valid <see cref="WorldDefinition"/> entirely in code — one row per REQUIRED
     /// section (see <c>WorldDefinitionValidator.RequireSections</c>), each populated with the smallest value shape
     /// its own validation pass accepts. Carries exactly the extra furniture the laws in this suite need beyond the
@@ -73,7 +73,7 @@ internal static class Fixtures {
     /// </summary>
     public static WorldDefinition BuildDocument() => BuildDocumentCore(
         spawnPoints: BuildSpawnPoints(),
-        collision: new WorldCollision(Requirements: [], ContactSkin: 0.02f, MaxIterations: 4, MaxSlopeDegrees: 60f, GradientProbe: 0f),
+        collision: new WorldCollision(ContactSkin: 0.02f, GradientProbe: 0f, MaxIterations: 4, MaxSlopeDegrees: 60f, Requirements: []),
         seatCollider: null,
         creations: [],
         placements: []
@@ -149,7 +149,6 @@ internal static class Fixtures {
             Collider: seatCollider
         ),
     ];
-
     /// <summary>The parameterized core every <see cref="WorldDefinition"/> fixture in this suite builds from — the
     /// pieces that vary across the two callers (<see cref="BuildDocument"/>, <see cref="BuildGradientUpDocument"/>)
     /// are parameters; everything else is the one shared literal, never forked.</summary>
@@ -243,12 +242,12 @@ internal static class Fixtures {
             // Control feel is REQUIRED — there is no engine default to fall back on, so even a compiler-maintained
             // fixture must state what its seats feel like. These are the numbers the shipped worlds author.
             SeatLook: new WorldSeatLook(
-                YawSensitivity: 0.001f,
-                PitchSensitivity: 0.001f,
-                InvertYaw: false,
-                InvertPitch: false,
                 Arming: WorldSeatLookArming.RightButton,
-                StickLookRate: 2.6f
+                InvertPitch: false,
+                InvertYaw: false,
+                PitchSensitivity: 0.001f,
+                StickLookRate: 2.6f,
+                YawSensitivity: 0.001f
             )
         );
 
@@ -269,7 +268,7 @@ internal static class Fixtures {
             HalfHeight: 1f,
             HalfDepth: 0.1f,
             Round: 0f,
-            Source: new WorldScreenSource.TestPattern(Width: 320, Height: 240),
+            Source: new WorldScreenSource.TestPattern(Height: 240, Width: 320),
             // Passive: EngageAuthorityLawTests calls Server.Engagement.Engage directly (the authority door itself),
             // never the screen-policy precheck (proximity/auto-insert/machine-presence) WorldServer.ApplyCommand
             // layers on top — so the route policy fields are inert for this suite's purposes.
@@ -277,7 +276,7 @@ internal static class Fixtures {
         );
 
         return new WorldDefinition(
-            Motion: new WorldMotionDefaults(MoveSpeed: 4f, TurnSpeed: 2.5f, MaxSmoothError: 3f),
+            Motion: new WorldMotionDefaults(MaxSmoothError: 3f, MoveSpeed: 4f, TurnSpeed: 2.5f),
             SpawnPoints: spawnPoints,
             Render: WorldRenderDefaults.Default,
             Screens: [testPatternScreen],
@@ -311,14 +310,13 @@ internal static class Fixtures {
             State: [],
             // Authored seconds now (WorldDefinition.InputHold is the AUTHORED shape) — 120/60/0 ticks at the
             // fixture's default 240 Hz (no Simulation section authored) is 0.5/0.25/0 seconds.
-            InputHold: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, LowerAfterSeconds: 0.25f, DefaultSeconds: 0f, EqualizeByDefault: true, Participants: [])
+            InputHold: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, DefaultSeconds: 0f, EqualizeByDefault: true, LowerAfterSeconds: 0.25f, Participants: [])
         );
     }
 
     /// <summary>The placed ball's actual surface radius, in world units — sized to "a few" per
     /// <see cref="GradientUpContactLawTests"/>'s brief, never a raw magic number at the call site.</summary>
     public const float BallSurfaceRadius = 3f;
-
     /// <summary>The seat slot <see cref="GradientUpContactLawTests"/> joins and repositions onto the ball's flank —
     /// slot 0 maps directly to body index 0 (the 0-based seat/body correspondence
     /// <see cref="EngageAuthorityLawTests"/> also relies on), and is the ONE spawn point
@@ -332,13 +330,11 @@ internal static class Fixtures {
     /// hash pin cannot silently accept: only the RESULTING surface radius matters here, so a mismatch just resizes
     /// the ball, never breaks the fixture.</summary>
     private const float SphereLocalRadius = 0.38f;
-
     /// <summary>How far off vertical (as a fraction of <see cref="BallSurfaceRadius"/>) the flank point
     /// <see cref="GradientUpContactLawTests"/> grounds on sits — 0.9 puts the surface normal at
     /// <c>acos(sqrt(1-0.9^2))</c> ~= 64 degrees off world +Y, comfortably past the fixture's 60-degree
     /// <c>maxSlopeDegrees</c> (the brief's own sizing).</summary>
     private const float FlankHorizontalRatio = 0.9f;
-
     /// <summary>How far above the ball's surface, along the flank ray, the seat spawns — small enough that the
     /// FLAT-UP control arm's straight vertical fall still lands on the same steep face (proving the control's push
     /// is real contact, not a body that free-falls past the ball entirely) rather than missing the sphere outright.</summary>
@@ -350,8 +346,7 @@ internal static class Fixtures {
     /// falls exactly along this ray toward the origin (no tangential velocity is ever introduced — see
     /// <see cref="BuildGradientUpDocument"/>'s remarks), so a body spawned anywhere on it lands on the SAME flank
     /// point every time.</summary>
-    private static Vector3 FlankDirection { get; } = new(x: FlankHorizontalRatio, y: MathF.Sqrt(1f - (FlankHorizontalRatio * FlankHorizontalRatio)), z: 0f);
-
+    private static Vector3 FlankDirection { get; } = new(x: FlankHorizontalRatio, y: MathF.Sqrt(x: (1f - (FlankHorizontalRatio * FlankHorizontalRatio))), z: 0f);
     /// <summary>The seat spawn position <see cref="GradientUpContactLawTests"/> relocates <c>seat-1</c> to — on the
     /// flank ray, <see cref="FlankSpawnClearance"/> world units above the ball's surface.</summary>
     private static Vector3 GradientUpSpawnPosition { get; } = (FlankDirection * (BallSurfaceRadius + FlankSpawnClearance));
@@ -408,7 +403,7 @@ internal static class Fixtures {
 
         return BuildDocumentCore(
             spawnPoints: spawnPoints,
-            collision: new WorldCollision(Requirements: requirements, ContactSkin: 0.02f, MaxIterations: 4, MaxSlopeDegrees: 60f, GradientProbe: 0f),
+            collision: new WorldCollision(ContactSkin: 0.02f, GradientProbe: 0f, MaxIterations: 4, MaxSlopeDegrees: 60f, Requirements: requirements),
             seatCollider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: 0.35f),
             creations: [creation],
             placements: [
@@ -416,7 +411,6 @@ internal static class Fixtures {
             ]
         );
     }
-
     /// <summary>The code-built document's canonical UTF-8 bytes — <see cref="WorldDefinitionSerialization.Serialize"/>
     /// over <see cref="BuildDocument"/>, freshly built and serialized on every call (cheap, and it keeps a caller
     /// free to mutate its own copy without a shared-buffer hazard). This is also the round-trip proof: the fixture
@@ -425,7 +419,6 @@ internal static class Fixtures {
     /// exact bytes back into a <see cref="WorldDefinition"/> and constructs a live <see cref="WorldServer"/> from
     /// the result).</summary>
     public static byte[] DefaultWorldBytes() => WorldDefinitionSerialization.Serialize(definition: BuildDocument());
-
     /// <summary>Serializes the code-built document, injects <c>bogusField: true</c> into the first row of
     /// <c>addons</c> (mirroring <c>docs/verification/strict-definition-parse</c>'s own choice of a
     /// <see cref="WorldAddonRow"/> as the target — the row the strict-parse gap was originally named against), and
@@ -440,7 +433,6 @@ internal static class Fixtures {
 
         return node.ToJsonBytes();
     }
-
     /// <summary>Serializes the code-built document and REMOVES <c>playerDefaults.seatLook</c>, returning the
     /// re-serialized bytes. A seat's control feel is a required member with no engine fallback, and a non-nullable
     /// record parameter does not by itself PROVE that: only a document actually missing the member, actually
@@ -453,7 +445,6 @@ internal static class Fixtures {
 
         return node.ToJsonBytes();
     }
-
     /// <summary>Serializes the code-built document and REMOVES <c>host.presentation</c>, returning the re-serialized
     /// bytes. The member has no C# default, so the source-generated context requires it of a document — but a
     /// generated schema marking a member <c>required</c> proves nothing about the LOADER, which is exactly the
@@ -494,7 +485,7 @@ internal static class Fixtures {
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
         var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines);
 
-        return new WorldFixture(server: server, machines: machines, stateDirectory: stateDirectory);
+        return new WorldFixture(machines: machines, server: server, stateDirectory: stateDirectory);
     }
 
     /// <summary>The tick duration every fixture step advances by — <see cref="EngineTicks.PerRate"/> at the fixed
@@ -514,10 +505,10 @@ internal static class Fixtures {
         string probePath;
 
         try {
-            probePath = Path.Combine(WorldReplayTape.Directory(), $".write-probe-{Guid.NewGuid():N}");
+            probePath = Path.Combine(path1: WorldReplayTape.Directory(), path2: $".write-probe-{Guid.NewGuid():N}");
 
-            File.WriteAllBytes(path: probePath, bytes: [0]);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            File.WriteAllBytes(bytes: [0], path: probePath);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Assert.Skip(reason: $"the Replays directory is not writable in this environment ({exception.GetType().Name}: {exception.Message}) — this law needs a real on-disk write to prove anything");
 
             return;
@@ -529,13 +520,13 @@ internal static class Fixtures {
         }
     }
 }
-
 /// <summary>A fresh, disposable <see cref="WorldServer"/> plus the resources its construction owns
 /// (<see cref="WorldMachineHost"/>, the scratch profile-catalog directory) — bundled so a law body drives the
 /// server without having to know what else a fresh boot required.</summary>
 internal sealed class WorldFixture : IDisposable {
     private readonly WorldMachineHost m_machines;
     private readonly string m_stateDirectory;
+
     private ulong m_tick;
     private ulong m_elapsedTicks;
 
@@ -555,17 +546,16 @@ internal sealed class WorldFixture : IDisposable {
     /// referenced by this project).</summary>
     public void Step(ulong? stepTicks = null) {
         var width = (stepTicks ?? Fixtures.StepTicks);
-        m_elapsedTicks = checked(m_elapsedTicks + width);
-        var context = new FixedStepContext(Tick: m_tick, ElapsedTicks: m_elapsedTicks, StepTicks: width);
+
+        m_elapsedTicks = checked((m_elapsedTicks + width));
+        var context = new FixedStepContext(ElapsedTicks: m_elapsedTicks, StepTicks: width, Tick: m_tick);
 
         Server.Step(context: in context);
         m_tick++;
     }
-
     /// <summary>The live document's current bytes — the byte-identity probe the all-or-nothing law compares
     /// before/after an apply attempt.</summary>
     public byte[] DefinitionBytes() => WorldDefinitionSerialization.Serialize(definition: Server.Definition);
-
     /// <inheritdoc/>
     public void Dispose() {
         m_machines.Dispose();
@@ -576,4 +566,32 @@ internal sealed class WorldFixture : IDisposable {
             // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the test itself.
         }
     }
+}
+/// <summary>An <see cref="IWorldAddonHost"/> that mounts and pumps nothing — the addon-less shadow host tests
+/// unrelated to the addon seam wire a <see cref="WorldReplayTape"/>'s required <c>addonHostFactory</c> parameter
+/// with, since this project cannot reference <c>Puck.World.Addons</c>.</summary>
+internal sealed class NullAddonHost : IWorldAddonHost {
+    /// <inheritdoc/>
+    public bool AnyEverPumped => false;
+    /// <inheritdoc/>
+    public int MountedCount => 0;
+    /// <inheritdoc/>
+    public IReadOnlyList<WorldAddonReceipt> Receipts => [];
+
+    /// <inheritdoc/>
+    public void ApplyContributions(ulong tick) { }
+    /// <inheritdoc/>
+    public void CompleteMutation(int addonIndex, ushort actOrdinal, bool applied) { }
+    /// <inheritdoc/>
+    public string? DescribeUndeclaredGrantedChannels(WorldPrincipal principal, ChannelReachMask? reach, WorldChannelTable channels) => null;
+    /// <inheritdoc/>
+    public void Dispose() { }
+    /// <inheritdoc/>
+    public string Mount(string name, string modulePath, string hash, ulong fuel, IReadOnlyList<WorldCapabilityRequest>? requests) => $"'{name}' refused — no addon host is mounted (NullAddonHost)";
+    /// <inheritdoc/>
+    public void TickAddons(ulong tick) { }
+    /// <inheritdoc/>
+    public string Unmount(string name) => $"'{name}' refused — no addon host is mounted (NullAddonHost)";
+    /// <inheritdoc/>
+    public void ResolveReads(ulong tick) { }
 }

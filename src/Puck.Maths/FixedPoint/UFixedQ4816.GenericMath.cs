@@ -31,21 +31,37 @@ public readonly partial record struct UFixedQ4816 {
     public static bool IsRealNumber(UFixedQ4816 value) => true;
     public static bool IsSubnormal(UFixedQ4816 value) => false;
     public static bool IsZero(UFixedQ4816 value) => (value.Value == 0UL);
-    public static UFixedQ4816 MaxMagnitude(UFixedQ4816 x, UFixedQ4816 y) => Max(x: x, y: y);
-    public static UFixedQ4816 MaxMagnitudeNumber(UFixedQ4816 x, UFixedQ4816 y) => Max(x: x, y: y);
-    public static UFixedQ4816 MinMagnitude(UFixedQ4816 x, UFixedQ4816 y) => Min(x: x, y: y);
-    public static UFixedQ4816 MinMagnitudeNumber(UFixedQ4816 x, UFixedQ4816 y) => Min(x: x, y: y);
+    public static UFixedQ4816 MaxMagnitude(UFixedQ4816 x, UFixedQ4816 y) => Max(
+        x: x,
+        y: y
+    );
+    public static UFixedQ4816 MaxMagnitudeNumber(UFixedQ4816 x, UFixedQ4816 y) => Max(
+        x: x,
+        y: y
+    );
+    public static UFixedQ4816 MinMagnitude(UFixedQ4816 x, UFixedQ4816 y) => Min(
+        x: x,
+        y: y
+    );
+    public static UFixedQ4816 MinMagnitudeNumber(UFixedQ4816 x, UFixedQ4816 y) => Min(
+        x: x,
+        y: y
+    );
     public static UFixedQ4816 Parse(string s, NumberStyles style, IFormatProvider? provider) {
         ArgumentNullException.ThrowIfNull(argument: s);
 
-        return Parse(s: s.AsSpan(), style: style, provider: provider);
+        return Parse(
+            s: s.AsSpan(),
+            style: style,
+            provider: provider
+        );
     }
     public static UFixedQ4816 Parse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider) {
         var status = ParseText(
-            s: s,
-            style: style,
             provider: provider,
-            result: out var result
+            result: out var result,
+            s: s,
+            style: style
         );
 
         if (FixedPointParseStatus.Success == status) {
@@ -58,7 +74,11 @@ public readonly partial record struct UFixedQ4816 {
 
         // Re-enter the platform parser only on failure so Parse preserves its FormatException versus
         // decimal-overflow distinction. Successful values are always quantized from their original digits.
-        _ = decimal.Parse(s: s, style: style, provider: (provider ?? CultureInfo.InvariantCulture));
+        _ = decimal.Parse(
+            s: s,
+            style: style,
+            provider: (provider ?? CultureInfo.InvariantCulture)
+        );
 
         throw new FormatException(message: $"The input span was not in a valid {nameof(UFixedQ4816)} format.");
     }
@@ -69,14 +89,19 @@ public readonly partial record struct UFixedQ4816 {
             return false;
         }
 
-        return TryParse(s: s.AsSpan(), style: style, provider: provider, result: out result);
-    }
-    public static bool TryParse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out UFixedQ4816 result) {
-        return (FixedPointParseStatus.Success == ParseText(
-            s: s,
+        return TryParse(
+            s: s.AsSpan(),
             style: style,
             provider: provider,
             result: out result
+        );
+    }
+    public static bool TryParse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out UFixedQ4816 result) {
+        return (FixedPointParseStatus.Success == ParseText(
+            provider: provider,
+            result: out result,
+            s: s,
+            style: style
         ));
     }
 
@@ -88,16 +113,16 @@ public readonly partial record struct UFixedQ4816 {
     ) {
         result = default;
         var status = FixedPointText.Parse(
-            s: s,
-            style: style,
-            provider: provider,
             fractionBitCount: FractionBitCount,
-            parsingDenominator: ParsingDenominator,
-            maximumPositiveRaw: ulong.MaxValue,
             maximumNegativeMagnitudeRaw: 0UL,
-            rejectExactOutOfRange: false,
+            maximumPositiveRaw: ulong.MaxValue,
             negative: out _,
-            rawMagnitude: out var rawMagnitude
+            parsingDenominator: ParsingDenominator,
+            provider: provider,
+            rawMagnitude: out var rawMagnitude,
+            rejectExactOutOfRange: false,
+            s: s,
+            style: style
         );
 
         if (FixedPointParseStatus.Success == status) {
@@ -122,7 +147,10 @@ public readonly partial record struct UFixedQ4816 {
             return true;
         }
 
-        if (FixedPointConvert.TryGetFloating(value: value, result: out var floating)) {
+        if (FixedPointConvert.TryGetFloating(
+            result: out var floating,
+            value: value
+        )) {
             result = FromDoubleChecked(value: floating);
 
             return true;
@@ -154,12 +182,17 @@ public readonly partial record struct UFixedQ4816 {
         if (typeof(TOther) == typeof(FixedQ4816)) {
             var other = Unsafe.As<TOther, FixedQ4816>(source: ref value);
 
-            result = new(Value: ((other.Value < 0L) ? 0UL : ((ulong)other.Value)));
+            result = new(Value: ((other.Value < 0L)
+                ? 0UL
+                : ((ulong)other.Value)));
 
             return true;
         }
 
-        if (FixedPointConvert.TryGetFloating(value: value, result: out var floating)) {
+        if (FixedPointConvert.TryGetFloating(
+            result: out var floating,
+            value: value
+        )) {
             result = FromDouble(value: floating);
 
             return true;
@@ -198,13 +231,20 @@ public readonly partial record struct UFixedQ4816 {
             return true;
         }
 
-        if (FixedPointConvert.TryGetFloating(value: value, result: out var floating)) {
+        if (FixedPointConvert.TryGetFloating(
+            result: out var floating,
+            value: value
+        )) {
             result = FromDouble(value: floating);
 
             return true;
         }
 
-        if (FixedPointConvert.TryScaleTruncating(value: value, fractionBitCount: FractionBitCount, out var scaled)) {
+        if (FixedPointConvert.TryScaleTruncating(
+            value: value,
+            fractionBitCount: FractionBitCount,
+            out var scaled
+        )) {
             result = new(Value: unchecked((ulong)scaled));
 
             return true;
@@ -229,7 +269,10 @@ public readonly partial record struct UFixedQ4816 {
             return true;
         }
 
-        if (TrySetFloating(value: value, result: out result)) {
+        if (TrySetFloating(
+            result: out result,
+            value: value
+        )) {
             return true;
         }
 
@@ -257,14 +300,19 @@ public readonly partial record struct UFixedQ4816 {
         }
 
         if (typeof(TOther) == typeof(FixedQ4816)) {
-            var converted = new FixedQ4816(Value: ((value.Value > long.MaxValue) ? long.MaxValue : ((long)value.Value)));
+            var converted = new FixedQ4816(Value: ((value.Value > long.MaxValue)
+                ? long.MaxValue
+                : ((long)value.Value)));
 
             result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
 
             return true;
         }
 
-        if (TrySetFloating(value: value, result: out result)) {
+        if (TrySetFloating(
+            result: out result,
+            value: value
+        )) {
             return true;
         }
 
@@ -307,7 +355,10 @@ public readonly partial record struct UFixedQ4816 {
             return true;
         }
 
-        if (TrySetFloating(value: value, result: out result)) {
+        if (TrySetFloating(
+            result: out result,
+            value: value
+        )) {
             return true;
         }
 
@@ -331,25 +382,41 @@ public readonly partial record struct UFixedQ4816 {
     private static UFixedQ4816 FromDecimalChecked(decimal value) {
         // The exact single ties-to-even rounding of the decimal's own rational; a decimal multiply would round the
         // rescale first and could resolve a manufactured tie off the true value's side.
-        var scaled = FixedPointConvert.ScaleDecimal(value: value, fractionBitCount: FractionBitCount);
+        var scaled = FixedPointConvert.ScaleDecimal(
+            fractionBitCount: FractionBitCount,
+            value: value
+        );
 
-        if ((scaled < Int128.Zero) || (scaled > ulong.MaxValue)) {
+        if (
+            (scaled < Int128.Zero) ||
+            (scaled > ulong.MaxValue)
+        ) {
             throw new OverflowException(message: $"Value is outside the representable {nameof(UFixedQ4816)} range.");
         }
 
         return new(Value: ((ulong)scaled));
     }
     private static UFixedQ4816 FromDoubleChecked(double value) {
-        var scaled = double.Round(x: (value * (1UL << FractionBitCount)), mode: MidpointRounding.ToEven);
+        var scaled = double.Round(
+            mode: MidpointRounding.ToEven,
+            x: (value * (1UL << FractionBitCount))
+        );
 
-        if (double.IsNaN(d: scaled) || (scaled < 0d) || (scaled > ScaledMaximum)) {
+        if (
+            double.IsNaN(d: scaled) ||
+            (scaled < 0d) ||
+            (scaled > ScaledMaximum)
+        ) {
             throw new OverflowException(message: $"Value is outside the representable {nameof(UFixedQ4816)} range.");
         }
 
         return new(Value: ((ulong)scaled));
     }
     private static UFixedQ4816 FromDecimalSaturating(decimal value) {
-        var scaled = FixedPointConvert.ScaleDecimal(value: value, fractionBitCount: FractionBitCount);
+        var scaled = FixedPointConvert.ScaleDecimal(
+            fractionBitCount: FractionBitCount,
+            value: value
+        );
 
         if (scaled < Int128.Zero) { return Zero; }
         if (scaled > ulong.MaxValue) { return MaxValue; }
@@ -372,7 +439,10 @@ public readonly partial record struct UFixedQ4816 {
         }
 
         if (typeof(TOther) == typeof(float)) {
-            var single = MathF.ScaleB(x: ((float)value.Value), n: -FractionBitCount);
+            var single = MathF.ScaleB(
+                x: ((float)value.Value),
+                n: -FractionBitCount
+            );
 
             result = Unsafe.As<float, TOther>(source: ref single);
 

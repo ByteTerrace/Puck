@@ -16,7 +16,6 @@ public enum ChargeLane {
     /// <summary>At least one charge is fractional, so the fused sums accumulate at the wider scale and round there.</summary>
     General,
 }
-
 /// <summary>
 /// The scalar operations and one-rounding fused sums the presented kernel executes. This base contract fixes the
 /// schedule and canonical representation of each operation, but deliberately promises no associativity or
@@ -77,7 +76,6 @@ public interface IMaterialOps<TValue, TSelf>
     /// <see cref="One"/>; the two agree bit for bit.</remarks>
     TValue FusedChargedLinear(ReadOnlySpan<TValue> charges, ReadOnlySpan<TValue> values, ChargeLane lane);
 }
-
 /// <summary>
 /// A material whose canonical carrier obeys the commutative-semiring laws exactly: associative commutative addition,
 /// associative multiplication, both identities, zero annihilation, and distributivity. Law-dependent algorithms use
@@ -88,7 +86,6 @@ public interface IMaterialOps<TValue, TSelf>
 public interface IExactSemiringMaterial<TValue, TSelf> : IMaterialOps<TValue, TSelf>
     where TSelf : struct, IMaterialOps<TValue, TSelf> {
 }
-
 /// <summary>A material whose addition has inverses.</summary>
 /// <typeparam name="TValue">The carrier the semiring operates on.</typeparam>
 /// <typeparam name="TSelf">The implementing struct.</typeparam>
@@ -104,7 +101,6 @@ public interface ISignedMaterial<TValue, TSelf> : IMaterialOps<TValue, TSelf>
     /// <returns>The difference.</returns>
     TValue Subtract(TValue left, TValue right);
 }
-
 /// <summary>
 /// A material whose addition is idempotent — <c>a + a = a</c> — which is what licenses a guarded sum over all lengths
 /// to stabilize rather than merely to terminate by nilpotence.
@@ -117,7 +113,6 @@ public interface ISignedMaterial<TValue, TSelf> : IMaterialOps<TValue, TSelf>
 public interface IIdempotentMaterial<TValue, TSelf> : IExactSemiringMaterial<TValue, TSelf>
     where TSelf : struct, IMaterialOps<TValue, TSelf> {
 }
-
 /// <summary>
 /// A De Morgan material: an idempotent semiring carrying a complement that is an involution and exchanges the
 /// semiring's two operations. Complementation lives here and nowhere else, so asking for it at a material that has none
@@ -132,7 +127,6 @@ public interface IComplementedMaterial<TValue, TSelf> : IIdempotentMaterial<TVal
     /// <returns>The complement.</returns>
     TValue Complement(TValue value);
 }
-
 /// <summary>A material whose non-zero values are units, with the non-unit returned as a witness rather than thrown.</summary>
 /// <typeparam name="TValue">The carrier the semiring operates on.</typeparam>
 /// <typeparam name="TSelf">The implementing struct.</typeparam>
@@ -145,14 +139,13 @@ public interface IFieldMaterial<TValue, TSelf> : ISignedMaterial<TValue, TSelf>,
     /// being the non-unit witness.</returns>
     bool TryInvert(TValue value, out TValue inverse);
 }
-
 /// <summary>The Boolean material <c>({false, true}, or, and)</c> — reachability, satisfaction, and every question whose
 /// answer is a bit. Exact: nothing here rounds.</summary>
 public readonly struct BooleanMaterial : IComplementedMaterial<bool, BooleanMaterial> {
-    /// <summary>Gets the additive identity, <see langword="false"/>.</summary>
-    public bool Zero => false;
     /// <summary>Gets the multiplicative identity, <see langword="true"/>.</summary>
     public bool One => true;
+    /// <summary>Gets the additive identity, <see langword="false"/>.</summary>
+    public bool Zero => false;
 
     /// <summary>Returns the disjunction of two values.</summary>
     /// <param name="left">The first addend.</param>
@@ -172,7 +165,10 @@ public readonly struct BooleanMaterial : IComplementedMaterial<bool, BooleanMate
     /// <returns>The folded value.</returns>
     public bool FusedChargedLinear(ReadOnlySpan<bool> charges, ReadOnlySpan<bool> values, ChargeLane lane) {
         for (var index = 0; (index < charges.Length); ++index) {
-            if (charges[index] && values[index]) { return true; }
+            if (
+                charges[index] &&
+                values[index]
+            ) { return true; }
         }
 
         return false;
@@ -185,7 +181,11 @@ public readonly struct BooleanMaterial : IComplementedMaterial<bool, BooleanMate
     /// <returns>The folded value.</returns>
     public bool FusedChargedSum(ReadOnlySpan<bool> charges, ReadOnlySpan<bool> left, ReadOnlySpan<bool> right, ChargeLane lane) {
         for (var index = 0; (index < charges.Length); ++index) {
-            if (charges[index] && left[index] && right[index]) { return true; }
+            if (
+                charges[index] &&
+                left[index] &&
+                right[index]
+            ) { return true; }
         }
 
         return false;
@@ -202,14 +202,13 @@ public readonly struct BooleanMaterial : IComplementedMaterial<bool, BooleanMate
     public bool Multiply(bool left, bool right) =>
         (left && right);
 }
-
 /// <summary>The two-element field <c>GF(2)</c> carried in a <see cref="ulong"/>: addition is exclusive-or and equals
 /// subtraction, multiplication is conjunction. Only the low bit is a member; every operation masks to it.</summary>
 public readonly struct ParityMaterial : ISignedMaterial<ulong, ParityMaterial>, IExactSemiringMaterial<ulong, ParityMaterial> {
-    /// <summary>Gets the additive identity, <c>0</c>.</summary>
-    public ulong Zero => 0UL;
     /// <summary>Gets the multiplicative identity, <c>1</c>.</summary>
     public ulong One => 1UL;
+    /// <summary>Gets the additive identity, <c>0</c>.</summary>
+    public ulong Zero => 0UL;
 
     /// <summary>Returns the exclusive-or of two values.</summary>
     /// <param name="left">The first addend.</param>
@@ -274,7 +273,6 @@ public readonly struct ParityMaterial : ISignedMaterial<ulong, ParityMaterial>, 
     public ulong Subtract(ulong left, ulong right) =>
         (left ^ right) & 1UL;
 }
-
 /// <summary>The counting semiring <c>(ℕ, +, ·)</c> over <see cref="BigInteger"/> — walk counts, ambiguity degrees, and
 /// every multiplicity that must not overflow. Exact and unbounded.</summary>
 /// <remarks>The carrier is the naturals, and admission enforces it: a negative coefficient is refused rather than
@@ -282,10 +280,10 @@ public readonly struct ParityMaterial : ISignedMaterial<ulong, ParityMaterial>, 
 /// negative value, and a material that squared <c>-1</c> to <c>1</c> would answer that question wrongly without
 /// saying so. <see cref="IntegerMaterial"/> is the signed carrier, and the two are chosen at the type argument.</remarks>
 public readonly struct CountingMaterial : IExactSemiringMaterial<BigInteger, CountingMaterial> {
-    /// <summary>Gets the additive identity, zero.</summary>
-    public BigInteger Zero => BigInteger.Zero;
     /// <summary>Gets the multiplicative identity, one.</summary>
     public BigInteger One => BigInteger.One;
+    /// <summary>Gets the additive identity, zero.</summary>
+    public BigInteger Zero => BigInteger.Zero;
 
     /// <summary>Adds two counts.</summary>
     /// <param name="left">The first addend.</param>
@@ -349,7 +347,6 @@ public readonly struct CountingMaterial : IExactSemiringMaterial<BigInteger, Cou
     public BigInteger Multiply(BigInteger left, BigInteger right) =>
         (left * right);
 }
-
 /// <summary>
 /// The tropical material <c>(min, +)</c> over the house scalar <see cref="FixedQ4816"/> — shortest paths, minimum
 /// weights, and the whole algebraic path problem at its cheapest dial setting. Its finite carrier is the nonnegative
@@ -364,17 +361,48 @@ public readonly struct CountingMaterial : IExactSemiringMaterial<BigInteger, Cou
 /// The choice costs the carrier a single raw code point (<c>long.MaxValue</c>), which is therefore not a usable finite
 /// weight; the exchange buys an identity that needs no separate flag and no boxed option.</remarks>
 public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, TropicalMaterial> {
-    /// <summary>Gets the additive identity of <c>(min, +)</c>: the <c>+∞</c> represented by <see cref="FixedQ4816.MaxValue"/>.</summary>
-    public FixedQ4816 Zero => FixedQ4816.MaxValue;
     /// <summary>Gets the multiplicative identity of <c>(min, +)</c>: the additive zero of the carrier.</summary>
     public FixedQ4816 One => FixedQ4816.Zero;
+    /// <summary>Gets the additive identity of <c>(min, +)</c>: the <c>+∞</c> represented by <see cref="FixedQ4816.MaxValue"/>.</summary>
+    public FixedQ4816 Zero => FixedQ4816.MaxValue;
+
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static long TropicalProduct(long left, long right) {
+        left = ValidateWeight(value: left);
+        right = ValidateWeight(value: right);
+
+        if (
+            (long.MaxValue == left) ||
+            (long.MaxValue == right) ||
+            (left > ((long.MaxValue - 1L) - right))
+        ) {
+            return long.MaxValue;
+        }
+
+        return (left + right);
+    }
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static long ValidateWeight(long value) {
+        if (value < 0L) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(value),
+                actualValue: value,
+                message: "A tropical weight must be nonnegative."
+            );
+        }
+
+        return value;
+    }
 
     /// <summary>Returns the lesser of two weights.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns><c>min(left, right)</c>.</returns>
     public FixedQ4816 Add(FixedQ4816 left, FixedQ4816 right) =>
-        FixedQ4816.FromRawBits(value: Math.Min(val1: ValidateWeight(value: left.Value), val2: ValidateWeight(value: right.Value)));
+        FixedQ4816.FromRawBits(value: Math.Min(
+            val1: ValidateWeight(value: left.Value),
+            val2: ValidateWeight(value: right.Value)
+        ));
     /// <summary>Admits a nonnegative finite weight or the tropical <c>+∞</c> sentinel.</summary>
     /// <param name="value">The carrier value to validate.</param>
     /// <returns><paramref name="value"/> when it belongs to the tropical carrier.</returns>
@@ -390,7 +418,10 @@ public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, Tropic
         var accumulator = long.MaxValue;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            var term = TropicalProduct(left: charges[index].Value, right: values[index].Value);
+            var term = TropicalProduct(
+                left: charges[index].Value,
+                right: values[index].Value
+            );
 
             if (term < accumulator) { accumulator = term; }
         }
@@ -409,7 +440,10 @@ public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, Tropic
         for (var index = 0; (index < charges.Length); ++index) {
             var term = TropicalProduct(
                 left: charges[index].Value,
-                right: TropicalProduct(left: left[index].Value, right: right[index].Value)
+                right: TropicalProduct(
+                    left: left[index].Value,
+                    right: right[index].Value
+                )
             );
 
             if (term < accumulator) { accumulator = term; }
@@ -427,33 +461,11 @@ public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, Tropic
     /// <param name="right">The multiplier.</param>
     /// <returns><c>left + right</c>, or <c>+∞</c> when either operand is infinite or the finite sum exceeds the carrier.</returns>
     public FixedQ4816 Multiply(FixedQ4816 left, FixedQ4816 right) =>
-        FixedQ4816.FromRawBits(value: TropicalProduct(left: left.Value, right: right.Value));
-
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static long TropicalProduct(long left, long right) {
-        left = ValidateWeight(value: left);
-        right = ValidateWeight(value: right);
-
-        if ((long.MaxValue == left) || (long.MaxValue == right) || (left > ((long.MaxValue - 1L) - right))) {
-            return long.MaxValue;
-        }
-
-        return (left + right);
-    }
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static long ValidateWeight(long value) {
-        if (value < 0L) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(value),
-                actualValue: value,
-                message: "A tropical weight must be nonnegative."
-            );
-        }
-
-        return value;
-    }
+        FixedQ4816.FromRawBits(value: TropicalProduct(
+            left: left.Value,
+            right: right.Value
+        ));
 }
-
 /// <summary>
 /// The house scalar <see cref="FixedQ4816"/> as a material: the one member that accumulates at a wider scale before
 /// rounding, and so the one that routes through the shared fused kernels rather than re-deriving them.
@@ -478,10 +490,10 @@ public readonly struct TropicalMaterial : IIdempotentMaterial<FixedQ4816, Tropic
 /// </para>
 /// </remarks>
 public readonly struct FixedMaterial : ISignedMaterial<FixedQ4816, FixedMaterial> {
-    /// <summary>Gets the additive identity, zero.</summary>
-    public FixedQ4816 Zero => FixedQ4816.Zero;
     /// <summary>Gets the multiplicative identity, one.</summary>
     public FixedQ4816 One => FixedQ4816.One;
+    /// <summary>Gets the additive identity, zero.</summary>
+    public FixedQ4816 Zero => FixedQ4816.Zero;
 
     /// <summary>Adds two scalars, wrapping on overflow. Exact: addition never rounds.</summary>
     /// <param name="left">The first addend.</param>
@@ -508,7 +520,7 @@ public readonly struct FixedMaterial : ISignedMaterial<FixedQ4816, FixedMaterial
         var accumulator = Int128.Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = unchecked((accumulator + ((Int128)charges[index].Value * values[index].Value)));
+            accumulator = unchecked((accumulator + (((Int128)charges[index].Value) * values[index].Value)));
         }
 
         return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: accumulator));
@@ -525,14 +537,14 @@ public readonly struct FixedMaterial : ISignedMaterial<FixedQ4816, FixedMaterial
 
         if (ChargeLane.Exact == lane) {
             for (var index = 0; (index < charges.Length); ++index) {
-                accumulator = unchecked((accumulator + ((charges[index].Value >> FixedQ4816.FractionBitCount) * ((Int128)left[index].Value * right[index].Value))));
+                accumulator = unchecked((accumulator + ((charges[index].Value >> FixedQ4816.FractionBitCount) * (((Int128)left[index].Value) * right[index].Value))));
             }
 
             return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: accumulator));
         }
 
         for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = unchecked((accumulator + ((Int128)charges[index].Value * ((Int128)left[index].Value * right[index].Value))));
+            accumulator = unchecked((accumulator + (((Int128)charges[index].Value) * (((Int128)left[index].Value) * right[index].Value))));
         }
 
         return FixedQ4816.FromRawBits(value: FusedArithmetic.RoundQ48SumToRaw(productSum: accumulator));
@@ -560,14 +572,13 @@ public readonly struct FixedMaterial : ISignedMaterial<FixedQ4816, FixedMaterial
     public FixedQ4816 Subtract(FixedQ4816 left, FixedQ4816 right) =>
         (left - right);
 }
-
 /// <summary>The ring of integers <c>ℤ</c> over <see cref="BigInteger"/> — exact, unbounded, and the reference material
 /// every rounding-side claim is measured against.</summary>
 public readonly struct IntegerMaterial : ISignedMaterial<BigInteger, IntegerMaterial>, IExactSemiringMaterial<BigInteger, IntegerMaterial> {
-    /// <summary>Gets the additive identity, zero.</summary>
-    public BigInteger Zero => BigInteger.Zero;
     /// <summary>Gets the multiplicative identity, one.</summary>
     public BigInteger One => BigInteger.One;
+    /// <summary>Gets the additive identity, zero.</summary>
+    public BigInteger Zero => BigInteger.Zero;
 
     /// <summary>Adds two integers.</summary>
     /// <param name="left">The first addend.</param>
@@ -627,7 +638,6 @@ public readonly struct IntegerMaterial : ISignedMaterial<BigInteger, IntegerMate
     public BigInteger Subtract(BigInteger left, BigInteger right) =>
         (left - right);
 }
-
 /// <summary>The exact rationals as a field material, carried by the rational values of <see cref="QuadraticSurd"/> — no
 /// new primitive, and the resolvent lane every exact solve wants.</summary>
 /// <remarks>The carrier is the rational surds only, and admission enforces it. The surd type also represents
@@ -637,10 +647,10 @@ public readonly struct IntegerMaterial : ISignedMaterial<BigInteger, IntegerMate
 /// at admission, where the offending value can still be named, rather than later at an operator that only knows the two
 /// operands disagree.</remarks>
 public readonly struct RationalMaterial : IFieldMaterial<QuadraticSurd, RationalMaterial> {
-    /// <summary>Gets the additive identity, zero.</summary>
-    public QuadraticSurd Zero => QuadraticSurd.Zero;
     /// <summary>Gets the multiplicative identity, one.</summary>
     public QuadraticSurd One => QuadraticSurd.One;
+    /// <summary>Gets the additive identity, zero.</summary>
+    public QuadraticSurd Zero => QuadraticSurd.Zero;
 
     /// <summary>Adds two rationals.</summary>
     /// <param name="left">The first addend.</param>
@@ -731,7 +741,6 @@ public readonly struct RationalMaterial : IFieldMaterial<QuadraticSurd, Rational
         return true;
     }
 }
-
 /// <summary>
 /// A prime field <c>GF(p)</c> as a field material, carrying its modulus as instance data — the case that forces the
 /// material to be a struct instance rather than a <see langword="static"/> <see langword="abstract"/> surface.
@@ -748,28 +757,30 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
 
     /// <summary>Gets the field whose arithmetic this material carries.</summary>
     public PrimeField64 Field => m_field;
-    /// <summary>Gets the additive identity, zero.</summary>
-    public ulong Zero => 0UL;
     /// <summary>Gets the multiplicative identity, one.</summary>
     public ulong One => 1UL;
-
-    /// <summary>Creates the material of a prime field.</summary>
-    /// <param name="modulus">The prime modulus, below <see cref="PrimeField64.MaximumModulus"/>.</param>
-    /// <returns>The described material.</returns>
-    public static PrimeFieldMaterial Create(ulong modulus) =>
-        new(field: PrimeField64.Create(modulus: modulus));
+    /// <summary>Gets the additive identity, zero.</summary>
+    public ulong Zero => 0UL;
 
     /// <summary>Adds two residues.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns>The sum.</returns>
     public ulong Add(ulong left, ulong right) =>
-        m_field.Add(left: Canonicalize(value: left), right: Canonicalize(value: right));
+        m_field.Add(
+            left: Canonicalize(value: left),
+            right: Canonicalize(value: right)
+        );
     /// <summary>Reduces a carrier value to the unique residue in <c>[0, p)</c>.</summary>
     /// <param name="value">The carrier value to reduce.</param>
     /// <returns>The canonical residue.</returns>
     public ulong Canonicalize(ulong value) =>
         m_field.Reduce(value: value);
+    /// <summary>Creates the material of a prime field.</summary>
+    /// <param name="modulus">The prime modulus, below <see cref="PrimeField64.MaximumModulus"/>.</param>
+    /// <returns>The described material.</returns>
+    public static PrimeFieldMaterial Create(ulong modulus) =>
+        new(field: PrimeField64.Create(modulus: modulus));
     /// <summary>Folds <c>Σ charges[i]·values[i]</c> exactly in the field.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="values">The per-term values.</param>
@@ -781,7 +792,10 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
         for (var index = 0; (index < charges.Length); ++index) {
             accumulator = m_field.Add(
                 left: accumulator,
-                right: m_field.Multiply(left: Canonicalize(value: charges[index]), right: Canonicalize(value: values[index]))
+                right: m_field.Multiply(
+                    left: Canonicalize(value: charges[index]),
+                    right: Canonicalize(value: values[index])
+                )
             );
         }
 
@@ -799,10 +813,16 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
         for (var index = 0; (index < charges.Length); ++index) {
             var term = m_field.Multiply(
                 left: Canonicalize(value: charges[index]),
-                right: m_field.Multiply(left: Canonicalize(value: left[index]), right: Canonicalize(value: right[index]))
+                right: m_field.Multiply(
+                    left: Canonicalize(value: left[index]),
+                    right: Canonicalize(value: right[index])
+                )
             );
 
-            accumulator = m_field.Add(left: accumulator, right: term);
+            accumulator = m_field.Add(
+                left: accumulator,
+                right: term
+            );
         }
 
         return accumulator;
@@ -817,7 +837,10 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
     /// <param name="right">The multiplier.</param>
     /// <returns>The product.</returns>
     public ulong Multiply(ulong left, ulong right) =>
-        m_field.Multiply(left: Canonicalize(value: left), right: Canonicalize(value: right));
+        m_field.Multiply(
+            left: Canonicalize(value: left),
+            right: Canonicalize(value: right)
+        );
     /// <summary>Negates a residue.</summary>
     /// <param name="value">The value to negate.</param>
     /// <returns>The negation.</returns>
@@ -828,7 +851,10 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
     /// <param name="right">The subtrahend.</param>
     /// <returns>The difference.</returns>
     public ulong Subtract(ulong left, ulong right) =>
-        m_field.Subtract(left: Canonicalize(value: left), right: Canonicalize(value: right));
+        m_field.Subtract(
+            left: Canonicalize(value: left),
+            right: Canonicalize(value: right)
+        );
     /// <summary>Attempts to invert a residue.</summary>
     /// <param name="value">The value to invert.</param>
     /// <param name="inverse">On success, the multiplicative inverse; otherwise zero.</param>
@@ -847,7 +873,6 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
         return true;
     }
 }
-
 /// <summary>
 /// The most-likely-path material <c>(max, ·)</c> over <see cref="UnitInterval32"/> — the probability twin of
 /// <see cref="TropicalMaterial"/>. A coefficient is the best likelihood a route carries, so a quiver readout is the
@@ -871,17 +896,20 @@ public readonly struct PrimeFieldMaterial : IFieldMaterial<ulong, PrimeFieldMate
 /// </para>
 /// </remarks>
 public readonly struct MostLikelyPathMaterial : IMaterialOps<UnitInterval32, MostLikelyPathMaterial> {
-    /// <summary>Gets the additive identity: the impossible outcome, <see cref="UnitInterval32.Zero"/>.</summary>
-    public UnitInterval32 Zero => UnitInterval32.Zero;
     /// <summary>Gets the multiplicative identity: the certain outcome, <see cref="UnitInterval32.One"/>.</summary>
     public UnitInterval32 One => UnitInterval32.One;
+    /// <summary>Gets the additive identity: the impossible outcome, <see cref="UnitInterval32.Zero"/>.</summary>
+    public UnitInterval32 Zero => UnitInterval32.Zero;
 
     /// <summary>Returns the likelier of two values.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns><c>max(left, right)</c>, which is idempotent and exact.</returns>
     public UnitInterval32 Add(UnitInterval32 left, UnitInterval32 right) =>
-        UnitInterval32.Max(x: left, y: right);
+        UnitInterval32.Max(
+            x: left,
+            y: right
+        );
     /// <summary>Folds <c>max over i of (charges[i]·values[i])</c>, with one rounding per term.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="values">The per-term values.</param>
@@ -891,7 +919,13 @@ public readonly struct MostLikelyPathMaterial : IMaterialOps<UnitInterval32, Mos
         var accumulator = Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = UnitInterval32.Max(x: accumulator, y: UnitInterval32.Multiply(x: charges[index], y: values[index]));
+            accumulator = UnitInterval32.Max(
+                x: accumulator,
+                y: UnitInterval32.Multiply(
+                    x: charges[index],
+                    y: values[index]
+                )
+            );
         }
 
         return accumulator;
@@ -906,7 +940,14 @@ public readonly struct MostLikelyPathMaterial : IMaterialOps<UnitInterval32, Mos
         var accumulator = Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = UnitInterval32.Max(x: accumulator, y: UnitInterval32.Multiply(x: charges[index], y: left[index], z: right[index]));
+            accumulator = UnitInterval32.Max(
+                x: accumulator,
+                y: UnitInterval32.Multiply(
+                    x: charges[index],
+                    y: left[index],
+                    z: right[index]
+                )
+            );
         }
 
         return accumulator;
@@ -921,9 +962,11 @@ public readonly struct MostLikelyPathMaterial : IMaterialOps<UnitInterval32, Mos
     /// <param name="right">The multiplier.</param>
     /// <returns>The rounded product.</returns>
     public UnitInterval32 Multiply(UnitInterval32 left, UnitInterval32 right) =>
-        UnitInterval32.Multiply(x: left, y: right);
+        UnitInterval32.Multiply(
+            x: left,
+            y: right
+        );
 }
-
 /// <summary>
 /// The fuzzy material <c>(max, min)</c> over <see cref="UnitInterval32"/> — a coefficient is a degree of membership, a
 /// quiver readout is the widest bottleneck along a route, and nothing here rounds: both operations select an operand,
@@ -937,17 +980,20 @@ public readonly struct MostLikelyPathMaterial : IMaterialOps<UnitInterval32, Mos
 /// rather than approximately. The other admission condition holds too, since <c>max(1, 1) = 1</c>.
 /// </remarks>
 public readonly struct FuzzyMaterial : IComplementedMaterial<UnitInterval32, FuzzyMaterial> {
-    /// <summary>Gets the additive identity, <see cref="UnitInterval32.Zero"/> — membership in nothing.</summary>
-    public UnitInterval32 Zero => UnitInterval32.Zero;
     /// <summary>Gets the multiplicative identity, <see cref="UnitInterval32.One"/> — full membership.</summary>
     public UnitInterval32 One => UnitInterval32.One;
+    /// <summary>Gets the additive identity, <see cref="UnitInterval32.Zero"/> — membership in nothing.</summary>
+    public UnitInterval32 Zero => UnitInterval32.Zero;
 
     /// <summary>Returns the greater of two membership degrees.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns><c>max(left, right)</c>.</returns>
     public UnitInterval32 Add(UnitInterval32 left, UnitInterval32 right) =>
-        UnitInterval32.Max(x: left, y: right);
+        UnitInterval32.Max(
+            x: left,
+            y: right
+        );
     /// <summary>Returns the De Morgan complement of a membership degree.</summary>
     /// <param name="value">The value to complement.</param>
     /// <returns><c>1 − value</c>, exactly.</returns>
@@ -962,7 +1008,13 @@ public readonly struct FuzzyMaterial : IComplementedMaterial<UnitInterval32, Fuz
         var accumulator = Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = UnitInterval32.Max(x: accumulator, y: UnitInterval32.Min(x: charges[index], y: values[index]));
+            accumulator = UnitInterval32.Max(
+                x: accumulator,
+                y: UnitInterval32.Min(
+                    x: charges[index],
+                    y: values[index]
+                )
+            );
         }
 
         return accumulator;
@@ -977,9 +1029,18 @@ public readonly struct FuzzyMaterial : IComplementedMaterial<UnitInterval32, Fuz
         var accumulator = Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            var term = UnitInterval32.Min(x: UnitInterval32.Min(x: charges[index], y: left[index]), y: right[index]);
+            var term = UnitInterval32.Min(
+                x: UnitInterval32.Min(
+                    x: charges[index],
+                    y: left[index]
+                ),
+                y: right[index]
+            );
 
-            accumulator = UnitInterval32.Max(x: accumulator, y: term);
+            accumulator = UnitInterval32.Max(
+                x: accumulator,
+                y: term
+            );
         }
 
         return accumulator;
@@ -994,9 +1055,11 @@ public readonly struct FuzzyMaterial : IComplementedMaterial<UnitInterval32, Fuz
     /// <param name="right">The multiplier.</param>
     /// <returns><c>min(left, right)</c>.</returns>
     public UnitInterval32 Multiply(UnitInterval32 left, UnitInterval32 right) =>
-        UnitInterval32.Min(x: left, y: right);
+        UnitInterval32.Min(
+            x: left,
+            y: right
+        );
 }
-
 /// <summary>
 /// The bounded-sum material <c>(max, ⊙)</c> over <see cref="UnitInterval32"/>, where <c>a ⊙ b</c> is the amount by which
 /// <c>a + b</c> exceeds one. It is the strictest of the three: a route survives only while its steps' shortfalls from
@@ -1008,17 +1071,20 @@ public readonly struct FuzzyMaterial : IComplementedMaterial<UnitInterval32, Fuz
 /// three factors is <c>max(0, a + b + c − 2)</c> — so the three-factor term the fused sum folds needs no wide
 /// accumulator and no special case.</remarks>
 public readonly struct BoundedSumMaterial : IIdempotentMaterial<UnitInterval32, BoundedSumMaterial> {
-    /// <summary>Gets the additive identity, <see cref="UnitInterval32.Zero"/>, which the product also annihilates at.</summary>
-    public UnitInterval32 Zero => UnitInterval32.Zero;
     /// <summary>Gets the multiplicative identity, <see cref="UnitInterval32.One"/>.</summary>
     public UnitInterval32 One => UnitInterval32.One;
+    /// <summary>Gets the additive identity, <see cref="UnitInterval32.Zero"/>, which the product also annihilates at.</summary>
+    public UnitInterval32 Zero => UnitInterval32.Zero;
 
     /// <summary>Returns the greater of two values.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns><c>max(left, right)</c>.</returns>
     public UnitInterval32 Add(UnitInterval32 left, UnitInterval32 right) =>
-        UnitInterval32.Max(x: left, y: right);
+        UnitInterval32.Max(
+            x: left,
+            y: right
+        );
     /// <summary>Folds <c>max over i of (charges[i] ⊙ values[i])</c>, exactly.</summary>
     /// <param name="charges">The per-term charges.</param>
     /// <param name="values">The per-term values.</param>
@@ -1028,7 +1094,13 @@ public readonly struct BoundedSumMaterial : IIdempotentMaterial<UnitInterval32, 
         var accumulator = Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            accumulator = UnitInterval32.Max(x: accumulator, y: UnitInterval32.SumExcess(x: charges[index], y: values[index]));
+            accumulator = UnitInterval32.Max(
+                x: accumulator,
+                y: UnitInterval32.SumExcess(
+                    x: charges[index],
+                    y: values[index]
+                )
+            );
         }
 
         return accumulator;
@@ -1043,9 +1115,18 @@ public readonly struct BoundedSumMaterial : IIdempotentMaterial<UnitInterval32, 
         var accumulator = Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
-            var term = UnitInterval32.SumExcess(x: UnitInterval32.SumExcess(x: charges[index], y: left[index]), y: right[index]);
+            var term = UnitInterval32.SumExcess(
+                x: UnitInterval32.SumExcess(
+                    x: charges[index],
+                    y: left[index]
+                ),
+                y: right[index]
+            );
 
-            accumulator = UnitInterval32.Max(x: accumulator, y: term);
+            accumulator = UnitInterval32.Max(
+                x: accumulator,
+                y: term
+            );
         }
 
         return accumulator;
@@ -1060,5 +1141,8 @@ public readonly struct BoundedSumMaterial : IIdempotentMaterial<UnitInterval32, 
     /// <param name="right">The multiplier.</param>
     /// <returns><c>max(0, left + right − 1)</c>, exactly.</returns>
     public UnitInterval32 Multiply(UnitInterval32 left, UnitInterval32 right) =>
-        UnitInterval32.SumExcess(x: left, y: right);
+        UnitInterval32.SumExcess(
+            x: left,
+            y: right
+        );
 }

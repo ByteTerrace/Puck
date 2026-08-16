@@ -28,18 +28,6 @@ public sealed class StandardInputReaderService : BackgroundService {
         m_threadName = threadName;
     }
 
-    /// <inheritdoc />
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) {
-        var readerThread = new Thread(start: () => ReadLoop(stoppingToken: stoppingToken)) {
-            IsBackground = true,
-            Name = m_threadName,
-        };
-
-        readerThread.Start();
-
-        return Task.CompletedTask;
-    }
-
     private void ReadLoop(CancellationToken stoppingToken) {
         try {
             var input = Console.In;
@@ -57,5 +45,17 @@ public sealed class StandardInputReaderService : BackgroundService {
             // No readable console (for example, a windowed launch with no attached terminal): there is
             // simply nothing to drive from, so the reader stops.
         }
+    }
+
+    /// <inheritdoc />
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) {
+        var readerThread = new Thread(start: () => ReadLoop(stoppingToken: stoppingToken)) {
+            IsBackground = true,
+            Name = m_threadName,
+        };
+
+        readerThread.Start();
+
+        return Task.CompletedTask;
     }
 }

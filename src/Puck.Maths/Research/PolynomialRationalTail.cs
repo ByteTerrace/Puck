@@ -12,51 +12,28 @@ namespace Puck.Maths;
 /// <c>s_n=B(n-1)*(lambda*n+beta+m*lambda)/B(n)</c>.
 /// </remarks>
 public sealed class PolynomialRationalTailCertificate {
-    private readonly QuadraticSurd[] denominatorCoefficients;
-    private readonly ReadOnlyCollection<QuadraticSurd> denominatorCoefficientView;
+    private readonly ReadOnlyCollection<QuadraticSurd> m_denominatorCoefficientView;
+    private readonly QuadraticSurd[] m_denominatorCoefficients;
 
     public PolynomialRationalTailCertificate(
         QuadraticSurd slope,
         QuadraticSurd offset,
         IEnumerable<QuadraticSurd> denominatorCoefficients) {
         ArgumentNullException.ThrowIfNull(denominatorCoefficients);
-        this.denominatorCoefficients = denominatorCoefficients.ToArray();
-        denominatorCoefficientView = Array.AsReadOnly(array: this.denominatorCoefficients);
+        this.m_denominatorCoefficients = denominatorCoefficients.ToArray();
+        m_denominatorCoefficientView = Array.AsReadOnly(array: this.m_denominatorCoefficients);
         Slope = slope;
         Offset = offset;
     }
 
-    /// <summary>Gets the exact rational or real-quadratic asymptotic slope.</summary>
-    public QuadraticSurd Slope { get; }
+    /// <summary>Gets the denominator coefficients in ascending degree order.</summary>
+    public IReadOnlyList<QuadraticSurd> DenominatorCoefficients => m_denominatorCoefficientView;
+    /// <summary>Gets the degree of the monic denominator.</summary>
+    public int DenominatorDegree => (m_denominatorCoefficients.Length - 1);
     /// <summary>Gets the exact affine offset in the characteristic field.</summary>
     public QuadraticSurd Offset { get; }
-    /// <summary>Gets the denominator coefficients in ascending degree order.</summary>
-    public IReadOnlyList<QuadraticSurd> DenominatorCoefficients => denominatorCoefficientView;
-    /// <summary>Gets the degree of the monic denominator.</summary>
-    public int DenominatorDegree => (denominatorCoefficients.Length - 1);
-
-    /// <summary>Evaluates the certified closed form at a positive integer index.</summary>
-    public QuadraticSurd Evaluate(BigInteger tailIndex) {
-        if (tailIndex <= BigInteger.Zero) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(tailIndex),
-                message: "the tail index must be positive"
-            );
-        }
-        if (denominatorCoefficients.Length == 0) {
-            throw new InvalidOperationException(message: "the denominator polynomial is empty");
-        }
-
-        var degree = QuadraticSurd.Rational(value: DenominatorDegree);
-        var numeratorFactor = (((Slope * QuadraticSurd.Rational(value: tailIndex)) + Offset) + (degree * Slope));
-        var denominator = EvaluatePolynomial(coefficients: denominatorCoefficients, value: QuadraticSurd.Rational(value: tailIndex));
-        var previousDenominator = EvaluatePolynomial(
-            coefficients: denominatorCoefficients,
-            value: QuadraticSurd.Rational(value: (tailIndex - 1))
-        );
-
-        return ((previousDenominator * numeratorFactor) / denominator);
-    }
+    /// <summary>Gets the exact rational or real-quadratic asymptotic slope.</summary>
+    public QuadraticSurd Slope { get; }
 
     private static QuadraticSurd EvaluatePolynomial(
         IReadOnlyList<QuadraticSurd> coefficients,
@@ -68,6 +45,32 @@ public sealed class PolynomialRationalTailCertificate {
         }
         return result;
     }
+
+    /// <summary>Evaluates the certified closed form at a positive integer index.</summary>
+    public QuadraticSurd Evaluate(BigInteger tailIndex) {
+        if (tailIndex <= BigInteger.Zero) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(tailIndex),
+                message: "the tail index must be positive"
+            );
+        }
+        if (m_denominatorCoefficients.Length == 0) {
+            throw new InvalidOperationException(message: "the denominator polynomial is empty");
+        }
+
+        var degree = QuadraticSurd.Rational(value: DenominatorDegree);
+        var numeratorFactor = (((Slope * QuadraticSurd.Rational(value: tailIndex)) + Offset) + (degree * Slope));
+        var denominator = EvaluatePolynomial(
+            coefficients: m_denominatorCoefficients,
+            value: QuadraticSurd.Rational(value: tailIndex)
+        );
+        var previousDenominator = EvaluatePolynomial(
+            coefficients: m_denominatorCoefficients,
+            value: QuadraticSurd.Rational(value: (tailIndex - 1))
+        );
+
+        return ((previousDenominator * numeratorFactor) / denominator);
+    }
 }
 public sealed partial class PolynomialContinuedFractionAnalysis {
     /// <summary>
@@ -76,7 +79,6 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// resource exhaustion.
     /// </summary>
     public const int MaximumRationalTailDenominatorDegree = 128;
-
     /// <summary>
     /// The largest finite positive-index prefix scanned by the exact pole check. A candidate requiring a longer scan is
     /// conservatively left unrecognized so adversarial coefficient magnitudes cannot turn verification into work
@@ -84,7 +86,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// </summary>
     public const int MaximumRationalTailPoleChecks = 1_000_000;
 
-    private readonly Lazy<PolynomialRationalTailCertificate?> rationalTailCertificate;
+    private readonly Lazy<PolynomialRationalTailCertificate?> m_rationalTailCertificate;
 
     /// <summary>
     /// Attempts to construct a complete finite certificate for a positive rational-function tail. For a reduced
@@ -95,7 +97,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     /// <see cref="MaximumRationalTailDenominatorDegree"/> and rejects larger candidates without allocating them.
     /// </summary>
     public bool TryRationalTailCertificate(out PolynomialRationalTailCertificate certificate) {
-        var recognized = rationalTailCertificate.Value;
+        var recognized = m_rationalTailCertificate.Value;
 
         certificate = recognized!;
         return (recognized is not null);
@@ -107,7 +109,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
             if (denominator is null) { continue; }
 
-            var candidate = new PolynomialRationalTailCertificate(denominatorCoefficients: denominator, offset: Offset, slope: Slope);
+            var candidate = new PolynomialRationalTailCertificate(
+                denominatorCoefficients: denominator,
+                offset: Offset,
+                slope: Slope
+            );
 
             if (VerifyRationalTailCertificate(certificate: candidate)) {
                 return candidate;
@@ -125,11 +131,14 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         ArgumentNullException.ThrowIfNull(certificate);
         var coefficients = certificate.DenominatorCoefficients;
 
-        if ((certificate.Slope != Slope) || (certificate.Offset != Offset) ||
+        if (
+            (certificate.Slope != Slope) ||
+            (certificate.Offset != Offset) ||
             (coefficients.Count == 0) ||
             (coefficients.Count > (MaximumRationalTailDenominatorDegree + 1)) ||
             !coefficients.All(predicate: BelongsToCharacteristicField) ||
-            (coefficients[^1] != QuadraticSurd.One)) {
+            (coefficients[^1] != QuadraticSurd.One)
+        ) {
             return false;
         }
 
@@ -143,7 +152,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         // Every positive certified tail has cConstant>0.  If it were non-positive, the base constraint and
         // q=c0-k0-lambda-m(lambda+mu) would force both C and K negative through index m+1.  Positivity of
         // B(n-1)C(n-1)/B(n) would then make the degree-m polynomial B alternate sign more than m times.
-        if ((cConstant.Sign <= 0) ||
+        if (
+            (cConstant.Sign <= 0) ||
             ((certificate.Slope * kSlope) != QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic)) ||
             (((certificate.Slope * kConstant) + (cConstant * kSlope)) !=
                 QuadraticSurd.Rational(value: Parameters.NumeratorLinear)) ||
@@ -153,10 +163,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         }
 
         var identity = PolynomialIdentityContributions(
-            maximumDegree: degree,
             cConstant: cConstant,
+            kConstant: kConstant,
             kSlope: kSlope,
-            kConstant: kConstant
+            maximumDegree: degree
         );
 
         for (var power = 0; (power < identity[0].Length); ++power) {
@@ -191,29 +201,48 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         // The m^2 coefficient is -lambda*(lambda-p)=-r and is rational.  If a surd component remains, it is
         // therefore linear in m and determines the sole possible integer degree.  Otherwise solve the rational
         // quadratic as before.
-        var linearSurd = (linear.IsRational ? BigInteger.Zero : linear.SurdNumerator);
-        var constantSurd = (constant.IsRational ? BigInteger.Zero : constant.SurdNumerator);
+        var linearSurd = (linear.IsRational
+            ? BigInteger.Zero
+            : linear.SurdNumerator
+        );
+        var constantSurd = (constant.IsRational
+            ? BigInteger.Zero
+            : constant.SurdNumerator
+        );
 
-        if (!linear.IsRational && !constant.IsRational && (linear.Radicand != constant.Radicand)) {
+        if (
+            !linear.IsRational &&
+            !constant.IsRational &&
+            (linear.Radicand != constant.Radicand)
+        ) {
             return [];
         }
         if (!linearSurd.IsZero) {
             var numerator = (-constantSurd * linear.Denominator);
             var denominator = (linearSurd * constant.Denominator);
-            var candidate = BigInteger.DivRem(dividend: numerator, divisor: denominator, remainder: out var remainder);
+            var candidate = BigInteger.DivRem(
+                dividend: numerator,
+                divisor: denominator,
+                remainder: out var remainder
+            );
 
-            if (!remainder.IsZero || (candidate < BigInteger.Zero) || (candidate > maximumDegree)) { return []; }
-            var degree = (int)candidate;
-            var value = (((quadratic * QuadraticSurd.Rational(value: (degree * (BigInteger)degree))) +
+            if (
+                !remainder.IsZero ||
+                (candidate < BigInteger.Zero) ||
+                (candidate > maximumDegree)
+            ) { return []; }
+            var degree = ((int)candidate);
+            var value = (((quadratic * QuadraticSurd.Rational(value: (degree * ((BigInteger)degree)))) +
                 (linear * QuadraticSurd.Rational(value: degree))) + constant);
 
-            return ((value == QuadraticSurd.Zero) ? [degree] : []);
+            return ((value == QuadraticSurd.Zero)
+                ? [degree]
+                : []
+            );
         }
         if (!constantSurd.IsZero) { return []; }
 
-        var scale = quadratic.Denominator.LeastCommonMultiple(
-            other: linear.Denominator.LeastCommonMultiple(other: constant.Denominator)
-        );
+        var scale = quadratic.Denominator.LeastCommonMultiple(other: linear.Denominator.LeastCommonMultiple(other: constant.Denominator));
         var a = (quadratic.RationalNumerator * (scale / quadratic.Denominator));
         var b = (linear.RationalNumerator * (scale / linear.Denominator));
         var c = (constant.RationalNumerator * (scale / constant.Denominator));
@@ -234,10 +263,18 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         void AddRoot(BigInteger numerator) {
             var denominator = (2 * a);
-            var quotient = BigInteger.DivRem(dividend: numerator, divisor: denominator, remainder: out var remainder);
+            var quotient = BigInteger.DivRem(
+                dividend: numerator,
+                divisor: denominator,
+                remainder: out var remainder
+            );
 
-            if (!remainder.IsZero || (quotient < BigInteger.Zero) || (quotient > maximumDegree)) { return; }
-            var degree = (int)quotient;
+            if (
+                !remainder.IsZero ||
+                (quotient < BigInteger.Zero) ||
+                (quotient > maximumDegree)
+            ) { return; }
+            var degree = ((int)quotient);
 
             if (!result.Contains(item: degree)) { result.Add(item: degree); }
         }
@@ -245,7 +282,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     private bool BelongsToCharacteristicField(QuadraticSurd value) {
         if (value.IsRational) { return true; }
         if (!Slope.IsRational) { return (value.Radicand == Slope.Radicand); }
-        return (!Offset.IsRational && (value.Radicand == Offset.Radicand));
+        return (
+            !Offset.IsRational &&
+            (value.Radicand == Offset.Radicand)
+        );
     }
     private QuadraticSurd[]? SolveMonicDenominator(int degree) {
         var p = QuadraticSurd.Rational(value: Parameters.Linear);
@@ -253,12 +293,18 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var cConstant = (Offset + (QuadraticSurd.Rational(value: (degree + 1)) * Slope));
         var kSlope = (Slope - p);
         var kConstant = ((Offset - q) - (QuadraticSurd.Rational(value: degree) * kSlope));
-        var contributions = PolynomialIdentityContributions(cConstant: cConstant, kConstant: kConstant, kSlope: kSlope, maximumDegree: degree);
+        var contributions = PolynomialIdentityContributions(
+            cConstant: cConstant,
+            kConstant: kConstant,
+            kSlope: kSlope,
+            maximumDegree: degree
+        );
 
         if (degree == 0) {
             return (contributions[0].All(predicate: value => (value == QuadraticSurd.Zero))
                 ? [QuadraticSurd.One]
-                : null);
+                : null
+            );
         }
 
         var rowCount = (degree + 2);
@@ -275,11 +321,17 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var pivotRow = 0;
         var pivots = new int[degree];
 
-        Array.Fill(array: pivots, value: -1);
+        Array.Fill(
+            array: pivots,
+            value: -1
+        );
         for (var column = 0; ((column < degree) && (pivotRow < rowCount)); ++column) {
             var selected = pivotRow;
 
-            while ((selected < rowCount) && (matrix[selected][column] == QuadraticSurd.Zero)) { ++selected; }
+            while (
+                (selected < rowCount) &&
+                (matrix[selected][column] == QuadraticSurd.Zero)
+            ) { ++selected; }
             if (selected == rowCount) { continue; }
             (matrix[pivotRow], matrix[selected]) = (matrix[selected], matrix[pivotRow]);
 
@@ -287,7 +339,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
             for (var index = column; (index <= degree); ++index) { matrix[pivotRow][index] /= divisor; }
             for (var row = 0; (row < rowCount); ++row) {
-                if ((row == pivotRow) || (matrix[row][column] == QuadraticSurd.Zero)) { continue; }
+                if (
+                    (row == pivotRow) ||
+                    (matrix[row][column] == QuadraticSurd.Zero)
+                ) { continue; }
                 var multiplier = matrix[row][column];
 
                 for (var index = column; (index <= degree); ++index) {
@@ -298,8 +353,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         }
 
         for (var row = 0; (row < rowCount); ++row) {
-            if (matrix[row].Take(count: degree).All(predicate: value => (value == QuadraticSurd.Zero)) &&
-                (matrix[row][degree] != QuadraticSurd.Zero)) {
+            if (
+                matrix[row].Take(count: degree).All(predicate: value => (value == QuadraticSurd.Zero)) &&
+                (matrix[row][degree] != QuadraticSurd.Zero)
+            ) {
                 return null;
             }
         }
@@ -322,13 +379,31 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         for (var basisDegree = 0; (basisDegree <= maximumDegree); ++basisDegree) {
             var contribution = new QuadraticSurd[(maximumDegree + 2)];
-            var previous = ShiftedMonomial(basisDegree, shift: -1);
-            var next = ShiftedMonomial(basisDegree, shift: 1);
+            var previous = ShiftedMonomial(
+                basisDegree,
+                shift: -1
+            );
+            var next = ShiftedMonomial(
+                basisDegree,
+                shift: 1
+            );
 
-            AddLinearProduct(constant: (cConstant - Slope), linear: Slope, polynomial: previous, scale: QuadraticSurd.One, target: contribution);
+            AddLinearProduct(
+                constant: (cConstant - Slope),
+                linear: Slope,
+                polynomial: previous,
+                scale: QuadraticSurd.One,
+                target: contribution
+            );
             contribution[basisDegree] -= q;
             contribution[(basisDegree + 1)] -= p;
-            AddLinearProduct(constant: kConstant, linear: kSlope, polynomial: next, scale: -QuadraticSurd.One, target: contribution);
+            AddLinearProduct(
+                constant: kConstant,
+                linear: kSlope,
+                polynomial: next,
+                scale: -QuadraticSurd.One,
+                target: contribution
+            );
             result[basisDegree] = contribution;
         }
 
@@ -338,9 +413,15 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var result = new QuadraticSurd[(degree + 1)];
 
         for (var power = 0; (power <= degree); ++power) {
-            var sign = (((shift < 0) && (((degree - power) & 1) != 0)) ? -1 : 1);
+            var sign = (((shift < 0) && (((degree - power) & 1) != 0))
+                ? -1
+                : 1
+            );
 
-            result[power] = QuadraticSurd.Rational(value: (sign * BinomialCoefficient(lower: power, upper: degree)));
+            result[power] = QuadraticSurd.Rational(value: (sign * BinomialCoefficient(
+                lower: power,
+                upper: degree
+            )));
         }
         return result;
     }
@@ -359,15 +440,27 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var cutoff = BigInteger.Zero;
 
         while (true) {
-            var translated = TranslatePolynomial(polynomial: polynomial, shift: cutoff);
+            var translated = TranslatePolynomial(
+                polynomial: polynomial,
+                shift: cutoff
+            );
 
-            if ((translated[0].Sign > 0) && translated.All(predicate: coefficient => (coefficient.Sign >= 0))) { break; }
-            cutoff = (cutoff.IsZero ? BigInteger.One : (2 * cutoff));
+            if (
+                (translated[0].Sign > 0) &&
+                translated.All(predicate: coefficient => (coefficient.Sign >= 0))
+            ) { break; }
+            cutoff = (cutoff.IsZero
+                ? BigInteger.One
+                : (2 * cutoff)
+            );
             if (cutoff > MaximumRationalTailPoleChecks) { return false; }
         }
 
         for (var index = BigInteger.One; (index < cutoff); ++index) {
-            if (EvaluatePolynomial(polynomial: polynomial, value: index) == QuadraticSurd.Zero) { return false; }
+            if (EvaluatePolynomial(
+                polynomial: polynomial,
+                value: index
+            ) == QuadraticSurd.Zero) { return false; }
         }
         return true;
     }
@@ -380,9 +473,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             var shiftPower = BigInteger.One;
 
             for (var newPower = oldPower; (newPower >= 0); --newPower) {
-                result[newPower] += (polynomial[oldPower] * QuadraticSurd.Rational(
-                    value: (BinomialCoefficient(lower: newPower, upper: oldPower) * shiftPower)
-                ));
+                result[newPower] += (polynomial[oldPower] * QuadraticSurd.Rational(value: (BinomialCoefficient(
+                    lower: newPower,
+                    upper: oldPower
+                ) * shiftPower)));
                 shiftPower *= shift;
             }
         }

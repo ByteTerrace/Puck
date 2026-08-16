@@ -25,6 +25,7 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
     private readonly ICartridgeSlot m_cartridgeSlot;
     private readonly IKey1 m_key1;
     private readonly SystemMemory m_memory;
+
     // Mutable so a LIVE device swap re-gates the color-only DMA rules (echo-RAM source reads 0xFF, the bus-conflict
     // window). Idempotent single-field push; no boot-only model read here.
     private bool m_supportsColor;
@@ -97,7 +98,7 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
             m_phase = 0;
 
             m_memory.WriteObjectAttributeMemory(
-                address: (ushort)(MemoryMap.ObjectAttributeMemoryStart + m_index),
+                address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + m_index)),
                 value: ReadSourceByte()
             );
 
@@ -111,7 +112,7 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
         m_register;
     /// <inheritdoc/>
     public void WriteRegister(byte value) {
-        var baseAddress = (ushort)(value << 8);
+        var baseAddress = ((ushort)(value << 8));
 
         m_register = value;
         m_delay = StartupDelayTCycles;
@@ -151,8 +152,8 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
         // flight.
         redirect = (((address >= MemoryMap.WorkRamBank0Start) && ((BusForAddress(address: source) != DmaBus.Ram) || (source >= MemoryMap.EchoRamStart)))
             ? RedirectedWorkRamCell(
-            source: source,
-            address: address
+            address: address,
+            source: source
         )
             : (ushort)(source - 1));
 
@@ -180,8 +181,8 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
             (address >= MemoryMap.WorkRamBank0Start)
         ) {
             target = RedirectedWorkRamCell(
-                source: source,
-                address: address
+                address: address,
+                source: source
             );
 
             return OamDmaWriteConflict.Store;
@@ -189,8 +190,8 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
 
         var redirect = (((source >= MemoryMap.EchoRamStart) && (address >= MemoryMap.WorkRamBank0Start))
             ? RedirectedWorkRamCell(
-            source: source,
-            address: address
+            address: address,
+            source: source
         )
             : (ushort)(source - 1));
 
@@ -208,7 +209,6 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>
         m_supportsColor = model.SupportsColor();
-
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteBoolean(value: m_active);
@@ -262,17 +262,17 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
         }
 
         return DmaSource.Read(
+            address: ((ushort)(m_activeBase + m_index)),
             cartridgeSlot: m_cartridgeSlot,
-            memory: m_memory,
-            address: (ushort)(m_activeBase + m_index)
+            memory: m_memory
         );
     }
     // The unclamped source pointer at the byte currently in flight.
     private ushort CurrentSource() =>
-        (ushort)(m_activeBaseUnclamped + m_index);
+        ((ushort)(m_activeBaseUnclamped + m_index));
     // The work-RAM cell a colliding access is steered to: the transfer's bank-select bit with the CPU's page offset.
     private static ushort RedirectedWorkRamCell(ushort source, ushort address) =>
-        (ushort)(((source - 1) & 0x1000) | (address & 0xFFF) | 0xC000);
+        ((ushort)(((source - 1) & 0x1000) | (address & 0xFFF) | 0xC000));
     // Whether a CPU access at the address collides with the in-flight transfer's bus: Color only, only once the first
     // byte has actually moved, never in the OAM/IO page, and never on the source cell itself.
     private bool IsAddressInDmaUse(ushort address) {

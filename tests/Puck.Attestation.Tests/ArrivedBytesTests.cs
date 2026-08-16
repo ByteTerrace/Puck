@@ -19,7 +19,6 @@ public sealed class ArrivedBytesTests {
 
         return (codec, keys, trust, claim, wire);
     }
-
     private static AttestationVerifyResult VerifyWire(CborAttestationCodec codec, TrustList trust, byte[] bytes) =>
         AttestationVerifier.VerifyChain(codec: codec, claim: codec.DecodeAttestation(wire: bytes), chain: null, trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
@@ -27,18 +26,16 @@ public sealed class ArrivedBytesTests {
     public void HonestlyEncodedAttestation_DecodesAndVerifies() {
         var (codec, _, trust, _, wire) = BuildFixture();
 
-        var result = VerifyWire(codec: codec, trust: trust, bytes: wire);
+        var result = VerifyWire(bytes: wire, codec: codec, trust: trust);
 
         AssertAccepted(result: result);
     }
-
     [Fact]
     public void RawSignedPortionConstruction_IsNotPublic() {
-        var method = typeof(SignedAttestation).GetMethod(name: nameof(SignedAttestation.FromSignedPortion), bindingAttr: (BindingFlags.Public | BindingFlags.Static));
+        var method = typeof(SignedAttestation).GetMethod(name: nameof(SignedAttestation.FromSignedPortion), bindingAttr: BindingFlags.Public | BindingFlags.Static);
 
         Assert.Null(@object: method);
     }
-
     // The object-boundary attack the factory must fail closed against: a valid signature and its authentic
     // bytes, with a separately projected payload substituted for what the application would read after
     // verification.
@@ -49,9 +46,8 @@ public sealed class ArrivedBytesTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: forgedProjection, chain: null, trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "parsed fields");
+        AssertRefused(reasonMustContain: "parsed fields", result: result);
     }
-
     // ReadOnlyMemory is only a read-only VIEW; when it wraps a byte[], whoever owns that array can still
     // mutate it, so signing must take its own copy rather than retaining caller storage.
     [Fact]
@@ -66,7 +62,6 @@ public sealed class ArrivedBytesTests {
 
         Assert.True(condition: isolatedClaim.PayloadBytes.Span.SequenceEqual(other: callerOwnedControl));
     }
-
     [Fact]
     public void MutatingCallersSourceArray_LeavesTheIsolatedAttestationVerifiable() {
         var codec = new CborAttestationCodec();
@@ -81,7 +76,6 @@ public sealed class ArrivedBytesTests {
 
         AssertAccepted(result: result);
     }
-
     [Fact]
     public void DecodedAttestation_CarriesTheSignedPortionVerbatimNotAReencoding() {
         var (codec, _, _, claim, wire) = BuildFixture();
@@ -90,7 +84,6 @@ public sealed class ArrivedBytesTests {
 
         Assert.True(condition: decoded.SignedPortion.Span.SequenceEqual(other: claim.SignedPortion.Span));
     }
-
     // The general property, checked rather than argued: every byte of a valid attestation is inside either the
     // signed portion or the signature, so no single-byte change can produce an accepted claim.
     [Fact]
@@ -105,12 +98,12 @@ public sealed class ArrivedBytesTests {
                     continue;
                 }
 
-                var mutated = (byte[])wire.Clone();
+                var mutated = ((byte[])wire.Clone());
 
-                mutated[offset] = (byte)value;
+                mutated[offset] = ((byte)value);
 
                 try {
-                    var result = VerifyWire(codec: codec, trust: trust, bytes: mutated);
+                    var result = VerifyWire(bytes: mutated, codec: codec, trust: trust);
 
                     if (result.Verified) {
                         accepted.Add(item: $"offset {offset} = 0x{value:X2}");

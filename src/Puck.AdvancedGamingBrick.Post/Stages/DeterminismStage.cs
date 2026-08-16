@@ -18,7 +18,6 @@ internal sealed class DeterminismStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "determinism";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

@@ -9,6 +9,7 @@ namespace Puck.Vulkan;
 public sealed class VulkanGpuComputePipeline : IGpuComputePipeline {
     private readonly IVulkanComputePipelineApi m_api;
     private readonly nint m_deviceHandle;
+
     private bool m_disposed;
     private nint m_pipeline;
 

@@ -38,28 +38,8 @@
       "type": "string"
     },
     "colorSequence": {
-      "description": "The deterministic sequence used for generated profile colors.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "The sequence name: None, Index, Additive, R1, or R2.",
-          "type": "string"
-        },
-        "offset": {
-          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
-          "type": "integer"
-        },
-        "step": {
-          "description": "The turn-sized increment for Additive; zero for every other sequence.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "name",
-        "offset",
-        "step"
-      ],
-      "additionalProperties": false
+      "$ref": "./common.schema.json#/$defs/WorldSequence",
+      "description": "The deterministic sequence used for generated profile colors."
     },
     "saturation": {
       "description": "The saturation used for generated colors.",

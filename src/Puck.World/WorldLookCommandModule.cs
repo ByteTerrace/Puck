@@ -18,37 +18,6 @@ namespace Puck.World;
 /// <see cref="WorldMutationCommandModule"/> so neither class crosses its analyzer ceilings.
 /// </summary>
 internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation population, IServerLink link) : ICommandModule {
-    /// <inheritdoc/>
-    public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.population.spawn",
-            description: "Sets the simulated-peer spawn distribution (LIVE for future activations, standing bodies unmoved): world.population.spawn disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…].",
-            handler: (context, args) => {
-                if (args.Count == 0) {
-                    return Usage(verb: "world.population.spawn", form: "disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…]");
-                }
-
-                if (ParseDistribution(args: in args, error: out var distributionError) is not { } distribution) {
-                    return CommandResult.Error(output: $"[world.population.spawn: {distributionError}]");
-                }
-
-                var current = server.Definition.Population;
-
-                return Submit(mutation: new WorldMutation.SetPopulationDefaults(Principal: context.ActingPrincipal(), Population: (current with { Distribution = distribution })));
-            },
-            routing: CommandRouting.Simulation
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.looks",
-            description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
-            handler: (_, args) => (args.Count == 0
-                ? new CommandResult(Output: DescribeLooks())
-                : CommandResult.Error(output: $"[world.looks: unrecognized '{args[0]}' — expected no arguments]"))
-        );
-    }
-
     // The world.looks census: one row per look, mirroring world.population's per-kit echo.
     private string DescribeLooks() {
         var rows = population.LookRows;
@@ -70,21 +39,56 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
     private static WorldDistribution? ParseDistribution(in WireArgs args, out string error) {
         error = string.Empty;
 
-        if (args.Is(index: 0, value: "disc")) {
-            if ((args.Count != 3) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var radius) ||
-                !int.TryParse(s: args[2], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out var sampleCount)) {
+        if (args.Is(
+            index: 0,
+            value: "disc"
+        )) {
+            if (
+                (args.Count != 3) ||
+                !float.TryParse(
+                s: args[1],
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out var radius
+            ) ||
+                !int.TryParse(
+                s: args[2],
+                style: NumberStyles.Integer,
+                provider: CultureInfo.InvariantCulture,
+                result: out var sampleCount
+            )
+            ) {
                 error = "disc needs a <radius> number and <sampleCount> integer";
 
                 return null;
             }
 
             return new WorldDistribution(
-                Region: new WorldDistributionRegion.Disc(Radius: radius, SampleCount: sampleCount),
-                Fill: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.3819660112501051f));
+                Region: new WorldDistributionRegion.Disc(
+                    Radius: radius,
+                    SampleCount: sampleCount
+                ),
+                Fill: new WorldSequence(
+                    Name: WorldSequence.Additive,
+                    Offset: 0,
+                    Step: 0.3819660112501051f
+                )
+            );
         }
 
-        if (args.Is(index: 0, value: "points")) {
-            if ((args.Count < 3) || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var halfExtent)) {
+        if (args.Is(
+            index: 0,
+            value: "points"
+        )) {
+            if (
+                (args.Count < 3) ||
+                !float.TryParse(
+                s: args[1],
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
+                result: out var halfExtent
+            )
+            ) {
                 error = "points needs a <halfExtent> number then at least one spawn-point id";
 
                 return null;
@@ -97,8 +101,16 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
             }
 
             return new WorldDistribution(
-                Region: new WorldDistributionRegion.Points(Names: points, HalfExtent: halfExtent),
-                Fill: new WorldSequence(Name: WorldSequence.R2, Offset: 133, Step: 0f));
+                Region: new WorldDistributionRegion.Points(
+                    HalfExtent: halfExtent,
+                    Names: points
+                ),
+                Fill: new WorldSequence(
+                    Name: WorldSequence.R2,
+                    Offset: 133,
+                    Step: 0f
+                )
+            );
         }
 
         error = $"unknown region '{args[0].ToString()}' — disc | points";
@@ -111,4 +123,44 @@ internal sealed class WorldLookCommandModule(WorldServer server, WorldPopulation
         return CommandResult.None;
     }
     private static CommandResult Usage(string verb, string form) => CommandResult.Error(output: $"[{verb}: expected {form}]");
+
+    /// <inheritdoc/>
+    public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.population.spawn",
+            description: "Sets the simulated-peer spawn distribution (LIVE for future activations, standing bodies unmoved): world.population.spawn disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…].",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return Usage(
+                        form: "disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…]",
+                        verb: "world.population.spawn"
+                    );
+                }
+
+                if (ParseDistribution(
+                    args: in args,
+                    error: out var distributionError
+                ) is not { } distribution) {
+                    return CommandResult.Error(output: $"[world.population.spawn: {distributionError}]");
+                }
+
+                var current = server.Definition.Population;
+
+                return Submit(mutation: new WorldMutation.SetPopulationDefaults(
+                    Principal: context.ActingPrincipal(),
+                    Population: (current with { Distribution = distribution })
+                ));
+            },
+            routing: CommandRouting.Simulation
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.looks",
+            description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
+            handler: (_, args) => ((args.Count == 0)
+            ? new CommandResult(Output: DescribeLooks())
+            : CommandResult.Error(output: $"[world.looks: unrecognized '{args[0]}' — expected no arguments]"))
+        );
+    }
 }

@@ -16,6 +16,7 @@ internal sealed class SuiteDebugBus : IAgbBus {
     private readonly IAgbBus m_inner;
     private readonly byte[] m_string = new byte[0x100];
     private readonly Action<int, string> m_onLog;
+
     private bool m_enabled;
 
     public SuiteDebugBus(IAgbBus inner, Action<int, string> onLog) {
@@ -36,12 +37,12 @@ internal sealed class SuiteDebugBus : IAgbBus {
             width: 1,
             out var value
         )) {
-            return (byte)value;
+            return ((byte)value);
         }
 
         return m_inner.Read8(
-            address: address,
-            access: access
+            access: access,
+            address: address
         );
     }
     public ushort Read16(uint address, BusAccessType access) {
@@ -50,12 +51,12 @@ internal sealed class SuiteDebugBus : IAgbBus {
             width: 2,
             out var value
         )) {
-            return (ushort)value;
+            return ((ushort)value);
         }
 
         return m_inner.Read16(
-            address: address,
-            access: access
+            access: access,
+            address: address
         );
     }
     public uint Read32(uint address, BusAccessType access) {
@@ -68,61 +69,61 @@ internal sealed class SuiteDebugBus : IAgbBus {
         }
 
         return m_inner.Read32(
-            address: address,
-            access: access
+            access: access,
+            address: address
         );
     }
     public ushort ReadCode16(uint address, BusAccessType access) => m_inner.ReadCode16(
-        address: address,
-        access: access
+        access: access,
+        address: address
     );
     public uint ReadCode32(uint address, BusAccessType access) => m_inner.ReadCode32(
-        address: address,
-        access: access
+        access: access,
+        address: address
     );
     public void Write8(uint address, byte value, BusAccessType access) {
         if (WriteDebug(
             address: address,
-            width: 1,
-            value: value
+            value: value,
+            width: 1
         )) {
             return;
         }
 
         m_inner.Write8(
+            access: access,
             address: address,
-            value: value,
-            access: access
+            value: value
         );
     }
     public void Write16(uint address, ushort value, BusAccessType access) {
         if (WriteDebug(
             address: address,
-            width: 2,
-            value: value
+            value: value,
+            width: 2
         )) {
             return;
         }
 
         m_inner.Write16(
+            access: access,
             address: address,
-            value: value,
-            access: access
+            value: value
         );
     }
     public void Write32(uint address, uint value, BusAccessType access) {
         if (WriteDebug(
             address: address,
-            width: 4,
-            value: value
+            value: value,
+            width: 4
         )) {
             return;
         }
 
         m_inner.Write32(
+            access: access,
             address: address,
-            value: value,
-            access: access
+            value: value
         );
     }
     public void Idle(int cycles) => m_inner.Idle(cycles: cycles);
@@ -139,7 +140,7 @@ internal sealed class SuiteDebugBus : IAgbBus {
 
         // KEYINPUT is overridden so the harness can press menu buttons.
         if ((address & ~1u) == KeyInput) {
-            var keys = (uint)Keys;
+            var keys = ((uint)Keys);
 
             value = width switch {
                 1 => (((address & 1u) == 0u)
@@ -164,7 +165,7 @@ internal sealed class SuiteDebugBus : IAgbBus {
 
         if (address == DebugFlags) {
             if ((value & 0x100u) != 0u) {
-                Flush(level: (int)(value & 0x7u));
+                Flush(level: ((int)(value & 0x7u)));
             }
 
             return true;
@@ -175,10 +176,10 @@ internal sealed class SuiteDebugBus : IAgbBus {
             (address < DebugFlags)
         ) {
             for (var i = 0; (i < width); ++i) {
-                var index = (int)((address - DebugString) + (uint)i);
+                var index = ((int)((address - DebugString) + ((uint)i)));
 
                 if (index < m_string.Length) {
-                    m_string[index] = (byte)(value >> (i * 8));
+                    m_string[index] = ((byte)(value >> (i * 8)));
                 }
             }
 
@@ -190,7 +191,7 @@ internal sealed class SuiteDebugBus : IAgbBus {
     private void Flush(int level) {
         var length = Array.IndexOf(
             array: m_string,
-            value: (byte)0
+            value: ((byte)0)
         );
 
         if (length < 0) {
@@ -201,8 +202,8 @@ internal sealed class SuiteDebugBus : IAgbBus {
             arg1: level,
             arg2: Encoding.ASCII.GetString(
                 bytes: m_string,
-                index: 0,
-                count: length
+                count: length,
+                index: 0
             )
         );
     }

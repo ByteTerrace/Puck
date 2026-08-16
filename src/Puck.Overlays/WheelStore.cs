@@ -11,7 +11,6 @@ public readonly record struct OverlayWheelRing(
     string Label,
     ReadOnlyMemory<string> Sectors
 );
-
 /// <summary>One seat's presented radial action menu, scoped to its viewport rect. Center and radii are pixels in
 /// full-frame space; the seat's clip rect confines them, exactly as the drawn cursor's records are.</summary>
 /// <param name="Viewport">The seat's viewport rect in normalized frame space.</param>
@@ -41,14 +40,12 @@ public readonly record struct OverlayWheelSeat(
     bool Clockwise,
     ReadOnlyMemory<OverlayWheelRing> Rings
 );
-
 /// <summary>The per-frame wheel snapshot — one entry per seat whose wheel is currently open (the host owns the
 /// open/close policy; an empty frame draws nothing, so closing is simply not publishing the seat).</summary>
 /// <param name="Seats">The wheel-presenting seats, in slot order.</param>
 public readonly record struct OverlayWheelFrame(
     ReadOnlyMemory<OverlayWheelSeat> Seats
 );
-
 /// <summary>The read seam <see cref="WheelWriter"/> consumes; the host's wheel feed is the writer.</summary>
 public interface IWheelSource {
     /// <summary>Copies the latest published frame, when one exists.</summary>
@@ -56,7 +53,6 @@ public interface IWheelSource {
     /// <returns><see langword="true"/> when a frame has been published.</returns>
     bool TrySnapshot(out OverlayWheelFrame frame);
 }
-
 /// <summary>
 /// The radial-action-menu state store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. Same
 /// threading contract as <see cref="CursorStore"/>: the host's feed publishes once per produced frame and the
@@ -69,7 +65,6 @@ public sealed class WheelStore : IWheelSource {
     /// <summary>Publishes a frame (the writer side).</summary>
     /// <param name="frame">The frame to publish.</param>
     public void Publish(in OverlayWheelFrame frame) => m_buffer.Publish(frame: frame);
-
     /// <inheritdoc/>
     public bool TrySnapshot(out OverlayWheelFrame frame) => m_buffer.TrySnapshot(frame: out frame);
 }

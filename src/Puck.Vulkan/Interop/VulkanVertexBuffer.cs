@@ -7,6 +7,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanVertexBuffer : IGpuVertexBuffer {
     private bool m_disposed;
+
     private readonly IVulkanVertexBufferApi m_vertexBufferApi;
 
     /// <summary>Gets the native <c>VkBuffer</c> handle, or zero once disposed.</summary>

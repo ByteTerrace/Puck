@@ -16,6 +16,64 @@ namespace Puck.Recording.Matroska;
 /// (unknown-size) pattern for that length.
 /// </remarks>
 internal static class EbmlWriter {
+    /// <summary>Writes an ASCII string element (the muxer's strings — codec ids and app names — are ASCII).</summary>
+    /// <param name="stream">The destination stream.</param>
+    /// <param name="id">The element identifier.</param>
+    /// <param name="value">The ASCII text to encode.</param>
+    public static void WriteAsciiString(Stream stream, uint id, string value) {
+        Span<byte> buffer = stackalloc byte[value.Length];
+
+        for (var index = 0; (index < value.Length); index++) {
+            buffer[index] = ((byte)value[index]);
+        }
+
+        WriteId(
+            id: id,
+            stream: stream
+        );
+        WriteSize(
+            stream: stream,
+            size: buffer.Length
+        );
+        stream.Write(buffer: buffer);
+    }
+    /// <summary>Writes a raw binary element.</summary>
+    /// <param name="stream">The destination stream.</param>
+    /// <param name="id">The element identifier.</param>
+    /// <param name="value">The content bytes.</param>
+    public static void WriteBinary(Stream stream, uint id, ReadOnlySpan<byte> value) {
+        WriteId(
+            id: id,
+            stream: stream
+        );
+        WriteSize(
+            stream: stream,
+            size: value.Length
+        );
+        stream.Write(buffer: value);
+    }
+    /// <summary>Writes an eight-byte IEEE-754 double element.</summary>
+    /// <param name="stream">The destination stream.</param>
+    /// <param name="id">The element identifier.</param>
+    /// <param name="value">The value to encode.</param>
+    public static void WriteDouble(Stream stream, uint id, double value) {
+        WriteId(
+            id: id,
+            stream: stream
+        );
+        WriteSize(
+            size: 8,
+            stream: stream
+        );
+
+        Span<byte> buffer = stackalloc byte[8];
+
+        BinaryPrimitives.WriteDoubleBigEndian(
+            destination: buffer,
+            value: value
+        );
+        stream.Write(buffer: buffer);
+    }
     /// <summary>Writes an element identifier using the byte count implied by its highest set bit.</summary>
     /// <param name="stream">The destination stream.</param>
     /// <param name="id">The canonical encoded identifier.</param>
@@ -23,10 +81,26 @@ internal static class EbmlWriter {
         var length = (((32 - BitOperations.LeadingZeroCount(value: id)) + 7) / 8);
         Span<byte> buffer = stackalloc byte[4];
 
-        BinaryPrimitives.WriteUInt32BigEndian(destination: buffer, value: id);
+        BinaryPrimitives.WriteUInt32BigEndian(
+            destination: buffer,
+            value: id
+        );
         stream.Write(buffer: buffer[(4 - length)..]);
     }
-
+    /// <summary>Writes a master element's identifier and known content size (the caller writes the children).</summary>
+    /// <param name="stream">The destination stream.</param>
+    /// <param name="id">The master element identifier.</param>
+    /// <param name="contentSize">The exact byte length of the children that follow.</param>
+    public static void WriteMasterHeader(Stream stream, uint id, long contentSize) {
+        WriteId(
+            id: id,
+            stream: stream
+        );
+        WriteSize(
+            size: contentSize,
+            stream: stream
+        );
+    }
     /// <summary>Writes a size as the shortest variable-length integer that can represent it.</summary>
     /// <param name="stream">The destination stream.</param>
     /// <param name="size">The non-negative content size.</param>
@@ -40,7 +114,10 @@ internal static class EbmlWriter {
                 Span<byte> buffer = stackalloc byte[8];
                 var marker = (1L << (7 * length));
 
-                BinaryPrimitives.WriteInt64BigEndian(destination: buffer, value: marker | size);
+                BinaryPrimitives.WriteInt64BigEndian(
+                    destination: buffer,
+                    value: marker | size
+                );
                 stream.Write(buffer: buffer[(8 - length)..]);
 
                 return;
@@ -53,7 +130,6 @@ internal static class EbmlWriter {
             paramName: nameof(size)
         );
     }
-
     /// <summary>Writes a size as a variable-length integer of an exact width, so a placeholder written while the
     /// value is unknown can be overwritten in place once it is known without shifting any following byte.</summary>
     /// <param name="stream">The destination stream.</param>
@@ -62,32 +138,33 @@ internal static class EbmlWriter {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is outside one to eight, or
     /// <paramref name="size"/> does not fit that width.</exception>
     public static void WriteSizeFixed(Stream stream, long size, int length) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: length, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: length, other: 8);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: length,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: length,
+            other: 8
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(value: size);
 
         var capacity = ((1L << (7 * length)) - 1L);
 
         // The all-ones value of the width is the reserved unknown-size pattern, so the usable maximum is one below it.
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: size, other: capacity);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: size,
+            other: capacity
+        );
 
         Span<byte> buffer = stackalloc byte[8];
         var marker = (1L << (7 * length));
 
-        BinaryPrimitives.WriteInt64BigEndian(destination: buffer, value: (marker | size));
+        BinaryPrimitives.WriteInt64BigEndian(
+            destination: buffer,
+            value: marker | size
+        );
         stream.Write(buffer: buffer[(8 - length)..]);
     }
-
-    /// <summary>Writes the eight-byte reserved unknown-size marker (for a live, unbounded master element).</summary>
-    /// <param name="stream">The destination stream.</param>
-    public static void WriteUnknownSize(Stream stream) {
-        // Eight-byte length whose seven-bit-per-byte value part is all ones: 0x01FF_FFFF_FFFF_FFFF.
-        Span<byte> buffer = stackalloc byte[8];
-
-        BinaryPrimitives.WriteInt64BigEndian(destination: buffer, value: 0x01FFFFFFFFFFFFFFL);
-        stream.Write(buffer: buffer);
-    }
-
     /// <summary>Writes an unsigned-integer element in the fewest content bytes that hold the value.</summary>
     /// <param name="stream">The destination stream.</param>
     /// <param name="id">The element identifier.</param>
@@ -95,65 +172,40 @@ internal static class EbmlWriter {
     public static void WriteUInt(Stream stream, uint id, ulong value) {
         var length = 1;
 
-        while ((length < 8) && (value >= (1UL << (8 * length)))) {
+        while (
+            (length < 8) &&
+            (value >= (1UL << (8 * length)))
+        ) {
             length++;
         }
 
-        WriteId(stream: stream, id: id);
-        WriteSize(stream: stream, size: length);
+        WriteId(
+            id: id,
+            stream: stream
+        );
+        WriteSize(
+            size: length,
+            stream: stream
+        );
 
         Span<byte> buffer = stackalloc byte[8];
 
-        BinaryPrimitives.WriteUInt64BigEndian(destination: buffer, value: value);
+        BinaryPrimitives.WriteUInt64BigEndian(
+            destination: buffer,
+            value: value
+        );
         stream.Write(buffer: buffer[(8 - length)..]);
     }
-
-    /// <summary>Writes an eight-byte IEEE-754 double element.</summary>
+    /// <summary>Writes the eight-byte reserved unknown-size marker (for a live, unbounded master element).</summary>
     /// <param name="stream">The destination stream.</param>
-    /// <param name="id">The element identifier.</param>
-    /// <param name="value">The value to encode.</param>
-    public static void WriteDouble(Stream stream, uint id, double value) {
-        WriteId(stream: stream, id: id);
-        WriteSize(stream: stream, size: 8);
-
+    public static void WriteUnknownSize(Stream stream) {
+        // Eight-byte length whose seven-bit-per-byte value part is all ones: 0x01FF_FFFF_FFFF_FFFF.
         Span<byte> buffer = stackalloc byte[8];
 
-        BinaryPrimitives.WriteDoubleBigEndian(destination: buffer, value: value);
+        BinaryPrimitives.WriteInt64BigEndian(
+            destination: buffer,
+            value: 0x01FFFFFFFFFFFFFFL
+        );
         stream.Write(buffer: buffer);
-    }
-
-    /// <summary>Writes an ASCII string element (the muxer's strings — codec ids and app names — are ASCII).</summary>
-    /// <param name="stream">The destination stream.</param>
-    /// <param name="id">The element identifier.</param>
-    /// <param name="value">The ASCII text to encode.</param>
-    public static void WriteAsciiString(Stream stream, uint id, string value) {
-        Span<byte> buffer = stackalloc byte[value.Length];
-
-        for (var index = 0; (index < value.Length); index++) {
-            buffer[index] = (byte)value[index];
-        }
-
-        WriteId(stream: stream, id: id);
-        WriteSize(stream: stream, size: buffer.Length);
-        stream.Write(buffer: buffer);
-    }
-
-    /// <summary>Writes a raw binary element.</summary>
-    /// <param name="stream">The destination stream.</param>
-    /// <param name="id">The element identifier.</param>
-    /// <param name="value">The content bytes.</param>
-    public static void WriteBinary(Stream stream, uint id, ReadOnlySpan<byte> value) {
-        WriteId(stream: stream, id: id);
-        WriteSize(stream: stream, size: value.Length);
-        stream.Write(buffer: value);
-    }
-
-    /// <summary>Writes a master element's identifier and known content size (the caller writes the children).</summary>
-    /// <param name="stream">The destination stream.</param>
-    /// <param name="id">The master element identifier.</param>
-    /// <param name="contentSize">The exact byte length of the children that follow.</param>
-    public static void WriteMasterHeader(Stream stream, uint id, long contentSize) {
-        WriteId(stream: stream, id: id);
-        WriteSize(stream: stream, size: contentSize);
     }
 }

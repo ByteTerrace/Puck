@@ -318,12 +318,13 @@ at one of these**:
 | Quadratic integer arithmetic | the `quadratic-integer.*` and `algebra.quadratic-*` law families (`laws/quadratic-integer.json`, `laws/doubling-tower.json`) |
 
 **Machine gotcha — `-c Release` must PRECEDE the file path.** In
-`dotnet run -c Release tools/quadratic-algebra-bench.cs` the flag comes first or the file
+`dotnet run -c Release wasm/build.cs` the flag comes first or the file
 is silently built and run as Debug. This is not cosmetic on the reference
 machine: Windows App Control blocks loading never-seen Debug binaries
 (`FileLoadException 0x800711C7`), so file-based `dotnet run <script>.cs`
 programs fail outright at their default configuration. Release outputs load
-cleanly.
+cleanly. `puck bench` is unaffected — it runs through `dotnet run --project`,
+not a file-based script.
 
 **What green means, and does not.** A green battery means no probe failed. It
 does not by itself mean no probe *diverged*: a defect that turns a subject

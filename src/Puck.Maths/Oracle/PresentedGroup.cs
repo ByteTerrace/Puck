@@ -13,7 +13,6 @@ namespace Puck.Maths;
 /// <c>generator · (charge · basis[key])</c> and its mirror image were both multiplied and both found equal to the
 /// unit.</remarks>
 public readonly record struct UnitWitness<TValue>(int Symbol, long InverseKey, TValue InverseCharge);
-
 /// <summary>The refusal of a bounded group query.</summary>
 /// <param name="Outcome">Why the query stopped. <see cref="ClosureOutcome.SearchLimitReached"/> is the budget: the
 /// answer may well exist and was not reached. <see cref="ClosureOutcome.AmbiguityWitness"/> is a structural refusal
@@ -40,7 +39,6 @@ public readonly record struct GroupObstruction(ClosureOutcome Outcome, int Block
     /// obstruction.</summary>
     public int AssociatorRightKey { get; init; } = -1;
 }
-
 /// <summary>
 /// The group regime of a presented algebra: a finite-basis associativity proof, the certificate that every generator
 /// is a unit, the inverses those certificates license, and bounded orbit enumeration under the generators.
@@ -100,6 +98,233 @@ public sealed class PresentedGroup<TValue, TOps>
     /// <summary>Gets one unit witness per generator, in symbol order.</summary>
     public ReadOnlySpan<UnitWitness<TValue>> UnitWitnesses => m_witnesses;
 
+    private static GroupObstruction NonAssociativeObstruction(int left, int middle, int right, long triplesChecked) =>
+        new(
+            BlockedKey: -1L,
+            BlockedSymbol: -1,
+            Outcome: ClosureOutcome.BasisNonAssociativityDetected,
+            PointsReached: triplesChecked
+        ) {
+            AssociatorLeftKey = left,
+            AssociatorMiddleKey = middle,
+            AssociatorRightKey = right,
+        };
+    // Associativity is checked on the whole finite basis before any inverse is sought. Bilinearity makes the ordered
+    // basis triples the exact finite certificate needed by the basis-element group regime. Pair products are memoized
+    // because every one participates in two complete triple sweeps.
+    private static bool TryCertifyAssociativity(PresentedAlgebra<TValue, TOps> algebra, int keyCount, out GroupObstruction obstruction) {
+        var compiled = algebra.Compile();
+        var cellCount = (keyCount * keyCount);
+        var pairCharge = new TValue[cellCount];
+        var pairTarget = new int[cellCount];
+        var material = algebra.Presentation.Material;
+        var one = material.One;
+        var singleCharge = new TValue[1];
+        var singleLeft = new TValue[1];
+        var singleRight = new TValue[1];
+
+        singleLeft[0] = one;
+        singleRight[0] = one;
+
+        // Every shipped group basis is monomial: one basis pair lands on one basis key, possibly with a sign. In that
+        // regime the complete associativity certificate is a tight table chase with no Element allocation. Retain the
+        // general product fallback below for a caller-authored table carrying sums or annihilation.
+        var monomial = true;
+
+        for (var left = 0; ((left < keyCount) && monomial); ++left) {
+            for (var right = 0; (right < keyCount); ++right) {
+                if (1 != compiled.TargetCount(
+                    leftKey: left,
+                    rightKey: right
+                )) {
+                    monomial = false;
+
+                    break;
+                }
+
+                var slot = ((left * keyCount) + right);
+
+                singleCharge[0] = compiled.Charge(
+                    leftKey: left,
+                    rightKey: right
+                );
+                pairCharge[slot] = material.FusedChargedSum(
+                    charges: singleCharge,
+                    left: singleLeft,
+                    right: singleRight,
+                    lane: algebra.Presentation.Lane
+                );
+                pairTarget[slot] = ((int)compiled.Target(
+                    leftKey: left,
+                    rightKey: right
+                ));
+            }
+        }
+
+        if (monomial) {
+            var comparer = EqualityComparer<TValue>.Default;
+            var triplesChecked = 0L;
+
+            for (var left = 0; (left < keyCount); ++left) {
+                for (var middle = 0; (middle < keyCount); ++middle) {
+                    var leftPairSlot = ((left * keyCount) + middle);
+
+                    for (var right = 0; (right < keyCount); ++right) {
+                        ++triplesChecked;
+
+                        var rightPairSlot = ((middle * keyCount) + right);
+                        var leftCell = ((pairTarget[leftPairSlot] * keyCount) + right);
+                        var rightCell = ((left * keyCount) + pairTarget[rightPairSlot]);
+
+                        singleCharge[0] = compiled.Charge(
+                            leftKey: pairTarget[leftPairSlot],
+                            rightKey: right
+                        );
+                        singleLeft[0] = pairCharge[leftPairSlot];
+                        singleRight[0] = one;
+
+                        var before = material.FusedChargedSum(
+                            charges: singleCharge,
+                            left: singleLeft,
+                            right: singleRight,
+                            lane: algebra.Presentation.Lane
+                        );
+
+                        singleCharge[0] = compiled.Charge(
+                            leftKey: left,
+                            rightKey: pairTarget[rightPairSlot]
+                        );
+                        singleLeft[0] = one;
+                        singleRight[0] = pairCharge[rightPairSlot];
+
+                        var after = material.FusedChargedSum(
+                            charges: singleCharge,
+                            left: singleLeft,
+                            right: singleRight,
+                            lane: algebra.Presentation.Lane
+                        );
+
+                        var beforeZero = material.IsZero(value: before);
+                        var afterZero = material.IsZero(value: after);
+
+                        if (
+                            (beforeZero && afterZero) ||
+                            (!beforeZero && !afterZero && (pairTarget[leftCell] == pairTarget[rightCell]) && comparer.Equals(
+                            x: before,
+                            y: after
+                        ))
+                        ) {
+                            continue;
+                        }
+
+                        obstruction = NonAssociativeObstruction(
+                            left: left,
+                            middle: middle,
+                            right: right,
+                            triplesChecked: triplesChecked
+                        );
+
+                        return false;
+                    }
+                }
+            }
+
+            obstruction = default;
+
+            return true;
+        }
+
+        var basis = new PresentedAlgebra<TValue, TOps>.Element[keyCount];
+        var products = new PresentedAlgebra<TValue, TOps>.Element[(keyCount * keyCount)];
+
+        obstruction = default;
+
+        for (var key = 0; (key < keyCount); ++key) {
+            basis[key] = algebra.FromSupport(
+                coefficients: [one],
+                keys: [key]
+            );
+        }
+
+        for (var left = 0; (left < keyCount); ++left) {
+            for (var right = 0; (right < keyCount); ++right) {
+                products[((left * keyCount) + right)] = algebra.Multiply(
+                    left: basis[left],
+                    right: basis[right]
+                );
+            }
+        }
+
+        var fallbackTriplesChecked = 0L;
+
+        for (var left = 0; (left < keyCount); ++left) {
+            for (var middle = 0; (middle < keyCount); ++middle) {
+                var leftPair = products[((left * keyCount) + middle)];
+
+                for (var right = 0; (right < keyCount); ++right) {
+                    ++fallbackTriplesChecked;
+
+                    var before = algebra.Multiply(
+                        left: leftPair,
+                        right: basis[right]
+                    );
+                    var after = algebra.Multiply(
+                        left: basis[left],
+                        right: products[((middle * keyCount) + right)]
+                    );
+
+                    if (algebra.AreEqual(
+                        left: before,
+                        right: after
+                    )) { continue; }
+
+                    obstruction = NonAssociativeObstruction(
+                        left: left,
+                        middle: middle,
+                        right: right,
+                        triplesChecked: fallbackTriplesChecked
+                    );
+
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+    // The coefficient a candidate would have to carry, read off the product it makes with the generator rather than
+    // guessed: if g·b lands on the unit key at charge c, then the only coefficient that can invert g through b is the
+    // material's inverse of c. At a field material every unit has one, so a generator whose inverse carries neither
+    // sign — which is every generator of a prime-field presentation whose cells are not signs — is reached instead of
+    // refused. The answer is a CANDIDATE and never a certificate; the caller multiplies it out on both sides.
+    private static bool TryDeriveInverseCharge(
+        PresentedAlgebra<TValue, TOps> algebra,
+        IFieldMaterial<TValue, TOps> field,
+        in PresentedAlgebra<TValue, TOps>.Element element,
+        long candidate,
+        long identityKey,
+        out TValue charge
+    ) {
+        var product = algebra.Multiply(
+            left: element,
+            right: algebra.FromSupport(
+                keys: [candidate],
+                coefficients: [algebra.Presentation.Material.One]
+            )
+        );
+
+        charge = algebra.Presentation.Material.Zero;
+
+        return (
+            (1 == product.SupportCount) &&
+            (identityKey == product.Keys[0]) &&
+            field.TryInvert(
+            value: product.Coefficients[0],
+            inverse: out charge
+        )
+        );
+    }
+
     /// <summary>Certifies that the finite-basis product is associative and every generator is a unit.</summary>
     /// <param name="algebra">The algebra.</param>
     /// <param name="group">On success, the certified group regime.</param>
@@ -123,9 +348,9 @@ public sealed class PresentedGroup<TValue, TOps>
 
         if (material is not IExactSemiringMaterial<TValue, TOps>) {
             obstruction = new(
-                Outcome: ClosureOutcome.AmbiguityWitness,
-                BlockedSymbol: -1,
                 BlockedKey: -1L,
+                BlockedSymbol: -1,
+                Outcome: ClosureOutcome.AmbiguityWitness,
                 PointsReached: 0L
             );
 
@@ -133,7 +358,12 @@ public sealed class PresentedGroup<TValue, TOps>
         }
 
         if (1 != identity.SupportCount) {
-            obstruction = new(Outcome: ClosureOutcome.AmbiguityWitness, BlockedSymbol: -1, BlockedKey: -1L, PointsReached: identity.SupportCount);
+            obstruction = new(
+                Outcome: ClosureOutcome.AmbiguityWitness,
+                BlockedSymbol: -1,
+                BlockedKey: -1L,
+                PointsReached: identity.SupportCount
+            );
 
             return false;
         }
@@ -143,16 +373,20 @@ public sealed class PresentedGroup<TValue, TOps>
 
         if (!dense) {
             obstruction = new(
-                Outcome: ClosureOutcome.SearchLimitReached,
-                BlockedSymbol: -1,
                 BlockedKey: -1L,
+                BlockedSymbol: -1,
+                Outcome: ClosureOutcome.SearchLimitReached,
                 PointsReached: 0L
             );
 
             return false;
         }
 
-        if (!TryCertifyAssociativity(algebra: algebra, keyCount: compiled.KeyCount, obstruction: out obstruction)) {
+        if (!TryCertifyAssociativity(
+            algebra: algebra,
+            keyCount: compiled.KeyCount,
+            obstruction: out obstruction
+        )) {
             return false;
         }
 
@@ -190,7 +424,16 @@ public sealed class PresentedGroup<TValue, TOps>
 
                     // The filter, and only a filter: a cell that does not carry the unit alone can hold no inverse, so
                     // the product below is never even formed for it.
-                    if (dense && ((1 != compiled.TargetCount(leftKey: key, rightKey: candidate)) || (identityKey != compiled.Target(leftKey: key, rightKey: candidate)))) { continue; }
+                    if (
+                        dense &&
+                        ((1 != compiled.TargetCount(
+                        leftKey: key,
+                        rightKey: candidate
+                    )) || (identityKey != compiled.Target(
+                        leftKey: key,
+                        rightKey: candidate
+                    )))
+                    ) { continue; }
 
                     ++searched;
 
@@ -200,219 +443,75 @@ public sealed class PresentedGroup<TValue, TOps>
 
                     if (signed is not null) { attempts[attemptCount++] = negativeOne; }
 
-                    if ((field is not null) && TryDeriveInverseCharge(algebra: algebra, field: field, element: element, candidate: candidate, identityKey: identityKey, charge: out var derived)) {
+                    if (
+                        (field is not null) &&
+                        TryDeriveInverseCharge(
+                        algebra: algebra,
+                        candidate: candidate,
+                        charge: out var derived,
+                        element: element,
+                        field: field,
+                        identityKey: identityKey
+                    )
+                    ) {
                         attempts[attemptCount++] = derived;
                     }
 
                     for (var attempt = 0; ((attempt < attemptCount) && !found); ++attempt) {
                         var charge = attempts[attempt];
-                        var inverse = algebra.FromSupport(keys: [candidate], coefficients: [charge]);
+                        var inverse = algebra.FromSupport(
+                            coefficients: [charge],
+                            keys: [candidate]
+                        );
 
-                        if (!algebra.AreEqual(left: algebra.Multiply(left: element, right: inverse), right: identity)
-                            || !algebra.AreEqual(left: algebra.Multiply(left: inverse, right: element), right: identity)) {
+                        if (
+                            !algebra.AreEqual(
+                            left: algebra.Multiply(
+                                left: element,
+                                right: inverse
+                            ),
+                            right: identity
+                        ) ||
+                            !algebra.AreEqual(
+                            left: algebra.Multiply(
+                                left: inverse,
+                                right: element
+                            ),
+                            right: identity
+                        )
+                        ) {
                             continue;
                         }
 
                         found = true;
-                        witnesses[symbol] = new(Symbol: symbol, InverseKey: candidate, InverseCharge: charge);
+                        witnesses[symbol] = new(
+                            InverseCharge: charge,
+                            InverseKey: candidate,
+                            Symbol: symbol
+                        );
                     }
                 }
             }
 
             if (!found) {
-                obstruction = new(Outcome: ClosureOutcome.AmbiguityWitness, BlockedSymbol: symbol, BlockedKey: -1L, PointsReached: searched);
+                obstruction = new(
+                    BlockedKey: -1L,
+                    BlockedSymbol: symbol,
+                    Outcome: ClosureOutcome.AmbiguityWitness,
+                    PointsReached: searched
+                );
 
                 return false;
             }
         }
 
-        group = new(algebra: algebra, witnesses: witnesses);
+        group = new(
+            algebra: algebra,
+            witnesses: witnesses
+        );
 
         return true;
     }
-
-    // Associativity is checked on the whole finite basis before any inverse is sought. Bilinearity makes the ordered
-    // basis triples the exact finite certificate needed by the basis-element group regime. Pair products are memoized
-    // because every one participates in two complete triple sweeps.
-    private static bool TryCertifyAssociativity(PresentedAlgebra<TValue, TOps> algebra, int keyCount, out GroupObstruction obstruction) {
-        var compiled = algebra.Compile();
-        var cellCount = (keyCount * keyCount);
-        var pairCharge = new TValue[cellCount];
-        var pairTarget = new int[cellCount];
-        var material = algebra.Presentation.Material;
-        var one = material.One;
-        var singleCharge = new TValue[1];
-        var singleLeft = new TValue[1];
-        var singleRight = new TValue[1];
-
-        singleLeft[0] = one;
-        singleRight[0] = one;
-
-        // Every shipped group basis is monomial: one basis pair lands on one basis key, possibly with a sign. In that
-        // regime the complete associativity certificate is a tight table chase with no Element allocation. Retain the
-        // general product fallback below for a caller-authored table carrying sums or annihilation.
-        var monomial = true;
-
-        for (var left = 0; ((left < keyCount) && monomial); ++left) {
-            for (var right = 0; (right < keyCount); ++right) {
-                if (1 != compiled.TargetCount(leftKey: left, rightKey: right)) {
-                    monomial = false;
-
-                    break;
-                }
-
-                var slot = ((left * keyCount) + right);
-
-                singleCharge[0] = compiled.Charge(leftKey: left, rightKey: right);
-                pairCharge[slot] = material.FusedChargedSum(
-                    charges: singleCharge,
-                    left: singleLeft,
-                    right: singleRight,
-                    lane: algebra.Presentation.Lane
-                );
-                pairTarget[slot] = (int)compiled.Target(leftKey: left, rightKey: right);
-            }
-        }
-
-        if (monomial) {
-            var comparer = EqualityComparer<TValue>.Default;
-            var triplesChecked = 0L;
-
-            for (var left = 0; (left < keyCount); ++left) {
-                for (var middle = 0; (middle < keyCount); ++middle) {
-                    var leftPairSlot = ((left * keyCount) + middle);
-
-                    for (var right = 0; (right < keyCount); ++right) {
-                        ++triplesChecked;
-
-                        var rightPairSlot = ((middle * keyCount) + right);
-                        var leftCell = ((pairTarget[leftPairSlot] * keyCount) + right);
-                        var rightCell = ((left * keyCount) + pairTarget[rightPairSlot]);
-
-                        singleCharge[0] = compiled.Charge(leftKey: pairTarget[leftPairSlot], rightKey: right);
-                        singleLeft[0] = pairCharge[leftPairSlot];
-                        singleRight[0] = one;
-
-                        var before = material.FusedChargedSum(
-                            charges: singleCharge,
-                            left: singleLeft,
-                            right: singleRight,
-                            lane: algebra.Presentation.Lane
-                        );
-
-                        singleCharge[0] = compiled.Charge(leftKey: left, rightKey: pairTarget[rightPairSlot]);
-                        singleLeft[0] = one;
-                        singleRight[0] = pairCharge[rightPairSlot];
-
-                        var after = material.FusedChargedSum(
-                            charges: singleCharge,
-                            left: singleLeft,
-                            right: singleRight,
-                            lane: algebra.Presentation.Lane
-                        );
-
-                        var beforeZero = material.IsZero(value: before);
-                        var afterZero = material.IsZero(value: after);
-
-                        if ((beforeZero && afterZero)
-                            || (!beforeZero && !afterZero && (pairTarget[leftCell] == pairTarget[rightCell]) && comparer.Equals(x: before, y: after))) {
-                            continue;
-                        }
-
-                        obstruction = NonAssociativeObstruction(
-                            left: left,
-                            middle: middle,
-                            right: right,
-                            triplesChecked: triplesChecked
-                        );
-
-                        return false;
-                    }
-                }
-            }
-
-            obstruction = default;
-
-            return true;
-        }
-
-        var basis = new PresentedAlgebra<TValue, TOps>.Element[keyCount];
-        var products = new PresentedAlgebra<TValue, TOps>.Element[(keyCount * keyCount)];
-
-        obstruction = default;
-
-        for (var key = 0; (key < keyCount); ++key) {
-            basis[key] = algebra.FromSupport(keys: [key], coefficients: [one]);
-        }
-
-        for (var left = 0; (left < keyCount); ++left) {
-            for (var right = 0; (right < keyCount); ++right) {
-                products[((left * keyCount) + right)] = algebra.Multiply(left: basis[left], right: basis[right]);
-            }
-        }
-
-        var fallbackTriplesChecked = 0L;
-
-        for (var left = 0; (left < keyCount); ++left) {
-            for (var middle = 0; (middle < keyCount); ++middle) {
-                var leftPair = products[((left * keyCount) + middle)];
-
-                for (var right = 0; (right < keyCount); ++right) {
-                    ++fallbackTriplesChecked;
-
-                    var before = algebra.Multiply(left: leftPair, right: basis[right]);
-                    var after = algebra.Multiply(left: basis[left], right: products[((middle * keyCount) + right)]);
-
-                    if (algebra.AreEqual(left: before, right: after)) { continue; }
-
-                    obstruction = NonAssociativeObstruction(
-                        left: left,
-                        middle: middle,
-                        right: right,
-                        triplesChecked: fallbackTriplesChecked
-                    );
-
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-    private static GroupObstruction NonAssociativeObstruction(int left, int middle, int right, long triplesChecked) =>
-        new(
-            Outcome: ClosureOutcome.BasisNonAssociativityDetected,
-            BlockedSymbol: -1,
-            BlockedKey: -1L,
-            PointsReached: triplesChecked
-        ) {
-            AssociatorLeftKey = left,
-            AssociatorMiddleKey = middle,
-            AssociatorRightKey = right,
-        };
-
-    // The coefficient a candidate would have to carry, read off the product it makes with the generator rather than
-    // guessed: if g·b lands on the unit key at charge c, then the only coefficient that can invert g through b is the
-    // material's inverse of c. At a field material every unit has one, so a generator whose inverse carries neither
-    // sign — which is every generator of a prime-field presentation whose cells are not signs — is reached instead of
-    // refused. The answer is a CANDIDATE and never a certificate; the caller multiplies it out on both sides.
-    private static bool TryDeriveInverseCharge(
-        PresentedAlgebra<TValue, TOps> algebra,
-        IFieldMaterial<TValue, TOps> field,
-        in PresentedAlgebra<TValue, TOps>.Element element,
-        long candidate,
-        long identityKey,
-        out TValue charge
-    ) {
-        var product = algebra.Multiply(left: element, right: algebra.FromSupport(keys: [candidate], coefficients: [algebra.Presentation.Material.One]));
-
-        charge = algebra.Presentation.Material.Zero;
-
-        return ((1 == product.SupportCount)
-            && (identityKey == product.Keys[0])
-            && field.TryInvert(value: product.Coefficients[0], inverse: out charge));
-    }
-
     /// <summary>Enumerates one basis element's orbit under the generators, bounded.</summary>
     /// <param name="seedKey">The normal-form key to close.</param>
     /// <param name="searchLimit">The largest orbit to admit; the enumeration stops there and refuses.</param>
@@ -428,9 +527,15 @@ public sealed class PresentedGroup<TValue, TOps>
     /// <remarks>The orbit is a set of keys. A step's charge is not part of it, so a Clifford basis whose products carry
     /// a sign has the same orbit as one whose products do not.</remarks>
     public bool TryEnumerateOrbit(long seedKey, long searchLimit, out ReadOnlyMemory<long> orbit, out GroupObstruction obstruction) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: searchLimit, other: 1L);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: searchLimit,
+            other: 1L
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(value: seedKey);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: seedKey, other: m_algebra.Presentation.NormalFormCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: seedKey,
+            other: m_algebra.Presentation.NormalFormCount
+        );
 
         var algebra = m_algebra;
         var one = algebra.Presentation.Material.One;
@@ -441,13 +546,24 @@ public sealed class PresentedGroup<TValue, TOps>
         obstruction = default;
 
         for (var cursor = 0; (cursor < frontier.Count); ++cursor) {
-            var point = algebra.FromSupport(keys: [frontier[cursor]], coefficients: [one]);
+            var point = algebra.FromSupport(
+                keys: [frontier[cursor]],
+                coefficients: [one]
+            );
 
             for (var symbol = 0; (symbol < m_witnesses.Length); ++symbol) {
-                var image = algebra.Multiply(left: point, right: algebra.Generator(symbol: symbol));
+                var image = algebra.Multiply(
+                    left: point,
+                    right: algebra.Generator(symbol: symbol)
+                );
 
                 if (1 != image.SupportCount) {
-                    obstruction = new(Outcome: ClosureOutcome.AmbiguityWitness, BlockedSymbol: symbol, BlockedKey: frontier[cursor], PointsReached: frontier.Count);
+                    obstruction = new(
+                        Outcome: ClosureOutcome.AmbiguityWitness,
+                        BlockedSymbol: symbol,
+                        BlockedKey: frontier[cursor],
+                        PointsReached: frontier.Count
+                    );
 
                     return false;
                 }
@@ -458,12 +574,20 @@ public sealed class PresentedGroup<TValue, TOps>
                 if (slot >= 0) { continue; }
 
                 if (frontier.Count >= searchLimit) {
-                    obstruction = new(Outcome: ClosureOutcome.SearchLimitReached, BlockedSymbol: symbol, BlockedKey: key, PointsReached: frontier.Count);
+                    obstruction = new(
+                        Outcome: ClosureOutcome.SearchLimitReached,
+                        BlockedSymbol: symbol,
+                        BlockedKey: key,
+                        PointsReached: frontier.Count
+                    );
 
                     return false;
                 }
 
-                sorted.Insert(index: ~slot, item: key);
+                sorted.Insert(
+                    index: ~slot,
+                    item: key
+                );
                 frontier.Add(item: key);
             }
         }
@@ -472,7 +596,6 @@ public sealed class PresentedGroup<TValue, TOps>
 
         return true;
     }
-
     /// <summary>Inverts one basis element, by inverting its word letter by letter and multiplying the result out.</summary>
     /// <param name="value">The element to invert; one basis element carrying the material's one.</param>
     /// <param name="inverse">On success, the two-sided inverse.</param>
@@ -499,16 +622,27 @@ public sealed class PresentedGroup<TValue, TOps>
         var identity = algebra.Identity;
         var presentation = algebra.Presentation;
 
-        algebra.RequireOwned(value: value, paramName: nameof(value));
+        algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         inverse = algebra.Zero;
         obstruction = default;
 
-        if ((1 != value.SupportCount) || !EqualityComparer<TValue>.Default.Equals(x: value.Coefficients[0], y: presentation.Material.One)) {
+        if (
+            (1 != value.SupportCount) ||
+            !EqualityComparer<TValue>.Default.Equals(
+            x: value.Coefficients[0],
+            y: presentation.Material.One
+        )
+        ) {
             obstruction = new(
                 Outcome: ClosureOutcome.AmbiguityWitness,
                 BlockedSymbol: -1,
-                BlockedKey: ((0 == value.SupportCount) ? -1L : value.Keys[0]),
+                BlockedKey: ((0 == value.SupportCount)
+                ? -1L
+                : value.Keys[0]),
                 PointsReached: value.SupportCount
             );
 
@@ -519,8 +653,17 @@ public sealed class PresentedGroup<TValue, TOps>
 
         Span<int> word = stackalloc int[MaximumWordLength];
 
-        if (!presentation.TryWordOf(key: key, word: word, length: out var length)) {
-            obstruction = new(Outcome: ClosureOutcome.AmbiguityWitness, BlockedSymbol: -1, BlockedKey: key, PointsReached: 0L);
+        if (!presentation.TryWordOf(
+            key: key,
+            length: out var length,
+            word: word
+        )) {
+            obstruction = new(
+                BlockedKey: key,
+                BlockedSymbol: -1,
+                Outcome: ClosureOutcome.AmbiguityWitness,
+                PointsReached: 0L
+            );
 
             return false;
         }
@@ -530,8 +673,16 @@ public sealed class PresentedGroup<TValue, TOps>
         for (var index = (length - 1); (index >= 0); --index) {
             var letter = word[index];
 
-            if ((letter < 0) || (letter >= m_witnesses.Length)) {
-                obstruction = new(Outcome: ClosureOutcome.AmbiguityWitness, BlockedSymbol: letter, BlockedKey: key, PointsReached: (length - index));
+            if (
+                (letter < 0) ||
+                (letter >= m_witnesses.Length)
+            ) {
+                obstruction = new(
+                    BlockedKey: key,
+                    BlockedSymbol: letter,
+                    Outcome: ClosureOutcome.AmbiguityWitness,
+                    PointsReached: (length - index)
+                );
 
                 return false;
             }
@@ -540,13 +691,35 @@ public sealed class PresentedGroup<TValue, TOps>
 
             product = algebra.Multiply(
                 left: product,
-                right: algebra.FromSupport(keys: [witness.InverseKey], coefficients: [witness.InverseCharge])
+                right: algebra.FromSupport(
+                    keys: [witness.InverseKey],
+                    coefficients: [witness.InverseCharge]
+                )
             );
         }
 
-        if (!algebra.AreEqual(left: algebra.Multiply(left: value, right: product), right: identity)
-            || !algebra.AreEqual(left: algebra.Multiply(left: product, right: value), right: identity)) {
-            obstruction = new(Outcome: ClosureOutcome.AmbiguityWitness, BlockedSymbol: -1, BlockedKey: key, PointsReached: length);
+        if (
+            !algebra.AreEqual(
+            left: algebra.Multiply(
+                left: value,
+                right: product
+            ),
+            right: identity
+        ) ||
+            !algebra.AreEqual(
+            left: algebra.Multiply(
+                left: product,
+                right: value
+            ),
+            right: identity
+        )
+        ) {
+            obstruction = new(
+                BlockedKey: key,
+                BlockedSymbol: -1,
+                Outcome: ClosureOutcome.AmbiguityWitness,
+                PointsReached: length
+            );
 
             return false;
         }

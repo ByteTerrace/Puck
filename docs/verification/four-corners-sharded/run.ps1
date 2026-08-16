@@ -3,9 +3,10 @@
 Runs Four Corners plus its floating island as five independent federated authorities and proves horizontal and vertical seams on the real path.
 
 .DESCRIPTION
-The runner copies the five quilt documents to unique scratch space, gives each document a distinct TCP authority,
-starts five Puck.World processes with one shared federation key, and drives one local body clockwise across each
-seam at the same time. After handoff, every traveler is stopped and driven again through synthesized left/right
+The runner copies the five quilt documents to unique scratch space, gives each document a distinct TCP authority and
+its own generated ECDSA federation keypair (pinned into every OTHER authority's admission rows), starts five
+Puck.World processes, and drives one local body clockwise across each seam at the same time. After handoff, every
+traveler is stopped and driven again through synthesized left/right
 stick signals—the exact binding/router path used by physical gamepads. Every authority also wakes two
 producer-driven bodies at authored spawns and never submits movement for them. It requires all four human transfers,
 retained camera state and movement control under the new authority, eight autonomous ownership migrations, routed read-backs after departure, delivered remote entity
@@ -33,7 +34,23 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $scratch = Join-Path $env:TEMP ('puck-four-corners-sharded-{0:yyyyMMdd-HHmmss}-{1}' -f (Get-Date), $PID)
 $worldDir = Join-Path $scratch 'worlds'
 $artifact = Join-Path $repoRoot 'src\Puck.World\bin\Release\net10.0\Puck.World.dll'
-$keyPath = Join-Path $scratch 'federation.key'
+
+# Each authority gets its own ECDSA P-256 keypair rather than one shared HMAC secret — the federation door verifies
+# a signed claim against the READING authority's own admission entries (WorldAttestedAuthenticator), so trust is
+# pinned per peer key, never handed out as one bearer secret every authority could sign anyone's namespace with.
+function New-AuthorityKey {
+    $ecdsa = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve]::CreateFromFriendlyName('nistP256'))
+    $spki = $ecdsa.ExportSubjectPublicKeyInfo()
+    $fingerprint = [System.Security.Cryptography.SHA256]::HashData($spki)
+    $domain = ([System.BitConverter]::ToString($fingerprint) -replace '-', '').ToLowerInvariant()
+    $pkcs8 = $ecdsa.ExportPkcs8PrivateKey()
+    $ecdsa.Dispose()
+    return [PSCustomObject]@{
+        Domain          = $domain
+        PublicKeyBase64 = [Convert]::ToBase64String($spki)
+        Pkcs8           = $pkcs8
+    }
+}
 
 function Get-FreeLoopbackPort {
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
@@ -66,6 +83,23 @@ function Require([bool] $condition, [string] $claim) {
     }
 }
 
+# Sets a nested member on a parsed world document, creating missing intermediate objects. The quilt documents are
+# deltas over quilt-base.world.json, so a member this fixture overrides (host, population, simulation) is usually
+# absent from the file and inherited at load — adding it to the delta deep-merges it over the base, which is exactly
+# the authored-override semantics the fixture wants.
+function Set-WorldMember($object, [string[]] $path, $value) {
+    for ($i = 0; $i -lt ($path.Length - 1); $i++) {
+        $name = $path[$i]
+        if ((-not $object.PSObject.Properties[$name]) -or ($null -eq $object.$name)) {
+            $object | Add-Member -NotePropertyName $name -NotePropertyValue ([pscustomobject]@{}) -Force
+        }
+        $object = $object.$name
+    }
+    $leaf = $path[-1]
+    if ($object.PSObject.Properties[$leaf]) { $object.$leaf = $value }
+    else { $object | Add-Member -NotePropertyName $leaf -NotePropertyValue $value }
+}
+
 New-Item -ItemType Directory -Force -Path $worldDir | Out-Null
 
 Push-Location $repoRoot
@@ -78,34 +112,77 @@ try {
     Pop-Location
 }
 
-[byte[]] $key = 1..32
-[System.IO.File]::WriteAllBytes($keyPath, $key)
+# The quilt documents are deltas over this template; a copy beside them keeps their relative `basis` resolvable.
+Copy-Item -LiteralPath (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-base.world.json') -Destination (Join-Path $worldDir 'quilt-base.world.json') -Force
+
+# One keypair per authority, generated before any document is written so every authority's admission rows can pin
+# every OTHER authority's public key up front.
+$keys = @{}
+foreach ($id in $authorityIds) {
+    $key = New-AuthorityKey
+    $key | Add-Member -NotePropertyName Path -NotePropertyValue (Join-Path $scratch "$id.federation.key")
+    [System.IO.File]::WriteAllBytes($key.Path, $key.Pkcs8)
+    $keys[$id] = $key
+}
+# The wildcard federation-arrival row quilt-base.world.json already authors, restated here because the runner
+# writes the WHOLE admission array as a delta (Set-WorldMember overrides the member outright — see its own remarks
+# above), not a composed layer over the base's own row.
+function WildcardArrivalRow {
+    [PSCustomObject]@{
+        domain    = '*'
+        subject   = $null
+        mode      = 'FederatedAuthority'
+        algorithm = ''
+        publicKey = ''
+        grants    = @(
+            [PSCustomObject]@{ capability = 'Control'; subject = 'all' },
+            [PSCustomObject]@{ capability = 'Drive'; exclusive = $true; budget = 64 },
+            [PSCustomObject]@{ capability = 'Observe'; budget = 64 }
+        )
+    }
+}
 
 foreach ($id in $authorityIds) {
     $source = Join-Path $repoRoot "src\Puck.World\Assets\worlds\quilt-$id.world.json"
     $target = Join-Path $worldDir "quilt-$id.world.json"
     $document = Get-Content -Raw -LiteralPath $source | ConvertFrom-Json
-    $document.host.listen = Endpoint $id
-    $document.host.authority = Endpoint $id
+    Set-WorldMember $document @('host', 'listen') (Endpoint $id)
+    Set-WorldMember $document @('host', 'authority') (Endpoint $id)
     # The presenting NW world deliberately ticks at half the destination rate. A held physical stick is replicated
     # state, so the NE/SE/SW authorities must integrate it on every one of THEIR ticks rather than turning the gaps
     # between NW samples into phantom releases (the post-transition "viscous movement" falsifier).
-    if ($id -eq 'nw') { $document.simulation.rateHz = 30 }
+    if ($id -eq 'nw') { Set-WorldMember $document @('simulation', 'rateHz') 30 }
     # Four indices are reserved for local seats. A federated arrival is an ordinary admitted network player, so the
     # sharded fixture must author network capacity instead of relying on the quilt documents' local-only floor.
     # Four driven locals plus all eight autonomous travelers can legally collect on one authority. Slot reuse under
     # that crowd is intentional: it is the real-path falsifier for generation-stable appearance and forwarding.
-    $document.population.capacity = 20
-    $document.population.networkPlayers = 16
-    $document.population.seatActivation = @('Eager', 'Eager', 'Eager', 'Eager')
-    $document.population.defaultPeerSource = 'Idle'
-    $document.population.distribution.region = [PSCustomObject]@{ '$type' = 'points'; names = @('npc-spawn'); halfExtent = 0 }
-    $document.population.distribution.fill = [PSCustomObject]@{ name = 'r2'; offset = 0; step = 0 }
+    Set-WorldMember $document @('population', 'capacity') 20
+    Set-WorldMember $document @('population', 'networkPlayers') 16
+    Set-WorldMember $document @('population', 'seatActivation') @('Eager', 'Eager', 'Eager', 'Eager')
+    Set-WorldMember $document @('population', 'defaultPeerSource') 'Idle'
+    Set-WorldMember $document @('population', 'distribution', 'region') ([PSCustomObject]@{ '$type' = 'points'; names = @('npc-spawn'); halfExtent = 0 })
+    Set-WorldMember $document @('population', 'distribution', 'fill') ([PSCustomObject]@{ name = 'r2'; offset = 0; step = 0 })
     if ($id -eq 'nw') {
-        $npcSpawn = $document.spawnPoints | Where-Object { $_.id -eq 'npc-spawn' }
-        $npcSpawn.position = @(-0.6, 0, -12)
-        $npcSpawn.yawDegrees = -90
+        # A keyed-row override: the one-row spawnPoints list patches the base's npc-spawn row in place at load.
+        Set-WorldMember $document @('spawnPoints') @([PSCustomObject]@{ id = 'npc-spawn'; position = @(-0.6, 0, -12); yawDegrees = -90 })
     }
+    # Each authority trusts every OTHER authority's own pinned key directly — the federation door verifies a
+    # SignsDirectly claim against these rows, deriving the connection's identity from the verified key rather than
+    # any claimed label (WorldAttestedAuthenticator).
+    $admissionRows = [System.Collections.Generic.List[object]]::new()
+    $admissionRows.Add((WildcardArrivalRow))
+    foreach ($peer in $authorityIds) {
+        if ($peer -eq $id) { continue }
+        $admissionRows.Add([PSCustomObject]@{
+                domain    = $keys[$peer].Domain
+                subject   = (Endpoint $peer)
+                mode      = 'SignsDirectly'
+                algorithm = 'ecdsa-p256-sha256'
+                publicKey = $keys[$peer].PublicKeyBase64
+                grants    = @()
+            })
+    }
+    Set-WorldMember $document @('admission') $admissionRows.ToArray()
     [System.IO.File]::WriteAllText($target, ($document | ConvertTo-Json -Depth 100), $utf8NoBom)
 }
 
@@ -253,7 +330,7 @@ wire.errors
             '--headless', 'true',
             '--exit-after-seconds', '56',
             '--state-dir', $state,
-            '--federation-key-file', $keyPath
+            '--federation-key-file', $keys[$id].Path
         )
         $process = Start-Process -FilePath 'dotnet' -ArgumentList $arguments -WorkingDirectory $repoRoot `
             -WindowStyle Hidden -RedirectStandardInput $stdin -RedirectStandardOutput $stdout `

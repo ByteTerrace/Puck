@@ -11,7 +11,6 @@ public static class Presentations {
     // The normal forms a finite basis of this library holds. A shuffle presentation's basis IS its word set, so this is
     // the cap every one of that entry's arguments is measured against rather than a second policy.
     private const int MaximumShuffleWords = 512;
-
     // The last boundary width whose planar diagrams fit a finite basis: the even-sum Catalan sum reads 377 at six and
     // 1182 at seven, against the 512 normal forms this library holds. It is derived, not chosen.
     private const int MaximumTangleWidth = 6;
@@ -19,6 +18,439 @@ public static class Presentations {
     // The colour list every single-object presentation shares. A presentation's boundaries are data, but a
     // one-object presentation has exactly one of them, so it need not be rebuilt per generator.
     private static readonly ReadOnlyMemory<int> SingleColour = new int[] { 0 };
+
+    // The composition rules of a category presented by its generators: one reduction per ordered pair whose boundaries
+    // meet, and the charge-zero annihilation everywhere else. Composability is DERIVED from the generators themselves,
+    // so a quiver's endpoint match, a poset interval's, and the wire count a tangle composes on are one comparison
+    // stated once rather than the same fact written out at every entry. All the caller supplies is what the boundaries
+    // cannot determine: the composite's symbol and the charge it carries.
+    private static void AppendBoundaryCompositionRules<TValue>(List<RewriteRule<TValue>> rules, ReadOnlySpan<Generator> generators, Func<int, int, (int Symbol, TValue Charge)> composite) {
+        for (var left = 0; (left < generators.Length); ++left) {
+            for (var right = 0; (right < generators.Length); ++right) {
+                if (!BoundariesMeet(
+                    left: generators[left],
+                    right: generators[right]
+                )) {
+                    rules.Add(item: new(
+                        kind: RuleKind.Annihilate,
+                        pattern: new[] { left, right },
+                        replacement: ReadOnlyMemory<int>.Empty,
+                        charges: ReadOnlyMemory<TValue>.Empty
+                    ));
+
+                    continue;
+                }
+
+                var (symbol, charge) = composite(
+                    left,
+                    right
+                );
+
+                rules.Add(item: new(
+                    kind: RuleKind.Reduce,
+                    pattern: new[] { left, right },
+                    replacement: RewriteRule<TValue>.PackReplacement(terms: [[symbol]]),
+                    charges: new[] { charge }
+                ));
+            }
+        }
+    }
+    // One same-length, lexicographically decreasing rule: the alternating word of the given length starting with the
+    // higher symbol rewrites to the one starting with the lower. At a bond of two that IS the ordinary swap, and above
+    // it, the braid relation of a Coxeter pair — one datum, so the commuting case is not a second shape.
+    private static void AppendBraidRule<TValue>(List<RewriteRule<TValue>> rules, int high, int low, int bond, TValue charge) {
+        var image = new int[bond];
+        var pattern = new int[bond];
+
+        for (var step = 0; (step < bond); ++step) {
+            var leading = (0 == (step & 1));
+
+            image[step] = (leading
+                ? low
+                : high
+            );
+            pattern[step] = (leading
+                ? high
+                : low
+            );
+        }
+
+        rules.Add(item: new(
+            kind: RuleKind.Swap,
+            pattern: pattern,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: [image]),
+            charges: new[] { charge }
+        ));
+    }
+    // The cells of the second product, one per ordered pair of words, emitted from the recursion on the two heads:
+    // (xu)·(yv) is x·(u·yv) + y·(xu·v) + [x·y]·(u·v), the third term present only under a letter product. The pairs are
+    // walked in increasing combined length, so the three shorter cells a pair reads are already emitted and every cell
+    // is formed exactly once from data. A term that would outgrow the window is dropped — the quotient by the ideal the
+    // over-long words span — and a pair left with no term at all annihilates, which is what every over-long pair of a
+    // plain shuffle does.
+    private static void AppendInterleavingRules<TValue, TOps>(List<RewriteRule<TValue>> rules, ShuffleBasis basis, ReadOnlySpan<int> letterProduct, TOps material)
+        where TOps : struct, IMaterialOps<TValue, TOps> {
+        var count = basis.Count;
+        var letterCount = basis.LetterCount;
+        var merges = (0 != letterProduct.Length);
+        var windowDegree = basis.WindowDegree;
+        var accumulator = new TValue[count];
+        var charges = new List<TValue>();
+        var ruleOfPair = new int[(count * count)];
+        var stamp = new int[count];
+        var terms = new List<int[]>();
+        var touched = new int[count];
+
+        Array.Fill(
+            array: stamp,
+            value: -1
+        );
+
+        Span<int> sourceLetter = stackalloc int[3];
+        Span<int> sourcePair = stackalloc int[3];
+
+        for (var pairLength = 0; (pairLength <= (2 * windowDegree)); ++pairLength) {
+            var longest = Math.Min(
+                val1: windowDegree,
+                val2: pairLength
+            );
+
+            for (var leftLength = Math.Max(
+                val1: 0,
+                val2: (pairLength - windowDegree)
+            ); (leftLength <= longest); ++leftLength) {
+                var rightLength = (pairLength - leftLength);
+
+                for (var left = basis.Start(length: leftLength); (left < basis.Start(length: (leftLength + 1))); ++left) {
+                    for (var right = basis.Start(length: rightLength); (right < basis.Start(length: (rightLength + 1))); ++right) {
+                        var pair = ((left * count) + right);
+                        var sourceCount = 0;
+                        var touchedCount = 0;
+
+                        if (0 != leftLength) {
+                            sourceLetter[sourceCount] = basis.Head(symbol: left);
+                            sourcePair[sourceCount++] = ((basis.Tail(symbol: left) * count) + right);
+                        }
+
+                        if (0 != rightLength) {
+                            sourceLetter[sourceCount] = basis.Head(symbol: right);
+                            sourcePair[sourceCount++] = ((left * count) + basis.Tail(symbol: right));
+                        }
+
+                        if (
+                            merges &&
+                            (0 != leftLength) &&
+                            (0 != rightLength)
+                        ) {
+                            sourceLetter[sourceCount] = letterProduct[((basis.Head(symbol: left) * letterCount) + basis.Head(symbol: right))];
+                            sourcePair[sourceCount++] = ((basis.Tail(symbol: left) * count) + basis.Tail(symbol: right));
+                        }
+
+                        // The recursion's base case, and the only pair with no shorter one to read: the empty word times
+                        // itself is the empty word, which is this presentation's unit.
+                        if (0 == pairLength) {
+                            accumulator[0] = material.One;
+                            stamp[0] = pair;
+                            touched[touchedCount++] = 0;
+                        }
+
+                        for (var source = 0; (source < sourceCount); ++source) {
+                            var child = rules[ruleOfPair[sourcePair[source]]];
+                            var letter = sourceLetter[source];
+                            var replacement = child.Replacement;
+                            var offset = 0;
+
+                            for (var term = 0; (term < child.TermCount); ++term) {
+                                // Every replacement this entry emits is a single word, so the term's own symbol sits
+                                // immediately after the length its packing carries.
+                                var length = replacement[offset++];
+                                var symbol = basis.Prepend(
+                                    letter: letter,
+                                    symbol: replacement[offset]
+                                );
+
+                                offset += length;
+
+                                if (symbol < 0) { continue; }
+
+                                if (stamp[symbol] != pair) {
+                                    accumulator[symbol] = material.Zero;
+                                    stamp[symbol] = pair;
+                                    touched[touchedCount++] = symbol;
+                                }
+
+                                accumulator[symbol] = material.Add(
+                                    left: accumulator[symbol],
+                                    right: child.Charges[term]
+                                );
+                            }
+                        }
+
+                        Array.Sort(
+                            array: touched,
+                            index: 0,
+                            length: touchedCount
+                        );
+                        charges.Clear();
+                        terms.Clear();
+
+                        for (var index = 0; (index < touchedCount); ++index) {
+                            var symbol = touched[index];
+
+                            if (material.IsZero(value: accumulator[symbol])) { continue; }
+
+                            charges.Add(item: accumulator[symbol]);
+                            terms.Add(item: [symbol]);
+                        }
+
+                        ruleOfPair[pair] = rules.Count;
+
+                        rules.Add(item: ((0 == terms.Count)
+                            ? new(
+                                kind: RuleKind.Annihilate,
+                                pattern: new[] { left, right },
+                                replacement: ReadOnlyMemory<int>.Empty,
+                                charges: ReadOnlyMemory<TValue>.Empty
+                            )
+                            : new(
+                                kind: RuleKind.Reduce,
+                                pattern: new[] { left, right },
+                                replacement: RewriteRule<TValue>.PackReplacement(terms: [.. terms]),
+                                charges: charges.ToArray()
+                            )));
+                    }
+                }
+            }
+        }
+    }
+    // The ordered swap rules of a commuting-up-to-a-charge presentation: one rule per descending generator pair,
+    // rewriting it to the ascending one at the given charge. Clifford charges minus one, a commutative window one.
+    private static void AppendSwapRules<TValue>(List<RewriteRule<TValue>> rules, int count, TValue charge) {
+        for (var high = 1; (high < count); ++high) {
+            for (var low = 0; (low < high); ++low) {
+                AppendBraidRule(
+                    bond: 2,
+                    charge: charge,
+                    high: high,
+                    low: low,
+                    rules: rules
+                );
+            }
+        }
+    }
+    // Two generators compose exactly when the wires the first hands over ARE the wires the second takes: the same
+    // number of them, in the same colours, in the same order. One comparison says all of that, because a span
+    // comparison compares length before contents: a diagram whose boundaries differ in width and a quiver arrow or
+    // poset interval whose endpoints disagree in colour both fail this same line, and a one-colour arity-one
+    // presentation runs it against one-entry lists — the same test in that degenerate case. Restating the width as
+    // a separate conjunct would read as two independent halves and be neither — the length test it names is already
+    // inside the one below, and a Generator's Coarity and Arity ARE those two lengths.
+    private static bool BoundariesMeet(in Generator left, in Generator right) =>
+        left.Outputs.SequenceEqual(other: right.Inputs);
+    // The tower's associator 3-cochain, declared as re-association data. It is the coboundary of the SAME 2-cochain the
+    // reduction rules carry: e_a·(e_b·e_c) is σ(b,c)·σ(a,b⊕c) on the target, (e_a·e_b)·e_c is σ(a,b)·σ(a⊕b,c) on it, and
+    // both bracketings reach the same target because the index law is exclusive-or. Every sign is its own inverse, so
+    // the ratio the splice charges is the product of all four and no division is taken.
+    private static RewriteRule<TValue> CayleyDicksonAssociatorRule<TValue>(int[] forward, int floors, TValue one, TValue negativeOne) {
+        var dimension = forward.Length;
+        var charges = new TValue[((dimension * dimension) * dimension)];
+
+        for (var left = 0; (left < dimension); ++left) {
+            var a = forward[left];
+
+            for (var middle = 0; (middle < dimension); ++middle) {
+                var b = forward[middle];
+
+                for (var right = 0; (right < dimension); ++right) {
+                    var c = forward[right];
+                    var sign = ((CayleyDicksonSign(
+                        floors: floors,
+                        left: b,
+                        right: c
+                    ) * CayleyDicksonSign(
+                        floors: floors,
+                        left: a,
+                        right: b ^ c
+                    ))
+                        * (CayleyDicksonSign(
+                        floors: floors,
+                        left: a,
+                        right: b
+                    ) * CayleyDicksonSign(
+                        floors: floors,
+                        left: a ^ b,
+                        right: c
+                    )));
+
+                    charges[((((left * dimension) + middle) * dimension) + right)] = ((sign > 0)
+                        ? one
+                        : negativeOne
+                    );
+                }
+            }
+        }
+
+        return new(
+            kind: RuleKind.Reassociate,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: ReadOnlyMemory<int>.Empty,
+            charges: charges
+        );
+    }
+    // The Cayley-Dickson 2-cochain, by the doubling recursion (a, b)·(c, d) = (a·c − d̄·b, d·a + b·c̄) with the
+    // conjugation (a, b)‾ = (ā, −b) — the convention DoublingAlgebra uses, whose floor-two instance reproduces the
+    // house quaternion component for component. The target index is always the exclusive-or of the two, so only the
+    // sign is computed here.
+    private static int CayleyDicksonSign(int left, int right, int floors) {
+        if (0 == floors) { return 1; }
+
+        var half = (1 << (floors - 1));
+        var leftHigh = (left >= half);
+        var leftLow = left & (half - 1);
+        var rightHigh = (right >= half);
+        var rightLow = right & (half - 1);
+
+        if (
+            !leftHigh &&
+            !rightHigh
+        ) {
+            return CayleyDicksonSign(
+                floors: (floors - 1),
+                left: leftLow,
+                right: rightLow
+            );
+        }
+        if (!leftHigh) {
+            return CayleyDicksonSign(
+                floors: (floors - 1),
+                left: rightLow,
+                right: leftLow
+            );
+        }
+        if (!rightHigh) {
+            return (ConjugationSign(index: rightLow) * CayleyDicksonSign(
+                floors: (floors - 1),
+                left: leftLow,
+                right: rightLow
+            ));
+        }
+
+        return (-ConjugationSign(index: rightLow) * CayleyDicksonSign(
+            floors: (floors - 1),
+            left: rightLow,
+            right: leftLow
+        ));
+    }
+    private static int ConjugationSign(int index) =>
+        ((0 == index)
+            ? 1
+            : -1
+        );
+    // The row's index in a lexicographically sorted permutation table, or minus one when the table does not hold it.
+    private static int IndexOfRow(int[] table, ReadOnlySpan<int> row, int pointCount, int elementCount) {
+        var low = 0;
+        var high = elementCount;
+
+        while (low < high) {
+            var middle = ((low + high) >> 1);
+            var comparison = table.AsSpan(
+                length: pointCount,
+                start: (middle * pointCount)
+            ).SequenceCompareTo(other: row);
+
+            if (0 == comparison) { return middle; }
+
+            if (comparison < 0) { low = (middle + 1); } else { high = middle; }
+        }
+
+        return -1;
+    }
+    private static TValue NegativeOne<TValue, TOps>(TOps material)
+        where TOps : struct, IMaterialOps<TValue, TOps> {
+        if (material is not ISignedMaterial<TValue, TOps> signed) {
+            throw new ArgumentException(
+                message: "This presentation carries a charge of minus one, which an unsigned material cannot express.",
+                paramName: nameof(material)
+            );
+        }
+
+        return signed.Negate(value: material.One);
+    }
+    // The paired re-association datum. A pair's brackets are the two factors' brackets side by side, so the charge is
+    // the product of the two factors' — which for two uniform factors is one charge and for a live factor is a charge
+    // per paired triple. Dropping a live factor's cochain here would hand back a presentation that silently flattens
+    // the brackets the factor charges for, so it is carried rather than lost.
+    private static RewriteRule<TValue> PairedReassociationRule<TValue, TOps>(ChargedPresentation<TValue, TOps> left, ChargedPresentation<TValue, TOps> right, int rightCount, int generatorCount, TOps material)
+        where TOps : struct, IMaterialOps<TValue, TOps> {
+        if (
+            !left.HasLiveReassociation &&
+            !right.HasLiveReassociation
+        ) {
+            return ReassociationRule(charge: material.Multiply(
+                left: left.SpliceCharge(
+                    left: 0L,
+                    middle: 0L,
+                    right: 0L
+                ),
+                right: right.SpliceCharge(
+                    left: 0L,
+                    middle: 0L,
+                    right: 0L
+                )
+            ));
+        }
+
+        var charges = new TValue[((generatorCount * generatorCount) * generatorCount)];
+
+        for (var first = 0; (first < generatorCount); ++first) {
+            for (var second = 0; (second < generatorCount); ++second) {
+                for (var third = 0; (third < generatorCount); ++third) {
+                    charges[((((first * generatorCount) + second) * generatorCount) + third)] = material.Multiply(
+                        left: left.SpliceCharge(
+                            left: (first / rightCount),
+                            middle: (second / rightCount),
+                            right: (third / rightCount)
+                        ),
+                        right: right.SpliceCharge(
+                            left: (first % rightCount),
+                            middle: (second % rightCount),
+                            right: (third % rightCount)
+                        )
+                    );
+                }
+            }
+        }
+
+        return new(
+            kind: RuleKind.Reassociate,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: ReadOnlyMemory<int>.Empty,
+            charges: charges
+        );
+    }
+    private static RewriteRule<TValue> ReassociationRule<TValue>(TValue charge) =>
+        new(
+            kind: RuleKind.Reassociate,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: ReadOnlyMemory<int>.Empty,
+            charges: new[] { charge }
+        );
+    // The generator array of a one-object presentation: one degree-one generator per symbol, all sharing the single
+    // boundary colour.
+    private static Generator[] SingleColourGenerators(int count) {
+        var generators = new Generator[count];
+
+        for (var symbol = 0; (symbol < count); ++symbol) {
+            generators[symbol] = new Generator(
+                degree: 1,
+                inputs: SingleColour,
+                outputs: SingleColour,
+                symbol: symbol
+            );
+        }
+
+        return generators;
+    }
 
     /// <summary>
     /// Builds the Cayley–Dickson tower at a given number of floors: the twisted group algebra of <c>(ℤ/2)^floors</c>
@@ -47,12 +479,21 @@ public static class Presentations {
     public static ChargedPresentation<TValue, TOps> CayleyDickson<TValue, TOps>(int floors, ReadOnlySpan<int> basisRelabelling, TOps material, bool liveAssociator = false)
         where TOps : struct, IMaterialOps<TValue, TOps> {
         ArgumentOutOfRangeException.ThrowIfNegative(value: floors);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: floors, other: 5);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: floors,
+            other: 5
+        );
 
         var dimension = (1 << floors);
 
-        if ((0 != basisRelabelling.Length) && (basisRelabelling.Length != dimension)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(basisRelabelling), message: "The relabelling must be empty or carry one entry per basis index.");
+        if (
+            (0 != basisRelabelling.Length) &&
+            (basisRelabelling.Length != dimension)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(basisRelabelling),
+                message: "The relabelling must be empty or carry one entry per basis index."
+            );
         }
 
         var forward = new int[dimension];
@@ -61,15 +502,25 @@ public static class Presentations {
         var one = material.One;
 
         for (var index = 0; (index < dimension); ++index) {
-            forward[index] = ((0 == basisRelabelling.Length) ? index : basisRelabelling[index]);
+            forward[index] = ((0 == basisRelabelling.Length)
+                ? index
+                : basisRelabelling[index]
+            );
             inverse[index] = -1;
         }
 
         for (var index = 0; (index < dimension); ++index) {
             var image = forward[index];
 
-            if ((image < 0) || (image >= dimension) || (-1 != inverse[image])) {
-                throw new ArgumentException(message: "The basis relabelling must be a permutation of the basis indices.", paramName: nameof(basisRelabelling));
+            if (
+                (image < 0) ||
+                (image >= dimension) ||
+                (-1 != inverse[image])
+            ) {
+                throw new ArgumentException(
+                    message: "The basis relabelling must be a permutation of the basis indices.",
+                    paramName: nameof(basisRelabelling)
+                );
             }
 
             inverse[image] = index;
@@ -78,25 +529,36 @@ public static class Presentations {
         var generators = SingleColourGenerators(count: dimension);
         var rules = new List<RewriteRule<TValue>> {
             (liveAssociator
-                ? CayleyDicksonAssociatorRule(forward: forward, floors: floors, one: one, negativeOne: negativeOne)
-                : ReassociationRule(charge: one)),
+            ? CayleyDicksonAssociatorRule(
+                floors: floors,
+                forward: forward,
+                negativeOne: negativeOne,
+                one: one
+            )
+            : ReassociationRule(charge: one)),
             new(
-                kind: RuleKind.Reduce,
-                pattern: ReadOnlyMemory<int>.Empty,
-                replacement: RewriteRule<TValue>.PackReplacement(terms: [[inverse[0]]]),
-                charges: new[] { one }
-            ),
+            kind: RuleKind.Reduce,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: [[inverse[0]]]),
+            charges: new[] { one }
+        ),
         };
 
         for (var left = 0; (left < dimension); ++left) {
             for (var right = 0; (right < dimension); ++right) {
-                var sign = CayleyDicksonSign(left: forward[left], right: forward[right], floors: floors);
+                var sign = CayleyDicksonSign(
+                    left: forward[left],
+                    right: forward[right],
+                    floors: floors
+                );
 
                 rules.Add(item: new(
                     kind: RuleKind.Reduce,
                     pattern: new[] { left, right },
                     replacement: RewriteRule<TValue>.PackReplacement(terms: [[inverse[forward[left] ^ forward[right]]]]),
-                    charges: new[] { ((sign > 0) ? one : negativeOne) }
+                    charges: new[] { ((sign > 0)
+                    ? one
+                    : negativeOne) }
                 ));
             }
         }
@@ -107,7 +569,6 @@ public static class Presentations {
             material: material
         );
     }
-
     /// <summary>
     /// Builds the Clifford presentation of signature <c>(p, q, r)</c>: one generator per basis vector, a swap charge of
     /// minus one, and a reduction sending each generator's square to its signature value — with a degenerate
@@ -131,7 +592,10 @@ public static class Presentations {
 
         var generatorCount = ((positiveCount + negativeCount) + degenerateCount);
 
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: generatorCount, other: 9);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: generatorCount,
+            other: 9
+        );
 
         var negativeOne = NegativeOne<TValue, TOps>(material: material);
         var one = material.One;
@@ -141,7 +605,10 @@ public static class Presentations {
         for (var symbol = 0; (symbol < generatorCount); ++symbol) {
             var square = ((symbol < positiveCount)
                 ? 1
-                : ((symbol < (positiveCount + negativeCount)) ? -1 : 0));
+                : ((symbol < (positiveCount + negativeCount))
+                    ? -1
+                    : 0
+            ));
 
             rules.Add(item: ((0 == square)
                 ? new(
@@ -154,11 +621,17 @@ public static class Presentations {
                     kind: RuleKind.Reduce,
                     pattern: new[] { symbol, symbol },
                     replacement: RewriteRule<TValue>.PackReplacement(terms: [[]]),
-                    charges: new[] { ((square > 0) ? one : negativeOne) }
+                    charges: new[] { ((square > 0)
+                    ? one
+                    : negativeOne) }
                 )));
         }
 
-        AppendSwapRules(rules: rules, count: generatorCount, charge: negativeOne);
+        AppendSwapRules(
+            charge: negativeOne,
+            count: generatorCount,
+            rules: rules
+        );
 
         return ChargedPresentation<TValue, TOps>.Create(
             generators: generators,
@@ -166,7 +639,6 @@ public static class Presentations {
             material: material
         );
     }
-
     /// <summary>
     /// Builds a Coxeter presentation: one involutive generator per mirror, and one braid relation per pair of them,
     /// read off a bond matrix. It is the reflection regime — generators that square to the unit and pairs that satisfy
@@ -221,26 +693,49 @@ public static class Presentations {
     /// </remarks>
     public static ChargedPresentation<TValue, TOps> Coxeter<TValue, TOps>(int rank, ReadOnlySpan<int> bonds, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: rank, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: rank, other: 32);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: rank,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: rank,
+            other: 32
+        );
 
         if (bonds.Length != (rank * rank)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(bonds), actualValue: bonds.Length, message: "A bond matrix carries one entry per ordered pair of generators.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(bonds),
+                actualValue: bonds.Length,
+                message: "A bond matrix carries one entry per ordered pair of generators."
+            );
         }
 
         for (var high = 0; (high < rank); ++high) {
             for (var low = 0; (low < rank); ++low) {
                 var bond = bonds[((high * rank) + low)];
 
-                ArgumentOutOfRangeException.ThrowIfNegative(value: bond, paramName: nameof(bonds));
-                ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bond, other: 64, paramName: nameof(bonds));
+                ArgumentOutOfRangeException.ThrowIfNegative(
+                    value: bond,
+                    paramName: nameof(bonds)
+                );
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(
+                    value: bond,
+                    other: 64,
+                    paramName: nameof(bonds)
+                );
 
                 if (bond != bonds[((low * rank) + high)]) {
-                    throw new ArgumentException(message: "A bond matrix is symmetric, since the order of a product of two reflections does not depend on which is written first.", paramName: nameof(bonds));
+                    throw new ArgumentException(
+                        message: "A bond matrix is symmetric, since the order of a product of two reflections does not depend on which is written first.",
+                        paramName: nameof(bonds)
+                    );
                 }
 
                 if ((high == low) != (1 == bond)) {
-                    throw new ArgumentException(message: "A generator bonds with itself at one and with every other generator at zero or at two or more, since a bond of one would identify the two.", paramName: nameof(bonds));
+                    throw new ArgumentException(
+                        message: "A generator bonds with itself at one and with every other generator at zero or at two or more, since a bond of one would identify the two.",
+                        paramName: nameof(bonds)
+                    );
                 }
             }
         }
@@ -261,7 +756,15 @@ public static class Presentations {
             for (var low = 0; (low < high); ++low) {
                 var bond = bonds[((high * rank) + low)];
 
-                if (0 != bond) { AppendBraidRule(rules: rules, high: high, low: low, bond: bond, charge: one); }
+                if (0 != bond) {
+                    AppendBraidRule(
+                        bond: bond,
+                        charge: one,
+                        high: high,
+                        low: low,
+                        rules: rules
+                    );
+                }
             }
         }
 
@@ -271,7 +774,6 @@ public static class Presentations {
             material: material
         );
     }
-
     /// <summary>
     /// Builds the free commutative monoid on a set of pairwise coprime generators — the primes — windowed to the
     /// integers <c>[1, window]</c>. Its normal forms are those integers, its product is Dirichlet convolution, and the
@@ -318,8 +820,14 @@ public static class Presentations {
     /// </remarks>
     public static ChargedPresentation<TValue, TOps> DivisibilityWindow<TValue, TOps>(ReadOnlySpan<ulong> primes, long window, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: window, other: 1L);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: primes.Length, other: 128);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: window,
+            other: 1L
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: primes.Length,
+            other: 128
+        );
 
         var descending = primes.ToArray();
 
@@ -330,11 +838,20 @@ public static class Presentations {
         // repeat — and on the sorted array a repeat is adjacent.
         for (var index = 0; (index < descending.Length); ++index) {
             if (!PrimeField64.IsPrime(value: descending[index])) {
-                throw new ArgumentException(message: "A divisibility generator names a prime, and a composite one would present a monoid whose normal forms are not the integers they are read as.", paramName: nameof(primes));
+                throw new ArgumentException(
+                    message: "A divisibility generator names a prime, and a composite one would present a monoid whose normal forms are not the integers they are read as.",
+                    paramName: nameof(primes)
+                );
             }
 
-            if ((0 != index) && (descending[index] == descending[(index - 1)])) {
-                throw new ArgumentException(message: "The divisibility generators must be distinct, since a repeated prime is not coprime with itself.", paramName: nameof(primes));
+            if (
+                (0 != index) &&
+                (descending[index] == descending[(index - 1)])
+            ) {
+                throw new ArgumentException(
+                    message: "The divisibility generators must be distinct, since a repeated prime is not coprime with itself.",
+                    paramName: nameof(primes)
+                );
             }
         }
 
@@ -343,7 +860,11 @@ public static class Presentations {
         var generators = SingleColourGenerators(count: generatorCount);
         var rules = new List<RewriteRule<TValue>> { ReassociationRule(charge: one) };
 
-        AppendSwapRules(rules: rules, count: generatorCount, charge: one);
+        AppendSwapRules(
+            charge: one,
+            count: generatorCount,
+            rules: rules
+        );
 
         var windowDegree = 0;
 
@@ -362,7 +883,10 @@ public static class Presentations {
 
         void Extend(int length, long product, int first) {
             if (++admitted > 512) {
-                throw new ArgumentOutOfRangeException(paramName: nameof(window), message: "This window admits more than 512 integers, which no finite basis of this library holds.");
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(window),
+                    message: "This window admits more than 512 integers, which no finite basis of this library holds."
+                );
             }
 
             for (var symbol = first; (symbol < generatorCount); ++symbol) {
@@ -373,7 +897,10 @@ public static class Presentations {
                 if (product > (window / prime)) {
                     rules.Add(item: new(
                         kind: RuleKind.Annihilate,
-                        pattern: word.AsSpan(start: 0, length: (length + 1)).ToArray(),
+                        pattern: word.AsSpan(
+                            length: (length + 1),
+                            start: 0
+                        ).ToArray(),
                         replacement: ReadOnlyMemory<int>.Empty,
                         charges: ReadOnlyMemory<TValue>.Empty
                     ));
@@ -381,11 +908,19 @@ public static class Presentations {
                     continue;
                 }
 
-                Extend(length: (length + 1), product: (product * prime), first: symbol);
+                Extend(
+                    first: symbol,
+                    length: (length + 1),
+                    product: (product * prime)
+                );
             }
         }
 
-        Extend(length: 0, product: 1L, first: 0);
+        Extend(
+            first: 0,
+            length: 0,
+            product: 1L
+        );
 
         return ChargedPresentation<TValue, TOps>.Create(
             generators: generators,
@@ -394,7 +929,6 @@ public static class Presentations {
             windowDegree: windowDegree
         );
     }
-
     /// <summary>Builds the free monoid on a given number of letters — the associative regime, whose only rule is the
     /// re-association charge.</summary>
     /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -409,7 +943,10 @@ public static class Presentations {
     public static ChargedPresentation<TValue, TOps> FreeMonoid<TValue, TOps>(int letterCount, TOps material, int windowDegree = 0)
         where TOps : struct, IMaterialOps<TValue, TOps> {
         ArgumentOutOfRangeException.ThrowIfNegative(value: letterCount);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: letterCount, other: 64);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: letterCount,
+            other: 64
+        );
 
         return ChargedPresentation<TValue, TOps>.Create(
             generators: SingleColourGenerators(count: letterCount),
@@ -418,7 +955,6 @@ public static class Presentations {
             windowDegree: windowDegree
         );
     }
-
     /// <summary>
     /// Builds the incidence algebra of a finite partially ordered set: the intervals are the generators, two of them
     /// compose exactly when the first one's upper endpoint is the second one's lower endpoint, and every other ordered
@@ -460,14 +996,28 @@ public static class Presentations {
     /// </remarks>
     public static ChargedPresentation<TValue, TOps> IntervalPoset<TValue, TOps>(int elementCount, ReadOnlySpan<(int Lower, int Upper)> relations, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: elementCount, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: elementCount, other: 256);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: elementCount,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: elementCount,
+            other: 256
+        );
 
         var order = new bool[(elementCount * elementCount)];
 
         foreach (var (lower, upper) in relations) {
-            if ((lower < 0) || (lower >= elementCount) || (upper < 0) || (upper >= elementCount)) {
-                throw new ArgumentException(message: "A relation leaves the element range of this poset.", paramName: nameof(relations));
+            if (
+                (lower < 0) ||
+                (lower >= elementCount) ||
+                (upper < 0) ||
+                (upper >= elementCount)
+            ) {
+                throw new ArgumentException(
+                    message: "A relation leaves the element range of this poset.",
+                    paramName: nameof(relations)
+                );
             }
 
             order[((lower * elementCount) + upper)] = true;
@@ -488,11 +1038,17 @@ public static class Presentations {
 
         var symbolOf = new int[(elementCount * elementCount)];
 
-        Array.Fill(array: symbolOf, value: -1);
+        Array.Fill(
+            array: symbolOf,
+            value: -1
+        );
 
         for (var index = 0; (index < elementCount); ++index) {
             if (order[((index * elementCount) + index)]) {
-                throw new ArgumentException(message: "The declared relations close into a cycle, so they order no set and name no intervals.", paramName: nameof(relations));
+                throw new ArgumentException(
+                    message: "The declared relations close into a cycle, so they order no set and name no intervals.",
+                    paramName: nameof(relations)
+                );
             }
 
             // Reflexive from here on: an element's own singleton interval is the identity arrow at it.
@@ -516,7 +1072,10 @@ public static class Presentations {
         var generatorCount = lowerOf.Count;
 
         if (generatorCount > 256) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(relations), message: "This order has more than 256 intervals, which no finite basis of this library holds.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(relations),
+                message: "This order has more than 256 intervals, which no finite basis of this library holds."
+            );
         }
 
         var one = material.One;
@@ -526,7 +1085,12 @@ public static class Presentations {
         for (var index = 0; (index < elementCount); ++index) { colours[index] = new int[] { index }; }
 
         for (var symbol = 0; (symbol < generatorCount); ++symbol) {
-            generators[symbol] = new Generator(symbol: symbol, inputs: colours[lowerOf[symbol]], outputs: colours[upperOf[symbol]], degree: 1);
+            generators[symbol] = new Generator(
+                symbol: symbol,
+                inputs: colours[lowerOf[symbol]],
+                outputs: colours[upperOf[symbol]],
+                degree: 1
+            );
         }
 
         var diagonal = new int[elementCount][];
@@ -540,11 +1104,11 @@ public static class Presentations {
         var rules = new List<RewriteRule<TValue>> {
             ReassociationRule(charge: one),
             new(
-                kind: RuleKind.Reduce,
-                pattern: ReadOnlyMemory<int>.Empty,
-                replacement: RewriteRule<TValue>.PackReplacement(terms: diagonal),
-                charges: diagonalCharges
-            ),
+            kind: RuleKind.Reduce,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: diagonal),
+            charges: diagonalCharges
+        ),
         };
 
         // An interval's boundaries ARE its endpoints, so the shared derivation composes exactly the pairs whose middle
@@ -562,7 +1126,6 @@ public static class Presentations {
             material: material
         );
     }
-
     /// <summary>
     /// Builds the monogenic presentation: one generator with a monic reduction <c>xⁿ → −Σ m_j·x^j</c>. Degree two is
     /// the quadratic algebra — the tail <c>[m₀, m₁]</c> being the relation <c>(P, Q) = (−m₁, −m₀)</c> — and over the
@@ -579,13 +1142,22 @@ public static class Presentations {
     public static ChargedPresentation<TValue, TOps> Monogenic<TValue, TOps>(ReadOnlySpan<TValue> modulus, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
         if (0 == modulus.Length) {
-            throw new ArgumentException(message: "A monic modulus carries at least one tail coefficient.", paramName: nameof(modulus));
+            throw new ArgumentException(
+                message: "A monic modulus carries at least one tail coefficient.",
+                paramName: nameof(modulus)
+            );
         }
 
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: modulus.Length, other: 512);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: modulus.Length,
+            other: 512
+        );
 
         if (material is not ISignedMaterial<TValue, TOps> signed) {
-            throw new ArgumentException(message: "A monic reduction negates its tail, which an unsigned material cannot express.", paramName: nameof(material));
+            throw new ArgumentException(
+                message: "A monic reduction negates its tail, which an unsigned material cannot express.",
+                paramName: nameof(material)
+            );
         }
 
         var degree = modulus.Length;
@@ -599,20 +1171,24 @@ public static class Presentations {
         }
 
         return ChargedPresentation<TValue, TOps>.Create(
-            generators: new[] { new Generator(symbol: 0, inputs: SingleColour, outputs: SingleColour, degree: 1) },
+            generators: new[] { new Generator(
+                degree: 1,
+                inputs: SingleColour,
+                outputs: SingleColour,
+                symbol: 0
+            ) },
             rules: new[] {
                 ReassociationRule(charge: material.One),
                 new RewriteRule<TValue>(
-                    kind: RuleKind.Reduce,
-                    pattern: pattern,
-                    replacement: RewriteRule<TValue>.PackReplacement(terms: terms),
-                    charges: charges
-                ),
+                kind: RuleKind.Reduce,
+                pattern: pattern,
+                replacement: RewriteRule<TValue>.PackReplacement(terms: terms),
+                charges: charges
+            ),
             },
             material: material
         );
     }
-
     /// <summary>
     /// Builds the group algebra of a permutation group: the generators are the group's elements and the rules are its
     /// composition table, so a finite group enters the presented algebra the same way a Cayley-Dickson floor does —
@@ -655,17 +1231,35 @@ public static class Presentations {
     /// </remarks>
     public static ChargedPresentation<TValue, TOps> PermutationGroup<TValue, TOps>(int pointCount, ReadOnlySpan<int> permutations, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: pointCount, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: pointCount, other: 512);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: pointCount,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: pointCount,
+            other: 512
+        );
 
         if (0 != (permutations.Length % pointCount)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(permutations), actualValue: permutations.Length, message: "A permutation table carries one row of point images per element.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(permutations),
+                actualValue: permutations.Length,
+                message: "A permutation table carries one row of point images per element."
+            );
         }
 
         var elementCount = (permutations.Length / pointCount);
 
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: elementCount, other: 1, paramName: nameof(permutations));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: elementCount, other: 256, paramName: nameof(permutations));
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: elementCount,
+            other: 1,
+            paramName: nameof(permutations)
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: elementCount,
+            other: 256,
+            paramName: nameof(permutations)
+        );
 
         var given = permutations.ToArray();
         var reached = new bool[pointCount];
@@ -676,8 +1270,15 @@ public static class Presentations {
             for (var point = 0; (point < pointCount); ++point) {
                 var image = given[((element * pointCount) + point)];
 
-                if ((image < 0) || (image >= pointCount) || reached[image]) {
-                    throw new ArgumentException(message: "Every row of a permutation table is a permutation of the points.", paramName: nameof(permutations));
+                if (
+                    (image < 0) ||
+                    (image >= pointCount) ||
+                    reached[image]
+                ) {
+                    throw new ArgumentException(
+                        message: "Every row of a permutation table is a permutation of the points.",
+                        paramName: nameof(permutations)
+                    );
                 }
 
                 reached[image] = true;
@@ -688,22 +1289,52 @@ public static class Presentations {
 
         for (var element = 0; (element < elementCount); ++element) { order[element] = element; }
 
-        Array.Sort(array: order, comparison: (left, right) => given.AsSpan(start: (left * pointCount), length: pointCount).SequenceCompareTo(other: given.AsSpan(start: (right * pointCount), length: pointCount)));
+        Array.Sort(
+            array: order,
+            comparison: (left, right) => given.AsSpan(
+                length: pointCount,
+                start: (left * pointCount)
+            ).SequenceCompareTo(other: given.AsSpan(
+                length: pointCount,
+                start: (right * pointCount)
+            ))
+        );
 
         var table = new int[given.Length];
 
         for (var element = 0; (element < elementCount); ++element) {
-            given.AsSpan(start: (order[element] * pointCount), length: pointCount).CopyTo(destination: table.AsSpan(start: (element * pointCount), length: pointCount));
+            given.AsSpan(
+                start: (order[element] * pointCount),
+                length: pointCount
+            ).CopyTo(destination: table.AsSpan(
+                length: pointCount,
+                start: (element * pointCount)
+            ));
 
-            if ((0 != element) && table.AsSpan(start: ((element - 1) * pointCount), length: pointCount).SequenceEqual(other: table.AsSpan(start: (element * pointCount), length: pointCount))) {
-                throw new ArgumentException(message: "A permutation table names each element once, and a repeated row would name two generators for one element.", paramName: nameof(permutations));
+            if (
+                (0 != element) &&
+                table.AsSpan(
+                length: pointCount,
+                start: ((element - 1) * pointCount)
+            ).SequenceEqual(other: table.AsSpan(
+                length: pointCount,
+                start: (element * pointCount)
+            ))
+            ) {
+                throw new ArgumentException(
+                    message: "A permutation table names each element once, and a repeated row would name two generators for one element.",
+                    paramName: nameof(permutations)
+                );
             }
         }
 
         // The identity is the lexicographically smallest permutation, so a table that holds it holds it first.
         for (var point = 0; (point < pointCount); ++point) {
             if (table[point] != point) {
-                throw new ArgumentException(message: "A group contains the identity, and this permutation table does not.", paramName: nameof(permutations));
+                throw new ArgumentException(
+                    message: "A group contains the identity, and this permutation table does not.",
+                    paramName: nameof(permutations)
+                );
             }
         }
 
@@ -711,11 +1342,11 @@ public static class Presentations {
         var rules = new List<RewriteRule<TValue>> {
             ReassociationRule(charge: one),
             new(
-                kind: RuleKind.Reduce,
-                pattern: ReadOnlyMemory<int>.Empty,
-                replacement: RewriteRule<TValue>.PackReplacement(terms: [[0]]),
-                charges: new[] { one }
-            ),
+            kind: RuleKind.Reduce,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: [[0]]),
+            charges: new[] { one }
+        ),
         };
 
         var composite = new int[pointCount];
@@ -726,10 +1357,18 @@ public static class Presentations {
                     composite[point] = table[((right * pointCount) + table[((left * pointCount) + point)])];
                 }
 
-                var target = IndexOfRow(table: table, row: composite, pointCount: pointCount, elementCount: elementCount);
+                var target = IndexOfRow(
+                    elementCount: elementCount,
+                    pointCount: pointCount,
+                    row: composite,
+                    table: table
+                );
 
                 if (target < 0) {
-                    throw new ArgumentException(message: "A permutation table is closed under composition, and this one leaves itself, so it names no group.", paramName: nameof(permutations));
+                    throw new ArgumentException(
+                        message: "A permutation table is closed under composition, and this one leaves itself, so it names no group.",
+                        paramName: nameof(permutations)
+                    );
                 }
 
                 rules.Add(item: new(
@@ -747,7 +1386,6 @@ public static class Presentations {
             material: material
         );
     }
-
     /// <summary>
     /// Builds the planar tangle algebra at a bounded boundary width: the generators are the planar diagrams and the
     /// rules are their composition table, so a generator whose output boundary is wider or narrower than its input
@@ -804,7 +1442,11 @@ public static class Presentations {
     public static ChargedPresentation<TValue, TOps> PlanarTangle<TValue, TOps>(int maximumWidth, TValue loopCharge, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
         ArgumentOutOfRangeException.ThrowIfNegative(value: maximumWidth);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: maximumWidth, other: MaximumTangleWidth, paramName: nameof(maximumWidth));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: maximumWidth,
+            other: MaximumTangleWidth,
+            paramName: nameof(maximumWidth)
+        );
 
         var basis = new PlanarBasis(maximumWidth: maximumWidth);
         var count = basis.Count;
@@ -816,7 +1458,12 @@ public static class Presentations {
         for (var width = 0; (width <= maximumWidth); ++width) { colours[width] = new int[width]; }
 
         for (var symbol = 0; (symbol < count); ++symbol) {
-            generators[symbol] = new Generator(symbol: symbol, inputs: colours[basis.InputWidth(symbol: symbol)], outputs: colours[basis.OutputWidth(symbol: symbol)], degree: 1);
+            generators[symbol] = new Generator(
+                symbol: symbol,
+                inputs: colours[basis.InputWidth(symbol: symbol)],
+                outputs: colours[basis.OutputWidth(symbol: symbol)],
+                degree: 1
+            );
         }
 
         // A loop closes over at least two glued wires, so a composition over a boundary of w wires strands off at most
@@ -826,7 +1473,12 @@ public static class Presentations {
 
         loopPowers[0] = one;
 
-        for (var index = 1; (index < loopPowers.Length); ++index) { loopPowers[index] = material.Multiply(left: loopPowers[(index - 1)], right: loopCharge); }
+        for (var index = 1; (index < loopPowers.Length); ++index) {
+            loopPowers[index] = material.Multiply(
+                left: loopPowers[(index - 1)],
+                right: loopCharge
+            );
+        }
 
         var identityCharges = new TValue[(maximumWidth + 1)];
         var identityTerms = new int[(maximumWidth + 1)][];
@@ -839,18 +1491,22 @@ public static class Presentations {
         var rules = new List<RewriteRule<TValue>> {
             ReassociationRule(charge: one),
             new(
-                kind: RuleKind.Reduce,
-                pattern: ReadOnlyMemory<int>.Empty,
-                replacement: RewriteRule<TValue>.PackReplacement(terms: identityTerms),
-                charges: identityCharges
-            ),
+            kind: RuleKind.Reduce,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: identityTerms),
+            charges: identityCharges
+        ),
         };
 
         AppendBoundaryCompositionRules(
             rules: rules,
             generators: generators,
             composite: (left, right) => {
-                var target = basis.Compose(left: left, right: right, loops: out var loops);
+                var target = basis.Compose(
+                    left: left,
+                    loops: out var loops,
+                    right: right
+                );
 
                 return (target, loopPowers[loops]);
             }
@@ -862,7 +1518,6 @@ public static class Presentations {
             material: material
         );
     }
-
     /// <summary>
     /// Builds a quiver on a given number of objects: the arrows are the generators, composition is by endpoint match,
     /// and a mismatch annihilates. The codiscrete case — every ordered pair present — is the matrix algebra, so a
@@ -882,8 +1537,14 @@ public static class Presentations {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="objectCount"/> is outside one through sixteen.</exception>
     public static ChargedPresentation<TValue, TOps> Quiver<TValue, TOps>(int objectCount, ReadOnlySpan<(int Source, int Target, TValue Weight)> arrows, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: objectCount, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: objectCount, other: 16);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: objectCount,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: objectCount,
+            other: 16
+        );
 
         var generatorCount = (objectCount * objectCount);
         var one = material.One;
@@ -898,18 +1559,34 @@ public static class Presentations {
                 var symbol = ((source * objectCount) + destination);
 
                 charges[symbol] = material.Zero;
-                generators[symbol] = new Generator(symbol: symbol, inputs: colours[source], outputs: colours[destination], degree: 1);
+                generators[symbol] = new Generator(
+                    symbol: symbol,
+                    inputs: colours[source],
+                    outputs: colours[destination],
+                    degree: 1
+                );
             }
         }
 
         foreach (var arrow in arrows) {
-            if ((arrow.Source < 0) || (arrow.Source >= objectCount) || (arrow.Target < 0) || (arrow.Target >= objectCount)) {
-                throw new ArgumentException(message: "An arrow leaves the object range of this quiver.", paramName: nameof(arrows));
+            if (
+                (arrow.Source < 0) ||
+                (arrow.Source >= objectCount) ||
+                (arrow.Target < 0) ||
+                (arrow.Target >= objectCount)
+            ) {
+                throw new ArgumentException(
+                    message: "An arrow leaves the object range of this quiver.",
+                    paramName: nameof(arrows)
+                );
             }
 
             var symbol = ((arrow.Source * objectCount) + arrow.Target);
 
-            charges[symbol] = material.Add(left: charges[symbol], right: arrow.Weight);
+            charges[symbol] = material.Add(
+                left: charges[symbol],
+                right: arrow.Weight
+            );
         }
 
         var diagonal = new int[objectCount][];
@@ -923,19 +1600,19 @@ public static class Presentations {
         var rules = new List<RewriteRule<TValue>> {
             ReassociationRule(charge: one),
             new(
-                kind: RuleKind.Reduce,
-                pattern: ReadOnlyMemory<int>.Empty,
-                replacement: RewriteRule<TValue>.PackReplacement(terms: diagonal),
-                charges: diagonalCharges
-            ),
+            kind: RuleKind.Reduce,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: diagonal),
+            charges: diagonalCharges
+        ),
         };
 
         // An arrow's boundaries ARE its endpoints, so the shared derivation composes exactly the pairs that meet at one
         // object; the composite keeps the first arrow's source and the second one's target.
         AppendBoundaryCompositionRules(
-            rules: rules,
+            composite: (left, right) => ((((left / objectCount) * objectCount) + (right % objectCount)), one),
             generators: generators,
-            composite: (left, right) => ((((left / objectCount) * objectCount) + (right % objectCount)), one)
+            rules: rules
         );
 
         return ChargedPresentation<TValue, TOps>.Create(
@@ -945,7 +1622,6 @@ public static class Presentations {
             generatorCharges: charges
         );
     }
-
     /// <summary>
     /// Builds the shift on jets of bounded degree: one generator <c>x</c> with <c>x^(degreeBound+1) → 0</c>, so an
     /// element is a truncated sequence and multiplying by <c>x</c> delays it by one place.
@@ -967,15 +1643,23 @@ public static class Presentations {
     public static ChargedPresentation<TValue, TOps> Shift<TValue, TOps>(int degreeBound, TOps material)
         where TOps : struct, IMaterialOps<TValue, TOps> {
         ArgumentOutOfRangeException.ThrowIfNegative(value: degreeBound);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degreeBound, other: 511);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degreeBound,
+            other: 511
+        );
 
         var modulus = new TValue[(degreeBound + 1)];
 
-        Array.Fill(array: modulus, value: material.Zero);
+        Array.Fill(
+            array: modulus,
+            value: material.Zero
+        );
 
-        return Monogenic<TValue, TOps>(modulus: modulus, material: material);
+        return Monogenic<TValue, TOps>(
+            material: material,
+            modulus: modulus
+        );
     }
-
     /// <summary>
     /// Builds the second product on words: the generators are the words of a bounded length and their product is the
     /// charged sum of the distinct interleavings, each carrying the number of ways it is interleaved. An empty
@@ -1047,48 +1731,77 @@ public static class Presentations {
     public static ChargedPresentation<TValue, TOps> Shuffle<TValue, TOps>(int letterCount, int windowDegree, TOps material, ReadOnlySpan<int> letterProduct = default)
         where TOps : struct, IMaterialOps<TValue, TOps> {
         ArgumentOutOfRangeException.ThrowIfNegative(value: letterCount);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: letterCount, other: MaximumShuffleWords);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: letterCount,
+            other: MaximumShuffleWords
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(value: windowDegree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: windowDegree, other: (MaximumShuffleWords - 1));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: windowDegree,
+            other: (MaximumShuffleWords - 1)
+        );
 
         var merges = (0 != letterProduct.Length);
 
         if (merges) {
             if (letterProduct.Length != (letterCount * letterCount)) {
-                throw new ArgumentOutOfRangeException(paramName: nameof(letterProduct), actualValue: letterProduct.Length, message: "A letter product is empty, which is the shuffle, or carries one merged letter per ordered pair of letters, which is the quasi-shuffle.");
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(letterProduct),
+                    actualValue: letterProduct.Length,
+                    message: "A letter product is empty, which is the shuffle, or carries one merged letter per ordered pair of letters, which is the quasi-shuffle."
+                );
             }
 
             for (var left = 0; (left < letterCount); ++left) {
                 for (var right = 0; (right < letterCount); ++right) {
                     var merged = letterProduct[((left * letterCount) + right)];
 
-                    if ((merged < 0) || (merged >= letterCount)) {
-                        throw new ArgumentException(message: $"The letters ({left}, {right}) collide into the letter {merged}, which this alphabet does not hold, so that collision term names no element of this algebra.", paramName: nameof(letterProduct));
+                    if (
+                        (merged < 0) ||
+                        (merged >= letterCount)
+                    ) {
+                        throw new ArgumentException(
+                            message: $"The letters ({left}, {right}) collide into the letter {merged}, which this alphabet does not hold, so that collision term names no element of this algebra.",
+                            paramName: nameof(letterProduct)
+                        );
                     }
                 }
             }
         }
 
-        var basis = new ShuffleBasis(letterCount: letterCount, windowDegree: windowDegree);
+        var basis = new ShuffleBasis(
+            letterCount: letterCount,
+            windowDegree: windowDegree
+        );
         var count = basis.Count;
         var one = material.One;
         var generators = new Generator[count];
 
         for (var symbol = 0; (symbol < count); ++symbol) {
-            generators[symbol] = new Generator(symbol: symbol, inputs: SingleColour, outputs: SingleColour, degree: basis.LengthOf(symbol: symbol));
+            generators[symbol] = new Generator(
+                symbol: symbol,
+                inputs: SingleColour,
+                outputs: SingleColour,
+                degree: basis.LengthOf(symbol: symbol)
+            );
         }
 
         var rules = new List<RewriteRule<TValue>>(capacity: ((count * count) + 2)) {
             ReassociationRule(charge: one),
             new(
-                kind: RuleKind.Reduce,
-                pattern: ReadOnlyMemory<int>.Empty,
-                replacement: RewriteRule<TValue>.PackReplacement(terms: [[0]]),
-                charges: new[] { one }
-            ),
+            kind: RuleKind.Reduce,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: [[0]]),
+            charges: new[] { one }
+        ),
         };
 
-        AppendInterleavingRules(rules: rules, basis: basis, letterProduct: letterProduct, material: material);
+        AppendInterleavingRules(
+            basis: basis,
+            letterProduct: letterProduct,
+            material: material,
+            rules: rules
+        );
 
         return ChargedPresentation<TValue, TOps>.Create(
             generators: generators,
@@ -1096,7 +1809,6 @@ public static class Presentations {
             material: material
         );
     }
-
     /// <summary>
     /// Builds the tensor product of two finite presentations: the Kronecker pair-up, stated as a presentation whose
     /// generators are the pairs of basis elements and whose rules are the pairs of compiled cells.
@@ -1142,23 +1854,44 @@ public static class Presentations {
         ArgumentNullException.ThrowIfNull(argument: left);
         ArgumentNullException.ThrowIfNull(argument: right);
 
-        if (!left.HasCompiledNormalFormBasis || !right.HasCompiledNormalFormBasis) {
-            throw new ArgumentException(message: "A tensor pairs two finite bases, and a factor without one has no cells to pair.", paramName: nameof(left));
+        if (
+            !left.HasCompiledNormalFormBasis ||
+            !right.HasCompiledNormalFormBasis
+        ) {
+            throw new ArgumentException(
+                message: "A tensor pairs two finite bases, and a factor without one has no cells to pair.",
+                paramName: nameof(left)
+            );
         }
 
-        if ((0 == left.IdentityKeys.Length) || (0 == right.IdentityKeys.Length)) {
-            throw new ArgumentException(message: "A tensor pairs the two factors' units, and a factor without one has nothing to pair.", paramName: nameof(left));
+        if (
+            (0 == left.IdentityKeys.Length) ||
+            (0 == right.IdentityKeys.Length)
+        ) {
+            throw new ArgumentException(
+                message: "A tensor pairs the two factors' units, and a factor without one has nothing to pair.",
+                paramName: nameof(left)
+            );
         }
 
-        if (!EqualityComparer<TOps>.Default.Equals(x: left.Material, y: right.Material)) {
-            throw new ArgumentException(message: "A tensor multiplies the two factors' charges in one material, so the factors carry the same one.", paramName: nameof(right));
+        if (!EqualityComparer<TOps>.Default.Equals(
+            x: left.Material,
+            y: right.Material
+        )) {
+            throw new ArgumentException(
+                message: "A tensor multiplies the two factors' charges in one material, so the factors carry the same one.",
+                paramName: nameof(right)
+            );
         }
 
         var leftCount = left.NormalFormCount;
         var rightCount = right.NormalFormCount;
         var generatorCount = (leftCount * rightCount);
 
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: generatorCount, other: 64);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: generatorCount,
+            other: 64
+        );
 
         var material = left.Material;
         var generators = SingleColourGenerators(count: generatorCount);
@@ -1167,19 +1900,28 @@ public static class Presentations {
 
         for (var leftIndex = 0; (leftIndex < left.IdentityKeys.Length); ++leftIndex) {
             for (var rightIndex = 0; (rightIndex < right.IdentityKeys.Length); ++rightIndex) {
-                unitCharges.Add(item: material.Multiply(left: left.IdentityCharges[leftIndex], right: right.IdentityCharges[rightIndex]));
+                unitCharges.Add(item: material.Multiply(
+                    left: left.IdentityCharges[leftIndex],
+                    right: right.IdentityCharges[rightIndex]
+                ));
                 unitTerms.Add(item: [((int)((left.IdentityKeys[leftIndex] * rightCount) + right.IdentityKeys[rightIndex]))]);
             }
         }
 
         var rules = new List<RewriteRule<TValue>> {
-            PairedReassociationRule(left: left, right: right, rightCount: rightCount, generatorCount: generatorCount, material: material),
+            PairedReassociationRule(
+            generatorCount: generatorCount,
+            left: left,
+            material: material,
+            right: right,
+            rightCount: rightCount
+        ),
             new(
-                kind: RuleKind.Reduce,
-                pattern: ReadOnlyMemory<int>.Empty,
-                replacement: RewriteRule<TValue>.PackReplacement(terms: [.. unitTerms]),
-                charges: unitCharges.ToArray()
-            ),
+            kind: RuleKind.Reduce,
+            pattern: ReadOnlyMemory<int>.Empty,
+            replacement: RewriteRule<TValue>.PackReplacement(terms: [.. unitTerms]),
+            charges: unitCharges.ToArray()
+        ),
         };
 
         var leftStarts = left.CellStarts;
@@ -1201,7 +1943,10 @@ public static class Presentations {
 
                 for (var leftEntry = leftStarts[leftCell]; (leftEntry < leftStarts[(leftCell + 1)]); ++leftEntry) {
                     for (var rightEntry = rightStarts[rightCell]; (rightEntry < rightStarts[(rightCell + 1)]); ++rightEntry) {
-                        pairCharges.Add(item: material.Multiply(left: leftCharges[((int)leftEntry)], right: rightCharges[((int)rightEntry)]));
+                        pairCharges.Add(item: material.Multiply(
+                            left: leftCharges[((int)leftEntry)],
+                            right: rightCharges[((int)rightEntry)]
+                        ));
                         pairTerms.Add(item: [((int)((leftTargets[((int)leftEntry)] * rightCount) + rightTargets[((int)rightEntry)]))]);
                     }
                 }
@@ -1228,327 +1973,6 @@ public static class Presentations {
             material: material
         );
     }
-
-    // The Cayley-Dickson 2-cochain, by the doubling recursion (a, b)·(c, d) = (a·c − d̄·b, d·a + b·c̄) with the
-    // conjugation (a, b)‾ = (ā, −b) — the convention DoublingAlgebra uses, whose floor-two instance reproduces the
-    // house quaternion component for component. The target index is always the exclusive-or of the two, so only the
-    // sign is computed here.
-    private static int CayleyDicksonSign(int left, int right, int floors) {
-        if (0 == floors) { return 1; }
-
-        var half = (1 << (floors - 1));
-        var leftHigh = (left >= half);
-        var leftLow = left & (half - 1);
-        var rightHigh = (right >= half);
-        var rightLow = right & (half - 1);
-
-        if (!leftHigh && !rightHigh) { return CayleyDicksonSign(left: leftLow, right: rightLow, floors: (floors - 1)); }
-        if (!leftHigh) { return CayleyDicksonSign(left: rightLow, right: leftLow, floors: (floors - 1)); }
-        if (!rightHigh) { return (ConjugationSign(index: rightLow) * CayleyDicksonSign(left: leftLow, right: rightLow, floors: (floors - 1))); }
-
-        return (-ConjugationSign(index: rightLow) * CayleyDicksonSign(left: rightLow, right: leftLow, floors: (floors - 1)));
-    }
-
-    // The tower's associator 3-cochain, declared as re-association data. It is the coboundary of the SAME 2-cochain the
-    // reduction rules carry: e_a·(e_b·e_c) is σ(b,c)·σ(a,b⊕c) on the target, (e_a·e_b)·e_c is σ(a,b)·σ(a⊕b,c) on it, and
-    // both bracketings reach the same target because the index law is exclusive-or. Every sign is its own inverse, so
-    // the ratio the splice charges is the product of all four and no division is taken.
-    private static RewriteRule<TValue> CayleyDicksonAssociatorRule<TValue>(int[] forward, int floors, TValue one, TValue negativeOne) {
-        var dimension = forward.Length;
-        var charges = new TValue[((dimension * dimension) * dimension)];
-
-        for (var left = 0; (left < dimension); ++left) {
-            var a = forward[left];
-
-            for (var middle = 0; (middle < dimension); ++middle) {
-                var b = forward[middle];
-
-                for (var right = 0; (right < dimension); ++right) {
-                    var c = forward[right];
-                    var sign = ((CayleyDicksonSign(left: b, right: c, floors: floors) * CayleyDicksonSign(left: a, right: b ^ c, floors: floors))
-                        * (CayleyDicksonSign(left: a, right: b, floors: floors) * CayleyDicksonSign(left: a ^ b, right: c, floors: floors)));
-
-                    charges[((((left * dimension) + middle) * dimension) + right)] = ((sign > 0) ? one : negativeOne);
-                }
-            }
-        }
-
-        return new(
-            kind: RuleKind.Reassociate,
-            pattern: ReadOnlyMemory<int>.Empty,
-            replacement: ReadOnlyMemory<int>.Empty,
-            charges: charges
-        );
-    }
-    private static int ConjugationSign(int index) =>
-        ((0 == index) ? 1 : -1);
-
-    // The paired re-association datum. A pair's brackets are the two factors' brackets side by side, so the charge is
-    // the product of the two factors' — which for two uniform factors is one charge and for a live factor is a charge
-    // per paired triple. Dropping a live factor's cochain here would hand back a presentation that silently flattens
-    // the brackets the factor charges for, so it is carried rather than lost.
-    private static RewriteRule<TValue> PairedReassociationRule<TValue, TOps>(ChargedPresentation<TValue, TOps> left, ChargedPresentation<TValue, TOps> right, int rightCount, int generatorCount, TOps material)
-        where TOps : struct, IMaterialOps<TValue, TOps> {
-        if (!left.HasLiveReassociation && !right.HasLiveReassociation) {
-            return ReassociationRule(charge: material.Multiply(left: left.SpliceCharge(left: 0L, middle: 0L, right: 0L), right: right.SpliceCharge(left: 0L, middle: 0L, right: 0L)));
-        }
-
-        var charges = new TValue[((generatorCount * generatorCount) * generatorCount)];
-
-        for (var first = 0; (first < generatorCount); ++first) {
-            for (var second = 0; (second < generatorCount); ++second) {
-                for (var third = 0; (third < generatorCount); ++third) {
-                    charges[((((first * generatorCount) + second) * generatorCount) + third)] = material.Multiply(
-                        left: left.SpliceCharge(left: (first / rightCount), middle: (second / rightCount), right: (third / rightCount)),
-                        right: right.SpliceCharge(left: (first % rightCount), middle: (second % rightCount), right: (third % rightCount))
-                    );
-                }
-            }
-        }
-
-        return new(
-            kind: RuleKind.Reassociate,
-            pattern: ReadOnlyMemory<int>.Empty,
-            replacement: ReadOnlyMemory<int>.Empty,
-            charges: charges
-        );
-    }
-
-    // One same-length, lexicographically decreasing rule: the alternating word of the given length starting with the
-    // higher symbol rewrites to the one starting with the lower. At a bond of two that IS the ordinary swap, and above
-    // it, the braid relation of a Coxeter pair — one datum, so the commuting case is not a second shape.
-    private static void AppendBraidRule<TValue>(List<RewriteRule<TValue>> rules, int high, int low, int bond, TValue charge) {
-        var image = new int[bond];
-        var pattern = new int[bond];
-
-        for (var step = 0; (step < bond); ++step) {
-            var leading = (0 == (step & 1));
-
-            image[step] = (leading ? low : high);
-            pattern[step] = (leading ? high : low);
-        }
-
-        rules.Add(item: new(
-            kind: RuleKind.Swap,
-            pattern: pattern,
-            replacement: RewriteRule<TValue>.PackReplacement(terms: [image]),
-            charges: new[] { charge }
-        ));
-    }
-
-    // The composition rules of a category presented by its generators: one reduction per ordered pair whose boundaries
-    // meet, and the charge-zero annihilation everywhere else. Composability is DERIVED from the generators themselves,
-    // so a quiver's endpoint match, a poset interval's, and the wire count a tangle composes on are one comparison
-    // stated once rather than the same fact written out at every entry. All the caller supplies is what the boundaries
-    // cannot determine: the composite's symbol and the charge it carries.
-    private static void AppendBoundaryCompositionRules<TValue>(List<RewriteRule<TValue>> rules, ReadOnlySpan<Generator> generators, Func<int, int, (int Symbol, TValue Charge)> composite) {
-        for (var left = 0; (left < generators.Length); ++left) {
-            for (var right = 0; (right < generators.Length); ++right) {
-                if (!BoundariesMeet(left: generators[left], right: generators[right])) {
-                    rules.Add(item: new(
-                        kind: RuleKind.Annihilate,
-                        pattern: new[] { left, right },
-                        replacement: ReadOnlyMemory<int>.Empty,
-                        charges: ReadOnlyMemory<TValue>.Empty
-                    ));
-
-                    continue;
-                }
-
-                var (symbol, charge) = composite(left, right);
-
-                rules.Add(item: new(
-                    kind: RuleKind.Reduce,
-                    pattern: new[] { left, right },
-                    replacement: RewriteRule<TValue>.PackReplacement(terms: [[symbol]]),
-                    charges: new[] { charge }
-                ));
-            }
-        }
-    }
-
-    // Two generators compose exactly when the wires the first hands over ARE the wires the second takes: the same
-    // number of them, in the same colours, in the same order. One comparison says all of that, because a span
-    // comparison compares length before contents: a diagram whose boundaries differ in width and a quiver arrow or
-    // poset interval whose endpoints disagree in colour both fail this same line, and a one-colour arity-one
-    // presentation runs it against one-entry lists — the same test in that degenerate case. Restating the width as
-    // a separate conjunct would read as two independent halves and be neither — the length test it names is already
-    // inside the one below, and a Generator's Coarity and Arity ARE those two lengths.
-    private static bool BoundariesMeet(in Generator left, in Generator right) =>
-        left.Outputs.SequenceEqual(other: right.Inputs);
-
-    // The cells of the second product, one per ordered pair of words, emitted from the recursion on the two heads:
-    // (xu)·(yv) is x·(u·yv) + y·(xu·v) + [x·y]·(u·v), the third term present only under a letter product. The pairs are
-    // walked in increasing combined length, so the three shorter cells a pair reads are already emitted and every cell
-    // is formed exactly once from data. A term that would outgrow the window is dropped — the quotient by the ideal the
-    // over-long words span — and a pair left with no term at all annihilates, which is what every over-long pair of a
-    // plain shuffle does.
-    private static void AppendInterleavingRules<TValue, TOps>(List<RewriteRule<TValue>> rules, ShuffleBasis basis, ReadOnlySpan<int> letterProduct, TOps material)
-        where TOps : struct, IMaterialOps<TValue, TOps> {
-        var count = basis.Count;
-        var letterCount = basis.LetterCount;
-        var merges = (0 != letterProduct.Length);
-        var windowDegree = basis.WindowDegree;
-        var accumulator = new TValue[count];
-        var charges = new List<TValue>();
-        var ruleOfPair = new int[(count * count)];
-        var stamp = new int[count];
-        var terms = new List<int[]>();
-        var touched = new int[count];
-
-        Array.Fill(array: stamp, value: -1);
-
-        Span<int> sourceLetter = stackalloc int[3];
-        Span<int> sourcePair = stackalloc int[3];
-
-        for (var pairLength = 0; (pairLength <= (2 * windowDegree)); ++pairLength) {
-            var longest = Math.Min(val1: windowDegree, val2: pairLength);
-
-            for (var leftLength = Math.Max(val1: 0, val2: (pairLength - windowDegree)); (leftLength <= longest); ++leftLength) {
-                var rightLength = (pairLength - leftLength);
-
-                for (var left = basis.Start(length: leftLength); (left < basis.Start(length: (leftLength + 1))); ++left) {
-                    for (var right = basis.Start(length: rightLength); (right < basis.Start(length: (rightLength + 1))); ++right) {
-                        var pair = ((left * count) + right);
-                        var sourceCount = 0;
-                        var touchedCount = 0;
-
-                        if (0 != leftLength) {
-                            sourceLetter[sourceCount] = basis.Head(symbol: left);
-                            sourcePair[sourceCount++] = ((basis.Tail(symbol: left) * count) + right);
-                        }
-
-                        if (0 != rightLength) {
-                            sourceLetter[sourceCount] = basis.Head(symbol: right);
-                            sourcePair[sourceCount++] = ((left * count) + basis.Tail(symbol: right));
-                        }
-
-                        if (merges && (0 != leftLength) && (0 != rightLength)) {
-                            sourceLetter[sourceCount] = letterProduct[((basis.Head(symbol: left) * letterCount) + basis.Head(symbol: right))];
-                            sourcePair[sourceCount++] = ((basis.Tail(symbol: left) * count) + basis.Tail(symbol: right));
-                        }
-
-                        // The recursion's base case, and the only pair with no shorter one to read: the empty word times
-                        // itself is the empty word, which is this presentation's unit.
-                        if (0 == pairLength) {
-                            accumulator[0] = material.One;
-                            stamp[0] = pair;
-                            touched[touchedCount++] = 0;
-                        }
-
-                        for (var source = 0; (source < sourceCount); ++source) {
-                            var child = rules[ruleOfPair[sourcePair[source]]];
-                            var letter = sourceLetter[source];
-                            var replacement = child.Replacement;
-                            var offset = 0;
-
-                            for (var term = 0; (term < child.TermCount); ++term) {
-                                // Every replacement this entry emits is a single word, so the term's own symbol sits
-                                // immediately after the length its packing carries.
-                                var length = replacement[offset++];
-                                var symbol = basis.Prepend(letter: letter, symbol: replacement[offset]);
-
-                                offset += length;
-
-                                if (symbol < 0) { continue; }
-
-                                if (stamp[symbol] != pair) {
-                                    accumulator[symbol] = material.Zero;
-                                    stamp[symbol] = pair;
-                                    touched[touchedCount++] = symbol;
-                                }
-
-                                accumulator[symbol] = material.Add(left: accumulator[symbol], right: child.Charges[term]);
-                            }
-                        }
-
-                        Array.Sort(array: touched, index: 0, length: touchedCount);
-                        charges.Clear();
-                        terms.Clear();
-
-                        for (var index = 0; (index < touchedCount); ++index) {
-                            var symbol = touched[index];
-
-                            if (material.IsZero(value: accumulator[symbol])) { continue; }
-
-                            charges.Add(item: accumulator[symbol]);
-                            terms.Add(item: [symbol]);
-                        }
-
-                        ruleOfPair[pair] = rules.Count;
-
-                        rules.Add(item: ((0 == terms.Count)
-                            ? new(
-                                kind: RuleKind.Annihilate,
-                                pattern: new[] { left, right },
-                                replacement: ReadOnlyMemory<int>.Empty,
-                                charges: ReadOnlyMemory<TValue>.Empty
-                            )
-                            : new(
-                                kind: RuleKind.Reduce,
-                                pattern: new[] { left, right },
-                                replacement: RewriteRule<TValue>.PackReplacement(terms: [.. terms]),
-                                charges: charges.ToArray()
-                            )));
-                    }
-                }
-            }
-        }
-    }
-
-    // The ordered swap rules of a commuting-up-to-a-charge presentation: one rule per descending generator pair,
-    // rewriting it to the ascending one at the given charge. Clifford charges minus one, a commutative window one.
-    private static void AppendSwapRules<TValue>(List<RewriteRule<TValue>> rules, int count, TValue charge) {
-        for (var high = 1; (high < count); ++high) {
-            for (var low = 0; (low < high); ++low) {
-                AppendBraidRule(rules: rules, high: high, low: low, bond: 2, charge: charge);
-            }
-        }
-    }
-
-    // The row's index in a lexicographically sorted permutation table, or minus one when the table does not hold it.
-    private static int IndexOfRow(int[] table, ReadOnlySpan<int> row, int pointCount, int elementCount) {
-        var low = 0;
-        var high = elementCount;
-
-        while (low < high) {
-            var middle = ((low + high) >> 1);
-            var comparison = table.AsSpan(start: (middle * pointCount), length: pointCount).SequenceCompareTo(other: row);
-
-            if (0 == comparison) { return middle; }
-
-            if (comparison < 0) { low = (middle + 1); } else { high = middle; }
-        }
-
-        return -1;
-    }
-
-    // The generator array of a one-object presentation: one degree-one generator per symbol, all sharing the single
-    // boundary colour.
-    private static Generator[] SingleColourGenerators(int count) {
-        var generators = new Generator[count];
-
-        for (var symbol = 0; (symbol < count); ++symbol) {
-            generators[symbol] = new Generator(symbol: symbol, inputs: SingleColour, outputs: SingleColour, degree: 1);
-        }
-
-        return generators;
-    }
-    private static TValue NegativeOne<TValue, TOps>(TOps material)
-        where TOps : struct, IMaterialOps<TValue, TOps> {
-        if (material is not ISignedMaterial<TValue, TOps> signed) {
-            throw new ArgumentException(message: "This presentation carries a charge of minus one, which an unsigned material cannot express.", paramName: nameof(material));
-        }
-
-        return signed.Negate(value: material.One);
-    }
-    private static RewriteRule<TValue> ReassociationRule<TValue>(TValue charge) =>
-        new(
-            kind: RuleKind.Reassociate,
-            pattern: ReadOnlyMemory<int>.Empty,
-            replacement: ReadOnlyMemory<int>.Empty,
-            charges: new[] { charge }
-        );
 
     // The enumerated planar basis of one width bound, and the arc trace that composes two of its diagrams. It is
     // construction-time DATA with a walk over it: the walk runs once per ordered pair while the composition table is
@@ -1581,8 +2005,15 @@ public static class Presentations {
 
                     symbolOfCode[block] = new int[(1 << points)];
 
-                    Array.Fill(array: symbolOfCode[block], value: -1);
-                    Enumerate(points: points, partners: partners, symbolOfCode: symbolOfCode[block]);
+                    Array.Fill(
+                        array: symbolOfCode[block],
+                        value: -1
+                    );
+                    Enumerate(
+                        points: points,
+                        partners: partners,
+                        symbolOfCode: symbolOfCode[block]
+                    );
                 }
             }
 
@@ -1612,14 +2043,69 @@ public static class Presentations {
 
         public int Count => m_partner.Length;
 
-        // The identity diagram of one width is the nested matching, whose word is every opener before every closer —
-        // the lexicographically first word of its block, so it needs no lookup.
-        public int IdentitySymbol(int width) =>
-            m_blockStart[((width * m_stride) + width)];
-        public int InputWidth(int symbol) =>
-            m_inputWidth[symbol];
-        public int OutputWidth(int symbol) =>
-            m_outputWidth[symbol];
+        // Every planar diagram of one boundary shape, in the canonical order: the balanced-parenthesis words of the
+        // boundary length, lexicographically with an opener before a closer, which IS non-crossing. The two prunings
+        // are the whole admission test — half the points may be openers and a closer needs a depth to close — and
+        // together they force the depth to zero at the end, so a reached leaf is balanced with nothing left to check.
+        // One stack scan then turns the word into the matching.
+        private static void Enumerate(int points, List<int[]> partners, int[] symbolOfCode) {
+            var openers = (points >> 1);
+            var stack = new int[points];
+            var word = new int[points];
+
+            void Extend(int position, int depth, int placed) {
+                if (position == points) {
+                    var code = 0;
+                    var height = 0;
+                    var partner = new int[points];
+
+                    for (var scan = 0; (scan < points); ++scan) {
+                        code = (code << 1) | word[scan];
+
+                        if (0 == word[scan]) {
+                            stack[height++] = scan;
+                        } else {
+                            var opener = stack[--height];
+
+                            partner[opener] = scan;
+                            partner[scan] = opener;
+                        }
+                    }
+
+                    symbolOfCode[code] = partners.Count;
+
+                    partners.Add(item: partner);
+
+                    return;
+                }
+
+                if (placed < openers) {
+                    word[position] = 0;
+
+                    Extend(
+                        depth: (depth + 1),
+                        placed: (placed + 1),
+                        position: (position + 1)
+                    );
+                }
+
+                if (depth > 0) {
+                    word[position] = 1;
+
+                    Extend(
+                        depth: (depth - 1),
+                        placed: placed,
+                        position: (position + 1)
+                    );
+                }
+            }
+
+            Extend(
+                depth: 0,
+                placed: 0,
+                position: 0
+            );
+        }
 
         // Glue the left diagram's outputs to the right diagram's inputs, walk each free boundary point along the two
         // matchings and the glue until it reaches another free point, and count what the walks never reach. The
@@ -1668,7 +2154,10 @@ public static class Presentations {
             Span<int> partner = stackalloc int[compositePoints];
 
             for (var position = 0; (position < compositePoints); ++position) {
-                var node = ((position < leftInputs) ? position : (outputBase + (position - leftInputs)));
+                var node = ((position < leftInputs)
+                    ? position
+                    : (outputBase + (position - leftInputs))
+                );
 
                 if (seen[node]) { continue; }
 
@@ -1686,7 +2175,10 @@ public static class Presentations {
                     seen[cursor] = true;
                 }
 
-                var reached = ((cursor < leftInputs) ? cursor : ((cursor - outputBase) + leftInputs));
+                var reached = ((cursor < leftInputs)
+                    ? cursor
+                    : ((cursor - outputBase) + leftInputs)
+                );
 
                 partner[position] = reached;
                 partner[reached] = position;
@@ -1712,72 +2204,30 @@ public static class Presentations {
             var code = 0;
 
             for (var position = 0; (position < compositePoints); ++position) {
-                code = (code << 1) | ((partner[position] < position) ? 1 : 0);
+                code = (code << 1) | ((partner[position] < position)
+                    ? 1
+                    : 0
+                );
             }
 
             return m_symbolOfCode[((leftInputs * m_stride) + rightOutputs)][code];
         }
-
-        // Every planar diagram of one boundary shape, in the canonical order: the balanced-parenthesis words of the
-        // boundary length, lexicographically with an opener before a closer, which IS non-crossing. The two prunings
-        // are the whole admission test — half the points may be openers and a closer needs a depth to close — and
-        // together they force the depth to zero at the end, so a reached leaf is balanced with nothing left to check.
-        // One stack scan then turns the word into the matching.
-        private static void Enumerate(int points, List<int[]> partners, int[] symbolOfCode) {
-            var openers = (points >> 1);
-            var stack = new int[points];
-            var word = new int[points];
-
-            void Extend(int position, int depth, int placed) {
-                if (position == points) {
-                    var code = 0;
-                    var height = 0;
-                    var partner = new int[points];
-
-                    for (var scan = 0; (scan < points); ++scan) {
-                        code = (code << 1) | word[scan];
-
-                        if (0 == word[scan]) {
-                            stack[height++] = scan;
-                        } else {
-                            var opener = stack[--height];
-
-                            partner[opener] = scan;
-                            partner[scan] = opener;
-                        }
-                    }
-
-                    symbolOfCode[code] = partners.Count;
-
-                    partners.Add(item: partner);
-
-                    return;
-                }
-
-                if (placed < openers) {
-                    word[position] = 0;
-
-                    Extend(position: (position + 1), depth: (depth + 1), placed: (placed + 1));
-                }
-
-                if (depth > 0) {
-                    word[position] = 1;
-
-                    Extend(position: (position + 1), depth: (depth - 1), placed: placed);
-                }
-            }
-
-            Extend(position: 0, depth: 0, placed: 0);
-        }
+        // The identity diagram of one width is the nested matching, whose word is every opener before every closer —
+        // the lexicographically first word of its block, so it needs no lookup.
+        public int IdentitySymbol(int width) =>
+            m_blockStart[((width * m_stride) + width)];
+        public int InputWidth(int symbol) =>
+            m_inputWidth[symbol];
+        public int OutputWidth(int symbol) =>
+            m_outputWidth[symbol];
     }
-
     // The words of one alphabet at one length window, and the arithmetic that walks between them. A word's KEY is its
     // index in the canonical order — ascending by length, then lexicographically — so taking a head, taking a tail and
     // prepending a letter are index arithmetic and no word is ever materialized. It is construction-time DATA, read once
     // per ordered pair while the cells are emitted and never again.
     private sealed class ShuffleBasis {
-        private readonly int m_letterCount;
         private readonly int[] m_lengthOf;
+        private readonly int m_letterCount;
         private readonly int[] m_scale;
         private readonly int[] m_start;
         private readonly int m_windowDegree;
@@ -1799,7 +2249,10 @@ public static class Presentations {
                 // The cap is the 512 normal forms a finite basis holds, read at the word count the two arguments name
                 // together: two letters reach 511 words at a window of eight and 1023 at nine.
                 if (total > MaximumShuffleWords) {
-                    throw new ArgumentOutOfRangeException(paramName: nameof(windowDegree), message: $"An alphabet of {letterCount} letter(s) already names {total} word(s) of length {length} or below, and no finite basis of this library holds more than {MaximumShuffleWords} normal forms.");
+                    throw new ArgumentOutOfRangeException(
+                        paramName: nameof(windowDegree),
+                        message: $"An alphabet of {letterCount} letter(s) already names {total} word(s) of length {length} or below, and no finite basis of this library holds more than {MaximumShuffleWords} normal forms."
+                    );
                 }
 
                 scale[length] = ((int)words);
@@ -1828,7 +2281,6 @@ public static class Presentations {
             ((symbol - m_start[m_lengthOf[symbol]]) / m_scale[(m_lengthOf[symbol] - 1)]);
         public int LengthOf(int symbol) =>
             m_lengthOf[symbol];
-
         // One letter in front, or minus one where the word would outgrow the window and so leaves this basis.
         public int Prepend(int letter, int symbol) {
             var length = m_lengthOf[symbol];
@@ -1839,7 +2291,6 @@ public static class Presentations {
         }
         public int Start(int length) =>
             m_start[length];
-
         // Everything past the first letter: the index inside the block, modulo the block's stride.
         public int Tail(int symbol) {
             var length = m_lengthOf[symbol];

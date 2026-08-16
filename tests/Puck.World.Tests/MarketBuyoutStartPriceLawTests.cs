@@ -39,7 +39,6 @@ public sealed class MarketBuyoutStartPriceLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null));
         Assert.Contains(expectedSubstring: "startPrice", actualString: reason, comparisonType: System.StringComparison.Ordinal);
     }
-
     [Fact]
     public void BuyoutListingWithZeroStartPrice_ValidatesWholeDocument() {
         var market = (MarketFixtures.BuildDocument().Market!) with {
@@ -62,7 +61,6 @@ public sealed class MarketBuyoutStartPriceLawTests {
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: reason);
     }
-
     [Fact]
     public void CreateBuyoutListing_NonzeroStartPrice_RefusedByName_ZeroSucceeds() {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());

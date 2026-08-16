@@ -28,6 +28,44 @@ public static class BindingBarSeatComposer {
         InputSources.Gamepad.RightStickPress,
     ];
 
+    private static BindingPageButtonView? FindButton(BindingPageView view, string source) {
+        foreach (var button in view.Buttons) {
+            if (string.Equals(
+                a: button.Source,
+                b: source,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Composes the bar's modifier pips from a page view (the active page's chord IS the held modifier
+    /// sequence, so <see cref="BindingModifierView.Required"/> doubles as "held right now").</summary>
+    /// <param name="view">The seat's active page view.</param>
+    /// <param name="destination">The destination pips; at least <c>view.Modifiers.Count</c> entries.</param>
+    /// <returns>The number of pips written.</returns>
+    public static int ComposeModifiers(BindingPageView view, Span<OverlayBindingModifier> destination) {
+        ArgumentNullException.ThrowIfNull(argument: view);
+
+        var count = Math.Min(
+            val1: view.Modifiers.Count,
+            val2: destination.Length
+        );
+
+        for (var index = 0; (index < count); index++) {
+            var modifier = view.Modifiers[index];
+
+            destination[index] = new OverlayBindingModifier(
+                Glyph: OverlayGamepadGlyphs.ResolveModifierSource(source: modifier.Source),
+                Held: modifier.Required
+            );
+        }
+
+        return count;
+    }
     /// <summary>Composes one bar's twelve slots from a page view.</summary>
     /// <param name="view">The seat's active page view.</param>
     /// <param name="family">The connected controller family (badge glyph theming).</param>
@@ -80,44 +118,5 @@ public static class BindingBarSeatComposer {
                 Visible: true
             );
         }
-    }
-
-    /// <summary>Composes the bar's modifier pips from a page view (the active page's chord IS the held modifier
-    /// sequence, so <see cref="BindingModifierView.Required"/> doubles as "held right now").</summary>
-    /// <param name="view">The seat's active page view.</param>
-    /// <param name="destination">The destination pips; at least <c>view.Modifiers.Count</c> entries.</param>
-    /// <returns>The number of pips written.</returns>
-    public static int ComposeModifiers(BindingPageView view, Span<OverlayBindingModifier> destination) {
-        ArgumentNullException.ThrowIfNull(argument: view);
-
-        var count = Math.Min(
-            val1: view.Modifiers.Count,
-            val2: destination.Length
-        );
-
-        for (var index = 0; (index < count); index++) {
-            var modifier = view.Modifiers[index];
-
-            destination[index] = new OverlayBindingModifier(
-                Glyph: OverlayGamepadGlyphs.ResolveModifierSource(source: modifier.Source),
-                Held: modifier.Required
-            );
-        }
-
-        return count;
-    }
-
-    private static BindingPageButtonView? FindButton(BindingPageView view, string source) {
-        foreach (var button in view.Buttons) {
-            if (string.Equals(
-                a: button.Source,
-                b: source,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                return button;
-            }
-        }
-
-        return null;
     }
 }

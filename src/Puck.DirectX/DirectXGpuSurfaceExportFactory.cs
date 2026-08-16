@@ -15,21 +15,19 @@ public sealed class DirectXGpuSurfaceExportFactory : IGpuSurfaceExportFactory {
     /// <inheritdoc/>
     public IGpuExportableRenderTarget CreateExportableTarget(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
         new DirectXGpuExportableRenderTarget(
-            deviceContext: (IDirectXDeviceContext)deviceContext,
+            deviceContext: ((IDirectXDeviceContext)deviceContext),
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
             height: height,
             width: width
         );
-
     /// <inheritdoc/>
     public IGpuExportableStorageImage CreateExportableStorageImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
         new DirectXGpuExportableStorageImage(
-            deviceContext: (IDirectXDeviceContext)deviceContext,
+            deviceContext: ((IDirectXDeviceContext)deviceContext),
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
             height: height,
             width: width
         );
-
     /// <summary>Creates an exportable storage image whose shared handle another API family can open — with
     /// <c>ALLOW_SIMULTANEOUS_ACCESS</c>, so a Direct3D 11 device (e.g. Media Foundation's camera decode device) can
     /// open and write it while this device merely owns the allocation. Not part of the neutral interface: the caller is
@@ -43,7 +41,7 @@ public sealed class DirectXGpuSurfaceExportFactory : IGpuSurfaceExportFactory {
     /// <returns>The exportable image (its <see cref="IGpuExportableStorageImage.SharedHandle"/> is the cross-API handle).</returns>
     public IGpuExportableStorageImage CreateSimultaneousAccessStorageImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
         new DirectXGpuExportableStorageImage(
-            deviceContext: (IDirectXDeviceContext)deviceContext,
+            deviceContext: ((IDirectXDeviceContext)deviceContext),
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
             height: height,
             simultaneousAccess: true,

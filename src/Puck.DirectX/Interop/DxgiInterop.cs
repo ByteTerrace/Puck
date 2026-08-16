@@ -17,12 +17,12 @@ internal static unsafe class DxgiInterop {
         void* factory;
         var result = PInvoke.CreateDXGIFactory2(
             Flags: default,
-            riid: IDXGIFactory4.IID_Guid,
-            ppFactory: out factory
+            ppFactory: out factory,
+            riid: IDXGIFactory4.IID_Guid
         );
 
         result.ThrowIfFailed(operation: "CreateDXGIFactory2");
-        return (IDXGIFactory4*)factory;
+        return ((IDXGIFactory4*)factory);
     }
     /// <summary>Packs a native <c>LUID</c> into a single 64-bit value.</summary>
     /// <param name="luid">The locally unique identifier to pack.</param>

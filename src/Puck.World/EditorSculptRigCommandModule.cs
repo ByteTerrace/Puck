@@ -14,29 +14,521 @@ namespace Puck.World;
 /// ceilings.
 /// </summary>
 internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, WorldWorkbench workbench) : ICommandModule {
-    /// <summary>The frame-record act (South on the frames page).</summary>
-    public const string FrameRecordCommand = "editor.sculpt.frame.record";
-    /// <summary>The frame-delete act (D-pad Down on the frames page).</summary>
-    public const string FrameRemoveCommand = "editor.sculpt.frame.remove";
-    /// <summary>The frame verb, widened to fold the step chord onto itself: <c>editor.sculpt.frame
-    /// &lt;n|next|prev&gt;</c>. East/West on the frames page bind it with a constant Axis1D value (+1 next, -1 prev)
-    /// in place of an argument.</summary>
-    public const string FrameCommand = "editor.sculpt.frame";
-    /// <summary>The playback-toggle act (North on the frames page).</summary>
-    public const string PlayCommand = "editor.sculpt.play";
     /// <summary>The chain verb: <c>editor.sculpt.chain</c> with no argument defines a LIMB chain from the
     /// selection (South on the rig page — the rig page's own binding);
     /// with arguments it defines a NAMED chain from an explicit shape list.</summary>
     public const string ChainCommand = "editor.sculpt.chain";
-    /// <summary>The chain-cursor-cycle act (West on the rig page).</summary>
-    public const string ChainNextCommand = "editor.sculpt.chain.next";
     /// <summary>The chain-kind-toggle act (North on the rig page).</summary>
     public const string ChainKindCommand = "editor.sculpt.chain.kind";
+    /// <summary>The chain-cursor-cycle act (West on the rig page).</summary>
+    public const string ChainNextCommand = "editor.sculpt.chain.next";
     /// <summary>The chain-delete act (East on the rig page): the cursored (or named) chain.</summary>
     public const string ChainRemoveCommand = "editor.sculpt.chain.remove";
+    /// <summary>The frame verb, widened to fold the step chord onto itself: <c>editor.sculpt.frame
+    /// &lt;n|next|prev&gt;</c>. East/West on the frames page bind it with a constant Axis1D value (+1 next, -1 prev)
+    /// in place of an argument.</summary>
+    public const string FrameCommand = "editor.sculpt.frame";
+    /// <summary>The frame-record act (South on the frames page).</summary>
+    public const string FrameRecordCommand = "editor.sculpt.frame.record";
+    /// <summary>The frame-delete act (D-pad Down on the frames page).</summary>
+    public const string FrameRemoveCommand = "editor.sculpt.frame.remove";
+    /// <summary>The playback-toggle act (North on the frames page).</summary>
+    public const string PlayCommand = "editor.sculpt.play";
 
     private readonly WorldEditorSession m_session = session;
     private readonly WorldWorkbench m_workbench = workbench;
+
+    // The chain fold: NO ARGUMENT defines a limb from the SELECTION (the rig page's South chord) — bindable,
+    // and takes an optional trailing [seat] since there is no variable
+    // member list to make one ambiguous. Any argument takes the original named-list form, which deliberately takes
+    // no seat token (the variable member list leaves one ambiguous) and so always acts on the invoking seat's bench.
+    private CommandResult ChainHandler(CommandContext context, WireArgs args) {
+        var isSeatOnly = ((args.Count == 0) || ((args.Count == 1) && EditorSculptCommandModule.SeatToken(token: args[0])));
+
+        if (isSeatOnly) {
+            var (noArgSlot, noArgModel, noArgError) = EditorSculptCommandModule.ResolveBench(
+                args: in args,
+                at: 0,
+                context: context,
+                session: m_session,
+                verb: ChainCommand,
+                workbench: m_workbench
+            );
+
+            if (noArgError is { } resolveError) {
+                return resolveError;
+            }
+
+            if (noArgModel!.DefineChainFromSelection() is not { } fromSelection) {
+                return CommandResult.Error(output: $"[{ChainCommand}: needs a selected shape with 2 more after it in document order (or use editor.sculpt.chain <name> <shapes...>)]");
+            }
+
+            return EditorSculptCommandModule.Echo(
+                detail: $"chain {fromSelection.Id} ({fromSelection.Kind}, {fromSelection.ShapeIds.Count} shapes)",
+                slot: noArgSlot,
+                verb: ChainCommand
+            );
+        }
+
+        // Shapes: <name> <shape> <shape> [more...] [limb|spine] — acts on the invoking seat's bench (the variable
+        // member list makes a trailing seat token ambiguous, so this verb deliberately takes none).
+        if (args.Count < 3) {
+            return CommandResult.Error(output: "[editor.sculpt.chain: expected <name> <shapeIdOrName> <shapeIdOrName> [more...] [limb|spine]]");
+        }
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            context: context,
+            args: WireArgs.Empty,
+            at: 0,
+            verb: ChainCommand,
+            session: m_session,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        var lastIndex = (args.Count - 1);
+        var hasKind = (args.Is(
+            index: lastIndex,
+            value: "limb"
+        ) || args.Is(
+            index: lastIndex,
+            value: "spine"
+        ));
+        var memberEnd = (hasKind
+            ? lastIndex
+            : args.Count
+        );
+
+        if ((memberEnd - 1) < 2) {
+            return CommandResult.Error(output: "[editor.sculpt.chain: a chain needs at least 2 member shapes]");
+        }
+
+        var members = new string[(memberEnd - 1)];
+
+        for (var index = 1; (index < memberEnd); index++) {
+            members[(index - 1)] = args[index].ToString();
+        }
+
+        var chain = model!.DefineChain(
+            name: args[0].ToString(),
+            shapeIdsOrNames: members,
+            kind: (hasKind
+            ? (args.Is(
+                    index: lastIndex,
+                    value: "limb"
+                )
+                ? "limb"
+                : "spine")
+            : null)
+        );
+
+        if (chain is null) {
+            return CommandResult.Error(output: "[editor.sculpt.chain: could not define — check the shape ids/names (all must resolve) and the 16-chain ceiling]");
+        }
+
+        return EditorSculptCommandModule.Echo(
+            detail: $"chain {chain.Id} '{chain.Name}' ({chain.Kind}, {chain.ShapeIds.Count} shapes) — cycle the target onto its goal to pose it",
+            slot: slot,
+            verb: ChainCommand
+        );
+    }
+    private CommandResult ChainKindHandler(CommandContext context, WireArgs args) {
+        // Shapes: [] = toggle cursored; [limb|spine] [idOrName] [seat].
+        var hasKind = ((args.Count >= 1) && (args.Is(
+            index: 0,
+            value: "limb"
+        ) || args.Is(
+            index: 0,
+            value: "spine"
+        )));
+        var hasTarget = (hasKind && (args.Count >= 2) && !EditorSculptCommandModule.SeatToken(token: args[1]));
+        var seatAt = (hasKind
+            ? (hasTarget
+                ? 2
+                : 1)
+            : 0
+        );
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: seatAt,
+            context: context,
+            session: m_session,
+            verb: ChainKindCommand,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        string? applied;
+
+        if (!hasKind) {
+            applied = model!.ToggleCurrentChainKind();
+
+            if (applied is null) {
+                return CommandResult.Error(output: $"[{ChainKindCommand}: no chain cursored — {ChainNextCommand} first, or name one: editor.sculpt.chain.kind <limb|spine> <idOrName>]");
+            }
+        } else {
+            var target = (hasTarget
+                ? args[1].ToString()
+                : (model!.CurrentChain?.Id.ToString(provider: CultureInfo.InvariantCulture))
+            );
+
+            if (target is null) {
+                return CommandResult.Error(output: $"[{ChainKindCommand}: no chain cursored — {ChainNextCommand} first, or name one]");
+            }
+
+            applied = model!.SetKind(
+                idOrName: target,
+                kind: (args.Is(
+                    index: 0,
+                    value: "limb"
+                )
+                ? "limb"
+                : "spine")
+            );
+
+            if (applied is null) {
+                return CommandResult.Error(output: $"[{ChainKindCommand}: no chain '{target}']");
+            }
+        }
+
+        return EditorSculptCommandModule.Echo(
+            detail: $"kind {applied}",
+            slot: slot,
+            verb: ChainKindCommand
+        );
+    }
+    private CommandResult ChainNextHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: 0,
+            context: context,
+            session: m_session,
+            verb: ChainNextCommand,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        var chain = model!.CycleChainCursor(direction: 1);
+
+        return EditorSculptCommandModule.Echo(
+            detail: ((chain is null)
+            ? "cursor none"
+            : $"cursor chain {chain.Id}{((chain.Name is { Length: > 0 } name)
+                ? $" '{name}'"
+                : string.Empty)} ({chain.Kind})"),
+            slot: slot,
+            verb: ChainNextCommand
+        );
+    }
+    // The shared <idOrName> <x y z> [seat] handler for goal/pole moves.
+    private CommandResult ChainPointHandler(CommandContext context, in WireArgs args, string verb, bool isGoal) {
+        if (args.Count is (< 4 or > 5)) {
+            return CommandResult.Error(output: $"[{verb}: expected <idOrName> <x> <y> <z> plus an optional seat 1..4]");
+        }
+
+        if (
+            !EditorCommandModule.TryFloat(
+            args: in args,
+            at: 1,
+            value: out var x
+        ) ||
+            !EditorCommandModule.TryFloat(
+            args: in args,
+            at: 2,
+            value: out var y
+        ) ||
+            !EditorCommandModule.TryFloat(
+            args: in args,
+            at: 3,
+            value: out var z
+        )
+        ) {
+            return CommandResult.Error(output: $"[{verb}: could not parse <x> <y> <z> as finite numbers]");
+        }
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: 4,
+            context: context,
+            session: m_session,
+            verb: verb,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        var idOrName = args[0].ToString();
+        var point = new Vector3(
+            x: x,
+            y: y,
+            z: z
+        );
+        var applied = (isGoal
+            ? model!.SetGoal(
+                goal: point,
+                idOrName: idOrName
+            )
+            : model!.SetPole(
+                idOrName: idOrName,
+                pole: point
+            )
+        );
+
+        if (!applied) {
+            return CommandResult.Error(output: $"[{verb}: no chain '{idOrName}']");
+        }
+
+        return EditorSculptCommandModule.Echo(
+            slot: slot,
+            verb: verb,
+            detail: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"chain '{idOrName}' {(isGoal
+            ? "goal"
+            : "pole")}=({x:0.00}, {y:0.00}, {z:0.00}) — pose re-solved"
+            )
+        );
+    }
+    private CommandResult ChainRemoveHandler(CommandContext context, WireArgs args) {
+        var hasTarget = ((args.Count >= 1) && !EditorSculptCommandModule.SeatToken(token: args[0]));
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: (hasTarget
+            ? 1
+            : 0),
+            context: context,
+            session: m_session,
+            verb: ChainRemoveCommand,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        var target = (hasTarget
+            ? args[0].ToString()
+            : (model!.CurrentChain?.Id.ToString(provider: CultureInfo.InvariantCulture))
+        );
+
+        if (target is null) {
+            return CommandResult.Error(output: $"[{ChainRemoveCommand}: no chain cursored — {ChainNextCommand} first, or name one]");
+        }
+
+        if (!model!.DeleteChain(idOrName: target)) {
+            return CommandResult.Error(output: $"[{ChainRemoveCommand}: no chain '{target}']");
+        }
+
+        return EditorSculptCommandModule.Echo(
+            detail: $"chain removed — {model.Chains.Count} left",
+            slot: slot,
+            verb: ChainRemoveCommand
+        );
+    }
+    // The frame fold: a leading next|prev literal, or (with no token) a bound constant Axis1D value from the
+    // frames page's East/West step chord — see EditorCommandModule.TryDirection. Anything else falls through to
+    // the original <n> form.
+    private CommandResult FrameHandler(CommandContext context, WireArgs args) {
+        if (EditorCommandModule.TryDirection(
+            args: args,
+            at: 0,
+            context: context,
+            direction: out var direction,
+            negative: "prev",
+            positive: "next"
+        )) {
+            var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+                context: context,
+                args: in args,
+                at: ((args.Count >= 1)
+                ? 1
+                : 0),
+                verb: FrameCommand,
+                session: m_session,
+                workbench: m_workbench
+            );
+
+            if (error is { } benchError) {
+                return benchError;
+            }
+
+            _ = model!.StepFrame(direction: direction);
+
+            return EditorSculptCommandModule.Echo(
+                detail: $"frame {model.CurrentFrame}/{model.FrameCount}{((model.CurrentFrame == 0)
+                ? " (rest)"
+                : string.Empty)}",
+                slot: slot,
+                verb: FrameCommand
+            );
+        }
+
+        if (args.Count is (< 1 or > 2)) {
+            return CommandResult.Error(output: "[editor.sculpt.frame: expected <n>, next, or prev, plus an optional seat 1..4]");
+        }
+
+        if (!args.TryInt(
+            index: 0,
+            value: out var index
+        )) {
+            return CommandResult.Error(output: "[editor.sculpt.frame: could not parse <n> as an integer]");
+        }
+
+        var (valueSlot, valueModel, valueError) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: 1,
+            context: context,
+            session: m_session,
+            verb: FrameCommand,
+            workbench: m_workbench
+        );
+
+        if (valueError is { } resolveError) {
+            return resolveError;
+        }
+
+        valueModel!.SetFrame(index: index);
+
+        return EditorSculptCommandModule.Echo(
+            detail: $"frame {valueModel.CurrentFrame}/{valueModel.FrameCount}{((valueModel.CurrentFrame == 0)
+            ? " (rest)"
+            : string.Empty)}",
+            slot: valueSlot,
+            verb: FrameCommand
+        );
+    }
+    private CommandResult FrameRecordHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: 0,
+            context: context,
+            session: m_session,
+            verb: FrameRecordCommand,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        var recorded = model!.RecordFrame();
+
+        return EditorSculptCommandModule.Echo(
+            detail: $"frame {recorded}/{model.FrameCount} recorded",
+            slot: slot,
+            verb: FrameRecordCommand
+        );
+    }
+    private CommandResult FrameRemoveHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: 0,
+            context: context,
+            session: m_session,
+            verb: FrameRemoveCommand,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        if (!model!.DeleteCurrentFrame()) {
+            return CommandResult.Error(output: $"[{FrameRemoveCommand}: the rest pose (frame 0) is protected — step onto a saved frame first]");
+        }
+
+        return EditorSculptCommandModule.Echo(
+            detail: $"frame removed — {model.FrameCount} left, cursor {model.CurrentFrame}",
+            slot: slot,
+            verb: FrameRemoveCommand
+        );
+    }
+    private CommandResult FrameTicksHandler(CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
+            return CommandResult.Error(output: "[editor.sculpt.frame.ticks: expected <n 1..60> plus an optional seat 1..4]");
+        }
+
+        if (!args.TryInt(
+            index: 0,
+            value: out var ticks
+        )) {
+            return CommandResult.Error(output: "[editor.sculpt.frame.ticks: could not parse <n> as an integer]");
+        }
+
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: 1,
+            context: context,
+            session: m_session,
+            verb: "editor.sculpt.frame.ticks",
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        return EditorSculptCommandModule.Echo(
+            slot: slot,
+            verb: "editor.sculpt.frame.ticks",
+            detail: $"{model!.SetFrameTicks(ticks: ticks)} ticks/frame"
+        );
+    }
+    private CommandResult GoalHandler(CommandContext context, WireArgs args) =>
+        ChainPointHandler(
+            args: in args,
+            context: context,
+            isGoal: true,
+            verb: "editor.sculpt.goal"
+        );
+    private CommandResult PlayHandler(CommandContext context, WireArgs args) {
+        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
+            args: in args,
+            at: 0,
+            context: context,
+            session: m_session,
+            verb: PlayCommand,
+            workbench: m_workbench
+        );
+
+        if (error is { } benchError) {
+            return benchError;
+        }
+
+        if ((model!.FrameCount == 0)) {
+            return CommandResult.Error(output: $"[{PlayCommand}: no saved frames — editor.sculpt.frame.record first]");
+        }
+
+        var playing = model.TogglePlayback();
+
+        return EditorSculptCommandModule.Echo(
+            detail: (playing
+            ? $"playing {model.FrameCount} frames (hold-style)"
+            : "stopped — rest pose restored"),
+            slot: slot,
+            verb: PlayCommand
+        );
+    }
+    private CommandResult PoleHandler(CommandContext context, WireArgs args) =>
+        ChainPointHandler(
+            args: in args,
+            context: context,
+            isGoal: false,
+            verb: "editor.sculpt.pole"
+        );
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -110,258 +602,6 @@ internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, W
             description: "Sets a limb chain's POLE (the bend-direction hint) and re-solves: editor.sculpt.pole <idOrName> <x> <y> <z> [seat].",
             handler: PoleHandler
         );
-    }
-
-    // The frame fold: a leading next|prev literal, or (with no token) a bound constant Axis1D value from the
-    // frames page's East/West step chord — see EditorCommandModule.TryDirection. Anything else falls through to
-    // the original <n> form.
-    private CommandResult FrameHandler(CommandContext context, WireArgs args) {
-        if (EditorCommandModule.TryDirection(context: context, args: args, at: 0, positive: "next", negative: "prev", direction: out var direction)) {
-            var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: ((args.Count >= 1) ? 1 : 0), verb: FrameCommand, session: m_session, workbench: m_workbench);
-
-            if (error is { } benchError) {
-                return benchError;
-            }
-
-            _ = model!.StepFrame(direction: direction);
-
-            return EditorSculptCommandModule.Echo(slot: slot, verb: FrameCommand, detail: $"frame {model.CurrentFrame}/{model.FrameCount}{((model.CurrentFrame == 0) ? " (rest)" : string.Empty)}");
-        }
-
-        if (args.Count is (< 1 or > 2)) {
-            return CommandResult.Error(output: "[editor.sculpt.frame: expected <n>, next, or prev, plus an optional seat 1..4]");
-        }
-
-        if (!args.TryInt(index: 0, value: out var index)) {
-            return CommandResult.Error(output: "[editor.sculpt.frame: could not parse <n> as an integer]");
-        }
-
-        var (valueSlot, valueModel, valueError) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: FrameCommand, session: m_session, workbench: m_workbench);
-
-        if (valueError is { } resolveError) {
-            return resolveError;
-        }
-
-        valueModel!.SetFrame(index: index);
-
-        return EditorSculptCommandModule.Echo(slot: valueSlot, verb: FrameCommand, detail: $"frame {valueModel.CurrentFrame}/{valueModel.FrameCount}{((valueModel.CurrentFrame == 0) ? " (rest)" : string.Empty)}");
-    }
-    private CommandResult FrameRecordHandler(CommandContext context, WireArgs args) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: FrameRecordCommand, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        var recorded = model!.RecordFrame();
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: FrameRecordCommand, detail: $"frame {recorded}/{model.FrameCount} recorded");
-    }
-    private CommandResult FrameRemoveHandler(CommandContext context, WireArgs args) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: FrameRemoveCommand, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        if (!model!.DeleteCurrentFrame()) {
-            return CommandResult.Error(output: $"[{FrameRemoveCommand}: the rest pose (frame 0) is protected — step onto a saved frame first]");
-        }
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: FrameRemoveCommand, detail: $"frame removed — {model.FrameCount} left, cursor {model.CurrentFrame}");
-    }
-    private CommandResult FrameTicksHandler(CommandContext context, WireArgs args) {
-        if (args.Count is (< 1 or > 2)) {
-            return CommandResult.Error(output: "[editor.sculpt.frame.ticks: expected <n 1..60> plus an optional seat 1..4]");
-        }
-
-        if (!args.TryInt(index: 0, value: out var ticks)) {
-            return CommandResult.Error(output: "[editor.sculpt.frame.ticks: could not parse <n> as an integer]");
-        }
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 1, verb: "editor.sculpt.frame.ticks", session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: "editor.sculpt.frame.ticks", detail: $"{model!.SetFrameTicks(ticks: ticks)} ticks/frame");
-    }
-    private CommandResult PlayHandler(CommandContext context, WireArgs args) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: PlayCommand, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        if ((model!.FrameCount == 0)) {
-            return CommandResult.Error(output: $"[{PlayCommand}: no saved frames — editor.sculpt.frame.record first]");
-        }
-
-        var playing = model.TogglePlayback();
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: PlayCommand, detail: (playing ? $"playing {model.FrameCount} frames (hold-style)" : "stopped — rest pose restored"));
-    }
-    // The chain fold: NO ARGUMENT defines a limb from the SELECTION (the rig page's South chord) — bindable,
-    // and takes an optional trailing [seat] since there is no variable
-    // member list to make one ambiguous. Any argument takes the original named-list form, which deliberately takes
-    // no seat token (the variable member list leaves one ambiguous) and so always acts on the invoking seat's bench.
-    private CommandResult ChainHandler(CommandContext context, WireArgs args) {
-        var isSeatOnly = ((args.Count == 0) || ((args.Count == 1) && EditorSculptCommandModule.SeatToken(token: args[0])));
-
-        if (isSeatOnly) {
-            var (noArgSlot, noArgModel, noArgError) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: ChainCommand, session: m_session, workbench: m_workbench);
-
-            if (noArgError is { } resolveError) {
-                return resolveError;
-            }
-
-            if (noArgModel!.DefineChainFromSelection() is not { } fromSelection) {
-                return CommandResult.Error(output: $"[{ChainCommand}: needs a selected shape with 2 more after it in document order (or use editor.sculpt.chain <name> <shapes...>)]");
-            }
-
-            return EditorSculptCommandModule.Echo(slot: noArgSlot, verb: ChainCommand, detail: $"chain {fromSelection.Id} ({fromSelection.Kind}, {fromSelection.ShapeIds.Count} shapes)");
-        }
-
-        // Shapes: <name> <shape> <shape> [more...] [limb|spine] — acts on the invoking seat's bench (the variable
-        // member list makes a trailing seat token ambiguous, so this verb deliberately takes none).
-        if (args.Count < 3) {
-            return CommandResult.Error(output: "[editor.sculpt.chain: expected <name> <shapeIdOrName> <shapeIdOrName> [more...] [limb|spine]]");
-        }
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: WireArgs.Empty, at: 0, verb: ChainCommand, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        var lastIndex = (args.Count - 1);
-        var hasKind = (args.Is(index: lastIndex, value: "limb") || args.Is(index: lastIndex, value: "spine"));
-        var memberEnd = (hasKind ? lastIndex : args.Count);
-
-        if ((memberEnd - 1) < 2) {
-            return CommandResult.Error(output: "[editor.sculpt.chain: a chain needs at least 2 member shapes]");
-        }
-
-        var members = new string[(memberEnd - 1)];
-
-        for (var index = 1; (index < memberEnd); index++) {
-            members[(index - 1)] = args[index].ToString();
-        }
-
-        var chain = model!.DefineChain(name: args[0].ToString(), shapeIdsOrNames: members, kind: (hasKind ? (args.Is(index: lastIndex, value: "limb") ? "limb" : "spine") : null));
-
-        if (chain is null) {
-            return CommandResult.Error(output: "[editor.sculpt.chain: could not define — check the shape ids/names (all must resolve) and the 16-chain ceiling]");
-        }
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: ChainCommand, detail: $"chain {chain.Id} '{chain.Name}' ({chain.Kind}, {chain.ShapeIds.Count} shapes) — cycle the target onto its goal to pose it");
-    }
-    private CommandResult ChainNextHandler(CommandContext context, WireArgs args) {
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 0, verb: ChainNextCommand, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        var chain = model!.CycleChainCursor(direction: 1);
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: ChainNextCommand, detail: ((chain is null) ? "cursor none" : $"cursor chain {chain.Id}{((chain.Name is { Length: > 0 } name) ? $" '{name}'" : string.Empty)} ({chain.Kind})"));
-    }
-    private CommandResult ChainKindHandler(CommandContext context, WireArgs args) {
-        // Shapes: [] = toggle cursored; [limb|spine] [idOrName] [seat].
-        var hasKind = ((args.Count >= 1) && (args.Is(index: 0, value: "limb") || args.Is(index: 0, value: "spine")));
-        var hasTarget = (hasKind && (args.Count >= 2) && !EditorSculptCommandModule.SeatToken(token: args[1]));
-        var seatAt = (hasKind ? (hasTarget ? 2 : 1) : 0);
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: seatAt, verb: ChainKindCommand, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        string? applied;
-
-        if (!hasKind) {
-            applied = model!.ToggleCurrentChainKind();
-
-            if (applied is null) {
-                return CommandResult.Error(output: $"[{ChainKindCommand}: no chain cursored — {ChainNextCommand} first, or name one: editor.sculpt.chain.kind <limb|spine> <idOrName>]");
-            }
-        } else {
-            var target = (hasTarget ? args[1].ToString() : (model!.CurrentChain?.Id.ToString(provider: CultureInfo.InvariantCulture)));
-
-            if (target is null) {
-                return CommandResult.Error(output: $"[{ChainKindCommand}: no chain cursored — {ChainNextCommand} first, or name one]");
-            }
-
-            applied = model!.SetKind(idOrName: target, kind: (args.Is(index: 0, value: "limb") ? "limb" : "spine"));
-
-            if (applied is null) {
-                return CommandResult.Error(output: $"[{ChainKindCommand}: no chain '{target}']");
-            }
-        }
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: ChainKindCommand, detail: $"kind {applied}");
-    }
-    private CommandResult ChainRemoveHandler(CommandContext context, WireArgs args) {
-        var hasTarget = ((args.Count >= 1) && !EditorSculptCommandModule.SeatToken(token: args[0]));
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: (hasTarget ? 1 : 0), verb: ChainRemoveCommand, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        var target = (hasTarget ? args[0].ToString() : (model!.CurrentChain?.Id.ToString(provider: CultureInfo.InvariantCulture)));
-
-        if (target is null) {
-            return CommandResult.Error(output: $"[{ChainRemoveCommand}: no chain cursored — {ChainNextCommand} first, or name one]");
-        }
-
-        if (!model!.DeleteChain(idOrName: target)) {
-            return CommandResult.Error(output: $"[{ChainRemoveCommand}: no chain '{target}']");
-        }
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: ChainRemoveCommand, detail: $"chain removed — {model.Chains.Count} left");
-    }
-    private CommandResult GoalHandler(CommandContext context, WireArgs args) =>
-        ChainPointHandler(context: context, args: in args, verb: "editor.sculpt.goal", isGoal: true);
-    private CommandResult PoleHandler(CommandContext context, WireArgs args) =>
-        ChainPointHandler(context: context, args: in args, verb: "editor.sculpt.pole", isGoal: false);
-
-    // The shared <idOrName> <x y z> [seat] handler for goal/pole moves.
-    private CommandResult ChainPointHandler(CommandContext context, in WireArgs args, string verb, bool isGoal) {
-        if (args.Count is (< 4 or > 5)) {
-            return CommandResult.Error(output: $"[{verb}: expected <idOrName> <x> <y> <z> plus an optional seat 1..4]");
-        }
-
-        if (!EditorCommandModule.TryFloat(args: in args, at: 1, value: out var x) ||
-            !EditorCommandModule.TryFloat(args: in args, at: 2, value: out var y) ||
-            !EditorCommandModule.TryFloat(args: in args, at: 3, value: out var z)) {
-            return CommandResult.Error(output: $"[{verb}: could not parse <x> <y> <z> as finite numbers]");
-        }
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(context: context, args: in args, at: 4, verb: verb, session: m_session, workbench: m_workbench);
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        var idOrName = args[0].ToString();
-        var point = new Vector3(x: x, y: y, z: z);
-        var applied = (isGoal
-            ? model!.SetGoal(idOrName: idOrName, goal: point)
-            : model!.SetPole(idOrName: idOrName, pole: point));
-
-        if (!applied) {
-            return CommandResult.Error(output: $"[{verb}: no chain '{idOrName}']");
-        }
-
-        return EditorSculptCommandModule.Echo(slot: slot, verb: verb, detail: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"chain '{idOrName}' {(isGoal ? "goal" : "pole")}=({x:0.00}, {y:0.00}, {z:0.00}) — pose re-solved"
-        ));
     }
 
 }

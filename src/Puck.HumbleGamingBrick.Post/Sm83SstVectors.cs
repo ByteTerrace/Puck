@@ -12,7 +12,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <param name="IsRead">Whether the read pin was asserted.</param>
 /// <param name="IsWrite">Whether the write pin was asserted.</param>
 internal readonly record struct Sm83SstCycle(ushort? Address, byte? Data, bool IsRead, bool IsWrite);
-
 /// <summary>One vector's register file plus the flat-RAM bytes it touches.</summary>
 /// <param name="A">The accumulator.</param>
 /// <param name="B">The B register.</param>
@@ -33,18 +32,15 @@ internal readonly record struct Sm83SstState(
     ushort Pc, ushort Sp, int Ime, bool Ei,
     IReadOnlyList<(ushort Address, byte Value)> Ram
 );
-
 /// <summary>One SingleStepTests/sm83 per-instruction test vector.</summary>
 /// <param name="Name">The corpus's human-readable name for the case.</param>
 /// <param name="Initial">The register/RAM state to seed before stepping.</param>
 /// <param name="Final">The expected register/RAM state after exactly one <c>StepInstruction</c>.</param>
 /// <param name="Cycles">The expected per-M-cycle bus-pin trace.</param>
 internal readonly record struct Sm83SstVector(string Name, Sm83SstState Initial, Sm83SstState Final, IReadOnlyList<Sm83SstCycle> Cycles);
-
 /// <summary>Deserializes one opcode family's JSON file (1000 vectors) from the SingleStepTests/sm83 corpus layout
 /// (<c>v1/&lt;opcode&gt;.json</c>; CB-prefixed opcodes are named <c>"cb xx.json"</c>).</summary>
 internal static partial class Sm83SstVectorFile {
-
     /// <summary>Loads and maps every vector in one opcode family's file.</summary>
     /// <param name="path">The JSON file's full path.</param>
     /// <returns>The parsed vectors, in file order.</returns>
@@ -82,20 +78,20 @@ internal static partial class Sm83SstVectorFile {
         for (var index = 0; (index < ram.Length); ++index) {
             var pair = dto.Ram![index];
 
-            ram[index] = ((ushort)pair[0], (byte)pair[1]);
+            ram[index] = (((ushort)pair[0]), ((byte)pair[1]));
         }
 
         return new Sm83SstState(
-            A: (byte)dto.A,
-            B: (byte)dto.B,
-            C: (byte)dto.C,
-            D: (byte)dto.D,
-            E: (byte)dto.E,
-            F: (byte)dto.F,
-            H: (byte)dto.H,
-            L: (byte)dto.L,
-            Pc: (ushort)dto.Pc,
-            Sp: (ushort)dto.Sp,
+            A: ((byte)dto.A),
+            B: ((byte)dto.B),
+            C: ((byte)dto.C),
+            D: ((byte)dto.D),
+            E: ((byte)dto.E),
+            F: ((byte)dto.F),
+            H: ((byte)dto.H),
+            L: ((byte)dto.L),
+            Pc: ((ushort)dto.Pc),
+            Sp: ((ushort)dto.Sp),
             Ime: dto.Ime,
             Ei: ei,
             Ram: ram

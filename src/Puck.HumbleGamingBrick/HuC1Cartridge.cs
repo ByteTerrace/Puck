@@ -18,6 +18,7 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
     private const int RomBankSize = 0x4000;
 
     private readonly int m_ramBankWrapMask;
+
     // The machine's shared IR transceiver, injected by the component factory (null when built bare in a test — then the
     // window keeps its lone-hardware behaviour: dark reads, dropped writes). Host wiring, never serialized.
     private IInfrared? m_infrared;

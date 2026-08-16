@@ -2,10 +2,11 @@
 
 A `WorldAddonRow` in the world document's `addons` section mounts a
 deterministic WebAssembly guest. World-side runtime:
-`src/Puck.World.Server/WorldAddonRuntime.cs` + `WorldAddonWire.cs`. The ABI
-itself (cell layouts, exports, mount steps, determinism posture) is owned by
-`src/Puck.Scripting/README.md` — read it before touching the guest boundary;
-this file carries the World-relevant surface.
+`src/Puck.World.Addons/WorldAddonRuntime.cs` + `WorldAddonWire.cs`, behind the
+`IWorldAddonHost` seam `src/Puck.World.Server/IWorldAddonHost.cs` declares.
+The ABI itself (cell layouts, exports, mount steps, determinism posture) is
+owned by `src/Puck.Scripting/README.md` — read it before touching the guest
+boundary; this file carries the World-relevant surface.
 
 ## Contents
 
@@ -98,7 +99,7 @@ non-empty prefix) — a guest holding a Mutate handle over a document section
 acts through it with a JSON payload (kind ordinal + guest-memory pointer +
 length in the request cell's `A`/`B`/`C` lanes) rather than a query.
 **A guest CAN edit the document at the ABI/authority level** — this is not
-withheld/inert. `Server.WorldAddonMutationDecoder` wires 10 of
+withheld/inert. `Addons.WorldAddonMutationDecoder` wires 10 of
 the 64 declared kinds today: the 5 HUD kinds
 (`UpsertHudPanel`/`RemoveHudPanel`/`UpsertHudElement`/`RemoveHudElement`/
 `SetHudDefaults`, ordinals 41-45), the 2 placement kinds

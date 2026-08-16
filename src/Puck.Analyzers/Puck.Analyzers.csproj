@@ -1,54 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <PuckKind>Analyzer</PuckKind>
-    </PropertyGroup>
-
-    <PropertyGroup>
-        <!-- Roslyn analyzers load into the compiler's own process, which only ever hosts netstandard2.0 (the
-             lowest common denominator across every SDK/IDE that can host an analyzer); this is a hard Roslyn
-             requirement, not a repo choice, so it overrides the net10.0 default from Directory.Build.props. -->
-        <TargetFramework>netstandard2.0</TargetFramework>
-        <!-- netstandard2.0 defaults to the C# 7.3 language version; this project uses newer syntax (target-typed
-             collection expressions, file-scoped namespaces, switch expressions, records) that the repo's
-             .editorconfig and style already assume everywhere else. -->
-        <LangVersion>latest</LangVersion>
-        <!-- The SDK does not support AOT or trim analysis for this project's required netstandard2.0 TFM. -->
-        <IsAotCompatible>false</IsAotCompatible>
-        <!-- Not a shippable package; it is consumed in-repo only, via ProjectReference/OutputItemType="Analyzer". -->
-        <IsPackable>false</IsPackable>
-        <!-- Bakes in the extra Roslyn SDK analyzer-authoring rules (RS-series: no direct Workspaces/Features
-             dependency, correct DiagnosticAnalyzer/CodeFixProvider shape, localizable-resource guidance, etc.)
-             so this project is held to the same bar the analyzer itself is enforcing on everything else. -->
+        <AssemblyName>Puck.Analyzers</AssemblyName>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-        <RootNamespace>Puck.Analyzers</RootNamespace>
-        <!-- The compiler-platform packages ship translations of their diagnostic/exception strings; without this
-             the output directory gains a localization folder per language for messages this project never surfaces. -->
-        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-        <!-- RS1038: EnforceExtendedAnalyzerRules flags VerifiedCodeAnalyzer (a DiagnosticAnalyzer, which command-line
-             `csc`/VBCSCompiler must be able to load standalone) for living in the same assembly as a reference to
-             Microsoft.CodeAnalysis.Workspaces — brought in only for VerifiedCodeCodeFixProvider, which command-line
-             compilation never loads. Both live in one project on purpose (the analyzer and its one code fix are a
-             single small unit); the analyzer TYPE itself references nothing from Workspaces, so command-line
-             loading is unaffected. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <IsPackable>false</IsPackable>
+        <LangVersion>latest</LangVersion>
         <NoWarn>$(NoWarn);RS1038</NoWarn>
+        <PuckKind>Analyzer</PuckKind>
+        <RootNamespace>Puck.Analyzers</RootNamespace>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+        <TargetFramework>netstandard2.0</TargetFramework>
     </PropertyGroup>
-
     <ItemGroup>
-        <!-- The C# syntax/semantic model the analyzer walks. PrivateAssets="all" is the standard shape for an
-             analyzer-authoring project: the compiler/IDE host that loads this analyzer already carries its own
-             copy of these assemblies, so they are not shipped as extra Analyzer items alongside Puck.Analyzers.dll. -->
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" PrivateAssets="all" />
-        <!-- The code-fix API surface (CodeFixProvider, CodeAction, Solution edits) used by
-             VerifiedCodeCodeFixProvider to rewrite VerifiedCode.json in place. -->
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.*, )" PrivateAssets="all" />
     </ItemGroup>
-
-    <!-- EnforceExtendedAnalyzerRules's RS2008 requires analyzer release tracking, and this project carries that
-         ledger as AnalyzerReleases.Shipped.md / .Unshipped.md (this analyzer has shipped nothing yet, so the Shipped
-         file is header-only). Do NOT add <AdditionalFiles Include="AnalyzerReleases.*.md" /> here: the
-         Microsoft.CodeAnalysis.Analyzers package already includes both by default, so an explicit include makes each
-         file appear TWICE in AdditionalFiles. csc tolerates the duplicate and the build stays green, but Roslyn's
-         MSBuildWorkspace refuses the project outright — which silently degrades every symbol-analysis run in the
-         repository to partial mode, with this project simply missing from the reference graph. A duplicate that
-         only breaks the tooling nobody builds with is exactly the kind that survives. -->
 </Project>

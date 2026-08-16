@@ -15,7 +15,6 @@ public sealed partial class AgbInterruptController : ISnapshotable {
         writer.WriteBoolean(value: m_ime1);
         writer.WriteBoolean(value: m_synchronizer);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

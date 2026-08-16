@@ -14,7 +14,7 @@ namespace Puck.DirectX;
 public sealed class DirectXGpuVertexBufferFactory(IDirectXVertexBufferFactory vertexBufferFactory) : IGpuVertexBufferFactory {
     /// <inheritdoc/>
     public IGpuVertexBuffer Create(IGpuDeviceContext deviceContext, byte[] vertexData, uint strideBytes) {
-        var dxContext = (IDirectXDeviceContext)deviceContext;
+        var dxContext = ((IDirectXDeviceContext)deviceContext);
         var inner = vertexBufferFactory.Create(
             deviceContext: dxContext,
             strideBytes: strideBytes,

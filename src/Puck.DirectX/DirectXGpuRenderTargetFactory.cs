@@ -14,7 +14,7 @@ public sealed class DirectXGpuRenderTargetFactory : IGpuRenderTargetFactory {
     /// <inheritdoc/>
     public IGpuRenderTarget Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
         new DirectXGpuRenderTarget(
-            deviceContext: (IDirectXDeviceContext)deviceContext,
+            deviceContext: ((IDirectXDeviceContext)deviceContext),
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
             height: height,
             width: width

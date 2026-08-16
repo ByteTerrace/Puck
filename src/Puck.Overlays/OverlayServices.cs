@@ -4,8 +4,9 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The backend-neutral GPU service bundle an overlay render decorator draws through. World registers exactly one
-/// backend (<c>Puck.World.WorldHost.AddWorldGpuHost</c>), so <see cref="Build"/> resolves
-/// <see cref="IGpuDeviceContext"/> directly, with no cast up from a backend-specific interface.
+/// backend (the launch-selected presenter registration in <c>Puck.Launcher.Windows</c>/<c>Puck.Launcher.Linux</c>),
+/// so <see cref="Build"/> resolves <see cref="IGpuDeviceContext"/> directly, with no cast up from a
+/// backend-specific interface.
 /// </summary>
 public sealed record OverlayServices {
     /// <summary>The shader bytecode file extension for the resolved backend (".spv" or ".dxil"), carried alongside
@@ -47,8 +48,8 @@ public sealed record OverlayServices {
     /// <summary>Resolves the neutral <see cref="OverlayServices"/> bundle for a same-device overlay producer on
     /// World's single registered backend.</summary>
     /// <param name="serviceProvider">The application service provider (resolves the neutral GPU compute factories
-    /// and the one registered <see cref="IGpuDeviceContext"/> — see <c>Puck.World.WorldHost.AddWorldGpuHost</c>,
-    /// which registers only the launch-selected backend so this resolution can never disagree with it).</param>
+    /// and the one registered <see cref="IGpuDeviceContext"/> — the launch-selected presenter registration
+    /// registers only that one backend so this resolution can never disagree with it).</param>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12 — selects the bytecode
     /// extension and the storage-buffer binding/slot convention.</param>
     /// <returns>The resolved services bundle.</returns>

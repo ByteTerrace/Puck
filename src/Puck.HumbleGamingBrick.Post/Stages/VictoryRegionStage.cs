@@ -30,7 +30,6 @@ internal sealed class VictoryRegionStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "victory-region";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -68,7 +67,7 @@ internal sealed class VictoryRegionStage : IPostStage {
 
         for (var index = 0; (index < RegionByteCount); index++) {
             cartridge.WriteRam(
-                address: (ushort)(0xBFF0 + index),
+                address: ((ushort)(0xBFF0 + index)),
                 value: Region[index]
             );
         }
@@ -77,8 +76,8 @@ internal sealed class VictoryRegionStage : IPostStage {
         var read = new byte[RegionByteCount];
 
         cartridge.ReadExternalRam(
-            offset: topOffset,
-            destination: read
+            destination: read,
+            offset: topOffset
         );
 
         if (!read.AsSpan().SequenceEqual(other: Region)) {
@@ -94,7 +93,7 @@ internal sealed class VictoryRegionStage : IPostStage {
 
         // The CPU-window read matches while bank 0x0F is paged.
         for (var index = 0; (index < RegionByteCount); index++) {
-            var observed = cartridge.ReadRam(address: (ushort)(0xBFF0 + index));
+            var observed = cartridge.ReadRam(address: ((ushort)(0xBFF0 + index)));
 
             if (observed != Region[index]) {
                 return PostStageOutcome.Fail(detail: $"the CPU-window read at 0x{(0xBFF0 + index):X4} (bank 0x0F) returned 0x{observed:X2}, expected 0x{Region[index]:X2}");
@@ -112,8 +111,8 @@ internal sealed class VictoryRegionStage : IPostStage {
         var afterRepage = new byte[RegionByteCount];
 
         cartridge.ReadExternalRam(
-            offset: topOffset,
-            destination: afterRepage
+            destination: afterRepage,
+            offset: topOffset
         );
 
         if (!afterRepage.AsSpan().SequenceEqual(other: Region)) {
@@ -137,8 +136,8 @@ internal sealed class VictoryRegionStage : IPostStage {
         var afterReboot = new byte[RegionByteCount];
 
         rebootCartridge.ReadExternalRam(
-            offset: topOffset,
-            destination: afterReboot
+            destination: afterReboot,
+            offset: topOffset
         );
 
         if (!afterReboot.AsSpan().SequenceEqual(other: Region)) {

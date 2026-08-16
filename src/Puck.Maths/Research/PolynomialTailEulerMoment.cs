@@ -29,7 +29,6 @@ public readonly record struct PolynomialTailEulerMomentExclusionCertificate(
     QuadraticSurd FirstEndpoint,
     QuadraticSurd SecondEndpoint
 );
-
 /// <summary>
 /// An exact failed Hausdorff-moment inequality for a putative Euler representation of an integer tail equality.
 /// </summary>
@@ -47,7 +46,6 @@ public readonly record struct PolynomialTailEulerHausdorffExclusionCertificate(
     int DifferenceOrder,
     QuadraticSurd Witness
 );
-
 /// <summary>
 /// An exact failed Hausdorff inequality after moving a non-native Gauss chart into the positive Euler region by
 /// contiguous parameter shifts.
@@ -73,7 +71,6 @@ public readonly record struct PolynomialTailEulerRegularizedHausdorffExclusionCe
     QuadraticSurd Anchor,
     QuadraticSurd Witness
 );
-
 /// <summary>
 /// The canonical nonresonant contiguous shifts that put a Gauss quotient into a positive Euler chart.
 /// </summary>
@@ -125,17 +122,20 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             certificate: out certificate,
             integerBoundary: integerBoundary,
             signedRoot: root,
-            tailIndex: tailIndex)) {
+            tailIndex: tailIndex
+        )) {
             return true;
         }
-        return (!root.IsZero && TryCreateEulerMomentIntegerExclusionCertificate(
+        return (
+            !root.IsZero &&
+            TryCreateEulerMomentIntegerExclusionCertificate(
             certificate: out certificate,
             integerBoundary: integerBoundary,
             signedRoot: -root,
             tailIndex: tailIndex
-        ));
+        )
+        );
     }
-
     /// <summary>Rechecks every algebraic identity and strict order condition in an Euler-moment exclusion.</summary>
     public bool VerifyEulerMomentIntegerExclusionCertificate(
         PolynomialTailEulerMomentExclusionCertificate certificate) {
@@ -144,13 +144,16 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             certificate: out var expected,
             integerBoundary: certificate.IntegerBoundary,
             signedRoot: certificate.SignedNumeratorDiscriminantRoot,
-            tailIndex: certificate.TailIndex)) {
+            tailIndex: certificate.TailIndex
+        )) {
             return false;
         }
 
-        return ((certificate == expected) && EulerMomentTargetIsExcluded(certificate: certificate));
+        return (
+            (certificate == expected) &&
+            EulerMomentTargetIsExcluded(certificate: certificate)
+        );
     }
-
     /// <summary>Attempts to exclude an integer equality by generating its forced Euler moments and finding a failed
     /// Hausdorff inequality <c>E[t^k*(1-t)^j]&gt;0</c>.</summary>
     /// <remarks>Increasing <paramref name="maximumTotalOrder"/> gives a nested exact exclusion search; no numerical
@@ -161,7 +164,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         int maximumTotalOrder,
         out PolynomialTailEulerHausdorffExclusionCertificate certificate) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
-        if ((maximumTotalOrder < 1) || (maximumTotalOrder > MaximumEulerHausdorffMomentOrder)) {
+        if (
+            (maximumTotalOrder < 1) ||
+            (maximumTotalOrder > MaximumEulerHausdorffMomentOrder)
+        ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(maximumTotalOrder));
         }
         certificate = default;
@@ -181,34 +187,42 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             integerBoundary: integerBoundary,
             maximumTotalOrder: maximumTotalOrder,
             signedRoot: root,
-            tailIndex: tailIndex)) {
+            tailIndex: tailIndex
+        )) {
             return true;
         }
-        return (!root.IsZero && TryCreateEulerHausdorffIntegerExclusionCertificate(
+        return (
+            !root.IsZero &&
+            TryCreateEulerHausdorffIntegerExclusionCertificate(
             certificate: out certificate,
             integerBoundary: integerBoundary,
             maximumTotalOrder: maximumTotalOrder,
             signedRoot: -root,
             tailIndex: tailIndex
-        ));
+        )
+        );
     }
-
     /// <summary>Recomputes the forced moment recurrence and the recorded failed Hausdorff inequality.</summary>
     public bool VerifyEulerHausdorffIntegerExclusionCertificate(
         PolynomialTailEulerHausdorffExclusionCertificate certificate) {
-        if ((certificate.TailIndex <= BigInteger.Zero) || (certificate.MomentIndex < 0) ||
+        if (
+            (certificate.TailIndex <= BigInteger.Zero) ||
+            (certificate.MomentIndex < 0) ||
             (certificate.DifferenceOrder < 0) ||
             ((certificate.MomentIndex + certificate.DifferenceOrder) < 1) ||
             ((certificate.MomentIndex + certificate.DifferenceOrder) > MaximumEulerHausdorffMomentOrder) ||
             !TryCreateEulerMomentData(
-                certificate: out var data,
-                integerBoundary: certificate.IntegerBoundary,
-                signedRoot: certificate.SignedNumeratorDiscriminantRoot,
-                tailIndex: certificate.TailIndex) ||
+            certificate: out var data,
+            integerBoundary: certificate.IntegerBoundary,
+            signedRoot: certificate.SignedNumeratorDiscriminantRoot,
+            tailIndex: certificate.TailIndex
+        ) ||
             !TryForcedEulerMoments(
-                data: data,
-                maximumOrder: (certificate.MomentIndex + certificate.DifferenceOrder),
-                moments: out var moments)) {
+            data: data,
+            maximumOrder: (certificate.MomentIndex + certificate.DifferenceOrder),
+            moments: out var moments
+        )
+        ) {
             return false;
         }
 
@@ -218,9 +232,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             moments: moments
         );
 
-        return ((certificate.Witness == witness) && (witness.Sign <= 0));
+        return (
+            (certificate.Witness == witness) &&
+            (witness.Sign <= 0)
+        );
     }
-
     /// <summary>Attempts the Hausdorff exclusion after the least separate contiguous shifts that make both Euler
     /// endpoint exponents positive.</summary>
     /// <remarks>The requested order is measured beyond that anchor. The dense exact computation is refused when the
@@ -231,8 +247,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         int maximumAdditionalOrder,
         out PolynomialTailEulerRegularizedHausdorffExclusionCertificate certificate) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
-        if ((maximumAdditionalOrder < 1) ||
-            (maximumAdditionalOrder > MaximumEulerHausdorffMomentOrder)) {
+        if (
+            (maximumAdditionalOrder < 1) ||
+            (maximumAdditionalOrder > MaximumEulerHausdorffMomentOrder)
+        ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(maximumAdditionalOrder));
         }
         certificate = default;
@@ -252,23 +270,28 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             integerBoundary: integerBoundary,
             maximumAdditionalOrder: maximumAdditionalOrder,
             signedRoot: root,
-            tailIndex: tailIndex)) {
+            tailIndex: tailIndex
+        )) {
             return true;
         }
-        return (!root.IsZero && TryCreateEulerRegularizedHausdorffIntegerExclusionCertificate(
+        return (
+            !root.IsZero &&
+            TryCreateEulerRegularizedHausdorffIntegerExclusionCertificate(
             certificate: out certificate,
             integerBoundary: integerBoundary,
             maximumAdditionalOrder: maximumAdditionalOrder,
             signedRoot: -root,
             tailIndex: tailIndex
-        ));
+        )
+        );
     }
-
     /// <summary>Reconstructs the canonical positive chart and its failed sign-normalized Hausdorff inequality.</summary>
     public bool VerifyEulerRegularizedHausdorffIntegerExclusionCertificate(
         PolynomialTailEulerRegularizedHausdorffExclusionCertificate certificate) {
-        if ((certificate.TailIndex <= BigInteger.Zero) ||
-            (certificate.AnchorMomentIndex < 0) || (certificate.AnchorDifferenceOrder < 0) ||
+        if (
+            (certificate.TailIndex <= BigInteger.Zero) ||
+            (certificate.AnchorMomentIndex < 0) ||
+            (certificate.AnchorDifferenceOrder < 0) ||
             (certificate.WitnessMomentIndex < certificate.AnchorMomentIndex) ||
             (certificate.WitnessDifferenceOrder < certificate.AnchorDifferenceOrder) ||
             (certificate.WitnessMomentIndex > MaximumEulerHausdorffMomentOrder) ||
@@ -276,20 +299,23 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             ((certificate.WitnessMomentIndex + certificate.WitnessDifferenceOrder) >
                 MaximumEulerHausdorffMomentOrder) ||
             !TryCreateEulerRegularizedMomentData(
-                data: out var data,
-                gaussBoundary: out var gaussBoundary,
-                gaussTailIndex: out var gaussTailIndex,
-                integerBoundary: certificate.IntegerBoundary,
-                signedRoot: certificate.SignedNumeratorDiscriminantRoot,
-                tailIndex: certificate.TailIndex) ||
+            data: out var data,
+            gaussBoundary: out var gaussBoundary,
+            gaussTailIndex: out var gaussTailIndex,
+            integerBoundary: certificate.IntegerBoundary,
+            signedRoot: certificate.SignedNumeratorDiscriminantRoot,
+            tailIndex: certificate.TailIndex
+        ) ||
             (certificate.GaussTailIndex != gaussTailIndex) ||
             (certificate.GaussBoundary != gaussBoundary) ||
             !TryEulerRegularizationAnchor(
-                data: data,
-                differenceOrder: out var expectedDifferenceOrder,
-                momentIndex: out var expectedMomentIndex) ||
+            data: data,
+            differenceOrder: out var expectedDifferenceOrder,
+            momentIndex: out var expectedMomentIndex
+        ) ||
             (certificate.AnchorMomentIndex != expectedMomentIndex) ||
-            (certificate.AnchorDifferenceOrder != expectedDifferenceOrder)) {
+            (certificate.AnchorDifferenceOrder != expectedDifferenceOrder)
+        ) {
             return false;
         }
 
@@ -297,7 +323,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             certificate.WitnessMomentIndex + certificate.WitnessDifferenceOrder
         );
 
-        if (!TryForcedEulerMoments(data: data, maximumOrder: maximumMomentOrder, moments: out var moments)) {
+        if (!TryForcedEulerMoments(
+            data: data,
+            maximumOrder: maximumMomentOrder,
+            moments: out var moments
+        )) {
             return false;
         }
 
@@ -321,10 +351,12 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
                 (certificate.AnchorMomentIndex + certificate.AnchorDifferenceOrder)) &&
             ((anchor * witness).Sign <= 0));
 
-        return ((certificate.Anchor == anchor) && (certificate.Witness == witness) &&
-            (isZeroAnchorCertificate || isFailedStrictSign));
+        return (
+            (certificate.Anchor == anchor) &&
+            (certificate.Witness == witness) &&
+            (isZeroAnchorCertificate || isFailedStrictSign)
+        );
     }
-
     /// <summary>Constructs the least separate nonnegative contiguous shifts <c>K,J</c> for which
     /// <c>b+K&gt;0</c> and <c>c-b+J&gt;0</c>.</summary>
     /// <remarks>Success also certifies that the Pochhammer prefactor connecting this positive Euler chart to the
@@ -352,33 +384,44 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             integerBoundary: integerBoundary,
             regularization: out regularization,
             signedRoot: root,
-            tailIndex: tailIndex)) {
+            tailIndex: tailIndex
+        )) {
             return true;
         }
-        return (!root.IsZero && TryCreateEulerMomentRegularization(
+        return (
+            !root.IsZero &&
+            TryCreateEulerMomentRegularization(
             integerBoundary: integerBoundary,
             regularization: out regularization,
             signedRoot: -root,
             tailIndex: tailIndex
-        ));
+        )
+        );
     }
-
     /// <summary>Rechecks the Gauss parameters, canonical positivity shifts, and nonresonance conditions.</summary>
     public bool VerifyEulerMomentRegularization(PolynomialTailEulerRegularization regularization) {
-        if ((regularization.TailIndex <= BigInteger.Zero) ||
+        if (
+            (regularization.TailIndex <= BigInteger.Zero) ||
             !TryCreateEulerRegularizedMomentData(
-                data: out var data,
-                gaussBoundary: out var gaussBoundary,
-                gaussTailIndex: out var gaussTailIndex,
-                integerBoundary: regularization.IntegerBoundary,
-                signedRoot: regularization.SignedNumeratorDiscriminantRoot,
-                tailIndex: regularization.TailIndex) ||
-            !TryEulerRegularizationShifts(data: data, differenceShift: out var differenceShift, momentShift: out var momentShift)) {
+            data: out var data,
+            gaussBoundary: out var gaussBoundary,
+            gaussTailIndex: out var gaussTailIndex,
+            integerBoundary: regularization.IntegerBoundary,
+            signedRoot: regularization.SignedNumeratorDiscriminantRoot,
+            tailIndex: regularization.TailIndex
+        ) ||
+            !TryEulerRegularizationShifts(
+            data: data,
+            differenceShift: out var differenceShift,
+            momentShift: out var momentShift
+        )
+        ) {
             return false;
         }
 
         return
-            ((regularization.HypergeometricA == data.HypergeometricA) &&
+            (
+            (regularization.HypergeometricA == data.HypergeometricA) &&
             (regularization.GaussTailIndex == gaussTailIndex) &&
             (regularization.GaussBoundary == gaussBoundary) &&
             (regularization.HypergeometricB == data.HypergeometricB) &&
@@ -386,7 +429,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (regularization.HypergeometricArgument == data.HypergeometricArgument) &&
             (regularization.HypergeometricRatioTarget == data.HypergeometricRatioTarget) &&
             (regularization.MomentShift == momentShift) &&
-            (regularization.DifferenceShift == differenceShift));
+            (regularization.DifferenceShift == differenceShift)
+        );
     }
 
     private bool TryCreateEulerMomentIntegerExclusionCertificate(
@@ -394,11 +438,18 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         BigInteger integerBoundary,
         BigInteger signedRoot,
         out PolynomialTailEulerMomentExclusionCertificate certificate) {
-        if (!TryCreateEulerMomentData(certificate: out certificate, integerBoundary: integerBoundary, signedRoot: signedRoot, tailIndex: tailIndex)) {
+        if (!TryCreateEulerMomentData(
+            certificate: out certificate,
+            integerBoundary: integerBoundary,
+            signedRoot: signedRoot,
+            tailIndex: tailIndex
+        )) {
             return false;
         }
-        if (EulerMomentTargetIsExcluded(certificate: certificate) &&
-            VerifyEulerMomentIntegerExclusionCertificate(certificate: certificate)) {
+        if (
+            EulerMomentTargetIsExcluded(certificate: certificate) &&
+            VerifyEulerMomentIntegerExclusionCertificate(certificate: certificate)
+        ) {
             return true;
         }
 
@@ -412,24 +463,39 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         int maximumTotalOrder,
         out PolynomialTailEulerHausdorffExclusionCertificate certificate) {
         certificate = default;
-        if (!TryCreateEulerMomentData(certificate: out var data, integerBoundary: integerBoundary, signedRoot: signedRoot, tailIndex: tailIndex) ||
-            !TryForcedEulerMoments(data: data, maximumOrder: maximumTotalOrder, moments: out var moments)) {
+        if (
+            !TryCreateEulerMomentData(
+            certificate: out var data,
+            integerBoundary: integerBoundary,
+            signedRoot: signedRoot,
+            tailIndex: tailIndex
+        ) ||
+            !TryForcedEulerMoments(
+            data: data,
+            maximumOrder: maximumTotalOrder,
+            moments: out var moments
+        )
+        ) {
             return false;
         }
 
         for (var totalOrder = 1; (totalOrder <= maximumTotalOrder); ++totalOrder) {
             for (var momentIndex = 0; (momentIndex <= totalOrder); ++momentIndex) {
                 var differenceOrder = (totalOrder - momentIndex);
-                var witness = EulerHausdorffWitness(differenceOrder: differenceOrder, momentIndex: momentIndex, moments: moments);
+                var witness = EulerHausdorffWitness(
+                    differenceOrder: differenceOrder,
+                    momentIndex: momentIndex,
+                    moments: moments
+                );
 
                 if (witness.Sign > 0) { continue; }
 
                 var candidate = new PolynomialTailEulerHausdorffExclusionCertificate(
-                    TailIndex: tailIndex,
-                    IntegerBoundary: integerBoundary,
-                    SignedNumeratorDiscriminantRoot: signedRoot,
-                    MomentIndex: momentIndex,
                     DifferenceOrder: differenceOrder,
+                    IntegerBoundary: integerBoundary,
+                    MomentIndex: momentIndex,
+                    SignedNumeratorDiscriminantRoot: signedRoot,
+                    TailIndex: tailIndex,
                     Witness: witness
                 );
 
@@ -447,45 +513,56 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         int maximumAdditionalOrder,
         out PolynomialTailEulerRegularizedHausdorffExclusionCertificate certificate) {
         certificate = default;
-        if (!TryCreateEulerRegularizedMomentData(
-                data: out var data,
-                gaussBoundary: out var gaussBoundary,
-                gaussTailIndex: out var gaussTailIndex,
-                integerBoundary: integerBoundary,
-                signedRoot: signedRoot,
-                tailIndex: tailIndex) ||
+        if (
+            !TryCreateEulerRegularizedMomentData(
+            data: out var data,
+            gaussBoundary: out var gaussBoundary,
+            gaussTailIndex: out var gaussTailIndex,
+            integerBoundary: integerBoundary,
+            signedRoot: signedRoot,
+            tailIndex: tailIndex
+        ) ||
             !TryEulerRegularizationAnchor(
-                data: data,
-                differenceOrder: out var anchorDifferenceOrder,
-                momentIndex: out var anchorMomentIndex)) {
+            data: data,
+            differenceOrder: out var anchorDifferenceOrder,
+            momentIndex: out var anchorMomentIndex
+        )
+        ) {
             return false;
         }
 
         var anchorTotalOrder = checked((anchorMomentIndex + anchorDifferenceOrder));
 
-        if ((anchorTotalOrder > (MaximumEulerHausdorffMomentOrder - maximumAdditionalOrder)) ||
+        if (
+            (anchorTotalOrder > (MaximumEulerHausdorffMomentOrder - maximumAdditionalOrder)) ||
             !TryForcedEulerMoments(
-                data: data,
-                maximumOrder: (anchorTotalOrder + maximumAdditionalOrder),
-                moments: out var moments)) {
+            data: data,
+            maximumOrder: (anchorTotalOrder + maximumAdditionalOrder),
+            moments: out var moments
+        )
+        ) {
             return false;
         }
 
-        var anchor = EulerHausdorffWitness(differenceOrder: anchorDifferenceOrder, momentIndex: anchorMomentIndex, moments: moments);
+        var anchor = EulerHausdorffWitness(
+            differenceOrder: anchorDifferenceOrder,
+            momentIndex: anchorMomentIndex,
+            moments: moments
+        );
 
         if (anchor == QuadraticSurd.Zero) {
             var zeroAnchor = new PolynomialTailEulerRegularizedHausdorffExclusionCertificate(
-                TailIndex: tailIndex,
-                IntegerBoundary: integerBoundary,
-                GaussTailIndex: gaussTailIndex,
-                GaussBoundary: gaussBoundary,
-                SignedNumeratorDiscriminantRoot: signedRoot,
-                AnchorMomentIndex: anchorMomentIndex,
-                AnchorDifferenceOrder: anchorDifferenceOrder,
-                WitnessMomentIndex: anchorMomentIndex,
-                WitnessDifferenceOrder: anchorDifferenceOrder,
                 Anchor: anchor,
-                Witness: anchor
+                AnchorDifferenceOrder: anchorDifferenceOrder,
+                AnchorMomentIndex: anchorMomentIndex,
+                GaussBoundary: gaussBoundary,
+                GaussTailIndex: gaussTailIndex,
+                IntegerBoundary: integerBoundary,
+                SignedNumeratorDiscriminantRoot: signedRoot,
+                TailIndex: tailIndex,
+                Witness: anchor,
+                WitnessDifferenceOrder: anchorDifferenceOrder,
+                WitnessMomentIndex: anchorMomentIndex
             );
 
             if (!VerifyEulerRegularizedHausdorffIntegerExclusionCertificate(certificate: zeroAnchor)) { return false; }
@@ -508,17 +585,17 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
                 if ((anchor * witness).Sign > 0) { continue; }
 
                 var candidate = new PolynomialTailEulerRegularizedHausdorffExclusionCertificate(
-                TailIndex: tailIndex,
-                IntegerBoundary: integerBoundary,
-                GaussTailIndex: gaussTailIndex,
-                GaussBoundary: gaussBoundary,
-                    SignedNumeratorDiscriminantRoot: signedRoot,
-                    AnchorMomentIndex: anchorMomentIndex,
-                    AnchorDifferenceOrder: anchorDifferenceOrder,
-                    WitnessMomentIndex: witnessMomentIndex,
-                    WitnessDifferenceOrder: witnessDifferenceOrder,
                     Anchor: anchor,
-                    Witness: witness
+                    AnchorDifferenceOrder: anchorDifferenceOrder,
+                    AnchorMomentIndex: anchorMomentIndex,
+                    GaussBoundary: gaussBoundary,
+                    GaussTailIndex: gaussTailIndex,
+                    IntegerBoundary: integerBoundary,
+                    SignedNumeratorDiscriminantRoot: signedRoot,
+                    TailIndex: tailIndex,
+                    Witness: witness,
+                    WitnessDifferenceOrder: witnessDifferenceOrder,
+                    WitnessMomentIndex: witnessMomentIndex
                 );
 
                 if (!VerifyEulerRegularizedHausdorffIntegerExclusionCertificate(certificate: candidate)) { return false; }
@@ -534,14 +611,21 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         BigInteger signedRoot,
         out PolynomialTailEulerRegularization regularization) {
         regularization = default;
-        if (!TryCreateEulerRegularizedMomentData(
-                data: out var data,
-                gaussBoundary: out var gaussBoundary,
-                gaussTailIndex: out var gaussTailIndex,
-                integerBoundary: integerBoundary,
-                signedRoot: signedRoot,
-                tailIndex: tailIndex) ||
-            !TryEulerRegularizationShifts(data: data, differenceShift: out var differenceShift, momentShift: out var momentShift)) {
+        if (
+            !TryCreateEulerRegularizedMomentData(
+            data: out var data,
+            gaussBoundary: out var gaussBoundary,
+            gaussTailIndex: out var gaussTailIndex,
+            integerBoundary: integerBoundary,
+            signedRoot: signedRoot,
+            tailIndex: tailIndex
+        ) ||
+            !TryEulerRegularizationShifts(
+            data: data,
+            differenceShift: out var differenceShift,
+            momentShift: out var momentShift
+        )
+        ) {
             return false;
         }
 
@@ -570,15 +654,21 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         out int differenceOrder) {
         momentIndex = 0;
         differenceOrder = 0;
-        if (!TryEulerRegularizationShifts(data: data, differenceShift: out var differenceShift, momentShift: out var momentShift) ||
+        if (
+            !TryEulerRegularizationShifts(
+            data: data,
+            differenceShift: out var differenceShift,
+            momentShift: out var momentShift
+        ) ||
             (momentShift > MaximumEulerHausdorffMomentOrder) ||
             (differenceShift > MaximumEulerHausdorffMomentOrder) ||
-            ((momentShift + differenceShift) > MaximumEulerHausdorffMomentOrder)) {
+            ((momentShift + differenceShift) > MaximumEulerHausdorffMomentOrder)
+        ) {
             return false;
         }
 
-        momentIndex = (int)momentShift;
-        differenceOrder = (int)differenceShift;
+        momentIndex = ((int)momentShift);
+        differenceOrder = ((int)differenceShift);
         return true;
     }
     private static bool TryEulerRegularizationShifts(
@@ -593,9 +683,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             left: BigInteger.Zero,
             right: ((data.HypergeometricB - data.HypergeometricC).Floor() + BigInteger.One)
         );
-        if (((data.HypergeometricB + QuadraticSurd.Rational(value: momentShift)).Sign <= 0) ||
+        if (
+            ((data.HypergeometricB + QuadraticSurd.Rational(value: momentShift)).Sign <= 0) ||
             (((data.HypergeometricC - data.HypergeometricB) +
-                QuadraticSurd.Rational(value: differenceShift)).Sign <= 0)) {
+                QuadraticSurd.Rational(value: differenceShift)).Sign <= 0)
+        ) {
             return false;
         }
 
@@ -603,19 +695,36 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         // (b)_momentIndex*(c-b)_differenceOrder/(c)_(momentIndex+differenceOrder).
         // A zero numerator factor is resonant and cannot be normalized into a positive moment measure by division.
         return
-            (PochhammerIsNonzero(initial: data.HypergeometricB, length: momentShift) &&
-            PochhammerIsNonzero(initial: (data.HypergeometricC - data.HypergeometricB), length: differenceShift) &&
-            PochhammerIsNonzero(initial: data.HypergeometricC, length: (momentShift + differenceShift)));
+            (
+            PochhammerIsNonzero(
+            initial: data.HypergeometricB,
+            length: momentShift
+        ) &&
+            PochhammerIsNonzero(
+            initial: (data.HypergeometricC - data.HypergeometricB),
+            length: differenceShift
+        ) &&
+            PochhammerIsNonzero(
+            initial: data.HypergeometricC,
+            length: (momentShift + differenceShift)
+        )
+        );
     }
     private static bool PochhammerIsNonzero(QuadraticSurd initial, BigInteger length) {
-        if ((length <= BigInteger.Zero) || !initial.IsRational) { return true; }
+        if (
+            (length <= BigInteger.Zero) ||
+            !initial.IsRational
+        ) { return true; }
         var numerator = initial.RationalNumerator;
         var denominator = initial.Denominator;
 
         if ((numerator % denominator) != BigInteger.Zero) { return true; }
         var integer = (numerator / denominator);
 
-        return ((integer > BigInteger.Zero) || (-integer >= length));
+        return (
+            (integer > BigInteger.Zero) ||
+            (-integer >= length)
+        );
     }
     private bool TryCreateEulerRegularizedMomentData(
         BigInteger tailIndex,
@@ -626,22 +735,33 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         out QuadraticSurd gaussBoundary) {
         gaussTailIndex = tailIndex;
         gaussBoundary = QuadraticSurd.Rational(value: integerBoundary);
-        if (TryCreateEulerMomentData(
-                tailIndex,
-                gaussBoundary,
-                integerBoundary,
-                signedRoot,
-                requirePositiveEulerChart: false,
-                out data) &&
-            TryEulerRegularizationShifts(data: data, differenceShift: out _, momentShift: out _)) {
+        if (
+            TryCreateEulerMomentData(
+            tailIndex,
+            gaussBoundary,
+            integerBoundary,
+            signedRoot,
+            requirePositiveEulerChart: false,
+            out data
+        ) &&
+            TryEulerRegularizationShifts(
+            data: data,
+            differenceShift: out _,
+            momentShift: out _
+        )
+        ) {
             return true;
         }
 
         // Positivity of B_n rules out every zero-Pochhammer resonance except N=1, B_n=r*n^2 — the special case
         // handled below.
         data = default;
-        if ((tailIndex != BigInteger.One) || !signedRoot.IsZero ||
-            !Parameters.NumeratorLinear.IsZero || !Parameters.NumeratorConstant.IsZero) {
+        if (
+            (tailIndex != BigInteger.One) ||
+            !signedRoot.IsZero ||
+            !Parameters.NumeratorLinear.IsZero ||
+            !Parameters.NumeratorConstant.IsZero
+        ) {
             return false;
         }
         var baseAtOne = (Parameters.Linear + Parameters.Constant);
@@ -655,14 +775,21 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             numerator: Parameters.NumeratorQuadratic
         );
         return
-            (TryCreateEulerMomentData(
-                gaussTailIndex,
-                gaussBoundary,
-                integerBoundary,
-                signedRoot,
-                requirePositiveEulerChart: false,
-                out data) &&
-            TryEulerRegularizationShifts(data: data, differenceShift: out _, momentShift: out _));
+            (
+            TryCreateEulerMomentData(
+            gaussTailIndex,
+            gaussBoundary,
+            integerBoundary,
+            signedRoot,
+            requirePositiveEulerChart: false,
+            out data
+        ) &&
+            TryEulerRegularizationShifts(
+            data: data,
+            differenceShift: out _,
+            momentShift: out _
+        )
+        );
     }
     private bool TryCreateEulerMomentData(
         BigInteger tailIndex,
@@ -718,11 +845,17 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var twoR = (2 * rInteger);
         var alpha = (
             QuadraticSurd.Rational(value: tailIndex) +
-            QuadraticSurd.Rational(denominator: twoR, numerator: (Parameters.NumeratorLinear + signedRoot))
+            QuadraticSurd.Rational(
+            denominator: twoR,
+            numerator: (Parameters.NumeratorLinear + signedRoot)
+        )
         );
         var gammaConstant = (r * (
             QuadraticSurd.Rational(value: (tailIndex - 1)) +
-            QuadraticSurd.Rational(denominator: twoR, numerator: (Parameters.NumeratorLinear - signedRoot))
+            QuadraticSurd.Rational(
+            denominator: twoR,
+            numerator: (Parameters.NumeratorLinear - signedRoot)
+        )
         ));
         var betaConstant = ((Parameters.Linear * tailIndex) + Parameters.Constant);
         var parameterA = (
@@ -736,23 +869,26 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var target = (tailBoundary / dominant);
         var secondEndpoint = (parameterC - (parameterA * argument));
 
-        if ((argument.Sign >= 0) || (argument.Abs() >= QuadraticSurd.One) ||
+        if (
+            (argument.Sign >= 0) ||
+            (argument.Abs() >= QuadraticSurd.One) ||
             (requirePositiveEulerChart &&
-                ((parameterB.Sign <= 0) || ((parameterC - parameterB).Sign <= 0)))) {
+                ((parameterB.Sign <= 0) || ((parameterC - parameterB).Sign <= 0)))
+        ) {
             return false;
         }
 
         certificate = new PolynomialTailEulerMomentExclusionCertificate(
-            TailIndex: tailIndex,
-            IntegerBoundary: recordedIntegerBoundary,
-            SignedNumeratorDiscriminantRoot: signedRoot,
+            FirstEndpoint: parameterC,
             HypergeometricA: parameterA,
+            HypergeometricArgument: argument,
             HypergeometricB: parameterB,
             HypergeometricC: parameterC,
-            HypergeometricArgument: argument,
             HypergeometricRatioTarget: target,
-            FirstEndpoint: parameterC,
-            SecondEndpoint: secondEndpoint
+            IntegerBoundary: recordedIntegerBoundary,
+            SecondEndpoint: secondEndpoint,
+            SignedNumeratorDiscriminantRoot: signedRoot,
+            TailIndex: tailIndex
         );
         return true;
     }
@@ -765,10 +901,19 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var second = certificate.SecondEndpoint;
 
         if (first == second) { return (target != first); }
-        var lower = ((first < second) ? first : second);
-        var upper = ((first > second) ? first : second);
+        var lower = ((first < second)
+            ? first
+            : second
+        );
+        var upper = ((first > second)
+            ? first
+            : second
+        );
 
-        return ((target <= lower) || (target >= upper));
+        return (
+            (target <= lower) ||
+            (target >= upper)
+        );
     }
     private static bool TryForcedEulerMoments(
         PolynomialTailEulerMomentExclusionCertificate data,
@@ -813,11 +958,15 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var result = QuadraticSurd.Zero;
 
         for (var offset = 0; (offset <= differenceOrder); ++offset) {
-            var sign = (((offset & 1) == 0) ? BigInteger.One : -BigInteger.One);
+            var sign = (((offset & 1) == 0)
+                ? BigInteger.One
+                : -BigInteger.One
+            );
 
-            result += (QuadraticSurd.Rational(
-                value: (sign * BinomialCoefficient(lower: offset, upper: differenceOrder))
-            ) * moments[(momentIndex + offset)]);
+            result += (QuadraticSurd.Rational(value: (sign * BinomialCoefficient(
+                lower: offset,
+                upper: differenceOrder
+            ))) * moments[(momentIndex + offset)]);
         }
         return result;
     }

@@ -9,7 +9,7 @@ public unsafe sealed class NativeMemoryAllocator : IAllocator {
             : alignment);
         var headerSize = align;
 
-        while (headerSize < (nuint)sizeof(Header)) {
+        while (headerSize < ((nuint)sizeof(Header))) {
             headerSize *= 2;
         }
 
@@ -22,8 +22,8 @@ public unsafe sealed class NativeMemoryAllocator : IAllocator {
             return null;
         }
 
-        var ptr = ((byte*)raw + headerSize);
-        var header = ((Header*)ptr - 1);
+        var ptr = (((byte*)raw) + headerSize);
+        var header = (((Header*)ptr) - 1);
 
         header->Raw = raw;
         header->Size = size;
@@ -32,7 +32,7 @@ public unsafe sealed class NativeMemoryAllocator : IAllocator {
     }
     public void Free(void* ptr) {
         if (ptr is not null) {
-            var header = ((Header*)ptr - 1);
+            var header = (((Header*)ptr) - 1);
             var raw = header->Raw;
 
             NativeMemory.AlignedFree(ptr: raw);
@@ -46,7 +46,7 @@ public unsafe sealed class NativeMemoryAllocator : IAllocator {
             );
         }
 
-        var header = ((Header*)ptr - 1);
+        var header = (((Header*)ptr) - 1);
         var oldSize = header->Size;
 
         var newPtr = Allocate(

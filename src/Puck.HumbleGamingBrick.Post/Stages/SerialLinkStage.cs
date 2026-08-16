@@ -41,7 +41,6 @@ internal sealed class SerialLinkStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         m_name;
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -96,7 +95,7 @@ internal sealed class SerialLinkStage : IPostStage {
         );
 
         for (var frame = 0; (frame < Frames); ++frame) {
-            session.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            session.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
         }
 
         return new LinkScenarioResult(
@@ -111,7 +110,7 @@ internal sealed class SerialLinkStage : IPostStage {
         var received = new byte[SerialLinkRom.TransferCount];
 
         for (var index = 0; (index < received.Length); ++index) {
-            received[index] = bus.ReadByte(address: (ushort)(SerialLinkRom.ReceiveBufferAddress + index));
+            received[index] = bus.ReadByte(address: ((ushort)(SerialLinkRom.ReceiveBufferAddress + index)));
         }
 
         return new LinkSideVerdict(
@@ -121,7 +120,6 @@ internal sealed class SerialLinkStage : IPostStage {
             SerialControl: bus.ReadByte(address: SerialControlAddress)
         );
     }
-
     // Judges the first run's protocol outcomes; null means every expectation held.
     private static string? Verify(LinkScenarioResult result) =>
         (VerifySide(
@@ -148,7 +146,7 @@ internal sealed class SerialLinkStage : IPostStage {
         }
 
         for (var index = 0; (index < verdict.Received.Length); ++index) {
-            var expected = (byte)(expectedBase + index);
+            var expected = ((byte)(expectedBase + index));
 
             if (verdict.Received[index] != expected) {
                 return $"the {side}'s received byte {index} is 0x{verdict.Received[index]:X2}; expected 0x{expected:X2}";
@@ -157,7 +155,6 @@ internal sealed class SerialLinkStage : IPostStage {
 
         return null;
     }
-
     // The lowercase token used in stage pass/fail details for a console model.
     private static string Label(ConsoleModel model) =>
         model switch {

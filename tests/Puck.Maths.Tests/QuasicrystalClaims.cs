@@ -50,7 +50,7 @@ internal static class QuasicrystalClaims {
     private static BigInteger IntegerSquareRoot(BigInteger value) {
         if (value.Sign <= 0) { return BigInteger.Zero; }
 
-        var root = (BigInteger.One << (int)((value.GetBitLength() + 1L) / 2L));
+        var root = (BigInteger.One << ((int)((value.GetBitLength() + 1L) / 2L)));
 
         while (true) {
             var next = ((root + (value / root)) >> 1);
@@ -65,20 +65,18 @@ internal static class QuasicrystalClaims {
 
         return root;
     }
-
     /// <summary>Floor division for a positive <paramref name="denominator"/>.</summary>
     private static BigInteger FloorDiv(BigInteger numerator, BigInteger denominator) {
-        var quotient = BigInteger.DivRem(numerator, denominator, out var remainder);
+        var quotient = BigInteger.DivRem(dividend: numerator, divisor: denominator, remainder: out var remainder);
 
         return ((remainder.Sign < 0) ? (quotient - BigInteger.One) : quotient);
     }
     /// <summary>Ceiling division for a positive <paramref name="denominator"/>.</summary>
     private static BigInteger CeilDiv(BigInteger numerator, BigInteger denominator) {
-        var quotient = BigInteger.DivRem(numerator, denominator, out var remainder);
+        var quotient = BigInteger.DivRem(dividend: numerator, divisor: denominator, remainder: out var remainder);
 
         return ((remainder.Sign > 0) ? (quotient + BigInteger.One) : quotient);
     }
-
     /// <summary>Brackets the Q16 raw fixed-point value of <c>(rationalNumerator + surdNumerator·√radicand) /
     /// denominator</c> to within a fraction of one raw tick, using <see cref="IntegerSquareRoot(BigInteger)"/> at
     /// 48 extra bits of precision. <paramref name="radicand"/> and <paramref name="denominator"/> must be
@@ -90,7 +88,7 @@ internal static class QuasicrystalClaims {
         BigInteger denominator) {
         const int ExtraBits = 48;
         var fine = (BigInteger.One << ExtraBits);
-        var root = IntegerSquareRoot((radicand * fine) * fine); // floor(sqrt(radicand) * 2^ExtraBits)
+        var root = IntegerSquareRoot(value: ((radicand * fine) * fine)); // floor(sqrt(radicand) * 2^ExtraBits)
         var scaleQ16 = (BigInteger.One << 16);
         var rationalTerm = ((rationalNumerator * scaleQ16) * fine);
         BigInteger lowNumerator;
@@ -106,7 +104,7 @@ internal static class QuasicrystalClaims {
 
         var divisor = (denominator * fine);
 
-        return (FloorDiv(lowNumerator, divisor), CeilDiv(highNumerator, divisor));
+        return (FloorDiv(denominator: divisor, numerator: lowNumerator), CeilDiv(denominator: divisor, numerator: highNumerator));
     }
     /// <summary>Whether <paramref name="actual"/>'s raw ticks fall inside the exact bracket (widened by
     /// <paramref name="toleranceRawTicks"/> on each side) of <c>(rationalNumerator + surdNumerator·√radicand) /
@@ -118,12 +116,11 @@ internal static class QuasicrystalClaims {
         BigInteger radicand,
         BigInteger denominator,
         long toleranceRawTicks) {
-        var (lower, upper) = BracketRawQ16(rationalNumerator: rationalNumerator, surdNumerator: surdNumerator, radicand: radicand, denominator: denominator);
-        var actualRaw = (BigInteger)actual.Value;
+        var (lower, upper) = BracketRawQ16(denominator: denominator, radicand: radicand, rationalNumerator: rationalNumerator, surdNumerator: surdNumerator);
+        var actualRaw = ((BigInteger)actual.Value);
 
         return ((actualRaw >= (lower - toleranceRawTicks)) && (actualRaw <= (upper + toleranceRawTicks)));
     }
-
     /// <summary>Is <paramref name="needle"/> a contiguous factor of <paramref name="haystack"/>? A phase-independent
     /// witness that two constructions of one tiling share a language.</summary>
     private static bool IsFactorOfWord(ReadOnlySpan<bool> haystack, ReadOnlySpan<bool> needle) {
@@ -141,19 +138,18 @@ internal static class QuasicrystalClaims {
         var window = 0UL;
 
         for (var i = 0; (i < word.Length); ++i) {
-            window = (((window << 1) | (word[i] ? 1UL : 0UL)) & mask);
+            window = ((window << 1) | (word[i] ? 1UL : 0UL)) & mask;
 
             if (i >= (k - 1)) { seen.Add(item: window); }
         }
 
         return seen.Count;
     }
-
     /// <summary>The Mobius action on a cusp p/q, formed as an exact BigInteger rational reduction, calling no
     /// <c>ModularTransform</c> member.</summary>
     private static (long Numerator, long Denominator) ModularCuspOracle(ModularTransform g, long p, long q) {
-        var numerator = (((BigInteger)g.A * p) + ((BigInteger)g.B * q));
-        var denominator = (((BigInteger)g.C * p) + ((BigInteger)g.D * q));
+        var numerator = ((((BigInteger)g.A) * p) + (((BigInteger)g.B) * q));
+        var denominator = ((((BigInteger)g.C) * p) + (((BigInteger)g.D) * q));
 
         if (denominator.IsZero) { return (1L, 0L); }
         if (numerator.IsZero) { return (0L, 1L); }
@@ -168,7 +164,7 @@ internal static class QuasicrystalClaims {
             denominator = -denominator;
         }
 
-        return ((long)numerator, (long)denominator);
+        return (((long)numerator), ((long)denominator));
     }
     /// <summary>The contravariant substitution action on a binary quadratic form <c>f(alpha*x+beta*y,
     /// gamma*x+delta*y)</c>, formed in Int128 and calling no <c>ModularTransform</c> member beyond reading its four
@@ -178,9 +174,9 @@ internal static class QuasicrystalClaims {
         var beta = ((Int128)g.B);
         var gamma = ((Int128)g.C);
         var delta = ((Int128)g.D);
-        var actedA = ((((Int128)a * alpha) * alpha) + (((Int128)b * alpha) * gamma) + (((Int128)c * gamma) * gamma));
-        var actedB = ((((2 * (Int128)a) * alpha) * beta) + ((Int128)b * ((alpha * delta) + (beta * gamma))) + (((2 * (Int128)c) * gamma) * delta));
-        var actedC = ((((Int128)a * beta) * beta) + (((Int128)b * beta) * delta) + (((Int128)c * delta) * delta));
+        var actedA = ((((((Int128)a) * alpha) * alpha) + ((((Int128)b) * alpha) * gamma)) + ((((Int128)c) * gamma) * gamma));
+        var actedB = (((((2 * ((Int128)a)) * alpha) * beta) + (((Int128)b) * ((alpha * delta) + (beta * gamma)))) + (((2 * ((Int128)c)) * gamma) * delta));
+        var actedC = ((((((Int128)a) * beta) * beta) + ((((Int128)b) * beta) * delta)) + ((((Int128)c) * delta) * delta));
 
         return (checked((long)actedA), checked((long)actedB), checked((long)actedC));
     }
@@ -199,7 +195,7 @@ internal static class QuasicrystalClaims {
     /// huge-index prefix is all long.</summary>
     public static string? MetallicRandomAccessMatchesStreamedWord() {
         for (var n = 1; (n <= 6); ++n) {
-            if (!MetallicQuasicrystal.Contains(n: n, a: 0L, b: 0L)) { return $"the metallic origin is not a member at n={n}"; }
+            if (!MetallicQuasicrystal.Contains(a: 0L, b: 0L, n: n)) { return $"the metallic origin is not a member at n={n}"; }
 
             var point = (A: 0L, B: 0L);
             var walkWord = new bool[4000];
@@ -212,13 +208,13 @@ internal static class QuasicrystalClaims {
             for (var step = 0; (step < walkWord.Length); ++step) {
                 visited.Add(item: point);
 
-                var isLong = MetallicQuasicrystal.StartsLongTile(n: n, a: point.A, b: point.B);
-                var next = MetallicQuasicrystal.Next(n: n, a: point.A, b: point.B);
+                var isLong = MetallicQuasicrystal.StartsLongTile(a: point.A, b: point.B, n: n);
+                var next = MetallicQuasicrystal.Next(a: point.A, b: point.B, n: n);
 
                 walkWord[step] = isLong;
 
-                if (!MetallicQuasicrystal.Contains(n: n, a: next.A, b: next.B)) { return $"the metallic walk left the set at n={n} step={step}"; }
-                if (MetallicQuasicrystal.Previous(n: n, a: next.A, b: next.B) != point) { return $"Previous does not invert Next at n={n} step={step}"; }
+                if (!MetallicQuasicrystal.Contains(a: next.A, b: next.B, n: n)) { return $"the metallic walk left the set at n={n} step={step}"; }
+                if (MetallicQuasicrystal.Previous(a: next.A, b: next.B, n: n) != point) { return $"Previous does not invert Next at n={n} step={step}"; }
 
                 var deltaA = (next.A - point.A);
                 var deltaB = (next.B - point.B);
@@ -226,7 +222,7 @@ internal static class QuasicrystalClaims {
                 if (isLong ? ((deltaA != 1L) || (deltaB != n)) : ((deltaA != 0L) || (deltaB != 1L))) {
                     return $"the metallic step is not delta or delta-squared at n={n} step={step}";
                 }
-                if (MetallicQuasicrystal.Position(n: n, a: next.A, b: next.B) <= MetallicQuasicrystal.Position(n: n, a: point.A, b: point.B)) {
+                if (MetallicQuasicrystal.Position(a: next.A, b: next.B, n: n) <= MetallicQuasicrystal.Position(a: point.A, b: point.B, n: n)) {
                     return $"metallic positions are not increasing at n={n} step={step}";
                 }
 
@@ -250,16 +246,16 @@ internal static class QuasicrystalClaims {
             if ((point.A <= 70L) || (point.B <= 70L)) { return $"the metallic walk did not cover the coordinate box at n={n}"; }
 
             // Density, exactly: |longCount*65536 - shortCount*factor.Value| / (shortCount*65536) <= 0.02, cross-multiplied.
-            var factorRaw = (BigInteger)MetallicQuasicrystal.InflationFactor(n: n).Value;
-            var lhs = ((BigInteger)longCount * 65536);
-            var rhs = ((BigInteger)shortCount * factorRaw);
-            var diff = BigInteger.Abs(lhs - rhs);
+            var factorRaw = ((BigInteger)MetallicQuasicrystal.InflationFactor(n: n).Value);
+            var lhs = (((BigInteger)longCount) * 65536);
+            var rhs = (((BigInteger)shortCount) * factorRaw);
+            var diff = BigInteger.Abs(value: (lhs - rhs));
 
             if ((diff * 100) > (rhs * 2)) { return $"the metallic long:short ratio does not approach delta_{n}: long={longCount} short={shortCount}"; }
 
             for (var a = 0L; (a <= 70L); ++a) {
                 for (var b = 0L; (b <= 70L); ++b) {
-                    if (MetallicQuasicrystal.Contains(n: n, a: a, b: b) != visited.Contains(item: (a, b))) {
+                    if (MetallicQuasicrystal.Contains(a: a, b: b, n: n) != visited.Contains(item: (a, b))) {
                         return $"Contains disagrees with the walked vertex set at n={n} ({a},{b})";
                     }
                 }
@@ -267,18 +263,18 @@ internal static class QuasicrystalClaims {
 
             var streamed = new bool[16000];
 
-            QuadraticQuasicrystal.Word(p: n, q: 1L, d: (((long)n * n) + 4L), r: 2L, tiles: streamed);
+            QuadraticQuasicrystal.Word(d: ((((long)n) * n) + 4L), p: n, q: 1L, r: 2L, tiles: streamed);
 
-            if (!IsFactorOfWord(haystack: streamed, needle: walkWord.AsSpan(0, 1200))) {
+            if (!IsFactorOfWord(haystack: streamed, needle: walkWord.AsSpan(length: 1200, start: 0))) {
                 return $"the metallic walk word is not a factor of the streamed substitution word at n={n}";
             }
         }
 
-        if (MetallicQuasicrystal.Contains(n: 1, a: long.MinValue, b: 0L)) { return "long.MinValue wrapped into metallic membership"; }
+        if (MetallicQuasicrystal.Contains(a: long.MinValue, b: 0L, n: 1)) { return "long.MinValue wrapped into metallic membership"; }
 
-        _ = Assert.Throws<OverflowException>(testCode: () => MetallicQuasicrystal.Next(n: 1, a: long.MaxValue, b: long.MaxValue));
+        _ = Assert.Throws<OverflowException>(testCode: () => MetallicQuasicrystal.Next(a: long.MaxValue, b: long.MaxValue, n: 1));
 
-        var positionRefusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MetallicQuasicrystal.Position(n: 1, a: long.MaxValue, b: 0L));
+        var positionRefusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MetallicQuasicrystal.Position(a: long.MaxValue, b: 0L, n: 1));
 
         Assert.Equal(expected: "value", actual: positionRefusal.ParamName);
         Assert.Equal(expected: FixedQ4816.FromInteger(value: int.MaxValue), actual: MetallicQuasicrystal.InflationFactor(n: int.MaxValue));
@@ -291,7 +287,6 @@ internal static class QuasicrystalClaims {
 
         return null;
     }
-
     // ---- banner: "ModularTransform + ContinuedFraction (the modular group beneath the three motions)" ----
 
     /// <summary>S is elliptic of order four, S*T elliptic of order six, T parabolic, and a hand-built hyperbolic
@@ -331,17 +326,17 @@ internal static class QuasicrystalClaims {
             for (var step = 0; (step < 7); ++step) {
                 var useS = (((index >> step) & 1) == 0);
 
-                word = useS
+                word = (useS
                     ? (ModularTransform.S * word)
-                    : (ModularTransform.Create(a: 1L, b: (((index + step) % 7) - 3), c: 0L, d: 1L) * word);
+                    : (ModularTransform.Create(a: 1L, b: (((index + step) % 7) - 3), c: 0L, d: 1L) * word));
             }
 
             words[index] = word;
 
-            if (Int128.One != (((Int128)word.A * word.D) - ((Int128)word.B * word.C))) { return $"word {index} does not have determinant one"; }
+            if (Int128.One != ((((Int128)word.A) * word.D) - (((Int128)word.B) * word.C))) { return $"word {index} does not have determinant one"; }
             if ((word * word.Inverse) != ModularTransform.Identity) { return $"word {index}'s inverse is not the adjugate inverse"; }
 
-            var absoluteTrace = Int128.Abs(value: ((Int128)word.A + word.D));
+            var absoluteTrace = Int128.Abs(value: (((Int128)word.A) + word.D));
             var expectedClass = ((absoluteTrace < 2)
                 ? ModularClass.Elliptic
                 : ((absoluteTrace == 2) ? ModularClass.Parabolic : ModularClass.Hyperbolic));
@@ -350,9 +345,9 @@ internal static class QuasicrystalClaims {
         }
 
         for (var index = 0; (index < 200); ++index) {
-            var x = words[index % words.Length];
-            var y = words[(index * 7 + 3) % words.Length];
-            var z = words[(index * 13 + 5) % words.Length];
+            var x = words[(index % words.Length)];
+            var y = words[(((index * 7) + 3) % words.Length)];
+            var z = words[(((index * 13) + 5) % words.Length)];
 
             if (((x * y) * z) != (x * (y * z))) { return $"composition is not associative at triple {index}"; }
         }
@@ -361,26 +356,27 @@ internal static class QuasicrystalClaims {
             var word = words[index];
 
             for (var trial = 0; (trial < 6); ++trial) {
-                var p = (long)(((ulong)((index * 6364136223846793005L) + (trial * 1442695040888963407L))) % 41UL) - 20L;
-                var q = (long)(((ulong)((index * 2862933555777941757L) + (trial * 3037000493L))) % 41UL);
+                var p = (((long)(((ulong)((index * 6364136223846793005L) + (trial * 1442695040888963407L))) % 41UL)) - 20L);
+                var q = ((long)(((ulong)((index * 2862933555777941757L) + (trial * 3037000493L))) % 41UL));
 
                 if ((p == 0L) && (q == 0L)) { q = 1L; }
 
-                if (word.Apply(numerator: p, denominator: q) != ModularCuspOracle(g: word, p: p, q: q)) {
+                if (word.Apply(denominator: q, numerator: p) != ModularCuspOracle(g: word, p: p, q: q)) {
                     return $"the cusp action disagrees with the rational oracle at word {index} trial {trial}";
                 }
 
-                var other = words[(index + trial + 1) % words.Length];
-                var composed = (word * other).Apply(numerator: p, denominator: q);
-                var (innerP, innerQ) = other.Apply(numerator: p, denominator: q);
+                var other = words[(((index + trial) + 1) % words.Length)];
+                var composed = (word * other).Apply(denominator: q, numerator: p);
 
-                if (composed != word.Apply(numerator: innerP, denominator: innerQ)) {
+                var (innerP, innerQ) = other.Apply(denominator: q, numerator: p);
+
+                if (composed != word.Apply(denominator: innerQ, numerator: innerP)) {
                     return $"the cusp action is not a group action at word {index} trial {trial}";
                 }
 
-                var (sP, sQ) = ModularTransform.S.Apply(numerator: p, denominator: q);
+                var (sP, sQ) = ModularTransform.S.Apply(denominator: q, numerator: p);
 
-                if (ModularTransform.S.Apply(numerator: sP, denominator: sQ) != ModularCuspOracle(g: ModularTransform.Identity, p: p, q: q)) {
+                if (ModularTransform.S.Apply(denominator: sQ, numerator: sP) != ModularCuspOracle(g: ModularTransform.Identity, p: p, q: q)) {
                     return $"S is not a cusp involution at trial {trial}";
                 }
             }
@@ -388,7 +384,6 @@ internal static class QuasicrystalClaims {
 
         return null;
     }
-
     /// <summary>Gauss reduction over every positive-definite form with <c>1&lt;=a&lt;=24</c>, <c>-24&lt;=b&lt;=24</c>,
     /// <c>1&lt;=c&lt;=24</c> (a fully deterministic sweep — no random draw): the reduced form satisfies
     /// <c>-A&lt;B&lt;=A&lt;=C</c>, the transform has determinant one, the discriminant is preserved, the transform's
@@ -404,19 +399,19 @@ internal static class QuasicrystalClaims {
                     // The definiteness filter and the preserved discriminant below are both formed in BigInteger. At
                     // these bounds a narrower carrier would hold them, but the quantity being judged is exactly the one
                     // the subject judges, so the oracle must not borrow the subject's width to judge it.
-                    if ((((BigInteger)b * b) - ((4 * (BigInteger)a) * c)) >= BigInteger.Zero) { continue; }
+                    if (((((BigInteger)b) * b) - ((4 * ((BigInteger)a)) * c)) >= BigInteger.Zero) { continue; }
 
                     var reduction = ModularTransform.GaussReduce(a: a, b: b, c: c);
 
                     if (!((-reduction.A < reduction.B) && (reduction.B <= reduction.A) && (reduction.A <= reduction.C))) {
                         return $"the reduced form violates -A < B <= A <= C at ({a},{b},{c})";
                     }
-                    if (Int128.One != (((Int128)reduction.Transform.A * reduction.Transform.D) - ((Int128)reduction.Transform.B * reduction.Transform.C))) {
+                    if (Int128.One != ((((Int128)reduction.Transform.A) * reduction.Transform.D) - (((Int128)reduction.Transform.B) * reduction.Transform.C))) {
                         return $"the reduction transform is not determinant one at ({a},{b},{c})";
                     }
 
-                    var sourceDiscriminant = (((BigInteger)b * b) - ((4 * (BigInteger)a) * c));
-                    var reducedDiscriminant = (((BigInteger)reduction.B * reduction.B) - ((4 * (BigInteger)reduction.A) * reduction.C));
+                    var sourceDiscriminant = ((((BigInteger)b) * b) - ((4 * ((BigInteger)a)) * c));
+                    var reducedDiscriminant = ((((BigInteger)reduction.B) * reduction.B) - ((4 * ((BigInteger)reduction.A)) * reduction.C));
 
                     if (sourceDiscriminant != reducedDiscriminant) { return $"the reduction did not preserve the discriminant at ({a},{b},{c})"; }
                     if (ModularFormAction(a: a, b: b, c: c, g: reduction.Transform.Inverse) != (reduction.A, reduction.B, reduction.C)) {
@@ -454,10 +449,10 @@ internal static class QuasicrystalClaims {
         const long unitRaw = (1L << FixedQ4816.FractionBitCount);
 
         var (realLow, realHigh) = BracketRawQ16(rationalNumerator: -b, surdNumerator: 0, radicand: BigInteger.One, denominator: (2 * a));
-        var (imaginaryLow, imaginaryHigh) = BracketRawQ16(rationalNumerator: 0, surdNumerator: 1, radicand: ((4 * (BigInteger)a * c) - ((BigInteger)b * b)), denominator: (2 * a));
+        var (imaginaryLow, imaginaryHigh) = BracketRawQ16(denominator: (2 * a), radicand: (((4 * ((BigInteger)a)) * c) - (((BigInteger)b) * b)), rationalNumerator: 0, surdNumerator: 1);
         var sourceRoot = new FixedComplex(
-            Real: FixedQ4816.FromRawBits(value: (long)((realLow + realHigh) / 2)),
-            Imaginary: FixedQ4816.FromRawBits(value: (long)((imaginaryLow + imaginaryHigh) / 2))
+            Real: FixedQ4816.FromRawBits(value: ((long)((realLow + realHigh) / 2))),
+            Imaginary: FixedQ4816.FromRawBits(value: ((long)((imaginaryLow + imaginaryHigh) / 2)))
         );
         var mapped = transform.Apply(point: sourceRoot);
         var realMagnitude = Math.Abs(value: mapped.Real.Value);
@@ -466,8 +461,8 @@ internal static class QuasicrystalClaims {
             return $"the reduction seam did not map the root's real part into |Re z| <= 1/2 at ({a},{b},{c}): real raw {mapped.Real.Value}";
         }
 
-        var squaredMagnitude = (((Int128)mapped.Real.Value * mapped.Real.Value) + ((Int128)mapped.Imaginary.Value * mapped.Imaginary.Value));
-        var floorBound = ((Int128)(unitRaw - toleranceRawTicks) * (unitRaw - toleranceRawTicks));
+        var squaredMagnitude = ((((Int128)mapped.Real.Value) * mapped.Real.Value) + (((Int128)mapped.Imaginary.Value) * mapped.Imaginary.Value));
+        var floorBound = (((Int128)(unitRaw - toleranceRawTicks)) * (unitRaw - toleranceRawTicks));
 
         if (squaredMagnitude < floorBound) {
             return $"the reduction seam did not map the root into |z| >= 1 at ({a},{b},{c}): squared magnitude raw {squaredMagnitude}";
@@ -519,7 +514,7 @@ internal static class QuasicrystalClaims {
         foreach (var a in corners) {
             foreach (var b in corners) {
                 foreach (var c in corners) {
-                    if (GaussDefinitenessDecision(a: a, b: b, c: c, admitted: ref admitted, refused: ref refused) is { } cornerFailure) {
+                    if (GaussDefinitenessDecision(a: a, admitted: ref admitted, b: b, c: c, refused: ref refused) is { } cornerFailure) {
                         return cornerFailure;
                     }
                 }
@@ -527,7 +522,7 @@ internal static class QuasicrystalClaims {
         }
 
         foreach (var (a, b, c) in boundary) {
-            if (GaussDefinitenessDecision(a: a, b: b, c: c, admitted: ref admitted, refused: ref refused) is { } boundaryFailure) {
+            if (GaussDefinitenessDecision(a: a, admitted: ref admitted, b: b, c: c, refused: ref refused) is { } boundaryFailure) {
                 return boundaryFailure;
             }
         }
@@ -543,19 +538,17 @@ internal static class QuasicrystalClaims {
     /// admission — it is the documented outcome of a form the definiteness test ACCEPTED whose reduction then exceeded
     /// the carrier, so it says the decision was "definite" just as loudly as a returned reduction does.</summary>
     private static string? GaussDefinitenessDecision(long a, long b, long c, ref int admitted, ref int refused) {
-        var discriminant = (((BigInteger)b * b) - ((4 * (BigInteger)a) * c));
+        var discriminant = ((((BigInteger)b) * b) - ((4 * ((BigInteger)a)) * c));
         var definite = ((a > 0L) && (discriminant < BigInteger.Zero));
         GaussReduction reduction;
 
         try {
             reduction = ModularTransform.GaussReduce(a: a, b: b, c: c);
-        }
-        catch (ArgumentOutOfRangeException) {
+        } catch (ArgumentOutOfRangeException) {
             ++refused;
 
             return (definite ? $"a positive-definite form was refused at ({a},{b},{c}): exact discriminant {discriminant}" : null);
-        }
-        catch (OverflowException) {
+        } catch (OverflowException) {
             ++admitted;
 
             return (definite ? null : $"an indefinite form was admitted at ({a},{b},{c}): exact discriminant {discriminant}");
@@ -568,7 +561,7 @@ internal static class QuasicrystalClaims {
             return $"the reduced form violates 0 < A and -A < B <= A <= C at ({a},{b},{c}): ({reduction.A},{reduction.B},{reduction.C})";
         }
 
-        var reducedDiscriminant = (((BigInteger)reduction.B * reduction.B) - ((4 * (BigInteger)reduction.A) * reduction.C));
+        var reducedDiscriminant = ((((BigInteger)reduction.B) * reduction.B) - ((4 * ((BigInteger)reduction.A)) * reduction.C));
 
         if (reducedDiscriminant != discriminant) {
             return $"the reduction did not preserve the discriminant at ({a},{b},{c}): {discriminant} became {reducedDiscriminant}";
@@ -597,13 +590,13 @@ internal static class QuasicrystalClaims {
 
         foreach (var testCase in cases) {
             var written = ContinuedFraction.Expand(
-                p: testCase.P,
-                q: testCase.Q,
                 d: testCase.D,
-                r: testCase.R,
-                terms: terms,
+                p: testCase.P,
+                periodLength: out var length,
                 periodStart: out var start,
-                periodLength: out var length
+                q: testCase.Q,
+                r: testCase.R,
+                terms: terms
             );
 
             if ((written <= 0) || (start != testCase.Start) || (length != testCase.Period.Length)) {
@@ -611,7 +604,7 @@ internal static class QuasicrystalClaims {
             }
 
             for (var offset = 0; (offset < length); ++offset) {
-                if (terms[start + offset] != testCase.Period[offset]) { return $"the period block is wrong for d={testCase.D}"; }
+                if (terms[(start + offset)] != testCase.Period[offset]) { return $"the period block is wrong for d={testCase.D}"; }
             }
 
             // Independent convergence check in exact BigInteger rather than double: unfold head + several periods,
@@ -623,53 +616,52 @@ internal static class QuasicrystalClaims {
             BigInteger denominator = 0;
 
             for (var repeat = 0; (repeat < 24); ++repeat) {
-                var term = ((repeat < start) ? terms[repeat] : terms[start + ((repeat - start) % length)]);
+                var term = ((repeat < start) ? terms[repeat] : terms[(start + ((repeat - start) % length))]);
 
                 (previousNumerator, numerator) = (numerator, ((term * numerator) + previousNumerator));
                 (previousDenominator, denominator) = (denominator, ((term * denominator) + previousDenominator));
             }
 
-            var lhs = (((BigInteger)testCase.R * numerator) - ((BigInteger)testCase.P * denominator));
+            var lhs = ((((BigInteger)testCase.R) * numerator) - (((BigInteger)testCase.P) * denominator));
             var lhsSquare = (lhs * lhs);
-            var rhsSquare = ((((BigInteger)testCase.Q * testCase.Q) * testCase.D) * (denominator * denominator));
-            var diff = BigInteger.Abs(lhsSquare - rhsSquare);
+            var rhsSquare = (((((BigInteger)testCase.Q) * testCase.Q) * testCase.D) * (denominator * denominator));
+            var diff = BigInteger.Abs(value: (lhsSquare - rhsSquare));
 
             if ((diff * 1_000_000) > rhsSquare) { return $"the convergents do not approach the value for d={testCase.D}"; }
         }
 
         var smallEquivalent = new long[32];
         var wideEquivalent = new long[32];
-        var smallWritten = ContinuedFraction.Expand(p: 0L, q: 1L, d: 3L, r: 1L, terms: smallEquivalent, periodStart: out var smallStart, periodLength: out var smallLength);
-        var wideWritten = ContinuedFraction.Expand(p: 0L, q: long.MaxValue, d: 3L, r: long.MaxValue, terms: wideEquivalent, periodStart: out var wideStart, periodLength: out var wideLength);
+        var smallWritten = ContinuedFraction.Expand(d: 3L, p: 0L, periodLength: out var smallLength, periodStart: out var smallStart, q: 1L, r: 1L, terms: smallEquivalent);
+        var wideWritten = ContinuedFraction.Expand(d: 3L, p: 0L, periodLength: out var wideLength, periodStart: out var wideStart, q: long.MaxValue, r: long.MaxValue, terms: wideEquivalent);
 
         if ((smallWritten != wideWritten) || (smallStart != wideStart) || (smallLength != wideLength) ||
-            !smallEquivalent.AsSpan(0, smallWritten).SequenceEqual(wideEquivalent.AsSpan(0, wideWritten))) {
+            !smallEquivalent.AsSpan(length: smallWritten, start: 0).SequenceEqual(other: wideEquivalent.AsSpan(length: wideWritten, start: 0))) {
             return "the full-width common-scale equivalence changed the expansion";
         }
 
         const long Scale = (long.MaxValue / 6L);
 
-        smallWritten = ContinuedFraction.Expand(p: 0L, q: 5L, d: 3L, r: 6L, terms: smallEquivalent, periodStart: out smallStart, periodLength: out smallLength);
-        wideWritten = ContinuedFraction.Expand(p: 0L, q: (5L * Scale), d: 3L, r: (6L * Scale), terms: wideEquivalent, periodStart: out wideStart, periodLength: out wideLength);
+        smallWritten = ContinuedFraction.Expand(d: 3L, p: 0L, periodLength: out smallLength, periodStart: out smallStart, q: 5L, r: 6L, terms: smallEquivalent);
+        wideWritten = ContinuedFraction.Expand(d: 3L, p: 0L, periodLength: out wideLength, periodStart: out wideStart, q: (5L * Scale), r: (6L * Scale), terms: wideEquivalent);
 
         if ((smallWritten != wideWritten) || (smallStart != wideStart) || (smallLength != wideLength) ||
-            !smallEquivalent.AsSpan(0, smallWritten).SequenceEqual(wideEquivalent.AsSpan(0, wideWritten))) {
+            !smallEquivalent.AsSpan(length: smallWritten, start: 0).SequenceEqual(other: wideEquivalent.AsSpan(length: wideWritten, start: 0))) {
             return "the full-width normalization equivalence changed the expansion";
         }
 
         _ = Assert.Throws<OverflowException>(testCode: () => ContinuedFraction.Expand(
-            p: long.MaxValue,
-            q: long.MaxValue,
             d: long.MaxValue,
-            r: 1L,
-            terms: new long[8],
+            p: long.MaxValue,
+            periodLength: out _,
             periodStart: out _,
-            periodLength: out _
+            q: long.MaxValue,
+            r: 1L,
+            terms: new long[8]
         ));
 
         return null;
     }
-
     // ---- banner: "QuadraticInflation + MetallicQuasicrystal (the inflation lens beneath the quasicrystal chains)" ----
 
     /// <summary>Six surds' <see cref="QuadraticInflation"/> invariants (period length, determinant, discriminant)
@@ -691,7 +683,7 @@ internal static class QuasicrystalClaims {
         ];
 
         foreach (var testCase in cases) {
-            var inflation = QuadraticInflation.FromQuadraticIrrational(p: testCase.P, q: testCase.Q, d: testCase.D, r: testCase.R);
+            var inflation = QuadraticInflation.FromQuadraticIrrational(d: testCase.D, p: testCase.P, q: testCase.Q, r: testCase.R);
 
             if ((inflation.PeriodLength != testCase.Period) || (inflation.Determinant != testCase.Det) || (inflation.Discriminant != testCase.Disc)) {
                 return $"the inflation invariants are wrong at d={testCase.D}";
@@ -709,7 +701,7 @@ internal static class QuasicrystalClaims {
             // The exact characteristic-root identity lambda^2 - trace*lambda + det == 0, in QuadraticSurd field
             // arithmetic -- no floating point anywhere, and no restatement of QuadraticInflation's own algorithm.
             var lambda = QuadraticSurd.Create(rationalNumerator: inflation.Trace, surdNumerator: 1, radicand: inflation.Discriminant, denominator: 2);
-            var characteristic = ((lambda * lambda) - (QuadraticSurd.Rational(inflation.Trace) * lambda)) + QuadraticSurd.Rational(inflation.Determinant);
+            var characteristic = (((lambda * lambda) - (QuadraticSurd.Rational(value: inflation.Trace) * lambda)) + QuadraticSurd.Rational(value: inflation.Determinant));
 
             if (characteristic != QuadraticSurd.Zero) { return $"the exact surd is not a root of the characteristic polynomial at d={testCase.D}"; }
 
@@ -719,16 +711,16 @@ internal static class QuasicrystalClaims {
             }
         }
 
-        if ((QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L) != QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L)) ||
-            (QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L).Discriminant != 5L) ||
-            (QuadraticInflation.FromQuadraticIrrational(p: 1L, q: 1L, d: 2L, r: 1L).Discriminant != 8L)) {
+        if ((QuadraticInflation.FromQuadraticIrrational(d: 5L, p: 1L, q: 1L, r: 2L) != QuadraticInflation.FromQuadraticIrrational(d: 5L, p: 1L, q: 1L, r: 2L)) ||
+            (QuadraticInflation.FromQuadraticIrrational(d: 5L, p: 1L, q: 1L, r: 2L).Discriminant != 5L) ||
+            (QuadraticInflation.FromQuadraticIrrational(d: 2L, p: 1L, q: 1L, r: 1L).Discriminant != 8L)) {
             return "the golden/silver discriminants are wrong";
         }
 
         var goldenTail = MetallicPolynomialContinuedFraction.Analyze(metallicIndex: BigInteger.One);
 
-        if ((goldenTail.Slope != QuadraticSurd.Create(1, 1, 5, 2)) ||
-            (goldenTail.Offset != QuadraticSurd.Create(-5, -3, 5, 10)) ||
+        if ((goldenTail.Slope != QuadraticSurd.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: 1)) ||
+            (goldenTail.Offset != QuadraticSurd.Create(denominator: 10, radicand: 5, rationalNumerator: -5, surdNumerator: -3)) ||
             !goldenTail.VerifyIntervalCertificate()) {
             return "the general polynomial tail's golden specialization is wrong";
         }
@@ -740,23 +732,22 @@ internal static class QuasicrystalClaims {
         }
 
         var wideTail = PolynomialContinuedFractionTail.Analyze(
-            linear: 1,
             constant: 0,
-            numeratorQuadratic: 100,
+            linear: 1,
+            numeratorConstant: 7,
             numeratorLinear: -3,
-            numeratorConstant: 7
+            numeratorQuadratic: 100
         );
 
-        if (!wideTail.VerifyIntervalCertificate() || (wideTail.CertifiedInterval(wideTail.IntervalCertificate.Cutoff).Lower.Sign <= 0)) {
+        if (!wideTail.VerifyIntervalCertificate() || (wideTail.CertifiedInterval(tailIndex: wideTail.IntervalCertificate.Cutoff).Lower.Sign <= 0)) {
             return "the wide r>>p^2 contraction certificate is wrong";
         }
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => PolynomialContinuedFractionTail.Analyze(1, -2, 1, 0, 0));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => PolynomialContinuedFractionTail.Analyze(1, 0, 1, 0, -2));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => PolynomialContinuedFractionTail.Analyze(constant: -2, linear: 1, numeratorConstant: 0, numeratorLinear: 0, numeratorQuadratic: 1));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => PolynomialContinuedFractionTail.Analyze(constant: 0, linear: 1, numeratorConstant: -2, numeratorLinear: 0, numeratorQuadratic: 1));
 
         return null;
     }
-
     /// <summary>MetallicQuasicrystal.Word (n=1 and n=2) reproduces the golden and silver words the ring-coordinate
     /// walk from the origin independently produces; the silver generator does NOT contain the golden word; for
     /// n=1..6 the streamed word's long:short frequency approaches delta_n (exact BigInteger cross-multiplication);
@@ -774,19 +765,19 @@ internal static class QuasicrystalClaims {
         var silverWalk = (A: 0L, B: 0L);
 
         for (var i = 0; (i < goldenFromOrigin.Length); ++i) {
-            goldenFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(n: 1, a: goldenWalk.A, b: goldenWalk.B);
-            goldenWalk = MetallicQuasicrystal.Next(n: 1, a: goldenWalk.A, b: goldenWalk.B);
+            goldenFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(a: goldenWalk.A, b: goldenWalk.B, n: 1);
+            goldenWalk = MetallicQuasicrystal.Next(a: goldenWalk.A, b: goldenWalk.B, n: 1);
         }
         for (var i = 0; (i < silverFromOrigin.Length); ++i) {
-            silverFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(n: 2, a: silverWalk.A, b: silverWalk.B);
-            silverWalk = MetallicQuasicrystal.Next(n: 2, a: silverWalk.A, b: silverWalk.B);
+            silverFromOrigin[i] = MetallicQuasicrystal.StartsLongTile(a: silverWalk.A, b: silverWalk.B, n: 2);
+            silverWalk = MetallicQuasicrystal.Next(a: silverWalk.A, b: silverWalk.B, n: 2);
         }
 
         if (!IsFactorOfWord(haystack: metallicGolden, needle: goldenFromOrigin) ||
             !IsFactorOfWord(haystack: metallicSilver, needle: silverFromOrigin)) {
             return "MetallicQuasicrystal.Word does not reproduce the golden/silver ring-coordinate word";
         }
-        if (IsFactorOfWord(haystack: metallicSilver, needle: goldenFromOrigin.AsSpan(0, 256))) {
+        if (IsFactorOfWord(haystack: metallicSilver, needle: goldenFromOrigin.AsSpan(length: 256, start: 0))) {
             return "the silver generator matched the golden word";
         }
 
@@ -800,10 +791,10 @@ internal static class QuasicrystalClaims {
             foreach (var isLong in word) { if (isLong) { ++longCount; } }
 
             var shortCount = (word.Length - longCount);
-            var factorRaw = (BigInteger)MetallicQuasicrystal.InflationFactor(n: n).Value;
-            var lhs = ((BigInteger)longCount * 65536);
-            var rhs = ((BigInteger)shortCount * factorRaw);
-            var diff = BigInteger.Abs(lhs - rhs);
+            var factorRaw = ((BigInteger)MetallicQuasicrystal.InflationFactor(n: n).Value);
+            var lhs = (((BigInteger)longCount) * 65536);
+            var rhs = (((BigInteger)shortCount) * factorRaw);
+            var diff = BigInteger.Abs(value: (lhs - rhs));
 
             if ((diff * 100) > (rhs * 2)) { return $"the streamed metallic frequency is off at n={n}"; }
 
@@ -826,7 +817,6 @@ internal static class QuasicrystalClaims {
 
         return null;
     }
-
     // ---- banner: "QuadraticQuasicrystal (the general chain: arbitrary CF period, not just metallic [n])" ----
 
     /// <summary>Square-equivalent <see cref="QuadraticSurd"/> representations compare, hash, set-deduplicate and add
@@ -837,15 +827,15 @@ internal static class QuasicrystalClaims {
     /// general generator reproduces the hand-coded golden word, and the WordComplexity oracle has teeth (a
     /// synthetic period-3 word does not report k+1).</summary>
     public static string? GeneralQuasicrystalIsSturmianAndTileLengthConsistent() {
-        var nonCanonicalSilver = QuadraticSurd.Create(2, 1, 8, 2);
-        var canonicalSilver = QuadraticSurd.Create(1, 1, 2, 1);
+        var nonCanonicalSilver = QuadraticSurd.Create(denominator: 2, radicand: 8, rationalNumerator: 2, surdNumerator: 1);
+        var canonicalSilver = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 1, surdNumerator: 1);
         var equivalentSurds = new HashSet<QuadraticSurd> { nonCanonicalSilver, canonicalSilver };
 
         if ((nonCanonicalSilver != canonicalSilver) ||
-            (nonCanonicalSilver.CompareTo(canonicalSilver) != 0) ||
+            (nonCanonicalSilver.CompareTo(other: canonicalSilver) != 0) ||
             (nonCanonicalSilver.GetHashCode() != canonicalSilver.GetHashCode()) ||
             (equivalentSurds.Count != 1) ||
-            ((nonCanonicalSilver + canonicalSilver) != (QuadraticSurd.Rational(2) * canonicalSilver))) {
+            ((nonCanonicalSilver + canonicalSilver) != (QuadraticSurd.Rational(value: 2) * canonicalSilver))) {
             return "square-equivalent QuadraticSurd representations disagree";
         }
 
@@ -855,41 +845,41 @@ internal static class QuasicrystalClaims {
         var word = new bool[40_000];
 
         foreach (var testCase in cases) {
-            QuadraticQuasicrystal.Word(p: testCase.P, q: testCase.Q, d: testCase.D, r: testCase.R, tiles: word);
+            QuadraticQuasicrystal.Word(d: testCase.D, p: testCase.P, q: testCase.Q, r: testCase.R, tiles: word);
 
-            var index = QuadraticQuasicrystal.Compile(p: testCase.P, q: testCase.Q, d: testCase.D, r: testCase.R);
+            var index = QuadraticQuasicrystal.Compile(d: testCase.D, p: testCase.P, q: testCase.Q, r: testCase.R);
             var streamedLongCount = BigInteger.Zero;
 
             for (var position = 0; (position < 2048); ++position) {
-                if ((index.TileAt(position) != word[position]) || (index.CountLongTiles(position) != streamedLongCount)) {
+                if ((index.TileAt(index: position) != word[position]) || (index.CountLongTiles(exclusiveEnd: position) != streamedLongCount)) {
                     return $"random access disagrees with the streamed word at d={testCase.D} index={position}";
                 }
                 if (word[position]) { ++streamedLongCount; }
             }
 
             var remoteIndex = ((BigInteger.One << 512) + 12345);
-            var remoteLongs = index.CountLongTiles(remoteIndex);
-            var remoteAdvance = (index.CountLongTiles(remoteIndex + 1) - remoteLongs);
+            var remoteLongs = index.CountLongTiles(exclusiveEnd: remoteIndex);
+            var remoteAdvance = (index.CountLongTiles(exclusiveEnd: (remoteIndex + 1)) - remoteLongs);
 
-            if (remoteAdvance != (index.TileAt(remoteIndex) ? BigInteger.One : BigInteger.Zero)) {
+            if (remoteAdvance != (index.TileAt(index: remoteIndex) ? BigInteger.One : BigInteger.Zero)) {
                 return $"the remote prefix identity fails at d={testCase.D}";
             }
 
             for (var k = 1; (k <= 24); ++k) {
-                if (WordComplexity(word: word, k: k) != (k + 1)) { return $"the word is not Sturmian at d={testCase.D} k={k}"; }
+                if (WordComplexity(k: k, word: word) != (k + 1)) { return $"the word is not Sturmian at d={testCase.D} k={k}"; }
             }
 
             // The tile lengths are the left Perron eigenvector: lambda*l = A*l + C, in exact QuadraticSurd arithmetic.
             var trace = (index.A + index.D);
             var determinant = ((index.A * index.D) - (index.B * index.C));
-            var lambda = QuadraticSurd.Create(rationalNumerator: trace, surdNumerator: 1, radicand: ((trace * trace) - (4 * determinant)), denominator: 2);
+            var lambda = QuadraticSurd.Create(denominator: 2, radicand: ((trace * trace) - (4 * determinant)), rationalNumerator: trace, surdNumerator: 1);
 
-            if ((lambda * index.ExactLongTileLength) != ((QuadraticSurd.Rational(index.A) * index.ExactLongTileLength) + QuadraticSurd.Rational(index.C))) {
+            if ((lambda * index.ExactLongTileLength) != ((QuadraticSurd.Rational(value: index.A) * index.ExactLongTileLength) + QuadraticSurd.Rational(value: index.C))) {
                 return $"the tile-length inflation identity fails at d={testCase.D}";
             }
 
             // The one approximate seam: QuadraticQuasicrystal.LongTileLength must bracket the exact tile length.
-            var actualLength = QuadraticQuasicrystal.LongTileLength(p: testCase.P, q: testCase.Q, d: testCase.D, r: testCase.R);
+            var actualLength = QuadraticQuasicrystal.LongTileLength(d: testCase.D, p: testCase.P, q: testCase.Q, r: testCase.R);
 
             var exactTileLength = index.ExactLongTileLength;
 
@@ -902,13 +892,13 @@ internal static class QuasicrystalClaims {
         var goldenWalk = (A: 0L, B: 0L);
 
         for (var i = 0; (i < goldenReference.Length); ++i) {
-            goldenReference[i] = MetallicQuasicrystal.StartsLongTile(n: 1, a: goldenWalk.A, b: goldenWalk.B);
-            goldenWalk = MetallicQuasicrystal.Next(n: 1, a: goldenWalk.A, b: goldenWalk.B);
+            goldenReference[i] = MetallicQuasicrystal.StartsLongTile(a: goldenWalk.A, b: goldenWalk.B, n: 1);
+            goldenWalk = MetallicQuasicrystal.Next(a: goldenWalk.A, b: goldenWalk.B, n: 1);
         }
 
         var generalGoldenWord = new bool[8192];
 
-        QuadraticQuasicrystal.Word(p: 1L, q: 1L, d: 5L, r: 2L, tiles: generalGoldenWord);
+        QuadraticQuasicrystal.Word(d: 5L, p: 1L, q: 1L, r: 2L, tiles: generalGoldenWord);
 
         if (!IsFactorOfWord(haystack: generalGoldenWord, needle: goldenReference)) { return "the general generator does not reproduce the golden word"; }
 
@@ -916,48 +906,47 @@ internal static class QuasicrystalClaims {
 
         for (var i = 0; (i < periodicProbe.Length); ++i) { periodicProbe[i] = ((i % 3) == 0); }
 
-        if (WordComplexity(word: periodicProbe, k: 10) == 11) { return "the WordComplexity oracle has no teeth"; }
+        if (WordComplexity(k: 10, word: periodicProbe) == 11) { return "the WordComplexity oracle has no teeth"; }
 
         return null;
     }
-
     /// <summary>Contract and scale regressions outside the ordinary small-period table: a perfect-square radicand is
     /// refused; a 217-term period streams and indexes correctly and stays Sturmian; <see cref="QuadraticInflation"/>
     /// overflows on that period (the term product exceeds <see cref="long"/>); a 3-billion partial quotient keeps
     /// its prefix and brackets its tile length to a handful of raw ticks; and <see cref="QuadraticQuasicrystal.Positions"/>
     /// overflows on 50,000 long tiles.</summary>
     public static string? QuadraticQuasicrystalWidthAndPeriodRegressions() {
-        var perfectSquareRefusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => QuadraticQuasicrystal.Word(p: 0L, q: 1L, d: 4L, r: 1L, tiles: []));
+        var perfectSquareRefusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => QuadraticQuasicrystal.Word(d: 4L, p: 0L, q: 1L, r: 1L, tiles: []));
 
         Assert.Equal(expected: "d", actual: perfectSquareRefusal.ParamName);
 
         var longPeriodWord = new bool[512];
 
-        QuadraticQuasicrystal.Word(p: 0L, q: 1L, d: 9949L, r: 1L, tiles: longPeriodWord); // period length 217
+        QuadraticQuasicrystal.Word(d: 9949L, p: 0L, q: 1L, r: 1L, tiles: longPeriodWord); // period length 217
 
-        var longPeriodIndex = QuadraticQuasicrystal.Compile(p: 0L, q: 1L, d: 9949L, r: 1L);
+        var longPeriodIndex = QuadraticQuasicrystal.Compile(d: 9949L, p: 0L, q: 1L, r: 1L);
 
         if (longPeriodIndex.PeriodLength != 217) { return "the long-period index lost the period"; }
 
         for (var index = 0; (index < longPeriodWord.Length); ++index) {
-            if (longPeriodIndex.TileAt(index) != longPeriodWord[index]) { return $"the long-period random access is wrong at index={index}"; }
+            if (longPeriodIndex.TileAt(index: index) != longPeriodWord[index]) { return $"the long-period random access is wrong at index={index}"; }
         }
         for (var k = 1; (k <= 12); ++k) {
-            if (WordComplexity(word: longPeriodWord, k: k) != (k + 1)) { return $"the long-period word is not Sturmian at k={k}"; }
+            if (WordComplexity(k: k, word: longPeriodWord) != (k + 1)) { return $"the long-period word is not Sturmian at k={k}"; }
         }
 
-        _ = Assert.Throws<OverflowException>(testCode: () => QuadraticInflation.FromQuadraticIrrational(p: 0L, q: 1L, d: 9949L, r: 1L));
+        _ = Assert.Throws<OverflowException>(testCode: () => QuadraticInflation.FromQuadraticIrrational(d: 9949L, p: 0L, q: 1L, r: 1L));
 
         const long LargeQuotient = 3_000_000_000L;
         const long LargeDiscriminant = 9_000_000_000_000_000_004L;
         var largePrefix = new bool[16];
 
-        QuadraticQuasicrystal.Word(p: LargeQuotient, q: 1L, d: LargeDiscriminant, r: 2L, tiles: largePrefix);
+        QuadraticQuasicrystal.Word(d: LargeDiscriminant, p: LargeQuotient, q: 1L, r: 2L, tiles: largePrefix);
 
         if (Array.IndexOf(array: largePrefix, value: false) >= 0) { return "the large-quotient prefix is wrong"; }
 
-        var largeIndex = QuadraticQuasicrystal.Compile(p: LargeQuotient, q: 1L, d: LargeDiscriminant, r: 2L);
-        var largeActualLength = QuadraticQuasicrystal.LongTileLength(p: LargeQuotient, q: 1L, d: LargeDiscriminant, r: 2L);
+        var largeIndex = QuadraticQuasicrystal.Compile(d: LargeDiscriminant, p: LargeQuotient, q: 1L, r: 2L);
+        var largeActualLength = QuadraticQuasicrystal.LongTileLength(d: LargeDiscriminant, p: LargeQuotient, q: 1L, r: 2L);
 
         var largeExactTileLength = largeIndex.ExactLongTileLength;
 
@@ -965,7 +954,7 @@ internal static class QuasicrystalClaims {
             return "the large-quotient tile length lost precision";
         }
 
-        var overflowTiles = Enumerable.Repeat(element: true, count: 50_000).ToArray();
+        var overflowTiles = Enumerable.Repeat(count: 50_000, element: true).ToArray();
 
         _ = Assert.Throws<OverflowException>(testCode: () => QuadraticQuasicrystal.Positions(
             p: LargeQuotient,
@@ -978,7 +967,6 @@ internal static class QuasicrystalClaims {
 
         return null;
     }
-
     // ---- banner: "QuadraticQuasicrystal.Chain random access (the general cut-and-project: ANY CF period, not just
     // metallic [n])" ----
 
@@ -995,7 +983,7 @@ internal static class QuasicrystalClaims {
     /// same way.</summary>
     public static string? ChainSingleTermMatchesMetallicAndNewPeriodsWalk() {
         for (var n = 1; (n <= 6); ++n) {
-            var chain = QuadraticQuasicrystal.Chain.FromQuadraticIrrational(p: n, q: 1L, d: (((long)n * n) + 4L), r: 2L);
+            var chain = QuadraticQuasicrystal.Chain.FromQuadraticIrrational(d: ((((long)n) * n) + 4L), p: n, q: 1L, r: 2L);
             var chainPoint = (A: 0L, B: 0L);
             var metallicPoint = (A: 0L, B: 0L);
             var chainWord = new bool[2000];
@@ -1004,12 +992,12 @@ internal static class QuasicrystalClaims {
             for (var step = 0; (step < chainWord.Length); ++step) {
                 chainWord[step] = chain.StartsLongTile(a: chainPoint.A, b: chainPoint.B);
                 chainPoint = chain.Next(a: chainPoint.A, b: chainPoint.B);
-                metallicWord[step] = MetallicQuasicrystal.StartsLongTile(n: n, a: metallicPoint.A, b: metallicPoint.B);
-                metallicPoint = MetallicQuasicrystal.Next(n: n, a: metallicPoint.A, b: metallicPoint.B);
+                metallicWord[step] = MetallicQuasicrystal.StartsLongTile(a: metallicPoint.A, b: metallicPoint.B, n: n);
+                metallicPoint = MetallicQuasicrystal.Next(a: metallicPoint.A, b: metallicPoint.B, n: n);
             }
 
-            if (!IsFactorOfWord(haystack: metallicWord, needle: chainWord.AsSpan(0, 900)) ||
-                !IsFactorOfWord(haystack: chainWord, needle: metallicWord.AsSpan(0, 900))) {
+            if (!IsFactorOfWord(haystack: metallicWord, needle: chainWord.AsSpan(length: 900, start: 0)) ||
+                !IsFactorOfWord(haystack: chainWord, needle: metallicWord.AsSpan(length: 900, start: 0))) {
                 return $"the single-term chain and the metallic ring walk do not realize the same tiling at n={n}";
             }
         }
@@ -1023,7 +1011,7 @@ internal static class QuasicrystalClaims {
         var streamed = new bool[60_000];
 
         foreach (var testCase in newPeriods) {
-            var chain = QuadraticQuasicrystal.Chain.FromQuadraticIrrational(p: testCase.P, q: testCase.Q, d: testCase.D, r: testCase.R);
+            var chain = QuadraticQuasicrystal.Chain.FromQuadraticIrrational(d: testCase.D, p: testCase.P, q: testCase.Q, r: testCase.R);
 
             if (!chain.Contains(a: 0L, b: 0L)) { return $"the chain origin is not a member at d={testCase.D}"; }
 
@@ -1054,16 +1042,16 @@ internal static class QuasicrystalClaims {
                 point = next;
             }
 
-            QuadraticQuasicrystal.Word(p: testCase.P, q: testCase.Q, d: testCase.D, r: testCase.R, tiles: streamed);
+            QuadraticQuasicrystal.Word(d: testCase.D, p: testCase.P, q: testCase.Q, r: testCase.R, tiles: streamed);
 
             var streamedLong = 0L;
 
             foreach (var tile in streamed) { if (tile) { ++streamedLong; } }
 
             // Density agreement, exactly: cross-multiply longCount/walkWord.Length against streamedLong/streamed.Length.
-            var lhs = ((BigInteger)longCount * streamed.Length);
-            var rhs = ((BigInteger)streamedLong * walkWord.Length);
-            var diff = BigInteger.Abs(lhs - rhs);
+            var lhs = (((BigInteger)longCount) * streamed.Length);
+            var rhs = (((BigInteger)streamedLong) * walkWord.Length);
+            var diff = BigInteger.Abs(value: (lhs - rhs));
 
             if ((diff * 100) > (rhs * 2)) { return $"the chain density disagrees with the streamed word at d={testCase.D}"; }
 
@@ -1079,11 +1067,11 @@ internal static class QuasicrystalClaims {
                 }
             }
 
-            if (!IsFactorOfWord(haystack: streamed, needle: walkWord.AsSpan(0, 1500))) {
+            if (!IsFactorOfWord(haystack: streamed, needle: walkWord.AsSpan(length: 1500, start: 0))) {
                 return $"the chain random access is not a factor of the streamed word at d={testCase.D}";
             }
 
-            var inflation = QuadraticInflation.FromQuadraticIrrational(p: testCase.P, q: testCase.Q, d: testCase.D, r: testCase.R);
+            var inflation = QuadraticInflation.FromQuadraticIrrational(d: testCase.D, p: testCase.P, q: testCase.Q, r: testCase.R);
 
             if ((chain.Inflation != inflation) || (chain.InflationFactor != inflation.InflationFactor())) {
                 return $"the chain's cached lens is not the inflation matrix at d={testCase.D}";

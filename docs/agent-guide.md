@@ -52,26 +52,31 @@ Prefer the cheapest correct tool:
 2026-08-02) — out of the solution and out of the build. Read it as prior art;
 do not run it, cite it as coverage, or write a stage for it.
 
-So the shared engine contract it used to gate — the cross-backend render path,
-the SDF VM ISA, the document schemas, the deterministic numerics, the
-differential fuzzer — **currently has no automated gate at all.** Say that
-plainly when it matters; do not imply coverage that does not exist, and do not
-reach into `experimental/` to manufacture some. An engine change is verified
-today by running what is still in the build and by argument, and a change that
-would once have been gated should say in its own commit what was and was not
-checked.
+So the shared engine contract it used to gate — the SDF VM ISA, the document
+schemas, the deterministic numerics, the differential fuzzer — **currently has
+no automated gate.** Say that plainly when it matters; do not imply coverage
+that does not exist, and do not reach into `experimental/` to manufacture
+some. An engine change is verified today by running what is still in the build
+and by argument, and a change that would once have been gated should say in
+its own commit what was and was not checked.
+
+The one narrow cross-backend check that exists is `puck parity`: for each
+authored pattern world under `docs/verification/parity/` (gradient, edges,
+modifiers, glyphs — each stressing one contract slice) plus the shipped default
+world,
+it boots the real `Puck.World` windowed on Vulkan and on Direct3D 12,
+screenshots the same fenced simulation moment in each run, and compares the
+backend pair under the relaxed envelope (benign ±1-LSB shader-codegen noise
+passes; a missing, relocated, or recolored region fails). There are no stored
+baselines, so content changes cannot fail it — only a cross-backend
+divergence can. Two different patterns from the same backend must fail the
+envelope on every run. It needs a display and both GPU devices, so run it on
+hardware for any render-path, shader, presenter, or capture change; it covers
+composed-frame agreement and nothing else.
 
 Still in the build and still applicable: the architecture gate (every build),
-the two emulator batteries below, `dotnet build Puck.slnx -c Release`, and
-running `Puck.World`.
-
-| Change | Minimum verification |
-|---|---|
-| Fixed-point, commands, input routing, bindings, world documents | Tier A |
-| Same-device GPU code, kernels, compositor, capture | Tiers A and B |
-| Shared shaders, either backend, surface sharing | Full battery, including Tier C |
-| Present pacing, device loss, backend switching | Full battery, including Tier D |
-| Suspected backend divergence | Differential fuzzer with `--filter fuzz` or one seeded fuzz stage |
+the two emulator batteries below, `dotnet build Puck.slnx -c Release`,
+`puck parity`, and running `Puck.World`.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. The default
 tier is the everyday gate; `deep` and `exhaustive` are the opt-in volumes:
@@ -156,7 +161,7 @@ kind changes:
    `[JsonDerivedType]` line.
 4. Verify by RUNNING `Puck.World` and round-tripping the document over stdin.
 
-`src/Puck.World.Data/README.md` documents the serializer's construction
+`src/Puck.World.Schema/README.md` documents the serializer's construction
 behavior; the procedure above is the complete add-a-field procedure.
 
 ## Configuration and diagnostics
@@ -175,7 +180,6 @@ content-development diagnostics:
 | `PUCK_PRESENT_TIMING` | Log measured present intervals. |
 | `PUCK_TEST_DEVICE_LOSS=<seconds>` | Request synthetic device loss for live verification. |
 | `PUCK_D3D12_DEBUG` | Opt in to the Direct3D 12 debug layer. |
-| `PUCK_PARITY_STRICT=1` | Use strict pixel-perfect parity thresholds instead of the default evidence-calibrated posture. |
 | `PUCK_CAPTURE_FRAME=<number>` | Delay one-shot capture for a world-document run. |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Regenerate committed flagship creation documents. |
 | `PUCK_GB_TESTROMS` | GB/GBC reference-ROM corpus. |

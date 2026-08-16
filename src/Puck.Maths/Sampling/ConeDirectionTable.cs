@@ -83,7 +83,10 @@ public static class ConeDirectionTable {
     /// <exception cref="ArgumentException"><paramref name="destination"/> is not <see cref="WordCount"/> long.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capHalfAngleRadians"/> is negative, not a number, or at or above <c>π/2</c>.</exception>
     public static void Build(double capHalfAngleRadians, Span<uint> destination) {
-        if (!(capHalfAngleRadians >= 0.0d) || (capHalfAngleRadians >= (0.5d * Math.PI))) {
+        if (
+            !(capHalfAngleRadians >= 0.0d) ||
+            (capHalfAngleRadians >= (0.5d * Math.PI))
+        ) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(capHalfAngleRadians),
                 actualValue: capHalfAngleRadians,
@@ -92,10 +95,16 @@ public static class ConeDirectionTable {
         }
 
         if (WordCount != destination.Length) {
-            throw new ArgumentException(message: $"The spherical-cap sample table occupies exactly {WordCount} words.", paramName: nameof(destination));
+            throw new ArgumentException(
+                message: $"The spherical-cap sample table occupies exactly {WordCount} words.",
+                paramName: nameof(destination)
+            );
         }
 
-        DigitalNetSampler.BuildPlaneDirectionNumbers(destination: destination.Slice(start: DirectionNumberOffset, length: DigitalNetSampler.PlaneDirectionNumberCount));
+        DigitalNetSampler.BuildPlaneDirectionNumbers(destination: destination.Slice(
+            length: DigitalNetSampler.PlaneDirectionNumberCount,
+            start: DirectionNumberOffset
+        ));
 
         for (var index = 0; (index < AzimuthEntryCount); ++index) {
             var angle = ((2.0d * Math.PI) * ((index + 0.5d) / AzimuthEntryCount));

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "puck.world.projection.v1",
   "title": "Puck world projection (puck.world.projection.v1)",
-  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out, because WorldDefinition requires 33 sections and a partial one either refuses at RequireSections or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, market, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, and every kit\u0027s producers/actions (see WorldProjectedKit). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently.",
+  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out, because WorldDefinition requires 33 sections and a partial one either refuses at RequireSections or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, market, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, and every kit\u0027s producers/actions (see WorldProjectedKit). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently. Metadata crosses in reduced form: WorldProjectedMetadata carries title/description only \u2014 a world\u0027s authored name and blurb are harmless to a presentation-tier peer. authors, tags, and custom never cross; custom in particular is an unbounded author scratch bag that may hold notes never meant to leave the authority.",
   "type": [
     "object",
     "null"
@@ -420,7 +420,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 WorldConsoleMirror, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
+                "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 ConsoleTape, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
                 "properties": {
                   "$type": {
                     "const": "console"
@@ -502,6 +502,68 @@
                 },
                 "required": [
                   "destination"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldEngine.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+                "properties": {
+                  "$type": {
+                    "const": "text"
+                  },
+                  "lines": {
+                    "description": "The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar per cell \u2014 no kerning or shaping on this tier).",
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "font": {
+                    "description": "The text catalog font name; null selects the catalog\u0027s default font.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "columns": {
+                    "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SdfVm.SdfWorldEngine.MaxScreenDecalCells).",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "rows": {
+                    "description": "The cell grid\u0027s row count, or null to fit the line count.",
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "foreground": {
+                    "description": "The letter color as #RRGGBB, or null for white.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "background": {
+                    "description": "The cell background color as #RRGGBB, or null for black.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "lines"
                 ],
                 "additionalProperties": false
               }
@@ -751,7 +813,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 WorldConsoleMirror, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
+                      "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 ConsoleTape, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
                       "properties": {
                         "$type": {
                           "const": "console"
@@ -833,6 +895,61 @@
                       },
                       "required": [
                         "destination"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldEngine.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+                      "properties": {
+                        "$type": {
+                          "const": "text"
+                        },
+                        "lines": {
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/9/properties/lines"
+                        },
+                        "font": {
+                          "description": "The text catalog font name; null selects the catalog\u0027s default font.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "columns": {
+                          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SdfVm.SdfWorldEngine.MaxScreenDecalCells).",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "rows": {
+                          "description": "The cell grid\u0027s row count, or null to fit the line count.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "foreground": {
+                          "description": "The letter color as #RRGGBB, or null for white.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "background": {
+                          "description": "The cell background color as #RRGGBB, or null for black.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "lines"
                       ],
                       "additionalProperties": false
                     }
@@ -3751,7 +3868,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 WorldConsoleMirror, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
+                      "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 ConsoleTape, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
                       "properties": {
                         "$type": {
                           "const": "console"
@@ -3833,6 +3950,61 @@
                       },
                       "required": [
                         "destination"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Authored reading text on the screen face, rendered through the engine\u0027s glyph-decal tier (Puck.SdfVm.SdfWorldEngine.SetScreenDecal): a fixed monospace cell grid sampled from the world\u0027s packed font atlas at shade time \u2014 the dense-text sibling of a creation\u0027s textRuns, which stamp marched Glyph geometry. Signs, plaques, books, and monitors author this; short sculptural lettering stays a text run. Requires the world to declare a text font catalog (Text); the decal bypasses the CRT image pipeline, so no image source competes with it on the slot.",
+                      "properties": {
+                        "$type": {
+                          "const": "text"
+                        },
+                        "lines": {
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/9/properties/lines"
+                        },
+                        "font": {
+                          "description": "The text catalog font name; null selects the catalog\u0027s default font.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "columns": {
+                          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SdfVm.SdfWorldEngine.MaxScreenDecalCells).",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "rows": {
+                          "description": "The cell grid\u0027s row count, or null to fit the line count.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "foreground": {
+                          "description": "The letter color as #RRGGBB, or null for white.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "background": {
+                          "description": "The cell background color as #RRGGBB, or null for black.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "lines"
                       ],
                       "additionalProperties": false
                     }
@@ -5401,7 +5573,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Upserts a whole HUD panel row \u2014 world scope only (refused at body scope: a per-body action has no HUD panel of its own to author). Admits UpsertHudPanel into the world-rule effect set through the same seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
+                      "description": "Upserts a whole HUD panel row \u2014 world scope only (refused at body scope: a per-body action has no HUD panel of its own to author). Admits WorldMutation.UpsertHudPanel into the world-rule effect set through the same seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
                       "properties": {
                         "$type": {
                           "const": "upsertHudPanel"
@@ -5469,7 +5641,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Upserts a whole placement row \u2014 world scope only (refused at body scope: a per-body action has no placement of its own to author). Admits UpsertPlacement into the world-rule effect set through the same seam Generate uses.",
+                      "description": "Upserts a whole placement row \u2014 world scope only (refused at body scope: a per-body action has no placement of its own to author). Admits WorldMutation.UpsertPlacement into the world-rule effect set through the same seam Generate uses.",
                       "properties": {
                         "$type": {
                           "const": "upsertPlacement"
@@ -5607,7 +5779,7 @@
         "null"
       ],
       "items": {
-        "description": "One row of the references section \u2014 a world NAMING another world by document path, the primitive a wall-mounted portal placement (or any future consumer) resolves against. Authored data only: a row asserts nothing about the named document\u0027s existence or shape at boot \u2014 resolution is a consumer\u0027s job, not this section\u0027s (no boot-time file-existence check).",
+        "description": "One row of the references section \u2014 a world NAMING another world, the primitive a wall-mounted portal placement (or any future consumer) resolves against. Authored data only: a row asserts nothing about the named world\u0027s existence or shape at boot \u2014 resolution is a consumer\u0027s job, not this section\u0027s (no boot-time existence check). Names its target through exactly one of two mutually exclusive spellings \u2014 a local document path (Document), or a remote owner-named world (Owner\u002BWorld together, since worlds ARE users) \u2014 never both, never neither; ValidateReferences refuses any other shape. NeighbourKey folds whichever spelling was authored into the one opaque string every IWorldNeighbourResolver call site already passes around.",
         "type": [
           "object",
           "null"
@@ -5618,13 +5790,33 @@
             "type": "string"
           },
           "document": {
-            "description": "The referenced world\u0027s document path (e.g. \u0022dive.world.json\u0022), authored verbatim.",
-            "type": "string"
+            "description": "The referenced world\u0027s document path (e.g. \u0022dive.world.json\u0022), authored verbatim. Mutually exclusive with Owner/World.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "owner": {
+            "description": "The remote world\u0027s owning platform user id (an Entra oid) \u2014 worlds ARE users, so naming the owner names the world\u0027s account. Required together with World; refused alone.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "default": null
+          },
+          "world": {
+            "description": "The remote world\u0027s own WorldSafeName-shaped id within its owner\u0027s account. Required together with Owner; refused alone.",
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
-          "name",
-          "document"
+          "name"
         ],
         "additionalProperties": false
       },
@@ -5796,6 +5988,14 @@
               "null"
             ],
             "default": null
+          },
+          "capacity": {
+            "description": "The maximum number of live bodies and outstanding reservations admitted through this border at once, or null to use the destination population\u0027s remaining capacity \u2014 the same policy Capacity gives portal furniture. A full border refuses the current attempt immediately; it never queues.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
@@ -5806,6 +6006,33 @@
         ],
         "additionalProperties": false
       },
+      "default": null
+    },
+    "metadata": {
+      "description": "The title/description half of metadata, when the world authors one \u2014 see the type remarks.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "title": {
+          "description": "The world\u0027s author-facing display name, when authored.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "description": {
+          "description": "The author description, when authored.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
       "default": null
     },
     "schema": {

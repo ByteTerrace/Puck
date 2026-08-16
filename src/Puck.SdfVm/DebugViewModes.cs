@@ -31,7 +31,6 @@ public static class DebugViewModes {
     /// <param name="mode">The mode value.</param>
     /// <returns>The command name.</returns>
     public static string Command(int mode) => (CommandPrefix + Name(mode: mode));
-
     /// <summary>Returns the name of a mode, or <c>"off"</c> when out of range.</summary>
     /// <param name="mode">The mode value.</param>
     /// <returns>The mode name.</returns>

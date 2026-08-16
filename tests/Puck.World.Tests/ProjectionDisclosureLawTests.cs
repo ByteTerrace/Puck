@@ -37,11 +37,20 @@ public sealed class ProjectionDisclosureLawTests {
         "portals",
         "actions",
         "producers",
+        "custom",
     ];
 
     [Fact]
     public void PresentationProjection_CarriesNoRedactedMember() {
-        var definition = Fixtures.BuildDocument();
+        var definition = (Fixtures.BuildDocument() with {
+            Metadata = new WorldMetadataSection(
+                Title: "Play",
+                Description: "The overworld hub.",
+                Authors: [new WorldMetadataAuthor(Name: "Jane")],
+                Tags: ["overworld"],
+                Custom: new Dictionary<string, JsonElement> { ["secret"] = JsonDocument.Parse(json: "true").RootElement.Clone() }
+            ),
+        });
         var projection = WorldProjection.Compose(definition: definition, tier: WorldDisclosureTier.Presentation, authority: "boot", revision: 7);
 
         Assert.NotNull(projection);
@@ -52,21 +61,26 @@ public sealed class ProjectionDisclosureLawTests {
         CollectMemberNames(element: JsonDocument.Parse(json: json).RootElement, names: found);
 
         foreach (var redacted in RedactedMembers) {
-            Assert.DoesNotContain(expected: redacted, collection: found);
+            Assert.DoesNotContain(collection: found, expected: redacted);
         }
 
-        // The control: the projection is not empty, and the disclosed sections really are in it.
-        Assert.Contains(expected: "placements", collection: found);
-        Assert.Contains(expected: "creations", collection: found);
-        Assert.Contains(expected: "kits", collection: found);
-        Assert.Contains(expected: "views", collection: found);
-        Assert.Contains(expected: "hud", collection: found);
-        Assert.Contains(expected: "provenance", collection: found);
+        // The control: the projection is not empty, and the disclosed sections really are in it — including
+        // metadata's title/description, which cross in reduced form even though authors/tags/custom do not.
+        Assert.Contains(collection: found, expected: "placements");
+        Assert.Contains(collection: found, expected: "creations");
+        Assert.Contains(collection: found, expected: "kits");
+        Assert.Contains(collection: found, expected: "views");
+        Assert.Contains(collection: found, expected: "hud");
+        Assert.Contains(collection: found, expected: "provenance");
+        Assert.Contains(collection: found, expected: "metadata");
+        Assert.Contains(collection: found, expected: "title");
+        Assert.Contains(collection: found, expected: "description");
     }
-
     [Fact]
     public void PresentationProjection_RoundTripsAndHydrates() {
-        var definition = Fixtures.BuildDocument();
+        var definition = (Fixtures.BuildDocument() with {
+            Metadata = new WorldMetadataSection(Title: "Play", Description: "The overworld hub.", Authors: [new WorldMetadataAuthor(Name: "Jane")], Tags: ["overworld"]),
+        });
         var projection = WorldProjection.Compose(definition: definition, tier: WorldDisclosureTier.Presentation, authority: "127.0.0.1:5000", revision: 3);
 
         Assert.NotNull(projection);
@@ -89,8 +103,13 @@ public sealed class ProjectionDisclosureLawTests {
         Assert.Empty(hydrated.Kits[0].Actions);
         Assert.Empty(hydrated.BodyMotionPrograms);
         Assert.Null(hydrated.Admission);
+        // Metadata's disclosed half survives the round trip; its withheld half hydrates neutral, not as a guess.
+        Assert.Equal(expected: "Play", actual: hydrated.Metadata!.Title);
+        Assert.Equal(expected: "The overworld hub.", actual: hydrated.Metadata.Description);
+        Assert.Null(@object: hydrated.Metadata.Authors);
+        Assert.Null(@object: hydrated.Metadata.Tags);
+        Assert.Null(@object: hydrated.Metadata.Custom);
     }
-
     [Fact]
     public void ReplicaTier_SendsTheDefinitionVerbatim() {
         var definition = Fixtures.BuildDocument();
@@ -103,7 +122,6 @@ public sealed class ProjectionDisclosureLawTests {
 
         Assert.Equal(expected: first, actual: WorldDefinitionSerialization.Serialize(definition: reloaded));
     }
-
     [Fact]
     public void UnauthoredAdmissionEntry_ResolvesToPresentation() {
         var entry = Fixtures.AnyAuthorityArrivals();
@@ -119,21 +137,20 @@ public sealed class ProjectionDisclosureLawTests {
         Assert.Null(WorldAdmissionDoor.TryAdmitArrival(entries: [entry with { Disclosure = WorldDisclosureTier.Replica }], sourceAuthority: "127.0.0.1:9", verdict: out var replica));
         Assert.Equal(expected: WorldDisclosureTier.Replica, actual: replica!.Tier);
     }
-
     [Fact]
     public void ProjectionParse_RefusesForeignAndUnreservedMembers() {
         var projection = WorldProjection.Compose(definition: Fixtures.BuildDocument(), tier: WorldDisclosureTier.Presentation, authority: "boot", revision: 1)!;
         var json = Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: projection));
 
-        Assert.False(WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: json.Replace(oldValue: "\"schema\"", newValue: "\"$schema\"", comparisonType: StringComparison.Ordinal)), projection: out _, reason: out var schemaReason));
+        Assert.False(WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: json.Replace(comparisonType: StringComparison.Ordinal, newValue: "\"$schema\"", oldValue: "\"schema\"")), projection: out _, reason: out var schemaReason));
         Assert.Contains(expectedSubstring: "puck.world.projection.v1", actualString: schemaReason, comparisonType: StringComparison.Ordinal);
 
-        var withUnknown = json.Insert(startIndex: (json.IndexOf(value: '{', comparisonType: StringComparison.Ordinal) + 1), value: "\"rules\": [],");
+        var withUnknown = json.Insert(startIndex: (json.IndexOf(comparisonType: StringComparison.Ordinal, value: '{') + 1), value: "\"rules\": [],");
 
         Assert.False(WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: withUnknown), projection: out _, reason: out var unknownReason));
         Assert.Contains(expectedSubstring: "rules", actualString: unknownReason, comparisonType: StringComparison.Ordinal);
 
-        var withReserved = json.Insert(startIndex: (json.IndexOf(value: '{', comparisonType: StringComparison.Ordinal) + 1), value: "\"_note\": \"kept\",");
+        var withReserved = json.Insert(startIndex: (json.IndexOf(comparisonType: StringComparison.Ordinal, value: '{') + 1), value: "\"_note\": \"kept\",");
 
         Assert.True(WorldProjection.TryDeserialize(utf8Json: Encoding.UTF8.GetBytes(s: withReserved), projection: out var reserved, reason: out var reservedReason), reservedReason);
         Assert.NotNull(reserved!.Extensions);

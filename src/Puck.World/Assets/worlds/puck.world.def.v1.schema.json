@@ -152,6 +152,15 @@
     "adjacencies": {
       "$ref": "./schema/adjacencies.schema.json"
     },
+    "text": {
+      "$ref": "./schema/text.schema.json"
+    },
+    "metadata": {
+      "$ref": "./schema/metadata.schema.json"
+    },
+    "basis": {
+      "$ref": "./schema/basis.schema.json"
+    },
     "documentId": {
       "$ref": "./schema/documentId.schema.json"
     },

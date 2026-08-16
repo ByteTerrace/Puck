@@ -1,0 +1,158 @@
+[
+  {
+    "Id": "quantization.quantize-nearest-vs-cleared-comparison",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BeattyQuantization",
+        "Name": "QuantizeNearest"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BeattyQuantization.QuantizeNearest — nearest dyadic grid numerator and its side, decided in QuadraticSurd arithmetic (floor, remainder, half comparison)",
+        "Against": "QuantizationClaims.OracleQuantize — the same decision reached without QuadraticSurd: an independent Newton-descent integer square root, a cleared-denominator floor division, and a cleared half-step sign evaluation; ties decided on the even numerator by the reference's own branch. ENVELOPE: the battery holds positive values only, fraction widths 0..16, and rational entries placed on grid points and exact half-steps so the tie and exact-hit branches are exercised",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a negative fractionBits refuses with ArgumentOutOfRangeException naming fractionBits",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quantization.first-divergence-vs-brute-force",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BeattyQuantization",
+        "Name": "CertifySlope"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantization",
+        "Name": "FirstFloorDisagreement"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": "Verify"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": "Slope"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": "FractionBits"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": "QuantizedNumerator"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": "RoundingSign"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": "FirstDivergence"
+      },
+      {
+        "Type": "Puck.Maths.BeattyQuantizationCertificate",
+        "Name": "DivergenceWitness"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "CertifySlope and FirstFloorDisagreement — the first index at which quantized and exact Beatty floors disagree, located through SimplestRational's Stern–Brocot descent",
+        "Against": "a brute-force linear scan comparing floors index by index, computed without QuadraticSurd or SimplestRational: exact floors from an independent integer square root plus floor division, quantized floors from integer multiply and shift. The scan confirms the divergence index, the direction against RoundingSign, and that the witness is one above the lower line. ENVELOPE: slope battery of five quadratic irrationals at widths 0..8 plus four rational pairs, every first divergence within the 200000 scan cap; minimality beyond the cap is carried by the construction, not this scan",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every generated certificate passes its own Verify; a rational slope refuses naming slope; an approximation equal to the exact slope refuses naming approximateNumerator; a zero denominator refuses naming approximateDenominator",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quantization.simplest-rational-minimality",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SimplestRational",
+        "Name": "InOpenInterval"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SimplestRational.InOpenInterval — the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot digit stripping in QuadraticSurd arithmetic",
+        "Against": "an exhaustive scan of every smaller denominator, in cleared-denominator integer arithmetic only: for each n below the returned denominator, the least integer above low·n is tested against high·n by sign evaluation — membership of any such fraction refutes minimality. Strict interior membership and lowest terms are checked the same way. ENVELOPE: the battery keeps returned denominators within the 5000 scan cap; both endpoint kinds (rational and quadratic irrational) appear on both sides",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an empty interval (low ≥ high) refuses with ArgumentOutOfRangeException naming high",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "quantization.convergents-are-closest-approach-records",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.ContinuedFraction",
+        "Name": "Convergents"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ContinuedFraction.Convergents — convergent numerators and denominators from the periodic expansion",
+        "Against": "the defining best-approximation property, checked without any Puck.Maths call: a full sweep n = 1..q_last computes each n·x's distance to its nearest integer via an independent integer square root and squared cross-comparison, and the strict distance-record indices must equal the distinct convergent denominators in order; sides must alternate and residuals strictly shrink. This never replays the convergent recurrence, so agreement pins the expansion and the recurrence together. ENVELOPE: five families with last denominators within a 3000-step sweep",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "mismatched numerator and denominator span lengths refuse with ArgumentException naming denominators; every convergent is in lowest terms",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

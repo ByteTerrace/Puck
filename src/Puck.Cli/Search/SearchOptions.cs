@@ -2,7 +2,6 @@ namespace Puck.Cli.Search;
 
 // Raised by SearchOptions.Parse on a bad command line; the caller maps it to exit 2 with the message.
 internal sealed class SearchUsageException(string message) : Exception(message);
-
 // How much of a file's match set the selected output mode actually prints. The scanner produces exactly this much and
 // no more.
 internal enum SearchDetail {
@@ -15,7 +14,6 @@ internal enum SearchDetail {
     // Line blocks (and spans under -s) print per-match locations.
     Locations,
 }
-
 // The parsed search command line. Parse is the sole constructor path; every property is set only during parsing.
 internal sealed class SearchOptions {
     public int After { get; private set; }
@@ -34,7 +32,6 @@ internal sealed class SearchOptions {
     public bool Quiet { get; private set; }
     public bool ShowHelp { get; private set; }
     public bool Span { get; private set; }
-
     // The mode precedence, in one place: -q silences everything, then -l wins over -c, then the line-block modes. It
     // is what SearchEmitter applies and what the scanner reads to skip work whose result is never printed.
     public SearchDetail Detail =>
@@ -89,24 +86,24 @@ internal sealed class SearchOptions {
                     o.FilesOnly = true;
                     break;
                 case "-A" or "--after-context":
-                    o.After = NextInt(args: args, i: ref i, flag: a);
+                    o.After = NextInt(args: args, flag: a, i: ref i);
                     break;
                 case "-B" or "--before-context":
-                    o.Before = NextInt(args: args, i: ref i, flag: a);
+                    o.Before = NextInt(args: args, flag: a, i: ref i);
                     break;
                 case "-C" or "--context":
-                    var c = NextInt(args: args, i: ref i, flag: a);
+                    var c = NextInt(args: args, flag: a, i: ref i);
                     o.Before = c;
                     o.After = c;
                     break;
                 case "-M" or "--max-results":
-                    o.MaxResults = NextInt(args: args, i: ref i, flag: a);
+                    o.MaxResults = NextInt(args: args, flag: a, i: ref i);
                     break;
                 case "-g" or "--glob":
-                    o.Include.Add(item: new CliGlob(glob: NextArg(args: args, i: ref i, flag: a)));
+                    o.Include.Add(item: new CliGlob(glob: NextArg(args: args, flag: a, i: ref i)));
                     break;
                 case "--not":
-                    o.Exclude.Add(item: new CliGlob(glob: NextArg(args: args, i: ref i, flag: a)));
+                    o.Exclude.Add(item: new CliGlob(glob: NextArg(args: args, flag: a, i: ref i)));
                     break;
                 default:
                     throw new SearchUsageException(message: $"unknown option '{a}' (try --help)");
@@ -143,9 +140,9 @@ internal sealed class SearchOptions {
         return args[++i];
     }
     private static int NextInt(string[] args, ref int i, string flag) {
-        var raw = NextArg(args: args, i: ref i, flag: flag);
+        var raw = NextArg(args: args, flag: flag, i: ref i);
 
-        if (!int.TryParse(s: raw, result: out var v) || (v < 0)) {
+        if (!int.TryParse(result: out var v, s: raw) || (v < 0)) {
             throw new SearchUsageException(message: $"{flag} expects a non-negative integer, got '{raw}'");
         }
 

@@ -19,6 +19,7 @@ public sealed class GamePrinterLinkSession : IDisposable {
     private readonly Machine m_machine;
     private readonly SerialComponent m_port;
     private readonly GamePrinterDevice m_printer;
+
     private bool m_disposed;
 
     /// <summary>Attaches a printer to a machine's serial port.</summary>
@@ -33,8 +34,8 @@ public sealed class GamePrinterLinkSession : IDisposable {
         var port = machine.GetRequiredService<SerialComponent>();
 
         SerialComponent.AttachPeer(
-            port: port,
-            peer: printer
+            peer: printer,
+            port: port
         );
 
         m_machine = machine.Machine;
@@ -55,7 +56,6 @@ public sealed class GamePrinterLinkSession : IDisposable {
         m_machine.Run(tCycles: tCycles);
         m_printer.AdvanceBusy(tCycles: tCycles);
     }
-
     /// <summary>Severs the cable: the serial port loses its peer and the machine steps independently again. The machine
     /// and printer themselves are untouched (they are owned by the caller, not the session).</summary>
     public void Dispose() {

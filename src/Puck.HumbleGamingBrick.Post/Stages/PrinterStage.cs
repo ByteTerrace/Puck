@@ -1,5 +1,5 @@
+using Puck.GamingBricks;
 using Puck.HumbleGamingBrick.Interfaces;
-using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -38,7 +38,6 @@ internal sealed class PrinterStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "printer";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -61,8 +60,8 @@ internal sealed class PrinterStage : IPostStage {
         var replay = RunScenario(churnAtStep: -1);
 
         if (Difference(
-            expected: reference,
             actual: replay,
+            expected: reference,
             leg: "replay"
         ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
@@ -73,8 +72,8 @@ internal sealed class PrinterStage : IPostStage {
         var churned = RunScenario(churnAtStep: churnStep);
 
         if (Difference(
-            expected: reference,
             actual: churned,
+            expected: reference,
             leg: "churn"
         ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
@@ -86,8 +85,8 @@ internal sealed class PrinterStage : IPostStage {
             var overflowReference = RunOverflowScenario(bandCount: bandCount);
 
             if (JudgeOverflow(
-                result: overflowReference,
-                bandCount: bandCount
+                bandCount: bandCount,
+                result: overflowReference
             ) is { } overflowFailure) {
                 return PostStageOutcome.Fail(detail: overflowFailure);
             }
@@ -95,8 +94,8 @@ internal sealed class PrinterStage : IPostStage {
             var overflowReplay = RunOverflowScenario(bandCount: bandCount);
 
             if (Difference(
-                expected: overflowReference,
                 actual: overflowReplay,
+                expected: overflowReference,
                 leg: $"{bandCount}-band overflow replay"
             ) is { } overflowReplayFailure) {
                 return PostStageOutcome.Fail(detail: overflowReplayFailure);
@@ -248,7 +247,6 @@ internal sealed class PrinterStage : IPostStage {
             machine.Dispose();
         }
     }
-
     // Judges an overflow run: no fault reaching this point is itself part of the proof (H-05 was an IndexOutOfRangeException
     // on this exact traffic), plus exactly one print, a clean busy -> ready transition, and the printed image matching the
     // independent wrap-policy reference model exactly (dimensions AND content, not just "didn't crash").
@@ -286,15 +284,14 @@ internal sealed class PrinterStage : IPostStage {
         }
 
         if (result.Statuses.IndexOf(
-            item: StatusDone,
-            index: firstPrinting
+            index: firstPrinting,
+            item: StatusDone
         ) < 0) {
             return $"the {bandCount}-band overflow scenario reported busy but never transitioned to ready";
         }
 
         return null;
     }
-
     // An independent model of GamePrinterDevice.UnpackBand's circular-buffer wrap policy (Core/printer.c:49's overflow
     // citation lives on that method) — computed from band count alone, not by calling the production code. Every
     // overflow band is PrinterRom.BuildOverflowBand, whose first 8-row half always decodes to shade 1 and second half
@@ -311,21 +308,20 @@ internal sealed class PrinterStage : IPostStage {
 
         for (var segment = 0; (segment < segmentCount); ++segment) {
             var writeIndex = ((totalWrites - segmentCount) + segment);
-            var shade = (byte)(((writeIndex % 2) == 0)
+            var shade = ((byte)(((writeIndex % 2) == 0)
                 ? 1
-                : 2);
+                : 2));
 
             Array.Fill(
                 array: expected,
-                value: shade,
+                count: SegmentBytes,
                 startIndex: (segment * SegmentBytes),
-                count: SegmentBytes
+                value: shade
             );
         }
 
         return expected;
     }
-
     // Judges the reference run: exactly one print emitted, the right dimensions, no checksum error, a clean busy -> ready
     // transition observed through the STATUS polls, the two DATA bands rendered to identical halves (the compressed band
     // round-tripped), and a non-uniform image (bytes actually crossed the cable).
@@ -356,8 +352,8 @@ internal sealed class PrinterStage : IPostStage {
         }
 
         var firstDone = result.Statuses.IndexOf(
-            item: StatusDone,
-            index: firstPrinting
+            index: firstPrinting,
+            item: StatusDone
         );
 
         if (firstDone < 0) {
@@ -387,7 +383,6 @@ internal sealed class PrinterStage : IPostStage {
             ? "the printed image is uniform; no varied image data reached the printer"
             : null);
     }
-
     // Compares a later run against the reference: the print fingerprint, the emitted-print count, the sampled status
     // sequence, and both final states (machine snapshot + printer state) must match exactly.
     private static string? Difference(PrinterScenarioResult expected, PrinterScenarioResult actual, string leg) {
@@ -420,7 +415,6 @@ internal sealed class PrinterStage : IPostStage {
 
         return null;
     }
-
     // The first budget boundary that is transfer-idle after at least one DATA band has landed but before the print
     // emits — a genuine mid-image severable instant.
     private static int PickChurnStep(List<BoundaryProbe> probes) {
@@ -438,7 +432,6 @@ internal sealed class PrinterStage : IPostStage {
 
         return -1;
     }
-
     // A boundary is transfer-idle when the machine's serial transfer bit is clear: with no active transfer no bits are
     // clocked into the printer, so its shift register sits byte-aligned (nothing mid-flight to lose across a snapshot).
     private static bool IsTransferIdle(MachineInstance machine, GamePrinterDevice printer) =>

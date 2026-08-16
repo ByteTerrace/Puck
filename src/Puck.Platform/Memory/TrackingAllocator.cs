@@ -21,7 +21,7 @@ public sealed class TrackingAllocator : IAllocator {
         );
 
         if (ptr is not null) {
-            m_allocations[(nuint)ptr] = new AllocationInfo(
+            m_allocations[((nuint)ptr)] = new AllocationInfo(
                 Size: size,
                 StackTrace: Environment.StackTrace
             );
@@ -31,7 +31,7 @@ public sealed class TrackingAllocator : IAllocator {
     public unsafe void Free(void* ptr) {
         if (ptr is not null) {
             m_allocations.TryRemove(
-                key: (nuint)ptr,
+                key: ((nuint)ptr),
                 value: out _
             );
             m_inner.Free(ptr: ptr);
@@ -46,12 +46,12 @@ public sealed class TrackingAllocator : IAllocator {
 
         if ((ptr is not null) && ((newPtr is not null) || (0 == newSize))) {
             m_allocations.TryRemove(
-                key: (nuint)ptr,
+                key: ((nuint)ptr),
                 value: out _
             );
         }
         if (newPtr is not null) {
-            m_allocations[(nuint)newPtr] = new AllocationInfo(
+            m_allocations[((nuint)newPtr)] = new AllocationInfo(
                 Size: newSize,
                 StackTrace: Environment.StackTrace
             );

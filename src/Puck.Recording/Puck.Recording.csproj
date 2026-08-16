@@ -1,17 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <AssemblyName>Puck.Recording</AssemblyName>
+        <Description>The platform-neutral half of Puck's recording graph: a versioned RecordingDocument describes one capture, and RecordingSession drives it against caller-supplied video-encoder and audio-source factories, muxing a hand-rolled deterministic Matroska/WebM container with an Opus audio lane and capture-only text/rect/timecode overlays.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Recording</PackageId>
+        <PackageTags>av1;capture;matroska;opus;recording;webm</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.Recording</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <!-- scripts/ holds standalone .NET 10 file-based programs (dotnet run <script>.cs); they are not part of this
-             assembly and their '#:' directives fail the project compile if swept in. -->
-        <Compile Remove="scripts/**/*.cs" />
-    </ItemGroup>
-
-    <ItemGroup>
         <PackageReference Include="Concentus" Version="[2.*, )" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <!-- CaptureSink encodes each captured frame through PngEncoder. -->
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

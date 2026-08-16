@@ -19,7 +19,6 @@ public sealed partial class ApuWaveChannel : ISnapshotable {
         writer.WriteBoolean(value: m_twoBank);
         writer.WriteInt32(value: m_bank);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

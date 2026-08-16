@@ -14,6 +14,106 @@ namespace Puck.World;
 /// device.
 /// </summary>
 internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link) : ICommandModule {
+    private static string DescribeAssignment(WorldRowAssignment assignment) =>
+        $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
+            ? "all"
+            : string.Join(
+                separator: ",",
+                values: assignment.Rows
+            ))}]";
+    private static string DescribeDistribution(WorldDistribution distribution) {
+        var region = distribution.Region switch {
+            WorldDistributionRegion.Disc disc => $"disc(radius={disc.Radius:0.###},samples={(disc.SampleCount?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "requested")})",
+            WorldDistributionRegion.Points points => $"points(names={string.Join(
+            separator: ",",
+            values: points.Names
+        )},halfExtent={points.HalfExtent:0.###})",
+            WorldDistributionRegion.Lattice lattice => $"lattice({lattice.CountA}x{lattice.CountB})",
+            _ => "unknown",
+        };
+
+        return $"{region}+{DescribeSequence(sequence: distribution.Fill)}";
+    }
+    // The world.parked readout: every entity index currently PARKED (see WorldPopulation.Entry.Parked), its
+    // remaining grace and absolute deadline tick, and — when the retained body carries one — its profile name, so a
+    // script can tell WHO a parked seat is waiting for without inferring it from player.where's silence. A body
+    // parked with NO deadline (a positive reconnect grace compiled at simulation rate 0 — see
+    // CompiledTickDuration.IsNever) reads null from WorldPopulation.ParkedRemainingTicks and renders "never" for
+    // both fields — a concrete expiry that will never arrive would be worse than saying nothing. The same null is
+    // POSITIVE INFINITY on the $parked: rule channel (Server.WorldServer.ReadWorldFact's Parked arm), so the
+    // console and the rules substrate say the same thing in their own vocabularies.
+    private string DescribeParked() {
+        var tick = server.NextInputTick;
+        var rows = new List<string>();
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (!population.IsParked(index: index)) {
+                continue;
+            }
+
+            var window = ((population.ParkedRemainingTicks(
+                index: index,
+                tick: tick
+            ) is { } remaining)
+                ? $"remaining={remaining} deadline={(tick + ((ulong)remaining))}"
+                : "remaining=never deadline=never"
+            );
+            var body = population.EntryBody(index: index);
+            var profile = body?.Profile?.Name;
+            var pose = (body?.DescribePose() ?? "pos=(?, ?) yaw=?°");
+
+            rows.Add(item: ((profile is null)
+                ? $"body:{index} {window} {pose}"
+                : $"body:{index} {window} profile={profile} {pose}"));
+        }
+
+        return $"[world.parked: {string.Join(
+            separator: " | ",
+            values: rows
+        )}]";
+    }
+    // The world.players readout: the roster's four slots plus the population line spliced in as a trailing segment.
+    // roster.Describe() ends with ']', so drop it (the [..^1] slice) and re-close after the population segment.
+    private string DescribePlayers() {
+        var players = roster.Describe();
+        var local = roster.Count;
+        var simulated = population.SimulatedCount;
+
+        return $"{players[..^1]} | population: {local} local + {simulated} network = {(local + simulated)}/{population.Capacity}]";
+    }
+    // The world.population readout: the active simulated count, the between-tapes behavior, and the total avatar load on
+    // the renderer. LOOPBACK-ONLY: the population reads here are in-process; a socket transport replaces them with a
+    // link query the server composes.
+    private string DescribePopulation() {
+        var local = roster.Count;
+        var simulated = population.SimulatedCount;
+        var behavior = (population.DefaultPeerSource.IsIdle
+            ? "idle"
+            : ((population.DefaultPeerSource.ProducerName is { } producer)
+                ? $"producer:{producer}"
+                : "live"
+        ));
+        var workload = WorldAvatarCatalog.ActiveWorkload(
+            isActive: population.IsActive,
+            capacity: population.Capacity
+        );
+        // The per-kit census derives its names and counts from the definition rows, in row order.
+        var counts = population.ActiveKitCounts();
+        var kits = string.Join(
+            separator: " ",
+            values: server.Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}")
+        );
+        var defaults = server.Definition.Population;
+        var kitAssignment = DescribeAssignment(assignment: server.Definition.Assignment);
+        var lookAssignment = DescribeAssignment(assignment: server.Definition.LookAssignment);
+
+        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
+    }
+    private static string DescribeSequence(WorldSequence sequence) =>
+        $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
+    private static string DescribeVariation(WorldPopulationVariation variation) =>
+        $"phase={DescribeSequence(sequence: variation.Phase)},weave={DescribeSequence(sequence: variation.Weave)},activity={DescribeSequence(sequence: variation.Activity)}";
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
@@ -32,7 +132,10 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 // of either lane, or an unrecognized token, is rejected whole so a typo never half-applies. WireArgs has
                 // no enumerator (a ref struct can't back foreach's pattern here without one) — walk it by index instead.
                 for (var index = 0; (index < args.Count); index++) {
-                    if (args.Is(index: index, value: "idle")) {
+                    if (args.Is(
+                        index: index,
+                        value: "idle"
+                    )) {
                         if (behavior is not null) {
                             return CommandResult.Error(output: $"[world.population: source given twice — idle|producer:<name>]");
                         }
@@ -44,7 +147,13 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
                     var token = args[index].ToString();
 
-                    if (token.StartsWith(value: "producer:", comparisonType: StringComparison.Ordinal) && (token.Length > "producer:".Length)) {
+                    if (
+                        token.StartsWith(
+                        comparisonType: StringComparison.Ordinal,
+                        value: "producer:"
+                    ) &&
+                        (token.Length > "producer:".Length)
+                    ) {
                         if (behavior is not null) {
                             return CommandResult.Error(output: $"[world.population: source given twice — idle|producer:<name>]");
                         }
@@ -54,7 +163,14 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                         continue;
                     }
 
-                    if (!args.TryInt(index: index, value: out var parsed) || (parsed < 0) || (parsed > population.PeerCapacity)) {
+                    if (
+                        !args.TryInt(
+                        index: index,
+                        value: out var parsed
+                    ) ||
+                        (parsed < 0) ||
+                        (parsed > population.PeerCapacity)
+                    ) {
                         return CommandResult.Error(output: $"[world.population: unknown token '{args[index]}' — a count 0..{population.PeerCapacity} and/or idle|producer:<name>]");
                     }
 
@@ -79,21 +195,33 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 string? notice = null;
 
                 if (count is { } resolvedCount) {
-                    link.SubmitSession(request: new SessionRequest.SetPopulation(Principal: actingPrincipal, Count: resolvedCount), completion: reply => {
-                        if (!reply.Accepted) {
-                            notice += $"[world.population: {actingPrincipal.Describe()} cannot set the census ({reply.Reason}) — see world.why]\n";
-                        } else if (reply.AssignedIndex != resolvedCount) {
-                            notice += $"[world.population: requested {resolvedCount}, GRANTED {reply.AssignedIndex} — clamped to the live ceiling ({population.SimulatedCeiling}: the networkPlayers admission cap under {population.MaxSimulated} free peer slots)]\n";
+                    link.SubmitSession(
+                        request: new SessionRequest.SetPopulation(
+                            Count: resolvedCount,
+                            Principal: actingPrincipal
+                        ),
+                        completion: reply => {
+                            if (!reply.Accepted) {
+                                notice += $"[world.population: {actingPrincipal.Describe()} cannot set the census ({reply.Reason}) — see world.why]\n";
+                            } else if (reply.AssignedIndex != resolvedCount) {
+                                notice += $"[world.population: requested {resolvedCount}, GRANTED {reply.AssignedIndex} — clamped to the live ceiling ({population.SimulatedCeiling}: the networkPlayers admission cap under {population.MaxSimulated} free peer slots)]\n";
+                            }
                         }
-                    });
+                    );
                 }
 
                 if (behavior is { } resolvedBehavior) {
-                    link.SubmitSession(request: new SessionRequest.SetPeerSource(Principal: actingPrincipal, Source: resolvedBehavior), completion: peerReply => {
-                        if (!peerReply.Accepted) {
-                            notice += $"[world.population: {actingPrincipal.Describe()} cannot set the peer source ({peerReply.Reason}) — see world.why]\n";
+                    link.SubmitSession(
+                        request: new SessionRequest.SetPeerSource(
+                            Principal: actingPrincipal,
+                            Source: resolvedBehavior
+                        ),
+                        completion: peerReply => {
+                            if (!peerReply.Accepted) {
+                                notice += $"[world.population: {actingPrincipal.Describe()} cannot set the peer source ({peerReply.Reason}) — see world.why]\n";
+                            }
                         }
-                    });
+                    );
                 }
 
                 return new CommandResult(Output: (notice + DescribePopulation()));
@@ -118,11 +246,14 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
                 var result = default(CommandResult);
 
-                link.Query(query: new WorldQuery.InputHolds(), completion: answer => {
-                    result = new CommandResult(Output: answer.Text) {
-                        IsError = answer.Refused,
-                    };
-                });
+                link.Query(
+                    query: new WorldQuery.InputHolds(),
+                    completion: answer => {
+                        result = new CommandResult(Output: answer.Text) {
+                            IsError = answer.Refused,
+                        };
+                    }
+                );
 
                 return result;
             }
@@ -148,81 +279,5 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: DescribeParked())
         );
-    }
-
-    // The world.players readout: the roster's four slots plus the population line spliced in as a trailing segment.
-    // roster.Describe() ends with ']', so drop it (the [..^1] slice) and re-close after the population segment.
-    private string DescribePlayers() {
-        var players = roster.Describe();
-        var local = roster.Count;
-        var simulated = population.SimulatedCount;
-
-        return $"{players[..^1]} | population: {local} local + {simulated} network = {(local + simulated)}/{population.Capacity}]";
-    }
-
-    // The world.population readout: the active simulated count, the between-tapes behavior, and the total avatar load on
-    // the renderer. LOOPBACK-ONLY: the population reads here are in-process; a socket transport replaces them with a
-    // link query the server composes.
-    private string DescribePopulation() {
-        var local = roster.Count;
-        var simulated = population.SimulatedCount;
-        var behavior = (population.DefaultPeerSource.IsIdle ? "idle" : ((population.DefaultPeerSource.ProducerName is { } producer) ? $"producer:{producer}" : "live"));
-        var workload = WorldAvatarCatalog.ActiveWorkload(isActive: population.IsActive, capacity: population.Capacity);
-        // The per-kit census derives its names and counts from the definition rows, in row order.
-        var counts = population.ActiveKitCounts();
-        var kits = string.Join(separator: " ", values: server.Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}"));
-        var defaults = server.Definition.Population;
-        var kitAssignment = DescribeAssignment(assignment: server.Definition.Assignment);
-        var lookAssignment = DescribeAssignment(assignment: server.Definition.LookAssignment);
-
-        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
-    }
-    private static string DescribeDistribution(WorldDistribution distribution) {
-        var region = distribution.Region switch {
-            WorldDistributionRegion.Disc disc => $"disc(radius={disc.Radius:0.###},samples={(disc.SampleCount?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "requested")})",
-            WorldDistributionRegion.Points points => $"points(names={string.Join(separator: ",", values: points.Names)},halfExtent={points.HalfExtent:0.###})",
-            WorldDistributionRegion.Lattice lattice => $"lattice({lattice.CountA}x{lattice.CountB})",
-            _ => "unknown",
-        };
-
-        return $"{region}+{DescribeSequence(sequence: distribution.Fill)}";
-    }
-    private static string DescribeVariation(WorldPopulationVariation variation) =>
-        $"phase={DescribeSequence(sequence: variation.Phase)},weave={DescribeSequence(sequence: variation.Weave)},activity={DescribeSequence(sequence: variation.Activity)}";
-    private static string DescribeAssignment(WorldRowAssignment assignment) =>
-        $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0) ? "all" : string.Join(separator: ",", values: assignment.Rows))}]";
-    private static string DescribeSequence(WorldSequence sequence) =>
-        $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
-
-    // The world.parked readout: every entity index currently PARKED (see WorldPopulation.Entry.Parked), its
-    // remaining grace and absolute deadline tick, and — when the retained body carries one — its profile name, so a
-    // script can tell WHO a parked seat is waiting for without inferring it from player.where's silence. A body
-    // parked with NO deadline (a positive reconnect grace compiled at simulation rate 0 — see
-    // CompiledTickDuration.IsNever) reads null from WorldPopulation.ParkedRemainingTicks and renders "never" for
-    // both fields — a concrete expiry that will never arrive would be worse than saying nothing. The same null is
-    // POSITIVE INFINITY on the $parked: rule channel (Server.WorldServer.ReadWorldFact's Parked arm), so the
-    // console and the rules substrate say the same thing in their own vocabularies.
-    private string DescribeParked() {
-        var tick = server.NextInputTick;
-        var rows = new List<string>();
-
-        for (var index = 0; (index < population.Capacity); index++) {
-            if (!population.IsParked(index: index)) {
-                continue;
-            }
-
-            var window = ((population.ParkedRemainingTicks(index: index, tick: tick) is { } remaining)
-                ? $"remaining={remaining} deadline={(tick + (ulong)remaining)}"
-                : "remaining=never deadline=never");
-            var body = population.EntryBody(index: index);
-            var profile = body?.Profile?.Name;
-            var pose = (body?.DescribePose() ?? "pos=(?, ?) yaw=?°");
-
-            rows.Add(item: ((profile is null)
-                ? $"body:{index} {window} {pose}"
-                : $"body:{index} {window} profile={profile} {pose}"));
-        }
-
-        return $"[world.parked: {string.Join(separator: " | ", values: rows)}]";
     }
 }

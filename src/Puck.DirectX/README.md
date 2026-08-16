@@ -21,9 +21,24 @@ submission, and timestamp pools. Swapchains and the frame loop live in
 `Puck.DirectX.Presentation`, mirroring the split between `Puck.Vulkan` and
 `Puck.Vulkan.Presentation`.
 
+## ✨ Key features
+
+- *Source-generated bindings, not hand-written P/Invoke:* CsWin32 emits the
+  raw COM surface from `NativeMethods.txt`, `unsafe` and pointer/vtable-shaped
+  in the same style as the rest of the codebase's interop.
+- *No runtime COM marshaling:* `NativeMethods.json` sets `allowMarshaling:
+  false`, so COM interfaces come through as `unsafe` structs with
+  function-pointer vtables — no marshaling ceremony, no GC pressure.
+- *A WARP fallback for headless verification:* software rendering is always
+  available through `IDirectXDeviceApi.CreateWarpDevice`, so CI and
+  no-GPU machines can still exercise the device path.
+- *One failure shape:* every native call funnels through
+  `HResultExtensions.ThrowIfFailed`, so a failing `HRESULT` always becomes a
+  `DirectXException` carrying the operation name and the code.
+
 ---
 
-## How it's organized
+## 📐 Structure
 
 The layering mirrors `Puck.Vulkan` so the two backends read the same way:
 
@@ -47,14 +62,7 @@ boundary.
 
 ---
 
-## Capabilities
-
-| Concern | Interface | Native call(s) | Result |
-|---------|-----------|----------------|--------|
-| Adapter enumeration | `IDirectXAdapterApi` | `CreateDXGIFactory2`, `IDXGIFactory4::EnumAdapters1` | `IReadOnlyList<DirectXAdapterDescription>` |
-| Feature-level probe | `IDirectXDeviceApi` | `D3D12CreateDevice` (null device) | `DirectXFeatureLevel?` |
-| Device creation | `IDirectXDeviceApi` | `D3D12CreateDevice` | `DirectXDevice` (owns `ID3D12Device`) |
-| Software fallback | `IDirectXDeviceApi` | `IDXGIFactory4::EnumWarpAdapter` + `D3D12CreateDevice` | `DirectXDevice` (WARP) |
+## 🚀 Quick start
 
 ```csharp
 using Puck.DirectX;
@@ -75,9 +83,18 @@ using var device = deviceApi.CreateWarpDevice(minimumFeatureLevel: DirectXFeatur
 `DirectXDevice` owns its `ID3D12Device` and releases it exactly once on `Dispose` — dispose
 it like any other Puck handle owner.
 
+## 🎛️ Capabilities
+
+| Concern | Interface | Native call(s) | Result |
+|---------|-----------|----------------|--------|
+| Adapter enumeration | `IDirectXAdapterApi` | `CreateDXGIFactory2`, `IDXGIFactory4::EnumAdapters1` | `IReadOnlyList<DirectXAdapterDescription>` |
+| Feature-level probe | `IDirectXDeviceApi` | `D3D12CreateDevice` (null device) | `DirectXFeatureLevel?` |
+| Device creation | `IDirectXDeviceApi` | `D3D12CreateDevice` | `DirectXDevice` (owns `ID3D12Device`) |
+| Software fallback | `IDirectXDeviceApi` | `IDXGIFactory4::EnumWarpAdapter` + `D3D12CreateDevice` | `DirectXDevice` (WARP) |
+
 ---
 
-## Result handling
+## ⚠️ Result handling
 
 Native calls return `HRESULT`. The internal `HResultExtensions.ThrowIfFailed(operation)`
 turns a failing code into a `DirectXException` carrying the operation name and the
@@ -87,7 +104,7 @@ never fails.)
 
 ---
 
-## Notes for agents
+## Constraints and invariants
 
 - **Windows-only by construction.** Every type that touches Win32 is
   `[SupportedOSPlatform("windows8.1")]`; consumers on a platform-neutral target framework
@@ -97,6 +114,36 @@ never fails.)
 - **COM lifetime is manual.** Every `IDXGIxxx`/`ID3D12xxx` pointer obtained must be
   `Release`d. The APIs use `try/finally` around transient factories and adapters; persistent
   objects are owned by an `IDisposable` `Interop` wrapper.
-- **Dependencies.** This project references only `Puck.Abstractions` (the neutral GPU
-  seams it implements). Presentation, windowing, and shader compilation live upstream in
-  `Puck.DirectX.Presentation`.
+
+## 📋 Core types
+
+| Type | Role |
+|------|------|
+| `IDirectXAdapterApi` / `DirectXNativeAdapterApi` | Adapter enumeration. |
+| `IDirectXDeviceApi` / `DirectXNativeDeviceApi` | Feature-level probing, device creation, and the WARP software fallback. |
+| `DirectXDevice` | The `IDisposable` handle owner for a created `ID3D12Device`. |
+| `DirectXAdapterDescription` | A `readonly record struct` projection of one enumerated adapter's native data. |
+| `DirectXFeatureLevel` | A managed mirror of `D3D_FEATURE_LEVEL`. |
+| `DirectXException` / `HResultExtensions` | The failing-`HRESULT`-to-exception seam every native call funnels through. |
+| `DirectXGpu*` (`Apis`/`Factories`/`Interop`) | The `Puck.Abstractions` GPU-contract implementations: compute pipelines, descriptor allocation, storage buffers/images, shared-surface export, DXR acceleration structures, queue submission, timestamp pools. |
+
+## 🧪 Verification
+
+There is no dedicated `Puck.DirectX.Tests` project; the backend is verified by
+running the engine on Direct3D 12 and by `puck parity`, which boots the real
+windowed `Puck.World` on both backends and compares the same fenced composed
+frame under the relaxed envelope:
+
+```powershell
+dotnet build Puck.slnx -c Release
+dotnet src/Puck.Cli/publish/Puck.Cli.dll parity
+```
+
+## 📦 Packaging
+
+`ByteTerrace.Puck.DirectX` depends on `Puck.Abstractions` (the neutral GPU
+contracts it implements) and, build-only, `Microsoft.Windows.CsWin32`
+(`PrivateAssets="all"` — a source generator, never a runtime dependency of a
+consumer). `Puck.DirectX.Presentation` and `Puck.World`/`Puck.Launcher.Windows`
+depend on it for the Direct3D 12 backend; presentation, windowing, and shader
+compilation live upstream in `Puck.DirectX.Presentation`.

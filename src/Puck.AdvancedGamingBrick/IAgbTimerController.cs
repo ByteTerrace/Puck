@@ -19,26 +19,22 @@ public interface IAgbTimerController {
     /// advance. Idempotent — a no-op once scheduled. The bus calls this before taking the span-collapse fast path.</summary>
     /// <param name="now">The current absolute master-clock value.</param>
     void EnsureScheduled(long now);
-
     /// <summary>Leaves event-scheduled mode: materializes every running prescaler timer's closed-form counter into
     /// its live field at <paramref name="now"/> and drops its scheduled overflow, so <see cref="RunCycle"/> can
     /// drive the latch/IRQ windows exactly. Idempotent — a no-op while already per-cycle. The bus calls this before
     /// stepping the block per-cycle.</summary>
     /// <param name="now">The current absolute master-clock value.</param>
     void EnsurePerCycle(long now);
-
     /// <summary>Advances all four timers by one master cycle at the given absolute clock: steps the running
     /// prescaler timers, applies any pending reload, then commits any latched control write (the run /
     /// reload-latch / step-latch sequence of the cycle-stepped hardware reference). Only valid in per-cycle mode
     /// (see <see cref="EnsurePerCycle"/>).</summary>
     /// <param name="clock">The absolute master-clock value for this cycle (the prescaler phase source).</param>
     void RunCycle(long clock);
-
     /// <summary>Reads a 16-bit timer register (the live counter for the CNT_L offsets).</summary>
     /// <param name="offset">The I/O offset within the 0x04000000 page.</param>
     /// <returns>The register value.</returns>
     ushort ReadRegister(uint offset);
-
     /// <summary>Writes a 16-bit timer register (CNT_L sets the reload; CNT_H is control). Both are latched and
     /// take effect one cycle later.</summary>
     /// <param name="offset">The I/O offset within the 0x04000000 page.</param>

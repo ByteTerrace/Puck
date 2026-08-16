@@ -35,7 +35,6 @@ public readonly record struct BindingChordEdge(
     bool Momentary = false,
     bool DispatchRelease = false
 );
-
 /// <summary>
 /// The seam a chord-aware <see cref="IInputBindings"/> hands its synthesized chord-command edges to the
 /// <see cref="InputRouter"/> through. After each <see cref="IInputBindings.Resolve(int, in InputSignal)"/> the
@@ -48,7 +47,6 @@ public interface IChordEdgeSource {
     /// <returns>The pending edges, in transition order. The span aliases an internal per-slot buffer that the next
     /// resolve for the slot reuses — consume it before resolving another signal.</returns>
     ReadOnlySpan<BindingChordEdge> DrainChordEdges(int slot);
-
     /// <summary>Drains every edge a PRIOR tick's signal processing scheduled to fire on the tick AFTER it — a
     /// <see cref="BindingActivatorMode.Tapped"/> row activator's completion is a momentary PULSE (the press fires
     /// immediately; its release is deferred one tick rather than collapsing into the same

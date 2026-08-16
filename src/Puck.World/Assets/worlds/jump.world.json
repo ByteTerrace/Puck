@@ -1032,7 +1032,7 @@
     "portalDefaults": {
       "travel": "party",
       "holdSeconds": 2,
-      "full": "retry",
+      "full": "Retry",
       "partyAllOrNothing": true
     }
   },

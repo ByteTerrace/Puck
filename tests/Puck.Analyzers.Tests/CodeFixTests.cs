@@ -14,12 +14,10 @@ namespace Puck.Analyzers.Tests;
 /// </summary>
 public sealed class CodeFixTests {
     private static readonly string StaleHash = new(c: '0', count: 64);
-
     // Two drifted bodies, chosen by what their recomputed fingerprint starts with. Roughly five in eight recomputed
     // hashes begin with a digit, and a digit-leading hash is the one a substitution pattern would swallow, so both
     // shapes are exercised rather than only whichever the first drifted body happened to produce.
     private static readonly (string Source, string Hash) LetterLeadingDrift = FindDrift(predicate: char.IsAsciiLetter);
-
     private static readonly (string Source, string Hash) DigitLeadingDrift = FindDrift(predicate: char.IsAsciiDigit);
 
     private static (string Source, string Hash) FindDrift(Func<char, bool> predicate) {
@@ -34,10 +32,8 @@ public sealed class CodeFixTests {
 
         throw new InvalidOperationException(message: "No drifted body produced a fingerprint with the requested leading character.");
     }
-
     private static string StaleLedger(string id = Sources.TargetId, string? extraMembers = null) =>
         Manifest.Of(new ManifestEntry { ExtraMembers = extraMembers, Id = id, Sha256 = StaleHash, Symbol = Sources.TargetSymbol });
-
     private static async Task<(ImmutableArray<Diagnostic> Diagnostics, ImmutableArray<CodeAction> Actions)> DiagnoseAndOfferAsync(FixSubject subject, CancellationToken cancellationToken) {
         var diagnostics = await FixHarness.DiagnoseAsync(solution: subject.Solution, projectId: subject.Solution.ProjectIds[0], cancellationToken: cancellationToken);
         var mismatches = diagnostics.Where(predicate: diagnostic => string.Equals(a: diagnostic.Id, b: "VER001", comparisonType: StringComparison.Ordinal)).ToImmutableArray();
@@ -48,9 +44,8 @@ public sealed class CodeFixTests {
 
         return (Diagnostics: diagnostics, Actions: await FixHarness.ActionsAsync(solution: subject.Solution, documentId: subject.SourceId, diagnostic: mismatches[0], cancellationToken: cancellationToken));
     }
-
     private static async Task<string> RepairAsync(FixSubject subject, CancellationToken cancellationToken) {
-        var (_, actions) = await DiagnoseAndOfferAsync(subject: subject, cancellationToken: cancellationToken);
+        var (_, actions) = await DiagnoseAndOfferAsync(cancellationToken: cancellationToken, subject: subject);
         var changed = await FixHarness.ApplyAsync(action: Assert.Single(collection: actions), cancellationToken: cancellationToken);
 
         return (await FixHarness.ManifestTextAsync(solution: changed!, manifestId: subject.ManifestId, cancellationToken: cancellationToken)).ToString();
@@ -62,22 +57,20 @@ public sealed class CodeFixTests {
 
         var text = await RepairAsync(subject: subject, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(json: text, id: Sources.TargetId));
+        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(id: Sources.TargetId, json: text));
     }
-
     [Fact]
     public async Task LedgerTheFixProducedSatisfiesTheAnalyzer() {
         var cancellationToken = TestContext.Current.CancellationToken;
 
         using var subject = FixHarness.Create(source: LetterLeadingDrift.Source, manifestJson: StaleLedger());
 
-        var (_, actions) = await DiagnoseAndOfferAsync(subject: subject, cancellationToken: cancellationToken);
+        var (_, actions) = await DiagnoseAndOfferAsync(cancellationToken: cancellationToken, subject: subject);
         var changed = await FixHarness.ApplyAsync(action: Assert.Single(collection: actions), cancellationToken: cancellationToken);
         var after = await FixHarness.DiagnoseAsync(solution: changed!, projectId: changed!.ProjectIds[0], cancellationToken: cancellationToken);
 
         Assert.Empty(collection: after);
     }
-
     [Fact]
     public async Task FixChangesNothingButTheRecordedHash() {
         var before = StaleLedger();
@@ -86,57 +79,51 @@ public sealed class CodeFixTests {
 
         var after = await RepairAsync(subject: subject, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Equal(expected: before.Replace(oldValue: StaleHash, newValue: LetterLeadingDrift.Hash, comparisonType: StringComparison.Ordinal), actual: after);
+        Assert.Equal(expected: before.Replace(comparisonType: StringComparison.Ordinal, newValue: LetterLeadingDrift.Hash, oldValue: StaleHash), actual: after);
     }
-
     [Fact]
     public async Task FixWritesADigitLeadingHashIntactAndLeavesTheEntryParseable() {
         var cancellationToken = TestContext.Current.CancellationToken;
 
         using var subject = FixHarness.Create(source: DigitLeadingDrift.Source, manifestJson: StaleLedger());
 
-        var text = await RepairAsync(subject: subject, cancellationToken: cancellationToken);
+        var text = await RepairAsync(cancellationToken: cancellationToken, subject: subject);
 
-        Assert.Contains(expectedSubstring: "\"sha256\"", actualString: text);
-        Assert.Equal(expected: DigitLeadingDrift.Hash, actual: Manifest.RecordedHash(json: text, id: Sources.TargetId));
-        Assert.Equal(expected: StaleLedger().Replace(oldValue: StaleHash, newValue: DigitLeadingDrift.Hash, comparisonType: StringComparison.Ordinal), actual: text);
+        Assert.Contains(actualString: text, expectedSubstring: "\"sha256\"");
+        Assert.Equal(expected: DigitLeadingDrift.Hash, actual: Manifest.RecordedHash(id: Sources.TargetId, json: text));
+        Assert.Equal(expected: StaleLedger().Replace(comparisonType: StringComparison.Ordinal, newValue: DigitLeadingDrift.Hash, oldValue: StaleHash), actual: text);
     }
-
     [Fact]
     public async Task FixPreservesTheLedgersEncoding() {
         var cancellationToken = TestContext.Current.CancellationToken;
 
         using var subject = FixHarness.Create(source: LetterLeadingDrift.Source, manifestJson: StaleLedger(), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-        var (_, actions) = await DiagnoseAndOfferAsync(subject: subject, cancellationToken: cancellationToken);
+        var (_, actions) = await DiagnoseAndOfferAsync(cancellationToken: cancellationToken, subject: subject);
         var changed = await FixHarness.ApplyAsync(action: Assert.Single(collection: actions), cancellationToken: cancellationToken);
         var text = await FixHarness.ManifestTextAsync(solution: changed!, manifestId: subject.ManifestId, cancellationToken: cancellationToken);
 
         Assert.Equal(expected: 3, actual: text.Encoding!.GetPreamble().Length);
     }
-
     [Fact]
     public async Task FixPreservesCarriageReturnLineEndings() {
         using var subject = FixHarness.Create(source: LetterLeadingDrift.Source, manifestJson: StaleLedger());
 
         var text = await RepairAsync(subject: subject, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.DoesNotContain(expectedSubstring: "\n", actualString: text.Replace(oldValue: "\r\n", newValue: string.Empty, comparisonType: StringComparison.Ordinal));
+        Assert.DoesNotContain(expectedSubstring: "\n", actualString: text.Replace(comparisonType: StringComparison.Ordinal, newValue: string.Empty, oldValue: "\r\n"));
     }
-
     [Fact]
     public async Task FixPreservesLineFeedOnlyLineEndings() {
-        using var subject = FixHarness.Create(source: LetterLeadingDrift.Source, manifestJson: StaleLedger().Replace(oldValue: "\r\n", newValue: "\n", comparisonType: StringComparison.Ordinal));
+        using var subject = FixHarness.Create(source: LetterLeadingDrift.Source, manifestJson: StaleLedger().Replace(comparisonType: StringComparison.Ordinal, newValue: "\n", oldValue: "\r\n"));
 
         var text = await RepairAsync(subject: subject, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.DoesNotContain(expectedSubstring: "\r", actualString: text);
+        Assert.DoesNotContain(actualString: text, expectedSubstring: "\r");
     }
-
     [Fact]
     public void FixIsOfferedForFingerprintDriftAlone() =>
         Assert.Equal(expected: new[] { "VER001" }, actual: new VerifiedCodeCodeFixProvider().FixableDiagnosticIds.ToArray());
-
     [Fact]
     public async Task NoFixIsOfferedForAnUnclaimedEntry() {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -150,21 +137,19 @@ public sealed class CodeFixTests {
         Assert.Equal(expected: "VER002", actual: unclaimed.Id);
         Assert.Empty(collection: actions);
     }
-
     [Fact]
     public async Task NoFixIsOfferedForABrandTheLedgerDoesNotRecord() {
         var cancellationToken = TestContext.Current.CancellationToken;
 
         using var subject = FixHarness.Create(source: Sources.BrandedMethod(), manifestJson: Manifest.Empty);
 
-        var (diagnostics, actions) = await DiagnoseAndOfferAsync(subject: subject, cancellationToken: cancellationToken);
+        var (diagnostics, actions) = await DiagnoseAndOfferAsync(cancellationToken: cancellationToken, subject: subject);
 
         // Rewriting a hash cannot record an entry that is not there, and an action reporting success having
         // changed nothing is worse than no action.
         Assert.Contains(collection: diagnostics, filter: diagnostic => string.Equals(a: diagnostic.Id, b: "VER001", comparisonType: StringComparison.Ordinal));
         Assert.Empty(collection: actions);
     }
-
     [Fact]
     public async Task NoFixIsOfferedForAnUnusableRecordedHashBecauseTheLedgerIsRefusedFirst() {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -178,7 +163,6 @@ public sealed class CodeFixTests {
         // there is no repair to offer and nothing pretends otherwise.
         Assert.Equal(expected: new[] { "VER006" }, actual: diagnostics.Select(selector: diagnostic => diagnostic.Id).ToArray());
     }
-
     [Fact]
     public async Task FixIsOfferedWhenTheBrandIdContainsAnApostrophe() {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -189,11 +173,10 @@ public sealed class CodeFixTests {
 
         // The id and hash travel as diagnostic properties, so display text an unusual id reshapes cannot break
         // the repair.
-        var text = await RepairAsync(subject: subject, cancellationToken: cancellationToken);
+        var text = await RepairAsync(cancellationToken: cancellationToken, subject: subject);
 
-        Assert.Equal(expected: hash, actual: Manifest.RecordedHash(json: text, id: "target's"));
+        Assert.Equal(expected: hash, actual: Manifest.RecordedHash(id: "target's", json: text));
     }
-
     [Fact]
     public async Task FixEditsTheLedgersOwnEntryNotAnUnrelatedObjectSharingItsKey() {
         var decoyHash = new string(c: 'a', count: 64);
@@ -225,10 +208,9 @@ public sealed class CodeFixTests {
 
         var text = await RepairAsync(subject: subject, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Contains(expectedSubstring: decoyHash, actualString: text);
-        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(json: text, id: Sources.TargetId));
+        Assert.Contains(actualString: text, expectedSubstring: decoyHash);
+        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(id: Sources.TargetId, json: text));
     }
-
     [Fact]
     public async Task FixLeavesEveryHashNestedInsideTheEntryAlone() {
         var nestedHash = new string(c: 'b', count: 64);
@@ -239,11 +221,10 @@ public sealed class CodeFixTests {
 
         var text = await RepairAsync(subject: subject, cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Contains(expectedSubstring: nestedHash, actualString: text);
+        Assert.Contains(actualString: text, expectedSubstring: nestedHash);
         Assert.Equal(expected: 1, actual: (text.Split(separator: LetterLeadingDrift.Hash).Length - 1));
-        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(json: text, id: Sources.TargetId));
+        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(id: Sources.TargetId, json: text));
     }
-
     [Fact]
     public async Task NoFixIsOfferedWhenTwoDocumentsAreNamedLikeTheLedger() {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -268,7 +249,6 @@ public sealed class CodeFixTests {
 
         Assert.Empty(collection: actions);
     }
-
     [Fact]
     public async Task FixLeavesTheSamePhysicalLedgerStaleInEveryOtherProjectThatLinksIt() {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -280,16 +260,15 @@ public sealed class CodeFixTests {
         // host's job, and this records where that boundary falls.
         var linkedManifestId = subject.AddLinkedProject(assemblyName: "Other.Assembly", source: Sources.Unbranded(), manifestJson: StaleLedger());
 
-        var (_, actions) = await DiagnoseAndOfferAsync(subject: subject, cancellationToken: cancellationToken);
+        var (_, actions) = await DiagnoseAndOfferAsync(cancellationToken: cancellationToken, subject: subject);
         var changed = await FixHarness.ApplyAsync(action: Assert.Single(collection: actions), cancellationToken: cancellationToken);
 
         var edited = (await FixHarness.ManifestTextAsync(solution: changed!, manifestId: subject.ManifestId, cancellationToken: cancellationToken)).ToString();
-        var linked = (await FixHarness.ManifestTextAsync(solution: changed!, manifestId: linkedManifestId, cancellationToken: cancellationToken)).ToString();
+        var linked = (await FixHarness.ManifestTextAsync(cancellationToken: cancellationToken, manifestId: linkedManifestId, solution: changed!)).ToString();
 
-        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(json: edited, id: Sources.TargetId));
-        Assert.Equal(expected: StaleHash, actual: Manifest.RecordedHash(json: linked, id: Sources.TargetId));
+        Assert.Equal(expected: LetterLeadingDrift.Hash, actual: Manifest.RecordedHash(id: Sources.TargetId, json: edited));
+        Assert.Equal(expected: StaleHash, actual: Manifest.RecordedHash(id: Sources.TargetId, json: linked));
     }
-
     [Fact]
     public async Task FixAllWritesEveryDriftedBrandsRecomputedHash() {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -336,7 +315,7 @@ public sealed class CodeFixTests {
             .Select(selector: diagnostic => diagnostic.Properties["VerifiedCodeHash"])
             .ToArray();
 
-        Assert.Equal(expected: expected, actual: new[] { Manifest.RecordedHash(json: after, id: "alpha"), Manifest.RecordedHash(json: after, id: "beta") });
-        Assert.NotEqual(expected: before, actual: after);
+        Assert.Equal(expected: expected, actual: new[] { Manifest.RecordedHash(id: "alpha", json: after), Manifest.RecordedHash(id: "beta", json: after) });
+        Assert.NotEqual(actual: after, expected: before);
     }
 }

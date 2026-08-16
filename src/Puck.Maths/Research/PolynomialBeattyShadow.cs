@@ -21,7 +21,6 @@ public readonly record struct PolynomialBeattyBoundaryAsymptoticCertificate(
     BigInteger LowerBoundDenominator,
     BigInteger ResidualMagnitudeCeiling
 );
-
 /// <summary>
 /// A finite proof that the boundary associated with one norm is eventually on a fixed side of the positive tail.
 /// </summary>
@@ -39,7 +38,6 @@ public readonly record struct PolynomialBeattyShadowNormDecisionCertificate(
     int BoundaryMinusTailSign,
     int EventualFloorDiscrepancy
 );
-
 /// <summary>An exact eventual floor decision for the integral-slope (square-discriminant) case.</summary>
 /// <param name="Cutoff">The first index at which the discrepancy is constant.</param>
 /// <param name="EventualFloorDiscrepancy">The constant discrepancy, necessarily zero or minus one.</param>
@@ -47,13 +45,11 @@ public readonly record struct PolynomialBeattyShadowRationalDecisionCertificate(
     BigInteger Cutoff,
     int EventualFloorDiscrepancy
 );
-
 /// <summary>One active generalized-Pell channel in an eventual Beatty-shadow presentation.</summary>
 public readonly record struct PolynomialBeattyShadowEventualChannel(
     PolynomialBeattyShadowNormDecisionCertificate Decision,
     PolynomialBeattyShadowPellChannel Channel
 );
-
 /// <summary>
 /// A finite presentation of every sufficiently large nonzero floor discrepancy as a union of congruence-periodic
 /// generalized-Pell channels.
@@ -68,16 +64,15 @@ public sealed class PolynomialBeattyShadowEventualCertificate {
         ActiveChannels = activeChannels;
     }
 
-    /// <summary>Gets the first index beyond which the channel presentation is complete.</summary>
-    public BigInteger Cutoff { get; }
-    /// <summary>Gets one sign-stabilization decision for every norm in the finite envelope.</summary>
-    public IReadOnlyList<PolynomialBeattyShadowNormDecisionCertificate> NormDecisions { get; }
     /// <summary>Gets the channels whose adjacent near-center boundary is eventually crossed.</summary>
     public IReadOnlyList<PolynomialBeattyShadowEventualChannel> ActiveChannels { get; }
+    /// <summary>Gets the first index beyond which the channel presentation is complete.</summary>
+    public BigInteger Cutoff { get; }
     /// <summary>Gets a value indicating whether the discrepancy is certified zero at every index beyond <see cref="Cutoff"/>.</summary>
     public bool EventuallyIdenticallyZero => (ActiveChannels.Count == 0);
+    /// <summary>Gets one sign-stabilization decision for every norm in the finite envelope.</summary>
+    public IReadOnlyList<PolynomialBeattyShadowNormDecisionCertificate> NormDecisions { get; }
 }
-
 /// <summary>An explicit Ostrowski DFAO certificate for the sufficiently large discrepancy sequence.</summary>
 public sealed class PolynomialBeattyShadowOstrowskiCertificate {
     internal PolynomialBeattyShadowOstrowskiCertificate(
@@ -99,12 +94,14 @@ public sealed class PolynomialBeattyShadowOstrowskiCertificate {
     /// <summary>Evaluates the certified discrepancy at or beyond <see cref="Cutoff"/>.</summary>
     public BigInteger Output(BigInteger tailIndex) {
         if (tailIndex < Cutoff) {
-            throw new ArgumentOutOfRangeException(nameof(tailIndex), "the index precedes the certified automaton cutoff");
+            throw new ArgumentOutOfRangeException(
+                nameof(tailIndex),
+                "the index precedes the certified automaton cutoff"
+            );
         }
         return Automaton.Output(value: tailIndex);
     }
 }
-
 /// <summary>An all-index Ostrowski DFAO together with the exact finite-prefix floors used to construct it.</summary>
 public sealed class PolynomialBeattyShadowTotalOstrowskiCertificate {
     internal PolynomialBeattyShadowTotalOstrowskiCertificate(
@@ -121,14 +118,17 @@ public sealed class PolynomialBeattyShadowTotalOstrowskiCertificate {
     public IReadOnlyDictionary<BigInteger, BigInteger> FinitePrefix { get; }
     public BigInteger? FirstCounterexample {
         get {
-            var finite = FinitePrefix.Where(predicate: pair => !pair.Value.IsZero).Select(selector: pair => (BigInteger?)pair.Key).Min();
+            var finite = FinitePrefix.Where(predicate: pair => !pair.Value.IsZero).Select(selector: pair => ((BigInteger?)pair.Key)).Min();
             var eventual = EventualCertificate.ChannelLanguages
-                .Select(selector: language => (BigInteger?)language.Channel.Decode(exponent: language.StartingExponent).TailIndex)
+                .Select(selector: language => ((BigInteger?)language.Channel.Decode(exponent: language.StartingExponent).TailIndex))
                 .Min();
 
             if (finite is null) { return eventual; }
             if (eventual is null) { return finite; }
-            return BigInteger.Min(left: finite.Value, right: eventual.Value);
+            return BigInteger.Min(
+                left: finite.Value,
+                right: eventual.Value
+            );
         }
     }
     public bool IdenticallyZero =>
@@ -137,12 +137,14 @@ public sealed class PolynomialBeattyShadowTotalOstrowskiCertificate {
 
     public BigInteger Output(BigInteger tailIndex) {
         if (tailIndex <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(tailIndex), "the tail index must be positive");
+            throw new ArgumentOutOfRangeException(
+                nameof(tailIndex),
+                "the tail index must be positive"
+            );
         }
         return Automaton.Output(value: tailIndex);
     }
 }
-
 /// <summary>An all-index positional DFAO for the integral-slope case.</summary>
 public sealed class PolynomialBeattyShadowTotalPositionalCertificate {
     internal PolynomialBeattyShadowTotalPositionalCertificate(
@@ -159,7 +161,7 @@ public sealed class PolynomialBeattyShadowTotalPositionalCertificate {
     public IReadOnlyDictionary<BigInteger, BigInteger> FinitePrefix { get; }
     public BigInteger? FirstCounterexample {
         get {
-            var finite = FinitePrefix.Where(predicate: pair => !pair.Value.IsZero).Select(selector: pair => (BigInteger?)pair.Key).Min();
+            var finite = FinitePrefix.Where(predicate: pair => !pair.Value.IsZero).Select(selector: pair => ((BigInteger?)pair.Key)).Min();
 
             return (finite ?? ((EventualCertificate.EventualFloorDiscrepancy == 0)
                 ? null
@@ -175,7 +177,6 @@ public sealed class PolynomialBeattyShadowTotalPositionalCertificate {
         return Automaton.Output(value: tailIndex);
     }
 }
-
 /// <summary>
 /// A bi-infinite congruence channel of integer boundaries for an affine quadratic center. Every point is obtained from
 /// <c>BaseX+BaseY*sqrt(D)</c> by a power of <see cref="PeriodUnit"/>; every point has the same cleared norm.
@@ -194,25 +195,16 @@ public readonly record struct PolynomialBeattyShadowPellChannel {
         Certificate = certificate;
     }
 
-    /// <summary>Gets the common cleared norm of the channel.</summary>
-    public BigInteger Norm { get; }
     /// <summary>Gets the rational coefficient of the channel's exponent-zero Pell point.</summary>
     public BigInteger BaseX { get; }
     /// <summary>Gets the square-root coefficient of the channel's exponent-zero Pell point.</summary>
     public BigInteger BaseY { get; }
-    /// <summary>Gets the norm-one unit advancing the channel by one congruence period.</summary>
-    public PellUnit PeriodUnit { get; }
     /// <summary>Gets the affine-center certificate whose congruences define the channel.</summary>
     public PolynomialBeattyShadowNormCertificate Certificate { get; }
-
-    /// <summary>Returns the Pell point at a signed channel exponent.</summary>
-    public (BigInteger X, BigInteger Y) Point(int exponent) {
-        var power = PeriodUnit.Power(exponent: checked((int)Math.Abs(value: (long)exponent)));
-
-        return ((exponent < 0)
-            ? power.Divide(x: BaseX, y: BaseY)
-            : power.Multiply(x: BaseX, y: BaseY));
-    }
+    /// <summary>Gets the common cleared norm of the channel.</summary>
+    public BigInteger Norm { get; }
+    /// <summary>Gets the norm-one unit advancing the channel by one congruence period.</summary>
+    public PellUnit PeriodUnit { get; }
 
     /// <summary>
     /// Decodes the point at a signed channel exponent into its tail index and integer boundary. Construction guarantees
@@ -248,293 +240,115 @@ public readonly record struct PolynomialBeattyShadowPellChannel {
 
         return (tailIndex, boundary);
     }
-}
+    /// <summary>Returns the Pell point at a signed channel exponent.</summary>
+    public (BigInteger X, BigInteger Y) Point(int exponent) {
+        var power = PeriodUnit.Power(exponent: checked((int)Math.Abs(value: ((long)exponent))));
 
+        return ((exponent < 0)
+            ? power.Divide(
+                x: BaseX,
+                y: BaseY
+            )
+            : power.Multiply(
+                x: BaseX,
+                y: BaseY
+            )
+        );
+    }
+}
 /// <summary>Finite quadratic-norm and generalized-Pell reductions for polynomial continued-fraction Beatty shadows.</summary>
 public static class PolynomialBeattyShadow {
-    /// <summary>
-    /// Attempts to compile the complete integral-slope discrepancy sequence into a radix-2 DFAO. As in the
-    /// irrational branch, an unresolved finite exact-integer comparison is reported rather than guessed.
-    /// </summary>
-    public static bool TryTotalPositionalAutomaton(
-        PolynomialContinuedFractionAnalysis analysis,
-        int refinementRounds,
-        out PolynomialBeattyShadowTotalPositionalCertificate? certificate,
-        out BigInteger unresolvedTailIndex) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        ArgumentOutOfRangeException.ThrowIfNegative(refinementRounds);
-        if (!analysis.Slope.IsRational) {
-            throw new ArgumentOutOfRangeException(nameof(analysis), "use the Ostrowski construction for irrational slope");
-        }
+    private static QuadraticSurd[] BoundaryResidualCoefficients(
+        IReadOnlyList<QuadraticSurd> coefficients,
+        QuadraticSurd leadingConjugateGap,
+        QuadraticSurd constantConjugateGap,
+        QuadraticSurd normValue) {
+        var termCount = coefficients.Count;
+        var residual = new QuadraticSurd[((2 * termCount) + 1)];
 
-        var eventual = RationalSlopeDecisionCertificate(analysis: analysis);
-        var system = new PositionalNumerationSystem(radix: 2);
-        var components = new List<(PositionalDigitAutomaton Automaton, BigInteger Output)>();
-
-        if (eventual.EventualFloorDiscrepancy != 0) {
-            components.Add(item: (
-                PositionalDigitAutomaton.AtLeast(cutoff: eventual.Cutoff, system: system),
-                eventual.EventualFloorDiscrepancy
-            ));
-        }
-
-        var prefix = new Dictionary<BigInteger, BigInteger>();
-        var hasExactTrap = analysis.TryExactBeattyTrapCertificate(certificate: out var exactTrap);
-        var hasShiftedExactTrap = analysis.TryShiftedExactBeattyTrapCertificate(certificate: out var shiftedExactTrap);
-
-        for (var tailIndex = BigInteger.One; (tailIndex < eventual.Cutoff); ++tailIndex) {
-            BigInteger tailFloor;
-
-            if (hasExactTrap) {
-                tailFloor = exactTrap.TailFloor(tailIndex: tailIndex);
-            } else if (hasShiftedExactTrap) {
-                tailFloor = shiftedExactTrap.TailFloor(tailIndex: tailIndex);
-            } else if (!analysis.TryCertifiedFloor(floor: out tailFloor, refinementRounds: refinementRounds, tailIndex: tailIndex)) {
-                certificate = null;
-                unresolvedTailIndex = tailIndex;
-                return false;
-            }
-            var discrepancy = (tailFloor - analysis.AffineCenter(tailIndex: tailIndex).Floor());
-
-            prefix[tailIndex] = discrepancy;
-            if (!discrepancy.IsZero) {
-                components.Add(item: (
-                    PositionalDigitAutomaton.FromLiteral(radix: system.Radix, word: system.Represent(value: tailIndex)),
-                    discrepancy
-                ));
-            }
-        }
-
-        certificate = new PolynomialBeattyShadowTotalPositionalCertificate(
-            eventual,
-            prefix,
-            PositionalOutputAutomaton.Build(components: components, system: system)
+        Array.Fill(
+            array: residual,
+            value: QuadraticSurd.Zero
         );
-        unresolvedTailIndex = BigInteger.Zero;
-        return true;
-    }
+        residual[0] = -normValue;
 
-    /// <summary>
-    /// Attempts to compile the complete discrepancy sequence into one Ostrowski DFAO. The method is exact: when a
-    /// finite tail enclosure still straddles an integer after <paramref name="refinementRounds"/>, it returns false and
-    /// identifies that index instead of assuming equality or inequality.
-    /// </summary>
-    public static bool TryTotalOstrowskiAutomaton(
-        PolynomialContinuedFractionAnalysis analysis,
-        int refinementRounds,
-        out PolynomialBeattyShadowTotalOstrowskiCertificate? certificate,
-        out BigInteger unresolvedTailIndex) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        ArgumentOutOfRangeException.ThrowIfNegative(refinementRounds);
-        if (analysis.Slope.IsRational) {
-            throw new ArgumentOutOfRangeException(nameof(analysis), "use the positional rational-slope construction");
+        for (var index = 0; (index < termCount); ++index) {
+            var inversePower = (index + 1);
+
+            residual[(inversePower - 1)] += (leadingConjugateGap * coefficients[index]);
+            residual[inversePower] += (constantConjugateGap * coefficients[index]);
         }
-
-        var eventual = EventualOstrowskiAutomaton(analysis: analysis);
-        var components = new List<(OstrowskiDigitAutomaton Automaton, BigInteger Output)>();
-
-        for (var index = 0; (index < eventual.ChannelLanguages.Count); ++index) {
-            components.Add(item: (
-                eventual.ChannelLanguages[index].CompileAutomaton(),
-                eventual.EventualCertificate.ActiveChannels[index].Decision.EventualFloorDiscrepancy
-            ));
-        }
-
-        var prefix = new Dictionary<BigInteger, BigInteger>();
-        var hasExactTrap = analysis.TryExactBeattyTrapCertificate(certificate: out var exactTrap);
-        var hasShiftedExactTrap = analysis.TryShiftedExactBeattyTrapCertificate(certificate: out var shiftedExactTrap);
-
-        for (var tailIndex = BigInteger.One; (tailIndex < eventual.Cutoff); ++tailIndex) {
-            BigInteger tailFloor;
-
-            if (hasExactTrap) {
-                tailFloor = exactTrap.TailFloor(tailIndex: tailIndex);
-            } else if (hasShiftedExactTrap) {
-                tailFloor = shiftedExactTrap.TailFloor(tailIndex: tailIndex);
-            } else if (!analysis.TryCertifiedFloor(floor: out tailFloor, refinementRounds: refinementRounds, tailIndex: tailIndex)) {
-                certificate = null;
-                unresolvedTailIndex = tailIndex;
-                return false;
+        for (var leftIndex = 0; (leftIndex < termCount); ++leftIndex) {
+            for (var rightIndex = 0; (rightIndex < termCount); ++rightIndex) {
+                residual[((leftIndex + rightIndex) + 2)] +=
+                    (coefficients[leftIndex] * coefficients[rightIndex]);
             }
-
-            var discrepancy = (tailFloor - analysis.AffineCenter(tailIndex: tailIndex).Floor());
-
-            prefix[tailIndex] = discrepancy;
-            if (discrepancy.IsZero) { continue; }
-            var word = eventual.Automaton.System.Represent(value: tailIndex);
-
-            components.Add(item: (OstrowskiDigitAutomaton.FromLiteral(word: word), discrepancy));
         }
 
-        var automaton = OstrowskiOutputAutomaton.Build(components: components, system: eventual.Automaton.System);
-
-        certificate = new PolynomialBeattyShadowTotalOstrowskiCertificate(automaton: automaton, eventualCertificate: eventual, finitePrefix: prefix);
-        unresolvedTailIndex = BigInteger.Zero;
-        return true;
-    }
-
-    /// <summary>
-    /// Compiles the eventual generalized-Pell presentation into an explicit deterministic output automaton over the
-    /// canonical Ostrowski representations of the quadratic slope.
-    /// </summary>
-    public static PolynomialBeattyShadowOstrowskiCertificate EventualOstrowskiAutomaton(
-        PolynomialContinuedFractionAnalysis analysis) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        var eventual = EventualCertificate(analysis: analysis);
-        var system = QuadraticOstrowskiSystem.Create(basis: analysis.Slope);
-        var languages = new List<OstrowskiPellChannelCertificate>();
-        var cutoff = eventual.Cutoff;
-
-        foreach (var active in eventual.ActiveChannels) {
-            var language = OstrowskiPellChannel.Build(
-                analysis: analysis,
-                channel: active.Channel,
-                minimumTailIndex: eventual.Cutoff
-            );
-
-            languages.Add(item: language);
-            var first = active.Channel.Decode(exponent: language.StartingExponent).TailIndex;
-
-            cutoff = BigInteger.Max(left: cutoff, right: first);
-        }
-
-        var components = new List<(OstrowskiDigitAutomaton Automaton, BigInteger Output)>();
-
-        for (var index = 0; (index < languages.Count); ++index) {
-            var language = languages[index];
-            var advance = 0;
-
-            while (language.Channel.Decode(exponent: checked((language.StartingExponent + advance))).TailIndex < cutoff) {
-                advance = checked((advance + 1));
+        for (var inversePower = 0; (inversePower < termCount); ++inversePower) {
+            if (residual[inversePower] != QuadraticSurd.Zero) {
+                throw new InvalidOperationException(message: "the boundary coefficients did not cancel the required residual orders");
             }
-            language = language.Advance(repeatCount: advance);
-            languages[index] = language;
-            components.Add(item: (
-                language.CompileAutomaton(),
-                (BigInteger.One * eventual.ActiveChannels[index].Decision.EventualFloorDiscrepancy)
-            ));
         }
 
-        var automaton = OstrowskiOutputAutomaton.Build(components: components, system: system);
-
-        return new PolynomialBeattyShadowOstrowskiCertificate(
-            automaton: automaton,
-            channelLanguages: languages,
-            cutoff: cutoff,
-            eventualCertificate: eventual
-        );
+        return residual[termCount..];
     }
-
-    /// <summary>
-    /// Decides the eventual discrepancy when the characteristic slope is rational (and therefore integral).
-    /// </summary>
-    public static PolynomialBeattyShadowRationalDecisionCertificate RationalSlopeDecisionCertificate(
-        PolynomialContinuedFractionAnalysis analysis) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        if (!analysis.Slope.IsRational || !analysis.Offset.IsRational) {
-            throw new ArgumentOutOfRangeException(nameof(analysis), "the affine slope and offset must be rational");
-        }
-
-        var offsetFloor = analysis.Offset.Floor();
-        var offsetFraction = (analysis.Offset - QuadraticSurd.Rational(value: offsetFloor));
-
-        if (offsetFraction != QuadraticSurd.Zero) {
-            var certificate = analysis.AsymptoticIntervalCertificate(termCount: 1);
-            var upperDistance = (QuadraticSurd.One - offsetFraction);
-            var boundaryDistance = ((offsetFraction <= upperDistance) ? offsetFraction : upperDistance);
-            var cutoff = BigInteger.Max(
-                left: certificate.Cutoff,
-                right: ((QuadraticSurd.Rational(value: certificate.RadiusNumerator) / boundaryDistance).Floor() + 1)
-            );
-
-            return new PolynomialBeattyShadowRationalDecisionCertificate(
-                Cutoff: cutoff,
-                EventualFloorDiscrepancy: 0
+    private static void ChoosePositiveBounds(
+        QuadraticSurd value,
+        out BigInteger scale,
+        out BigInteger upperLowerNumerator,
+        out BigInteger lowerLowerNumerator) {
+        if (value.Sign <= 0) {
+            throw new ArgumentOutOfRangeException(
+                nameof(value),
+                "the value requiring positive lower bounds must be positive"
             );
         }
 
-        var coefficients = analysis.AsymptoticCoefficients(termCount: 2);
-        var leadingError = coefficients[1];
+        var precisionBits = 8;
 
-        if (leadingError == QuadraticSurd.Zero) {
-            if (analysis.AffineResidual != QuadraticSurd.Zero) {
-                throw new InvalidOperationException(message: "zero leading error did not reduce to the exact affine case");
-            }
+        while (true) {
+            scale = (BigInteger.One << precisionBits);
+            upperLowerNumerator = ((value * QuadraticSurd.Rational(value: scale)).Floor() - 1);
+            lowerLowerNumerator = (upperLowerNumerator / 2);
+            if (lowerLowerNumerator > 0) { return; }
+            precisionBits = checked((precisionBits * 2));
+        }
+    }
+    private static bool SatisfiesAffineCongruences(
+        PolynomialBeattyShadowNormCertificate certificate,
+        BigInteger x,
+        BigInteger y) {
+        var tailIndex = BigInteger.DivRem(
+            dividend: (y - certificate.OffsetSurdNumerator),
+            divisor: certificate.SlopeSurdNumerator,
+            remainder: out var tailIndexRemainder
+        );
 
-            return new PolynomialBeattyShadowRationalDecisionCertificate(
-                Cutoff: analysis.IntervalCertificate.Cutoff,
-                EventualFloorDiscrepancy: 0
+        if (!tailIndexRemainder.IsZero) { return false; }
+
+        var centerRationalNumerator = (
+            (certificate.SlopeRationalNumerator * tailIndex) +
+            certificate.OffsetRationalNumerator
+        );
+
+        return ((x + centerRationalNumerator) % certificate.CommonDenominator).IsZero;
+    }
+    private static void ValidateNorm(
+        PolynomialBeattyShadowNormCertificate certificate,
+        BigInteger norm) {
+        if (BigInteger.Abs(value: norm) > certificate.NormMagnitudeBound) {
+            throw new ArgumentOutOfRangeException(
+                nameof(norm),
+                "the norm lies outside the certified discrepancy envelope"
             );
         }
-
-        var errorCertificate = analysis.AsymptoticIntervalCertificate(termCount: 2);
-        var signCutoff = ((QuadraticSurd.Rational(value: errorCertificate.RadiusNumerator) /
-            leadingError.Abs()).Floor() + 1);
-        var unitCutoff = ((leadingError.Abs() +
-            QuadraticSurd.Rational(value: errorCertificate.RadiusNumerator)).Floor() + 1);
-        var finalCutoff = BigInteger.Max(
-            left: errorCertificate.Cutoff,
-            right: BigInteger.Max(left: signCutoff, right: unitCutoff)
-        );
-
-        return new PolynomialBeattyShadowRationalDecisionCertificate(
-            Cutoff: finalCutoff,
-            EventualFloorDiscrepancy: ((leadingError.Sign < 0) ? -1 : 0)
-        );
-    }
-
-    /// <summary>
-    /// Constructs a finite, exact generalized-Pell channel presentation of every nonzero discrepancy beyond one
-    /// computable cutoff.
-    /// </summary>
-    /// <remarks>
-    /// This method is intentionally proof-transparent rather than complexity-optimized: it enumerates every integer
-    /// norm in the certified envelope and the bounded representative box for each generalized Pell equation.
-    /// </remarks>
-    public static PolynomialBeattyShadowEventualCertificate EventualCertificate(
-        PolynomialContinuedFractionAnalysis analysis) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        var envelope = analysis.BeattyShadowNormCertificate();
-
-        if (envelope.SlopeSurdNumerator <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(analysis), "the affine slope must be irrational");
+        if (certificate.SlopeSurdNumerator <= 0) {
+            throw new ArgumentOutOfRangeException(
+                nameof(certificate),
+                "the affine slope must have a positive irrational part"
+            );
         }
-
-        var decisions = new List<PolynomialBeattyShadowNormDecisionCertificate>();
-        var activeChannels = new List<PolynomialBeattyShadowEventualChannel>();
-        var cutoff = envelope.Cutoff;
-
-        for (var norm = -envelope.NormMagnitudeBound;
-            (norm <= envelope.NormMagnitudeBound);
-            ++norm) {
-            var decision = NormDecisionCertificate(analysis: analysis, norm: norm);
-
-            decisions.Add(item: decision);
-            cutoff = BigInteger.Max(left: cutoff, right: decision.Cutoff);
-            if (decision.EventualFloorDiscrepancy == 0) { continue; }
-
-            foreach (var channel in CandidatePellChannels(analysis: analysis, norm: norm)) {
-                var positiveEmbedding = QuadraticSurd.Create(
-                    denominator: BigInteger.One,
-                    radicand: envelope.Radicand,
-                    rationalNumerator: channel.BaseX,
-                    surdNumerator: channel.BaseY
-                );
-
-                if (positiveEmbedding.Sign <= 0) { continue; }
-
-                activeChannels.Add(item: new PolynomialBeattyShadowEventualChannel(
-                    Decision: decision,
-                    Channel: channel
-                ));
-            }
-        }
-
-        return new PolynomialBeattyShadowEventualCertificate(
-            cutoff: cutoff,
-            normDecisions: decisions,
-            activeChannels: activeChannels
-        );
     }
 
     /// <summary>
@@ -547,15 +361,24 @@ public static class PolynomialBeattyShadow {
         int termCount) {
         ArgumentNullException.ThrowIfNull(analysis);
         if (termCount < 0) {
-            throw new ArgumentOutOfRangeException(nameof(termCount), "the boundary term count must be non-negative");
+            throw new ArgumentOutOfRangeException(
+                nameof(termCount),
+                "the boundary term count must be non-negative"
+            );
         }
         if (termCount == 0) { return []; }
 
         var certificate = analysis.BeattyShadowNormCertificate();
 
-        ValidateNorm(certificate: certificate, norm: norm);
+        ValidateNorm(
+            certificate: certificate,
+            norm: norm
+        );
         var scale = certificate.CommonDenominator;
-        var normValue = QuadraticSurd.Rational(denominator: (scale * scale), numerator: norm);
+        var normValue = QuadraticSurd.Rational(
+            denominator: (scale * scale),
+            numerator: norm
+        );
         var leadingConjugateGap = QuadraticSurd.Create(
             rationalNumerator: BigInteger.Zero,
             surdNumerator: (2 * certificate.SlopeSurdNumerator),
@@ -587,7 +410,6 @@ public static class PolynomialBeattyShadow {
 
         return coefficients;
     }
-
     /// <summary>
     /// Certifies the truncated boundary-gap expansion with an explicit <c>K/n^(k+1)</c> remainder.
     /// </summary>
@@ -597,15 +419,28 @@ public static class PolynomialBeattyShadow {
         int termCount) {
         ArgumentNullException.ThrowIfNull(analysis);
         if (termCount <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(termCount), "the certified boundary term count must be positive");
+            throw new ArgumentOutOfRangeException(
+                nameof(termCount),
+                "the certified boundary term count must be positive"
+            );
         }
 
         var normCertificate = analysis.BeattyShadowNormCertificate();
 
-        ValidateNorm(certificate: normCertificate, norm: norm);
-        var coefficients = BoundaryAsymptoticCoefficients(analysis: analysis, norm: norm, termCount: termCount);
+        ValidateNorm(
+            certificate: normCertificate,
+            norm: norm
+        );
+        var coefficients = BoundaryAsymptoticCoefficients(
+            analysis: analysis,
+            norm: norm,
+            termCount: termCount
+        );
         var scaleZ = normCertificate.CommonDenominator;
-        var normValue = QuadraticSurd.Rational(denominator: (scaleZ * scaleZ), numerator: norm);
+        var normValue = QuadraticSurd.Rational(
+            denominator: (scaleZ * scaleZ),
+            numerator: norm
+        );
         var leadingConjugateGap = QuadraticSurd.Create(
             denominator: scaleZ,
             radicand: normCertificate.Radicand,
@@ -639,10 +474,16 @@ public static class PolynomialBeattyShadow {
             out var deltaLowerNumerator,
             out var denominatorLowerNumerator
         );
-        var denominatorLower = QuadraticSurd.Rational(denominator: lowerScale, numerator: denominatorLowerNumerator);
+        var denominatorLower = QuadraticSurd.Rational(
+            denominator: lowerScale,
+            numerator: denominatorLowerNumerator
+        );
         var residualMagnitudeCeiling = residualMagnitude.Ceiling();
         var radius = (QuadraticSurd.Rational(value: residualMagnitudeCeiling) / denominatorLower).Ceiling();
-        var deltaLower = QuadraticSurd.Rational(denominator: lowerScale, numerator: deltaLowerNumerator);
+        var deltaLower = QuadraticSurd.Rational(
+            denominator: lowerScale,
+            numerator: deltaLowerNumerator
+        );
         var cutoff = BigInteger.One;
 
         while (true) {
@@ -654,21 +495,26 @@ public static class PolynomialBeattyShadow {
             var denominatorMargin = ((deltaLower - denominatorLower) *
                 QuadraticSurd.Rational(value: (cutoff * cutoff)));
 
-            if ((deltaAtCutoff >= deltaLower) &&
+            if (
+                (deltaAtCutoff >= deltaLower) &&
                 (discriminantLower >= (QuadraticSurd.Rational(value: 4) * normValue.Abs())) &&
-                (denominatorMargin >= denominatorLoss)) {
+                (denominatorMargin >= denominatorLoss)
+            ) {
                 var certificate = new PolynomialBeattyBoundaryAsymptoticCertificate(
-                    Norm: norm,
                     CoefficientCount: termCount,
                     Cutoff: cutoff,
-                    RadiusNumerator: radius,
                     DeltaLowerNumerator: deltaLowerNumerator,
                     DenominatorLowerNumerator: denominatorLowerNumerator,
                     LowerBoundDenominator: lowerScale,
+                    Norm: norm,
+                    RadiusNumerator: radius,
                     ResidualMagnitudeCeiling: residualMagnitudeCeiling
                 );
 
-                if (!VerifyBoundaryAsymptoticIntervalCertificate(analysis: analysis, certificate: certificate)) {
+                if (!VerifyBoundaryAsymptoticIntervalCertificate(
+                    analysis: analysis,
+                    certificate: certificate
+                )) {
                     throw new InvalidOperationException(message: "the constructed boundary asymptotic certificate did not verify");
                 }
 
@@ -678,170 +524,6 @@ public static class PolynomialBeattyShadow {
             cutoff *= 2;
         }
     }
-
-    /// <summary>Rechecks the exact inequalities in a boundary asymptotic certificate.</summary>
-    public static bool VerifyBoundaryAsymptoticIntervalCertificate(
-        PolynomialContinuedFractionAnalysis analysis,
-        PolynomialBeattyBoundaryAsymptoticCertificate certificate) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        if ((certificate.CoefficientCount <= 0) || (certificate.Cutoff < 1) ||
-            (certificate.RadiusNumerator < 0) || (certificate.DeltaLowerNumerator <= 0) ||
-            (certificate.DenominatorLowerNumerator <= 0) ||
-            (certificate.DeltaLowerNumerator <= certificate.DenominatorLowerNumerator) ||
-            (certificate.LowerBoundDenominator <= 0) ||
-            (certificate.ResidualMagnitudeCeiling < 0)) {
-            return false;
-        }
-
-        var normCertificate = analysis.BeattyShadowNormCertificate();
-
-        if (BigInteger.Abs(value: certificate.Norm) > normCertificate.NormMagnitudeBound) { return false; }
-        var coefficients = BoundaryAsymptoticCoefficients(
-            analysis: analysis,
-            norm: certificate.Norm,
-            termCount: certificate.CoefficientCount
-        );
-        var scaleZ = normCertificate.CommonDenominator;
-        var normValue = QuadraticSurd.Rational(denominator: (scaleZ * scaleZ), numerator: certificate.Norm);
-        var leadingConjugateGap = QuadraticSurd.Create(
-            denominator: scaleZ,
-            radicand: normCertificate.Radicand,
-            rationalNumerator: BigInteger.Zero,
-            surdNumerator: (2 * normCertificate.SlopeSurdNumerator)
-        );
-        var constantConjugateGap = QuadraticSurd.Create(
-            denominator: scaleZ,
-            radicand: normCertificate.Radicand,
-            rationalNumerator: BigInteger.Zero,
-            surdNumerator: (2 * normCertificate.OffsetSurdNumerator)
-        );
-        var residualCoefficients = BoundaryResidualCoefficients(
-            coefficients: coefficients,
-            constantConjugateGap: constantConjugateGap,
-            leadingConjugateGap: leadingConjugateGap,
-            normValue: normValue
-        );
-        var residualMagnitude = residualCoefficients.Aggregate(
-            QuadraticSurd.Zero,
-            (sum, coefficient) => (sum + coefficient.Abs())
-        );
-
-        if (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) < residualMagnitude) {
-            return false;
-        }
-
-        var lowerScale = certificate.LowerBoundDenominator;
-        var deltaLower = QuadraticSurd.Rational(denominator: lowerScale, numerator: certificate.DeltaLowerNumerator);
-        var denominatorLower = QuadraticSurd.Rational(denominator: lowerScale, numerator: certificate.DenominatorLowerNumerator);
-
-        if ((denominatorLower >= deltaLower) || (deltaLower >= leadingConjugateGap) ||
-            (QuadraticSurd.Rational(value: certificate.RadiusNumerator) <
-                (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) / denominatorLower))) {
-            return false;
-        }
-
-        var coefficientMagnitude = coefficients.Aggregate(
-            QuadraticSurd.Zero,
-            (sum, coefficient) => (sum + coefficient.Abs())
-        );
-        var cutoff = certificate.Cutoff;
-        var deltaAtCutoff = (leadingConjugateGap +
-            (constantConjugateGap / QuadraticSurd.Rational(value: cutoff)));
-        var discriminantLower = ((deltaLower * deltaLower) * QuadraticSurd.Rational(value: (cutoff * cutoff)));
-        var denominatorLoss = (coefficientMagnitude +
-            ((QuadraticSurd.Rational(value: 2) * normValue.Abs()) / deltaLower));
-        var denominatorMargin = ((deltaLower - denominatorLower) *
-            QuadraticSurd.Rational(value: (cutoff * cutoff)));
-
-        return ((deltaAtCutoff >= deltaLower) &&
-            (discriminantLower >= (QuadraticSurd.Rational(value: 4) * normValue.Abs())) &&
-            (denominatorMargin >= denominatorLoss));
-    }
-
-    /// <summary>
-    /// Decides the eventual crossing behavior for one norm. A first-order collision is resolved at second order by
-    /// <c>c_2-a_2=-(p*lambda/(lambda^2+r))*c_1</c>; if <c>c_1=0</c>, norm zero is the exact affine tail.
-    /// </summary>
-    public static PolynomialBeattyShadowNormDecisionCertificate NormDecisionCertificate(
-        PolynomialContinuedFractionAnalysis analysis,
-        BigInteger norm) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        var normCertificate = analysis.BeattyShadowNormCertificate();
-
-        ValidateNorm(certificate: normCertificate, norm: norm);
-        var tailCoefficients = analysis.AsymptoticCoefficients(termCount: 3);
-        var boundaryCoefficients = BoundaryAsymptoticCoefficients(analysis, norm, termCount: 2);
-        var comparisonOrder = 1;
-        var comparison = (boundaryCoefficients[0] - tailCoefficients[1]);
-
-        if (comparison == QuadraticSurd.Zero) {
-            if (tailCoefficients[1] == QuadraticSurd.Zero) {
-                if (!norm.IsZero || (analysis.AffineResidual != QuadraticSurd.Zero)) {
-                    throw new InvalidOperationException(message: "zero leading comparison did not reduce to the exact affine case");
-                }
-
-                return new PolynomialBeattyShadowNormDecisionCertificate(
-                    Norm: norm,
-                    ComparisonOrder: 0,
-                    Cutoff: normCertificate.Cutoff,
-                    BoundaryMinusTailSign: 0,
-                    EventualFloorDiscrepancy: 0
-                );
-            }
-
-            comparisonOrder = 2;
-            comparison = (boundaryCoefficients[1] - tailCoefficients[2]);
-            var forcedDifference = (((QuadraticSurd.Rational(value: analysis.Parameters.Linear) * analysis.Slope) *
-                tailCoefficients[1]) /
-                ((analysis.Slope * analysis.Slope) +
-                    QuadraticSurd.Rational(value: analysis.Parameters.NumeratorQuadratic)));
-
-            if ((tailCoefficients[2] - boundaryCoefficients[1]) != -forcedDifference) {
-                throw new InvalidOperationException(message: "the second-order collision identity failed");
-            }
-            if (comparison == QuadraticSurd.Zero) {
-                throw new InvalidOperationException(message: "a nonzero first-order collision persisted to second order");
-            }
-        }
-
-        var tailCertificate = analysis.AsymptoticIntervalCertificate(termCount: (comparisonOrder + 1));
-        var boundaryCertificate = BoundaryAsymptoticIntervalCertificate(
-            analysis,
-            norm,
-            termCount: comparisonOrder
-        );
-        var errorRadius = (tailCertificate.RadiusNumerator + boundaryCertificate.RadiusNumerator);
-        var dominanceCutoff = ((QuadraticSurd.Rational(value: errorRadius) / comparison.Abs()).Floor() + 1);
-        var orientationCutoff = BigInteger.One;
-        var slopeSurd = normCertificate.SlopeSurdNumerator;
-        var offsetSurd = normCertificate.OffsetSurdNumerator;
-
-        if (((slopeSurd * orientationCutoff) + offsetSurd) <= 0) {
-            orientationCutoff = ((-offsetSurd).FloorDivide(divisor: slopeSurd) + 1);
-        }
-        var cutoff = BigInteger.Max(
-            left: normCertificate.Cutoff,
-            right: BigInteger.Max(
-                left: tailCertificate.Cutoff,
-                right: BigInteger.Max(left: boundaryCertificate.Cutoff, right: BigInteger.Max(left: dominanceCutoff, right: orientationCutoff))
-            )
-        );
-        var comparisonSign = comparison.Sign;
-        var discrepancy = norm.Sign switch {
-            > 0 when (comparisonSign < 0) => 1,
-            < 0 when (comparisonSign > 0) => -1,
-            _ => 0
-        };
-
-        return new PolynomialBeattyShadowNormDecisionCertificate(
-            Norm: norm,
-            ComparisonOrder: comparisonOrder,
-            Cutoff: cutoff,
-            BoundaryMinusTailSign: comparisonSign,
-            EventualFloorDiscrepancy: discrepancy
-        );
-    }
-
     /// <summary>
     /// Constructs the finite set of bi-infinite Pell channels containing every integer boundary of a specified cleared
     /// norm for the analysis's affine center.
@@ -907,101 +589,561 @@ public static class PolynomialBeattyShadow {
                 if (SatisfiesAffineCongruences(
                     certificate: certificate,
                     x: pointX,
-                    y: pointY)) {
+                    y: pointY
+                )) {
                     channels.Add(item: new PolynomialBeattyShadowPellChannel(
-                        norm: norm,
                         baseX: pointX,
                         baseY: pointY,
-                        periodUnit: periodUnit,
-                        certificate: certificate
+                        certificate: certificate,
+                        norm: norm,
+                        periodUnit: periodUnit
                     ));
                 }
 
-                (pointX, pointY) = unit.Multiply(x: pointX, y: pointY);
+                (pointX, pointY) = unit.Multiply(
+                    x: pointX,
+                    y: pointY
+                );
             }
         }
 
         return channels;
     }
+    /// <summary>
+    /// Constructs a finite, exact generalized-Pell channel presentation of every nonzero discrepancy beyond one
+    /// computable cutoff.
+    /// </summary>
+    /// <remarks>
+    /// This method is intentionally proof-transparent rather than complexity-optimized: it enumerates every integer
+    /// norm in the certified envelope and the bounded representative box for each generalized Pell equation.
+    /// </remarks>
+    public static PolynomialBeattyShadowEventualCertificate EventualCertificate(
+        PolynomialContinuedFractionAnalysis analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        var envelope = analysis.BeattyShadowNormCertificate();
 
-    private static QuadraticSurd[] BoundaryResidualCoefficients(
-        IReadOnlyList<QuadraticSurd> coefficients,
-        QuadraticSurd leadingConjugateGap,
-        QuadraticSurd constantConjugateGap,
-        QuadraticSurd normValue) {
-        var termCount = coefficients.Count;
-        var residual = new QuadraticSurd[((2 * termCount) + 1)];
-
-        Array.Fill(array: residual, value: QuadraticSurd.Zero);
-        residual[0] = -normValue;
-
-        for (var index = 0; (index < termCount); ++index) {
-            var inversePower = (index + 1);
-
-            residual[(inversePower - 1)] += (leadingConjugateGap * coefficients[index]);
-            residual[inversePower] += (constantConjugateGap * coefficients[index]);
+        if (envelope.SlopeSurdNumerator <= 0) {
+            throw new ArgumentOutOfRangeException(
+                nameof(analysis),
+                "the affine slope must be irrational"
+            );
         }
-        for (var leftIndex = 0; (leftIndex < termCount); ++leftIndex) {
-            for (var rightIndex = 0; (rightIndex < termCount); ++rightIndex) {
-                residual[((leftIndex + rightIndex) + 2)] +=
-                    (coefficients[leftIndex] * coefficients[rightIndex]);
+
+        var decisions = new List<PolynomialBeattyShadowNormDecisionCertificate>();
+        var activeChannels = new List<PolynomialBeattyShadowEventualChannel>();
+        var cutoff = envelope.Cutoff;
+
+        for (var norm = -envelope.NormMagnitudeBound;
+            (norm <= envelope.NormMagnitudeBound);
+            ++norm) {
+            var decision = NormDecisionCertificate(
+                analysis: analysis,
+                norm: norm
+            );
+
+            decisions.Add(item: decision);
+            cutoff = BigInteger.Max(
+                left: cutoff,
+                right: decision.Cutoff
+            );
+            if (decision.EventualFloorDiscrepancy == 0) { continue; }
+
+            foreach (var channel in CandidatePellChannels(
+                analysis: analysis,
+                norm: norm
+            )) {
+                var positiveEmbedding = QuadraticSurd.Create(
+                    denominator: BigInteger.One,
+                    radicand: envelope.Radicand,
+                    rationalNumerator: channel.BaseX,
+                    surdNumerator: channel.BaseY
+                );
+
+                if (positiveEmbedding.Sign <= 0) { continue; }
+
+                activeChannels.Add(item: new PolynomialBeattyShadowEventualChannel(
+                    Channel: channel,
+                    Decision: decision
+                ));
             }
         }
 
-        for (var inversePower = 0; (inversePower < termCount); ++inversePower) {
-            if (residual[inversePower] != QuadraticSurd.Zero) {
-                throw new InvalidOperationException(message: "the boundary coefficients did not cancel the required residual orders");
+        return new PolynomialBeattyShadowEventualCertificate(
+            activeChannels: activeChannels,
+            cutoff: cutoff,
+            normDecisions: decisions
+        );
+    }
+    /// <summary>
+    /// Compiles the eventual generalized-Pell presentation into an explicit deterministic output automaton over the
+    /// canonical Ostrowski representations of the quadratic slope.
+    /// </summary>
+    public static PolynomialBeattyShadowOstrowskiCertificate EventualOstrowskiAutomaton(
+        PolynomialContinuedFractionAnalysis analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        var eventual = EventualCertificate(analysis: analysis);
+        var system = QuadraticOstrowskiSystem.Create(basis: analysis.Slope);
+        var languages = new List<OstrowskiPellChannelCertificate>();
+        var cutoff = eventual.Cutoff;
+
+        foreach (var active in eventual.ActiveChannels) {
+            var language = OstrowskiPellChannel.Build(
+                analysis: analysis,
+                channel: active.Channel,
+                minimumTailIndex: eventual.Cutoff
+            );
+
+            languages.Add(item: language);
+            var first = active.Channel.Decode(exponent: language.StartingExponent).TailIndex;
+
+            cutoff = BigInteger.Max(
+                left: cutoff,
+                right: first
+            );
+        }
+
+        var components = new List<(OstrowskiDigitAutomaton Automaton, BigInteger Output)>();
+
+        for (var index = 0; (index < languages.Count); ++index) {
+            var language = languages[index];
+            var advance = 0;
+
+            while (language.Channel.Decode(exponent: checked((language.StartingExponent + advance))).TailIndex < cutoff) {
+                advance = checked((advance + 1));
             }
+            language = language.Advance(repeatCount: advance);
+            languages[index] = language;
+            components.Add(item: (
+                language.CompileAutomaton(),
+                (BigInteger.One * eventual.ActiveChannels[index].Decision.EventualFloorDiscrepancy)
+            ));
         }
 
-        return residual[termCount..];
+        var automaton = OstrowskiOutputAutomaton.Build(
+            components: components,
+            system: system
+        );
+
+        return new PolynomialBeattyShadowOstrowskiCertificate(
+            automaton: automaton,
+            channelLanguages: languages,
+            cutoff: cutoff,
+            eventualCertificate: eventual
+        );
     }
-    private static void ChoosePositiveBounds(
-        QuadraticSurd value,
-        out BigInteger scale,
-        out BigInteger upperLowerNumerator,
-        out BigInteger lowerLowerNumerator) {
-        if (value.Sign <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(value), "the value requiring positive lower bounds must be positive");
-        }
-
-        var precisionBits = 8;
-
-        while (true) {
-            scale = (BigInteger.One << precisionBits);
-            upperLowerNumerator = ((value * QuadraticSurd.Rational(value: scale)).Floor() - 1);
-            lowerLowerNumerator = (upperLowerNumerator / 2);
-            if (lowerLowerNumerator > 0) { return; }
-            precisionBits = checked((precisionBits * 2));
-        }
-    }
-    private static void ValidateNorm(
-        PolynomialBeattyShadowNormCertificate certificate,
+    /// <summary>
+    /// Decides the eventual crossing behavior for one norm. A first-order collision is resolved at second order by
+    /// <c>c_2-a_2=-(p*lambda/(lambda^2+r))*c_1</c>; if <c>c_1=0</c>, norm zero is the exact affine tail.
+    /// </summary>
+    public static PolynomialBeattyShadowNormDecisionCertificate NormDecisionCertificate(
+        PolynomialContinuedFractionAnalysis analysis,
         BigInteger norm) {
-        if (BigInteger.Abs(value: norm) > certificate.NormMagnitudeBound) {
-            throw new ArgumentOutOfRangeException(nameof(norm), "the norm lies outside the certified discrepancy envelope");
+        ArgumentNullException.ThrowIfNull(analysis);
+        var normCertificate = analysis.BeattyShadowNormCertificate();
+
+        ValidateNorm(
+            certificate: normCertificate,
+            norm: norm
+        );
+        var tailCoefficients = analysis.AsymptoticCoefficients(termCount: 3);
+        var boundaryCoefficients = BoundaryAsymptoticCoefficients(
+            analysis,
+            norm,
+            termCount: 2
+        );
+        var comparisonOrder = 1;
+        var comparison = (boundaryCoefficients[0] - tailCoefficients[1]);
+
+        if (comparison == QuadraticSurd.Zero) {
+            if (tailCoefficients[1] == QuadraticSurd.Zero) {
+                if (
+                    !norm.IsZero ||
+                    (analysis.AffineResidual != QuadraticSurd.Zero)
+                ) {
+                    throw new InvalidOperationException(message: "zero leading comparison did not reduce to the exact affine case");
+                }
+
+                return new PolynomialBeattyShadowNormDecisionCertificate(
+                    Norm: norm,
+                    ComparisonOrder: 0,
+                    Cutoff: normCertificate.Cutoff,
+                    BoundaryMinusTailSign: 0,
+                    EventualFloorDiscrepancy: 0
+                );
+            }
+
+            comparisonOrder = 2;
+            comparison = (boundaryCoefficients[1] - tailCoefficients[2]);
+            var forcedDifference = (((QuadraticSurd.Rational(value: analysis.Parameters.Linear) * analysis.Slope) *
+                tailCoefficients[1]) /
+                ((analysis.Slope * analysis.Slope) +
+                    QuadraticSurd.Rational(value: analysis.Parameters.NumeratorQuadratic)));
+
+            if ((tailCoefficients[2] - boundaryCoefficients[1]) != -forcedDifference) {
+                throw new InvalidOperationException(message: "the second-order collision identity failed");
+            }
+            if (comparison == QuadraticSurd.Zero) {
+                throw new InvalidOperationException(message: "a nonzero first-order collision persisted to second order");
+            }
         }
-        if (certificate.SlopeSurdNumerator <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(certificate), "the affine slope must have a positive irrational part");
+
+        var tailCertificate = analysis.AsymptoticIntervalCertificate(termCount: (comparisonOrder + 1));
+        var boundaryCertificate = BoundaryAsymptoticIntervalCertificate(
+            analysis,
+            norm,
+            termCount: comparisonOrder
+        );
+        var errorRadius = (tailCertificate.RadiusNumerator + boundaryCertificate.RadiusNumerator);
+        var dominanceCutoff = ((QuadraticSurd.Rational(value: errorRadius) / comparison.Abs()).Floor() + 1);
+        var orientationCutoff = BigInteger.One;
+        var slopeSurd = normCertificate.SlopeSurdNumerator;
+        var offsetSurd = normCertificate.OffsetSurdNumerator;
+
+        if (((slopeSurd * orientationCutoff) + offsetSurd) <= 0) {
+            orientationCutoff = ((-offsetSurd).FloorDivide(divisor: slopeSurd) + 1);
         }
+        var cutoff = BigInteger.Max(
+            left: normCertificate.Cutoff,
+            right: BigInteger.Max(
+                left: tailCertificate.Cutoff,
+                right: BigInteger.Max(
+                    left: boundaryCertificate.Cutoff,
+                    right: BigInteger.Max(
+                        left: dominanceCutoff,
+                        right: orientationCutoff
+                    )
+                )
+            )
+        );
+        var comparisonSign = comparison.Sign;
+        var discrepancy = norm.Sign switch {
+            > 0 when (comparisonSign < 0) => 1,
+            < 0 when (comparisonSign > 0) => -1,
+            _ => 0
+        };
+
+        return new PolynomialBeattyShadowNormDecisionCertificate(
+            BoundaryMinusTailSign: comparisonSign,
+            ComparisonOrder: comparisonOrder,
+            Cutoff: cutoff,
+            EventualFloorDiscrepancy: discrepancy,
+            Norm: norm
+        );
     }
-    private static bool SatisfiesAffineCongruences(
-        PolynomialBeattyShadowNormCertificate certificate,
-        BigInteger x,
-        BigInteger y) {
-        var tailIndex = BigInteger.DivRem(
-            dividend: (y - certificate.OffsetSurdNumerator),
-            divisor: certificate.SlopeSurdNumerator,
-            remainder: out var tailIndexRemainder
+    /// <summary>
+    /// Decides the eventual discrepancy when the characteristic slope is rational (and therefore integral).
+    /// </summary>
+    public static PolynomialBeattyShadowRationalDecisionCertificate RationalSlopeDecisionCertificate(
+        PolynomialContinuedFractionAnalysis analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        if (
+            !analysis.Slope.IsRational ||
+            !analysis.Offset.IsRational
+        ) {
+            throw new ArgumentOutOfRangeException(
+                nameof(analysis),
+                "the affine slope and offset must be rational"
+            );
+        }
+
+        var offsetFloor = analysis.Offset.Floor();
+        var offsetFraction = (analysis.Offset - QuadraticSurd.Rational(value: offsetFloor));
+
+        if (offsetFraction != QuadraticSurd.Zero) {
+            var certificate = analysis.AsymptoticIntervalCertificate(termCount: 1);
+            var upperDistance = (QuadraticSurd.One - offsetFraction);
+            var boundaryDistance = ((offsetFraction <= upperDistance)
+                ? offsetFraction
+                : upperDistance
+            );
+            var cutoff = BigInteger.Max(
+                left: certificate.Cutoff,
+                right: ((QuadraticSurd.Rational(value: certificate.RadiusNumerator) / boundaryDistance).Floor() + 1)
+            );
+
+            return new PolynomialBeattyShadowRationalDecisionCertificate(
+                Cutoff: cutoff,
+                EventualFloorDiscrepancy: 0
+            );
+        }
+
+        var coefficients = analysis.AsymptoticCoefficients(termCount: 2);
+        var leadingError = coefficients[1];
+
+        if (leadingError == QuadraticSurd.Zero) {
+            if (analysis.AffineResidual != QuadraticSurd.Zero) {
+                throw new InvalidOperationException(message: "zero leading error did not reduce to the exact affine case");
+            }
+
+            return new PolynomialBeattyShadowRationalDecisionCertificate(
+                Cutoff: analysis.IntervalCertificate.Cutoff,
+                EventualFloorDiscrepancy: 0
+            );
+        }
+
+        var errorCertificate = analysis.AsymptoticIntervalCertificate(termCount: 2);
+        var signCutoff = ((QuadraticSurd.Rational(value: errorCertificate.RadiusNumerator) /
+            leadingError.Abs()).Floor() + 1);
+        var unitCutoff = ((leadingError.Abs() +
+            QuadraticSurd.Rational(value: errorCertificate.RadiusNumerator)).Floor() + 1);
+        var finalCutoff = BigInteger.Max(
+            left: errorCertificate.Cutoff,
+            right: BigInteger.Max(
+                left: signCutoff,
+                right: unitCutoff
+            )
         );
 
-        if (!tailIndexRemainder.IsZero) { return false; }
+        return new PolynomialBeattyShadowRationalDecisionCertificate(
+            Cutoff: finalCutoff,
+            EventualFloorDiscrepancy: ((leadingError.Sign < 0)
+            ? -1
+            : 0)
+        );
+    }
+    /// <summary>
+    /// Attempts to compile the complete discrepancy sequence into one Ostrowski DFAO. The method is exact: when a
+    /// finite tail enclosure still straddles an integer after <paramref name="refinementRounds"/>, it returns false and
+    /// identifies that index instead of assuming equality or inequality.
+    /// </summary>
+    public static bool TryTotalOstrowskiAutomaton(
+        PolynomialContinuedFractionAnalysis analysis,
+        int refinementRounds,
+        out PolynomialBeattyShadowTotalOstrowskiCertificate? certificate,
+        out BigInteger unresolvedTailIndex) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentOutOfRangeException.ThrowIfNegative(refinementRounds);
+        if (analysis.Slope.IsRational) {
+            throw new ArgumentOutOfRangeException(
+                nameof(analysis),
+                "use the positional rational-slope construction"
+            );
+        }
 
-        var centerRationalNumerator = (
-            (certificate.SlopeRationalNumerator * tailIndex) +
-            certificate.OffsetRationalNumerator
+        var eventual = EventualOstrowskiAutomaton(analysis: analysis);
+        var components = new List<(OstrowskiDigitAutomaton Automaton, BigInteger Output)>();
+
+        for (var index = 0; (index < eventual.ChannelLanguages.Count); ++index) {
+            components.Add(item: (
+                eventual.ChannelLanguages[index].CompileAutomaton(),
+                eventual.EventualCertificate.ActiveChannels[index].Decision.EventualFloorDiscrepancy
+            ));
+        }
+
+        var prefix = new Dictionary<BigInteger, BigInteger>();
+        var hasExactTrap = analysis.TryExactBeattyTrapCertificate(certificate: out var exactTrap);
+        var hasShiftedExactTrap = analysis.TryShiftedExactBeattyTrapCertificate(certificate: out var shiftedExactTrap);
+
+        for (var tailIndex = BigInteger.One; (tailIndex < eventual.Cutoff); ++tailIndex) {
+            BigInteger tailFloor;
+
+            if (hasExactTrap) {
+                tailFloor = exactTrap.TailFloor(tailIndex: tailIndex);
+            } else if (hasShiftedExactTrap) {
+                tailFloor = shiftedExactTrap.TailFloor(tailIndex: tailIndex);
+            } else if (!analysis.TryCertifiedFloor(
+                floor: out tailFloor,
+                refinementRounds: refinementRounds,
+                tailIndex: tailIndex
+            )) {
+                certificate = null;
+                unresolvedTailIndex = tailIndex;
+                return false;
+            }
+
+            var discrepancy = (tailFloor - analysis.AffineCenter(tailIndex: tailIndex).Floor());
+
+            prefix[tailIndex] = discrepancy;
+            if (discrepancy.IsZero) { continue; }
+            var word = eventual.Automaton.System.Represent(value: tailIndex);
+
+            components.Add(item: (OstrowskiDigitAutomaton.FromLiteral(word: word), discrepancy));
+        }
+
+        var automaton = OstrowskiOutputAutomaton.Build(
+            components: components,
+            system: eventual.Automaton.System
         );
 
-        return ((x + centerRationalNumerator) % certificate.CommonDenominator).IsZero;
+        certificate = new PolynomialBeattyShadowTotalOstrowskiCertificate(
+            automaton: automaton,
+            eventualCertificate: eventual,
+            finitePrefix: prefix
+        );
+        unresolvedTailIndex = BigInteger.Zero;
+        return true;
+    }
+    /// <summary>
+    /// Attempts to compile the complete integral-slope discrepancy sequence into a radix-2 DFAO. As in the
+    /// irrational branch, an unresolved finite exact-integer comparison is reported rather than guessed.
+    /// </summary>
+    public static bool TryTotalPositionalAutomaton(
+        PolynomialContinuedFractionAnalysis analysis,
+        int refinementRounds,
+        out PolynomialBeattyShadowTotalPositionalCertificate? certificate,
+        out BigInteger unresolvedTailIndex) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentOutOfRangeException.ThrowIfNegative(refinementRounds);
+        if (!analysis.Slope.IsRational) {
+            throw new ArgumentOutOfRangeException(
+                nameof(analysis),
+                "use the Ostrowski construction for irrational slope"
+            );
+        }
+
+        var eventual = RationalSlopeDecisionCertificate(analysis: analysis);
+        var system = new PositionalNumerationSystem(radix: 2);
+        var components = new List<(PositionalDigitAutomaton Automaton, BigInteger Output)>();
+
+        if (eventual.EventualFloorDiscrepancy != 0) {
+            components.Add(item: (
+                PositionalDigitAutomaton.AtLeast(
+                cutoff: eventual.Cutoff,
+                system: system
+            ),
+                eventual.EventualFloorDiscrepancy
+            ));
+        }
+
+        var prefix = new Dictionary<BigInteger, BigInteger>();
+        var hasExactTrap = analysis.TryExactBeattyTrapCertificate(certificate: out var exactTrap);
+        var hasShiftedExactTrap = analysis.TryShiftedExactBeattyTrapCertificate(certificate: out var shiftedExactTrap);
+
+        for (var tailIndex = BigInteger.One; (tailIndex < eventual.Cutoff); ++tailIndex) {
+            BigInteger tailFloor;
+
+            if (hasExactTrap) {
+                tailFloor = exactTrap.TailFloor(tailIndex: tailIndex);
+            } else if (hasShiftedExactTrap) {
+                tailFloor = shiftedExactTrap.TailFloor(tailIndex: tailIndex);
+            } else if (!analysis.TryCertifiedFloor(
+                floor: out tailFloor,
+                refinementRounds: refinementRounds,
+                tailIndex: tailIndex
+            )) {
+                certificate = null;
+                unresolvedTailIndex = tailIndex;
+                return false;
+            }
+            var discrepancy = (tailFloor - analysis.AffineCenter(tailIndex: tailIndex).Floor());
+
+            prefix[tailIndex] = discrepancy;
+            if (!discrepancy.IsZero) {
+                components.Add(item: (
+                    PositionalDigitAutomaton.FromLiteral(
+                    radix: system.Radix,
+                    word: system.Represent(value: tailIndex)
+                ),
+                    discrepancy
+                ));
+            }
+        }
+
+        certificate = new PolynomialBeattyShadowTotalPositionalCertificate(
+            eventual,
+            prefix,
+            PositionalOutputAutomaton.Build(
+                components: components,
+                system: system
+            )
+        );
+        unresolvedTailIndex = BigInteger.Zero;
+        return true;
+    }
+    /// <summary>Rechecks the exact inequalities in a boundary asymptotic certificate.</summary>
+    public static bool VerifyBoundaryAsymptoticIntervalCertificate(
+        PolynomialContinuedFractionAnalysis analysis,
+        PolynomialBeattyBoundaryAsymptoticCertificate certificate) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        if (
+            (certificate.CoefficientCount <= 0) ||
+            (certificate.Cutoff < 1) ||
+            (certificate.RadiusNumerator < 0) ||
+            (certificate.DeltaLowerNumerator <= 0) ||
+            (certificate.DenominatorLowerNumerator <= 0) ||
+            (certificate.DeltaLowerNumerator <= certificate.DenominatorLowerNumerator) ||
+            (certificate.LowerBoundDenominator <= 0) ||
+            (certificate.ResidualMagnitudeCeiling < 0)
+        ) {
+            return false;
+        }
+
+        var normCertificate = analysis.BeattyShadowNormCertificate();
+
+        if (BigInteger.Abs(value: certificate.Norm) > normCertificate.NormMagnitudeBound) { return false; }
+        var coefficients = BoundaryAsymptoticCoefficients(
+            analysis: analysis,
+            norm: certificate.Norm,
+            termCount: certificate.CoefficientCount
+        );
+        var scaleZ = normCertificate.CommonDenominator;
+        var normValue = QuadraticSurd.Rational(
+            denominator: (scaleZ * scaleZ),
+            numerator: certificate.Norm
+        );
+        var leadingConjugateGap = QuadraticSurd.Create(
+            denominator: scaleZ,
+            radicand: normCertificate.Radicand,
+            rationalNumerator: BigInteger.Zero,
+            surdNumerator: (2 * normCertificate.SlopeSurdNumerator)
+        );
+        var constantConjugateGap = QuadraticSurd.Create(
+            denominator: scaleZ,
+            radicand: normCertificate.Radicand,
+            rationalNumerator: BigInteger.Zero,
+            surdNumerator: (2 * normCertificate.OffsetSurdNumerator)
+        );
+        var residualCoefficients = BoundaryResidualCoefficients(
+            coefficients: coefficients,
+            constantConjugateGap: constantConjugateGap,
+            leadingConjugateGap: leadingConjugateGap,
+            normValue: normValue
+        );
+        var residualMagnitude = residualCoefficients.Aggregate(
+            QuadraticSurd.Zero,
+            (sum, coefficient) => (sum + coefficient.Abs())
+        );
+
+        if (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) < residualMagnitude) {
+            return false;
+        }
+
+        var lowerScale = certificate.LowerBoundDenominator;
+        var deltaLower = QuadraticSurd.Rational(
+            denominator: lowerScale,
+            numerator: certificate.DeltaLowerNumerator
+        );
+        var denominatorLower = QuadraticSurd.Rational(
+            denominator: lowerScale,
+            numerator: certificate.DenominatorLowerNumerator
+        );
+
+        if (
+            (denominatorLower >= deltaLower) ||
+            (deltaLower >= leadingConjugateGap) ||
+            (QuadraticSurd.Rational(value: certificate.RadiusNumerator) <
+                (QuadraticSurd.Rational(value: certificate.ResidualMagnitudeCeiling) / denominatorLower))
+        ) {
+            return false;
+        }
+
+        var coefficientMagnitude = coefficients.Aggregate(
+            QuadraticSurd.Zero,
+            (sum, coefficient) => (sum + coefficient.Abs())
+        );
+        var cutoff = certificate.Cutoff;
+        var deltaAtCutoff = (leadingConjugateGap +
+            (constantConjugateGap / QuadraticSurd.Rational(value: cutoff)));
+        var discriminantLower = ((deltaLower * deltaLower) * QuadraticSurd.Rational(value: (cutoff * cutoff)));
+        var denominatorLoss = (coefficientMagnitude +
+            ((QuadraticSurd.Rational(value: 2) * normValue.Abs()) / deltaLower));
+        var denominatorMargin = ((deltaLower - denominatorLower) *
+            QuadraticSurd.Rational(value: (cutoff * cutoff)));
+
+        return (
+            (deltaAtCutoff >= deltaLower) &&
+            (discriminantLower >= (QuadraticSurd.Rational(value: 4) * normValue.Abs())) &&
+            (denominatorMargin >= denominatorLoss)
+        );
     }
 }

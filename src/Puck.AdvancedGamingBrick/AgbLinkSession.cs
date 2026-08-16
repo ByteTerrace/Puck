@@ -40,6 +40,7 @@ public sealed class AgbLinkSession : IDisposable {
     private readonly IAgbSerialController[] m_controllers;
     private readonly AdvancedGamingBrickMachine[] m_machines;
     private readonly long[] m_targets;
+
     private bool m_disposed;
 
     /// <summary>Connects the consoles' serial controllers into one cable, in order (the first console is the parent,
@@ -52,7 +53,6 @@ public sealed class AgbLinkSession : IDisposable {
     /// same console appears twice. No console is connected when this is thrown.</exception>
     public AgbLinkSession(params AgbMachineInstance[] consoles) : this(plan: BuildFreshPlan(consoles: consoles)) {
     }
-
     /// <summary>Reconnects a suspended set, re-anchoring each console's pacing target at <c>Cycles − credit</c> so the
     /// run continues the exact pacing the matching <see cref="Suspend"/> severed at — the credit-preserving path a
     /// snapshot/restore/reconnect cycle needs. Use this (never the plain constructor) after restoring every console
@@ -68,8 +68,8 @@ public sealed class AgbLinkSession : IDisposable {
     /// position — a reordered or substituted console. No console is connected when this is thrown.</exception>
     public AgbLinkSession(AgbLinkResumeToken resumeToken, params AgbMachineInstance[] consoles)
         : this(plan: BuildResumePlan(
-        resumeToken: resumeToken,
-        consoles: consoles
+        consoles: consoles,
+        resumeToken: resumeToken
     )) {
     }
 
@@ -143,7 +143,6 @@ public sealed class AgbLinkSession : IDisposable {
             Targets: targets
         );
     }
-
     // Shared shape/identity validation for both constructors: resolves each console's serial controller and machine,
     // rejects a null array, an out-of-range count, a null element, and a duplicate machine. Never connects anything —
     // callers wire the cable only once their own additional checks (resume-token credits/identities) also pass.
@@ -229,7 +228,6 @@ public sealed class AgbLinkSession : IDisposable {
             m_machines[furthest].Step();
         }
     }
-
     /// <summary>Severs the cable and returns the credit token a later credit-preserving reconnect needs. Each
     /// console's credit is its instruction overshoot at this instant — the master-clock cycles it has already run
     /// past its cumulative link target (always non-negative: a completed <see cref="Run"/> leaves each console at or

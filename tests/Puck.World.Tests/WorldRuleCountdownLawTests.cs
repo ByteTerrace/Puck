@@ -22,7 +22,7 @@ public sealed class WorldRuleCountdownLawTests {
                     Name: WorldCellName.Parse(candidate: "cooldown-tick"),
                     Gate: new ActionPredicate.CompareState(State: countdownName.Value, Comparison: ActionStateComparison.Greater, Value: 0f),
                     Effects: [new ActionEffect.CountdownState(State: countdownName.Value)])
-            ]
+            ],
         };
 
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -33,7 +33,6 @@ public sealed class WorldRuleCountdownLawTests {
         fixture.Step(stepTicks: 1120UL);
         Assert.Equal(expected: 0L, actual: CountdownValue(fixture: fixture, name: countdownName));
     }
-
     [Fact]
     public void OutOfRangeValueSecondsRefusesByNameWithoutOverflow() {
         var denied = DurationDocument(seconds: decimal.MaxValue);
@@ -59,10 +58,9 @@ public sealed class WorldRuleCountdownLawTests {
                 new WorldRule(
                     Name: WorldCellName.Parse(candidate: "arm-cooldown"),
                     Effects: [new ActionEffect.SetState(State: countdownName.Value, ValueSeconds: seconds)])
-            ]
+            ],
         };
     }
-
     private static long CountdownValue(WorldFixture fixture, WorldCellName name) =>
-        fixture.Server.Definition.State.Single(predicate: row => row.Name == name).Cells!.Single().Value;
+        fixture.Server.Definition.State.Single(predicate: row => (row.Name == name)).Cells!.Single().Value;
 }

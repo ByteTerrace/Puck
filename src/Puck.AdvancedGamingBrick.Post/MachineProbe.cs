@@ -29,7 +29,6 @@ internal static class MachineProbe {
             }
         }
     }
-
     /// <summary>Whether a program counter lies in a region the machine can legitimately fetch code from — BIOS, either WRAM,
     /// VRAM, or game-pak ROM and its mirrors. A settled PC anywhere else means the core ran off into unmapped memory
     /// rather than reaching the ROM's result loop.</summary>

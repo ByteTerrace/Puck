@@ -7,7 +7,6 @@ namespace Puck.HumbleGamingBrick.Post;
 internal interface IPostStage {
     /// <summary>The stage's stable display name (used in the report and for the <c>--filter</c> option).</summary>
     string Name { get; }
-
     /// <summary>The tier this stage belongs to (drives ordering and <c>--tier</c> selection).</summary>
     PostTier Tier { get; }
 

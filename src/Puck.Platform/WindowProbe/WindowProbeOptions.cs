@@ -2,6 +2,7 @@ namespace Puck.Platform.WindowProbe;
 
 public sealed class WindowProbeOptions {
     public bool AutoCloseAfterFirstPaint { get; set; }
+
     public uint Height { get; set; } = 600;
     public int MaxPumpIterations { get; set; } = 600;
     public int PollDelayMilliseconds { get; set; } = 16;

@@ -31,11 +31,14 @@ public struct GamepadButtonEdges : IEquatable<GamepadButtonEdges> {
     /// <param name="other">The buffer to compare against.</param>
     /// <returns><see langword="true"/> when every slot is equal; otherwise <see langword="false"/>.</returns>
     public readonly bool Equals(GamepadButtonEdges other) {
-        return ((ReadOnlySpan<ulong>)this).SequenceEqual(other: (ReadOnlySpan<ulong>)other);
+        return ((ReadOnlySpan<ulong>)this).SequenceEqual(other: ((ReadOnlySpan<ulong>)other));
     }
     /// <inheritdoc/>
     public readonly override bool Equals(object? obj) {
-        return ((obj is GamepadButtonEdges other) && Equals(other: other));
+        return (
+            (obj is GamepadButtonEdges other) &&
+            Equals(other: other)
+        );
     }
     /// <inheritdoc/>
     public readonly override int GetHashCode() {

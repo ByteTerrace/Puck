@@ -31,7 +31,7 @@ public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi 
 
         try {
             var createInfo = new VkShaderModuleCreateInfo {
-                CodeSize = (nuint)spirVBytes.Length,
+                CodeSize = ((nuint)spirVBytes.Length),
                 PCode = codeHandle.AddrOfPinnedObject(),
                 SType = StructureTypeShaderModuleCreateInfo,
             };
@@ -75,8 +75,8 @@ public unsafe sealed class VulkanNativeShaderModuleApi : IVulkanShaderModuleApi 
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateShaderModule = (delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateShaderModule"u8),
-                DestroyShaderModule = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyShaderModule"u8),
+                CreateShaderModule = ((delegate* unmanaged[Cdecl]<nint, in VkShaderModuleCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateShaderModule"u8)),
+                DestroyShaderModule = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyShaderModule"u8)),
             }
         );
     }

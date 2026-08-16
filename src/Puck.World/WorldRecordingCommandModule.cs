@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Options;
+using Puck.Abstractions.Capture;
 using Puck.Abstractions.Recording;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.Platform.Recording;
 using Puck.Recording.Session;
 
@@ -11,63 +13,44 @@ namespace Puck.World;
 /// The recording console surface — <c>capture.start</c> / <c>capture.stop</c> / <c>capture.status</c>, the native-capture
 /// control plane over the pipe. It resolves the boot recording document (<c>puck.recording.v1</c>, host-scope data) and
 /// the platform's Media Foundation encoder ladder + WASAPI audio sources against real hardware, opening only what this
-/// machine can encode and capture, and arms the render tap. Every verb is Immediate (no simulation effect) and echoes
+/// machine can encode and capture, and arms launcher-level frame capture. Every verb is Immediate (no simulation effect) and echoes
 /// honestly: the negotiated codec, frames captured/dropped, audio track count and drops, bytes, and the output path;
 /// declines are loud. A separate module keeps each class under its analyzer ceilings.
 /// </summary>
-/// <remarks>The live windowed present path hands GPU surfaces, so the capture tap reads each captured frame back to CPU
-/// pixels through the SDF engine before encoding — a synchronous GPU readback per captured frame on the render thread.
-/// It costs nothing until <c>capture.start</c> arms it; the frame counters and the <c>world.fps</c> verb reveal the live
-/// impact (no cost figure is claimed without measurement).</remarks>
+/// <remarks>The launcher captures the exact root surface immediately before presentation. GPU surfaces are read back
+/// through the active presenter's backend capability — synchronously, once per due captured frame, on the render thread.
+/// It costs nothing until <c>capture.start</c> arms the controller; the frame counters and the <c>world.fps</c> verb reveal
+/// the live impact (no cost figure is claimed without measurement).</remarks>
 internal sealed class WorldRecordingCommandModule(
-    RecordingTap tap,
+    FrameCaptureController capture,
     IVideoEncoderFactory videoEncoders,
     IAudioCaptureSourceFactory audioSources,
     RecordingSessionClock clock,
     RecordingDocumentSource source,
     IOptions<NativeWindowOptions> window
 ) : ICommandModule {
-    private readonly RecordingTap m_tap = tap;
+    private readonly FrameCaptureController m_capture = capture;
     private readonly IVideoEncoderFactory m_videoEncoders = videoEncoders;
     private readonly IAudioCaptureSourceFactory m_audioSources = audioSources;
     private readonly RecordingSessionClock m_clock = clock;
     private readonly RecordingDocumentSource m_source = source;
     private readonly IOptions<NativeWindowOptions> m_window = window;
 
-    /// <inheritdoc/>
-    public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "capture.start",
-            description: "Starts a native recording (Immediate): loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms the render tap, and echoes the negotiated codec and any declines.",
-            handler: (_, args) => Start(args: args)
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "capture.stop",
-            description: "Stops the active recording (Immediate): drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, negotiated codec, frames captured/dropped, audio drops, and byte size.",
-            handler: (_, args) => Stop(args: args)
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "capture.status",
-            description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",
-            handler: (_, args) => Status(args: args)
-        );
-    }
-
     private CommandResult Start(WireArgs args) {
         if (args.Count > 1) {
             return CommandResult.Error(output: "[capture.start: expected at most one argument (an output path)]");
         }
 
-        if (m_tap.WantsFrames) {
-            return CommandResult.Error(output: $"[capture.start: already recording -> {m_tap.Current?.OutputPath}]");
+        if (m_capture.IsArmed) {
+            return CommandResult.Error(output: $"[capture.start: already recording -> {(m_capture.CurrentSink as RecordingSession)?.OutputPath}]");
         }
 
         var document = m_source.Document;
 
-        if ((args.Count == 1) && !args[0].IsWhiteSpace()) {
+        if (
+            (args.Count == 1) &&
+            !args[0].IsWhiteSpace()
+        ) {
             document = document with { Output = args[0].ToString() };
         }
 
@@ -79,31 +62,62 @@ internal sealed class WorldRecordingCommandModule(
             options: new RecordingSessionOptions {
                 AudioSourceFactory = m_audioSources,
                 Document = document,
-                SourceHeight = (int)m_window.Value.Height,
-                SourceWidth = (int)m_window.Value.Width,
+                SourceHeight = ((int)m_window.Value.Height),
+                SourceWidth = ((int)m_window.Value.Width),
                 VideoEncoderFactory = m_videoEncoders,
             },
             session: out var session,
             reason: out var reason
         );
 
-        if (!created || (session is null)) {
+        if (
+            !created ||
+            (session is null)
+        ) {
             return CommandResult.Error(output: $"[capture.start: declined — {reason}]");
         }
 
-        m_tap.Arm(session: session);
+        m_capture.Arm(
+            sink: session,
+            options: new CaptureOptions {
+                FrameRate = (document.Video?.FrameRate ?? 60),
+                MaxFrames = 0,
+            }
+        );
 
-        var notes = (string.IsNullOrWhiteSpace(value: reason) ? "full" : reason);
+        var notes = (string.IsNullOrWhiteSpace(value: reason)
+            ? "full"
+            : reason
+        );
         var status = session.Snapshot();
 
         return new CommandResult(Output: $"[capture.start: recording -> {session.OutputPath} | codec {session.CodecLanded} | audio tracks {status.AudioTrackCount} | {notes}]");
+    }
+    private CommandResult Status(WireArgs args) {
+        if (args.Count > 0) {
+            return CommandResult.Error(output: "[capture.status: expected no arguments]");
+        }
+
+        var origin = m_source.SourcePath;
+
+        if (m_capture.CurrentSink is not RecordingSession session) {
+            return new CommandResult(Output: $"[capture.status: idle | document {origin} | readback synchronous presenter readback per captured GPU frame while recording]");
+        }
+
+        var status = session.Snapshot();
+        var fault = ((m_capture.Fault is { } exception)
+            ? $" | capture fault {exception.Message}"
+            : string.Empty
+        );
+
+        return new CommandResult(Output: ((string)$"[capture.status: recording -> {status.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | audio tracks {status.AudioTrackCount} drops {status.AudioSamplesDropped} | bytes {status.BytesWritten} | document {origin} | readback synchronous presenter readback per captured GPU frame{fault}]"));
     }
     private CommandResult Stop(WireArgs args) {
         if (args.Count > 0) {
             return CommandResult.Error(output: "[capture.stop: expected no arguments]");
         }
 
-        var session = m_tap.Disarm();
+        var session = (m_capture.Disarm() as RecordingSession);
 
         if (session is null) {
             return CommandResult.Error(output: "[capture.stop: not recording]");
@@ -119,28 +133,34 @@ internal sealed class WorldRecordingCommandModule(
 
         return new CommandResult(Output: $"[capture.stop: wrote {session.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | audio drops {status.AudioSamplesDropped} | bytes {bytes}]");
     }
-    private CommandResult Status(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Error(output: "[capture.status: expected no arguments]");
-        }
-
-        var origin = m_source.SourcePath;
-
-        if (m_tap.Current is not { } session) {
-            return new CommandResult(Output: $"[capture.status: idle | document {origin} | readback synchronous GPU readback per captured frame while recording]");
-        }
-
-        var status = session.Snapshot();
-
-        return new CommandResult(Output: ($"[capture.status: recording -> {status.OutputPath} | codec {status.CodecLanded} | frames {status.FramesCaptured}/{status.FramesDropped} dropped | " +
-            $"audio tracks {status.AudioTrackCount} drops {status.AudioSamplesDropped} | bytes {status.BytesWritten} | document {origin} | readback synchronous per captured frame]"));
-    }
     private static long TryFileLength(string path) {
         try {
             return new FileInfo(fileName: path).Length;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return 0L;
         }
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "capture.start",
+            description: "Starts a native recording (Immediate): loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms frame capture, and echoes the negotiated codec and any declines.",
+            handler: (_, args) => Start(args: args)
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "capture.stop",
+            description: "Stops the active recording (Immediate): drains and finalizes the container (final cluster, cues, patched duration) and echoes the output path, negotiated codec, frames captured/dropped, audio drops, and byte size.",
+            handler: (_, args) => Stop(args: args)
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "capture.status",
+            description: "Reports the recording state (Immediate): running/idle, the negotiated codec, frames captured/dropped, audio tracks and drops, bytes written, the output path, and the source document.",
+            handler: (_, args) => Status(args: args)
+        );
     }
 
 }

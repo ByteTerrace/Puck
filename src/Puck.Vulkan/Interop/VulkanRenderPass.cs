@@ -7,6 +7,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanRenderPass : IDisposable {
     private bool m_disposed;
+
     private readonly IVulkanRenderPassApi m_renderPassApi;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the render pass.</summary>

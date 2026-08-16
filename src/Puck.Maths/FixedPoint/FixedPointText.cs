@@ -8,7 +8,6 @@ internal enum FixedPointParseStatus {
     Invalid,
     Overflow
 }
-
 /// <summary>Exact decimal parsing and rendering shared by the fixed-point primitives. Rendering
 /// (<see cref="TryFormatRaw"/>) is always allocation-free. <see cref="Parse"/>'s fraction-digit accumulation
 /// and rounding stay allocation-free too, in <see cref="UInt128"/>, for every carrier at or below
@@ -19,294 +18,24 @@ internal enum FixedPointParseStatus {
 /// proved to fit its original width, so the wide path is a strict generalization and changes no result versus the
 /// narrow one at any fraction width where both could run.</summary>
 internal static class FixedPointText {
-    private const int StoredSignificantDigitCount = 64;
+    /// <summary>The style every fixed-point carrier parses under when the caller names none: leading and trailing
+    /// white space, a leading sign, and a decimal point. Thousands separators, an exponent, and a currency symbol are
+    /// all admitted only when a caller asks for them by style.</summary>
+    internal const NumberStyles DefaultParseStyle = NumberStyles.AllowLeadingWhite |
+                                                   NumberStyles.AllowTrailingWhite |
+                                                   NumberStyles.AllowLeadingSign |
+                                                   NumberStyles.AllowDecimalPoint;
+
+    /// <summary>A buffer length covering the invariant expansion of every 64-bit raw at any fraction bit count: a
+    /// sign, twenty integer digits (the decimal length of <c>2⁶⁴</c>), the point, and one fraction digit per fraction
+    /// bit.</summary>
+    private const int MaximumInvariantLength = (((1 + 20) + 1) + 64);
     /// <summary>The largest fraction bit count whose <c>fractionBitCount + 1</c>-decimal-digit accumulation still fits
     /// <see cref="UInt128"/> (<c>10^38 &lt; 2^128 ≤ 10^39</c>), and therefore the largest <see cref="Parse"/> serves
     /// allocation-free. Every carrier below <c>FixedQ1648</c>'s forty-eight fraction bits — sixteen and thirty-two —
     /// sits under it today.</summary>
     private const int NarrowFractionBitCountLimit = 37;
-
-    /// <summary>A buffer length covering the invariant expansion of every 64-bit raw at any fraction bit count: a
-    /// sign, twenty integer digits (the decimal length of <c>2⁶⁴</c>), the point, and one fraction digit per fraction
-    /// bit.</summary>
-    private const int MaximumInvariantLength = (1 + 20 + 1 + 64);
-
-    /// <summary>Writes the invariant exact decimal expansion of a raw fixed-point magnitude.</summary>
-    /// <param name="magnitude">The raw magnitude.</param>
-    /// <param name="negative">Whether the value is negative.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <param name="destination">The span the expansion is written to.</param>
-    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
-    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
-    internal static bool TryFormatRaw(
-        ulong magnitude,
-        bool negative,
-        int fractionBitCount,
-        Span<char> destination,
-        out int charsWritten
-    ) {
-        var integerPart = (magnitude >> fractionBitCount);
-        var fraction = magnitude & ((1UL << fractionBitCount) - 1UL);
-        // The exact required length is a pure function of the raw, so the length check runs before any write and the
-        // caller's destination is genuinely all-or-nothing. Each rendered fraction digit multiplies by ten, which
-        // strips exactly one factor of two from the denominator, so the expansion terminates after fractionBitCount
-        // minus the fraction's trailing zero count digits.
-        var requiredLength = ((negative ? 1 : 0) + ((int)integerPart.LogarithmBase10()));
-
-        if (fraction != 0UL) {
-            requiredLength += (1 + (fractionBitCount - BitOperations.TrailingZeroCount(value: fraction)));
-        }
-
-        if (destination.Length < requiredLength) {
-            charsWritten = 0;
-
-            return false;
-        }
-
-        var position = 0;
-
-        if (negative) {
-            destination[position++] = '-';
-        }
-
-        _ = integerPart.TryFormat(
-            destination: destination[position..],
-            charsWritten: out var integerChars,
-            format: default,
-            provider: CultureInfo.InvariantCulture
-        );
-        position += integerChars;
-
-        if (fraction != 0UL) {
-            // The length check above already reserved the point and every digit, so the write cannot come up short.
-            position += WriteFractionDigits(
-                fraction: fraction,
-                fractionBitCount: fractionBitCount,
-                destination: destination[position..]
-            );
-        }
-
-        charsWritten = position;
-
-        return true;
-    }
-
-    /// <summary>Writes a raw fixed-point magnitude using a provider's decimal-separator and negative-sign
-    /// tokens.</summary>
-    /// <param name="magnitude">The raw magnitude.</param>
-    /// <param name="negative">Whether the value is negative.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <param name="destination">The span the expansion is written to.</param>
-    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
-    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
-    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
-    internal static bool TryFormat(
-        ulong magnitude,
-        bool negative,
-        int fractionBitCount,
-        Span<char> destination,
-        out int charsWritten,
-        IFormatProvider? provider
-    ) {
-        var numberFormat = ((provider is null)
-            ? NumberFormatInfo.InvariantInfo
-            : NumberFormatInfo.GetInstance(formatProvider: provider));
-
-        if ((numberFormat.NumberDecimalSeparator == ".") && (!negative || (numberFormat.NegativeSign == "-"))) {
-            return TryFormatRaw(
-                magnitude: magnitude,
-                negative: negative,
-                fractionBitCount: fractionBitCount,
-                destination: destination,
-                charsWritten: out charsWritten
-            );
-        }
-
-        Span<char> invariant = stackalloc char[MaximumInvariantLength];
-
-        _ = TryFormatRaw(
-            magnitude: magnitude,
-            negative: negative,
-            fractionBitCount: fractionBitCount,
-            destination: invariant,
-            charsWritten: out var invariantLength
-        );
-
-        return TrySpliceProviderTokens(
-            invariant: invariant[..invariantLength],
-            numberFormat: numberFormat,
-            destination: destination,
-            charsWritten: out charsWritten
-        );
-    }
-
-    /// <summary>Writes a signed raw value using a provider's decimal-separator and negative-sign tokens.</summary>
-    /// <param name="rawValue">The signed raw value.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <param name="destination">The span the expansion is written to.</param>
-    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
-    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
-    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
-    internal static bool TryFormatSigned(
-        long rawValue,
-        int fractionBitCount,
-        Span<char> destination,
-        out int charsWritten,
-        IFormatProvider? provider
-    ) =>
-        TryFormat(
-            magnitude: FusedArithmetic.RawMagnitude(value: rawValue),
-            negative: (rawValue < 0L),
-            fractionBitCount: fractionBitCount,
-            destination: destination,
-            charsWritten: out charsWritten,
-            provider: provider
-        );
-
-    /// <summary>Renders the invariant exact decimal expansion of a raw fixed-point magnitude as a string.</summary>
-    /// <param name="magnitude">The raw magnitude.</param>
-    /// <param name="negative">Whether the value is negative.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <returns>The invariant exact decimal expansion.</returns>
-    internal static string FormatRaw(ulong magnitude, bool negative, int fractionBitCount) {
-        Span<char> buffer = stackalloc char[MaximumInvariantLength];
-
-        _ = TryFormatRaw(
-            magnitude: magnitude,
-            negative: negative,
-            fractionBitCount: fractionBitCount,
-            destination: buffer,
-            charsWritten: out var charsWritten
-        );
-
-        return new string(value: buffer[..charsWritten]);
-    }
-
-    /// <summary>Renders the invariant exact decimal expansion of a signed raw value as a string.</summary>
-    /// <param name="rawValue">The signed raw value.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <returns>The invariant exact decimal expansion.</returns>
-    internal static string FormatSignedRaw(long rawValue, int fractionBitCount) =>
-        FormatRaw(
-            magnitude: FusedArithmetic.RawMagnitude(value: rawValue),
-            negative: (rawValue < 0L),
-            fractionBitCount: fractionBitCount
-        );
-
-    /// <summary>Splices a provider's decimal-separator and negative-sign tokens into an invariant expansion.</summary>
-    /// <param name="invariant">The invariant exact decimal expansion.</param>
-    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
-    /// <returns>The spliced expansion, or <paramref name="invariant"/> itself when no token differs.</returns>
-    internal static string SpliceProviderTokens(string invariant, IFormatProvider? provider) {
-        var numberFormat = ((provider is null)
-            ? NumberFormatInfo.InvariantInfo
-            : NumberFormatInfo.GetInstance(formatProvider: provider));
-        var negative = invariant.StartsWith(value: '-');
-        var pointIndex = invariant.IndexOf(value: '.');
-
-        if ((!negative || (numberFormat.NegativeSign == "-"))
-            && ((pointIndex < 0) || (numberFormat.NumberDecimalSeparator == "."))) {
-            return invariant;
-        }
-
-        var requiredLength = ((invariant.Length
-            + (negative ? (numberFormat.NegativeSign.Length - 1) : 0))
-            + ((pointIndex < 0) ? 0 : (numberFormat.NumberDecimalSeparator.Length - 1)));
-
-        return string.Create(
-            length: requiredLength,
-            state: (invariant, numberFormat),
-            action: static (destination, state) => _ = TrySpliceProviderTokens(
-                invariant: state.invariant,
-                numberFormat: state.numberFormat,
-                destination: destination,
-                charsWritten: out _
-            )
-        );
-    }
-
-    private static bool TrySpliceProviderTokens(
-        ReadOnlySpan<char> invariant,
-        NumberFormatInfo numberFormat,
-        Span<char> destination,
-        out int charsWritten
-    ) {
-        var body = invariant;
-        var negative = (body[0] == '-');
-
-        if (negative) {
-            body = body[1..];
-        }
-
-        var separator = numberFormat.NumberDecimalSeparator;
-        var negativeSign = numberFormat.NegativeSign;
-        var pointIndex = body.IndexOf(value: '.');
-        var signLength = (negative ? negativeSign.Length : 0);
-        var requiredLength = ((signLength + body.Length) + ((pointIndex < 0) ? 0 : (separator.Length - 1)));
-
-        if (destination.Length < requiredLength) {
-            charsWritten = 0;
-
-            return false;
-        }
-
-        if (negative) {
-            negativeSign.AsSpan().CopyTo(destination: destination);
-        }
-
-        if (pointIndex < 0) {
-            body.CopyTo(destination: destination[signLength..]);
-        } else {
-            body[..pointIndex].CopyTo(destination: destination[signLength..]);
-            separator.AsSpan().CopyTo(destination: destination[(signLength + pointIndex)..]);
-            body[(pointIndex + 1)..].CopyTo(destination: destination[((signLength + pointIndex) + separator.Length)..]);
-        }
-
-        charsWritten = requiredLength;
-
-        return true;
-    }
-
-    /// <summary>Writes the decimal point and the exact terminating expansion of a raw fraction.</summary>
-    /// <param name="fraction">The raw fraction bits, strictly below <c>2^fractionBitCount</c>.</param>
-    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
-    /// <param name="destination">The span the expansion is written to, starting at the decimal point.</param>
-    /// <returns>The characters written, or <c>-1</c> when <paramref name="destination"/> was too small — in which case
-    /// the characters that did fit have already been written.</returns>
-    /// <remarks>Each digit multiplies by ten, stripping exactly one factor of two from the
-    /// <paramref name="fractionBitCount"/> the denominator holds, so the expansion terminates after
-    /// <paramref name="fractionBitCount"/> minus the fraction's trailing zero count digits.</remarks>
-    internal static int WriteFractionDigits(ulong fraction, int fractionBitCount, Span<char> destination) {
-        if (destination.IsEmpty) {
-            return -1;
-        }
-
-        var mask = ((1UL << fractionBitCount) - 1UL);
-        var position = 0;
-
-        destination[position++] = '.';
-
-        do {
-            if (destination.Length <= position) {
-                return -1;
-            }
-
-            fraction *= 10UL;
-            destination[position++] = ((char)('0' + ((int)(fraction >> fractionBitCount))));
-            fraction &= mask;
-        } while (0UL != fraction);
-
-        return position;
-    }
-
-    /// <summary>Refuses any format specifier other than the exact decimal expansion.</summary>
-    /// <param name="format">The specifier to validate.</param>
-    /// <exception cref="FormatException">The specifier is neither empty nor <c>G</c>/<c>g</c>.</exception>
-    internal static void ValidateGeneralFormat(ReadOnlySpan<char> format) {
-        if (!format.IsEmpty && !format.Equals(other: "G", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            throw new FormatException(message: $"The '{format.ToString()}' format is not supported. Use 'G' for the exact decimal expansion.");
-        }
-    }
+    private const int StoredSignificantDigitCount = 64;
 
     /// <summary>
     /// Creates <c>2 × 5^(fractionBitCount + 1)</c>, the reduced denominator obtained when a decimal prefix with
@@ -321,7 +50,34 @@ internal static class FixedPointText {
 
         return (powerOfFive << 1);
     }
+    /// <summary>Renders the invariant exact decimal expansion of a raw fixed-point magnitude as a string.</summary>
+    /// <param name="magnitude">The raw magnitude.</param>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <returns>The invariant exact decimal expansion.</returns>
+    internal static string FormatRaw(ulong magnitude, bool negative, int fractionBitCount) {
+        Span<char> buffer = stackalloc char[MaximumInvariantLength];
 
+        _ = TryFormatRaw(
+            charsWritten: out var charsWritten,
+            destination: buffer,
+            fractionBitCount: fractionBitCount,
+            magnitude: magnitude,
+            negative: negative
+        );
+
+        return new string(value: buffer[..charsWritten]);
+    }
+    /// <summary>Renders the invariant exact decimal expansion of a signed raw value as a string.</summary>
+    /// <param name="rawValue">The signed raw value.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <returns>The invariant exact decimal expansion.</returns>
+    internal static string FormatSignedRaw(long rawValue, int fractionBitCount) =>
+        FormatRaw(
+            magnitude: FusedArithmetic.RawMagnitude(value: rawValue),
+            negative: (rawValue < 0L),
+            fractionBitCount: fractionBitCount
+        );
     /// <summary>
     /// Validates the culture/style syntax with the platform number parser, then quantizes the original digits
     /// directly. The intermediate <see cref="decimal"/> value supplies only the sign; its rounded magnitude is never
@@ -345,10 +101,10 @@ internal static class FixedPointText {
         var effectiveProvider = (provider ?? CultureInfo.InvariantCulture);
 
         if (!decimal.TryParse(
-            s: s,
-            style: style,
             provider: effectiveProvider,
-            result: out var validated
+            result: out var validated,
+            s: s,
+            style: style
         )) {
             return FixedPointParseStatus.Invalid;
         }
@@ -357,16 +113,18 @@ internal static class FixedPointText {
 
         var numberFormat = NumberFormatInfo.GetInstance(formatProvider: effectiveProvider);
         var useCurrencySeparators = UsesCurrencySeparators(
+            numberFormat: numberFormat,
             s: s,
-            style: style,
-            numberFormat: numberFormat
+            style: style
         );
         ReadOnlySpan<char> decimalSeparator = (useCurrencySeparators
             ? numberFormat.CurrencyDecimalSeparator
-            : numberFormat.NumberDecimalSeparator);
+            : numberFormat.NumberDecimalSeparator
+        );
         ReadOnlySpan<char> groupSeparator = (useCurrencySeparators
             ? numberFormat.CurrencyGroupSeparator
-            : numberFormat.NumberGroupSeparator);
+            : numberFormat.NumberGroupSeparator
+        );
 
         // The exact scanner must be able to distinguish syntax tokens from significand digits and the exponent
         // marker. Built-in cultures (including alphabetic currency symbols and multi-character tokens) satisfy that
@@ -382,9 +140,9 @@ internal static class FixedPointText {
         // another, so each is REFUSED here rather than quantized: a parse that succeeds names the number the
         // validation pass accepted.
         if (HasAmbiguousEnabledFormatToken(
+            numberFormat: numberFormat,
             s: s,
             style: style,
-            numberFormat: numberFormat,
             useCurrencySeparators: useCurrencySeparators
         )) {
             return FixedPointParseStatus.Invalid;
@@ -399,7 +157,10 @@ internal static class FixedPointText {
             exponentLimit: ((((long)s.Length) + fractionBitCount) + 21L),
             exponent: out var exponent
         );
-        var significand = ((0 <= exponentIndex) ? s[..exponentIndex] : s);
+        var significand = ((0 <= exponentIndex)
+            ? s[..exponentIndex]
+            : s
+        );
         Span<byte> significantDigits = stackalloc byte[StoredSignificantDigitCount];
         var storedDigitCount = 0;
         var totalDigitCount = 0L;
@@ -411,7 +172,7 @@ internal static class FixedPointText {
         for (var index = 0; (index < significand.Length);) {
             var digit = (significand[index] - '0');
 
-            if ((uint)digit <= 9U) {
+            if (((uint)digit) <= 9U) {
                 if (!seenNonzero) {
                     if (0 == digit) {
                         leadingZeroCount++;
@@ -442,9 +203,9 @@ internal static class FixedPointText {
                 (0L > decimalDigitIndex) &&
                 !decimalSeparator.IsEmpty &&
                 significand[index..].StartsWith(
-                    value: decimalSeparator,
-                    comparisonType: StringComparison.Ordinal
-                )
+                comparisonType: StringComparison.Ordinal,
+                value: decimalSeparator
+            )
             ) {
                 decimalDigitIndex = totalDigitCount;
                 index += decimalSeparator.Length;
@@ -455,9 +216,9 @@ internal static class FixedPointText {
             if (
                 !groupSeparator.IsEmpty &&
                 significand[index..].StartsWith(
-                    value: groupSeparator,
-                    comparisonType: StringComparison.Ordinal
-                )
+                comparisonType: StringComparison.Ordinal,
+                value: groupSeparator
+            )
             ) {
                 index += groupSeparator.Length;
 
@@ -490,7 +251,8 @@ internal static class FixedPointText {
         for (var digitIndex = 0L; (digitIndex < integerSignificantDigitCount); digitIndex++) {
             var digit = ((digitIndex < storedDigitCount)
                 ? significantDigits[((int)digitIndex)]
-                : ((byte)0));
+                : ((byte)0)
+            );
 
             integerPart = ((integerPart * 10U) + digit);
         }
@@ -499,7 +261,10 @@ internal static class FixedPointText {
         var fractionDigitLimit = (fractionBitCount + 1);
         var hasNonzeroDiscardedFractionDigit =
             (lastNonzeroSignificantIndex >= (integerSignificantDigitCount + fractionDigitLimit));
-        var maximumRaw = (negative ? maximumNegativeMagnitudeRaw : maximumPositiveRaw);
+        var maximumRaw = (negative
+            ? maximumNegativeMagnitudeRaw
+            : maximumPositiveRaw
+        );
         UInt128 fractionRaw;
 
         // fractionDigitLimit decimal digits can reach 10^(fractionBitCount + 1) − 1. That fits UInt128
@@ -515,7 +280,8 @@ internal static class FixedPointText {
                 var significantIndex = (integerSignificantDigitCount + fractionIndex);
                 var digit = (((0L <= significantIndex) && (significantIndex < storedDigitCount))
                     ? significantDigits[((int)significantIndex)]
-                    : ((byte)0));
+                    : ((byte)0)
+                );
 
                 fractionPrefix = ((fractionPrefix * 10U) + digit);
             }
@@ -571,7 +337,8 @@ internal static class FixedPointText {
                 var significantIndex = (integerSignificantDigitCount + fractionIndex);
                 var digit = (((0L <= significantIndex) && (significantIndex < storedDigitCount))
                     ? significantDigits[((int)significantIndex)]
-                    : ((byte)0));
+                    : ((byte)0)
+                );
 
                 fractionPrefix = ((fractionPrefix * 10) + digit);
             }
@@ -631,7 +398,373 @@ internal static class FixedPointText {
 
         return FixedPointParseStatus.Success;
     }
+    /// <summary>Parses text into the raw of a signed 64-bit fixed-point carrier, throwing the diagnosis that
+    /// carrier's public <c>Parse</c> states.</summary>
+    /// <typeparam name="TSelf">The carrier the diagnoses name.</typeparam>
+    /// <param name="s">The text to parse.</param>
+    /// <param name="style">The styles <paramref name="s"/> is admitted under.</param>
+    /// <param name="provider">The provider supplying the numeric conventions, or <see langword="null"/> for the
+    /// invariant culture.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="parsingDenominator">The carrier's <see cref="CreateParsingDenominator"/> value.</param>
+    /// <returns>The parsed raw value.</returns>
+    /// <exception cref="OverflowException">The value is outside the carrier's range.</exception>
+    /// <exception cref="FormatException"><paramref name="s"/> is not a valid literal.</exception>
+    /// <remarks>The platform parser is re-entered only on failure, so this preserves its format-versus-overflow
+    /// distinction while a successful value is always quantized from the original digits.</remarks>
+    internal static long ParseSignedRaw<TSelf>(
+        ReadOnlySpan<char> s,
+        NumberStyles style,
+        IFormatProvider? provider,
+        int fractionBitCount,
+        UInt128 parsingDenominator
+    ) {
+        var status = ParseSignedRawCore(
+            fractionBitCount: fractionBitCount,
+            parsingDenominator: parsingDenominator,
+            provider: provider,
+            rawValue: out var rawValue,
+            s: s,
+            style: style
+        );
 
+        if (FixedPointParseStatus.Success == status) {
+            return rawValue;
+        }
+
+        if (FixedPointParseStatus.Overflow == status) {
+            throw new OverflowException(message: $"Value is outside the representable {typeof(TSelf).Name} range.");
+        }
+
+        _ = decimal.Parse(
+            provider: (provider ?? CultureInfo.InvariantCulture),
+            s: s,
+            style: style
+        );
+
+        throw new FormatException(message: $"The input span was not in a valid {typeof(TSelf).Name} format.");
+    }
+    /// <summary>Refuses any format specifier other than the exact decimal expansion, then splices a provider's number
+    /// tokens into an invariant expansion.</summary>
+    /// <param name="invariant">The invariant exact decimal expansion, as the carrier's own
+    /// <see cref="object.ToString"/> renders it.</param>
+    /// <param name="format">An empty format, <c>G</c> or <c>g</c>.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>The spliced expansion, character for character what <see cref="TryFormat"/> writes.</returns>
+    /// <exception cref="FormatException"><paramref name="format"/> is another specifier.</exception>
+    internal static string SpliceGeneralFormat(string invariant, string? format, IFormatProvider? provider) {
+        ValidateGeneralFormat(format: format.AsSpan());
+
+        return SpliceProviderTokens(
+            invariant: invariant,
+            provider: provider
+        );
+    }
+    /// <summary>Splices a provider's decimal-separator and negative-sign tokens into an invariant expansion.</summary>
+    /// <param name="invariant">The invariant exact decimal expansion.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>The spliced expansion, or <paramref name="invariant"/> itself when no token differs.</returns>
+    internal static string SpliceProviderTokens(string invariant, IFormatProvider? provider) {
+        var numberFormat = ((provider is null)
+            ? NumberFormatInfo.InvariantInfo
+            : NumberFormatInfo.GetInstance(formatProvider: provider)
+        );
+        var negative = invariant.StartsWith(value: '-');
+        var pointIndex = invariant.IndexOf(value: '.');
+
+        if (
+            (!negative || (numberFormat.NegativeSign == "-")) &&
+            ((pointIndex < 0) || (numberFormat.NumberDecimalSeparator == "."))
+        ) {
+            return invariant;
+        }
+
+        var requiredLength = ((invariant.Length
+            + (negative
+            ? (numberFormat.NegativeSign.Length - 1)
+            : 0))
+            + ((pointIndex < 0)
+            ? 0
+            : (numberFormat.NumberDecimalSeparator.Length - 1)));
+
+        return string.Create(
+            length: requiredLength,
+            state: (invariant, numberFormat),
+            action: static (destination, state) => _ = TrySpliceProviderTokens(
+                charsWritten: out _,
+                destination: destination,
+                invariant: state.invariant,
+                numberFormat: state.numberFormat
+            )
+        );
+    }
+    /// <summary>Writes a raw fixed-point magnitude using a provider's decimal-separator and negative-sign
+    /// tokens.</summary>
+    /// <param name="magnitude">The raw magnitude.</param>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="destination">The span the expansion is written to.</param>
+    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
+    internal static bool TryFormat(
+        ulong magnitude,
+        bool negative,
+        int fractionBitCount,
+        Span<char> destination,
+        out int charsWritten,
+        IFormatProvider? provider
+    ) {
+        var numberFormat = ((provider is null)
+            ? NumberFormatInfo.InvariantInfo
+            : NumberFormatInfo.GetInstance(formatProvider: provider)
+        );
+
+        if (
+            (numberFormat.NumberDecimalSeparator == ".") &&
+            (!negative || (numberFormat.NegativeSign == "-"))
+        ) {
+            return TryFormatRaw(
+                charsWritten: out charsWritten,
+                destination: destination,
+                fractionBitCount: fractionBitCount,
+                magnitude: magnitude,
+                negative: negative
+            );
+        }
+
+        Span<char> invariant = stackalloc char[MaximumInvariantLength];
+
+        _ = TryFormatRaw(
+            charsWritten: out var invariantLength,
+            destination: invariant,
+            fractionBitCount: fractionBitCount,
+            magnitude: magnitude,
+            negative: negative
+        );
+
+        return TrySpliceProviderTokens(
+            invariant: invariant[..invariantLength],
+            numberFormat: numberFormat,
+            destination: destination,
+            charsWritten: out charsWritten
+        );
+    }
+    /// <summary>Writes the invariant exact decimal expansion of a raw fixed-point magnitude.</summary>
+    /// <param name="magnitude">The raw magnitude.</param>
+    /// <param name="negative">Whether the value is negative.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="destination">The span the expansion is written to.</param>
+    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
+    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
+    internal static bool TryFormatRaw(
+        ulong magnitude,
+        bool negative,
+        int fractionBitCount,
+        Span<char> destination,
+        out int charsWritten
+    ) {
+        var integerPart = (magnitude >> fractionBitCount);
+        var fraction = magnitude & ((1UL << fractionBitCount) - 1UL);
+        // The exact required length is a pure function of the raw, so the length check runs before any write and the
+        // caller's destination is genuinely all-or-nothing. Each rendered fraction digit multiplies by ten, which
+        // strips exactly one factor of two from the denominator, so the expansion terminates after fractionBitCount
+        // minus the fraction's trailing zero count digits.
+        var requiredLength = ((negative
+            ? 1
+            : 0) + ((int)integerPart.LogarithmBase10()));
+
+        if (fraction != 0UL) {
+            requiredLength += (1 + (fractionBitCount - BitOperations.TrailingZeroCount(value: fraction)));
+        }
+
+        if (destination.Length < requiredLength) {
+            charsWritten = 0;
+
+            return false;
+        }
+
+        var position = 0;
+
+        if (negative) {
+            destination[position++] = '-';
+        }
+
+        _ = integerPart.TryFormat(
+            destination: destination[position..],
+            charsWritten: out var integerChars,
+            format: default,
+            provider: CultureInfo.InvariantCulture
+        );
+        position += integerChars;
+
+        if (fraction != 0UL) {
+            // The length check above already reserved the point and every digit, so the write cannot come up short.
+            position += WriteFractionDigits(
+                fraction: fraction,
+                fractionBitCount: fractionBitCount,
+                destination: destination[position..]
+            );
+        }
+
+        charsWritten = position;
+
+        return true;
+    }
+    /// <summary>Writes a signed raw value using a provider's decimal-separator and negative-sign tokens.</summary>
+    /// <param name="rawValue">The signed raw value.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="destination">The span the expansion is written to.</param>
+    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
+    internal static bool TryFormatSigned(
+        long rawValue,
+        int fractionBitCount,
+        Span<char> destination,
+        out int charsWritten,
+        IFormatProvider? provider
+    ) =>
+        TryFormat(
+            magnitude: FusedArithmetic.RawMagnitude(value: rawValue),
+            negative: (rawValue < 0L),
+            fractionBitCount: fractionBitCount,
+            destination: destination,
+            charsWritten: out charsWritten,
+            provider: provider
+        );
+    /// <summary>Refuses any format specifier other than the exact decimal expansion, then writes a signed raw value
+    /// using a provider's number tokens.</summary>
+    /// <param name="rawValue">The signed raw value.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="format">An empty format, <c>G</c> or <c>g</c>.</param>
+    /// <param name="destination">The span the expansion is written to.</param>
+    /// <param name="charsWritten">The characters written, or zero when the destination is too small.</param>
+    /// <param name="provider">The provider whose number tokens are spliced into the invariant expansion.</param>
+    /// <returns>Whether the complete expansion fit. A refusal leaves <paramref name="destination"/> untouched.</returns>
+    /// <exception cref="FormatException"><paramref name="format"/> is another specifier.</exception>
+    internal static bool TryFormatSignedGeneral(
+        long rawValue,
+        int fractionBitCount,
+        ReadOnlySpan<char> format,
+        Span<char> destination,
+        out int charsWritten,
+        IFormatProvider? provider
+    ) {
+        ValidateGeneralFormat(format: format);
+
+        return TryFormatSigned(
+            charsWritten: out charsWritten,
+            destination: destination,
+            fractionBitCount: fractionBitCount,
+            provider: provider,
+            rawValue: rawValue
+        );
+    }
+    /// <summary>Parses text into the raw of a signed 64-bit fixed-point carrier, reporting instead of
+    /// throwing.</summary>
+    /// <param name="s">The text to parse.</param>
+    /// <param name="style">The styles <paramref name="s"/> is admitted under.</param>
+    /// <param name="provider">The provider supplying the numeric conventions, or <see langword="null"/> for the
+    /// invariant culture.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="parsingDenominator">The carrier's <see cref="CreateParsingDenominator"/> value.</param>
+    /// <param name="rawValue">The parsed raw value, or zero on failure.</param>
+    /// <returns>Whether <paramref name="s"/> named an in-range value.</returns>
+    internal static bool TryParseSignedRaw(
+        ReadOnlySpan<char> s,
+        NumberStyles style,
+        IFormatProvider? provider,
+        int fractionBitCount,
+        UInt128 parsingDenominator,
+        out long rawValue
+    ) =>
+        (FixedPointParseStatus.Success == ParseSignedRawCore(
+            fractionBitCount: fractionBitCount,
+            parsingDenominator: parsingDenominator,
+            provider: provider,
+            rawValue: out rawValue,
+            s: s,
+            style: style
+        ));
+    /// <summary>Refuses any format specifier other than the exact decimal expansion.</summary>
+    /// <param name="format">The specifier to validate.</param>
+    /// <exception cref="FormatException">The specifier is neither empty nor <c>G</c>/<c>g</c>.</exception>
+    internal static void ValidateGeneralFormat(ReadOnlySpan<char> format) {
+        if (
+            !format.IsEmpty &&
+            !format.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "G"
+        )
+        ) {
+            throw new FormatException(message: $"The '{format.ToString()}' format is not supported. Use 'G' for the exact decimal expansion.");
+        }
+    }
+    /// <summary>Writes the decimal point and the exact terminating expansion of a raw fraction.</summary>
+    /// <param name="fraction">The raw fraction bits, strictly below <c>2^fractionBitCount</c>.</param>
+    /// <param name="fractionBitCount">The carrier's fraction bit count.</param>
+    /// <param name="destination">The span the expansion is written to, starting at the decimal point.</param>
+    /// <returns>The characters written, or <c>-1</c> when <paramref name="destination"/> was too small — in which case
+    /// the characters that did fit have already been written.</returns>
+    /// <remarks>Each digit multiplies by ten, stripping exactly one factor of two from the
+    /// <paramref name="fractionBitCount"/> the denominator holds, so the expansion terminates after
+    /// <paramref name="fractionBitCount"/> minus the fraction's trailing zero count digits.</remarks>
+    internal static int WriteFractionDigits(ulong fraction, int fractionBitCount, Span<char> destination) {
+        if (destination.IsEmpty) {
+            return -1;
+        }
+
+        var mask = ((1UL << fractionBitCount) - 1UL);
+        var position = 0;
+
+        destination[position++] = '.';
+
+        do {
+            if (destination.Length <= position) {
+                return -1;
+            }
+
+            fraction *= 10UL;
+            destination[position++] = ((char)('0' + ((int)(fraction >> fractionBitCount))));
+            fraction &= mask;
+        } while (0UL != fraction);
+
+        return position;
+    }
+
+    private static bool ContainsAmbiguousFreeToken(ReadOnlySpan<char> s, ReadOnlySpan<char> token) {
+        if (
+            token.IsEmpty ||
+            !s.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: token
+        )
+        ) {
+            return false;
+        }
+
+        foreach (var value in token) {
+            if (((uint)(value - '0')) <= 9U) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static bool ContainsExponentMarkerToken(ReadOnlySpan<char> s, string token) =>
+        (!string.IsNullOrEmpty(value: token) &&
+        (token.Contains(value: 'e') || token.Contains(value: 'E')) &&
+        s.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: token
+        ));
+    private static bool ContainsToken(ReadOnlySpan<char> s, string token) =>
+        (!string.IsNullOrEmpty(value: token) &&
+        s.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: token
+        ));
     /// <summary>
     /// Locates the exponent marker and reads its magnitude, saturating at <paramref name="exponentLimit"/>.
     /// </summary>
@@ -665,17 +798,27 @@ internal static class FixedPointText {
         var hasPriorDigit = false;
 
         for (var index = 0; (index < s.Length); index++) {
-            if ((0 != (style & NumberStyles.AllowDecimalPoint)) &&
+            if (
+                (0 != (style & NumberStyles.AllowDecimalPoint)) &&
                 !decimalSeparator.IsEmpty &&
-                s[index..].StartsWith(value: decimalSeparator, comparisonType: StringComparison.Ordinal)) {
+                s[index..].StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: decimalSeparator
+            )
+            ) {
                 index += (decimalSeparator.Length - 1);
 
                 continue;
             }
 
-            if ((0 != (style & NumberStyles.AllowThousands)) &&
+            if (
+                (0 != (style & NumberStyles.AllowThousands)) &&
                 !groupSeparator.IsEmpty &&
-                s[index..].StartsWith(value: groupSeparator, comparisonType: StringComparison.Ordinal)) {
+                s[index..].StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: groupSeparator
+            )
+            ) {
                 index += (groupSeparator.Length - 1);
 
                 continue;
@@ -683,7 +826,7 @@ internal static class FixedPointText {
 
             var digit = (s[index] - '0');
 
-            if ((uint)digit <= 9U) {
+            if (((uint)digit) <= 9U) {
                 hasPriorDigit = true;
 
                 continue;
@@ -699,9 +842,17 @@ internal static class FixedPointText {
             var exponentIndex = (index + 1);
             var negativeExponent = false;
 
-            if (MatchesToken(s: s, index: exponentIndex, token: numberFormat.PositiveSign)) {
+            if (MatchesToken(
+                s: s,
+                index: exponentIndex,
+                token: numberFormat.PositiveSign
+            )) {
                 exponentIndex += numberFormat.PositiveSign.Length;
-            } else if (MatchesToken(s: s, index: exponentIndex, token: numberFormat.NegativeSign)) {
+            } else if (MatchesToken(
+                s: s,
+                index: exponentIndex,
+                token: numberFormat.NegativeSign
+            )) {
                 negativeExponent = true;
                 exponentIndex += numberFormat.NegativeSign.Length;
             }
@@ -712,7 +863,7 @@ internal static class FixedPointText {
             while (exponentIndex < s.Length) {
                 digit = (s[exponentIndex] - '0');
 
-                if ((uint)digit > 9U) {
+                if (((uint)digit) > 9U) {
                     break;
                 }
 
@@ -729,12 +880,329 @@ internal static class FixedPointText {
                 continue;
             }
 
-            exponent = (negativeExponent ? -magnitude : magnitude);
+            exponent = (negativeExponent
+                ? -magnitude
+                : magnitude
+            );
 
             return index;
         }
 
         return -1;
+    }
+    // Two tokens alias when the shorter is a prefix of the longer AND the input carries the shorter one: from that
+    // point on, a containment test cannot say which token the text spells. Equality is the degenerate case.
+    private static bool HasAliasedTokens(ReadOnlySpan<char> s, string first, string second) {
+        if (
+            string.IsNullOrEmpty(value: first) ||
+            string.IsNullOrEmpty(value: second)
+        ) {
+            return false;
+        }
+
+        var shorter = ((first.Length <= second.Length)
+            ? first
+            : second
+        );
+        var longer = ((first.Length <= second.Length)
+            ? second
+            : first
+        );
+
+        return (
+            longer.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: shorter
+        ) &&
+            s.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: shorter
+        )
+        );
+    }
+    private static bool HasAmbiguousEnabledFormatToken(
+        ReadOnlySpan<char> s,
+        NumberStyles style,
+        NumberFormatInfo numberFormat,
+        bool useCurrencySeparators
+    ) {
+        var signEnabled = (0 != (style & (NumberStyles.AllowLeadingSign | NumberStyles.AllowTrailingSign | NumberStyles.AllowExponent)));
+
+        if (
+            signEnabled &&
+            (ContainsAmbiguousFreeToken(
+            s: s,
+            token: numberFormat.PositiveSign
+        ) ||
+             ContainsAmbiguousFreeToken(
+            s: s,
+            token: numberFormat.NegativeSign
+        ))
+        ) {
+            return true;
+        }
+
+        // The separator family this scanner selected — the tokens the main scan and exponent discovery will match.
+        var decimalSeparator = (useCurrencySeparators
+            ? numberFormat.CurrencyDecimalSeparator
+            : numberFormat.NumberDecimalSeparator
+        );
+        var groupSeparator = (useCurrencySeparators
+            ? numberFormat.CurrencyGroupSeparator
+            : numberFormat.NumberGroupSeparator
+        );
+
+        // A separator that aliases an enabled sign token splits the classifications by POSITION: the platform reads
+        // the token as a sign where the grammar admits one, while this scanner matches separators wherever they
+        // stand, so the same text can name two numbers.
+        if (
+            signEnabled &&
+            (HasAliasedTokens(
+            s: s,
+            first: decimalSeparator,
+            second: numberFormat.PositiveSign
+        ) ||
+             HasAliasedTokens(
+            s: s,
+            first: decimalSeparator,
+            second: numberFormat.NegativeSign
+        ) ||
+             HasAliasedTokens(
+            s: s,
+            first: groupSeparator,
+            second: numberFormat.PositiveSign
+        ) ||
+             HasAliasedTokens(
+            s: s,
+            first: groupSeparator,
+            second: numberFormat.NegativeSign
+        ))
+        ) {
+            return true;
+        }
+
+        // The platform consumes leading and trailing white space in its own phase before any token is matched, so a
+        // decimal separator whose text BEGINS with parser white space can be consumed there while this scanner reads
+        // it as the radix point. A group separator needs no twin check: skipping it is value-preserving on both
+        // sides.
+        if (
+            (0 != (style & (NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite))) &&
+            (0 != decimalSeparator.Length) &&
+            IsParserWhitespace(value: decimalSeparator[0]) &&
+            ContainsToken(
+            s: s,
+            token: decimalSeparator
+        )
+        ) {
+            return true;
+        }
+
+        // Exponent discovery skips separator matches before testing for 'e'/'E', while the platform's state machine
+        // classifies a marker by grammar position — one consumed decimal separator, no group separator past it — so
+        // an enabled separator token CARRYING the marker can make the two passes split the digits differently.
+        if (
+            (0 != (style & NumberStyles.AllowExponent)) &&
+            (((0 != (style & NumberStyles.AllowDecimalPoint)) && ContainsExponentMarkerToken(
+            s: s,
+            token: decimalSeparator
+        )) ||
+             ((0 != (style & NumberStyles.AllowThousands)) && ContainsExponentMarkerToken(
+            s: s,
+            token: groupSeparator
+        )))
+        ) {
+            return true;
+        }
+
+        if (0 == (style & NumberStyles.AllowCurrencySymbol)) {
+            return false;
+        }
+
+        if (
+            useCurrencySeparators &&
+            ContainsAmbiguousFreeToken(
+            s: s,
+            token: numberFormat.CurrencySymbol
+        )
+        ) {
+            return true;
+        }
+
+        // The platform consumes the whole currency symbol as one token, so a symbol that CONTAINS the active decimal
+        // separator hides that separator from the validator while this scanner still finds it inside the symbol's
+        // own characters — no family choice can mend a split inside a single token. A group separator inside the
+        // symbol needs no twin check: skipping it is value-preserving on both sides.
+        if (
+            ContainsToken(
+            s: s,
+            token: numberFormat.CurrencySymbol
+        ) &&
+            TokenContainsToken(
+            outer: numberFormat.CurrencySymbol,
+            inner: decimalSeparator
+        )
+        ) {
+            return true;
+        }
+
+        // The currency symbol is what UsesCurrencySeparators selects the separator family on, and the platform parser
+        // classifies the same token by grammar and position instead. When the symbol aliases an enabled sign token the
+        // two classifications part company — the validator reads a plain signed number, this scanner reads currency
+        // syntax — so the family choice is unfounded and the input is refused.
+        if (
+            signEnabled &&
+            (HasAliasedTokens(
+            s: s,
+            first: numberFormat.CurrencySymbol,
+            second: numberFormat.NegativeSign
+        ) ||
+             HasAliasedTokens(
+            s: s,
+            first: numberFormat.CurrencySymbol,
+            second: numberFormat.PositiveSign
+        ))
+        ) {
+            return true;
+        }
+
+        // With a currency symbol admitted the platform classifies a separator by POSITION: the currency family once a
+        // currency symbol has been consumed, either family before one. UsesCurrencySeparators picks a family for the
+        // whole input and cannot see that position, so wherever the two families disagree the exact scanner can split
+        // the digits where the validator did not. When they agree — every built-in culture, and every provider that
+        // sets both faces together — there is nothing to disagree about and the input is scanned as usual.
+        if (
+            string.Equals(
+            a: numberFormat.NumberDecimalSeparator,
+            b: numberFormat.CurrencyDecimalSeparator,
+            comparisonType: StringComparison.Ordinal
+        ) &&
+            string.Equals(
+            a: numberFormat.NumberGroupSeparator,
+            b: numberFormat.CurrencyGroupSeparator,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            return false;
+        }
+
+        return (
+            ContainsToken(
+            s: s,
+            token: numberFormat.NumberDecimalSeparator
+        ) ||
+            ContainsToken(
+            s: s,
+            token: numberFormat.CurrencyDecimalSeparator
+        ) ||
+            ContainsToken(
+            s: s,
+            token: numberFormat.NumberGroupSeparator
+        ) ||
+            ContainsToken(
+            s: s,
+            token: numberFormat.CurrencyGroupSeparator
+        )
+        );
+    }
+    // The fixed set the platform's number parser skips as white space: 0x20 and 0x09 through 0x0D.
+    private static bool IsParserWhitespace(char value) =>
+        ((' ' == value) || (('\t' <= value) && ('\r' >= value)));
+    private static bool MatchesToken(ReadOnlySpan<char> s, int index, string token) =>
+        (!string.IsNullOrEmpty(value: token) &&
+        (((uint)index) <= ((uint)s.Length)) &&
+        s[index..].StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: token
+        ));
+    // The signed carriers differ only in fraction bit count and parsing denominator: all three reserve one raw beyond
+    // long.MaxValue on the negative side, and a magnitude of exactly 2^63 is long.MinValue, which no negation of a
+    // long can name, so it is spelled directly rather than negated.
+    private static FixedPointParseStatus ParseSignedRawCore(
+        ReadOnlySpan<char> s,
+        NumberStyles style,
+        IFormatProvider? provider,
+        int fractionBitCount,
+        UInt128 parsingDenominator,
+        out long rawValue
+    ) {
+        rawValue = 0L;
+
+        var status = Parse(
+            fractionBitCount: fractionBitCount,
+            maximumNegativeMagnitudeRaw: (1UL << 63),
+            maximumPositiveRaw: long.MaxValue,
+            negative: out var negative,
+            parsingDenominator: parsingDenominator,
+            provider: provider,
+            rawMagnitude: out var rawMagnitude,
+            rejectExactOutOfRange: false,
+            s: s,
+            style: style
+        );
+
+        if (FixedPointParseStatus.Success == status) {
+            rawValue = (negative
+                ? ((rawMagnitude == (1UL << 63))
+                    ? long.MinValue
+                    : -((long)rawMagnitude))
+                : ((long)rawMagnitude)
+            );
+        }
+
+        return status;
+    }
+    private static bool TokenContainsToken(string outer, string inner) =>
+        (!string.IsNullOrEmpty(value: outer) &&
+        !string.IsNullOrEmpty(value: inner) &&
+        outer.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: inner
+        ));
+    private static bool TrySpliceProviderTokens(
+        ReadOnlySpan<char> invariant,
+        NumberFormatInfo numberFormat,
+        Span<char> destination,
+        out int charsWritten
+    ) {
+        var body = invariant;
+        var negative = (body[0] == '-');
+
+        if (negative) {
+            body = body[1..];
+        }
+
+        var separator = numberFormat.NumberDecimalSeparator;
+        var negativeSign = numberFormat.NegativeSign;
+        var pointIndex = body.IndexOf(value: '.');
+        var signLength = (negative
+            ? negativeSign.Length
+            : 0
+        );
+        var requiredLength = ((signLength + body.Length) + ((pointIndex < 0)
+            ? 0
+            : (separator.Length - 1)));
+
+        if (destination.Length < requiredLength) {
+            charsWritten = 0;
+
+            return false;
+        }
+
+        if (negative) {
+            negativeSign.AsSpan().CopyTo(destination: destination);
+        }
+
+        if (pointIndex < 0) {
+            body.CopyTo(destination: destination[signLength..]);
+        } else {
+            body[..pointIndex].CopyTo(destination: destination[signLength..]);
+            separator.AsSpan().CopyTo(destination: destination[(signLength + pointIndex)..]);
+            body[(pointIndex + 1)..].CopyTo(destination: destination[((signLength + pointIndex) + separator.Length)..]);
+        }
+
+        charsWritten = requiredLength;
+
+        return true;
     }
     private static bool UsesCurrencySeparators(
         ReadOnlySpan<char> s,
@@ -748,168 +1216,24 @@ internal static class FixedPointText {
         if (
             !string.IsNullOrEmpty(value: numberFormat.CurrencySymbol) &&
             s.Contains(
-                value: numberFormat.CurrencySymbol,
-                comparisonType: StringComparison.Ordinal
-            )
+            value: numberFormat.CurrencySymbol,
+            comparisonType: StringComparison.Ordinal
+        )
         ) {
             return true;
         }
 
         return
-            (!string.IsNullOrEmpty(value: numberFormat.CurrencyDecimalSeparator) &&
+            (
+            !string.IsNullOrEmpty(value: numberFormat.CurrencyDecimalSeparator) &&
             !s.Contains(
-                value: numberFormat.NumberDecimalSeparator,
-                comparisonType: StringComparison.Ordinal
-            ) &&
-            s.Contains(
-                value: numberFormat.CurrencyDecimalSeparator,
-                comparisonType: StringComparison.Ordinal
-            ));
-    }
-    private static bool MatchesToken(ReadOnlySpan<char> s, int index, string token) =>
-        (!string.IsNullOrEmpty(value: token) &&
-        ((uint)index <= ((uint)s.Length)) &&
-        s[index..].StartsWith(
-            value: token,
+            value: numberFormat.NumberDecimalSeparator,
             comparisonType: StringComparison.Ordinal
-        ));
-    private static bool ContainsAmbiguousFreeToken(ReadOnlySpan<char> s, ReadOnlySpan<char> token) {
-        if (token.IsEmpty ||
-            !s.Contains(value: token, comparisonType: StringComparison.Ordinal)) {
-            return false;
-        }
-
-        foreach (var value in token) {
-            if ((uint)(value - '0') <= 9U) {
-                return true;
-            }
-        }
-
-        return false;
+        ) &&
+            s.Contains(
+            value: numberFormat.CurrencyDecimalSeparator,
+            comparisonType: StringComparison.Ordinal
+        )
+        );
     }
-
-    // Two tokens alias when the shorter is a prefix of the longer AND the input carries the shorter one: from that
-    // point on, a containment test cannot say which token the text spells. Equality is the degenerate case.
-    private static bool HasAliasedTokens(ReadOnlySpan<char> s, string first, string second) {
-        if (string.IsNullOrEmpty(value: first) || string.IsNullOrEmpty(value: second)) {
-            return false;
-        }
-
-        var shorter = ((first.Length <= second.Length) ? first : second);
-        var longer = ((first.Length <= second.Length) ? second : first);
-
-        return (longer.StartsWith(value: shorter, comparisonType: StringComparison.Ordinal) &&
-               s.Contains(value: shorter, comparisonType: StringComparison.Ordinal));
-    }
-    private static bool HasAmbiguousEnabledFormatToken(
-        ReadOnlySpan<char> s,
-        NumberStyles style,
-        NumberFormatInfo numberFormat,
-        bool useCurrencySeparators
-    ) {
-        var signEnabled = (0 != (style & (NumberStyles.AllowLeadingSign | NumberStyles.AllowTrailingSign | NumberStyles.AllowExponent)));
-
-        if (signEnabled &&
-            (ContainsAmbiguousFreeToken(s: s, token: numberFormat.PositiveSign) ||
-             ContainsAmbiguousFreeToken(s: s, token: numberFormat.NegativeSign))) {
-            return true;
-        }
-
-        // The separator family this scanner selected — the tokens the main scan and exponent discovery will match.
-        var decimalSeparator = (useCurrencySeparators
-            ? numberFormat.CurrencyDecimalSeparator
-            : numberFormat.NumberDecimalSeparator);
-        var groupSeparator = (useCurrencySeparators
-            ? numberFormat.CurrencyGroupSeparator
-            : numberFormat.NumberGroupSeparator);
-
-        // A separator that aliases an enabled sign token splits the classifications by POSITION: the platform reads
-        // the token as a sign where the grammar admits one, while this scanner matches separators wherever they
-        // stand, so the same text can name two numbers.
-        if (signEnabled &&
-            (HasAliasedTokens(s: s, first: decimalSeparator, second: numberFormat.PositiveSign) ||
-             HasAliasedTokens(s: s, first: decimalSeparator, second: numberFormat.NegativeSign) ||
-             HasAliasedTokens(s: s, first: groupSeparator, second: numberFormat.PositiveSign) ||
-             HasAliasedTokens(s: s, first: groupSeparator, second: numberFormat.NegativeSign))) {
-            return true;
-        }
-
-        // The platform consumes leading and trailing white space in its own phase before any token is matched, so a
-        // decimal separator whose text BEGINS with parser white space can be consumed there while this scanner reads
-        // it as the radix point. A group separator needs no twin check: skipping it is value-preserving on both
-        // sides.
-        if ((0 != (style & (NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite))) &&
-            (0 != decimalSeparator.Length) &&
-            IsParserWhitespace(value: decimalSeparator[0]) &&
-            ContainsToken(s: s, token: decimalSeparator)) {
-            return true;
-        }
-
-        // Exponent discovery skips separator matches before testing for 'e'/'E', while the platform's state machine
-        // classifies a marker by grammar position — one consumed decimal separator, no group separator past it — so
-        // an enabled separator token CARRYING the marker can make the two passes split the digits differently.
-        if ((0 != (style & NumberStyles.AllowExponent)) &&
-            (((0 != (style & NumberStyles.AllowDecimalPoint)) && ContainsExponentMarkerToken(s: s, token: decimalSeparator)) ||
-             ((0 != (style & NumberStyles.AllowThousands)) && ContainsExponentMarkerToken(s: s, token: groupSeparator)))) {
-            return true;
-        }
-
-        if (0 == (style & NumberStyles.AllowCurrencySymbol)) {
-            return false;
-        }
-
-        if (useCurrencySeparators &&
-            ContainsAmbiguousFreeToken(s: s, token: numberFormat.CurrencySymbol)) {
-            return true;
-        }
-
-        // The platform consumes the whole currency symbol as one token, so a symbol that CONTAINS the active decimal
-        // separator hides that separator from the validator while this scanner still finds it inside the symbol's
-        // own characters — no family choice can mend a split inside a single token. A group separator inside the
-        // symbol needs no twin check: skipping it is value-preserving on both sides.
-        if (ContainsToken(s: s, token: numberFormat.CurrencySymbol) &&
-            TokenContainsToken(outer: numberFormat.CurrencySymbol, inner: decimalSeparator)) {
-            return true;
-        }
-
-        // The currency symbol is what UsesCurrencySeparators selects the separator family on, and the platform parser
-        // classifies the same token by grammar and position instead. When the symbol aliases an enabled sign token the
-        // two classifications part company — the validator reads a plain signed number, this scanner reads currency
-        // syntax — so the family choice is unfounded and the input is refused.
-        if (signEnabled &&
-            (HasAliasedTokens(s: s, first: numberFormat.CurrencySymbol, second: numberFormat.NegativeSign) ||
-             HasAliasedTokens(s: s, first: numberFormat.CurrencySymbol, second: numberFormat.PositiveSign))) {
-            return true;
-        }
-
-        // With a currency symbol admitted the platform classifies a separator by POSITION: the currency family once a
-        // currency symbol has been consumed, either family before one. UsesCurrencySeparators picks a family for the
-        // whole input and cannot see that position, so wherever the two families disagree the exact scanner can split
-        // the digits where the validator did not. When they agree — every built-in culture, and every provider that
-        // sets both faces together — there is nothing to disagree about and the input is scanned as usual.
-        if (string.Equals(a: numberFormat.NumberDecimalSeparator, b: numberFormat.CurrencyDecimalSeparator, comparisonType: StringComparison.Ordinal) &&
-            string.Equals(a: numberFormat.NumberGroupSeparator, b: numberFormat.CurrencyGroupSeparator, comparisonType: StringComparison.Ordinal)) {
-            return false;
-        }
-
-        return (ContainsToken(s: s, token: numberFormat.NumberDecimalSeparator) ||
-               ContainsToken(s: s, token: numberFormat.CurrencyDecimalSeparator) ||
-               ContainsToken(s: s, token: numberFormat.NumberGroupSeparator) ||
-               ContainsToken(s: s, token: numberFormat.CurrencyGroupSeparator));
-    }
-    private static bool ContainsToken(ReadOnlySpan<char> s, string token) =>
-        (!string.IsNullOrEmpty(value: token) &&
-        s.Contains(value: token, comparisonType: StringComparison.Ordinal));
-
-    // The fixed set the platform's number parser skips as white space: 0x20 and 0x09 through 0x0D.
-    private static bool IsParserWhitespace(char value) =>
-        ((' ' == value) || (('\t' <= value) && ('\r' >= value)));
-    private static bool ContainsExponentMarkerToken(ReadOnlySpan<char> s, string token) =>
-        (!string.IsNullOrEmpty(value: token) &&
-        (token.Contains(value: 'e') || token.Contains(value: 'E')) &&
-        s.Contains(value: token, comparisonType: StringComparison.Ordinal));
-    private static bool TokenContainsToken(string outer, string inner) =>
-        (!string.IsNullOrEmpty(value: outer) &&
-        !string.IsNullOrEmpty(value: inner) &&
-        outer.Contains(value: inner, comparisonType: StringComparison.Ordinal));
 }

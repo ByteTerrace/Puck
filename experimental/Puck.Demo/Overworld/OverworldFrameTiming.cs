@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.Demo.Overworld;
 

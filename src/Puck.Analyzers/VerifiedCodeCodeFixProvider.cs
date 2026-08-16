@@ -30,7 +30,6 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
     /// <inheritdoc/>
     public override FixAllProvider GetFixAllProvider() =>
         LedgerFixAllProvider.Instance;
-
     /// <inheritdoc/>
     public override async Task RegisterCodeFixesAsync(CodeFixContext context) {
         var manifestDocument = FindManifest(project: context.Document.Project);
@@ -45,8 +44,8 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
         foreach (var diagnostic in context.Diagnostics) {
             if (!TryReadRepair(
                 diagnostic: diagnostic,
-                id: out var id,
-                hash: out var hash
+                hash: out var hash,
+                id: out var id
             )) {
                 continue;
             }
@@ -54,8 +53,8 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
             // An entry the ledger does not record cannot be repaired by rewriting a hash, and an action that
             // reports success having changed nothing is worse than no action at all.
             if (JsonText.FindRecordedHash(
-                json: json,
-                id: id
+                id: id,
+                json: json
             ) is null) {
                 continue;
             }
@@ -89,9 +88,9 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
 
         return ((candidates.Length == 1)
             ? candidates[0]
-            : null);
+            : null
+        );
     }
-
     /// <summary>Recovers a repair's inputs from the diagnostic's structured properties, refusing anything that is not a usable pair.</summary>
     private static bool TryReadRepair(Diagnostic diagnostic, out string id, out string hash) {
         id = string.Empty;
@@ -130,7 +129,6 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
 
         return true;
     }
-
     /// <summary>Whether <paramref name="text"/> is the exact shape the analyzer computes, so it can be written into JSON without escaping.</summary>
     private static bool IsRecordedHash(string? text) {
         if (
@@ -168,8 +166,8 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (JsonText.FindRecordedHash(
-                json: json,
-                id: repair.Id
+                id: repair.Id,
+                json: json
             ) is not JsonText.ValueSpan span) {
                 continue;
             }
@@ -178,8 +176,8 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
             // pattern would let a leading digit be read as part of a capture-group reference.
             json = JsonText.Replace(
                 json: json,
-                span: span,
-                replacement: $"\"{repair.Hash}\""
+                replacement: $"\"{repair.Hash}\"",
+                span: span
             );
             changed = true;
         }
@@ -211,19 +209,20 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
     private sealed class LedgerFixAllProvider : FixAllProvider {
         public static readonly LedgerFixAllProvider Instance = new();
 
-        // One physical VerifiedCode.json is linked into every project as its own additional document, so a
-        // solution-wide batch would have to edit each project's copy in step. Keeping the file and the other
-        // projects in step is the host's job, so no solution scope is advertised rather than half-performed.
-        public override IEnumerable<FixAllScope> GetSupportedFixAllScopes() =>
-            [FixAllScope.Document, FixAllScope.Project];
+        private static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(FixAllContext fixAllContext) =>
+            ((fixAllContext.Scope == FixAllScope.Document)
+                ? await fixAllContext.GetDocumentDiagnosticsAsync(document: fixAllContext.Document!).ConfigureAwait(continueOnCapturedContext: false)
+                : await fixAllContext.GetAllDiagnosticsAsync(project: fixAllContext.Project).ConfigureAwait(continueOnCapturedContext: false)
+            );
+
         public override async Task<CodeAction?> GetFixAsync(FixAllContext fixAllContext) {
             var diagnostics = await GetDiagnosticsAsync(fixAllContext: fixAllContext).ConfigureAwait(continueOnCapturedContext: false);
 
             var repairs = diagnostics
                 .Select(selector: diagnostic => (Diagnostic: diagnostic, Read: TryReadRepair(
                 diagnostic: diagnostic,
-                id: out var id,
-                hash: out var hash
+                hash: out var hash,
+                id: out var id
             ), Id: id, Hash: hash))
                 .Where(predicate: candidate => candidate.Read)
                 .GroupBy(
@@ -246,17 +245,17 @@ public sealed class VerifiedCodeCodeFixProvider : CodeFixProvider {
             return CodeAction.Create(
                 title: "Update every drifted verification brand",
                 createChangedSolution: cancellationToken => UpdateManifestAsync(
+                    cancellationToken: cancellationToken,
                     project: project,
-                    repairs: repairs,
-                    cancellationToken: cancellationToken
+                    repairs: repairs
                 ),
                 equivalenceKey: EquivalenceKey
             );
         }
-
-        private static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(FixAllContext fixAllContext) =>
-            ((fixAllContext.Scope == FixAllScope.Document)
-            ? await fixAllContext.GetDocumentDiagnosticsAsync(document: fixAllContext.Document!).ConfigureAwait(continueOnCapturedContext: false)
-            : await fixAllContext.GetAllDiagnosticsAsync(project: fixAllContext.Project).ConfigureAwait(continueOnCapturedContext: false));
+        // One physical VerifiedCode.json is linked into every project as its own additional document, so a
+        // solution-wide batch would have to edit each project's copy in step. Keeping the file and the other
+        // projects in step is the host's job, so no solution scope is advertised rather than half-performed.
+        public override IEnumerable<FixAllScope> GetSupportedFixAllScopes() =>
+            [FixAllScope.Document, FixAllScope.Project];
     }
 }

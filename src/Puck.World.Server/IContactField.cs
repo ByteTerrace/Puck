@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -28,14 +29,17 @@ public interface IContactField {
     /// <returns>The grounded verdict and the last resolved non-walkable contact normal (zero when nothing obstructed
     /// the body).</returns>
     ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes);
-
     /// <summary>Resolves one integrated step from <paramref name="previousPosition"/> to
     /// <paramref name="position"/>. Providers whose endpoint solve is already sufficient inherit that behavior;
     /// fields may use the start point to recover the approached surface when the endpoint lies inside geometry.</summary>
     ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
-        Resolve(position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
-
+        Resolve(
+            orientation: in orientation,
+            position: ref position,
+            velocity: ref velocity,
+            volumes: volumes
+        );
     /// <summary>Returns the world up axis at a position — the direction a grounded body's gravity opposes and a standing test
     /// aligns against. The analytic provider always answers constant <c>+Y</c>.</summary>
     /// <param name="position">The body's foot point.</param>
@@ -50,7 +54,13 @@ internal interface IEntityContactField : IContactField {
     ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes);
     ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
         ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
-        ResolveEntity(entityIndex: entityIndex, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+        ResolveEntity(
+            entityIndex: entityIndex,
+            orientation: in orientation,
+            position: ref position,
+            velocity: ref velocity,
+            volumes: volumes
+        );
 }
 
 /// <summary>The outcome of one <see cref="IContactField.Resolve"/> call — the grounded verdict every integrator
@@ -63,7 +73,6 @@ internal interface IEntityContactField : IContactField {
 /// <see cref="FixedVector3.Zero"/> when nothing obstructed the body. A walkable push (the ground, a ramp) never
 /// writes this — only a contact whose alignment fails the grounded test does.</param>
 public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal);
-
 /// <summary>The analytic collider vocabulary's live document census.</summary>
 /// <param name="SphereCount">All sphere colliders.</param>
 /// <param name="BoxCount">All axis-aligned box colliders.</param>
@@ -81,9 +90,8 @@ public readonly record struct WorldContactCensus(
     long PlacementPlaneCount,
     long UnsupportedPlacementCount
 ) {
-    /// <summary>Gets all analytic colliders.</summary>
-    public long SolidCount => (SphereCount + BoxCount + PlaneCount);
-
     /// <summary>Gets all analytic colliders derived from placements.</summary>
-    public long PlacementColliderCount => (PlacementSphereCount + PlacementBoxCount + PlacementPlaneCount);
+    public long PlacementColliderCount => ((PlacementSphereCount + PlacementBoxCount) + PlacementPlaneCount);
+    /// <summary>Gets all analytic colliders.</summary>
+    public long SolidCount => ((SphereCount + BoxCount) + PlaneCount);
 }

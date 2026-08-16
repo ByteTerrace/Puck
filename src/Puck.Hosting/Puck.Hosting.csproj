@@ -1,7 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <AssemblyName>Puck.Hosting</AssemblyName>
+        <Description>Deterministic host boundaries for simulations and presentation: fixed-step clocks that convert elapsed wall-clock time into whole ticks, render-node lifecycle with frame publication and readback, and capability-owning host contexts. The fixed-step path advances state one host-owned tick at a time so a run stays reproducible.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Hosting</PackageId>
+        <PackageTags>clock;determinism;fixed-step;hosting;rendering;screen-machine</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
+        <RootNamespace>Puck.Hosting</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />

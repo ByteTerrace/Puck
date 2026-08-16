@@ -158,12 +158,12 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateImage = (delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImage"u8),
-                DestroyImage = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImage"u8),
-                GetImageMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetImageMemoryRequirements"u8),
-                AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8),
-                FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8),
-                BindImageMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindImageMemory"u8),
+                CreateImage = ((delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImage"u8)),
+                DestroyImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImage"u8)),
+                GetImageMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetImageMemoryRequirements"u8)),
+                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
+                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
+                BindImageMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindImageMemory"u8)),
             }
         );
     }
@@ -171,7 +171,7 @@ public unsafe sealed class VulkanNativeOffscreenImageApi : IVulkanOffscreenImage
         return m_instancePointers.GetOrAdd(
             key: instanceHandle,
             valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceMemoryProperties"u8),
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
             }
         );
     }

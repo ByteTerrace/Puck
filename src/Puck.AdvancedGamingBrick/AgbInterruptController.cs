@@ -20,10 +20,8 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
 
     /// <inheritdoc/>
     public bool Synchronizer => m_synchronizer;
-
     /// <inheritdoc/>
     public bool HasPendingInterrupt => ((m_enable0 & m_flag0 & SourceMask) != 0);
-
     /// <inheritdoc/>
     public bool PipelineQuiescent =>
         ((m_flag0 == m_flag1)
@@ -44,35 +42,32 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
         m_flag0 = m_flag1;
         m_ime0 = m_ime1;
     }
-
     /// <inheritdoc/>
     public void Request(InterruptSource source) {
         // Land the request in the "next" stage.
-        m_flag1 |= (ushort)(1u << (int)source);
+        m_flag1 |= ((ushort)(1u << ((int)source)));
     }
-
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) => offset switch {
         // Reads return the committed [0] stage — not the just-written value.
         0x200u => m_enable0,
         0x202u => m_flag0,
-        0x208u => (ushort)(m_ime0
+        0x208u => ((ushort)(m_ime0
         ? 1u
-        : 0u),
+        : 0u)),
         _ => 0,
     };
-
     /// <inheritdoc/>
     public void WriteRegister(uint offset, ushort value) {
         // Writes target the "next" [1] stage; they take effect after the next StepSync.
         switch (offset) {
             case 0x200u:
-                m_enable1 = (ushort)(value & SourceMask);
+                m_enable1 = ((ushort)(value & SourceMask));
 
                 break;
             case 0x202u:
                 // Writing a one to an IF bit acknowledges (clears) that request, in the next stage.
-                m_flag1 &= (ushort)~value;
+                m_flag1 &= ((ushort)~value);
 
                 break;
             case 0x208u:

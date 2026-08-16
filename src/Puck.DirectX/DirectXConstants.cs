@@ -47,7 +47,7 @@ public static unsafe class DirectXConstants {
     [SupportedOSPlatform("windows10.0.10240")]
     public static D3D12_CPU_DESCRIPTOR_HANDLE GetCpuHeapStart(ID3D12DescriptorHeap* heap) {
         D3D12_CPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
+        var vtable = *((void***)heap);
 
         ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_CPU_DESCRIPTOR_HANDLE*, void>)vtable[GetCpuDescriptorHandleSlot])(
             heap,
@@ -63,7 +63,7 @@ public static unsafe class DirectXConstants {
     [SupportedOSPlatform("windows10.0.10240")]
     public static D3D12_GPU_DESCRIPTOR_HANDLE GetGpuHeapStart(ID3D12DescriptorHeap* heap) {
         D3D12_GPU_DESCRIPTOR_HANDLE handle;
-        var vtable = *(void***)heap;
+        var vtable = *((void***)heap);
 
         ((delegate* unmanaged[Stdcall]<ID3D12DescriptorHeap*, D3D12_GPU_DESCRIPTOR_HANDLE*, void>)vtable[GetGpuDescriptorHandleSlot])(
             heap,

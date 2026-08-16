@@ -20,34 +20,43 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
 
     /// <inheritdoc/>
     public int Count { get; }
-
     /// <summary>Gets whether this view contains no elements.</summary>
     public bool IsEmpty => (Count == 0);
-
     /// <summary>Gets the element count.</summary>
     public int Length => Count;
-
     /// <summary>Gets the view as a span with the same borrowed lifetime.</summary>
-    public ReadOnlySpan<T> Span => ((m_items is null) ? [] : m_items.AsSpan(start: 0, length: Count));
+    public ReadOnlySpan<T> Span => ((m_items is null)
+        ? []
+        : m_items.AsSpan(
+            start: 0,
+            length: Count
+        )
+    );
 
     /// <inheritdoc/>
     public T this[int index] {
         get {
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, Count);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+                index,
+                Count
+            );
 
             return m_items![index];
         }
     }
 
-    /// <summary>Returns a non-allocating enumerator over the view.</summary>
-    public Enumerator GetEnumerator() => new(items: m_items, count: Count);
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     /// <inheritdoc/>
     public bool Equals(CommandBuffer<T> other) => Span.SequenceEqual(other: other.Span);
-
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => (obj is CommandBuffer<T> other) && Equals(other: other);
-
+    public override bool Equals(object? obj) => ((obj is CommandBuffer<T> other) && Equals(other: other));
+    /// <summary>Returns a non-allocating enumerator over the view.</summary>
+    public Enumerator GetEnumerator() => new(
+        items: m_items,
+        count: Count
+    );
     /// <inheritdoc/>
     public override int GetHashCode() {
         var hash = new HashCode();
@@ -61,17 +70,14 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
 
     /// <summary>Compares two views structurally.</summary>
     public static bool operator ==(CommandBuffer<T> left, CommandBuffer<T> right) => left.Equals(other: right);
-
     /// <summary>Compares two views structurally.</summary>
     public static bool operator !=(CommandBuffer<T> left, CommandBuffer<T> right) => !left.Equals(other: right);
-
-    IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     /// <summary>A non-allocating enumerator over a <see cref="CommandBuffer{T}"/>.</summary>
     public struct Enumerator : IEnumerator<T> {
         private readonly int m_count;
         private readonly T[]? m_items;
+
         private int m_index;
 
         internal Enumerator(T[]? items, int count) {
@@ -80,19 +86,17 @@ public readonly struct CommandBuffer<T> : IReadOnlyList<T>, IEquatable<CommandBu
             m_index = -1;
         }
 
-        /// <inheritdoc/>
-        public readonly T Current => m_items![m_index];
-
         readonly object? IEnumerator.Current => Current;
 
         /// <inheritdoc/>
-        public bool MoveNext() => (++m_index < m_count);
-
-        /// <inheritdoc/>
-        public void Reset() => m_index = -1;
+        public readonly T Current => m_items![m_index];
 
         /// <inheritdoc/>
         public readonly void Dispose() {
         }
+        /// <inheritdoc/>
+        public bool MoveNext() => (++m_index < m_count);
+        /// <inheritdoc/>
+        public void Reset() => m_index = -1;
     }
 }

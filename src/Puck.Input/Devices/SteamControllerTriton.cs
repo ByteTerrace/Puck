@@ -26,99 +26,78 @@ namespace Puck.Input.Devices;
 /// pitch/roll regardless — only gyro-only yaw depends on the exact mapping).
 /// </remarks>
 internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGamepadStreamReset, IDisposable {
-    // Report ids. The vendor collection carries a fixed 54-byte state report (0x42); rumble is written as an
-    // output report (0x80); every control write is a feature report under report id 1 (the classic pad's id-0
-    // framing is rejected by the Triton firmware with Win32 error 87).
-    private const byte InputReportId = 0x42;
-    private const byte OutputRumbleReportId = 0x80;     // ID_OUT_REPORT_HAPTIC_RUMBLE
-    private const byte FeatureReportId = 0x01;          // buffer[0] for every feature write (SET_SETTINGS etc.)
-
-    // Feature-report message header (at buffer offset 1, after the report id): type then payload length.
-    private const byte SetSettingsValuesCommand = 0x87; // ID_SET_SETTINGS_VALUES
+    // Nominal (uncalibrated) IMU scales. Accel: ±2 g over int16 (16384 LSB/g). Gyro: 2000 deg/s full scale over
+    // int16 (so 2000/32768 deg/s per LSB). The fusion's gravity term anchors pitch/roll regardless of the exact
+    // axis mapping; only gyro-only yaw depends on the gyro scale being roughly right.
+    private const float AccelerometerGPerLsb = (1f / 16384f);
+    private const int AccelerometerOffset = 34;         // three i16 axes
+    // Triton button bits (the 32-bit field at ButtonsOffset).
+    private const uint ButtonA = (1u << 0);
+    private const uint ButtonB = (1u << 1);
+    private const uint ButtonDpadDown = (1u << 10);
+    private const uint ButtonDpadLeft = (1u << 12);
+    private const uint ButtonDpadRight = (1u << 11);
+    private const uint ButtonDpadUp = (1u << 13);
+    private const uint ButtonL4 = (1u << 17);             // rear paddle, LEFT-TOP (wizard-verified)
+    private const uint ButtonL5 = (1u << 18);             // rear paddle, LEFT-BOTTOM (wizard-verified)
+    private const uint ButtonLeftBumper = (1u << 19);     // LB
+    private const uint ButtonLeftPadClick = (1u << 26);   // the left trackpad pressed
+    private const uint ButtonLeftPadTouch = (1u << 25);   // capacitive: a finger on the left trackpad
+    private const uint ButtonLeftStickClick = (1u << 15); // L3
+    private const uint ButtonMenu = (1u << 6);            // MENU, the hamburger glyph (wizard-verified: this bit is swapped relative to the upstream RE record)
+    // Hardware-verified button mapping from the press-driven calibration wizard: L4=17 left-top,
+    // L5=18 left-bottom, R4=7 right-top, R5=8 right-bottom, and RB=9.
+    private const uint ButtonQuickAccess = (1u << 4);     // QAM ("…")
+    private const uint ButtonR4 = (1u << 7);              // rear paddle, RIGHT-TOP (wizard-verified)
+    private const uint ButtonR5 = (1u << 8);              // rear paddle, RIGHT-BOTTOM (wizard-verified)
+    private const uint ButtonRightBumper = (1u << 9);     // RB (wizard-verified)
+    private const uint ButtonRightPadClick = (1u << 22);  // the right trackpad pressed
+    private const uint ButtonRightPadTouch = (1u << 21);  // capacitive: a finger on the right trackpad
+    private const uint ButtonRightStickClick = (1u << 5); // R3 (wizard-verified)
+    private const uint ButtonSteam = (1u << 16);
+    private const uint ButtonView = (1u << 14);           // VIEW, the overlapping-squares glyph (wizard-verified: this bit is swapped relative to the upstream RE record)
+    private const uint ButtonX = (1u << 2);
+    private const uint ButtonY = (1u << 3);
+    // Input report field offsets (absolute, report id at [0]). Layout is the packed TritonMTUNoQuat report: a
+    // sequence byte, a 32-bit button field, the analog axes, then the IMU block (accel BEFORE gyro).
+    private const int ButtonsOffset = 2;                // u32 LE
     private const byte ControllerSettingSize = 3;       // sizeof(ControllerSetting): settingNum (u8) + value (u16)
-
-    // Settings written via SetSettingsValuesCommand.
-    private const byte SettingLizardMode = 9;           // SETTING_LIZARD_MODE
-    private const byte SettingImuMode = 48;             // SETTING_IMU_MODE
-    private const ushort LizardModeOff = 0;             // disable the keyboard/mouse emulation
-    private const ushort LizardModeOn = 1;             // restore it on release
+    private const byte FeatureReportId = 0x01;          // buffer[0] for every feature write (SET_SETTINGS etc.)
+    private const int GyroOffset = 40;                  // three i16 axes
+    private const float GyroRadiansPerSecondPerLsb = (((2000f / 32768f)) * (MathF.PI / 180f));
+    // A freshly opened receiver slot may not accept a feature write immediately, so each setup command is retried
+    // briefly before giving up. Missing a write degrades a feature, never crashes.
+    private const int HidFeatureReportBytes = 64;       // HID_FEATURE_REPORT_BYTES (the declared feature length)
+    private const int HidRumbleOutputReportBytes = 10;  // HID_RUMBLE_OUTPUT_REPORT_BYTES (report id + 9-byte payload)
+    private const ushort ImuModeRaw = ImuModeSendRawAccelerometer | ImuModeSendRawGyro; // 0x0018 (hardware-proven accepted)
     // IMU mode bit flags. Raw accel + raw gyro feed the shared complementary fusion (matching the other pads).
     // SETTING_GYRO_MODE_SEND_ORIENTATION (0x0004) is deliberately left off — the firmware quaternion at
     // OrientationQuatOffset is available as an alternative to running the fusion, but we consume raw so a Triton
     // fuses identically to a DualSense/Switch.
     private const ushort ImuModeSendRawAccelerometer = 0x0008; // SETTING_GYRO_MODE_SEND_RAW_ACCEL
     private const ushort ImuModeSendRawGyro = 0x0010;         // SETTING_GYRO_MODE_SEND_RAW_GYRO
-    private const ushort ImuModeRaw = ImuModeSendRawAccelerometer | ImuModeSendRawGyro; // 0x0018 (hardware-proven accepted)
-
-    // A freshly opened receiver slot may not accept a feature write immediately, so each setup command is retried
-    // briefly before giving up. Missing a write degrades a feature, never crashes.
-    private const int HidFeatureReportBytes = 64;       // HID_FEATURE_REPORT_BYTES (the declared feature length)
-    private const int HidRumbleOutputReportBytes = 10;  // HID_RUMBLE_OUTPUT_REPORT_BYTES (report id + 9-byte payload)
-
-    // Lizard-off is re-asserted on a ~1 s watchdog so a firmware re-arm can't restore the keyboard/mouse emulation
-    // mid-session; the pad streams at ~274 Hz, so this rides the per-report parse hook (serviced on the I/O thread).
-    private static readonly long LizardWatchdogIntervalTicks = (3L * Stopwatch.Frequency);
-
-    // Input report field offsets (absolute, report id at [0]). Layout is the packed TritonMTUNoQuat report: a
-    // sequence byte, a 32-bit button field, the analog axes, then the IMU block (accel BEFORE gyro).
-    private const int ButtonsOffset = 2;                // u32 LE
-    private const int TriggerLeftOffset = 6;            // u16, 0..32768
-    private const int TriggerRightOffset = 8;           // u16
-    private const int LeftStickOffset = 10;             // i16 X then i16 Y
-    private const int RightStickOffset = 14;
-    private const int LeftPadOffset = 18;               // i16 X then i16 Y (capacitive trackpad absolute position)
-    private const int RightPadOffset = 24;
     private const int ImuTimestampOffset = 30;          // u32 LE, microseconds (the report clock the fusion dt derives from)
-    private const int AccelerometerOffset = 34;         // three i16 axes
-    private const int GyroOffset = 40;                  // three i16 axes
+    // Report ids. The vendor collection carries a fixed 54-byte state report (0x42); rumble is written as an
+    // output report (0x80); every control write is a feature report under report id 1 (the classic pad's id-0
+    // framing is rejected by the Triton firmware with Win32 error 87).
+    private const byte InputReportId = 0x42;
+    private const int LeftPadOffset = 18;               // i16 X then i16 Y (capacitive trackpad absolute position)
+    private const int LeftStickOffset = 10;             // i16 X then i16 Y
+    private const ushort LizardModeOff = 0;             // disable the keyboard/mouse emulation
+    private const ushort LizardModeOn = 1;             // restore it on release
     // An optional firmware orientation quaternion (four i16 Q15 W/X/Y/Z at offset 46) follows the gyro block, but
     // only when SEND_ORIENTATION is enabled; we stream raw and fuse instead, so it is neither requested nor read.
     private const int MinimumReportLength = (GyroOffset + 6); // through the gyro block (46)
-
-    // Triton button bits (the 32-bit field at ButtonsOffset).
-    private const uint ButtonA = (1u << 0);
-    private const uint ButtonB = (1u << 1);
-    private const uint ButtonX = (1u << 2);
-    private const uint ButtonY = (1u << 3);
-    // Hardware-verified button mapping from the press-driven calibration wizard: L4=17 left-top,
-    // L5=18 left-bottom, R4=7 right-top, R5=8 right-bottom, and RB=9.
-    private const uint ButtonQuickAccess = (1u << 4);     // QAM ("…")
-    private const uint ButtonRightStickClick = (1u << 5); // R3 (wizard-verified)
-    private const uint ButtonMenu = (1u << 6);            // MENU, the hamburger glyph (wizard-verified: this bit is swapped relative to the upstream RE record)
-    private const uint ButtonR4 = (1u << 7);              // rear paddle, RIGHT-TOP (wizard-verified)
-    private const uint ButtonR5 = (1u << 8);              // rear paddle, RIGHT-BOTTOM (wizard-verified)
-    private const uint ButtonRightBumper = (1u << 9);     // RB (wizard-verified)
-    private const uint ButtonDpadDown = (1u << 10);
-    private const uint ButtonDpadLeft = (1u << 12);
-    private const uint ButtonDpadRight = (1u << 11);
-    private const uint ButtonDpadUp = (1u << 13);
-    private const uint ButtonView = (1u << 14);           // VIEW, the overlapping-squares glyph (wizard-verified: this bit is swapped relative to the upstream RE record)
-    private const uint ButtonLeftStickClick = (1u << 15); // L3
-    private const uint ButtonSteam = (1u << 16);
-    private const uint ButtonL4 = (1u << 17);             // rear paddle, LEFT-TOP (wizard-verified)
-    private const uint ButtonL5 = (1u << 18);             // rear paddle, LEFT-BOTTOM (wizard-verified)
-    private const uint ButtonLeftBumper = (1u << 19);     // LB
-    private const uint ButtonRightPadTouch = (1u << 21);  // capacitive: a finger on the right trackpad
-    private const uint ButtonRightPadClick = (1u << 22);  // the right trackpad pressed
-    private const uint ButtonLeftPadTouch = (1u << 25);   // capacitive: a finger on the left trackpad
-    private const uint ButtonLeftPadClick = (1u << 26);   // the left trackpad pressed
-    // Deliberately NOT mapped (no honest carrier in GamepadState / would only bloat the button vocabulary):
-    //   RightJoystickTouch (1u<<20), LeftJoystickTouch (1u<<24), RightGripTouch (1u<<28), LeftGripTouch (1u<<29)
-    //   capacitive proximity sensors; and RightTriggerClick (1u<<23), LeftTriggerClick (1u<<27) — the analog
-    //   trigger crossing full scale already carries the full-pull click.
-
-    private const float TriggerRange = 32768f;          // full pull is ~32768 over the u16 range
-    private const int TriggerThreshold = 256;           // ~0.8% of full scale, to reject a resting jitter floor
-    private const float PadRange = 65536f;              // normalized pad position = raw / 65536 + 0.5
+    private const byte OutputRumbleReportId = 0x80;     // ID_OUT_REPORT_HAPTIC_RUMBLE
     private const float PadHalf = 0.5f;
-    // Nominal (uncalibrated) IMU scales. Accel: ±2 g over int16 (16384 LSB/g). Gyro: 2000 deg/s full scale over
-    // int16 (so 2000/32768 deg/s per LSB). The fusion's gravity term anchors pitch/roll regardless of the exact
-    // axis mapping; only gyro-only yaw depends on the gyro scale being roughly right.
-    private const float AccelerometerGPerLsb = (1f / 16384f);
-    private const float GyroRadiansPerSecondPerLsb = (((2000f / 32768f)) * (MathF.PI / 180f));
-    // The IMU timestamp is a free-running microsecond counter; a raw delta converts to seconds by dividing by 1e6.
-    private const float SensorTimestampSecondsPerUnit = (1f / 1_000_000f);
-
+    private const float PadRange = 65536f;              // normalized pad position = raw / 65536 + 0.5
+    private const int RightPadOffset = 24;
+    private const int RightStickOffset = 14;
+    private const int RumbleIntensityOffset = 2;        // u16
+    private const int RumbleLeftGainOffset = 6;         // i8
+    private const int RumbleLeftSpeedOffset = 4;        // u16 (low band)
+    private const int RumbleRightGainOffset = 9;        // i8
+    private const int RumbleRightSpeedOffset = 7;       // u16 (high band)
     // Rumble: the low/high bands map onto the left/right motor speeds (u16). The IRumbleParser 0..1 intensity
     // scales across the full 16-bit speed range. Coalesce equal-or-weaker writes to a >=30 ms cadence so a
     // per-tick streamer can't flood the link; stops, the first write, and any intensity increase always go through.
@@ -126,20 +105,36 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGa
     // Rumble output-report field offsets (packed MsgHapticRumble: type u8, intensity u16, then {speed u16, gain
     // i8} per side). intensity is 16-bit — this shifts the speeds one byte past a naive u8 reading.
     private const int RumbleTypeOffset = 1;
-    private const int RumbleIntensityOffset = 2;        // u16
-    private const int RumbleLeftSpeedOffset = 4;        // u16 (low band)
-    private const int RumbleLeftGainOffset = 6;         // i8
-    private const int RumbleRightSpeedOffset = 7;       // u16 (high band)
-    private const int RumbleRightGainOffset = 9;        // i8
+    // The IMU timestamp is a free-running microsecond counter; a raw delta converts to seconds by dividing by 1e6.
+    private const float SensorTimestampSecondsPerUnit = (1f / 1_000_000f);
+    // Feature-report message header (at buffer offset 1, after the report id): type then payload length.
+    private const byte SetSettingsValuesCommand = 0x87; // ID_SET_SETTINGS_VALUES
+    private const byte SettingImuMode = 48;             // SETTING_IMU_MODE
+    // Settings written via SetSettingsValuesCommand.
+    private const byte SettingLizardMode = 9;           // SETTING_LIZARD_MODE
+    private const int TriggerLeftOffset = 6;            // u16, 0..32768
+    // Deliberately NOT mapped (no honest carrier in GamepadState / would only bloat the button vocabulary):
+    //   RightJoystickTouch (1u<<20), LeftJoystickTouch (1u<<24), RightGripTouch (1u<<28), LeftGripTouch (1u<<29)
+    //   capacitive proximity sensors; and RightTriggerClick (1u<<23), LeftTriggerClick (1u<<27) — the analog
+    //   trigger crossing full scale already carries the full-pull click.
+
+    private const float TriggerRange = 32768f;          // full pull is ~32768 over the u16 range
+    private const int TriggerRightOffset = 8;           // u16
+    private const int TriggerThreshold = 256;           // ~0.8% of full scale, to reject a resting jitter floor
+
+    // Lizard-off is re-asserted on a ~1 s watchdog so a firmware re-arm can't restore the keyboard/mouse emulation
+    // mid-session; the pad streams at ~274 Hz, so this rides the per-report parse hook (serviced on the I/O thread).
+    private static readonly long LizardWatchdogIntervalTicks = (3L * Stopwatch.Frequency);
 
     private readonly IHidDevice m_device;
     private readonly byte[] m_featureBuffer;
     private readonly byte[] m_outputBuffer;
     private readonly ImuOrientationTracker m_tracker = new();
+
     private bool m_hasSensorTimestamp;
     private uint m_lastSensorTimestamp;
-    private RumbleThrottle m_rumbleThrottle;
     private long m_nextLizardWatchdogTicks;
+    private RumbleThrottle m_rumbleThrottle;
 
     /// <summary>Initializes a new instance of the <see cref="SteamControllerTriton"/> class.</summary>
     /// <param name="device">The opened HID device handle for the Triton's vendor input interface.</param>
@@ -150,25 +145,31 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGa
         var outputLength = device.OutputReportByteLength;
 
         m_device = device;
-        // Feature and output reports must be written at the device's declared length (the HID stack rejects a
-        // mismatched length); fall back to the documented sizes if the device declares none.
-        m_featureBuffer = new byte[Math.Max(val1: featureLength, val2: HidFeatureReportBytes)];
-        m_outputBuffer = new byte[Math.Max(val1: outputLength, val2: HidRumbleOutputReportBytes)];
+        // Both buffers must hold their documented reports (composition writes at protocol offsets), so the
+        // declared lengths are floored to them. A smaller declared length is nonconforming: the HID stack
+        // rejects the oversized write, which beats the composer overrunning the buffer.
+        m_featureBuffer = new byte[Math.Max(
+            val1: featureLength,
+            val2: HidFeatureReportBytes
+        )];
+        m_outputBuffer = new byte[Math.Max(
+            val1: outputLength,
+            val2: HidRumbleOutputReportBytes
+        )];
     }
 
     /// <inheritdoc />
-    public GamepadType Type => GamepadType.SteamControllerTriton;
-    /// <inheritdoc />
     // A 6-axis IMU and pressure-sensitive analog triggers.
     public GamepadInputCapabilities InputCapabilities => GamepadInputCapabilities.Gyro | GamepadInputCapabilities.AnalogTriggers;
-
     /// <inheritdoc />
-    public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
-        // Take the Triton out of lizard mode and enable raw IMU streaming. Both are best-effort feature writes
-        // under report id 1; a failed write simply leaves that feature at its default rather than faulting.
-        _ = await SendSettingAsync(settingNum: SettingLizardMode, value: LizardModeOff, cancellationToken: cancellationToken);
-        _ = await SendSettingAsync(settingNum: SettingImuMode, value: ImuModeRaw, cancellationToken: cancellationToken);
-        m_nextLizardWatchdogTicks = (Stopwatch.GetTimestamp() + LizardWatchdogIntervalTicks);
+    public GamepadType Type => GamepadType.SteamControllerTriton;
+
+    void IGamepadStreamReset.ResetStreamState() {
+        m_hasSensorTimestamp = false;
+        m_lastSensorTimestamp = 0u;
+        m_nextLizardWatchdogTicks = 0L;
+        m_rumbleThrottle.Reset();
+        m_tracker.Reset();
     }
 
     // Builds a single-setting SET_SETTINGS_VALUES feature report into the reusable feature buffer: report id 1,
@@ -184,19 +185,58 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGa
         buffer[4] = ((byte)(value & 0xFF));
         buffer[5] = ((byte)(value >> 8));
     }
+    private static GamepadTouchPoint ReadTouch(ReadOnlySpan<byte> report, int offset, byte id) {
+        // Signed int16 X (left→right) and Y (bottom→top); normalized position = raw / 65536 + 0.5. Y is flipped to
+        // the shared GamepadTouchPoint top-left origin convention (X right, Y down).
+        var x = BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]);
+        var y = BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]);
+
+        return new GamepadTouchPoint(
+            Id: id,
+            IsActive: true,
+            Position: new Vector2(
+                x: ((x / PadRange) + PadHalf),
+                y: (1f - ((y / PadRange) + PadHalf))
+            )
+        );
+    }
     // Writes one setting, retrying briefly because a freshly connected receiver slot may not accept the write
     // immediately. Returns whether the write was ultimately accepted.
     private async ValueTask<bool> SendSettingAsync(byte settingNum, ushort value, CancellationToken cancellationToken) {
-        BuildSingleSetting(settingNum: settingNum, value: value);
+        BuildSingleSetting(
+            settingNum: settingNum,
+            value: value
+        );
 
-        return await HidFeatureWriteRetry.TryWriteAsync(device: m_device, buffer: m_featureBuffer, cancellationToken: cancellationToken);
+        return await HidFeatureWriteRetry.TryWriteAsync(
+            buffer: m_featureBuffer,
+            cancellationToken: cancellationToken,
+            device: m_device
+        );
     }
     // The synchronous variant used by the watchdog (on the I/O thread, between reads) and by disposal (the async
     // loop has stopped, the handle is still open) to best-effort re-assert / restore a setting without awaiting.
     private bool SendSettingSynchronously(byte settingNum, ushort value) {
-        BuildSingleSetting(settingNum: settingNum, value: value);
+        BuildSingleSetting(
+            settingNum: settingNum,
+            value: value
+        );
 
         return m_device.TrySetFeatureReport(buffer: m_featureBuffer);
+    }
+    // Converts the free-running microsecond IMU counter into a seconds delta since the previous report. The
+    // counter is 32-bit and wraps; the unsigned subtraction yields the correct forward delta across a single wrap,
+    // and the tracker clamps the result so a wrap or the first sample degrades safely.
+    private float SensorDeltaSeconds(uint sensorTimestamp) {
+        var delta = (m_hasSensorTimestamp
+            ? unchecked((sensorTimestamp - m_lastSensorTimestamp))
+            : 0u
+        );
+
+        m_hasSensorTimestamp = true;
+        m_lastSensorTimestamp = sensorTimestamp;
+
+        return (delta * SensorTimestampSecondsPerUnit);
     }
     // Lizard-off is re-asserted periodically so a firmware re-arm can't quietly restore the keyboard/mouse
     // emulation while we stream. TryParse runs on the device I/O thread once per report, so this synchronous
@@ -206,13 +246,84 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGa
 
         if (now >= m_nextLizardWatchdogTicks) {
             m_nextLizardWatchdogTicks = (now + LizardWatchdogIntervalTicks);
-            _ = SendSettingSynchronously(settingNum: SettingLizardMode, value: LizardModeOff);
+            _ = SendSettingSynchronously(
+                settingNum: SettingLizardMode,
+                value: LizardModeOff
+            );
         }
     }
+    // Maps the IMU axes into the fusion frame (X=right, Y=up, Z=back). Nominal: the device rests with +Z up
+    // (accelZ ≈ +1 g at rest, hardware-observed), so this proper rotation routes sensor +Z to the fusion up-axis
+    // (+Y); the accelerometer gravity term anchors pitch/roll regardless of the remaining sign choices.
+    private static Vector3 ToFusionFrame(Vector3 sensor) {
+        return new Vector3(
+            x: sensor.X,
+            y: sensor.Z,
+            z: -sensor.Y
+        );
+    }
+    private ValueTask WriteRumbleAsync(ushort leftSpeed, ushort rightSpeed, CancellationToken cancellationToken) {
+        var buffer = m_outputBuffer;
 
+        buffer.AsSpan().Clear();
+        buffer[0] = OutputRumbleReportId;   // 0x80
+        buffer[RumbleTypeOffset] = 0;
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: buffer.AsSpan(start: RumbleIntensityOffset),
+            value: 0
+        );
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: buffer.AsSpan(start: RumbleLeftSpeedOffset),
+            value: leftSpeed
+        );
+        buffer[RumbleLeftGainOffset] = 0;
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: buffer.AsSpan(start: RumbleRightSpeedOffset),
+            value: rightSpeed
+        );
+        buffer[RumbleRightGainOffset] = 0;
+
+        return m_device.WriteAsync(
+            buffer: buffer,
+            cancellationToken: cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Restores the controller's built-in keyboard/mouse (lizard) emulation, so it behaves as a normal desktop
+    /// device again once the engine releases it. Best-effort and synchronous: the I/O loop has already stopped but
+    /// the handle is still open at this point.
+    /// </summary>
+    public void Dispose() {
+        _ = SendSettingSynchronously(
+            settingNum: SettingLizardMode,
+            value: LizardModeOn
+        );
+    }
+    /// <inheritdoc />
+    public async ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default) {
+        // Take the Triton out of lizard mode and enable raw IMU streaming. Both are best-effort feature writes
+        // under report id 1; a failed write simply leaves that feature at its default rather than faulting.
+        _ = await SendSettingAsync(
+            cancellationToken: cancellationToken,
+            settingNum: SettingLizardMode,
+            value: LizardModeOff
+        );
+        _ = await SendSettingAsync(
+            cancellationToken: cancellationToken,
+            settingNum: SettingImuMode,
+            value: ImuModeRaw
+        );
+        m_nextLizardWatchdogTicks = (Stopwatch.GetTimestamp() + LizardWatchdogIntervalTicks);
+    }
     /// <inheritdoc />
     public ValueTask SetRumbleAsync(float lowFrequency, float highFrequency, CancellationToken cancellationToken = default) {
-        if (!m_rumbleThrottle.TryPrepare(lowFrequency: lowFrequency, highFrequency: highFrequency, low: out var low, high: out var high)) {
+        if (!m_rumbleThrottle.TryPrepare(
+            high: out var high,
+            highFrequency: highFrequency,
+            low: out var low,
+            lowFrequency: lowFrequency
+        )) {
             return ValueTask.CompletedTask;
         }
 
@@ -223,35 +334,14 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGa
             rightSpeed: ((ushort)(high * RumbleSpeedMax))
         );
     }
-
-    private ValueTask WriteRumbleAsync(ushort leftSpeed, ushort rightSpeed, CancellationToken cancellationToken) {
-        var buffer = m_outputBuffer;
-
-        buffer.AsSpan().Clear();
-        buffer[0] = OutputRumbleReportId;   // 0x80
-        buffer[RumbleTypeOffset] = 0;
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: RumbleIntensityOffset), value: 0);
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: RumbleLeftSpeedOffset), value: leftSpeed);
-        buffer[RumbleLeftGainOffset] = 0;
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: buffer.AsSpan(start: RumbleRightSpeedOffset), value: rightSpeed);
-        buffer[RumbleRightGainOffset] = 0;
-
-        return m_device.WriteAsync(buffer: buffer, cancellationToken: cancellationToken);
-    }
-
-    void IGamepadStreamReset.ResetStreamState() {
-        m_hasSensorTimestamp = false;
-        m_lastSensorTimestamp = 0u;
-        m_nextLizardWatchdogTicks = 0L;
-        m_rumbleThrottle.Reset();
-        m_tracker.Reset();
-    }
-
     /// <inheritdoc />
     public bool TryParse(ReadOnlySpan<byte> report, out GamepadState state) {
         state = GamepadState.Neutral;
 
-        if ((report.Length < MinimumReportLength) || (report[0] != InputReportId)) {
+        if (
+            (report.Length < MinimumReportLength) ||
+            (report[0] != InputReportId)
+        ) {
             return false;
         }
 
@@ -295,8 +385,16 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGa
         if (0u != (raw & ButtonRightPadClick)) { buttons |= GamepadButtons.Touchpad; }
         if (0u != (raw & ButtonLeftPadClick)) { buttons |= GamepadButtons.TouchpadLeft; }
 
-        var accelerometer = GamepadNormalization.ReadVector3Int16(source: report, offset: AccelerometerOffset, scale: AccelerometerGPerLsb);
-        var gyro = GamepadNormalization.ReadVector3Int16(source: report, offset: GyroOffset, scale: GyroRadiansPerSecondPerLsb);
+        var accelerometer = GamepadNormalization.ReadVector3Int16(
+            offset: AccelerometerOffset,
+            scale: AccelerometerGPerLsb,
+            source: report
+        );
+        var gyro = GamepadNormalization.ReadVector3Int16(
+            offset: GyroOffset,
+            scale: GyroRadiansPerSecondPerLsb,
+            source: report
+        );
         var timestamp = BinaryPrimitives.ReadUInt32LittleEndian(source: report[ImuTimestampOffset..]);
         var rightPadTouched = (0u != (raw & ButtonRightPadTouch));
         var leftPadTouched = (0u != (raw & ButtonLeftPadTouch));
@@ -305,57 +403,48 @@ internal sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, IGa
             Accelerometer: accelerometer,
             Buttons: buttons,
             Gyro: gyro,
-            LeftStick: SteamControllerInput.ReadStick(report: report, offset: LeftStickOffset),
-            LeftTrigger: GamepadNormalization.NormalizeTrigger(raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerLeftOffset..]), threshold: TriggerThreshold, range: TriggerRange),
-            Orientation: m_tracker.Update(gyroRadiansPerSecond: ToFusionFrame(sensor: gyro), accelerometerG: ToFusionFrame(sensor: accelerometer), deltaSeconds: SensorDeltaSeconds(sensorTimestamp: timestamp)),
-            RightStick: SteamControllerInput.ReadStick(report: report, offset: RightStickOffset),
-            RightTrigger: GamepadNormalization.NormalizeTrigger(raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerRightOffset..]), threshold: TriggerThreshold, range: TriggerRange),
+            LeftStick: SteamControllerInput.ReadStick(
+                offset: LeftStickOffset,
+                report: report
+            ),
+            LeftTrigger: GamepadNormalization.NormalizeTrigger(
+                raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerLeftOffset..]),
+                threshold: TriggerThreshold,
+                range: TriggerRange
+            ),
+            Orientation: m_tracker.Update(
+                gyroRadiansPerSecond: ToFusionFrame(sensor: gyro),
+                accelerometerG: ToFusionFrame(sensor: accelerometer),
+                deltaSeconds: SensorDeltaSeconds(sensorTimestamp: timestamp)
+            ),
+            RightStick: SteamControllerInput.ReadStick(
+                offset: RightStickOffset,
+                report: report
+            ),
+            RightTrigger: GamepadNormalization.NormalizeTrigger(
+                raw: BinaryPrimitives.ReadUInt16LittleEndian(source: report[TriggerRightOffset..]),
+                threshold: TriggerThreshold,
+                range: TriggerRange
+            ),
             SensorTimestamp: timestamp,
             // The two trackpads surface as the shared touch points (right → Touch0, left → Touch1), mirroring the
             // classic pad; pad pressure (unPressureLeft/Right) has no carrier in GamepadState and is not exposed.
-            Touch0: (rightPadTouched ? ReadTouch(report: report, offset: RightPadOffset, id: 0) : default),
-            Touch1: (leftPadTouched ? ReadTouch(report: report, offset: LeftPadOffset, id: 1) : default)
+            Touch0: (rightPadTouched
+            ? ReadTouch(
+                    id: 0,
+                    offset: RightPadOffset,
+                    report: report
+                )
+            : default),
+            Touch1: (leftPadTouched
+            ? ReadTouch(
+                    id: 1,
+                    offset: LeftPadOffset,
+                    report: report
+                )
+            : default)
         );
 
         return true;
-    }
-
-    // Converts the free-running microsecond IMU counter into a seconds delta since the previous report. The
-    // counter is 32-bit and wraps; the unsigned subtraction yields the correct forward delta across a single wrap,
-    // and the tracker clamps the result so a wrap or the first sample degrades safely.
-    private float SensorDeltaSeconds(uint sensorTimestamp) {
-        var delta = (m_hasSensorTimestamp ? unchecked((sensorTimestamp - m_lastSensorTimestamp)) : 0u);
-
-        m_hasSensorTimestamp = true;
-        m_lastSensorTimestamp = sensorTimestamp;
-
-        return (delta * SensorTimestampSecondsPerUnit);
-    }
-    // Maps the IMU axes into the fusion frame (X=right, Y=up, Z=back). Nominal: the device rests with +Z up
-    // (accelZ ≈ +1 g at rest, hardware-observed), so this proper rotation routes sensor +Z to the fusion up-axis
-    // (+Y); the accelerometer gravity term anchors pitch/roll regardless of the remaining sign choices.
-    private static Vector3 ToFusionFrame(Vector3 sensor) {
-        return new Vector3(x: sensor.X, y: sensor.Z, z: -sensor.Y);
-    }
-    private static GamepadTouchPoint ReadTouch(ReadOnlySpan<byte> report, int offset, byte id) {
-        // Signed int16 X (left→right) and Y (bottom→top); normalized position = raw / 65536 + 0.5. Y is flipped to
-        // the shared GamepadTouchPoint top-left origin convention (X right, Y down).
-        var x = BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]);
-        var y = BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]);
-
-        return new GamepadTouchPoint(
-            Id: id,
-            IsActive: true,
-            Position: new Vector2(x: ((x / PadRange) + PadHalf), y: (1f - ((y / PadRange) + PadHalf)))
-        );
-    }
-
-    /// <summary>
-    /// Restores the controller's built-in keyboard/mouse (lizard) emulation, so it behaves as a normal desktop
-    /// device again once the engine releases it. Best-effort and synchronous: the I/O loop has already stopped but
-    /// the handle is still open at this point.
-    /// </summary>
-    public void Dispose() {
-        _ = SendSettingSynchronously(settingNum: SettingLizardMode, value: LizardModeOn);
     }
 }

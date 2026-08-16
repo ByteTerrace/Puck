@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.Vulkan.Interfaces;
 
 namespace Puck.Vulkan.Presentation;

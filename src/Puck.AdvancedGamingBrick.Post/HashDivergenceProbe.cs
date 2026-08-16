@@ -1,5 +1,5 @@
+using Puck.GamingBricks;
 using Puck.Maths;
-using Puck.Snapshots;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -21,14 +21,12 @@ namespace Puck.AdvancedGamingBrick.Post;
 internal static class HashDivergenceProbe {
     private const int ScanlineCycles = 1232;
     private const int ScanlinesPerFrame = 228;
-
     // Sizes from AgbBus.State.cs's fixed save order (EWRAM, then IWRAM, then the I/O register backing) — used only
     // to annotate a "bus" section offset for a human-readable report; the localizer itself does not need to touch
     // AgbBus at all, since the section table already gives an exact byte range per component.
     private const int EwramSize = 0x40000;
     private const int IoSize = 0x400;
     private const int IwramSize = 0x8000;
-
     // Any offset inside the EWRAM sub-range of the "bus" section's data — mid-region, clear of anything a
     // synthetic/micro-ROM's own working set would touch. Used only by the deliberate-perturbation mode, to prove the
     // tool finds an injected divergence and names it correctly.
@@ -83,7 +81,6 @@ internal static class HashDivergenceProbe {
             perturbAtFrame: perturbAtFrame
         );
     }
-
     /// <summary>The in-memory counterpart of <see cref="Run(string, string?, ReadOnlyMemory{byte}, int, bool, int?)"/>,
     /// for callers (and the self-check-over-a-micro-ROM proof) that already hold ROM bytes rather than a disk path.</summary>
     public static int Run(byte[] romA, string romALabel, byte[] romB, string? romBLabel, ReadOnlyMemory<byte> bios, int frames, bool fine, int? perturbAtFrame) {
@@ -128,9 +125,9 @@ internal static class HashDivergenceProbe {
                     );
 
                     if (!TryCompare(
+                        frame: frame,
                         machineA: machineA,
                         machineB: machineB,
-                        frame: frame,
                         scanline: scanline
                     )) {
                         return 1;
@@ -145,9 +142,9 @@ internal static class HashDivergenceProbe {
                 _ = machineB.RunFrame();
 
                 if (!TryCompare(
+                    frame: frame,
                     machineA: machineA,
                     machineB: machineB,
-                    frame: frame,
                     scanline: null
                 )) {
                     return 1;
@@ -221,7 +218,6 @@ internal static class HashDivergenceProbe {
             offset: absoluteOffset
         ));
     }
-
     /// <summary>
     /// Describes the first byte-level difference between two snapshots as a one-line, component-localized detail —
     /// "component 'bus' (EWRAM), byte offset 32768 within component (absolute 32768)" rather than a bare "mismatch".
@@ -281,7 +277,7 @@ internal static class HashDivergenceProbe {
         var current = snapshot.Data[absoluteOffset];
         var poked = snapshot.WithPokedByte(
             offset: absoluteOffset,
-            value: (byte)(current ^ 0xFF)
+            value: ((byte)(current ^ 0xFF))
         );
 
         machine.Restore(snapshot: poked);

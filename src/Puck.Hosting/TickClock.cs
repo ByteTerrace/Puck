@@ -4,6 +4,7 @@ namespace Puck.Hosting;
 
 public struct TickClock {
     private readonly ulong m_frequency;
+
     private long m_previousTimestamp;
     private ulong m_remainder;
 
@@ -13,11 +14,6 @@ public struct TickClock {
         m_remainder = 0UL;
     }
 
-    public static TickClock Start() =>
-        new(
-            frequency: ((ulong)Stopwatch.Frequency),
-            timestamp: Stopwatch.GetTimestamp()
-        );
     public ulong Sample() {
         var now = Stopwatch.GetTimestamp();
         var elapsed = unchecked((ulong)(now - m_previousTimestamp));
@@ -33,4 +29,9 @@ public struct TickClock {
 
         return quotient;
     }
+    public static TickClock Start() =>
+        new(
+            frequency: ((ulong)Stopwatch.Frequency),
+            timestamp: Stopwatch.GetTimestamp()
+        );
 }

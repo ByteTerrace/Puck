@@ -18,7 +18,7 @@ public static class MachineFactory {
     /// <returns>The assembled, isolated machine instance. The caller owns it and must dispose it.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="configuration"/> or <paramref name="compose"/> is
     /// <see langword="null"/>.</exception>
-    public static MachineInstance Create(MachineConfiguration configuration, Action<IServiceCollection> compose) {
+    public static MachineInstance Create(MachineConfiguration configuration, Action<IServiceCollection>? compose) {
         ArgumentNullException.ThrowIfNull(argument: configuration);
         ArgumentNullException.ThrowIfNull(argument: compose);
 
@@ -39,7 +39,8 @@ public static class MachineFactory {
             scope: scope,
             machine: machine,
             configuration: configuration,
-            compose: compose
+            compose: compose,
+            create: Create
         );
     }
 }

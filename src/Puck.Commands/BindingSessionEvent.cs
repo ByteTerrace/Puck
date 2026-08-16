@@ -29,7 +29,6 @@ public enum BindingSessionEventKind {
     /// <summary>A press on a source an earlier step already captured — refused, the step is unchanged. <see cref="BindingSessionEvent.ConflictingCommand"/> names the command holding it.</summary>
     ConflictRejected,
 }
-
 /// <summary>
 /// The outcome of applying one signal to a <see cref="BindingSession"/> — everything a host needs to narrate the
 /// session (which prompt, what was pressed, how many presses remain, what went wrong).

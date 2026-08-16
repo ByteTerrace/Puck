@@ -34,7 +34,6 @@ public sealed class ManifestOwnershipTests {
         Assert.Equal(expected: new[] { "VER008" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "SomewhereElse", actualString: result.Single(id: "VER008").GetMessage());
     }
-
     [Fact]
     public void MovingABrandedTypeLeavesItsDeclaredDependenciesNamingNothing() {
         var result = Harness.Run(
@@ -57,7 +56,6 @@ public sealed class ManifestOwnershipTests {
         Assert.Equal(expected: new[] { "VER010" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "InvertibleBitMix.FirstMultiplier", actualString: result.Single(id: "VER010").GetMessage());
     }
-
     [Fact]
     public void TwoDeclarationsClaimingOneEntryAreBothRefused() {
         var source = """
@@ -97,7 +95,6 @@ public sealed class ManifestOwnershipTests {
         Assert.Contains(expectedSubstring: "Beta.Target", actualString: result.Single(id: "VER009").GetMessage());
         Assert.Contains(expectedSubstring: "Alpha.Target", actualString: result.Single(id: "VER009").GetMessage());
     }
-
     [Fact]
     public void SecondClaimantWithDifferentTokensIsReportedAsADuplicateClaimAsWellAsADrift() {
         var source = """
@@ -130,7 +127,6 @@ public sealed class ManifestOwnershipTests {
         Assert.Equal(expected: new[] { "VER001", "VER008", "VER009" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "Beta.Target", actualString: result.Single(id: "VER001").GetMessage());
     }
-
     [Fact]
     public void EntryWhoseRecordedSymbolNamesAnAssemblyOtherThanItsOwnerIsRefused() {
         var result = Harness.Run(
@@ -146,7 +142,6 @@ public sealed class ManifestOwnershipTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "Nonexistent.Assembly", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void EntryRecordingNoSymbolIsRefused() {
         var result = Harness.Run(
@@ -160,7 +155,6 @@ public sealed class ManifestOwnershipTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "documentation-comment id", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void EntryRecordingNoOwningAssemblyIsRefused() {
         var result = Harness.Run(
@@ -174,7 +168,6 @@ public sealed class ManifestOwnershipTests {
 
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
     }
-
     [Fact]
     public void UnclaimedEntryBelongingToAnotherAssemblyIsLeftToThatAssemblysSweep() {
         var result = Harness.Run(
@@ -189,7 +182,6 @@ public sealed class ManifestOwnershipTests {
         // Narrowing to the owning compilation is deliberate: every other project would otherwise report every entry.
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EntryClaimedByItsOwnAssemblyIsSweptThere() {
         var result = Harness.Run(
@@ -205,7 +197,6 @@ public sealed class ManifestOwnershipTests {
 
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void CompilationWithoutTheMarkerAttributeStillSweepsTheEntriesItOwns() {
         var source = """

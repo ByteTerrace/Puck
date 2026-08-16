@@ -23,14 +23,13 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
         var (model, dmgSpeed) = ParseOptions(options: options);
 
         return new MachineHost(
-            model: model,
+            audioSampleRate: audioSampleRate,
             cartridgeRom: contentBytes,
-            savePath: savePath,
             dmgSpeed: dmgSpeed,
-            audioSampleRate: audioSampleRate
+            model: model,
+            savePath: savePath
         );
     }
-
     /// <inheritdoc/>
     public bool TryLink(IReadOnlyList<IScreenMachine> machines, out IMachineLink? link, out string reason) {
         link = null;
@@ -78,27 +77,27 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
         }
 
         foreach (var token in options.Split(
-            separator: (char[]?)null,
-            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+            separator: ((char[]?)null)
         )) {
             if (token.Equals(
-                value: "dmg",
-                comparisonType: StringComparison.OrdinalIgnoreCase
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "dmg"
             )) {
                 model = ConsoleModel.Dmg;
             } else if (token.Equals(
-                value: "cgb",
-                comparisonType: StringComparison.OrdinalIgnoreCase
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "cgb"
             )) {
                 model = ConsoleModel.Cgb;
             } else if (token.Equals(
-                value: "agb",
-                comparisonType: StringComparison.OrdinalIgnoreCase
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "agb"
             )) {
                 model = ConsoleModel.Agb;
             } else if (token.Equals(
-                value: DmgSpeedToken,
-                comparisonType: StringComparison.OrdinalIgnoreCase
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: DmgSpeedToken
             )) {
                 dmgSpeed = true;
             } else {
@@ -108,7 +107,6 @@ public sealed class GamingBrickEngine : IScreenMachineEngine, IMachineLinkingEng
 
         return (Model: model, DmgSpeed: dmgSpeed);
     }
-
     /// <summary>Formats a model + fairness pin back into the canonical options string — the inverse of
     /// <see cref="ParseOptions"/>, so a host's <c>screen.options</c> echo and <c>world.save</c> readback speak the same
     /// vocabulary an author wrote.</summary>

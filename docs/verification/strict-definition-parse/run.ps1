@@ -101,10 +101,14 @@ $shippedWorlds = @(
     @{ Id = 'kart'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\kart.world.json') },
     @{ Id = 'jump'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\jump.world.json') },
     @{ Id = 'studio'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\studio.world.json') },
+    # quilt-base is the composition template the five quilt deltas name as `basis`; it is itself a complete,
+    # bootable document, so it boots here like any other. The deltas exercise the basis-composition load path.
+    @{ Id = 'quilt-base'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-base.world.json') },
     @{ Id = 'quilt-ne'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-ne.world.json') },
     @{ Id = 'quilt-nw'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-nw.world.json') },
     @{ Id = 'quilt-se'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-se.world.json') },
     @{ Id = 'quilt-sw'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-sw.world.json') },
+    @{ Id = 'quilt-island'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-island.world.json') },
     @{ Id = 'scenario-combat'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\scenarios\combat.world.json') },
     @{ Id = 'scenario-reconnect'; Path = (Join-Path $repoRoot 'src\Puck.World\Assets\scenarios\reconnect.world.json') },
     @{ Id = 'wasm-channelwalk'; Path = (Join-Path $repoRoot 'wasm\puck-addon-channelwalk\worlds\channel-walk-world.json') }

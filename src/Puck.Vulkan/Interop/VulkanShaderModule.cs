@@ -9,6 +9,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanShaderModule : IGpuShaderModule {
     private bool m_disposed;
+
     private readonly IVulkanShaderModuleApi m_shaderModuleApi;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the shader module.</summary>

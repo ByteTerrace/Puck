@@ -4,8 +4,6 @@ using Puck.Abstractions.Pacing;
 namespace Puck.Launcher;
 
 internal static class LauncherHostLoop {
-    public const int SpinThresholdMilliseconds = 2;
-
     /// <summary>The host's OWN pacing default — used when no <see cref="Puck.Hosting.IFixedStepSimulation"/> is
     /// registered (a composition root that drives no fixed-step sim at all, so nothing declares a rate via
     /// <see cref="Puck.Hosting.IFixedStepSimulation.RatePerSecond"/>), AND as the fixed-step pump's own calling
@@ -18,6 +16,7 @@ internal static class LauncherHostLoop {
     /// is the fallback for both the null and the stopped case, never a value that silently overrides an authored
     /// one (the registered simulation still gates its OWN actual stepping internally).</summary>
     public const uint DefaultUpdateRate = 240U;
+    public const int SpinThresholdMilliseconds = 2;
 
     public static T? SingleOrDefault<T>(IEnumerable<T> items, string name, string hostDescription)
         where T : class {
@@ -46,7 +45,10 @@ internal static class LauncherHostLoop {
             if (remaining > spinThreshold) {
                 var sleepTicks = (remaining - spinThreshold);
 
-                if ((precisionWaiter is null) || !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds(value: ((double)sleepTicks / frequency)))) {
+                if (
+                    (precisionWaiter is null) ||
+                    !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds(value: (((double)sleepTicks) / frequency)))
+                ) {
                     Thread.Sleep(millisecondsTimeout: 1);
                 }
             } else {

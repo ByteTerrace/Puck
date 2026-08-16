@@ -38,8 +38,9 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     // processing, drained on the NEXT tick's call, before it folds its own due signals. The list is retained across
     // drains; the next scheduled edge clears the already-consumed contents before appending a fresh batch.
     private readonly List<(int Slot, BindingChordEdge Edge)> m_scheduledEdges = [];
-    private bool m_scheduledEdgesPending;
+
     private volatile CompiledBindingProfile m_profile;
+    private bool m_scheduledEdgesPending;
 
     event Action<int?> IInputBindingsReloadSource.Reloading {
         add => Reloading += value;
@@ -49,18 +50,18 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     private event Action<int?>? Reloading;
 
     private sealed class SlotState {
+        // One RowActivatorTracker per compiled activator entry (CompiledActivatorEntry.ActivatorIndex), lazily
+        // instantiated on first use. Sized once at slot creation — see CompiledBindingProfile.ActivatorCount.
+        public required RowActivatorTracker?[] ActivatorTrackers { get; init; }
         public required bool[] ArmedRows { get; init; }
         public required Dictionary<string, IReadOnlyList<CommandBinding>> Latches { get; init; }
         public required CompiledBindingProfile Profile { get; init; }
         public required BindingChordTracker Tracker { get; init; }
-        // One RowActivatorTracker per compiled activator entry (CompiledActivatorEntry.ActivatorIndex), lazily
-        // instantiated on first use. Sized once at slot creation — see CompiledBindingProfile.ActivatorCount.
-        public required RowActivatorTracker?[] ActivatorTrackers { get; init; }
 
         public int GroupIndex;
         public int PageRowIndex;
-        public BindingChordEdge[] PendingEdges;
         public int PendingEdgeCount;
+        public BindingChordEdge[] PendingEdges;
         public volatile BindingPageView View;
 
         public SlotState() {
@@ -78,329 +79,24 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         m_profile = profile;
     }
 
-    /// <inheritdoc/>
-    public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) {
-        // The stateless view: the active page's table, with no tracker advance and no latch. Legacy callers
-        // that only know a source id get the same answer a fresh press would.
-        var state = StateFor(slot: slot);
-
-        return (state.Profile.TableOf(rowIndex: state.PageRowIndex).TryGetValue(
-            key: source,
-            value: out var bindings
-        )
-            ? bindings
-            : null);
-    }
-
-    /// <inheritdoc/>
-    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
-        var state = StateFor(slot: slot);
-        var isDigitalReassertion = ((signal.Phase == CommandPhase.Active) && (signal.Value.Kind == CommandValueKind.Digital));
-
-        if (state.Tracker.Apply(signal: signal)) {
-            SyncChordState(state: state, isDigitalReassertion: isDigitalReassertion);
-        }
-
-        // The active page's ROW ACTIVATORS, evaluated regardless of whether this signal matches this page's
-        // per-source table below — an activator's trigger is its own ordered sequence, not necessarily the signal
-        // that happens to be resolving right now (a Tapped tracker in particular must see every signal to detect
-        // wrong input; see RowActivatorTracker).
-        // Activators are gestures, not held-state destinations. Reassertions may rebuild modifier/page state but
-        // never advance or complete a Held/Tapped sequence without a real physical edge.
-        if (!isDigitalReassertion) {
-            ApplyRowActivators(
-                slot: slot,
-                state: state,
-                signal: in signal
+    private static void AppendEdge(SlotState state, in BindingChordEdge edge) {
+        if (state.PendingEdgeCount == state.PendingEdges.Length) {
+            Array.Resize(
+                array: ref state.PendingEdges,
+                newSize: (state.PendingEdges.Length * 2)
             );
         }
 
-        if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
-            // A release resolves to whatever its press resolved to (see remarks), then the latch clears.
-            if (state.Latches.Remove(
-                key: signal.Source,
-                value: out var latched
-            )) {
-                return latched;
-            }
-        }
-
-        var resolved = ((state.Profile.TableOf(rowIndex: state.PageRowIndex).TryGetValue(
-            key: signal.Source,
-            value: out var bindings
-        ))
-            ? bindings
-            : null);
-
-        if (
-            ((signal.Phase == CommandPhase.Started) || isDigitalReassertion) &&
-            (resolved is not null) &&
-            !state.Latches.ContainsKey(key: signal.Source)
-        ) {
-            // The first real press owns the release mapping. After a reload/reset, the first reassertion establishes
-            // the current mapping's release ownership; later repeats/page flips cannot overwrite either latch.
-            state.Latches[signal.Source] = resolved;
-        }
-
-        return resolved;
+        state.PendingEdges[state.PendingEdgeCount++] = edge;
     }
-
-    /// <inheritdoc/>
-    public ReadOnlySpan<BindingChordEdge> DrainChordEdges(int slot) {
-        if (
-            !m_slots.TryGetValue(
-            key: slot,
-            value: out var state
-        ) ||
-            (state.PendingEdgeCount == 0)
-        ) {
-            return [];
-        }
-
-        var count = state.PendingEdgeCount;
-
-        state.PendingEdgeCount = 0;
-
-        return state.PendingEdges.AsSpan(
-            start: 0,
-            length: count
-        );
-    }
-
-    /// <inheritdoc/>
-    public IReadOnlyList<(int Slot, BindingChordEdge Edge)> DrainScheduledEdges() {
+    private void AppendScheduledEdge(int slot, in BindingChordEdge edge) {
         if (!m_scheduledEdgesPending) {
-            return [];
+            m_scheduledEdges.Clear();
+            m_scheduledEdgesPending = true;
         }
 
-        m_scheduledEdgesPending = false;
-
-        return m_scheduledEdges;
+        m_scheduledEdges.Add(item: (slot, edge));
     }
-
-    /// <summary>Sets a slot's active group — the runtime mode flip. A pointer-level switch on the compiled
-    /// profile: the active page re-resolves in the new group against the same held modifiers, while the press
-    /// latches, the chord tracker, and any armed command chords survive untouched (see remarks). The request is
-    /// remembered per slot, so a later <see cref="Reload"/> re-applies it to the new profile.</summary>
-    /// <param name="slot">The logical player slot.</param>
-    /// <param name="group">The group name to activate, or <see langword="null"/> for the profile's default group.</param>
-    /// <returns><see langword="false"/> when the profile declares no such group (the slot keeps its current group).</returns>
-    public bool SetActiveGroup(int slot, string? group) {
-        var profile = m_profile;
-        var groupIndex = profile.DefaultGroupIndex;
-
-        if (
-            (group is not null) &&
-            !profile.TryGetGroup(
-            group: group,
-            groupIndex: out groupIndex
-        )
-        ) {
-            return false;
-        }
-
-        if (group is null) {
-            _ = m_requestedGroups.TryRemove(
-                key: slot,
-                value: out _
-            );
-        } else {
-            m_requestedGroups[slot] = group;
-        }
-
-        var state = StateFor(slot: slot);
-
-        if (state.GroupIndex != groupIndex) {
-            state.GroupIndex = groupIndex;
-            ResolveAndPublishPage(state: state);
-        }
-
-        return true;
-    }
-
-    /// <summary>Returns a value indicating whether the currently-loaded compiled profile declares <paramref name="group"/> — the probe a caller
-    /// uses to validate a requested group without applying it (a context-derived override may currently shadow the
-    /// request, so "apply and observe" cannot answer this).</summary>
-    /// <param name="group">The group name to look up.</param>
-    /// <returns><see langword="true"/> when the profile declares the group.</returns>
-    public bool HasGroup(string group) {
-        return m_profile.TryGetGroup(
-            group: group,
-            groupIndex: out _
-        );
-    }
-
-    /// <summary>Gets the immutable view of the page a slot's active group and held chord currently select.</summary>
-    /// <param name="slot">The logical player slot.</param>
-    /// <returns>The active page's precomputed view.</returns>
-    public BindingPageView ViewFor(int slot) {
-        var profile = m_profile;
-
-        return ((m_slots.TryGetValue(
-            key: slot,
-            value: out var state
-        ) && ReferenceEquals(
-            objA: state.Profile,
-            objB: profile
-        ))
-            ? state.View
-            : profile.ViewOf(rowIndex: profile.RestingRowOf(groupIndex: ResolveGroupIndex(
-            profile: profile,
-            slot: slot
-        ))));
-    }
-
-    /// <summary>Gets the wheel the slot's active page presents, or <see langword="null"/> when the active page is
-    /// no wheel's hold page — the radial presenter's one open/closed read (a slot holds a wheel open exactly while
-    /// its held chord keeps the hold page selected, so this needs no state of its own).</summary>
-    /// <param name="slot">The logical player slot.</param>
-    /// <returns>The active wheel view, or <see langword="null"/>.</returns>
-    public BindingWheelView? WheelFor(int slot) {
-        var state = StateFor(slot: slot);
-
-        return state.Profile.WheelOfRow(rowIndex: state.PageRowIndex);
-    }
-
-    /// <summary>Releases a slot's chord, press latches, and armed command chords — wired to focus loss (via
-    /// <see cref="ResetAll"/>). Deliberately not wired to a single device's disconnect: <c>InputRouter</c>'s
-    /// per-device release touches no binding state, because resetting a whole slot's chord tracker on one
-    /// device's disconnect could wipe a different still-connected device's legitimately-held modifier on the same
-    /// slot. Silent by design: the router's own held cancellation delivers the release edges.</summary>
-    /// <param name="slot">The logical player slot.</param>
-    public void Reset(int slot) {
-        _ = m_scheduledEdges.RemoveAll(match: scheduled => scheduled.Slot == slot);
-
-        if (m_scheduledEdges.Count == 0) {
-            m_scheduledEdgesPending = false;
-        }
-
-        if (m_slots.TryGetValue(
-            key: slot,
-            value: out var state
-        )) {
-            state.Latches.Clear();
-            state.Tracker.Reset();
-            Array.Clear(array: state.ArmedRows);
-
-            foreach (var tracker in state.ActivatorTrackers) {
-                tracker?.Reset();
-            }
-
-            state.PendingEdgeCount = 0;
-            state.PageRowIndex = state.Profile.RestingRowOf(groupIndex: state.GroupIndex);
-            Publish(state: state);
-        }
-    }
-
-    /// <summary>Releases every slot this instance currently tracks — the all-slots twin of <see cref="Reset(int)"/>,
-    /// wired to OS window focus loss (see <see cref="IInputBindings.ResetAll"/>).</summary>
-    public void ResetAll() {
-        m_scheduledEdges.Clear();
-        m_scheduledEdgesPending = false;
-
-        foreach (var slot in m_slots.Keys) {
-            Reset(slot: slot);
-        }
-    }
-
-    /// <summary>Atomically swaps in a recompiled profile (an editor save), releasing every slot's chord and latches.
-    /// Each slot's requested active group carries over — re-resolved against the new profile, falling back to its
-    /// default group when the new profile no longer declares the name.</summary>
-    /// <param name="profile">The compiled profile to resolve against from now on.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="profile"/> is <see langword="null"/>.</exception>
-    public void Reload(CompiledBindingProfile profile) {
-        ArgumentNullException.ThrowIfNull(profile);
-
-        Reloading?.Invoke(obj: null);
-        m_scheduledEdges.Clear();
-        m_scheduledEdgesPending = false;
-        m_profile = profile;
-        m_slots.Clear();
-    }
-
-    // Recompute a slot's chord-derived state after a tracker change: the deepest-page resolution, the published
-    // view, and the command-row transition edges (releases of broken armed rows first, then fresh completions).
-    private static void SyncChordState(SlotState state, bool isDigitalReassertion) {
-        var held = state.Tracker.HeldOrder;
-        var profile = state.Profile;
-
-        for (var rowIndex = 0; (rowIndex < state.ArmedRows.Length); rowIndex++) {
-            if (!state.ArmedRows[rowIndex]) {
-                continue;
-            }
-
-            var row = profile.RowAt(rowIndex: rowIndex);
-
-            if (!CompiledBindingProfile.IsPrefix(
-                chord: row.Chord,
-                heldOrder: held
-            )) {
-                state.ArmedRows[rowIndex] = false;
-                AppendEdge(
-                    state: state,
-                    edge: new BindingChordEdge(
-                        Command: row.Command!.Command,
-                        Dispatch: row.Command.DispatchRelease,
-                        Phase: CommandPhase.Completed,
-                        Value: row.Command.ReleaseValue
-                    )
-                );
-            }
-        }
-
-        foreach (var rowIndex in profile.CommandRowsOf(groupIndex: state.GroupIndex)) {
-            if (state.ArmedRows[rowIndex]) {
-                continue;
-            }
-
-            var row = profile.RowAt(rowIndex: rowIndex);
-
-            // A command chord fires on COMPLETION: the held order equals its chord exactly (a press only ever
-            // appends to the held order, so completion is the exact-match moment).
-            if (held.SequenceEqual(other: row.Chord)) {
-                var command = row.Command!;
-
-                if (isDigitalReassertion && !command.Reassertable) {
-                    continue;
-                }
-
-                state.ArmedRows[rowIndex] = true;
-                AppendEdge(
-                    state: state,
-                    edge: new BindingChordEdge(
-                        Command: command.Command,
-                        Dispatch: true,
-                        DispatchRelease: command.DispatchRelease,
-                        Phase: (isDigitalReassertion ? CommandPhase.Active : CommandPhase.Started),
-                        Value: command.PressValue
-                    )
-                );
-            }
-        }
-
-        ResolveAndPublishPage(state: state);
-    }
-
-    // Re-resolves and publishes the page selected by the slot's current group and held order. A page flip abandons
-    // the outgoing row activators' partial progress before the new view becomes visible.
-    private static void ResolveAndPublishPage(SlotState state) {
-        var previousPageRowIndex = state.PageRowIndex;
-
-        state.PageRowIndex = state.Profile.PageRowOf(
-            groupIndex: state.GroupIndex,
-            heldOrder: state.Tracker.HeldOrder
-        );
-
-        if (previousPageRowIndex != state.PageRowIndex) {
-            ResetActivatorTrackers(
-                state: state,
-                pageRowIndex: previousPageRowIndex
-            );
-        }
-
-        Publish(state: state);
-    }
-
     // Evaluates the ACTIVE page's row activators against one signal, synthesizing chord-style edges (drained the
     // same way a group-level command chord's are — see DrainChordEdges) on a Held gate open/close. A Tapped
     // completion is a PULSE: the press edge fires NOW, but the release is SCHEDULED for the next tick
@@ -460,12 +156,15 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                         DispatchRelease: activatorEntry.Edge.DispatchRelease
                     )
                     );
-                    AppendScheduledEdge(slot: slot, edge: new BindingChordEdge(
-                        Command: activatorEntry.Edge.Command,
-                        Dispatch: activatorEntry.Edge.DispatchRelease,
-                        Phase: CommandPhase.Completed,
-                        Value: activatorEntry.Edge.ReleaseValue
-                    ));
+                    AppendScheduledEdge(
+                        slot: slot,
+                        edge: new BindingChordEdge(
+                            Command: activatorEntry.Edge.Command,
+                            Dispatch: activatorEntry.Edge.DispatchRelease,
+                            Phase: CommandPhase.Completed,
+                            Value: activatorEntry.Edge.ReleaseValue
+                        )
+                    );
                     break;
                 case RowActivatorTransition.None:
                 default:
@@ -473,7 +172,9 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             }
         }
     }
-
+    private static void Publish(SlotState state) {
+        state.View = state.Profile.ViewOf(rowIndex: state.PageRowIndex);
+    }
     // Abandons a page's in-flight activator progress when it stops being the active page (see SyncChordState,
     // SetActiveGroup, Reset) — a partial Held/Tapped sequence must not silently complete after the player has
     // moved to a different page.
@@ -482,26 +183,24 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             state.ActivatorTrackers[activatorEntry.ActivatorIndex]?.Reset();
         }
     }
-    private static void AppendEdge(SlotState state, in BindingChordEdge edge) {
-        if (state.PendingEdgeCount == state.PendingEdges.Length) {
-            Array.Resize(
-                array: ref state.PendingEdges,
-                newSize: (state.PendingEdges.Length * 2)
+    // Re-resolves and publishes the page selected by the slot's current group and held order. A page flip abandons
+    // the outgoing row activators' partial progress before the new view becomes visible.
+    private static void ResolveAndPublishPage(SlotState state) {
+        var previousPageRowIndex = state.PageRowIndex;
+
+        state.PageRowIndex = state.Profile.PageRowOf(
+            groupIndex: state.GroupIndex,
+            heldOrder: state.Tracker.HeldOrder
+        );
+
+        if (previousPageRowIndex != state.PageRowIndex) {
+            ResetActivatorTrackers(
+                pageRowIndex: previousPageRowIndex,
+                state: state
             );
         }
 
-        state.PendingEdges[state.PendingEdgeCount++] = edge;
-    }
-    private void AppendScheduledEdge(int slot, in BindingChordEdge edge) {
-        if (!m_scheduledEdgesPending) {
-            m_scheduledEdges.Clear();
-            m_scheduledEdgesPending = true;
-        }
-
-        m_scheduledEdges.Add(item: (slot, edge));
-    }
-    private static void Publish(SlotState state) {
-        state.View = state.Profile.ViewOf(rowIndex: state.PageRowIndex);
+        Publish(state: state);
     }
     private int ResolveGroupIndex(CompiledBindingProfile profile, int slot) {
         return ((m_requestedGroups.TryGetValue(
@@ -512,7 +211,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             groupIndex: out var groupIndex
         ))
             ? groupIndex
-            : profile.DefaultGroupIndex);
+            : profile.DefaultGroupIndex
+        );
     }
     private SlotState StateFor(int slot) {
         var profile = m_profile;
@@ -548,5 +248,308 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         m_slots[slot] = created;
 
         return created;
+    }
+    // Recompute a slot's chord-derived state after a tracker change: the deepest-page resolution, the published
+    // view, and the command-row transition edges (releases of broken armed rows first, then fresh completions).
+    private static void SyncChordState(SlotState state, bool isDigitalReassertion) {
+        var held = state.Tracker.HeldOrder;
+        var profile = state.Profile;
+
+        for (var rowIndex = 0; (rowIndex < state.ArmedRows.Length); rowIndex++) {
+            if (!state.ArmedRows[rowIndex]) {
+                continue;
+            }
+
+            var row = profile.RowAt(rowIndex: rowIndex);
+
+            if (!CompiledBindingProfile.IsPrefix(
+                chord: row.Chord,
+                heldOrder: held
+            )) {
+                state.ArmedRows[rowIndex] = false;
+                AppendEdge(
+                    state: state,
+                    edge: new BindingChordEdge(
+                        Command: row.Command!.Command,
+                        Dispatch: row.Command.DispatchRelease,
+                        Phase: CommandPhase.Completed,
+                        Value: row.Command.ReleaseValue
+                    )
+                );
+            }
+        }
+
+        foreach (var rowIndex in profile.CommandRowsOf(groupIndex: state.GroupIndex)) {
+            if (state.ArmedRows[rowIndex]) {
+                continue;
+            }
+
+            var row = profile.RowAt(rowIndex: rowIndex);
+
+            // A command chord fires on COMPLETION: the held order equals its chord exactly (a press only ever
+            // appends to the held order, so completion is the exact-match moment).
+            if (held.SequenceEqual(other: row.Chord)) {
+                var command = row.Command!;
+
+                if (
+                    isDigitalReassertion &&
+                    !command.Reassertable
+                ) {
+                    continue;
+                }
+
+                state.ArmedRows[rowIndex] = true;
+                AppendEdge(
+                    state: state,
+                    edge: new BindingChordEdge(
+                        Command: command.Command,
+                        Dispatch: true,
+                        DispatchRelease: command.DispatchRelease,
+                        Phase: (isDigitalReassertion
+                    ? CommandPhase.Active
+                    : CommandPhase.Started),
+                        Value: command.PressValue
+                    )
+                );
+            }
+        }
+
+        ResolveAndPublishPage(state: state);
+    }
+
+    /// <inheritdoc/>
+    public ReadOnlySpan<BindingChordEdge> DrainChordEdges(int slot) {
+        if (
+            !m_slots.TryGetValue(
+            key: slot,
+            value: out var state
+        ) ||
+            (state.PendingEdgeCount == 0)
+        ) {
+            return [];
+        }
+
+        var count = state.PendingEdgeCount;
+
+        state.PendingEdgeCount = 0;
+
+        return state.PendingEdges.AsSpan(
+            length: count,
+            start: 0
+        );
+    }
+    /// <inheritdoc/>
+    public IReadOnlyList<(int Slot, BindingChordEdge Edge)> DrainScheduledEdges() {
+        if (!m_scheduledEdgesPending) {
+            return [];
+        }
+
+        m_scheduledEdgesPending = false;
+
+        return m_scheduledEdges;
+    }
+    /// <summary>Returns a value indicating whether the currently-loaded compiled profile declares <paramref name="group"/> — the probe a caller
+    /// uses to validate a requested group without applying it (a context-derived override may currently shadow the
+    /// request, so "apply and observe" cannot answer this).</summary>
+    /// <param name="group">The group name to look up.</param>
+    /// <returns><see langword="true"/> when the profile declares the group.</returns>
+    public bool HasGroup(string group) {
+        return m_profile.TryGetGroup(
+            group: group,
+            groupIndex: out _
+        );
+    }
+    /// <summary>Atomically swaps in a recompiled profile (an editor save), releasing every slot's chord and latches.
+    /// Each slot's requested active group carries over — re-resolved against the new profile, falling back to its
+    /// default group when the new profile no longer declares the name.</summary>
+    /// <param name="profile">The compiled profile to resolve against from now on.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="profile"/> is <see langword="null"/>.</exception>
+    public void Reload(CompiledBindingProfile profile) {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        Reloading?.Invoke(obj: null);
+        m_scheduledEdges.Clear();
+        m_scheduledEdgesPending = false;
+        m_profile = profile;
+        m_slots.Clear();
+    }
+    /// <summary>Releases a slot's chord, press latches, and armed command chords — wired to focus loss (via
+    /// <see cref="ResetAll"/>). Deliberately not wired to a single device's disconnect: <c>InputRouter</c>'s
+    /// per-device release touches no binding state, because resetting a whole slot's chord tracker on one
+    /// device's disconnect could wipe a different still-connected device's legitimately-held modifier on the same
+    /// slot. Silent by design: the router's own held cancellation delivers the release edges.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    public void Reset(int slot) {
+        _ = m_scheduledEdges.RemoveAll(match: scheduled => (scheduled.Slot == slot));
+
+        if (m_scheduledEdges.Count == 0) {
+            m_scheduledEdgesPending = false;
+        }
+
+        if (m_slots.TryGetValue(
+            key: slot,
+            value: out var state
+        )) {
+            state.Latches.Clear();
+            state.Tracker.Reset();
+            Array.Clear(array: state.ArmedRows);
+
+            foreach (var tracker in state.ActivatorTrackers) {
+                tracker?.Reset();
+            }
+
+            state.PendingEdgeCount = 0;
+            state.PageRowIndex = state.Profile.RestingRowOf(groupIndex: state.GroupIndex);
+            Publish(state: state);
+        }
+    }
+    /// <summary>Releases every slot this instance currently tracks — the all-slots twin of <see cref="Reset(int)"/>,
+    /// wired to OS window focus loss (see <see cref="IInputBindings.ResetAll"/>).</summary>
+    public void ResetAll() {
+        m_scheduledEdges.Clear();
+        m_scheduledEdgesPending = false;
+
+        foreach (var slot in m_slots.Keys) {
+            Reset(slot: slot);
+        }
+    }
+    /// <inheritdoc/>
+    public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) {
+        // The stateless view: the active page's table, with no tracker advance and no latch. Legacy callers
+        // that only know a source id get the same answer a fresh press would.
+        var state = StateFor(slot: slot);
+
+        return (state.Profile.TableOf(rowIndex: state.PageRowIndex).TryGetValue(
+            key: source,
+            value: out var bindings
+        )
+            ? bindings
+            : null
+        );
+    }
+    /// <inheritdoc/>
+    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+        var state = StateFor(slot: slot);
+        var isDigitalReassertion = ((signal.Phase == CommandPhase.Active) && (signal.Value.Kind == CommandValueKind.Digital));
+
+        if (state.Tracker.Apply(signal: signal)) {
+            SyncChordState(
+                isDigitalReassertion: isDigitalReassertion,
+                state: state
+            );
+        }
+
+        // The active page's ROW ACTIVATORS, evaluated regardless of whether this signal matches this page's
+        // per-source table below — an activator's trigger is its own ordered sequence, not necessarily the signal
+        // that happens to be resolving right now (a Tapped tracker in particular must see every signal to detect
+        // wrong input; see RowActivatorTracker).
+        // Activators are gestures, not held-state destinations. Reassertions may rebuild modifier/page state but
+        // never advance or complete a Held/Tapped sequence without a real physical edge.
+        if (!isDigitalReassertion) {
+            ApplyRowActivators(
+                signal: in signal,
+                slot: slot,
+                state: state
+            );
+        }
+
+        if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
+            // A release resolves to whatever its press resolved to (see remarks), then the latch clears.
+            if (state.Latches.Remove(
+                key: signal.Source,
+                value: out var latched
+            )) {
+                return latched;
+            }
+        }
+
+        var resolved = ((state.Profile.TableOf(rowIndex: state.PageRowIndex).TryGetValue(
+            key: signal.Source,
+            value: out var bindings
+        ))
+            ? bindings
+            : null
+        );
+
+        if (
+            ((signal.Phase == CommandPhase.Started) || isDigitalReassertion) &&
+            (resolved is not null) &&
+            !state.Latches.ContainsKey(key: signal.Source)
+        ) {
+            // The first real press owns the release mapping. After a reload/reset, the first reassertion establishes
+            // the current mapping's release ownership; later repeats/page flips cannot overwrite either latch.
+            state.Latches[signal.Source] = resolved;
+        }
+
+        return resolved;
+    }
+    /// <summary>Sets a slot's active group — the runtime mode flip. A pointer-level switch on the compiled
+    /// profile: the active page re-resolves in the new group against the same held modifiers, while the press
+    /// latches, the chord tracker, and any armed command chords survive untouched (see remarks). The request is
+    /// remembered per slot, so a later <see cref="Reload"/> re-applies it to the new profile.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <param name="group">The group name to activate, or <see langword="null"/> for the profile's default group.</param>
+    /// <returns><see langword="false"/> when the profile declares no such group (the slot keeps its current group).</returns>
+    public bool SetActiveGroup(int slot, string? group) {
+        var profile = m_profile;
+        var groupIndex = profile.DefaultGroupIndex;
+
+        if (
+            (group is not null) &&
+            !profile.TryGetGroup(
+            group: group,
+            groupIndex: out groupIndex
+        )
+        ) {
+            return false;
+        }
+
+        if (group is null) {
+            _ = m_requestedGroups.TryRemove(
+                key: slot,
+                value: out _
+            );
+        } else {
+            m_requestedGroups[slot] = group;
+        }
+
+        var state = StateFor(slot: slot);
+
+        if (state.GroupIndex != groupIndex) {
+            state.GroupIndex = groupIndex;
+            ResolveAndPublishPage(state: state);
+        }
+
+        return true;
+    }
+    /// <summary>Gets the immutable view of the page a slot's active group and held chord currently select.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <returns>The active page's precomputed view.</returns>
+    public BindingPageView ViewFor(int slot) {
+        var profile = m_profile;
+
+        return ((m_slots.TryGetValue(
+            key: slot,
+            value: out var state
+        ) && ReferenceEquals(
+            objA: state.Profile,
+            objB: profile
+        ))
+            ? state.View
+            : profile.ViewOf(rowIndex: profile.RestingRowOf(groupIndex: ResolveGroupIndex(
+                profile: profile,
+                slot: slot
+            )))
+        );
+    }
+    /// <summary>Gets the wheel the slot's active page presents, or <see langword="null"/> when the active page is
+    /// no wheel's hold page — the radial presenter's one open/closed read (a slot holds a wheel open exactly while
+    /// its held chord keeps the hold page selected, so this needs no state of its own).</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <returns>The active wheel view, or <see langword="null"/>.</returns>
+    public BindingWheelView? WheelFor(int slot) {
+        var state = StateFor(slot: slot);
+
+        return state.Profile.WheelOfRow(rowIndex: state.PageRowIndex);
     }
 }

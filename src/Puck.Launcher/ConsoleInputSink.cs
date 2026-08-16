@@ -33,13 +33,25 @@ public sealed class ConsoleInputSink : IWindowInputObserver {
 
         var slot = m_slotOf(arg: inputEvent.DeviceId);
 
-        if ((slot < 0) || (slot >= m_sessions.Count)) {
+        if (
+            (slot < 0) ||
+            (slot >= m_sessions.Count)
+        ) {
             return;
         }
 
-        m_sessions.TrackTextDevice(slot: slot, device: inputEvent.DeviceId);
+        m_sessions.TrackTextDevice(
+            slot: slot,
+            device: inputEvent.DeviceId
+        );
 
-        if (!m_sessions.TryGetVisible(slot: slot, visible: out var visible) || !visible) {
+        if (
+            !m_sessions.TryGetVisible(
+            slot: slot,
+            visible: out var visible
+        ) ||
+            !visible
+        ) {
             // Console closed: nothing else here has anything to do.
             return;
         }
@@ -54,11 +66,17 @@ public sealed class ConsoleInputSink : IWindowInputObserver {
             return;
         }
 
-        if ((inputEvent.Kind == WindowInputKind.Key) && (inputEvent.Phase == CommandPhase.Started)) {
+        if (
+            (inputEvent.Kind == WindowInputKind.Key) &&
+            (inputEvent.Phase == CommandPhase.Started)
+        ) {
             // A Control chord on a letter is a clipboard/select verb, not typed text — handled ahead of the
             // named-key switch below since KeyCode.Letter never appears in it. Ctrl+letters never produce
             // TypedText (their WM_CHAR is a control char, filtered), so there is no double-append risk.
-            if ((inputEvent.Key == KeyCode.Letter) && inputEvent.Modifiers.HasFlag(flag: WindowInputModifiers.Control)) {
+            if (
+                (inputEvent.Key == KeyCode.Letter) &&
+                inputEvent.Modifiers.HasFlag(flag: WindowInputModifiers.Control)
+            ) {
                 switch (char.ToLowerInvariant(c: inputEvent.Character)) {
                     case 'a':
                         input.SelectAll();
@@ -88,7 +106,11 @@ public sealed class ConsoleInputSink : IWindowInputObserver {
                     input.Submit();
                     break;
                 case KeyCode.Escape:
-                    _ = m_sessions.TrySetVisible(slot: slot, visible: false, resolved: out _);
+                    _ = m_sessions.TrySetVisible(
+                        resolved: out _,
+                        slot: slot,
+                        visible: false
+                    );
                     break;
                 case KeyCode.ArrowLeft:
                     input.CaretLeft();

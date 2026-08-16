@@ -82,7 +82,7 @@ public static unsafe class VulkanNativeBufferSupport {
             }
 
             if ((memoryProperties.MemoryTypePropertyFlags(memoryTypeIndex: index) & preferredProperties) == preferredProperties) {
-                return (uint)index;
+                return ((uint)index);
             }
 
             if (fallbackIndex < 0) {
@@ -97,7 +97,7 @@ public static unsafe class VulkanNativeBufferSupport {
             throw new InvalidOperationException(message: $"The Vulkan physical device did not report a compatible memory type for {resourceDescription}.");
         }
 
-        return (uint)fallbackIndex;
+        return ((uint)fallbackIndex);
     }
     /// <summary>Allocates device memory sized and typed for a buffer and binds it, freeing the allocation if the bind fails.</summary>
     /// <param name="allocateMemory">A pointer to the native <c>vkAllocateMemory</c> entry point.</param>

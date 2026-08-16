@@ -59,7 +59,10 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
 
         // The integer-to-key lookup, sorted by integer so it is bisected rather than hashed. The sort runs over a copy
         // of the values, since the value-by-key table itself must keep key order.
-        Array.Sort(keys: value.ToArray(), items: ordered);
+        Array.Sort(
+            keys: value.ToArray(),
+            items: ordered
+        );
 
         m_keyOfOrdered = new long[count];
         m_ordered = new long[count];
@@ -73,13 +76,19 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
         // values start at one, so the reach ends at the first gap. Every classical identity here is conditioned on it.
         var consecutive = 0L;
 
-        while ((consecutive < count) && (m_ordered[((int)consecutive)] == (consecutive + 1L))) { ++consecutive; }
+        while (
+            (consecutive < count) &&
+            (m_ordered[((int)consecutive)] == (consecutive + 1L))
+        ) { ++consecutive; }
 
         Algebra = algebra;
         ConsecutiveBound = consecutive;
         NormalFormCount = count;
         Window = window;
-        Zeta = algebra.FromSupport(keys: everyKey, coefficients: ones);
+        Zeta = algebra.FromSupport(
+            coefficients: ones,
+            keys: everyKey
+        );
         m_descending = descending;
         m_signed = (material as ISignedMaterial<TValue, TOps>);
         m_value = value;
@@ -100,6 +109,35 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// <summary>Gets the zeta element — the coefficient one at every integer in the window.</summary>
     public PresentedAlgebra<TValue, TOps>.Element Zeta { get; }
 
+    // A non-negative count as a material value, by doubling rather than by repeated addition, so a floor quotient of a
+    // large bound costs its logarithm.
+    private static TValue FromCount(long count, TOps material) {
+        var result = material.Zero;
+        var scale = material.One;
+
+        while (0L != count) {
+            if (0L != (count & 1L)) {
+                result = material.Add(
+                    left: result,
+                    right: scale
+                );
+            }
+
+            count >>= 1;
+
+            if (0L != count) {
+                scale = material.Add(
+                    left: scale,
+                    right: scale
+                );
+            }
+        }
+
+        return result;
+    }
+    private ISignedMaterial<TValue, TOps> RequireSigned() =>
+        (m_signed ?? throw new InvalidOperationException(message: "Möbius inversion and sieving both subtract, which an unsigned material cannot express."));
+
     /// <summary>Creates the divisibility algebra of a prime set and an integer bound.</summary>
     /// <param name="primes">The generating primes, in any order.</param>
     /// <param name="window">The inclusive integer bound.</param>
@@ -109,7 +147,11 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="window"/> is below one, more than 128 primes were
     /// given, or the window admits more than 512 integers.</exception>
     public static DivisibilityAlgebra<TValue, TOps> Create(ReadOnlySpan<ulong> primes, long window, TOps material) {
-        var presentation = Presentations.DivisibilityWindow<TValue, TOps>(primes: primes, window: window, material: material);
+        var presentation = Presentations.DivisibilityWindow<TValue, TOps>(
+            material: material,
+            primes: primes,
+            window: window
+        );
         var descending = primes.ToArray();
 
         Array.Sort(array: descending);
@@ -133,7 +175,6 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
             value: value
         );
     }
-
     /// <summary>Returns the element whose coefficient at <c>n</c> is the number of ordered factorizations of <c>n</c>
     /// into a given number of factors — the divisor counts.</summary>
     /// <param name="order">The number of factors; two gives the divisor count itself, one gives zeta, zero the unit.</param>
@@ -144,9 +185,11 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     public PresentedAlgebra<TValue, TOps>.Element DivisorCounts(int order) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: order);
 
-        return Algebra.Power(value: Zeta, exponent: ((ulong)order));
+        return Algebra.Power(
+            value: Zeta,
+            exponent: ((ulong)order)
+        );
     }
-
     /// <summary>Returns the covector whose coefficient at <c>d</c> is <c>⌊bound / d⌋</c>, and zero above the bound.</summary>
     /// <param name="bound">The dividend, at most <see cref="Window"/>.</param>
     /// <returns>The covector.</returns>
@@ -170,7 +213,10 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// </remarks>
     public PresentedAlgebra<TValue, TOps>.Element FloorCovector(long bound) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: bound);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bound, other: Window);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: bound,
+            other: Window
+        );
 
         var material = Algebra.Presentation.Material;
         var coefficients = new List<TValue>();
@@ -179,13 +225,18 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
         for (var key = 0; (key < NormalFormCount); ++key) {
             if (m_value[key] > bound) { continue; }
 
-            coefficients.Add(item: FromCount(count: (bound / m_value[key]), material: material));
+            coefficients.Add(item: FromCount(
+                count: (bound / m_value[key]),
+                material: material
+            ));
             keys.Add(item: key);
         }
 
-        return Algebra.FromSupport(keys: CollectionsMarshal.AsSpan(list: keys), coefficients: CollectionsMarshal.AsSpan(list: coefficients));
+        return Algebra.FromSupport(
+            keys: CollectionsMarshal.AsSpan(list: keys),
+            coefficients: CollectionsMarshal.AsSpan(list: coefficients)
+        );
     }
-
     /// <summary>Returns the covector carrying the material's one at every integer of the window through a bound.</summary>
     /// <param name="bound">The inclusive bound, at most <see cref="Window"/>.</param>
     /// <returns>The covector — the window's zeta truncated at the bound.</returns>
@@ -199,7 +250,10 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// difference.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element Indicator(long bound) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: bound);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bound, other: Window);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: bound,
+            other: Window
+        );
 
         var material = Algebra.Presentation.Material;
         var coefficients = new List<TValue>();
@@ -212,9 +266,11 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
             keys.Add(item: key);
         }
 
-        return Algebra.FromSupport(keys: CollectionsMarshal.AsSpan(list: keys), coefficients: CollectionsMarshal.AsSpan(list: coefficients));
+        return Algebra.FromSupport(
+            keys: CollectionsMarshal.AsSpan(list: keys),
+            coefficients: CollectionsMarshal.AsSpan(list: coefficients)
+        );
     }
-
     /// <summary>Returns the sieve element of the smallest primes of this window — the product of <c>1 − p</c> over
     /// them.</summary>
     /// <param name="primeCount">How many of the smallest generating primes to sieve by.</param>
@@ -230,7 +286,10 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
     /// counted.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element Sieve(int primeCount) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: primeCount);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: primeCount, other: m_descending.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: primeCount,
+            other: m_descending.Length
+        );
 
         var signed = RequireSigned();
         var result = Algebra.Identity;
@@ -238,48 +297,29 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
         for (var index = 0; (index < primeCount); ++index) {
             var prime = ((long)m_descending[((m_descending.Length - 1) - index)]);
 
-            if (!TryKey(value: prime, out var key)) {
+            if (!TryKey(
+                value: prime,
+                out var key
+            )) {
                 throw new InvalidOperationException(message: "A generating prime of this window lies outside the window itself, so it names no key to sieve by.");
             }
 
-            var basis = Algebra.FromSupport(keys: [key], coefficients: [signed.One]);
+            var basis = Algebra.FromSupport(
+                keys: [key],
+                coefficients: [signed.One]
+            );
 
             result = Algebra.Multiply(
                 left: result,
-                right: Algebra.Subtract(left: Algebra.Identity, right: basis)
+                right: Algebra.Subtract(
+                    left: Algebra.Identity,
+                    right: basis
+                )
             );
         }
 
         return result;
     }
-
-    /// <summary>Attempts to compute the Möbius element — the convolution inverse of <see cref="Zeta"/>.</summary>
-    /// <param name="mobius">On success, the element whose coefficient at <c>n</c> is <c>μ(n)</c>.</param>
-    /// <param name="obstruction">On failure, the certificate attempted and where the attempt stopped.</param>
-    /// <returns><see langword="true"/> when a closure certificate was issued; otherwise <see langword="false"/>.</returns>
-    /// <exception cref="InvalidOperationException">The material is not signed, so the alternating inverse has no value.</exception>
-    /// <remarks>
-    /// <para>
-    /// It is the sum over all lengths of <c>−(ζ − 1)</c>, which is <c>1/(1 + (ζ − 1)) = 1/ζ</c>. The strict part of zeta
-    /// carries no coefficient below degree one, so its <c>k</c>-th power carries none below degree <c>k</c> and the sum
-    /// terminates once <c>k</c> passes the window's degree: the window IS the certificate.
-    /// </para>
-    /// <para>
-    /// <b>The issued certificate is <see cref="ClosureCertificate.Nilpotent"/>, not
-    /// <see cref="ClosureCertificate.LocallyFinite"/>.</b> Local finiteness is what makes the truncation legitimate, but
-    /// what the guarded sum observes is a power that became zero, and it reports what it observed. The distinction is
-    /// visible only in a refusal, which this call does not produce for a window that has a finite basis.
-    /// </para>
-    /// </remarks>
-    public bool TryMobius(out PresentedAlgebra<TValue, TOps>.Element mobius, out SumClosureObstruction obstruction) {
-        // The guard runs first so the refusal names Möbius inversion rather than the negation it happens to reach.
-        RequireSigned();
-
-        var strict = Algebra.Subtract(left: Zeta, right: Algebra.Identity);
-
-        return Algebra.TrySumOverAllLengths(value: Algebra.Negate(value: strict), total: out mobius, obstruction: out obstruction);
-    }
-
     /// <summary>Attempts to find the key of one integer of the window.</summary>
     /// <param name="value">The integer.</param>
     /// <param name="key">On success, the key naming it.</param>
@@ -305,35 +345,54 @@ public sealed class DivisibilityAlgebra<TValue, TOps>
 
         return false;
     }
+    /// <summary>Attempts to compute the Möbius element — the convolution inverse of <see cref="Zeta"/>.</summary>
+    /// <param name="mobius">On success, the element whose coefficient at <c>n</c> is <c>μ(n)</c>.</param>
+    /// <param name="obstruction">On failure, the certificate attempted and where the attempt stopped.</param>
+    /// <returns><see langword="true"/> when a closure certificate was issued; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="InvalidOperationException">The material is not signed, so the alternating inverse has no value.</exception>
+    /// <remarks>
+    /// <para>
+    /// It is the sum over all lengths of <c>−(ζ − 1)</c>, which is <c>1/(1 + (ζ − 1)) = 1/ζ</c>. The strict part of zeta
+    /// carries no coefficient below degree one, so its <c>k</c>-th power carries none below degree <c>k</c> and the sum
+    /// terminates once <c>k</c> passes the window's degree: the window IS the certificate.
+    /// </para>
+    /// <para>
+    /// <b>The issued certificate is <see cref="ClosureCertificate.Nilpotent"/>, not
+    /// <see cref="ClosureCertificate.LocallyFinite"/>.</b> Local finiteness is what makes the truncation legitimate, but
+    /// what the guarded sum observes is a power that became zero, and it reports what it observed. The distinction is
+    /// visible only in a refusal, which this call does not produce for a window that has a finite basis.
+    /// </para>
+    /// </remarks>
+    public bool TryMobius(out PresentedAlgebra<TValue, TOps>.Element mobius, out SumClosureObstruction obstruction) {
+        // The guard runs first so the refusal names Möbius inversion rather than the negation it happens to reach.
+        RequireSigned();
 
+        var strict = Algebra.Subtract(
+            left: Zeta,
+            right: Algebra.Identity
+        );
+
+        return Algebra.TrySumOverAllLengths(
+            value: Algebra.Negate(value: strict),
+            total: out mobius,
+            obstruction: out obstruction
+        );
+    }
     /// <summary>Returns the integer one key names.</summary>
     /// <param name="key">The key.</param>
     /// <returns>The integer.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The key names no normal form of this window.</exception>
     public long Value(long key) {
-        if ((key < 0L) || (key >= m_value.Length)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(key), message: "The key names no integer of this window.");
+        if (
+            (key < 0L) ||
+            (key >= m_value.Length)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(key),
+                message: "The key names no integer of this window."
+            );
         }
 
         return m_value[((int)key)];
     }
-
-    // A non-negative count as a material value, by doubling rather than by repeated addition, so a floor quotient of a
-    // large bound costs its logarithm.
-    private static TValue FromCount(long count, TOps material) {
-        var result = material.Zero;
-        var scale = material.One;
-
-        while (0L != count) {
-            if (0L != (count & 1L)) { result = material.Add(left: result, right: scale); }
-
-            count >>= 1;
-
-            if (0L != count) { scale = material.Add(left: scale, right: scale); }
-        }
-
-        return result;
-    }
-    private ISignedMaterial<TValue, TOps> RequireSigned() =>
-        (m_signed ?? throw new InvalidOperationException(message: "Möbius inversion and sieving both subtract, which an unsigned material cannot express."));
 }

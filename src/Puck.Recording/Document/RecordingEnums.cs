@@ -26,7 +26,6 @@ public enum RecordingClock {
     /// Playback time is simulated time, which runs slower than real time whenever the engine cannot keep up.</summary>
     Sim,
 }
-
 /// <summary>The kind of an audio capture row.</summary>
 [JsonConverter(typeof(StrictEnumConverter<RecordingAudioKind>))]
 public enum RecordingAudioKind {
@@ -35,7 +34,6 @@ public enum RecordingAudioKind {
     /// <summary>The system output loopback (what the machine is playing).</summary>
     Loopback,
 }
-
 /// <summary>How an audio row lands in the container.</summary>
 [JsonConverter(typeof(StrictEnumConverter<RecordingAudioTrackMode>))]
 public enum RecordingAudioTrackMode {
@@ -44,7 +42,6 @@ public enum RecordingAudioTrackMode {
     /// <summary>Its own Matroska track (archival multitrack).</summary>
     Isolated,
 }
-
 /// <summary>The kind of a capture-only overlay row.</summary>
 [JsonConverter(typeof(StrictEnumConverter<OverlayKind>))]
 public enum OverlayKind {
@@ -55,7 +52,6 @@ public enum OverlayKind {
     /// <summary>A running timecode rendered as text.</summary>
     Timecode,
 }
-
 /// <summary>The anchor a normalized overlay position is measured from.</summary>
 [JsonConverter(typeof(StrictEnumConverter<OverlayAnchor>))]
 public enum OverlayAnchor {
@@ -78,7 +74,6 @@ public enum OverlayAnchor {
     /// <summary>The bottom-right corner.</summary>
     BottomRight,
 }
-
 /// <summary>Which clock a <see cref="OverlayKind.Timecode"/> row reads. This is chosen independently of
 /// <see cref="RecordingClock"/>, which is what the container's own timeline measures — see that type's remarks for
 /// why a burnt-in timecode and a player's position are not the same number.</summary>

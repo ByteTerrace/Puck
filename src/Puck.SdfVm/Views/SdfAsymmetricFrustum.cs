@@ -90,12 +90,11 @@ public readonly record struct SdfAsymmetricFrustum(
             Forward: -apertureNormal,
             HalfWidthTangent: (apertureHalfWidth / depth),
             HalfHeightTangent: (apertureHalfHeight / depth),
-            CenterOffset: new Vector2((-offsetRight / depth), (-offsetUp / depth))
+            CenterOffset: new Vector2(x: (-offsetRight / depth), y: (-offsetUp / depth))
         );
 
         return true;
     }
-
     /// <summary>Packs this fit into a <see cref="CameraSnapshot"/> apexed at <paramref name="eye"/> — reusing
     /// <see cref="CameraSnapshot.TanHalfFieldOfView"/>/<see cref="CameraSnapshot.AspectRatio"/> for the symmetric
     /// half-extent (<see cref="HalfHeightTangent"/> and <see cref="HalfWidthTangent"/>/<see cref="HalfHeightTangent"/>

@@ -34,8 +34,8 @@ namespace Puck.Cli.Scan.Analyzers;
 internal sealed class CloneAnalyzer : ISourceAnalyzer {
     // Fingerprint sentinels from the C0 control range: neither byte can occur in C# token text, so a
     // separator never splits a token and a placeholder never collides with real source.
-    private const char PlaceholderPrefix = (char)0x02;
-    private const char TokenSeparator = (char)0x01;
+    private const char PlaceholderPrefix = ((char)0x02);
+    private const char TokenSeparator = ((char)0x01);
 
     private static readonly string CharacterMark = $"{PlaceholderPrefix}C";
     private static readonly string IdentifierMark = $"{PlaceholderPrefix}I";
@@ -96,13 +96,12 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
 
                 var (structural, exact, weight) = Fingerprint(body: body);
 
-                units.Add(item: CreateMember(relative: relative, node: node, body: body, structural: structural, exact: exact, weight: weight));
+                units.Add(item: CreateMember(body: body, exact: exact, node: node, relative: relative, structural: structural, weight: weight));
             }
         }
 
         return units;
     }
-
     // The body spans of clustered units, per file — a block inside one of these is redundant with the
     // unit clone, so the block pass skips it.
     private static Dictionary<string, List<(int Start, int End)>> BodySpansByFile(List<List<Member>> clusters) {
@@ -121,7 +120,6 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
 
         return spansByFile;
     }
-
     // Pass 2: nested blocks of >= minStatements statements that are neither a unit body nor inside a
     // clustered unit, kept only at the OUTERMOST duplicated level so a duplicated outer block never
     // re-reports its inner blocks.
@@ -155,7 +153,7 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
                     continue;
                 }
 
-                candidates.Add(item: (block, CreateMember(relative: relative, node: block, body: block, structural: structural, exact: exact, weight: weight)));
+                candidates.Add(item: (block, CreateMember(body: block, exact: exact, node: block, relative: relative, structural: structural, weight: weight)));
             }
         }
 
@@ -187,7 +185,6 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
             .Select(selector: static group => group.ToList())
             .ToList();
     }
-
     // Heaviest clones first (redundant mass = extra copies x weight), deterministically tie-broken, then
     // numbered.
     private static List<Cluster> OrderAndNumber(List<Cluster> clusters) {
@@ -263,7 +260,6 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
                 value: $"{((cluster.Members.Count - 1) * cluster.Weight),7}  x{cluster.Members.Count} w{cluster.Weight} {abiTag}{cluster.Kind} ({exactTag}) {cluster.Label} [{fileCount} file{((fileCount == 1) ? "" : "s")}]");
         }
     }
-
     // One chunk per cluster (split if a cluster has more than maxPerChunk members), so a fan-out triage
     // spends one agent per duplication cluster.
     private static string BuildCloneGroups(List<Cluster> clusters, int maxPerChunk) {
@@ -350,18 +346,17 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
             Unit: unit,
             Abi: IsAbi(relative: relative, typeName: typeName));
     }
-
     // The body to fingerprint for a callable node — its block body, else its expression body, else null
     // (an abstract/partial/extern/interface declaration or an auto-property accessor has no body and is
     // not a clone candidate).
     private static SyntaxNode? UnitBody(SyntaxNode node) => node switch {
-        MethodDeclarationSyntax method => ((SyntaxNode?)method.Body ?? method.ExpressionBody),
-        ConstructorDeclarationSyntax constructor => ((SyntaxNode?)constructor.Body ?? constructor.ExpressionBody),
-        DestructorDeclarationSyntax destructor => ((SyntaxNode?)destructor.Body ?? destructor.ExpressionBody),
-        OperatorDeclarationSyntax op => ((SyntaxNode?)op.Body ?? op.ExpressionBody),
-        ConversionOperatorDeclarationSyntax conversion => ((SyntaxNode?)conversion.Body ?? conversion.ExpressionBody),
-        AccessorDeclarationSyntax accessor => ((SyntaxNode?)accessor.Body ?? accessor.ExpressionBody),
-        LocalFunctionStatementSyntax local => ((SyntaxNode?)local.Body ?? local.ExpressionBody),
+        MethodDeclarationSyntax method => (((SyntaxNode?)method.Body) ?? method.ExpressionBody),
+        ConstructorDeclarationSyntax constructor => (((SyntaxNode?)constructor.Body) ?? constructor.ExpressionBody),
+        DestructorDeclarationSyntax destructor => (((SyntaxNode?)destructor.Body) ?? destructor.ExpressionBody),
+        OperatorDeclarationSyntax op => (((SyntaxNode?)op.Body) ?? op.ExpressionBody),
+        ConversionOperatorDeclarationSyntax conversion => (((SyntaxNode?)conversion.Body) ?? conversion.ExpressionBody),
+        AccessorDeclarationSyntax accessor => (((SyntaxNode?)accessor.Body) ?? accessor.ExpressionBody),
+        LocalFunctionStatementSyntax local => (((SyntaxNode?)local.Body) ?? local.ExpressionBody),
         _ => null
     };
     private static bool IsUnitNode(SyntaxNode node) => (node
@@ -372,7 +367,6 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
         or ConversionOperatorDeclarationSyntax
         or AccessorDeclarationSyntax
         or LocalFunctionStatementSyntax);
-
     // A human label for a node: (enclosing type, member). For a block it is the enclosing callable's
     // member name plus the block's line, so two block clones are distinguishable in the report.
     private static (string Type, string Member) Describe(SyntaxNode node) {
@@ -414,14 +408,12 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
 
         return $"{ownerName}.{accessor.Keyword.ValueText}";
     }
-
     // True when a member lives in a marshalling/ABI context, so triage can separate deliberate binding
     // mirrors from real copy-paste.
     private static bool IsAbi(string relative, string typeName) =>
-        (relative.Contains(value: "VulkanNative", comparisonType: StringComparison.OrdinalIgnoreCase)
-        || relative.Contains(value: "Vulkan/Bindings", comparisonType: StringComparison.OrdinalIgnoreCase)
-        || typeName.StartsWith(value: "Vk", comparisonType: StringComparison.Ordinal));
-
+        (relative.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "VulkanNative")
+        || relative.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Vulkan/Bindings")
+        || typeName.StartsWith(comparisonType: StringComparison.Ordinal, value: "Vk"));
     // Two hashes over the body's token stream (trivia excluded, so whitespace and comments never
     // matter): STRUCTURAL abstracts identifiers and literals to a placeholder (Type-2 clones collide),
     // EXACT keeps the raw token text (Type-1).
@@ -438,7 +430,6 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
 
         return (Hash(value: structural.ToString()), Hash(value: exact.ToString()), weight);
     }
-
     // Structural canonicalization: identifiers and literals collapse to a kind marker (the placeholder
     // prefix keeps a marker from ever colliding with literal token text); keywords, punctuation and
     // operators keep their text, as they ARE the structure that must match.

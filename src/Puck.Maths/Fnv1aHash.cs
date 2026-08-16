@@ -16,14 +16,6 @@ public struct Fnv1aHash {
 
     private ulong m_hash;
 
-    /// <summary>Creates an accumulator primed with the FNV-1a offset basis.</summary>
-    /// <returns>A ready-to-fold accumulator.</returns>
-    public static Fnv1aHash Create() =>
-        new() { m_hash = OffsetBasis, };
-
-    /// <summary>Gets the current 64-bit hash value.</summary>
-    public readonly ulong Value => m_hash;
-
     /// <summary>Folds one byte into the hash.</summary>
     /// <param name="value">The byte to fold.</param>
     public void Add(byte value) {
@@ -55,7 +47,6 @@ public struct Fnv1aHash {
     /// <param name="value">The value to fold.</param>
     public void Add(long value) =>
         Add(value: unchecked((ulong)value));
-
     /// <summary>Computes the 64-bit FNV-1a hash of a byte span.</summary>
     /// <param name="values">The bytes to hash.</param>
     /// <returns>The hash value.</returns>
@@ -66,4 +57,11 @@ public struct Fnv1aHash {
 
         return hash.Value;
     }
+    /// <summary>Creates an accumulator primed with the FNV-1a offset basis.</summary>
+    /// <returns>A ready-to-fold accumulator.</returns>
+    public static Fnv1aHash Create() =>
+        new() { m_hash = OffsetBasis, };
+
+    /// <summary>Gets the current 64-bit hash value.</summary>
+    public readonly ulong Value => m_hash;
 }

@@ -6,8 +6,6 @@ public sealed class LauncherOptions {
     /// <summary>Gets the wall-clock duration after which the terminal auto-exits (for headless or scripted
     /// runs), or <see langword="null"/> to run until closed.</summary>
     public TimeSpan? ExitAfter { get; init; }
-    /// <summary>Gets the target render rate in Hz, or <see langword="null"/> for automatic display-aware pacing. Defaults to 60.</summary>
-    public double? TargetRenderRate { get; init; } = 60.0;
     /// <summary>Gets a value indicating whether the genlock phase-aligner is enabled. Defaults to enabled.</summary>
     public bool GenlockEnabled { get; init; } = true;
     /// <summary>Gets a value indicating whether to periodically log the measured present interval / genlock phase
@@ -16,4 +14,6 @@ public sealed class LauncherOptions {
     /// <summary>Gets the delay, in seconds, before a one-shot synthetic device-loss is injected to exercise recovery,
     /// or <see langword="null"/> to leave it off.</summary>
     public double? SyntheticDeviceLossSeconds { get; init; }
+    /// <summary>Gets the target render rate in Hz, or <see langword="null"/> for automatic display-aware pacing. Defaults to 60.</summary>
+    public double? TargetRenderRate { get; init; } = 60.0;
 }

@@ -16,7 +16,7 @@ namespace Puck.Cli.Format.Rewriters;
 // idempotent.
 internal sealed class DeclSpacingRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitBlock(BlockSyntax node) {
-        var visited = (BlockSyntax)base.VisitBlock(node: node)!;
+        var visited = ((BlockSyntax)base.VisitBlock(node: node)!);
         var statements = visited.Statements;
 
         if (statements.Count < 2) {
@@ -32,7 +32,7 @@ internal sealed class DeclSpacingRewriter : CSharpSyntaxRewriter {
             rebuilt.Add(
                 item: (((previous is LocalDeclarationStatementSyntax)
                     && (current is not LocalDeclarationStatementSyntax)
-                    && OnSeparateLines(previous: previous, current: current)
+                    && OnSeparateLines(current: current, previous: previous)
                     && !RewriteShaping.HasCommentOrDirective(trivia: current.GetLeadingTrivia()))
                     ? current.WithLeadingTrivia(trivia: RewriteShaping.SetBlankLines(lead: current.GetLeadingTrivia(), desired: 1))
                     : current));

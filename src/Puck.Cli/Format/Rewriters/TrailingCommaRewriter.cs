@@ -9,7 +9,7 @@ namespace Puck.Cli.Format.Rewriters;
 // initializers are left alone, and an initializer that already ends with a comma is untouched (idempotent).
 internal sealed class TrailingCommaRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node) {
-        var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(node: node)!;
+        var visited = ((InitializerExpressionSyntax)base.VisitInitializerExpression(node: node)!);
         var expressions = visited.Expressions;
         var separators = expressions.GetSeparators().ToList();
 

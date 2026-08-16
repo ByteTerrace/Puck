@@ -8,12 +8,12 @@ public sealed class BindingSessionTests {
         var first = RunProtocol();
         var second = RunProtocol();
 
-        Assert.Equal(expected: first.Events, actual: second.Events);
-        Assert.Equal(expected: first.Captures, actual: second.Captures);
-        Assert.Contains(collection: first.Events, filter: static item => item.Kind == BindingSessionEventKind.ReservedRejected);
-        Assert.Contains(collection: first.Events, filter: static item => item.Kind == BindingSessionEventKind.Mismatch);
-        Assert.Contains(collection: first.Events, filter: static item => item.Kind == BindingSessionEventKind.ConflictRejected);
-        Assert.Contains(collection: first.Events, filter: static item => item.Kind == BindingSessionEventKind.ConfirmationProgress);
+        Assert.Equal(actual: second.Events, expected: first.Events);
+        Assert.Equal(actual: second.Captures, expected: first.Captures);
+        Assert.Contains(collection: first.Events, filter: static item => (item.Kind == BindingSessionEventKind.ReservedRejected));
+        Assert.Contains(collection: first.Events, filter: static item => (item.Kind == BindingSessionEventKind.Mismatch));
+        Assert.Contains(collection: first.Events, filter: static item => (item.Kind == BindingSessionEventKind.ConflictRejected));
+        Assert.Contains(collection: first.Events, filter: static item => (item.Kind == BindingSessionEventKind.ConfirmationProgress));
         Assert.Equal(expected: BindingSessionEventKind.SessionCompleted, actual: first.Events[^1].Kind);
 
         Assert.Collection(
@@ -35,7 +35,6 @@ public sealed class BindingSessionTests {
             }
         );
     }
-
     [Fact]
     public void ResultRewritesDisplacesAppendsAndStillCompiles() {
         var document = Document(entries: [
@@ -49,19 +48,18 @@ public sealed class BindingSessionTests {
         ]);
 
         var rewritten = result.Apply(
+            displaced: out var displaced,
             document: document,
-            pageId: "base",
-            displaced: out var displaced
+            pageId: "base"
         );
-        var entries = Assert.Single(rewritten.Chords).Page!.Entries;
+        var entries = Assert.Single(collection: rewritten.Chords).Page!.Entries;
 
-        Assert.Equal(expected: "menu", actual: Assert.Single(displaced).Command);
-        Assert.Equal(expected: "pad.east", actual: Assert.Single(entries, predicate: static entry => entry.Command == "jump").Source);
-        Assert.Equal(expected: "pad.north", actual: Assert.Single(entries, predicate: static entry => entry.Command == "keep").Source);
-        Assert.Equal(expected: "pad.west", actual: Assert.Single(entries, predicate: static entry => entry.Command == "new-action").Source);
+        Assert.Equal(expected: "menu", actual: Assert.Single(collection: displaced).Command);
+        Assert.Equal(expected: "pad.east", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "jump")).Source);
+        Assert.Equal(expected: "pad.north", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "keep")).Source);
+        Assert.Equal(expected: "pad.west", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "new-action")).Source);
         _ = BindingProfile.Compile(document: rewritten);
     }
-
     [Fact]
     public void PlanFromPageSkipsActivatorRowsAndReservesModifierSources() {
         var document = new BindingProfileDocument(
@@ -87,14 +85,13 @@ public sealed class BindingSessionTests {
             requiredPresses: 2
         );
 
-        var step = Assert.Single(plan.Steps);
+        var step = Assert.Single(collection: plan.Steps);
 
         Assert.Equal(expected: "jump", actual: step.Command);
         Assert.Equal(expected: "pad.south", actual: step.SuggestedSource);
         Assert.Equal(expected: 2, actual: plan.RequiredPresses);
-        Assert.Equal(expected: "pad.leftTrigger", actual: Assert.Single(plan.ReservedSources!));
+        Assert.Equal(expected: "pad.leftTrigger", actual: Assert.Single(collection: plan.ReservedSources!));
     }
-
     [Fact]
     public void ResultMatchesCommandIdentityCaseInsensitively() {
         var document = Document(entries: [new BindingPageEntryDefinition(
@@ -108,11 +105,11 @@ public sealed class BindingSessionTests {
         )]);
 
         var rewritten = result.Apply(
+            displaced: out _,
             document: document,
-            pageId: "base",
-            displaced: out _
+            pageId: "base"
         );
-        var entry = Assert.Single(Assert.Single(rewritten.Chords).Page!.Entries);
+        var entry = Assert.Single(collection: Assert.Single(collection: rewritten.Chords).Page!.Entries);
 
         Assert.Equal(expected: "jump", actual: entry.Command);
         Assert.Equal(expected: "key.new", actual: entry.Source);
@@ -155,7 +152,6 @@ public sealed class BindingSessionTests {
 
         return (Events: events, Captures: session.Result.Captures);
     }
-
     private static BindingSessionEvent Press(BindingSession session, string source) {
         var result = session.Advance(signal: InputSignal.Press(source: source));
 
@@ -163,7 +159,6 @@ public sealed class BindingSessionTests {
 
         return result;
     }
-
     private static InputSignal Axis(string source, float value) {
         return new InputSignal(
             Source: source,
@@ -172,7 +167,6 @@ public sealed class BindingSessionTests {
             Phase: CommandPhase.Active
         );
     }
-
     private static BindingProfileDocument Document(IReadOnlyList<BindingPageEntryDefinition> entries) {
         return new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,

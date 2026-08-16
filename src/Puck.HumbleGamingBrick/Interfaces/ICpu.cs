@@ -27,12 +27,10 @@ public interface ICpu {
     ushort StackPointer { get; set; }
     /// <summary>Gets or sets the 16-bit program counter (PC).</summary>
     ushort ProgramCounter { get; set; }
-
     /// <summary>Gets whether the processor is stalled in HALT (or STOP), burning cycles until an interrupt wakes it.
     /// Read-only observability (the halt-share measurement rides this); the state itself is machine state and lives in
     /// the snapshot.</summary>
     bool IsHalted { get; }
-
     /// <summary>Gets whether the interrupt master enable (IME) is set — the CPU-internal master gate the IE/IF register
     /// masks feed. Read-only observability for a debugger's register dump; the state itself is in the snapshot.</summary>
     bool InterruptMasterEnable { get; }

@@ -53,13 +53,18 @@ public static class SecureRandom {
         // Guard the inverted interval: an unsigned (maximum - minimum) would wrap to a huge span and silently draw an
         // unrelated value, so reject it rather than honour a range that was never asked for.
         if (maximum < minimum) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(maximum), actualValue: maximum, message: "The maximum must be greater than or equal to the minimum.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(maximum),
+                actualValue: maximum,
+                message: "The maximum must be greater than or equal to the minimum."
+            );
         }
 
         var range = (maximum - minimum);
 
         return ((range != T.AllBitsSet)
             ? (NextUInt(exclusiveHigh: (range + T.One)) + minimum)
-            : NextUInt<T>());
+            : NextUInt<T>()
+        );
     }
 }

@@ -11,6 +11,27 @@ namespace Puck.Recording.Session;
 internal static class Av1TemporalDelimiterFilter {
     private const int ObuTemporalDelimiter = 2;
 
+    private static bool TryReadLeb128(ReadOnlySpan<byte> data, ref int offset, out ulong value) {
+        value = 0;
+
+        for (var i = 0; (i < 8); i++) {
+            if (offset >= data.Length) {
+                return false;
+            }
+
+            var b = data[offset];
+
+            offset++;
+            value |= (((ulong)(b & 0x7F)) << (i * 7));
+
+            if ((b & 0x80) == 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Copies <paramref name="temporalUnit"/> into <paramref name="destination"/> minus any temporal-delimiter
     /// OBUs, growing the buffer as needed.</summary>
     /// <param name="temporalUnit">The encoder's AV1 temporal unit (a run of OBUs).</param>
@@ -40,25 +61,35 @@ internal static class Av1TemporalDelimiterFilter {
             int payloadLength;
 
             if (hasSizeField == 1) {
-                if (!TryReadLeb128(data: temporalUnit, offset: ref cursor, value: out var size)) {
+                if (!TryReadLeb128(
+                    data: temporalUnit,
+                    offset: ref cursor,
+                    value: out var size
+                )) {
                     return -1;
                 }
 
-                payloadLength = (int)size;
+                payloadLength = ((int)size);
             } else {
                 payloadLength = (temporalUnit.Length - cursor);
             }
 
             var obuEnd = (cursor + payloadLength);
 
-            if ((payloadLength < 0) || (obuEnd > temporalUnit.Length)) {
+            if (
+                (payloadLength < 0) ||
+                (obuEnd > temporalUnit.Length)
+            ) {
                 return -1;
             }
 
             if (obuType != ObuTemporalDelimiter) {
                 var obuLength = (obuEnd - index);
 
-                temporalUnit.Slice(start: index, length: obuLength).CopyTo(destination: destination.AsSpan(start: written));
+                temporalUnit.Slice(
+                    length: obuLength,
+                    start: index
+                ).CopyTo(destination: destination.AsSpan(start: written));
                 written += obuLength;
             }
 
@@ -66,26 +97,5 @@ internal static class Av1TemporalDelimiterFilter {
         }
 
         return written;
-    }
-
-    private static bool TryReadLeb128(ReadOnlySpan<byte> data, ref int offset, out ulong value) {
-        value = 0;
-
-        for (var i = 0; (i < 8); i++) {
-            if (offset >= data.Length) {
-                return false;
-            }
-
-            var b = data[offset];
-
-            offset++;
-            value |= (((ulong)(b & 0x7F)) << (i * 7));
-
-            if ((b & 0x80) == 0) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

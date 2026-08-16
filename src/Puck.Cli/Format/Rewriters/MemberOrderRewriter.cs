@@ -9,18 +9,27 @@ namespace Puck.Cli.Format.Rewriters;
 // declared name — the same convention `named-args`/`init-order` apply to arguments and object-
 // initializer members. The block boundary is exactly the run `member-spacing` packs tight (same kind AND
 // same scope), so each blank-line-delimited group sorts independently. Regular (non-const) fields are
-// NEVER reordered — their order is a [StructLayout]/ABI contract. A block is left untouched if ANY of
-// its members carries a leading/trailing comment or #directive (a human arranged it; reordering would
-// scramble the annotation). Per-slot trivia is reassigned positionally, so the tight one-per-line layout
-// is preserved and a second run is a no-op.
+// NEVER reordered — their order is a [StructLayout]/ABI contract — and initializer-coupled properties
+// stay in source order. A block is left untouched if ANY member carries a leading/trailing comment or
+// #directive (slot reassignment would scramble the annotation). Per-slot trivia is reassigned
+// positionally, so the tight one-per-line layout is preserved and a second run is a no-op.
 internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter {
-    public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix(node: (TypeDeclarationSyntax)base.VisitClassDeclaration(node: node)!);
-    public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix(node: (TypeDeclarationSyntax)base.VisitStructDeclaration(node: node)!);
-    public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix(node: (TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node: node)!);
-    public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix(node: (TypeDeclarationSyntax)base.VisitRecordDeclaration(node: node)!);
+    public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitClassDeclaration(node: node)!));
+    public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitStructDeclaration(node: node)!));
+    public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitInterfaceDeclaration(node: node)!));
+    public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Fix(node: ((TypeDeclarationSyntax)base.VisitRecordDeclaration(node: node)!));
 
-    private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) =>
-        node.WithMembers(members: Reorder(members: node.Members));
+    private static TypeDeclarationSyntax Fix(TypeDeclarationSyntax node) {
+        if ((node is StructDeclarationSyntax)
+            || ((node is RecordDeclarationSyntax record) && record.ClassOrStructKeyword.IsKind(kind: SyntaxKind.StructKeyword))
+            || node.Modifiers.Any(predicate: static modifier => modifier.IsKind(kind: SyntaxKind.PartialKeyword))
+            || (node.AttributeLists.Count > 0)
+            || node.Members.Any(predicate: static member => member.ContainsDirectives)) {
+            return node;
+        }
+
+        return node.WithMembers(members: Reorder(members: node.Members));
+    }
     private static SyntaxList<MemberDeclarationSyntax> Reorder(SyntaxList<MemberDeclarationSyntax> members) {
         if (members.Count < 2) {
             return members;
@@ -28,10 +37,11 @@ internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter {
 
         var result = new List<MemberDeclarationSyntax>(capacity: members.Count);
         var run = new List<MemberDeclarationSyntax>();
+        var coupled = InitializerCoupling.CoupledMemberNames(members: members);
         string? runKey = null;
 
         foreach (var member in members) {
-            var key = (RewriteShaping.IsAnnotated(node: member) ? null : GroupKey(member: member));
+            var key = (RewriteShaping.IsAnnotated(node: member) ? null : GroupKey(coupled: coupled, member: member));
 
             if ((key is not null) && (key == runKey)) {
                 run.Add(item: member);
@@ -76,13 +86,12 @@ internal sealed class MemberOrderRewriter : CSharpSyntaxRewriter {
 
         run.Clear();
     }
-
     // The block key: kind (const / property) plus accessibility scope. A null key marks a member that
     // cannot join a sortable run (any other member kind).
-    private static string? GroupKey(MemberDeclarationSyntax member) {
+    private static string? GroupKey(MemberDeclarationSyntax member, HashSet<string> coupled) {
         var kind = member switch {
             FieldDeclarationSyntax field when field.Modifiers.Any(predicate: static modifier => modifier.IsKind(kind: SyntaxKind.ConstKeyword)) => "const",
-            PropertyDeclarationSyntax => "property",
+            PropertyDeclarationSyntax property when !coupled.Contains(item: property.Identifier.ValueText) => "property",
             _ => null
         };
 

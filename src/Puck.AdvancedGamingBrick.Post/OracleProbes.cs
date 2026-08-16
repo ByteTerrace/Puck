@@ -149,12 +149,12 @@ internal static class OracleProbes {
         }
 
         var results = RunRom(
-            rom: rom,
+            hasRetailBios: hasRetailBios,
+            needsBios: needsBios,
             resultCount: ((resultIndex < 0)
             ? 2
             : 1),
-            hasRetailBios: hasRetailBios,
-            needsBios: needsBios
+            rom: rom
         );
 
         if (results is null) {
@@ -169,7 +169,6 @@ internal static class OracleProbes {
 
         Console.WriteLine(value: $"   {name,-30} measured={measured,-18} documented={documented}");
     }
-
     // Builds a direct-booted machine over the probe ROM, runs it to its spin loop (or a step cap), and reads the
     // result words the ROM stored to EWRAM (0x02000000+). Returns null when the ROM could not run.
     private static uint[]? RunRom(byte[] rom, int resultCount, bool hasRetailBios, bool needsBios) {
@@ -184,7 +183,7 @@ internal static class OracleProbes {
 
         using var provider = services.BuildServiceProvider();
         var machine = provider.CreateScope().ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
-        var bus = (AgbBus)machine.Bus;
+        var bus = ((AgbBus)machine.Bus);
 
         machine.DirectBoot();
 
@@ -211,12 +210,11 @@ internal static class OracleProbes {
         var results = new uint[resultCount];
 
         for (var i = 0; (i < resultCount); ++i) {
-            results[i] = bus.DebugRead32(address: (ResultBase + (uint)(i * 4)));
+            results[i] = bus.DebugRead32(address: (ResultBase + ((uint)(i * 4))));
         }
 
         return results;
     }
-
     // -------------------------------------------------------------------------------------------------------------
     // Component-level probe: the hardware-measured Direct Sound FIFO (7-word ring + 32-bit playing buffer). We drive
     // AgbApu directly and assert the model's documented properties. Expected values are DERIVED FROM THE MODEL SPEC, so
@@ -254,7 +252,7 @@ internal static class OracleProbes {
             for (var i = 0; (i < 4); ++i) {
                 apu.WriteFifoByte(
                     fifo: 0,
-                    value: (byte)(word >> (8 * i))
+                    value: ((byte)(word >> (8 * i)))
                 );
             }
         }
@@ -364,7 +362,6 @@ internal static class OracleProbes {
 
         return (ok, lines);
     }
-
     // -------------------------------------------------------------------------------------------------------------
     // ROM probe builders. Each is a direct-boot ARM ROM: it stores its result word(s) to EWRAM 0x02000000+ and spins.
     // -------------------------------------------------------------------------------------------------------------
@@ -390,9 +387,9 @@ internal static class OracleProbes {
             value: 0x02000100u
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         // Channel 1 (regs at 0xBC/0xC0/0xC4/0xC6): SAD=0x02000100, DAD=0x02000004, count 1, 32-bit immediate enable.
         a.LdrConst(
@@ -400,27 +397,27 @@ internal static class OracleProbes {
             value: 0x02000100u
         );
         a.Str(
+            imm12: 0xBC,
             rd: 1,
-            rn: 0,
-            imm12: 0xBC
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: 0x02000004u
         );
         a.Str(
+            imm12: 0xC0,
             rd: 1,
-            rn: 0,
-            imm12: 0xC0
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: (0x8400u << 16) | 1u
         ); // CNT_L=1, CNT_H=0x8400 (enable + 32-bit + immediate)
         a.Str(
+            imm12: 0xC4,
             rd: 1,
-            rn: 0,
-            imm12: 0xC4
+            rn: 0
         );
         // Channel 0 (regs at 0xB0/0xB4/0xB8/0xBA): SAD=0x00000000 (BIOS, undrivable), DAD=0x02000000, count 1, 32-bit.
         a.LdrConst(
@@ -428,27 +425,27 @@ internal static class OracleProbes {
             value: 0x00000000u
         );
         a.Str(
+            imm12: 0xB0,
             rd: 1,
-            rn: 0,
-            imm12: 0xB0
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: 0x02000000u
         );
         a.Str(
+            imm12: 0xB4,
             rd: 1,
-            rn: 0,
-            imm12: 0xB4
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: (0x8400u << 16) | 1u
         );
         a.Str(
+            imm12: 0xB8,
             rd: 1,
-            rn: 0,
-            imm12: 0xB8
+            rn: 0
         );
         // Give the pending channel-0 DMA a bus access to run on, then spin.
         a.Nop();
@@ -456,7 +453,6 @@ internal static class OracleProbes {
 
         return a.Finish();
     }
-
     // Timer0 (÷1) enabled, then an immediate 4-word DMA is triggered; the timer is read right after. The measured
     // value reflects the DMA start delay + burst cycles. Documented corpus target: 20.
     private static byte[] BuildDmaStartDelayProbe() {
@@ -471,9 +467,9 @@ internal static class OracleProbes {
             value: 0x00800000u
         );          // TM0: reload 0, control 0x80 (enable, ÷1)
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         // Immediate DMA3 (regs 0xD4/0xD8/0xDC/0xDE): EWRAM→EWRAM, 4 words, 32-bit.
         a.LdrConst(
@@ -481,47 +477,46 @@ internal static class OracleProbes {
             value: 0x02000100u
         );
         a.Str(
+            imm12: 0xD4,
             rd: 1,
-            rn: 0,
-            imm12: 0xD4
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: 0x02000200u
         );
         a.Str(
+            imm12: 0xD8,
             rd: 1,
-            rn: 0,
-            imm12: 0xD8
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: (0x8400u << 16) | 4u
         );
         a.Str(
+            imm12: 0xDC,
             rd: 1,
-            rn: 0,
-            imm12: 0xDC
+            rn: 0
         );
         a.Ldr(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // read TM0COUNT
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Spin();
 
         return a.Finish();
     }
-
     // Timer0 (÷1) enabled, an immediate 1-word DMA runs, then a plain memory access follows: hardware forces the
     // instruction fetch after a DMA non-sequential. The timer read afterward captures the combined cost. Target: 88.
     private static byte[] BuildDmaForceNseqProbe() {
@@ -536,59 +531,58 @@ internal static class OracleProbes {
             value: 0x00800000u
         );
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: 0x02000100u
         );
         a.Str(
+            imm12: 0xD4,
             rd: 1,
-            rn: 0,
-            imm12: 0xD4
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: 0x02000200u
         );
         a.Str(
+            imm12: 0xD8,
             rd: 1,
-            rn: 0,
-            imm12: 0xD8
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: (0x8400u << 16) | 1u
         );
         a.Str(
+            imm12: 0xDC,
             rd: 1,
-            rn: 0,
-            imm12: 0xDC
+            rn: 0
         );
         a.Nop();
         a.Nop();
         a.Nop();
         a.Ldr(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Spin();
 
         return a.Finish();
     }
-
     // Enable timer0 (÷1), read it a few cycles later (result 0), then STOP it and read again (result 1, frozen).
     // Documented: reads ~3 while running, then a frozen value (corpus target 8).
     private static byte[] BuildTimerStartStopProbe() {
@@ -603,48 +597,47 @@ internal static class OracleProbes {
             value: 0x00800000u
         );          // enable ÷1
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.Ldr(
+            imm12: 0x100,
             rd: 3,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // read running counter → result 0
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
+            imm12: 0,
             rd: 3,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Mov(
-            rd: 1,
-            imm8: 0
+            imm8: 0,
+            rd: 1
         );
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // reload 0, control 0 → stop (freezes the counter)
         a.Ldr(
+            imm12: 0x100,
             rd: 3,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // read frozen counter → result 1
         a.Str(
+            imm12: 4,
             rd: 3,
-            rn: 2,
-            imm12: 4
+            rn: 2
         );
         a.Spin();
 
         return a.Finish();
     }
-
     // Timer0 near overflow (reload 0xFFF0), let it run, then write a new reload while live and read the counter: probes
     // whether the live counter or the freshly written reload wins at the boundary. Documented boundary: 0xDEAE/0xFFF9.
     private static byte[] BuildTimerReloadRaceProbe() {
@@ -659,50 +652,49 @@ internal static class OracleProbes {
             value: (0x0080u << 16) | 0xFFF0u
         ); // reload 0xFFF0, enable ÷1
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.Nop();
         a.Nop();
         a.Ldr(
+            imm12: 0x100,
             rd: 3,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // read live counter → result 0
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
+            imm12: 0,
             rd: 3,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.LdrConst(
             rd: 1,
             value: 0xDEAEu
         );              // write a new reload low half while live
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.Ldr(
+            imm12: 0x100,
             rd: 3,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // read again → result 1
         a.Str(
+            imm12: 4,
             rd: 3,
-            rn: 2,
-            imm12: 4
+            rn: 2
         );
         a.Spin();
 
         return a.Finish();
     }
-
     // Timer0 raises an IRQ; a ROM handler (installed at the BIOS user-vector 0x03007FFC) reads timer1 on entry to
     // capture the elapsed cycles through the BIOS dispatch path. timer1 is (re)started to 0 immediately before arming
     // timer0 so the reading isolates the dispatch window as closely as this coarse harness allows. This is a coarse
@@ -716,94 +708,93 @@ internal static class OracleProbes {
             value: IoBase
         );
         a.LdrLabel(
-            rd: 1,
-            label: "handler"
+            label: "handler",
+            rd: 1
         );
         a.LdrConst(
             rd: 2,
             value: 0x03007FFCu
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Mov(
-            rd: 1,
-            imm8: 1
+            imm8: 1,
+            rd: 1
         );
         a.Str(
+            imm12: 0x208,
             rd: 1,
-            rn: 0,
-            imm12: 0x208
+            rn: 0
         );              // IME = 1
         a.Mov(
-            rd: 1,
-            imm8: 8
+            imm8: 8,
+            rd: 1
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );              // IE = timer0
         a.LdrConst(
             rd: 1,
             value: 0x00800000u
         );          // timer1 ÷1 free-running (the latency clock), started at 0
         a.Str(
+            imm12: 0x104,
             rd: 1,
-            rn: 0,
-            imm12: 0x104
+            rn: 0
         );
         a.LdrConst(
             rd: 1,
             value: (0x00C0u << 16) | 0xFFFFu
         ); // timer0 reload 0xFFFF, enable + IRQ, ÷1 (overflows next)
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.Spin();
 
         a.Label(name: "handler");
         a.Ldr(
+            imm12: 0x104,
             rd: 1,
-            rn: 0,
-            imm12: 0x104
+            rn: 0
         );              // read TM1COUNT (elapsed through the dispatch path)
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Mov(
-            rd: 1,
-            imm8: 0
+            imm8: 0,
+            rd: 1
         );
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // disable timer0 so it fires ONCE (no IRQ storm)
         a.LdrConst(
             rd: 1,
             value: 0x00080008u
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );              // ack timer0
         a.Bx(rn: 14);
 
         return a.Finish();
     }
-
     // Enable timer0 (÷1), HALT (write HALTCNT=0), and immediately raise a pending timer IRQ so the CPU wakes; the
     // timer is read after wake, capturing the halt-exit latency. Documented direct halt-exit: 12. Needs the retail BIOS.
     private static byte[] BuildHaltExitProbe() {
@@ -814,67 +805,67 @@ internal static class OracleProbes {
             value: IoBase
         );
         a.LdrLabel(
-            rd: 1,
-            label: "handler"
+            label: "handler",
+            rd: 1
         );
         a.LdrConst(
             rd: 2,
             value: 0x03007FFCu
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Mov(
-            rd: 1,
-            imm8: 1
+            imm8: 1,
+            rd: 1
         );
         a.Str(
+            imm12: 0x208,
             rd: 1,
-            rn: 0,
-            imm12: 0x208
+            rn: 0
         );              // IME = 1
         a.Mov(
-            rd: 1,
-            imm8: 8
+            imm8: 8,
+            rd: 1
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );              // IE = timer0
         a.LdrConst(
             rd: 1,
             value: (0x00C0u << 16) | 0xFFFFu
         ); // timer0 overflow next cycle, enable + IRQ
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.Mov(
-            rd: 1,
-            imm8: 0
+            imm8: 0,
+            rd: 1
         );
         a.Str(
+            imm12: 0x301,
             rd: 1,
-            rn: 0,
-            imm12: 0x301
+            rn: 0
         );              // HALTCNT = 0 → halt (wakes on the timer IRQ)
         a.Ldr(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // read timer0 after wake → result 0
         a.LdrConst(
             rd: 2,
             value: ResultBase
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Spin();
 
@@ -888,9 +879,9 @@ internal static class OracleProbes {
             value: 0x00080008u
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 3,
-            imm12: 0x200
+            rn: 3
         );              // ack timer0
         a.Bx(rn: 14);
 
@@ -910,13 +901,13 @@ internal static class OracleProbes {
         private readonly Dictionary<string, int> m_labels = new();
 
         public void Label(string name) => m_labels[name] = m_code.Count;
-        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | ((uint)rd << 12) | (imm8 & 0xFFu));
+        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | (((uint)rd) << 12) | (imm8 & 0xFFu));
         public void Nop() => m_code.Add(item: 0xE1A00000u); // mov r0,r0
         public void Str(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5800000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm12 & 0xFFFu));
+            m_code.Add(item: 0xE5800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
         public void Ldr(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5900000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm12 & 0xFFFu));
-        public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | (uint)rn);
+            m_code.Add(item: 0xE5900000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
+        public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | ((uint)rn));
         public void Spin() => m_code.Add(item: 0xEAFFFFFEu); // b . (branch to self)
         public void LdrConst(int rd, uint value) {
             m_loads.Add(item: (m_code.Count, rd, value, null));
@@ -933,7 +924,7 @@ internal static class OracleProbes {
             foreach (var (instr, rd, value, label) in m_loads) {
                 var resolved = ((label is null)
                     ? value
-                    : (RomBase + ((uint)m_labels[label] * 4u)));
+                    : (RomBase + (((uint)m_labels[label]) * 4u)));
                 var poolIndex = pool.IndexOf(item: resolved);
 
                 if (poolIndex < 0) {
@@ -944,7 +935,7 @@ internal static class OracleProbes {
                 var literalWord = (poolBase + poolIndex);
                 var offsetBytes = ((literalWord - (instr + 2)) * 4);
 
-                m_code[instr] = 0xE59F0000u | ((uint)rd << 12) | ((uint)offsetBytes & 0xFFFu);
+                m_code[instr] = 0xE59F0000u | (((uint)rd) << 12) | (((uint)offsetBytes) & 0xFFFu);
             }
 
             var words = new List<uint>(collection: m_code);

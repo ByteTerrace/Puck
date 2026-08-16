@@ -9,6 +9,7 @@ public sealed unsafe class VulkanQueueSubmitter {
 
     private readonly Dictionary<nint, DevicePointers> m_pointers = [];
     private readonly Lock m_syncRoot = new();
+
     private delegate* unmanaged[Cdecl]<nint, byte*, nint> m_getDeviceProcAddr;
 
     private struct DevicePointers {
@@ -73,8 +74,8 @@ public sealed unsafe class VulkanQueueSubmitter {
     private static void SubmitCore(DevicePointers pointers, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle) {
         fixed (nint* commandBuffersPointer = commandBufferHandles) {
             var submitInfo = new VkSubmitInfo {
-                CommandBufferCount = (uint)commandBufferHandles.Length,
-                PCommandBuffers = (nint)commandBuffersPointer,
+                CommandBufferCount = ((uint)commandBufferHandles.Length),
+                PCommandBuffers = ((nint)commandBuffersPointer),
                 SType = StructureTypeSubmitInfo,
             };
 
@@ -99,17 +100,17 @@ public sealed unsafe class VulkanQueueSubmitter {
             DevicePointers pointers = default;
 
             fixed (byte* name = "vkQueueSubmit"u8) {
-                pointers.QueueSubmit = (delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)getAddr(
+                pointers.QueueSubmit = ((delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)getAddr(
                     deviceHandle,
                     name
-                );
+                ));
             }
 
             fixed (byte* name = "vkQueueWaitIdle"u8) {
-                pointers.QueueWaitIdle = (delegate* unmanaged[Cdecl]<nint, VkResult>)getAddr(
+                pointers.QueueWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)getAddr(
                     deviceHandle,
                     name
-                );
+                ));
             }
 
             m_pointers[deviceHandle] = pointers;
@@ -122,7 +123,7 @@ public sealed unsafe class VulkanQueueSubmitter {
             return m_getDeviceProcAddr;
         }
 
-        m_getDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
+        m_getDeviceProcAddr = ((delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr"));
 
         return m_getDeviceProcAddr;
     }

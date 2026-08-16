@@ -14,24 +14,27 @@ namespace Puck.Overlays;
 /// one line. Past <see cref="MaxMessageChars"/> × <see cref="MaxMessageLines"/> the tail drops — the whole text
 /// always survives on stderr and in the console panel.</remarks>
 public sealed class ToastWriter {
-    /// <summary>The characters one wrapped line holds.</summary>
-    public const int MaxMessageChars = 44;
-    /// <summary>The wrapped lines the chip grows to.</summary>
-    public const int MaxMessageLines = 4;
+    private const string ErrorLabel = "ER";
+    private const string OkLabel = "OK";
+
     /// <summary>The <see cref="OkLabel"/>/<see cref="ErrorLabel"/> literals' shared character count — the ONE
     /// source <see cref="OverlayChannelLeases"/> reads for its text-word reservation. The label's <c>WriteText</c>
     /// call clamps to this constant, so an edit to either literal that forgets to update it truncates (reported,
     /// never silent) instead of quietly overrunning the reservation.</summary>
     public const int LabelChars = 2;
+    /// <summary>The characters one wrapped line holds.</summary>
+    public const int MaxMessageChars = 44;
+    /// <summary>The wrapped lines the chip grows to.</summary>
+    public const int MaxMessageLines = 4;
 
-    private const string ErrorLabel = "ER";
-    private const string OkLabel = "OK";
+    private readonly IOverlayToastSource m_source;
+
+    private ulong m_firstTicks;
+    private int m_sequenceSeen;
+
     // Lifetime and fade in DETERMINISTIC engine ticks (content tick, never wall clock).
     private static readonly ulong DurationTicks = (3UL * EngineTicks.PerSecond);
     private static readonly ulong FadeTicks = ((ulong)((DesignTokens.Motion.DurMed / 1000f) * EngineTicks.PerSecond));
-    private readonly IOverlayToastSource m_source;
-    private ulong m_firstTicks;
-    private int m_sequenceSeen;
 
     static ToastWriter() {
         System.Diagnostics.Debug.Assert(
@@ -47,6 +50,66 @@ public sealed class ToastWriter {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         m_source = source;
+    }
+
+    // The message's first-line length (a multi-line echo shows its head; no substring allocation).
+    private static int FirstLineLength(string text) {
+        var newline = text.AsSpan().IndexOfAny(
+            value0: '\r',
+            value1: '\n'
+        );
+
+        return ((newline >= 0)
+            ? newline
+            : text.Length
+        );
+    }
+    // Greedy word wrap into at most `lines.Length` ranges of MaxMessageChars: break at the last space that fits,
+    // hard-break a token longer than a line. Returns the line count; the tail past the last line is dropped.
+    private static int Wrap(ReadOnlySpan<char> text, Span<Range> lines) {
+        var count = 0;
+        var start = 0;
+
+        while (
+            (start < text.Length) &&
+            (count < lines.Length)
+        ) {
+            var remaining = (text.Length - start);
+
+            if (remaining <= MaxMessageChars) {
+                lines[count++] = new Range(
+                    start: start,
+                    end: text.Length
+                );
+
+                return count;
+            }
+
+            var window = text.Slice(
+                length: (MaxMessageChars + 1),
+                start: start
+            );
+            var space = window.LastIndexOf(value: ' ');
+            var take = ((space > 0)
+                ? space
+                : MaxMessageChars
+            );
+
+            lines[count++] = new Range(
+                end: (start + take),
+                start: start
+            );
+            start += take;
+
+            while (
+                (start < text.Length) &&
+                (text[start] == ' ')
+            ) {
+                start++;
+            }
+        }
+
+        return count;
     }
 
     /// <summary>Emits this frame's toast, when one is live.</summary>
@@ -91,8 +154,8 @@ public sealed class ToastWriter {
         );
         Span<Range> wrapped = stackalloc Range[MaxMessageLines];
         var lineCount = Wrap(
-            text: message,
-            lines: wrapped
+            lines: wrapped,
+            text: message
         );
         var messageChars = 0;
 
@@ -112,8 +175,8 @@ public sealed class ToastWriter {
             y: (textHeight + (2f * DesignTokens.Space.Space2))
         );
         var panelWidth = ((((DesignTokens.Space.Space3 + icon) + DesignTokens.Space.Space2) + builder.TextWidth(
-            chars: messageChars,
-            cellHeight: monoCell
+            cellHeight: monoCell,
+            chars: messageChars
         )) + DesignTokens.Space.Space3);
         var x = ((builder.Width - panelWidth) - DesignTokens.Space.Space8);
         var y = ((builder.Height * 0.5f) - (panelHeight * 0.5f));
@@ -185,66 +248,5 @@ public sealed class ToastWriter {
                 y: (textY + (index * monoCell))
             );
         }
-    }
-
-    // The message's first-line length (a multi-line echo shows its head; no substring allocation).
-    private static int FirstLineLength(string text) {
-        var newline = text.AsSpan().IndexOfAny(
-            value0: '\r',
-            value1: '\n'
-        );
-
-        return ((newline >= 0)
-            ? newline
-            : text.Length
-        );
-    }
-
-    // Greedy word wrap into at most `lines.Length` ranges of MaxMessageChars: break at the last space that fits,
-    // hard-break a token longer than a line. Returns the line count; the tail past the last line is dropped.
-    private static int Wrap(ReadOnlySpan<char> text, Span<Range> lines) {
-        var count = 0;
-        var start = 0;
-
-        while (
-            (start < text.Length) &&
-            (count < lines.Length)
-        ) {
-            var remaining = (text.Length - start);
-
-            if (remaining <= MaxMessageChars) {
-                lines[count++] = new Range(
-                    start: start,
-                    end: text.Length
-                );
-
-                return count;
-            }
-
-            var window = text.Slice(
-                start: start,
-                length: (MaxMessageChars + 1)
-            );
-            var space = window.LastIndexOf(value: ' ');
-            var take = ((space > 0)
-                ? space
-                : MaxMessageChars
-            );
-
-            lines[count++] = new Range(
-                start: start,
-                end: (start + take)
-            );
-            start += take;
-
-            while (
-                (start < text.Length) &&
-                (text[start] == ' ')
-            ) {
-                start++;
-            }
-        }
-
-        return count;
     }
 }

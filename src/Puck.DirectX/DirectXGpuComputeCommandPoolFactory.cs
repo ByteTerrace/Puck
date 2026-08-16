@@ -12,5 +12,5 @@ namespace Puck.DirectX;
 public sealed class DirectXGpuComputeCommandPoolFactory : IGpuComputeCommandPoolFactory {
     /// <inheritdoc/>
     public IGpuComputeCommandPool Create(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuComputeCommandPool(deviceContext: (IDirectXDeviceContext)deviceContext);
+        new DirectXGpuComputeCommandPool(deviceContext: ((IDirectXDeviceContext)deviceContext));
 }

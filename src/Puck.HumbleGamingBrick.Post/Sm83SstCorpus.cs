@@ -26,8 +26,8 @@ internal static class Sm83SstCorpus {
         return Directory
             .EnumerateFiles(
             path: directory,
-            searchPattern: "*.json",
-            searchOption: SearchOption.TopDirectoryOnly
+            searchOption: SearchOption.TopDirectoryOnly,
+            searchPattern: "*.json"
         )
             .OrderBy(
             keySelector: static path => path,

@@ -6,10 +6,6 @@ namespace Puck.World;
 
 /// <summary>Owns the shared construction rules for simulation-routed world command definitions.</summary>
 internal static class WorldCommandDefinition {
-    /// <summary>Creates an unbindable simulation-routed command over raw wire arguments.</summary>
-    public static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) =>
-        CommandDefinition.WithWireArgs(bindability: CommandBindability.Unbindable, name: name, description: description, handler: handler, routing: CommandRouting.Simulation);
-
     /// <summary>Creates a simulation-routed row mutation command, including inline JSON parsing and submission.</summary>
     public static CommandDefinition Row<T>(string name, string description, JsonTypeInfo<T> info, Func<WorldPrincipal, T, WorldMutation> toMutation, IServerLink link) {
         return CommandDefinition.WithWireArgs(
@@ -17,16 +13,37 @@ internal static class WorldCommandDefinition {
             name: name,
             description: description,
             handler: (context, args) => {
-                var raw = WorldCommandArguments.Raw(context: context, args: in args);
+                var raw = WorldCommandArguments.Raw(
+                    args: in args,
+                    context: context
+                );
 
-                if (!WorldJsonPayload.TryParse(json: raw, info: info, value: out var value, error: out var error)) {
+                if (!WorldJsonPayload.TryParse(
+                    error: out var error,
+                    info: info,
+                    json: raw,
+                    value: out var value
+                )) {
                     return CommandResult.Error(output: $"[{name}: {error}]");
                 }
 
-                link.SubmitWorldMutation(mutation: toMutation(arg1: context.ActingPrincipal(), arg2: value));
+                link.SubmitWorldMutation(mutation: toMutation(
+                    arg1: context.ActingPrincipal(),
+                    arg2: value
+                ));
 
                 return CommandResult.None;
             },
-            routing: CommandRouting.Simulation);
+            routing: CommandRouting.Simulation
+        );
     }
+    /// <summary>Creates an unbindable simulation-routed command over raw wire arguments.</summary>
+    public static CommandDefinition Simulation(string name, string description, Func<CommandContext, WireArgs, CommandResult> handler) =>
+        CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: name,
+            description: description,
+            handler: handler,
+            routing: CommandRouting.Simulation
+        );
 }

@@ -48,19 +48,19 @@ internal static class OracleClaims {
             _ = GradedComplement<ulong, PrimeFieldMaterial>.Create(algebra: charged);
 
             return "the GF(5) charge e1 e0 -> 2 e0 e1 admitted complements whose composition scales e1 by four";
-        } catch (ArgumentException exception) when ("algebra" == exception.ParamName) {
-            if (!exception.Message.Contains(value: "basis key", comparisonType: StringComparison.Ordinal)
-                || !exception.Message.Contains(value: "rather than", comparisonType: StringComparison.Ordinal)) {
+        } catch (ArgumentException exception) when (("algebra" == exception.ParamName)) {
+            if (!exception.Message.Contains(comparisonType: StringComparison.Ordinal, value: "basis key")
+                || !exception.Message.Contains(comparisonType: StringComparison.Ordinal, value: "rather than")) {
                 return $"the GF(5) refusal did not publish its basis witness: {exception.Message}";
             }
         }
 
         var rounded = PresentedAlgebra<FixedQ4816, FixedMaterial>.Create(
             presentation: Presentations.Clifford<FixedQ4816, FixedMaterial>(
-                positiveCount: 2,
-                negativeCount: 0,
                 degenerateCount: 0,
-                material: default
+                material: default,
+                negativeCount: 0,
+                positiveCount: 2
             )
         );
 
@@ -68,55 +68,53 @@ internal static class OracleClaims {
             _ = GradedComplement<FixedQ4816, FixedMaterial>.Create(algebra: rounded);
 
             return "the rounded FixedMaterial admitted a basis-key proof that cannot extend to arbitrary coefficients";
-        } catch (ArgumentException exception) when ("algebra" == exception.ParamName) {
-            if (!exception.Message.Contains(value: "exact semiring", comparisonType: StringComparison.Ordinal)) {
+        } catch (ArgumentException exception) when (("algebra" == exception.ParamName)) {
+            if (!exception.Message.Contains(comparisonType: StringComparison.Ordinal, value: "exact semiring")) {
                 return $"the rounded-material refusal did not name its missing exact-semiring licence: {exception.Message}";
             }
         }
 
         return ComplementCliffordSignatures(maximumGeneratorCount: 4);
     }
-
     internal static string? ComplementCliffordSignaturesDeep() =>
         ComplementCliffordSignatures(maximumGeneratorCount: 8);
-
     internal static string? MatcherRejectsDifferentAlphabetIdentity() {
         var finite = FiniteTokenAlphabet.Create(tokens: [10UL, 20UL]);
         var ten = finite.Predicate(tokens: [10UL]);
         var twenty = finite.Predicate(tokens: [20UL]);
-        var first = MintermAlphabet<ulong, FiniteTokenAlphabet>.Create(refinement: finite, predicates: [ten]);
-        var swapped = MintermAlphabet<ulong, FiniteTokenAlphabet>.Create(refinement: finite, predicates: [twenty]);
+        var first = MintermAlphabet<ulong, FiniteTokenAlphabet>.Create(predicates: [ten], refinement: finite);
+        var swapped = MintermAlphabet<ulong, FiniteTokenAlphabet>.Create(predicates: [twenty], refinement: finite);
         var pattern = TokenPattern<bool, BooleanMaterial>.Create(letterCount: first.LetterCount, window: 1, material: default);
         var value = pattern.Predicate(letters: 1UL);
 
         if (!PatternMatcher<bool, BooleanMaterial>.TryCompile(
-            pattern: pattern,
-            value: value,
             alphabet: first,
-            stateLimit: PresentedAlgebra<bool, BooleanMaterial>.MaximumClosureStates,
             matcher: out var matcher,
-            obstruction: out _
+            obstruction: out _,
+            pattern: pattern,
+            stateLimit: PresentedAlgebra<bool, BooleanMaterial>.MaximumClosureStates,
+            value: value
         )) {
             return "the finite-alphabet matcher did not compile";
         }
 
-        if (!TokenMatching.TryMatch(matcher: matcher, alphabet: first, tokens: [10UL], weight: out var accepted, obstruction: out _)
+        if (!TokenMatching.TryMatch(alphabet: first, matcher: matcher, obstruction: out _, tokens: [10UL], weight: out var accepted)
             || !accepted) {
             return "the matcher rejected token 10 through the alphabet that assigned letter zero to it";
         }
 
         try {
-            _ = TokenMatching.TryMatch(matcher: matcher, alphabet: swapped, tokens: [20UL], weight: out _, obstruction: out _);
+            _ = TokenMatching.TryMatch(alphabet: swapped, matcher: matcher, obstruction: out _, tokens: [20UL], weight: out _);
 
             return "a same-sized swapped two-token partition silently changed letter zero from token 10 to token 20";
-        } catch (ArgumentException exception) when ("alphabet" == exception.ParamName) {
+        } catch (ArgumentException exception) when (("alphabet" == exception.ParamName)) {
         }
 
         var ranges = default(TokenRangeAlphabet);
         var low = TokenRangeSet.Create(ranges: [new TokenRange(First: 0UL, Last: 99UL)]);
         var high = TokenRangeSet.Create(ranges: [new TokenRange(First: 100UL, Last: 199UL)]);
-        var lowFirst = MintermAlphabet<TokenRangeSet, TokenRangeAlphabet>.Create(refinement: ranges, predicates: [low, high]);
-        var highFirst = MintermAlphabet<TokenRangeSet, TokenRangeAlphabet>.Create(refinement: ranges, predicates: [high, low]);
+        var lowFirst = MintermAlphabet<TokenRangeSet, TokenRangeAlphabet>.Create(predicates: [low, high], refinement: ranges);
+        var highFirst = MintermAlphabet<TokenRangeSet, TokenRangeAlphabet>.Create(predicates: [high, low], refinement: ranges);
 
         if (lowFirst.LetterCount != highFirst.LetterCount) {
             return $"the range controls do not have equal partition sizes ({lowFirst.LetterCount} and {highFirst.LetterCount})";
@@ -126,36 +124,35 @@ internal static class OracleClaims {
         var lowValue = rangePattern.Predicate(letters: 1UL);
 
         if (!PatternMatcher<bool, BooleanMaterial>.TryCompile(
-            pattern: rangePattern,
-            value: lowValue,
             alphabet: lowFirst,
-            stateLimit: PresentedAlgebra<bool, BooleanMaterial>.MaximumClosureStates,
             matcher: out var rangeMatcher,
-            obstruction: out _
+            obstruction: out _,
+            pattern: rangePattern,
+            stateLimit: PresentedAlgebra<bool, BooleanMaterial>.MaximumClosureStates,
+            value: lowValue
         )) {
             return "the range-alphabet matcher did not compile";
         }
 
-        if (!TokenMatching.TryMatch(matcher: rangeMatcher, alphabet: lowFirst, tokens: [50UL], weight: out var lowAccepted, obstruction: out _)
+        if (!TokenMatching.TryMatch(alphabet: lowFirst, matcher: rangeMatcher, obstruction: out _, tokens: [50UL], weight: out var lowAccepted)
             || !lowAccepted) {
             return "the range matcher rejected the low block through its bound alphabet";
         }
 
         try {
-            _ = TokenMatching.TryMatch(matcher: rangeMatcher, alphabet: highFirst, tokens: [150UL], weight: out _, obstruction: out _);
+            _ = TokenMatching.TryMatch(alphabet: highFirst, matcher: rangeMatcher, obstruction: out _, tokens: [150UL], weight: out _);
 
             return "an equal-sized range partition with different block ordering silently changed the matcher's letters";
-        } catch (ArgumentException exception) when ("alphabet" == exception.ParamName) {
+        } catch (ArgumentException exception) when (("alphabet" == exception.ParamName)) {
         }
 
         return null;
     }
-
     internal static string? FiniteBasisCapacityIsTyped() {
         var presentation = Presentations.FreeMonoid<BigInteger, IntegerMaterial>(
             letterCount: 2,
-            windowDegree: 9,
-            material: default
+            material: default,
+            windowDegree: 9
         );
         var status = presentation.BasisStatus;
 
@@ -176,8 +173,8 @@ internal static class OracleClaims {
 
         var compiled = Presentations.FreeMonoid<BigInteger, IntegerMaterial>(
             letterCount: 2,
-            windowDegree: 4,
-            material: default
+            material: default,
+            windowDegree: 4
         );
 
         if (!compiled.HasFiniteNormalForms
@@ -190,8 +187,8 @@ internal static class OracleClaims {
 
         var free = Presentations.FreeMonoid<BigInteger, IntegerMaterial>(
             letterCount: 2,
-            windowDegree: 0,
-            material: default
+            material: default,
+            windowDegree: 0
         );
 
         if (free.HasFiniteNormalForms
@@ -205,8 +202,8 @@ internal static class OracleClaims {
         // capacity. The late obstruction must discard dense keys without discarding the packed-key unit.
         var lateObstruction = Presentations.FreeMonoid<BigInteger, IntegerMaterial>(
             letterCount: 1,
-            windowDegree: 200,
-            material: default
+            material: default,
+            windowDegree: 200
         );
         var lateAlgebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: lateObstruction);
         var lateIdentity = lateAlgebra.Identity;
@@ -246,7 +243,6 @@ internal static class OracleClaims {
 
         return null;
     }
-
     internal static string? NonChainHomologyRefuses() {
         int[] dimensions = [0, 1, 2];
         (int Face, int Coface, int Sign)[] incidences = [(0, 1, +1), (1, 2, +1)];
@@ -331,7 +327,6 @@ internal static class OracleClaims {
 
         return null;
     }
-
     internal static string? PresentedGroupRequiresAssociativity() {
         var octonions = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(
             presentation: Presentations.CayleyDickson<QuadraticSurd, RationalMaterial>(
@@ -369,9 +364,9 @@ internal static class OracleClaims {
 
         var infinite = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
             presentation: Presentations.Coxeter<BigInteger, IntegerMaterial>(
-                rank: 2,
                 bonds: [1, 0, 0, 1],
-                material: default
+                material: default,
+                rank: 2
             )
         );
 
@@ -385,10 +380,10 @@ internal static class OracleClaims {
         // triple check as a proof about products carrying rounded coefficients.
         var rounded = PresentedAlgebra<FixedQ4816, FixedMaterial>.Create(
             presentation: Presentations.Clifford<FixedQ4816, FixedMaterial>(
-                positiveCount: 1,
-                negativeCount: 0,
                 degenerateCount: 0,
-                material: default
+                material: default,
+                negativeCount: 0,
+                positiveCount: 1
             )
         );
 
@@ -407,9 +402,9 @@ internal static class OracleClaims {
         // two-permutation table. Both must still certify after associativity became an admission condition.
         var coxeter = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
             presentation: Presentations.Coxeter<BigInteger, IntegerMaterial>(
-                rank: 2,
                 bonds: [1, 3, 3, 1],
-                material: default
+                material: default,
+                rank: 2
             )
         );
 
@@ -417,26 +412,26 @@ internal static class OracleClaims {
             return $"the associative D3 Coxeter control refused as {coxeterRefusal.Outcome}";
         }
 
-        foreach (var badSeed in new[] { -1L, (long)coxeter.Presentation.NormalFormCount }) {
+        foreach (var badSeed in new[] { -1L, ((long)coxeter.Presentation.NormalFormCount) }) {
             try {
                 _ = coxeterGroup.TryEnumerateOrbit(
-                    seedKey: badSeed,
-                    searchLimit: 1L,
+                    obstruction: out _,
                     orbit: out _,
-                    obstruction: out _
+                    searchLimit: 1L,
+                    seedKey: badSeed
                 );
 
                 return $"the invalid group-orbit seed {badSeed} was admitted";
-            } catch (ArgumentOutOfRangeException exception) when ("seedKey" == exception.ParamName) {
+            } catch (ArgumentOutOfRangeException exception) when (("seedKey" == exception.ParamName)) {
                 // The public API names its own seed instead of leaking PresentedAlgebra.FromSupport's `keys` detail.
             }
         }
 
         var permutation = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
             presentation: Presentations.PermutationGroup<BigInteger, IntegerMaterial>(
-                pointCount: 2,
+                material: default,
                 permutations: [0, 1, 1, 0],
-                material: default
+                pointCount: 2
             )
         );
 
@@ -446,7 +441,6 @@ internal static class OracleClaims {
 
         return null;
     }
-
     // The counting semiring's carrier is the naturals, so a negative coefficient is not a count at all. It used to be
     // admitted and to square to one, which reads as a walk count and is not one.
     internal static string? CountingMaterialAdmitsOnlyNaturals() {
@@ -455,7 +449,7 @@ internal static class OracleClaims {
             presentation: Presentations.FreeMonoid<BigInteger, CountingMaterial>(letterCount: 2, material: default, windowDegree: 2)
         );
 
-        foreach (var negative in new BigInteger[] { BigInteger.MinusOne, -2, BigInteger.Pow(value: 10, exponent: 40) * BigInteger.MinusOne }) {
+        foreach (var negative in new BigInteger[] { BigInteger.MinusOne, -2, (BigInteger.Pow(exponent: 40, value: 10) * BigInteger.MinusOne) }) {
             var direct = Refusal<ArgumentOutOfRangeException>(action: () => material.Canonicalize(value: negative));
 
             if (direct is null) { return $"the counting material canonicalized the negative count {negative}"; }
@@ -463,23 +457,23 @@ internal static class OracleClaims {
             if ("value" != direct.ParamName) { return $"the counting refusal of {negative} named '{direct.ParamName}' rather than 'value'"; }
 
             if (!direct.Message.Contains(value: negative.ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal)
-                || !direct.Message.Contains(value: "natural number", comparisonType: StringComparison.Ordinal)) {
+                || !direct.Message.Contains(comparisonType: StringComparison.Ordinal, value: "natural number")) {
                 return $"the counting refusal of {negative} named neither the value nor the rule: {direct.Message}";
             }
 
-            var admission = Refusal<ArgumentOutOfRangeException>(action: () => _ = algebra.FromSupport(keys: [1L], coefficients: [negative]));
+            var admission = Refusal<ArgumentOutOfRangeException>(action: () => _ = algebra.FromSupport(coefficients: [negative], keys: [1L]));
 
             if (admission is null) { return $"element admission accepted the negative count {negative}"; }
         }
 
         // The naturals themselves are untouched, identities included, and a walk count still multiplies as a count.
         var counting = default(CountingMaterial);
-        var two = algebra.FromSupport(keys: [1L], coefficients: [(BigInteger)2]);
-        var three = algebra.FromSupport(keys: [2L], coefficients: [(BigInteger)3]);
+        var two = algebra.FromSupport(coefficients: [((BigInteger)2)], keys: [1L]);
+        var three = algebra.FromSupport(coefficients: [((BigInteger)3)], keys: [2L]);
         var product = algebra.Multiply(left: two, right: three);
 
         if ((1 != product.SupportCount) || (6 != product.Coefficients[0])) {
-            return $"the counting product of two ways by three ways carries {product.SupportCount} term(s) reading {(0 == product.SupportCount ? "nothing" : product.Coefficients[0].ToString(provider: CultureInfo.InvariantCulture))} rather than one term reading six";
+            return $"the counting product of two ways by three ways carries {product.SupportCount} term(s) reading {((0 == product.SupportCount) ? "nothing" : product.Coefficients[0].ToString(provider: CultureInfo.InvariantCulture))} rather than one term reading six";
         }
 
         if ((!counting.Zero.IsZero) || (!counting.One.IsOne)
@@ -490,7 +484,6 @@ internal static class OracleClaims {
 
         return null;
     }
-
     // A colour index numbers a boundary wire and ColourCount is one past the largest one mentioned, so an index outside
     // the range that arithmetic is honest over must not reach it. Both -1 and int.MaxValue used to be admitted, each
     // leaving ColourCount at zero for a presentation whose generator still mentioned the colour.
@@ -518,7 +511,7 @@ internal static class OracleClaims {
                 if ("generators" != refusal.ParamName) { return $"the colour refusal of {colour} named '{refusal.ParamName}' rather than 'generators'"; }
 
                 if (!refusal.Message.Contains(value: colour.ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal)
-                    || !refusal.Message.Contains(value: boundary, comparisonType: StringComparison.Ordinal)) {
+                    || !refusal.Message.Contains(comparisonType: StringComparison.Ordinal, value: boundary)) {
                     return $"the colour refusal of {colour} named neither the value nor the {boundary} boundary it sat on: {refusal.Message}";
                 }
             }
@@ -528,7 +521,7 @@ internal static class OracleClaims {
         // of the wires: two generators mentioning colours 0 and 2 carry three colours.
         var wide = ChargedPresentation<BigInteger, IntegerMaterial>.Create(
             generators: [
-                new(symbol: 0, inputs: new int[] { 0 }, outputs: new int[] { 2 }, degree: 1),
+                new(degree: 1, inputs: new int[] { 0 }, outputs: new int[] { 2 }, symbol: 0),
                 new(symbol: 1, inputs: new int[] { (ColourCap - 1) }, outputs: ReadOnlyMemory<int>.Empty, degree: 1),
             ],
             rules: [],
@@ -539,7 +532,7 @@ internal static class OracleClaims {
         if (ColourCap != wide.ColourCount) { return $"the largest admitted colour {(ColourCap - 1)} produced a colour count of {wide.ColourCount} rather than {ColourCap}"; }
 
         var narrow = ChargedPresentation<BigInteger, IntegerMaterial>.Create(
-            generators: [new(symbol: 0, inputs: new int[] { 0 }, outputs: new int[] { 2 }, degree: 1)],
+            generators: [new(degree: 1, inputs: new int[] { 0 }, outputs: new int[] { 2 }, symbol: 0)],
             rules: [],
             material: default,
             windowDegree: 1
@@ -558,7 +551,6 @@ internal static class OracleClaims {
 
         return null;
     }
-
     // A letter is the smallest thing a mask can name, so a predicate that cuts one in half is not nameable. The mask
     // used to be built from intersection alone, which handed back a letter accepting tokens the predicate rejects.
     internal static string? LetterMaskRefusesASplitBlock() {
@@ -578,15 +570,15 @@ internal static class OracleClaims {
 
             if ("predicate" != refusal.ParamName) { return $"the split refusal named '{refusal.ParamName}' rather than 'predicate'"; }
 
-            if (!refusal.Message.Contains(value: "Letter 0", comparisonType: StringComparison.Ordinal)
-                || !refusal.Message.Contains(value: "split", comparisonType: StringComparison.Ordinal)) {
+            if (!refusal.Message.Contains(comparisonType: StringComparison.Ordinal, value: "Letter 0")
+                || !refusal.Message.Contains(comparisonType: StringComparison.Ordinal, value: "split")) {
                 return $"the split refusal named neither the letter nor the rule: {refusal.Message}";
             }
         }
 
         // A predicate that is a union of whole letters is still answered exactly, and the block of tokens satisfying no
         // listed predicate is one of those letters.
-        var refined = MintermAlphabet<ulong, FiniteTokenAlphabet>.Create(refinement: refinement, predicates: [tokenOne, oneOrTwo]);
+        var refined = MintermAlphabet<ulong, FiniteTokenAlphabet>.Create(predicates: [tokenOne, oneOrTwo], refinement: refinement);
 
         if (3 != refined.LetterCount) { return $"refining against the token-1 and token-{{1,2}} predicates produced {refined.LetterCount} letters rather than three"; }
 
@@ -612,7 +604,6 @@ internal static class OracleClaims {
 
         return null;
     }
-
     // The material advertises the exact rational FIELD. The surd carrier also represents a + b·√d, and those values are
     // not one field between them: √2 and √3 were each admitted and their sum then had nowhere to live.
     internal static string? RationalMaterialAdmitsOnlyRationals() {
@@ -620,9 +611,9 @@ internal static class OracleClaims {
         var algebra = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(
             presentation: Presentations.FreeMonoid<QuadraticSurd, RationalMaterial>(letterCount: 2, material: default, windowDegree: 2)
         );
-        var root2 = QuadraticSurd.Create(rationalNumerator: 0, surdNumerator: 1, radicand: 2, denominator: 1);
-        var root3 = QuadraticSurd.Create(rationalNumerator: 0, surdNumerator: 1, radicand: 3, denominator: 1);
-        var goldenRatio = QuadraticSurd.Create(rationalNumerator: 1, surdNumerator: 1, radicand: 5, denominator: 2);
+        var root2 = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1);
+        var root3 = QuadraticSurd.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 1);
+        var goldenRatio = QuadraticSurd.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: 1);
 
         foreach (var irrational in new[] { root2, root3, goldenRatio }) {
             var direct = Refusal<ArgumentOutOfRangeException>(action: () => material.Canonicalize(value: irrational));
@@ -636,22 +627,22 @@ internal static class OracleClaims {
                 return $"the rational refusal of {irrational} named neither the value nor the root that leaves the field: {direct.Message}";
             }
 
-            var admission = Refusal<ArgumentOutOfRangeException>(action: () => _ = algebra.FromSupport(keys: [1L], coefficients: [irrational]));
+            var admission = Refusal<ArgumentOutOfRangeException>(action: () => _ = algebra.FromSupport(coefficients: [irrational], keys: [1L]));
 
             if (admission is null) { return $"element admission accepted the irrational coefficient {irrational}"; }
         }
 
         // The rationals stay a field: a product and a sum of admitted coefficients land back in the carrier, and the
         // reciprocal of a nonzero one exists.
-        var third = QuadraticSurd.Rational(numerator: 1, denominator: 3);
-        var half = QuadraticSurd.Rational(numerator: -1, denominator: 2);
-        var left = algebra.FromSupport(keys: [1L], coefficients: [third]);
-        var right = algebra.FromSupport(keys: [1L], coefficients: [half]);
+        var third = QuadraticSurd.Rational(denominator: 3, numerator: 1);
+        var half = QuadraticSurd.Rational(denominator: 2, numerator: -1);
+        var left = algebra.FromSupport(coefficients: [third], keys: [1L]);
+        var right = algebra.FromSupport(coefficients: [half], keys: [1L]);
         var sum = algebra.Add(left: left, right: right);
-        var expected = QuadraticSurd.Rational(numerator: -1, denominator: 6);
+        var expected = QuadraticSurd.Rational(denominator: 6, numerator: -1);
 
         if ((1 != sum.SupportCount) || (expected != sum.Coefficients[0])) {
-            return $"one third plus minus one half admitted as {(0 == sum.SupportCount ? "nothing" : sum.Coefficients[0].ToString())} rather than {expected}";
+            return $"one third plus minus one half admitted as {((0 == sum.SupportCount) ? "nothing" : sum.Coefficients[0].ToString())} rather than {expected}";
         }
 
         var rational = default(RationalMaterial);
@@ -679,18 +670,17 @@ internal static class OracleClaims {
 
         return null;
     }
-
     private static string? ComplementCliffordSignatures(int maximumGeneratorCount) {
         for (var generatorCount = 1; (generatorCount <= maximumGeneratorCount); ++generatorCount) {
             for (var positive = 0; (positive <= generatorCount); ++positive) {
                 for (var negative = 0; (negative <= (generatorCount - positive)); ++negative) {
-                    var degenerate = (generatorCount - positive - negative);
+                    var degenerate = ((generatorCount - positive) - negative);
                     var algebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
                         presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(
-                            positiveCount: positive,
-                            negativeCount: negative,
                             degenerateCount: degenerate,
-                            material: default
+                            material: default,
+                            negativeCount: negative,
+                            positiveCount: positive
                         )
                     );
                     var complement = GradedComplement<BigInteger, IntegerMaterial>.Create(algebra: algebra);

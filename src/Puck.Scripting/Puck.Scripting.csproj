@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>A deterministic WASM addon host: loads sandboxed WebAssembly modules that declare zero imports and drives each one once per sim tick through a fixed-size two-ring cell ABI in the guest's own linear memory. Every determinism knob is pinned explicit (fuel accounting on, threads and SIMD off, NaN canonicalization on, a fixed Cranelift optimization level); no floating point ever crosses the host/guest boundary, and a runaway module halts at a fuel-deterministic point, never a wall-clock one. It decodes structure only — verb vocabularies and authority live in its consumers.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Scripting</PackageId>
+        <PackageTags>addon;determinism;wasm;wasmtime;webassembly</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>
@@ -15,7 +19,7 @@
              channel-name table (AddonChannelNameTableReader) and resolves each declared name through the
              injected IAddonChannelResolver; there is no phase discriminant any more, and an unresolved name
              is report-and-inert, never a mount fault. The vocabulary and authority layers live in
-             Puck.Scripting.Simulation and Puck.World respectively. -->
+             Puck.World.Addons and Puck.World respectively. -->
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>

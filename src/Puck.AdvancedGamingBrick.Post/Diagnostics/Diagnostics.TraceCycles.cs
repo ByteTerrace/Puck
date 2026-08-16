@@ -13,7 +13,7 @@ internal static partial class Diagnostics {
 
         using (instance) {
             var machine = instance.Machine;
-            var bus = (AgbBus)machine.Bus;
+            var bus = ((AgbBus)machine.Bus);
             var prev = bus.Cycles;
             var lastPc = 0xFFFFFFFFu;
             var stable = 0;
@@ -41,8 +41,8 @@ internal static partial class Diagnostics {
             }
 
             Console.WriteLine(value: $"RESULT[0x02000000] = 0x{machine.Bus.Read32(
-                address: 0x02000000u,
-                access: BusAccessType.NonSequential
+                access: BusAccessType.NonSequential,
+                address: 0x02000000u
             ):X8} (timer value the test reads)");
         }
     }

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.SignedDistance</AssemblyName>
+        <Description>The signed-distance-function field as data: the instruction ISA, the packed-word program
+        representation, the fluent authoring builder (including laying out Puck.Text-authored strings into marchable
+        glyph geometry), and a warp-free deterministic fixed-point CPU interpreter (Puck.SignedDistance.Queries) for
+        authoritative simulation to query the same field a GPU renders. No GPU or shader-compiler dependency of any
+        kind.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.SignedDistance</PackageId>
+        <PackageTags>determinism;distance-field;fixed-point;sdf;simulation</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.SignedDistance</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <!-- SdfProgramBuilder.Text() lays a string out against a Puck.Text FontAtlas and emits one SDF_SHAPE_GLYPH
+             cell per character; render-agnostic (Puck.Text carries no GPU or windowing concepts of its own). -->
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+    </ItemGroup>
+</Project>

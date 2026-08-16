@@ -33,7 +33,10 @@ public sealed class FiniteCalculus<TValue, TOps>
 
         Algebra = algebra;
         DegreeBound = degreeBound;
-        Difference = algebra.Subtract(left: algebra.Identity, right: shift);
+        Difference = algebra.Subtract(
+            left: algebra.Identity,
+            right: shift
+        );
         Shift = shift;
     }
 
@@ -57,29 +60,39 @@ public sealed class FiniteCalculus<TValue, TOps>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="degreeBound"/> is negative or above 511.</exception>
     public static FiniteCalculus<TValue, TOps> Create(int degreeBound, TOps material) {
         if (material is not ISignedMaterial<TValue, TOps>) {
-            throw new ArgumentException(message: "The backward difference subtracts, which an unsigned material cannot express.", paramName: nameof(material));
+            throw new ArgumentException(
+                message: "The backward difference subtracts, which an unsigned material cannot express.",
+                paramName: nameof(material)
+            );
         }
 
         return new(
-            algebra: PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Shift<TValue, TOps>(degreeBound: degreeBound, material: material)),
+            algebra: PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Shift<TValue, TOps>(
+                degreeBound: degreeBound,
+                material: material
+            )),
             degreeBound: degreeBound
         );
     }
-
     /// <summary>Returns a sequence as an element, one value per place.</summary>
     /// <param name="values">The sequence's values, place zero first; at most <c>DegreeBound + 1</c> of them.</param>
     /// <returns>The element.</returns>
     /// <exception cref="ArgumentOutOfRangeException">More values were given than the jet holds.</exception>
     public PresentedAlgebra<TValue, TOps>.Element Sequence(ReadOnlySpan<TValue> values) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: values.Length, other: (DegreeBound + 1));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: values.Length,
+            other: (DegreeBound + 1)
+        );
 
         var keys = new long[values.Length];
 
         for (var index = 0; (index < keys.Length); ++index) { keys[index] = index; }
 
-        return Algebra.FromSupport(keys: keys, coefficients: values);
+        return Algebra.FromSupport(
+            coefficients: values,
+            keys: keys
+        );
     }
-
     /// <summary>Attempts to compute the antidifference — the prefix-sum operator, the sum of the shift over all lengths.</summary>
     /// <param name="antidifference">On success, the element <c>1 + x + x² + …</c>; multiplying a sequence by it replaces
     /// each place with the sum of that place and every place before it.</param>
@@ -89,5 +102,9 @@ public sealed class FiniteCalculus<TValue, TOps>
     /// shift's power at the degree bound is zero, so the sum terminates. It is the exact two-sided inverse of
     /// <see cref="Difference"/>, since <c>(1 − x)·(1 + x + … + x^bound) = 1 − x^(bound+1) = 1</c>.</remarks>
     public bool TryAntidifference(out PresentedAlgebra<TValue, TOps>.Element antidifference, out SumClosureObstruction obstruction) =>
-        Algebra.TrySumOverAllLengths(value: Shift, total: out antidifference, obstruction: out obstruction);
+        Algebra.TrySumOverAllLengths(
+            value: Shift,
+            total: out antidifference,
+            obstruction: out obstruction
+        );
 }

@@ -9,7 +9,7 @@ namespace Puck.Cli.Format;
 // (1); a genuine tool error in write mode maps to infra (2).
 internal static class WhitespacePhase {
     public static int Run(string rootArgument, bool verifyOnly) {
-        if (!SourceFiles.TryEnumerate(rootArgument: rootArgument, scanRoot: out _, files: out var files)) {
+        if (!SourceFiles.TryEnumerate(files: out var files, rootArgument: rootArgument, scanRoot: out _)) {
             return 2;
         }
 

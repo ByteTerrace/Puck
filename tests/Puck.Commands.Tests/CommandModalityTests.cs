@@ -13,10 +13,10 @@ public sealed class CommandModalityTests {
         var activations = new List<(string Name, int Slot)>();
         var registry = Registry(
             activations,
-            new Spec("common", CommandMaps.Global),
-            new Spec("tank.fire", Tank),
-            new Spec("foot.jump", Foot),
-            new Spec("plan.place", Plan)
+            new Spec(Map: CommandMaps.Global, Name: "common"),
+            new Spec(Map: Tank, Name: "tank.fire"),
+            new Spec(Map: Foot, Name: "foot.jump"),
+            new Spec(Map: Plan, Name: "plan.place")
         );
         var tankDevice = InputDeviceId.FromConnectionKey(key: "tank-pad");
         var footDevice = InputDeviceId.FromConnectionKey(key: "foot-pad");
@@ -28,9 +28,9 @@ public sealed class CommandModalityTests {
             slotResolver: device => ((device == tankDevice) ? 0 : ((device == footDevice) ? 1 : 2))
         );
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
-        router.SetActiveMaps(slot: 1, maps: [Foot]);
-        router.SetActiveMaps(slot: 2, maps: [Plan]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
+        router.SetActiveMaps(maps: [Foot], slot: 1);
+        router.SetActiveMaps(maps: [Plan], slot: 2);
         router.Capture(signal: InputSignal.Press(source: "button.action", deviceId: tankDevice));
         router.Capture(signal: InputSignal.Press(source: "button.action", deviceId: footDevice));
         router.Capture(signal: InputSignal.Press(source: "button.action", deviceId: planDevice));
@@ -40,22 +40,21 @@ public sealed class CommandModalityTests {
         registry.ApplySnapshot(snapshot: in snapshot);
 
         Assert.Equal(
+            actual: activations,
             expected: [
                 ("common", 0), ("tank.fire", 0),
                 ("common", 1), ("foot.jump", 1),
                 ("common", 2), ("plan.place", 2),
-            ],
-            actual: activations
+            ]
         );
     }
-
     [Fact]
     public void ReplacingOneSlotsModalityDoesNotChangeAnotherSlot() {
         var activations = new List<(string Name, int Slot)>();
         var registry = Registry(
             activations,
-            new Spec("foot.jump", Foot),
-            new Spec("menu.accept", Menu)
+            new Spec(Map: Foot, Name: "foot.jump"),
+            new Spec(Map: Menu, Name: "menu.accept")
         );
         var menuDevice = InputDeviceId.FromConnectionKey(key: "menu-pad");
         var footDevice = InputDeviceId.FromConnectionKey(key: "foot-pad");
@@ -66,8 +65,8 @@ public sealed class CommandModalityTests {
             slotResolver: device => ((device == menuDevice) ? 0 : 1)
         );
 
-        router.SetActiveMaps(slot: 0, maps: [Menu]);
-        router.SetActiveMaps(slot: 1, maps: [Foot]);
+        router.SetActiveMaps(maps: [Menu], slot: 0);
+        router.SetActiveMaps(maps: [Foot], slot: 1);
         router.Capture(signal: InputSignal.Press(source: "button.action", deviceId: menuDevice));
         router.Capture(signal: InputSignal.Press(source: "button.action", deviceId: footDevice));
 
@@ -75,33 +74,31 @@ public sealed class CommandModalityTests {
 
         registry.ApplySnapshot(snapshot: in snapshot);
 
-        Assert.Equal(expected: [("menu.accept", 0), ("foot.jump", 1)], actual: activations);
-        Assert.True(condition: router.IsMapActive(slot: 0, map: CommandMaps.Global));
-        Assert.True(condition: router.IsMapActive(slot: 0, map: Menu));
-        Assert.False(condition: router.IsMapActive(slot: 0, map: Foot));
-        Assert.True(condition: router.IsMapActive(slot: 1, map: Foot));
+        Assert.Equal(actual: activations, expected: [("menu.accept", 0), ("foot.jump", 1)]);
+        Assert.True(condition: router.IsMapActive(map: CommandMaps.Global, slot: 0));
+        Assert.True(condition: router.IsMapActive(map: Menu, slot: 0));
+        Assert.False(condition: router.IsMapActive(map: Foot, slot: 0));
+        Assert.True(condition: router.IsMapActive(map: Foot, slot: 1));
     }
-
     [Fact]
     public void AModalityMayRetainGameplayWhileAddingAMenuOverlay() {
         var registry = Registry(
             activations: [],
-            new Spec("foot.jump", Foot),
-            new Spec("menu.accept", Menu)
+            new Spec(Map: Foot, Name: "foot.jump"),
+            new Spec(Map: Menu, Name: "menu.accept")
         );
         var router = Router(registry: registry, bindings: new EmptyBindings());
 
-        router.SetActiveMaps(slot: 0, maps: [Foot, Menu]);
+        router.SetActiveMaps(maps: [Foot, Menu], slot: 0);
 
-        Assert.True(condition: router.IsMapActive(slot: 0, map: Foot));
-        Assert.True(condition: router.IsMapActive(slot: 0, map: Menu));
+        Assert.True(condition: router.IsMapActive(map: Foot, slot: 0));
+        Assert.True(condition: router.IsMapActive(map: Menu, slot: 0));
 
-        router.SetActiveMaps(slot: 0, maps: [Menu]);
+        router.SetActiveMaps(maps: [Menu], slot: 0);
 
-        Assert.False(condition: router.IsMapActive(slot: 0, map: Foot));
-        Assert.True(condition: router.IsMapActive(slot: 0, map: Menu));
+        Assert.False(condition: router.IsMapActive(map: Foot, slot: 0));
+        Assert.True(condition: router.IsMapActive(map: Menu, slot: 0));
     }
-
     [Fact]
     public void RemovingAMapCancelsOnlyThatSlotsAffectedHolds() {
         var phases = new List<(int Slot, CommandPhase Phase)>();
@@ -115,23 +112,24 @@ public sealed class CommandModalityTests {
             slotResolver: device => ((device == firstDevice) ? 0 : 1)
         );
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
-        router.SetActiveMaps(slot: 1, maps: [Tank]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
+        router.SetActiveMaps(maps: [Tank], slot: 1);
         router.Capture(signal: InputSignal.Press(source: "axis.drive", deviceId: firstDevice));
         router.Capture(signal: InputSignal.Press(source: "axis.drive", deviceId: secondDevice));
         var started = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in started);
         phases.Clear();
 
-        router.SetActiveMaps(slot: 0, maps: [Plan]);
+        router.SetActiveMaps(maps: [Plan], slot: 0);
         var transitioned = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in transitioned);
 
-        Assert.Equal(expected: [(0, CommandPhase.Canceled), (1, CommandPhase.Active)], actual: phases);
-        Assert.False(condition: router.IsCommandHeld(slot: 0, command: "tank.drive"));
-        Assert.True(condition: router.IsCommandHeld(slot: 1, command: "tank.drive"));
+        Assert.Equal(actual: phases, expected: [(0, CommandPhase.Canceled), (1, CommandPhase.Active)]);
+        Assert.False(condition: router.IsCommandHeld(command: "tank.drive", slot: 0));
+        Assert.True(condition: router.IsCommandHeld(command: "tank.drive", slot: 1));
     }
-
     [Fact]
     public void HeldDigitalChannelRecoversAfterItsMapBecomesActiveAgain() {
         var phases = new List<(int Slot, CommandPhase Phase)>();
@@ -151,33 +149,35 @@ public sealed class CommandModalityTests {
             ),
             channelCommandName: static _ => "tank.drive"
         ));
-        var router = Router(registry: registry, bindings: bindings);
+        var router = Router(bindings: bindings, registry: registry);
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
         router.Capture(signal: InputSignal.Press(source: "key.drive"));
         var started = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in started);
 
-        router.SetActiveMaps(slot: 0, maps: [Plan]);
+        router.SetActiveMaps(maps: [Plan], slot: 0);
         var closed = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in closed);
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
         router.Capture(signal: InputSignal.Reassert(source: "key.drive"));
         var reopened = router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in reopened);
 
         Assert.Equal(
+            actual: phases,
             expected: [
                 (0, CommandPhase.Started),
                 (0, CommandPhase.Canceled),
                 (0, CommandPhase.Active),
-            ],
-            actual: phases
+            ]
         );
-        Assert.True(condition: router.IsCommandHeld(slot: 0, command: "tank.drive"));
+        Assert.True(condition: router.IsCommandHeld(command: "tank.drive", slot: 0));
     }
-
     [Fact]
     public void RemovingAMapCancelsATappedChannelBeforeItsDeferredRelease() {
         var phases = new List<(int Slot, CommandPhase Phase)>();
@@ -187,85 +187,85 @@ public sealed class CommandModalityTests {
             bindings: TappedTankChannelBindings()
         );
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
         router.Capture(signal: InputSignal.Press(source: "button.tap"));
         var started = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in started);
 
-        Assert.False(condition: router.IsCommandHeld(slot: 0, command: "tank.drive"));
+        Assert.False(condition: router.IsCommandHeld(command: "tank.drive", slot: 0));
 
-        router.SetActiveMaps(slot: 0, maps: [Plan]);
+        router.SetActiveMaps(maps: [Plan], slot: 0);
         var transitioned = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in transitioned);
 
         Assert.Equal(
-            expected: [(0, CommandPhase.Started), (0, CommandPhase.Canceled)],
-            actual: phases
+            actual: phases,
+            expected: [(0, CommandPhase.Started), (0, CommandPhase.Canceled)]
         );
         Assert.Empty(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes);
     }
-
     [Fact]
     public void AnAlreadyBuiltSnapshotRetainsItsResolvedModality() {
         var activations = new List<(string Name, int Slot)>();
         var registry = Registry(
             activations,
-            new Spec("tank.fire", Tank),
-            new Spec("plan.place", Plan)
+            new Spec(Map: Tank, Name: "tank.fire"),
+            new Spec(Map: Plan, Name: "plan.place")
         );
         var router = Router(
             registry: registry,
             bindings: new SameSourceBindings("tank.fire", "plan.place")
         );
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
         router.Capture(signal: InputSignal.Press(source: "button.action"));
         var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
 
-        router.SetActiveMaps(slot: 0, maps: [Plan]);
+        router.SetActiveMaps(maps: [Plan], slot: 0);
         registry.ApplySnapshot(snapshot: in snapshot);
 
-        Assert.Equal(expected: [("tank.fire", 0)], actual: activations);
+        Assert.Equal(actual: activations, expected: [("tank.fire", 0)]);
     }
-
     [Fact]
     public void CompiledPresentationActivationUsesTheOriginatingSlotsModality() {
         var activations = new List<(string Name, int Slot)>();
-        var registry = Registry(activations, new Spec("menu.accept", Menu));
+        var registry = Registry(activations, new Spec(Map: Menu, Name: "menu.accept"));
         var router = Router(registry: registry, bindings: new EmptyBindings());
         var activation = MenuActivation();
 
-        Assert.True(condition: router.Activate(slot: 0, activation: activation));
+        Assert.True(condition: router.Activate(activation: activation, slot: 0));
         Assert.Empty(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes);
 
-        router.SetActiveMaps(slot: 0, maps: [Menu]);
-        Assert.True(condition: router.Activate(slot: 0, activation: activation));
+        router.SetActiveMaps(maps: [Menu], slot: 0);
+        Assert.True(condition: router.Activate(activation: activation, slot: 0));
         var snapshot = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in snapshot);
 
-        Assert.Equal(expected: [("menu.accept", 0)], actual: activations);
+        Assert.Equal(actual: activations, expected: [("menu.accept", 0)]);
     }
-
     [Fact]
     public void CompiledCommandChordUsesTheSlotsModality() {
         var activations = new List<(string Name, int Slot)>();
-        var registry = Registry(activations, new Spec("tank.chord", Tank));
+        var registry = Registry(activations, new Spec(Map: Tank, Name: "tank.chord"));
         var bindings = ChordBindings();
-        var router = Router(registry: registry, bindings: bindings);
+        var router = Router(bindings: bindings, registry: registry);
 
         router.Capture(signal: InputSignal.Press(source: "button.modifier"));
         Assert.Empty(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes);
         router.Capture(signal: InputSignal.Release(source: "button.modifier"));
         _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
         router.Capture(signal: InputSignal.Press(source: "button.modifier"));
         var snapshot = router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in snapshot);
 
-        Assert.Equal(expected: [("tank.chord", 0)], actual: activations);
+        Assert.Equal(actual: activations, expected: [("tank.chord", 0)]);
     }
-
     [Fact]
     public void SubmittedTextRemainsOutsidePlayerModality() {
         var activations = new List<(string Name, int Slot)>();
@@ -275,26 +275,25 @@ public sealed class CommandModalityTests {
         registry.RouteSimulationTo(sink: router.ConsoleTextSink);
         Assert.Equal(expected: CommandResult.None, actual: registry.Submit(line: "plan.text"));
         var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
         registry.ApplySnapshot(snapshot: in snapshot);
 
-        Assert.Equal(expected: [("plan.text", 0)], actual: activations);
+        Assert.Equal(actual: activations, expected: [("plan.text", 0)]);
     }
-
     [Fact]
     public void UnknownMapIsRefusedWithoutChangingTheSlot() {
-        var registry = Registry(activations: [], new Spec("tank.fire", Tank));
+        var registry = Registry(activations: [], new Spec(Map: Tank, Name: "tank.fire"));
         var router = Router(registry: registry, bindings: new EmptyBindings());
 
-        router.SetActiveMaps(slot: 0, maps: [Tank]);
+        router.SetActiveMaps(maps: [Tank], slot: 0);
 
-        _ = Assert.Throws<ArgumentException>(testCode: () => router.SetActiveMaps(slot: 0, maps: new[] { "typo" }));
-        Assert.True(condition: router.IsMapActive(slot: 0, map: Tank));
+        _ = Assert.Throws<ArgumentException>(testCode: () => router.SetActiveMaps(maps: new[] { "typo" }, slot: 0));
+        Assert.True(condition: router.IsMapActive(map: Tank, slot: 0));
     }
 
     private static CommandRegistry Registry(List<(string Name, int Slot)> activations, params Spec[] specs) {
-        return new CommandRegistry(modules: [new ProbeModule(specs: specs, activations: activations)]);
+        return new CommandRegistry(modules: [new ProbeModule(activations: activations, specs: specs)]);
     }
-
     private static InputRouter Router(CommandRegistry registry, IInputBindings bindings) {
         return new InputRouter(
             registry: registry,
@@ -302,7 +301,6 @@ public sealed class CommandModalityTests {
             principalResolver: new SeatPrincipals()
         );
     }
-
     private static BindingActivation MenuActivation() {
         var profile = BindingProfile.Compile(document: new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
@@ -325,7 +323,6 @@ public sealed class CommandModalityTests {
 
         return new PagedInputBindings(profile: profile).WheelFor(slot: 0)!.Rings[0].Sectors[0].Activation;
     }
-
     private static PagedInputBindings ChordBindings() {
         return new PagedInputBindings(profile: BindingProfile.Compile(document: new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
@@ -344,7 +341,6 @@ public sealed class CommandModalityTests {
             ]
         )));
     }
-
     private static PagedInputBindings TappedTankChannelBindings() {
         return new PagedInputBindings(profile: BindingProfile.Compile(
             document: new BindingProfileDocument(
@@ -368,7 +364,6 @@ public sealed class CommandModalityTests {
     }
 
     private readonly record struct Spec(string Name, string Map);
-
     private sealed class ProbeModule(Spec[] specs, List<(string Name, int Slot)> activations) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             foreach (var spec in specs) {
@@ -387,7 +382,6 @@ public sealed class CommandModalityTests {
             }
         }
     }
-
     private sealed class HoldModule(List<(int Slot, CommandPhase Phase)> phases) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
@@ -412,7 +406,6 @@ public sealed class CommandModalityTests {
             );
         }
     }
-
     private sealed class SimulationTextModule(List<(string Name, int Slot)> activations) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
@@ -429,23 +422,19 @@ public sealed class CommandModalityTests {
             );
         }
     }
-
     private sealed class SameSourceBindings(params string[] commands) : IInputBindings {
         private readonly CommandBinding[] m_bindings = [.. commands.Select(selector: static command => new CommandBinding(Command: command))];
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => ((source == "button.action") ? m_bindings : null);
     }
-
     private sealed class ChannelBindings(string command) : IInputBindings {
         private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: command, ChannelScale: 1f)];
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => ((source == "axis.drive") ? m_bindings : null);
     }
-
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
-
     private sealed class SeatPrincipals : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Seat(slot: slot);
     }

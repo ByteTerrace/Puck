@@ -47,12 +47,17 @@ public sealed class BufferedConsoleOutput : IDisposable {
         };
     }
 
-    /// <summary>Appends one echoed line to the buffer (not flushed until <see cref="Flush"/>).</summary>
-    /// <param name="value">The line to write.</param>
-    public void WriteLine(string value) {
-        m_writer.WriteLine(value: value);
+    /// <summary>Flushes any buffered tail; the underlying standard streams are left open for the process.</summary>
+    public void Dispose() {
+        m_writer.Flush();
+        m_writer.Dispose();
+        m_errorWriter.Dispose();
     }
-
+    /// <summary>Flushes the buffered lines to standard output in one write. Called once per frame after the command
+    /// pump's <c>Collect</c> drain, and on shutdown, so a burst of echoes costs one syscall and no tail is ever lost.</summary>
+    public void Flush() {
+        m_writer.Flush();
+    }
     /// <summary>Writes one REFUSED line to standard error, so a rejection is distinguishable from ordinary transcript
     /// output by stream and not only by wording. The buffered stdout is flushed first, so a reader merging the two
     /// streams still sees strict submission order across them.</summary>
@@ -61,17 +66,9 @@ public sealed class BufferedConsoleOutput : IDisposable {
         m_writer.Flush();
         m_errorWriter.WriteLine(value: value);
     }
-
-    /// <summary>Flushes the buffered lines to standard output in one write. Called once per frame after the command
-    /// pump's <c>Collect</c> drain, and on shutdown, so a burst of echoes costs one syscall and no tail is ever lost.</summary>
-    public void Flush() {
-        m_writer.Flush();
-    }
-
-    /// <summary>Flushes any buffered tail; the underlying standard streams are left open for the process.</summary>
-    public void Dispose() {
-        m_writer.Flush();
-        m_writer.Dispose();
-        m_errorWriter.Dispose();
+    /// <summary>Appends one echoed line to the buffer (not flushed until <see cref="Flush"/>).</summary>
+    /// <param name="value">The line to write.</param>
+    public void WriteLine(string value) {
+        m_writer.WriteLine(value: value);
     }
 }

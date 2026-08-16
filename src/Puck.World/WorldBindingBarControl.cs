@@ -21,15 +21,15 @@ internal readonly record struct WorldBindingBarStatus(
     ulong IdleTicks,
     CompiledTickDuration HideAfterRestTicks
 );
-
 /// <summary>Resolves the world binding-bar floor with each seat identity's preference and live override.</summary>
 internal sealed class WorldBindingBarControl {
     private readonly WorldClient m_client;
-    private readonly WorldBindingBarAuthoring?[] m_lastAuthoring = new WorldBindingBarAuthoring?[PlayerRoster.MaxSlots];
-    private readonly Func<InputRouter> m_router;
     private readonly PlayerRoster m_roster;
-    private readonly ulong[] m_restOriginTicks = new ulong[PlayerRoster.MaxSlots];
+    private readonly Func<InputRouter> m_router;
     private readonly WorldServer m_server;
+
+    private readonly WorldBindingBarAuthoring?[] m_lastAuthoring = new WorldBindingBarAuthoring?[PlayerRoster.MaxSlots];
+    private readonly ulong[] m_restOriginTicks = new ulong[PlayerRoster.MaxSlots];
     private readonly bool?[] m_visibilityOverrides = new bool?[PlayerRoster.MaxSlots];
     private readonly bool[] m_wasResolved = new bool[PlayerRoster.MaxSlots];
 
@@ -46,30 +46,77 @@ internal sealed class WorldBindingBarControl {
         m_server = server;
     }
 
+    private (WorldBindingBarAuthoring Authoring, string Source) ResolveAuthoring(int slot) {
+        if (m_roster.ProfileAt(slot: slot)?.Document?.BindingOverlays.FirstOrDefault()?.BindingBar is { } profile) {
+            return (profile, "identity");
+        }
+
+        if (m_client.Definition.BindingOverlays.FirstOrDefault()?.BindingBar is { } world) {
+            return (world, "world");
+        }
+
+        return (WorldBindingBarAuthoring.Default, "default");
+    }
+
+    /// <summary>Sets or clears one seat's live visibility override.</summary>
+    /// <param name="slot">The 0-based local seat.</param>
+    /// <param name="visible">The forced visibility, or <see langword="null"/> to return to authored behavior.</param>
+    public void SetOverride(int slot, bool? visible) {
+        _ = Status(slot: slot);
+        m_visibilityOverrides[slot] = visible;
+        var nextInputTick = m_server.NextInputTick;
+
+        m_restOriginTicks[slot] = ((nextInputTick == 0UL)
+            ? 0UL
+            : (nextInputTick - 1UL)
+        );
+    }
     /// <summary>Gets one seat's resolved policy and current visibility.</summary>
     /// <param name="slot">The 0-based local seat.</param>
     public WorldBindingBarStatus Status(int slot) {
         ArgumentOutOfRangeException.ThrowIfNegative(slot);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(slot, PlayerRoster.MaxSlots);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            slot,
+            PlayerRoster.MaxSlots
+        );
 
         var nextInputTick = m_server.NextInputTick;
-        var completedTick = ((nextInputTick == 0UL) ? 0UL : (nextInputTick - 1UL));
+        var completedTick = ((nextInputTick == 0UL)
+            ? 0UL
+            : (nextInputTick - 1UL)
+        );
+
         var (authoring, source) = ResolveAuthoring(slot: slot);
 
-        if (!m_wasResolved[slot] || !Equals(objA: m_lastAuthoring[slot], objB: authoring)) {
+        if (
+            !m_wasResolved[slot] ||
+            !Equals(
+            objA: m_lastAuthoring[slot],
+            objB: authoring
+        )
+        ) {
             m_wasResolved[slot] = true;
             m_lastAuthoring[slot] = authoring;
             m_restOriginTicks[slot] = completedTick;
         }
 
-        if (m_router().TryGetLastInputTick(slot: slot, tick: out var inputTick) && (inputTick > m_restOriginTicks[slot])) {
+        if (
+            m_router().TryGetLastInputTick(
+            slot: slot,
+            tick: out var inputTick
+        ) &&
+            (inputTick > m_restOriginTicks[slot])
+        ) {
             m_restOriginTicks[slot] = inputTick;
         }
 
-        var idleTicks = (completedTick - Math.Min(val1: completedTick, val2: m_restOriginTicks[slot]));
+        var idleTicks = (completedTick - Math.Min(
+            val1: completedTick,
+            val2: m_restOriginTicks[slot]
+        ));
         var timeout = WorldSimulationTickConversion.CompiledDuration(
             seconds: authoring.HideAfterRestSeconds,
-            ratePerSecond: (uint)m_client.Definition.SimulationRateHz
+            ratePerSecond: ((uint)m_client.Definition.SimulationRateHz)
         );
         var liveOverride = m_visibilityOverrides[slot];
         bool hidden;
@@ -84,7 +131,11 @@ internal sealed class WorldBindingBarControl {
         } else if (!authoring.Enabled) {
             hidden = true;
             reason = "authored-off";
-        } else if (timeout.IsNever || timeout.IsZero || (idleTicks < (ulong)timeout.Ticks)) {
+        } else if (
+            timeout.IsNever ||
+            timeout.IsZero ||
+            (idleTicks < ((ulong)timeout.Ticks))
+        ) {
             hidden = false;
             reason = "shown";
         } else {
@@ -94,34 +145,12 @@ internal sealed class WorldBindingBarControl {
 
         return new WorldBindingBarStatus(
             Authoring: authoring,
-            Source: source,
-            Override: liveOverride,
             Hidden: hidden,
-            Reason: reason,
+            HideAfterRestTicks: timeout,
             IdleTicks: idleTicks,
-            HideAfterRestTicks: timeout
+            Override: liveOverride,
+            Reason: reason,
+            Source: source
         );
-    }
-
-    /// <summary>Sets or clears one seat's live visibility override.</summary>
-    /// <param name="slot">The 0-based local seat.</param>
-    /// <param name="visible">The forced visibility, or <see langword="null"/> to return to authored behavior.</param>
-    public void SetOverride(int slot, bool? visible) {
-        _ = Status(slot: slot);
-        m_visibilityOverrides[slot] = visible;
-        var nextInputTick = m_server.NextInputTick;
-        m_restOriginTicks[slot] = ((nextInputTick == 0UL) ? 0UL : (nextInputTick - 1UL));
-    }
-
-    private (WorldBindingBarAuthoring Authoring, string Source) ResolveAuthoring(int slot) {
-        if (m_roster.ProfileAt(slot: slot)?.Document?.BindingOverlays.FirstOrDefault()?.BindingBar is { } profile) {
-            return (profile, "identity");
-        }
-
-        if (m_client.Definition.BindingOverlays.FirstOrDefault()?.BindingBar is { } world) {
-            return (world, "world");
-        }
-
-        return (WorldBindingBarAuthoring.Default, "default");
     }
 }

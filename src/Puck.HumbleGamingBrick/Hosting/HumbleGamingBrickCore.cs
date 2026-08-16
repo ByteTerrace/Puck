@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick;
@@ -63,15 +62,12 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         ((!m_dmgSpeed && m_key1.IsDoubleSpeed)
         ? (2UL * MachineCyclesPerSecond)
         : MachineCyclesPerSecond);
-
     /// <inheritdoc/>
     public long NativeFrameIndex =>
-        (long)(m_machine.Machine.Clock.CycleCount / DotsPerFrame);
-
+        ((long)(m_machine.Machine.Clock.CycleCount / DotsPerFrame));
     /// <inheritdoc/>
     public long CycleCount =>
-        (long)m_machine.Machine.Clock.CycleCount;
-
+        ((long)m_machine.Machine.Clock.CycleCount);
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_framebuffer.Pixels;
@@ -86,36 +82,31 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             y: input.Tilt.Y
         );
     }
-
     /// <inheritdoc/>
     public void RunCycles(long cycles) =>
-        m_machine.Machine.Run(tCycles: (ulong)cycles);
-
+        m_machine.Machine.Run(tCycles: ((ulong)cycles));
     /// <inheritdoc/>
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();
         m_machine.Machine.SerializeState(writer: m_timeTravelWriter);
         return SnapshotBuffer.CopyWrittenState(
-            writer: m_timeTravelWriter,
-            buffer: ref buffer
+            buffer: ref buffer,
+            writer: m_timeTravelWriter
         );
     }
-
     /// <inheritdoc/>
     public void RestoreState(byte[] buffer, int length) =>
         m_machine.Machine.RestoreState(reader: new StateReader(
         buffer: buffer,
-        start: 0,
-        length: length
+        length: length,
+        start: 0
     ));
-
     /// <inheritdoc/>
     public ITimeTravelLookahead<MachinePadState> CreateLookahead() =>
         new HumbleGamingBrickLookahead(
         instance: m_machine.Fork(),
         oneFrameCycles: DotsPerFrame
     );
-
     /// <summary>Reads one byte from anywhere in the bus address space for the host's <see cref="IMachineMemoryPeek"/> —
     /// a side-effect-free poll (no clock advance, no lock masking), never a write into machine state.</summary>
     /// <param name="address">A 16-bit bus address.</param>
@@ -123,8 +114,7 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     public byte PeekByte(int address) =>
         (((address < 0x0000) || (address > 0xFFFF))
         ? (byte)0
-        : m_systemBus.DebugReadByte(address: (ushort)address));
-
+        : m_systemBus.DebugReadByte(address: ((ushort)address)));
     /// <summary>Forces one byte into a writable bus region for the host's <see cref="IMachineMemoryPeek"/> — a debug
     /// mutation outside replay determinism (the host drops rewind history). A no-op for an out-of-range address.</summary>
     /// <param name="address">A 16-bit bus address.</param>
@@ -135,12 +125,11 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             (address <= 0xFFFF)
         ) {
             m_systemBus.DebugWriteByte(
-                address: (ushort)address,
+                address: ((ushort)address),
                 value: value
             );
         }
     }
-
     /// <inheritdoc/>
     public bool Reconfigure(string? options, out string reason) {
         ConsoleModel model;
@@ -159,8 +148,8 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         // move the model here; a bare capability flip with no recipe is honest, not a fake native retarget.
         var title = m_cartridge.Header.Title;
         var pokes = ConsoleModeRecipes.PokesFor(
-            title: title,
-            target: model
+            target: model,
+            title: title
         );
 
         m_machine.Machine.SwitchModel(
@@ -174,11 +163,9 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
 
         return true;
     }
-
     /// <inheritdoc/>
     public void ConfigureAudio(int sampleRate) =>
         m_audioSink.Configure(sampleRate: sampleRate);
-
     /// <inheritdoc/>
     public int DrainAudioSamples(Span<short> destination) =>
         m_audioSink.ReadSamples(destination: destination);
@@ -225,7 +212,6 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             Console.Error.WriteLine(value: $"[machine-host] battery-save flush to '{savePath}' failed ({exception.Message}); retrying on the next flush.");
         }
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         FlushSave(force: true);

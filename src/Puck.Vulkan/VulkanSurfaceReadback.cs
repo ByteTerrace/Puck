@@ -25,6 +25,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
     private readonly IVulkanFrameReadbackApi m_frameReadbackApi;
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
+
     private VulkanCommandResources? m_commandResources;
     private VulkanLogicalDevice? m_device;
     private bool m_disposed;
@@ -116,7 +117,6 @@ public sealed class VulkanSurfaceReadback : IDisposable {
 
         return m_frameReadbackApi.ReadBuffer(buffer: m_readbackBuffer!);
     }
-
     /// <summary>Records the image-to-staging copy and submits it under a completion fence without waiting — the
     /// non-blocking counterpart of <see cref="Read"/>. Poll <see cref="IsReadComplete"/> and then <see cref="MapPixels"/>
     /// to collect the pixels. At most one read may be in flight per instance.</summary>
@@ -179,7 +179,6 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         );
         m_readInFlight = true;
     }
-
     /// <summary>Polls, without blocking, whether the outstanding <see cref="SubmitRead"/>'s copy has completed. Returns
     /// <see langword="false"/> when no read is in flight, the copy has not finished, or the device is torn down/lost;
     /// <see langword="true"/> once the fence is signaled. Never throws (it is polled from the render loop).</summary>
@@ -198,7 +197,6 @@ public sealed class VulkanSurfaceReadback : IDisposable {
         // fail-safe boolean, never a throw into the render loop.
         return (m_frameSynchronizationApi.WaitForFence(deviceHandle: m_device.Handle, fenceHandle: m_fence, timeout: 0UL) == VkResult.Success);
     }
-
     /// <summary>Returns the pixels the last completed <see cref="SubmitRead"/> copied (the same reusable staging view
     /// <see cref="Read"/> returns — copy it before the next submit if it must outlive one) and clears the in-flight
     /// state so a new <see cref="SubmitRead"/> may be issued.</summary>
@@ -294,7 +292,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             DeviceHandle: device.Handle,
             InstanceHandle: instance.Handle,
             PhysicalDeviceHandle: device.PhysicalDevice.Handle,
-            SizeBytes: (((ulong)width * height) * bytesPerPixel)
+            SizeBytes: ((((ulong)width) * height) * bytesPerPixel)
         ));
         m_width = width;
         // The completion fence for the pipelined SubmitRead path — device-scoped, so a device/extent change rebuilds

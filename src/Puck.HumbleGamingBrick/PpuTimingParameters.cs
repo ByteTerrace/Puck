@@ -18,7 +18,6 @@ public sealed class PpuTimingParameters {
     /// mode-0 lags (the 51/50/49-cycle SCX pattern uniquely selects the mode-0 interrupt firing at dot
     /// 256 + SCX%8), and its LCD-on cases pin the entry latency. See the Post README for the corpus.</summary>
     public static PpuTimingParameters Default { get; } = new();
-
     /// <summary>The offset added to the pipeline's output position when the background fetcher derives its
     /// pixel-position-coupled coarse tile column, aligning our fetch dot to the hardware-accurate reference's
     /// per-dot line-position sample.</summary>

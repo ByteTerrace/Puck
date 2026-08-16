@@ -5,9 +5,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// Ports the law <c>verification/authority</c> proved out-of-process before its quarantine (a denial paired with a
-/// control, actor always distinct from the target, so a check that consults the wrong principal is caught) as an in-process
-/// substrate law directly against <see cref="Puck.World.Server.WorldServer.Grant"/>'s actor check
+/// The administration-authority law (a denial paired with a control, actor always distinct from the target, so a
+/// check that consults the wrong principal is caught), as an in-process substrate law directly against <see cref="Puck.World.Server.WorldServer.Grant"/>'s actor check
 /// (<c>WorldGrants.HoldsForAdministration</c>): a <see cref="PrincipalKind.Seat"/> actor may administer a grant row
 /// ONLY when the row's SUBJECT is its own body — <c>IsOwnSeatBody</c>'s rule, the narrowed 2026-08 posture the
 /// runner's own <c>03-assign.txt</c>/<c>05-disengage.txt</c> cases exist to keep closed (a handler that consults

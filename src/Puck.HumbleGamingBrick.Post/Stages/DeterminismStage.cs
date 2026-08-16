@@ -13,7 +13,6 @@ internal sealed class DeterminismStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "determinism";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -32,12 +31,12 @@ internal sealed class DeterminismStage : IPostStage {
         );
 
         PostMachine.RunFrames(
-            instance: first,
-            frames: Frames
+            frames: Frames,
+            instance: first
         );
         PostMachine.RunFrames(
-            instance: second,
-            frames: Frames
+            frames: Frames,
+            instance: second
         );
 
         var firstState = first.Machine.Snapshot();

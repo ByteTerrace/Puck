@@ -43,11 +43,13 @@ public static class AgbMachineFactory {
         var machine = scope.ServiceProvider.GetRequiredService<AdvancedGamingBrickMachine>();
 
         return new AgbMachineInstance(
-            provider: provider,
-            scope: scope,
-            machine: machine,
+            compose: compose,
             configuration: configuration,
-            compose: compose
+            create: Create,
+            forkWriterCapacity: 4096,
+            machine: machine,
+            provider: provider,
+            scope: scope
         );
     }
 }

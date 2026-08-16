@@ -10,7 +10,6 @@ namespace Puck.Maths;
 /// <param name="ColumnCell">The degree-<c>d+1</c> cell indexing the witness column.</param>
 /// <param name="CompositeCoefficient">The nonzero coefficient at that row and column.</param>
 public readonly record struct ChainComplexObstruction<TValue>(int Degree, int RowCell, int ColumnCell, TValue CompositeCoefficient);
-
 /// <summary>The typed refusal raised when incidence data does not define a chain complex.</summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
 /// <remarks>Homology is undefined unless every adjacent boundary composition vanishes. The exception carries the
@@ -25,7 +24,6 @@ public sealed class ChainComplexException<TValue> : InvalidOperationException {
     /// <summary>Gets the first nonzero entry of an adjacent boundary composition.</summary>
     public ChainComplexObstruction<TValue> Obstruction { get; }
 }
-
 /// <summary>
 /// The Betti numbers of a finite oriented complex over a field material: the ranks of its graded boundary operators,
 /// taken with the same reduced row echelon basis the duality layer already uses, and nothing else.
@@ -70,6 +68,33 @@ public sealed class FieldHomology<TValue, TOps>
     /// the statement — three routes to one number, sharing no step.</remarks>
     public int EulerCharacteristic { get; }
 
+    /// <summary>Returns the Betti number of one degree — the dimension of that homology space.</summary>
+    /// <param name="degree">The degree.</param>
+    /// <returns>The Betti number.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
+    public int BettiNumber(int degree) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degree,
+            other: Dimension
+        );
+
+        return m_betti[degree];
+    }
+    /// <summary>Returns the rank of one graded boundary operator, the one whose columns are the cells of that degree.</summary>
+    /// <param name="degree">The degree.</param>
+    /// <returns>The rank.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
+    /// <remarks>Degree zero and one past the top are both the zero map, and both are answered rather than refused.</remarks>
+    public int BoundaryRank(int degree) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degree,
+            other: (Dimension + 1)
+        );
+
+        return m_ranks[degree];
+    }
     /// <summary>Computes the Betti numbers of a complex over a field material.</summary>
     /// <param name="calculus">The complex.</param>
     /// <returns>The described homology.</returns>
@@ -81,7 +106,10 @@ public sealed class FieldHomology<TValue, TOps>
         ArgumentNullException.ThrowIfNull(argument: calculus);
 
         if (calculus.Poset.Algebra.Presentation.Material is not IFieldMaterial<TValue, TOps> field) {
-            throw new ArgumentException(message: "A rank counts independent columns, which a material without inverses cannot decide.", paramName: nameof(calculus));
+            throw new ArgumentException(
+                message: "A rank counts independent columns, which a material without inverses cannot decide.",
+                paramName: nameof(calculus)
+            );
         }
 
         GradedHomology.RequireChainComplex(calculus: calculus);
@@ -96,13 +124,22 @@ public sealed class FieldHomology<TValue, TOps>
             var columns = cellCounts[degree];
             var rows = cellCounts[(degree - 1)];
 
-            if ((0 == columns) || (0 == rows)) { continue; }
+            if (
+                (0 == columns) ||
+                (0 == rows)
+            ) { continue; }
 
             var entries = new TValue[(rows * columns)];
 
-            calculus.BoundaryMatrix(degree: degree, entries: entries);
+            calculus.BoundaryMatrix(
+                degree: degree,
+                entries: entries
+            );
 
-            var echelon = new FieldEchelon<TValue, TOps>(field: field, width: rows);
+            var echelon = new FieldEchelon<TValue, TOps>(
+                field: field,
+                width: rows
+            );
             var vector = new TValue[rows];
 
             for (var column = 0; (column < columns); ++column) {
@@ -114,33 +151,16 @@ public sealed class FieldHomology<TValue, TOps>
             ranks[degree] = echelon.Count;
         }
 
-        return new(dimension: dimension, betti: GradedHomology.BettiNumbers(cellCounts: cellCounts, ranks: ranks), ranks: ranks);
-    }
-
-    /// <summary>Returns the Betti number of one degree — the dimension of that homology space.</summary>
-    /// <param name="degree">The degree.</param>
-    /// <returns>The Betti number.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
-    public int BettiNumber(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degree, other: Dimension);
-
-        return m_betti[degree];
-    }
-
-    /// <summary>Returns the rank of one graded boundary operator, the one whose columns are the cells of that degree.</summary>
-    /// <param name="degree">The degree.</param>
-    /// <returns>The rank.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
-    /// <remarks>Degree zero and one past the top are both the zero map, and both are answered rather than refused.</remarks>
-    public int BoundaryRank(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degree, other: (Dimension + 1));
-
-        return m_ranks[degree];
+        return new(
+            dimension: dimension,
+            betti: GradedHomology.BettiNumbers(
+                cellCounts: cellCounts,
+                ranks: ranks
+            ),
+            ranks: ranks
+        );
     }
 }
-
 /// <summary>
 /// The integral homology of a finite oriented complex: Betti numbers and torsion coefficients, read off the elementary
 /// divisors of its graded boundary operators through the declared second kernel.
@@ -185,6 +205,85 @@ public sealed class IntegerHomology {
     /// whose homology is not free.</remarks>
     public int EulerCharacteristic { get; }
 
+    private static BigInteger[] TorsionCoefficients(ReadOnlySpan<BigInteger> divisors) {
+        var count = 0;
+
+        foreach (var divisor in divisors) {
+            if (divisor > BigInteger.One) { ++count; }
+        }
+
+        var coefficients = new BigInteger[count];
+        var slot = 0;
+
+        foreach (var divisor in divisors) {
+            if (divisor > BigInteger.One) { coefficients[slot++] = divisor; }
+        }
+
+        return coefficients;
+    }
+
+    /// <summary>Returns the Betti number of one degree — the free rank of that homology group.</summary>
+    /// <param name="degree">The degree.</param>
+    /// <returns>The Betti number.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
+    public int BettiNumber(int degree) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degree,
+            other: Dimension
+        );
+
+        return m_betti[degree];
+    }
+    /// <summary>Returns the rank of one graded boundary operator over the rationals.</summary>
+    /// <param name="degree">The degree.</param>
+    /// <returns>The rank.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
+    public int BoundaryRank(int degree) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degree,
+            other: (Dimension + 1)
+        );
+
+        return m_ranks[degree];
+    }
+    /// <summary>Returns the torsion coefficients of one degree, each dividing the next.</summary>
+    /// <param name="degree">The degree.</param>
+    /// <returns>The elementary divisors above one of the boundary operator one degree higher, which are the orders of
+    /// the cyclic torsion summands.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
+    public ReadOnlySpan<BigInteger> Torsion(int degree) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degree,
+            other: Dimension
+        );
+
+        return m_torsion[degree];
+    }
+    /// <summary>Attempts to read the certified reduction one degree's invariants came from.</summary>
+    /// <param name="degree">The degree.</param>
+    /// <param name="form">On success, the reduction of the boundary operator whose columns are that degree's cells.</param>
+    /// <returns><see langword="true"/> when that graded operator has both a row and a column; otherwise
+    /// <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
+    /// <remarks>An operator with no rows or no columns is the zero map between groups one of which is trivial: it has
+    /// rank zero and no divisors, and there is no matrix to reduce, so it carries no certificate rather than an empty
+    /// one.</remarks>
+    public bool TryBoundary(int degree, out SmithNormalForm form) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degree,
+            other: (Dimension + 1)
+        );
+
+        var stored = m_boundaries[degree];
+
+        form = stored!;
+
+        return (stored is not null);
+    }
     /// <summary>Attempts the integral homology of a complex.</summary>
     /// <param name="calculus">The complex, over the integers.</param>
     /// <param name="magnitudeBits">The magnitude ceiling every elementary-divisor reduction runs under.</param>
@@ -203,8 +302,14 @@ public sealed class IntegerHomology {
 
         // The ceiling is validated here rather than left to the first reduction, because a complex with no boundary
         // operator at all — a zero-dimensional one — reduces nothing and would have accepted any number in silence.
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: magnitudeBits, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: magnitudeBits, other: SmithNormalForm.MaximumMagnitudeBits);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: magnitudeBits,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: magnitudeBits,
+            other: SmithNormalForm.MaximumMagnitudeBits
+        );
 
         GradedHomology.RequireChainComplex(calculus: calculus);
 
@@ -226,13 +331,26 @@ public sealed class IntegerHomology {
             var columns = cellCounts[degree];
             var rows = cellCounts[(degree - 1)];
 
-            if ((0 == columns) || (0 == rows)) { continue; }
+            if (
+                (0 == columns) ||
+                (0 == rows)
+            ) { continue; }
 
             var entries = new BigInteger[(rows * columns)];
 
-            calculus.BoundaryMatrix(degree: degree, entries: entries);
+            calculus.BoundaryMatrix(
+                degree: degree,
+                entries: entries
+            );
 
-            if (!SmithNormalForm.TryReduce(entries: entries, rowCount: rows, columnCount: columns, magnitudeBits: magnitudeBits, form: out var form, obstruction: out obstruction)) {
+            if (!SmithNormalForm.TryReduce(
+                columnCount: columns,
+                entries: entries,
+                form: out var form,
+                magnitudeBits: magnitudeBits,
+                obstruction: out obstruction,
+                rowCount: rows
+            )) {
                 return false;
             }
 
@@ -243,84 +361,16 @@ public sealed class IntegerHomology {
 
         homology = new(
             dimension: dimension,
-            betti: GradedHomology.BettiNumbers(cellCounts: cellCounts, ranks: ranks),
+            betti: GradedHomology.BettiNumbers(
+                cellCounts: cellCounts,
+                ranks: ranks
+            ),
             boundaries: boundaries,
             ranks: ranks,
             torsion: torsion
         );
 
         return true;
-    }
-
-    /// <summary>Returns the Betti number of one degree — the free rank of that homology group.</summary>
-    /// <param name="degree">The degree.</param>
-    /// <returns>The Betti number.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
-    public int BettiNumber(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degree, other: Dimension);
-
-        return m_betti[degree];
-    }
-
-    /// <summary>Returns the rank of one graded boundary operator over the rationals.</summary>
-    /// <param name="degree">The degree.</param>
-    /// <returns>The rank.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
-    public int BoundaryRank(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degree, other: (Dimension + 1));
-
-        return m_ranks[degree];
-    }
-
-    /// <summary>Returns the torsion coefficients of one degree, each dividing the next.</summary>
-    /// <param name="degree">The degree.</param>
-    /// <returns>The elementary divisors above one of the boundary operator one degree higher, which are the orders of
-    /// the cyclic torsion summands.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/>.</exception>
-    public ReadOnlySpan<BigInteger> Torsion(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degree, other: Dimension);
-
-        return m_torsion[degree];
-    }
-
-    /// <summary>Attempts to read the certified reduction one degree's invariants came from.</summary>
-    /// <param name="degree">The degree.</param>
-    /// <param name="form">On success, the reduction of the boundary operator whose columns are that degree's cells.</param>
-    /// <returns><see langword="true"/> when that graded operator has both a row and a column; otherwise
-    /// <see langword="false"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Dimension"/> plus one.</exception>
-    /// <remarks>An operator with no rows or no columns is the zero map between groups one of which is trivial: it has
-    /// rank zero and no divisors, and there is no matrix to reduce, so it carries no certificate rather than an empty
-    /// one.</remarks>
-    public bool TryBoundary(int degree, out SmithNormalForm form) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degree, other: (Dimension + 1));
-
-        var stored = m_boundaries[degree];
-
-        form = stored!;
-
-        return (stored is not null);
-    }
-
-    private static BigInteger[] TorsionCoefficients(ReadOnlySpan<BigInteger> divisors) {
-        var count = 0;
-
-        foreach (var divisor in divisors) {
-            if (divisor > BigInteger.One) { ++count; }
-        }
-
-        var coefficients = new BigInteger[count];
-        var slot = 0;
-
-        foreach (var divisor in divisors) {
-            if (divisor > BigInteger.One) { coefficients[slot++] = divisor; }
-        }
-
-        return coefficients;
     }
 }
 
@@ -332,7 +382,10 @@ internal static class GradedHomology {
         var total = 0;
 
         for (var degree = 0; (degree < counts.Length); ++degree) {
-            total += ((0 == (degree & 1)) ? counts[degree] : -counts[degree]);
+            total += ((0 == (degree & 1))
+                ? counts[degree]
+                : -counts[degree]
+            );
         }
 
         return total;
@@ -359,13 +412,23 @@ internal static class GradedHomology {
             var middleCells = calculus.CellsOfDegree(degree: degree);
             var columnCells = calculus.CellsOfDegree(degree: (degree + 1));
 
-            if ((0 == rowCells.Length) || (0 == middleCells.Length) || (0 == columnCells.Length)) { continue; }
+            if (
+                (0 == rowCells.Length) ||
+                (0 == middleCells.Length) ||
+                (0 == columnCells.Length)
+            ) { continue; }
 
             var lower = new TValue[(rowCells.Length * middleCells.Length)];
             var upper = new TValue[(middleCells.Length * columnCells.Length)];
 
-            calculus.BoundaryMatrix(degree: degree, entries: lower);
-            calculus.BoundaryMatrix(degree: (degree + 1), entries: upper);
+            calculus.BoundaryMatrix(
+                degree: degree,
+                entries: lower
+            );
+            calculus.BoundaryMatrix(
+                degree: (degree + 1),
+                entries: upper
+            );
 
             for (var row = 0; (row < rowCells.Length); ++row) {
                 for (var column = 0; (column < columnCells.Length); ++column) {
@@ -383,14 +446,12 @@ internal static class GradedHomology {
 
                     if (material.IsZero(value: coefficient)) { continue; }
 
-                    throw new ChainComplexException<TValue>(
-                        obstruction: new(
-                            Degree: degree,
-                            RowCell: rowCells[row],
-                            ColumnCell: columnCells[column],
-                            CompositeCoefficient: coefficient
-                        )
-                    );
+                    throw new ChainComplexException<TValue>(obstruction: new(
+                        Degree: degree,
+                        RowCell: rowCells[row],
+                        ColumnCell: columnCells[column],
+                        CompositeCoefficient: coefficient
+                    ));
                 }
             }
         }

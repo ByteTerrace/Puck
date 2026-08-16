@@ -34,8 +34,14 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// </para>
     /// </remarks>
     public bool TrySolve(in Element divisor, in Element target, out Element quotient, out DivisionObstruction obstruction) {
-        RequireOwned(value: divisor, paramName: nameof(divisor));
-        RequireOwned(value: target, paramName: nameof(target));
+        RequireOwned(
+            value: divisor,
+            paramName: nameof(divisor)
+        );
+        RequireOwned(
+            value: target,
+            paramName: nameof(target)
+        );
 
         var field = RequireFieldMaterial();
         var width = RequireFiniteWidth();
@@ -44,11 +50,17 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         for (var row = 0; (row < width); ++row) {
             matrix[row] = new TValue[(width + 1)];
 
-            Array.Fill(array: matrix[row], value: field.Zero);
+            Array.Fill(
+                array: matrix[row],
+                value: field.Zero
+            );
         }
 
         for (var column = 0; (column < width); ++column) {
-            var image = Multiply(left: divisor, right: BasisElement(key: column));
+            var image = Multiply(
+                left: divisor,
+                right: BasisElement(key: column)
+            );
 
             for (var index = 0; (index < image.SupportCount); ++index) {
                 matrix[((int)image.Keys[index])][column] = image.Coefficients[index];
@@ -73,8 +85,17 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
                 }
             }
 
-            if ((pivot < 0) || !field.TryInvert(value: matrix[pivot][column], inverse: out var inverse)) {
-                obstruction = new(BlockedKey: column, RankReached: column);
+            if (
+                (pivot < 0) ||
+                !field.TryInvert(
+                value: matrix[pivot][column],
+                inverse: out var inverse
+            )
+            ) {
+                obstruction = new(
+                    BlockedKey: column,
+                    RankReached: column
+                );
 
                 return false;
             }
@@ -82,7 +103,10 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
             (matrix[column], matrix[pivot]) = (matrix[pivot], matrix[column]);
 
             for (var entry = column; (entry <= width); ++entry) {
-                matrix[column][entry] = field.Multiply(left: matrix[column][entry], right: inverse);
+                matrix[column][entry] = field.Multiply(
+                    left: matrix[column][entry],
+                    right: inverse
+                );
             }
 
             for (var row = 0; (row < width); ++row) {
@@ -93,7 +117,13 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
                 if (field.IsZero(value: factor)) { continue; }
 
                 for (var entry = column; (entry <= width); ++entry) {
-                    matrix[row][entry] = field.Subtract(left: matrix[row][entry], right: field.Multiply(left: factor, right: matrix[column][entry]));
+                    matrix[row][entry] = field.Subtract(
+                        left: matrix[row][entry],
+                        right: field.Multiply(
+                            left: factor,
+                            right: matrix[column][entry]
+                        )
+                    );
                 }
             }
         }
@@ -106,11 +136,13 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
             keys[index] = index;
         }
 
-        quotient = FromSupport(keys: keys, coefficients: coefficients);
+        quotient = FromSupport(
+            coefficients: coefficients,
+            keys: keys
+        );
 
         return true;
     }
-
     /// <summary>Attempts to sum an element over all lengths by resolvent rather than by iteration — the exact
     /// <c>(1 − value)⁻¹</c>.</summary>
     /// <param name="value">The element to sum the powers of.</param>
@@ -136,17 +168,32 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// </para>
     /// </remarks>
     public bool TryResolvent(in Element value, out Element resolvent, out SumClosureObstruction obstruction) {
-        RequireOwned(value: value, paramName: nameof(value));
+        RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
-        var divisor = Subtract(left: Identity, right: value);
+        var divisor = Subtract(
+            left: Identity,
+            right: value
+        );
 
-        if (TrySolve(divisor: divisor, target: Identity, quotient: out resolvent, obstruction: out var division)) {
+        if (TrySolve(
+            divisor: divisor,
+            target: Identity,
+            quotient: out resolvent,
+            obstruction: out var division
+        )) {
             obstruction = default;
 
             return true;
         }
 
-        obstruction = new(Attempted: ClosureCertificate.FieldResolvent, SupportKey: division.BlockedKey, StepsTaken: division.RankReached);
+        obstruction = new(
+            Attempted: ClosureCertificate.FieldResolvent,
+            SupportKey: division.BlockedKey,
+            StepsTaken: division.RankReached
+        );
         resolvent = Zero;
 
         return false;

@@ -38,31 +38,37 @@ internal static class PostStages {
             // Tier A — the BESS importer's validate-then-apply safety contract (M-08): every malformed-corpus case is
             // rejected before any machine state mutates (self-contained synthetic ROM; run anywhere).
             new BessImportGuardStage(),
+            // Tier A — SerialLinkSession.Suspend refuses a mid-transfer boundary rather than silently severing the
+            // cable (self-contained synthetic ROM; run anywhere).
+            new SerialSuspendIdleGuardStage(),
+            // Tier A — the resume constructor refuses a credit that exceeds the machine's cycle count rather than
+            // wrapping the pacing target with unsigned arithmetic (self-contained synthetic ROM; run anywhere).
+            new SerialResumeCreditGuardStage(),
             // Tier B — reference-ROM correctness (conformance ROMs via the $A000 result block; skip when the corpus is absent).
             new ConformanceRomStage(
         group: "cpu-instrs",
-        subPath: "cpu_instrs/individual",
-        model: ConsoleModel.Dmg
+        model: ConsoleModel.Dmg,
+        subPath: "cpu_instrs/individual"
     ),
             new ConformanceRomStage(
         group: "instr-timing",
-        subPath: "instr_timing",
-        model: ConsoleModel.Dmg
+        model: ConsoleModel.Dmg,
+        subPath: "instr_timing"
     ),
             new ConformanceRomStage(
         group: "mem-timing",
-        subPath: "mem_timing/individual",
-        model: ConsoleModel.Dmg
+        model: ConsoleModel.Dmg,
+        subPath: "mem_timing/individual"
     ),
             new ConformanceRomStage(
         group: "dmg-sound",
-        subPath: "dmg_sound/rom_singles",
-        model: ConsoleModel.Dmg
+        model: ConsoleModel.Dmg,
+        subPath: "dmg_sound/rom_singles"
     ),
             new ConformanceRomStage(
         group: "cgb-sound",
-        subPath: "cgb_sound/rom_singles",
-        model: ConsoleModel.Cgb
+        model: ConsoleModel.Cgb,
+        subPath: "cgb_sound/rom_singles"
     ),
             // Tier B — SingleStepTests/sm83 per-instruction vectors: the shared SM83 core against 500 opcode families
             // on a flat-RAM harness, off-ROM (skip when PUCK_GB_SST is absent).
@@ -70,60 +76,60 @@ internal static class PostStages {
             // Tier B — acceptance timing suite (serial Fibonacci signature; skip when the corpus is absent).
             new AcceptanceRomStage(
         group: "timer",
-        relativeDirectory: "timer",
-        recurse: true
+        recurse: true,
+        relativeDirectory: "timer"
     ),
             new AcceptanceRomStage(
         group: "ppu",
-        relativeDirectory: "ppu",
-        recurse: true
+        recurse: true,
+        relativeDirectory: "ppu"
     ),
             new AcceptanceRomStage(
         group: "interrupts",
-        relativeDirectory: "interrupts",
-        recurse: true
+        recurse: true,
+        relativeDirectory: "interrupts"
     ),
             new AcceptanceRomStage(
         group: "serial",
-        relativeDirectory: "serial",
-        recurse: true
+        recurse: true,
+        relativeDirectory: "serial"
     ),
             new AcceptanceRomStage(
         group: "oam-dma",
-        relativeDirectory: "oam_dma",
-        recurse: true
+        recurse: true,
+        relativeDirectory: "oam_dma"
     ),
             new AcceptanceRomStage(
         group: "bits",
-        relativeDirectory: "bits",
-        recurse: true
+        recurse: true,
+        relativeDirectory: "bits"
     ),
             new AcceptanceRomStage(
         group: "instr",
-        relativeDirectory: "instr",
-        recurse: true
+        recurse: true,
+        relativeDirectory: "instr"
     ),
             new AcceptanceRomStage(
         group: "misc",
-        relativeDirectory: "",
-        recurse: false
+        recurse: false,
+        relativeDirectory: ""
     ),
             // Tier C — cross-machine link determinism, one stage per generation pairing (self-contained synthetic
             // ROMs; run anywhere). Dmg↔Cgb is the original pairing; Dmg↔Agb and Cgb↔Agb prove the carry-forward
             // rule's Agb costume links through the identical SerialLinkSession machinery.
             new SerialLinkStage(
-        name: "serial-link",
         masterModel: ConsoleModel.Dmg,
+        name: "serial-link",
         slaveModel: ConsoleModel.Cgb
     ),
             new SerialLinkStage(
-        name: "serial-link-dmg-agb",
         masterModel: ConsoleModel.Dmg,
+        name: "serial-link-dmg-agb",
         slaveModel: ConsoleModel.Agb
     ),
             new SerialLinkStage(
-        name: "serial-link-cgb-agb",
         masterModel: ConsoleModel.Cgb,
+        name: "serial-link-cgb-agb",
         slaveModel: ConsoleModel.Agb
     ),
             // Tier C — the link cable under a longer gapped exchange and a mid-exchange churn: suspend/snapshot/restore/

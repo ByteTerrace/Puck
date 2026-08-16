@@ -7,7 +7,6 @@ namespace Puck.SdfVm.Views;
 /// <param name="View">The view's id.</param>
 /// <param name="Region">Its normalized screen region.</param>
 public readonly record struct ViewBinding(ViewId View, NormalizedRect Region);
-
 /// <summary>A full frame's slot assignment at one moment — the view-stack analogue of a layout director's per-slot
 /// rect array, generalized to name any registered view (not only a room/pane camera).
 /// <see cref="ViewTransition"/> eases between two of these.</summary>
@@ -19,7 +18,6 @@ public readonly record struct ViewLayout(IReadOnlyList<ViewBinding> Bindings) {
     /// fades a slot out/in entirely).</summary>
     public static ViewLayout Empty { get; } = new(Bindings: []);
 }
-
 /// <summary>
 /// Eases a <see cref="ViewStack"/> composition from one <see cref="ViewLayout"/> to another. Each slot can change
 /// both its normalized region and the identity of the view occupying it.
@@ -71,7 +69,7 @@ public sealed class ViewTransition {
     /// <returns>The eased layout at this instant — a REUSED buffer, valid only until the next <see cref="Sample"/>
     /// call.</returns>
     public ViewLayout Sample(float elapsedSeconds, out bool complete) {
-        var t = Math.Clamp(value: (elapsedSeconds / m_durationSeconds), min: 0f, max: 1f);
+        var t = Math.Clamp(max: 1f, min: 0f, value: (elapsedSeconds / m_durationSeconds));
 
         complete = (t >= 1f);
 

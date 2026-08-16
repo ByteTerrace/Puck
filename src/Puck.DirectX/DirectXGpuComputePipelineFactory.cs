@@ -31,8 +31,8 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         ArgumentNullException.ThrowIfNull(bindings);
         GpuComputeBinding.ValidateSet(bindings: bindings);
 
-        var device = (ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle;
-        var cs = (DirectXGpuShaderModule)computeShaderModule;
+        var device = ((ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle);
+        var cs = ((DirectXGpuShaderModule)computeShaderModule);
         var hasDescriptorTable = (bindings.Count > 0);
         var hasRootConstants = (pushConstantBinding is not null);
         var layout = DirectXPipelineLayout.CreateForParameters(
@@ -48,8 +48,8 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
         layout.DescriptorSlotCount = slotCount;
 
         layout.RootSignatureHandle = CreateRootSignature(
-            device: device,
             bindings: bindings,
+            device: device,
             hasDescriptorTable: hasDescriptorTable,
             hasRootConstants: hasRootConstants,
             rootConstantsCount: layout.RootConstantsCount,
@@ -83,7 +83,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             var binding = bindings[index];
 
             slotByBinding[binding.Binding] = nextSlot;
-            nextSlot = checked(nextSlot + binding.Count);
+            nextSlot = checked((nextSlot + binding.Count));
         }
 
         slotCount = nextSlot;
@@ -144,7 +144,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
             };
 
             tableParam.Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE {
-                NumDescriptorRanges = (uint)rangeCount,
+                NumDescriptorRanges = ((uint)rangeCount),
                 pDescriptorRanges = ranges,
             };
 
@@ -189,7 +189,7 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
                 continue;
             }
 
-            staticSamplers[(int)samplerRegister] = new D3D12_STATIC_SAMPLER_DESC {
+            staticSamplers[((int)samplerRegister)] = new D3D12_STATIC_SAMPLER_DESC {
                 AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
                 AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
                 AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
@@ -212,21 +212,21 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
 
         var desc = new D3D12_ROOT_SIGNATURE_DESC {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE,
-            NumParameters = (uint)paramCount,
+            NumParameters = ((uint)paramCount),
             NumStaticSamplers = sampledImageCount,
             pParameters = ((0 < paramCount) ? parameters : null),
             pStaticSamplers = ((sampledImageCount > 0) ? staticSamplers : null),
         };
 
-        return DirectXRootSignatures.Create(device: device, description: in desc);
+        return DirectXRootSignatures.Create(description: in desc, device: device);
     }
     private static nint BuildPso(ID3D12Device* device, nint rootSignature, nint csHandle, nuint csLength) {
         var psoDesc = new D3D12_COMPUTE_PIPELINE_STATE_DESC {
             CS = new D3D12_SHADER_BYTECODE {
                 BytecodeLength = csLength,
-                pShaderBytecode = (void*)csHandle,
+                pShaderBytecode = ((void*)csHandle),
             },
-            pRootSignature = (ID3D12RootSignature*)rootSignature,
+            pRootSignature = ((ID3D12RootSignature*)rootSignature),
         };
 
         void* pso;
@@ -234,6 +234,6 @@ public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelin
 
         device->CreateComputePipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
 
-        return (nint)pso;
+        return ((nint)pso);
     }
 }

@@ -25,12 +25,11 @@ internal static class PresentedDiagramClaims {
 
     private static PresentedAlgebra<BigInteger, IntegerMaterial>.Element IntegerBasisElement(PresentedAlgebra<BigInteger, IntegerMaterial> algebra, int key) =>
         algebra.FromSupport(keys: [key], coefficients: [BigInteger.One]);
-
     private static Generator[] SingleColourBasis(int count) {
         var generators = new Generator[count];
 
         for (var symbol = 0; (symbol < count); ++symbol) {
-            generators[symbol] = new Generator(symbol: symbol, inputs: new int[] { 0 }, outputs: new int[] { 0 }, degree: 1);
+            generators[symbol] = new Generator(degree: 1, inputs: new int[] { 0 }, outputs: new int[] { 0 }, symbol: symbol);
         }
 
         return generators;
@@ -58,10 +57,10 @@ internal static class PresentedDiagramClaims {
             ("cayley-dickson(2)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.CayleyDickson<BigInteger, IntegerMaterial>(floors: 2, basisRelabelling: [], material: default))),
             ("cayley-dickson(3)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.CayleyDickson<BigInteger, IntegerMaterial>(floors: 3, basisRelabelling: [], material: default))),
             ("cayley-dickson(4)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.CayleyDickson<BigInteger, IntegerMaterial>(floors: 4, basisRelabelling: [], material: default))),
-            ("clifford(3,0,0)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: 3, negativeCount: 0, degenerateCount: 0, material: default))),
-            ("clifford(2,1,0)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: 2, negativeCount: 1, degenerateCount: 0, material: default))),
-            ("clifford(4,1,0)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: 4, negativeCount: 1, degenerateCount: 0, material: default))),
-            ("clifford(2,0,1)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: 2, negativeCount: 0, degenerateCount: 1, material: default))),
+            ("clifford(3,0,0)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: 0, material: default, negativeCount: 0, positiveCount: 3))),
+            ("clifford(2,1,0)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: 0, material: default, negativeCount: 1, positiveCount: 2))),
+            ("clifford(4,1,0)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: 0, material: default, negativeCount: 1, positiveCount: 4))),
+            ("clifford(2,0,1)", PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: 1, material: default, negativeCount: 0, positiveCount: 2))),
         ];
 
         foreach (var (name, algebra) in instances) {
@@ -100,7 +99,6 @@ internal static class PresentedDiagramClaims {
 
         return null;
     }
-
     // ---- the quantum torus, against the skew pairing, at three configurations ----
 
     /// <summary>Proves the braiding certificate's derived charge, at EVERY ordered basis pair of a quantum torus,
@@ -118,8 +116,8 @@ internal static class PresentedDiagramClaims {
     /// normal-form word's own letter counts, never touching <see cref="PresentationCertificate{TValue}"/>.
     /// </remarks>
     public static string? QuantumTorusChargeMatchesSkewPairing() {
-        foreach (var (order, modulus, swapCharge) in ((int Order, ulong Modulus, ulong SwapCharge)[])[(3, 7UL, 2UL), (3, 13UL, 3UL), (4, 5UL, 2UL)]) {
-            var algebra = PresentedAlgebra<ulong, PrimeFieldMaterial>.Create(presentation: QuantumTorus(order: order, modulus: modulus, swapCharge: swapCharge));
+        foreach (var (order, modulus, swapCharge) in (((int Order, ulong Modulus, ulong SwapCharge)[])[(3, 7UL, 2UL), (3, 13UL, 3UL), (4, 5UL, 2UL)])) {
+            var algebra = PresentedAlgebra<ulong, PrimeFieldMaterial>.Create(presentation: QuantumTorus(modulus: modulus, order: order, swapCharge: swapCharge));
             var certificate = algebra.Certify(overlapLimit: (1L << 22));
             var keys = algebra.MaximumSupportCount;
 
@@ -131,7 +129,7 @@ internal static class PresentedDiagramClaims {
                 for (var right = 0; (right < keys); ++right) {
                     var (leftLow, leftHigh) = TorusExponents(presentation: algebra.Presentation, key: left);
                     var (rightLow, rightHigh) = TorusExponents(presentation: algebra.Presentation, key: right);
-                    var exponent = ((((leftHigh * rightLow) - (rightHigh * leftLow)) % order) + order) % order;
+                    var exponent = (((((leftHigh * rightLow) - (rightHigh * leftLow)) % order) + order) % order);
                     var expected = 1UL;
 
                     for (var step = 0; (step < exponent); ++step) { expected = ((expected * swapCharge) % modulus); }
@@ -170,7 +168,6 @@ internal static class PresentedDiagramClaims {
             material: PrimeFieldMaterial.Create(modulus: modulus)
         );
     }
-
     // The two exponents of a quantum-torus normal form, counted off its word rather than assumed from its key.
     private static (int Low, int High) TorusExponents(ChargedPresentation<ulong, PrimeFieldMaterial> presentation, long key) {
         var low = 0;
@@ -198,8 +195,8 @@ internal static class PresentedDiagramClaims {
     /// </remarks>
     public static string? FunctorTwinsTransferAtVariedLength() {
         for (var draw = 0; (draw < 60); ++draw) {
-            var lengthMix = unchecked((uint)(((uint)draw * 2654435761U) ^ 0x9E3779B9U));
-            var letters = (1 + (int)(lengthMix % 8U));
+            var lengthMix = unchecked((uint)((((uint)draw) * 2654435761U) ^ 0x9E3779B9U));
+            var letters = (1 + ((int)(lengthMix % 8U)));
             var free = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: Presentations.FreeMonoid<BigInteger, IntegerMaterial>(letterCount: letters, material: default));
             var transfer = ConvergentTransfer<BigInteger, IntegerMaterial>.Create(material: default);
             var quotients = new BigInteger[letters];
@@ -207,9 +204,9 @@ internal static class PresentedDiagramClaims {
             var word = free.Identity;
 
             for (var symbol = 0; (symbol < letters); ++symbol) {
-                var quotientMix = unchecked((uint)((((uint)draw * 2654435761U) + ((uint)symbol * 0x85EBCA6BU)) ^ 0xC2B2AE35U));
+                var quotientMix = unchecked((uint)(((((uint)draw) * 2654435761U) + (((uint)symbol) * 0x85EBCA6BU)) ^ 0xC2B2AE35U));
 
-                quotients[symbol] = (1 + (int)(quotientMix % 9U));
+                quotients[symbol] = (1 + ((int)(quotientMix % 9U)));
                 images[symbol] = transfer.Digit(partialQuotient: quotients[symbol]);
                 word = free.Multiply(left: word, right: free.Generator(symbol: symbol));
             }
@@ -227,7 +224,7 @@ internal static class PresentedDiagramClaims {
 
             for (var row = 0; (row < 2); ++row) {
                 for (var column = 0; (column < 2); ++column) {
-                    if (transfer.Entry(value: mapped, row: row, column: column) != transfer.Run(partialQuotients: quotients, row: row, column: column)) {
+                    if (transfer.Entry(column: column, row: row, value: mapped) != transfer.Run(column: column, partialQuotients: quotients, row: row)) {
                         return $"draw {draw}: the morphism and the module run disagree at ({row},{column}) on [{FormatQuotients(quotients: quotients)}]";
                     }
                 }

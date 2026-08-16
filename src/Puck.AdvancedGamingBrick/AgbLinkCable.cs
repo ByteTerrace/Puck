@@ -81,7 +81,6 @@ public sealed class AgbLinkCable : IAgbLink {
             ? 0xFFFFFFFFu
             : 0xFFu);
     }
-
     // One multiplayer round, clocked by `from` (the console whose transfer just completed — the parent): latch every
     // participating console's send word FIRST, so every delivery below observes the same completed round regardless
     // of chain position, then deliver the slots to every other participant. `from`'s own registers are set by its own
@@ -133,7 +132,6 @@ public sealed class AgbLinkCable : IAgbLink {
 
         /// <summary>Gets the console-side endpoint the cable delivers completed exchanges into.</summary>
         public IAgbLinkClient Client { get; }
-
         /// <inheritdoc/>
         public int PlayerId { get; }
 
@@ -144,7 +142,6 @@ public sealed class AgbLinkCable : IAgbLink {
             outgoing: outgoing,
             word: word
         );
-
         /// <inheritdoc/>
         public bool MultiplayerExchange(ushort send, out ushort[] slots) {
             slots = new ushort[MaxPlayers];

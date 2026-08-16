@@ -11,7 +11,7 @@ namespace Puck.Vulkan;
 public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter, IVulkanFrameSynchronizationApi frameSynchronizationApi) : IGpuQueueSubmitter {
     /// <inheritdoc/>
     public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
 
         queueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,
@@ -21,8 +21,8 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
     }
     /// <inheritdoc/>
     public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
-        var vkFence = (VulkanGpuSubmissionFence)fence;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
+        var vkFence = ((VulkanGpuSubmissionFence)fence);
 
         queueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,
@@ -33,7 +33,7 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
     }
     /// <inheritdoc/>
     public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
 
         queueSubmitter.SubmitAndWait(
             commandBufferHandles: commandBufferHandles,
@@ -43,7 +43,7 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
     }
     /// <inheritdoc/>
     public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
 
         return new VulkanGpuSubmissionFence(
             deviceHandle: vkContext.LogicalDevice.Handle,
@@ -59,6 +59,7 @@ public sealed class VulkanGpuQueueSubmitter(VulkanQueueSubmitter queueSubmitter,
 file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
     private readonly nint m_deviceHandle;
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
+
     private nint m_fenceHandle;
     private bool m_pending;
 
@@ -102,7 +103,6 @@ file sealed class VulkanGpuSubmissionFence : IGpuSubmissionFence {
         ).ThrowIfFailed(operation: "vkResetFences");
         m_pending = false;
     }
-
     /// <inheritdoc/>
     /// <remarks>Destroys the fence WITHOUT waiting (the frame-ring owner drains the device before teardown, and a
     /// lost device has nothing left to wait on).</remarks>

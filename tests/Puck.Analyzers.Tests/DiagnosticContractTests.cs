@@ -23,7 +23,6 @@ public sealed class DiagnosticContractTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EditedBodyRaisesFingerprintMismatchCarryingTheRecomputedHash() {
         var edited = Sources.BrandedMethod(body: "        return 2;");
@@ -42,14 +41,12 @@ public sealed class DiagnosticContractTests {
         Assert.Contains(expectedSubstring: $"(id '{Sources.TargetId}')", actualString: diagnostic.GetMessage());
         Assert.Contains(expectedSubstring: expected, actualString: diagnostic.GetMessage());
     }
-
     [Fact]
     public void BrandWithNoManifestEntryRaisesFingerprintMismatch() {
         var result = Harness.Run(source: Sources.BrandedMethod(), manifestJson: Manifest.Empty);
 
         Assert.Equal(expected: new[] { "VER001" }, actual: result.Ids);
     }
-
     [Fact]
     public void ManifestEntryNoBrandClaimsRaisesUnclaimedEntry() {
         var result = Harness.Run(
@@ -64,7 +61,6 @@ public sealed class DiagnosticContractTests {
 
         Assert.Contains(expectedSubstring: "deleted-brand", actualString: diagnostic.GetMessage());
     }
-
     [Fact]
     public void ManifestEntryAnEncounteredBrandClaimsRaisesNoUnclaimedEntry() {
         var source = Sources.BrandedMethod();
@@ -79,7 +75,6 @@ public sealed class DiagnosticContractTests {
 
         Assert.Empty(collection: result.WithId(id: "VER002"));
     }
-
     [Fact]
     public void PartialBrandedTypeIsRefusedRatherThanFingerprinted() {
         var source = """
@@ -99,7 +94,6 @@ public sealed class DiagnosticContractTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Equal(expected: new[] { "VER003" }, actual: result.Ids);
     }
-
     [Fact]
     public void BrandedDeclarationCarryingAPreprocessorDirectiveIsRefused() {
         var source = Sources.BrandedMethod(body: """
@@ -115,14 +109,12 @@ public sealed class DiagnosticContractTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Equal(expected: new[] { "VER003" }, actual: result.Ids);
     }
-
     [Fact]
     public void OrdinaryBrandedDeclarationIsNotRefusedAsUnfingerprintable() {
         var result = Harness.Run(source: Sources.BrandedMethod(), manifestJson: Manifest.Empty);
 
         Assert.Empty(collection: result.WithId(id: "VER003"));
     }
-
     [Fact]
     public void AttributeBasisDisagreeingWithTheRecordedBasisRaisesBasisMismatch() {
         var source = Sources.BrandedMethod(attribute: "[VerifiedCode(\"target\", Basis = \"exhaustive\")]");
@@ -141,7 +133,6 @@ public sealed class DiagnosticContractTests {
         Assert.Contains(expectedSubstring: "exhaustive", actualString: diagnostic.GetMessage());
         Assert.Contains(expectedSubstring: "exact-by-proof", actualString: diagnostic.GetMessage());
     }
-
     [Fact]
     public void AttributeBasisAgreeingUpToOrderAndSpacingRaisesNoBasisMismatch() {
         var source = Sources.BrandedMethod(attribute: "[VerifiedCode(\"target\", Basis = \" exhaustive ,exact-by-proof \")]");
@@ -157,7 +148,6 @@ public sealed class DiagnosticContractTests {
 
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void AttributeOmittingBasisRaisesNoBasisMismatch() {
         var source = Sources.BrandedMethod();
@@ -173,7 +163,6 @@ public sealed class DiagnosticContractTests {
 
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void UnclaimedEntryNamingAnAssemblyThatDeclaresNoMatchingNamespaceRaisesConventionViolated() {
         var source = """
@@ -200,7 +189,6 @@ public sealed class DiagnosticContractTests {
         Assert.Contains(expectedSubstring: Harness.DefaultAssemblyName, actualString: diagnostic.GetMessage());
         Assert.Empty(collection: result.WithId(id: "VER002"));
     }
-
     [Fact]
     public void EntryNamingADependencyNothingDeclaresRaisesUnresolvableDependency() {
         var result = Harness.Run(
@@ -219,7 +207,6 @@ public sealed class DiagnosticContractTests {
         Assert.Equal(expected: new[] { "VER010" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "Subject.Nowhere", actualString: result.Single(id: "VER010").GetMessage());
     }
-
     [Fact]
     public void EntryNamingADependencyInAPartialTypeIsRefusedRatherThanHalfWalked() {
         var source = """
@@ -250,7 +237,6 @@ public sealed class DiagnosticContractTests {
         Assert.Equal(expected: new[] { "VER010" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "partial", actualString: result.Single(id: "VER010").GetMessage());
     }
-
     [Fact]
     public void EntryRecordingADependencyThatIsNotADocumentationIdIsRefusedOnTheLedger() {
         var result = Harness.Run(
@@ -265,7 +251,6 @@ public sealed class DiagnosticContractTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "documentation-comment id", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void EntryRecordingOneDependencyTwiceIsRefusedOnTheLedger() {
         var result = Harness.Run(
@@ -280,7 +265,6 @@ public sealed class DiagnosticContractTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "more than once", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void EntryRecordingADependencyOutsideItsOwnAssemblyIsRefusedOnTheLedger() {
         var result = Harness.Run(
@@ -297,7 +281,6 @@ public sealed class DiagnosticContractTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "System.Int64", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void EntryDeclaringNoDependenciesIsNotRefused() {
         var source = Sources.BrandedMethod();
@@ -313,7 +296,6 @@ public sealed class DiagnosticContractTests {
         // A body that reads nothing outside itself rests on nothing outside itself, and an empty list says so.
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void UnclaimedEntryInAnAssemblyThatDoesDeclareItsOwnNamespaceRaisesUnclaimedEntryNotConventionViolated() {
         var result = Harness.Run(

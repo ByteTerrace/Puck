@@ -36,7 +36,7 @@ public static unsafe class DirectXRootSignatures {
                 out rootSig
             );
 
-            return (nint)rootSig;
+            return ((nint)rootSig);
         } finally {
             if (sigBlob is not null) {
                 _ = sigBlob->Release();

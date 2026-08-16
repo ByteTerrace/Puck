@@ -27,7 +27,6 @@ internal static class Laws {
 
         return deadline;
     }
-
     /// <summary>Asserts a denial/control pair: <paramref name="deniedOutcome"/> must report the action's ordinary
     /// POSITIVE outcome did NOT happen (refused), and <paramref name="controlOutcome"/> — the identical action with
     /// the ONE discriminating fact reversed (the missing grant restored, the reserved name replaced, the actor's own

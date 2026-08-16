@@ -23,9 +23,10 @@ pipeline and prefetch latches, PPU, APU, DMA, timer, interrupt, scheduler,
 serial, cartridge, backup, and master-cycle state. Subsystems implement
 `IAgbSnapshotable` through their `*.State.cs` partials.
 
-`AgbMachineFactory` owns construction. `AgbMachineInstance.Fork` rebuilds a
-machine from its recipe and restores the snapshot, avoiding shared mutable
-component state.
+`AgbMachineFactory` owns construction. `AgbMachineInstance.Fork` (a `global
+using` alias for `Puck.GamingBricks.MachineInstance<AdvancedGamingBrickMachine,
+AgbMachineConfiguration>.Fork`) rebuilds a machine from its recipe and restores
+the snapshot, avoiding shared mutable component state.
 
 Verification surfaces:
 
@@ -40,7 +41,7 @@ behavior and deterministic content, not a private field layout.
 
 ## Rewind
 
-`MachineTimeTravel<TInput>` (`src/Puck.Hosting/MachineTimeTravel.cs`) is the
+`MachineTimeTravel<TInput>` (`src/Puck.GamingBricks/MachineTimeTravel.cs`) is the
 shared, machine-neutral rewind layer both GamingBrick cores drive through
 `ITimeTravelMachineCore<TInput>` — it is not AGB-specific or Demo-specific.
 It stores periodic full keyframes and, for the frames between two keyframes,

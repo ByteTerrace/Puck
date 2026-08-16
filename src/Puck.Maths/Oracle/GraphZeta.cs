@@ -10,7 +10,6 @@ namespace Puck.Maths;
 /// <remarks>A successful call returns <see cref="BlockedIndex"/> at <c>-1</c>, which reads unambiguously as "nothing
 /// blocked": the recursion's indexes run from one.</remarks>
 public readonly record struct ZetaObstruction(int BlockedIndex, int Order);
-
 /// <summary>
 /// The characteristic polynomial and the dynamical zeta of one element, read out of the algebra's own trace and powers.
 /// At a quiver the element is a weighted adjacency matrix, the trace of its <c>m</c>-th power is the closed-walk count
@@ -82,7 +81,10 @@ public sealed class GraphZeta<TValue, TOps>
         m_powerSums = new TValue[(order + 1)];
 
         for (var length = 0; (length <= order); ++length) {
-            m_powerSums[length] = algebra.Trace(value: algebra.Power(value: value, exponent: ((ulong)length)));
+            m_powerSums[length] = algebra.Trace(value: algebra.Power(
+                exponent: ((ulong)length),
+                value: value
+            ));
         }
 
         // The recursion, one degree at a time. The sum is a charged linear fold — the shape the material rounds exactly
@@ -100,33 +102,65 @@ public sealed class GraphZeta<TValue, TOps>
             }
 
             var total = material.FusedChargedLinear(
-                charges: charges.AsSpan(start: 0, length: degree),
-                values: terms.AsSpan(start: 0, length: degree),
+                charges: charges.AsSpan(
+                    length: degree,
+                    start: 0
+                ),
+                values: terms.AsSpan(
+                    length: degree,
+                    start: 0
+                ),
                 lane: lane
             );
 
-            m_coefficients[degree] = material.Multiply(left: field.Negate(value: total), right: inverses[degree]);
+            m_coefficients[degree] = material.Multiply(
+                left: field.Negate(value: total),
+                right: inverses[degree]
+            );
         }
 
-        var series = PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Shift<TValue, TOps>(degreeBound: degreeBound, material: material));
-        var width = Math.Min(val1: order, val2: degreeBound);
+        var series = PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Shift<TValue, TOps>(
+            degreeBound: degreeBound,
+            material: material
+        ));
+        var width = Math.Min(
+            val1: order,
+            val2: degreeBound
+        );
         var keys = new long[(width + 1)];
 
         for (var degree = 0; (degree <= width); ++degree) { keys[degree] = degree; }
 
         Series = series;
-        CharacteristicPolynomial = series.FromSupport(keys: keys, coefficients: m_coefficients.AsSpan(start: 0, length: (width + 1)));
+        CharacteristicPolynomial = series.FromSupport(
+            keys: keys,
+            coefficients: m_coefficients.AsSpan(
+                length: (width + 1),
+                start: 0
+            )
+        );
 
         // The reciprocal. Writing the polynomial as 1 + q, its inverse is the star of −q, and one subtraction from the
         // unit forms −q directly. Its nilpotence — which is what the star runs under, and which the guarded sum reports
         // only when it FAILS — is measured here instead of inferred.
-        var augmentation = series.Subtract(left: series.Identity, right: CharacteristicPolynomial);
-        var vanishes = (0 == series.Power(value: augmentation, exponent: ((ulong)(degreeBound + 1))).SupportCount);
-        var summed = series.TrySumOverAllLengths(value: augmentation, total: out var reciprocal, obstruction: out _);
+        var augmentation = series.Subtract(
+            left: series.Identity,
+            right: CharacteristicPolynomial
+        );
+        var vanishes = (0 == series.Power(
+            exponent: ((ulong)(degreeBound + 1)),
+            value: augmentation
+        ).SupportCount);
+        var summed = series.TrySumOverAllLengths(
+            obstruction: out _,
+            total: out var reciprocal,
+            value: augmentation
+        );
 
         Certificate = ((vanishes && summed)
             ? ClosureCertificate.Nilpotent
-            : ClosureCertificate.None);
+            : ClosureCertificate.None
+        );
         DynamicalZeta = reciprocal;
     }
 
@@ -151,6 +185,35 @@ public sealed class GraphZeta<TValue, TOps>
     /// <summary>Gets the truncated jet algebra the two series live in.</summary>
     public PresentedAlgebra<TValue, TOps> Series { get; }
 
+    /// <summary>Returns one coefficient of the characteristic polynomial.</summary>
+    /// <param name="degree">The degree, from zero through <see cref="Order"/>.</param>
+    /// <returns>The coefficient of <c>t^degree</c> in <c>det(I − tA)</c>; degree zero is the material's one.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Order"/>.</exception>
+    /// <remarks>It is the full coefficient even where <see cref="DegreeBound"/> truncates
+    /// <see cref="CharacteristicPolynomial"/>, since the recursion reaches every degree the order carries.</remarks>
+    public TValue Coefficient(int degree) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: degree,
+            other: Order
+        );
+
+        return m_coefficients[degree];
+    }
+    /// <summary>Returns one power sum: the trace of a power of the element.</summary>
+    /// <param name="length">The power, from zero through <see cref="Order"/>.</param>
+    /// <returns><c>Trace(Aˡ)</c>, which at a quiver is the number of closed walks of that length; length zero is the
+    /// order's worth of ones.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The length is negative or above <see cref="Order"/>.</exception>
+    public TValue PowerSum(int length) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: length,
+            other: Order
+        );
+
+        return m_powerSums[length];
+    }
     /// <summary>Reads the characteristic polynomial and the dynamical zeta of one element.</summary>
     /// <param name="algebra">The algebra the element belongs to; it has a finite basis.</param>
     /// <param name="value">The element — at a quiver, the weighted adjacency matrix.</param>
@@ -179,7 +242,10 @@ public sealed class GraphZeta<TValue, TOps>
         out ZetaObstruction obstruction
     ) {
         ArgumentNullException.ThrowIfNull(argument: algebra);
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: order, other: 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: order,
+            other: 1
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(value: degreeBound);
 
         var presentation = algebra.Presentation;
@@ -191,69 +257,75 @@ public sealed class GraphZeta<TValue, TOps>
             );
         }
 
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: order, other: presentation.NormalFormCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: order,
+            other: presentation.NormalFormCount
+        );
 
-        algebra.RequireOwned(value: value, paramName: nameof(value));
+        algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         var inverses = new TValue[(order + 1)];
         var material = presentation.Material;
         var divisor = material.Zero;
 
         zeta = null;
-        obstruction = new(BlockedIndex: -1, Order: order);
+        obstruction = new(
+            BlockedIndex: -1,
+            Order: order
+        );
 
         // Division lives at a certified field, so a material that declares none cannot reach even the recursion's first
         // divisor, and index one is where it stops.
         if (material is not IFieldMaterial<TValue, TOps> field) {
-            obstruction = new(BlockedIndex: 1, Order: order);
+            obstruction = new(
+                BlockedIndex: 1,
+                Order: order
+            );
 
             return false;
         }
 
         for (var index = 1; (index <= order); ++index) {
-            divisor = material.Add(left: divisor, right: material.One);
+            divisor = material.Add(
+                left: divisor,
+                right: material.One
+            );
 
-            if (!field.TryInvert(value: divisor, inverse: out inverses[index])) {
-                obstruction = new(BlockedIndex: index, Order: order);
+            if (!field.TryInvert(
+                value: divisor,
+                inverse: out inverses[index]
+            )) {
+                obstruction = new(
+                    BlockedIndex: index,
+                    Order: order
+                );
 
                 return false;
             }
         }
 
-        if (!EqualityComparer<TValue>.Default.Equals(x: algebra.Trace(value: algebra.Identity), y: divisor)) {
+        if (!EqualityComparer<TValue>.Default.Equals(
+            x: algebra.Trace(value: algebra.Identity),
+            y: divisor
+        )) {
             throw new ArgumentException(
                 message: "The trace of this algebra's unit is not the declared order's worth of ones, so the trace recursion would recover the coefficients of a polynomial this element does not have.",
                 paramName: nameof(order)
             );
         }
 
-        zeta = new GraphZeta<TValue, TOps>(algebra: algebra, value: value, order: order, degreeBound: degreeBound, field: field, inverses: inverses);
+        zeta = new GraphZeta<TValue, TOps>(
+            algebra: algebra,
+            degreeBound: degreeBound,
+            field: field,
+            inverses: inverses,
+            order: order,
+            value: value
+        );
 
         return true;
-    }
-
-    /// <summary>Returns one coefficient of the characteristic polynomial.</summary>
-    /// <param name="degree">The degree, from zero through <see cref="Order"/>.</param>
-    /// <returns>The coefficient of <c>t^degree</c> in <c>det(I − tA)</c>; degree zero is the material's one.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The degree is negative or above <see cref="Order"/>.</exception>
-    /// <remarks>It is the full coefficient even where <see cref="DegreeBound"/> truncates
-    /// <see cref="CharacteristicPolynomial"/>, since the recursion reaches every degree the order carries.</remarks>
-    public TValue Coefficient(int degree) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: degree);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: degree, other: Order);
-
-        return m_coefficients[degree];
-    }
-
-    /// <summary>Returns one power sum: the trace of a power of the element.</summary>
-    /// <param name="length">The power, from zero through <see cref="Order"/>.</param>
-    /// <returns><c>Trace(Aˡ)</c>, which at a quiver is the number of closed walks of that length; length zero is the
-    /// order's worth of ones.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The length is negative or above <see cref="Order"/>.</exception>
-    public TValue PowerSum(int length) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: length, other: Order);
-
-        return m_powerSums[length];
     }
 }

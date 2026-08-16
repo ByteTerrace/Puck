@@ -9,23 +9,23 @@ namespace Puck.Cli.Format.Rewriters;
 // Single-attribute declarations and the rare combined [A, B] list are left alone. Only the
 // attribute-list ORDER changes (each slot keeps its own trivia, so the multi-line layout is preserved).
 internal sealed class AttrRewriter : CSharpSyntaxRewriter {
-    public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node) => Reorder(node: (MethodDeclarationSyntax)base.VisitMethodDeclaration(node: node)!);
-    public override SyntaxNode? VisitConstructorDeclaration(ConstructorDeclarationSyntax node) => Reorder(node: (ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node: node)!);
-    public override SyntaxNode? VisitDestructorDeclaration(DestructorDeclarationSyntax node) => Reorder(node: (DestructorDeclarationSyntax)base.VisitDestructorDeclaration(node: node)!);
-    public override SyntaxNode? VisitOperatorDeclaration(OperatorDeclarationSyntax node) => Reorder(node: (OperatorDeclarationSyntax)base.VisitOperatorDeclaration(node: node)!);
-    public override SyntaxNode? VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node) => Reorder(node: (ConversionOperatorDeclarationSyntax)base.VisitConversionOperatorDeclaration(node: node)!);
-    public override SyntaxNode? VisitPropertyDeclaration(PropertyDeclarationSyntax node) => Reorder(node: (PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node: node)!);
-    public override SyntaxNode? VisitIndexerDeclaration(IndexerDeclarationSyntax node) => Reorder(node: (IndexerDeclarationSyntax)base.VisitIndexerDeclaration(node: node)!);
-    public override SyntaxNode? VisitEventDeclaration(EventDeclarationSyntax node) => Reorder(node: (EventDeclarationSyntax)base.VisitEventDeclaration(node: node)!);
-    public override SyntaxNode? VisitEventFieldDeclaration(EventFieldDeclarationSyntax node) => Reorder(node: (EventFieldDeclarationSyntax)base.VisitEventFieldDeclaration(node: node)!);
-    public override SyntaxNode? VisitFieldDeclaration(FieldDeclarationSyntax node) => Reorder(node: (FieldDeclarationSyntax)base.VisitFieldDeclaration(node: node)!);
-    public override SyntaxNode? VisitDelegateDeclaration(DelegateDeclarationSyntax node) => Reorder(node: (DelegateDeclarationSyntax)base.VisitDelegateDeclaration(node: node)!);
-    public override SyntaxNode? VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node) => Reorder(node: (EnumMemberDeclarationSyntax)base.VisitEnumMemberDeclaration(node: node)!);
-    public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Reorder(node: (ClassDeclarationSyntax)base.VisitClassDeclaration(node: node)!);
-    public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Reorder(node: (StructDeclarationSyntax)base.VisitStructDeclaration(node: node)!);
-    public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Reorder(node: (InterfaceDeclarationSyntax)base.VisitInterfaceDeclaration(node: node)!);
-    public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Reorder(node: (RecordDeclarationSyntax)base.VisitRecordDeclaration(node: node)!);
-    public override SyntaxNode? VisitEnumDeclaration(EnumDeclarationSyntax node) => Reorder(node: (EnumDeclarationSyntax)base.VisitEnumDeclaration(node: node)!);
+    public override SyntaxNode? VisitMethodDeclaration(MethodDeclarationSyntax node) => Reorder(node: ((MethodDeclarationSyntax)base.VisitMethodDeclaration(node: node)!));
+    public override SyntaxNode? VisitConstructorDeclaration(ConstructorDeclarationSyntax node) => Reorder(node: ((ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node: node)!));
+    public override SyntaxNode? VisitDestructorDeclaration(DestructorDeclarationSyntax node) => Reorder(node: ((DestructorDeclarationSyntax)base.VisitDestructorDeclaration(node: node)!));
+    public override SyntaxNode? VisitOperatorDeclaration(OperatorDeclarationSyntax node) => Reorder(node: ((OperatorDeclarationSyntax)base.VisitOperatorDeclaration(node: node)!));
+    public override SyntaxNode? VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node) => Reorder(node: ((ConversionOperatorDeclarationSyntax)base.VisitConversionOperatorDeclaration(node: node)!));
+    public override SyntaxNode? VisitPropertyDeclaration(PropertyDeclarationSyntax node) => Reorder(node: ((PropertyDeclarationSyntax)base.VisitPropertyDeclaration(node: node)!));
+    public override SyntaxNode? VisitIndexerDeclaration(IndexerDeclarationSyntax node) => Reorder(node: ((IndexerDeclarationSyntax)base.VisitIndexerDeclaration(node: node)!));
+    public override SyntaxNode? VisitEventDeclaration(EventDeclarationSyntax node) => Reorder(node: ((EventDeclarationSyntax)base.VisitEventDeclaration(node: node)!));
+    public override SyntaxNode? VisitEventFieldDeclaration(EventFieldDeclarationSyntax node) => Reorder(node: ((EventFieldDeclarationSyntax)base.VisitEventFieldDeclaration(node: node)!));
+    public override SyntaxNode? VisitFieldDeclaration(FieldDeclarationSyntax node) => Reorder(node: ((FieldDeclarationSyntax)base.VisitFieldDeclaration(node: node)!));
+    public override SyntaxNode? VisitDelegateDeclaration(DelegateDeclarationSyntax node) => Reorder(node: ((DelegateDeclarationSyntax)base.VisitDelegateDeclaration(node: node)!));
+    public override SyntaxNode? VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node) => Reorder(node: ((EnumMemberDeclarationSyntax)base.VisitEnumMemberDeclaration(node: node)!));
+    public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax node) => Reorder(node: ((ClassDeclarationSyntax)base.VisitClassDeclaration(node: node)!));
+    public override SyntaxNode? VisitStructDeclaration(StructDeclarationSyntax node) => Reorder(node: ((StructDeclarationSyntax)base.VisitStructDeclaration(node: node)!));
+    public override SyntaxNode? VisitInterfaceDeclaration(InterfaceDeclarationSyntax node) => Reorder(node: ((InterfaceDeclarationSyntax)base.VisitInterfaceDeclaration(node: node)!));
+    public override SyntaxNode? VisitRecordDeclaration(RecordDeclarationSyntax node) => Reorder(node: ((RecordDeclarationSyntax)base.VisitRecordDeclaration(node: node)!));
+    public override SyntaxNode? VisitEnumDeclaration(EnumDeclarationSyntax node) => Reorder(node: ((EnumDeclarationSyntax)base.VisitEnumDeclaration(node: node)!));
 
     // Moves each attribute (with its own trailing newline) into its alphabetical slot and reassigns each
     // slot's leading trivia, preserving the one-per-line layout.
@@ -57,7 +57,7 @@ internal sealed class AttrRewriter : CSharpSyntaxRewriter {
             newLists.Add(item: lists[order[slot]].WithLeadingTrivia(trivia: lists[slot].GetLeadingTrivia()));
         }
 
-        return (T)node.WithAttributeLists(attributeLists: SyntaxFactory.List(nodes: newLists));
+        return ((T)node.WithAttributeLists(attributeLists: SyntaxFactory.List(nodes: newLists)));
     }
     private static string SimpleName(AttributeSyntax attribute) => attribute.Name switch {
         QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,

@@ -1,18 +1,10 @@
 using System.Globalization;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 
 namespace Puck.Maths;
 
 public readonly partial record struct FixedQ1648 {
-    private const NumberStyles DefaultParseStyle = NumberStyles.AllowLeadingWhite |
-                                                     NumberStyles.AllowTrailingWhite |
-                                                     NumberStyles.AllowLeadingSign |
-                                                     NumberStyles.AllowDecimalPoint;
-
-    private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(
-        fractionBitCount: FractionBitCount
-    );
+    private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(fractionBitCount: FractionBitCount);
 
     public static int Radix => 2;
 
@@ -21,8 +13,7 @@ public readonly partial record struct FixedQ1648 {
     public static bool IsCanonical(FixedQ1648 value) => true;
     public static bool IsComplexNumber(FixedQ1648 value) => false;
     public static bool IsEvenInteger(FixedQ1648 value) =>
-        (((value.Value & ((1L << FractionBitCount) - 1L)) == 0L) &&
-        (((value.Value >> FractionBitCount) & 1L) == 0L));
+        (IsInteger(value: value) && (((value.Value >> FractionBitCount) & 1L) == 0L));
     public static bool IsFinite(FixedQ1648 value) => true;
     public static bool IsImaginaryNumber(FixedQ1648 value) => false;
     public static bool IsInfinity(FixedQ1648 value) => false;
@@ -33,103 +24,100 @@ public readonly partial record struct FixedQ1648 {
     public static bool IsNegativeInfinity(FixedQ1648 value) => false;
     public static bool IsNormal(FixedQ1648 value) => (value.Value != 0L);
     public static bool IsOddInteger(FixedQ1648 value) =>
-        (((value.Value & ((1L << FractionBitCount) - 1L)) == 0L) &&
-        (((value.Value >> FractionBitCount) & 1L) != 0L));
+        (IsInteger(value: value) && (((value.Value >> FractionBitCount) & 1L) != 0L));
     public static bool IsPositive(FixedQ1648 value) => (value.Value >= 0L);
     public static bool IsPositiveInfinity(FixedQ1648 value) => false;
     public static bool IsRealNumber(FixedQ1648 value) => true;
     public static bool IsSubnormal(FixedQ1648 value) => false;
     public static bool IsZero(FixedQ1648 value) => (value.Value == 0L);
-    public static FixedQ1648 MaxMagnitude(FixedQ1648 x, FixedQ1648 y) {
-        var xMagnitude = FusedArithmetic.RawMagnitude(value: x.Value);
-        var yMagnitude = FusedArithmetic.RawMagnitude(value: y.Value);
-
-        return (((xMagnitude > yMagnitude) || ((xMagnitude == yMagnitude) && (x.Value >= 0L))) ? x : y);
-    }
-    public static FixedQ1648 MaxMagnitudeNumber(FixedQ1648 x, FixedQ1648 y) => MaxMagnitude(x: x, y: y);
-    public static FixedQ1648 MinMagnitude(FixedQ1648 x, FixedQ1648 y) {
-        var xMagnitude = FusedArithmetic.RawMagnitude(value: x.Value);
-        var yMagnitude = FusedArithmetic.RawMagnitude(value: y.Value);
-
-        return (((xMagnitude < yMagnitude) || ((xMagnitude == yMagnitude) && (x.Value < 0L))) ? x : y);
-    }
-    public static FixedQ1648 MinMagnitudeNumber(FixedQ1648 x, FixedQ1648 y) => MinMagnitude(x: x, y: y);
+    public static FixedQ1648 MaxMagnitude(FixedQ1648 x, FixedQ1648 y) =>
+        new(Value: SignedFixedPointArithmetic.MaximumMagnitude(
+            x: x.Value,
+            y: y.Value
+        ));
+    public static FixedQ1648 MaxMagnitudeNumber(FixedQ1648 x, FixedQ1648 y) => MaxMagnitude(
+        x: x,
+        y: y
+    );
+    public static FixedQ1648 MinMagnitude(FixedQ1648 x, FixedQ1648 y) =>
+        new(Value: SignedFixedPointArithmetic.MinimumMagnitude(
+            x: x.Value,
+            y: y.Value
+        ));
+    public static FixedQ1648 MinMagnitudeNumber(FixedQ1648 x, FixedQ1648 y) => MinMagnitude(
+        x: x,
+        y: y
+    );
     public static FixedQ1648 Parse(string s, IFormatProvider? provider) {
         ArgumentNullException.ThrowIfNull(argument: s);
 
-        return Parse(s: s.AsSpan(), style: DefaultParseStyle, provider: provider);
+        return Parse(
+            s: s.AsSpan(),
+            style: FixedPointText.DefaultParseStyle,
+            provider: provider
+        );
     }
     public static FixedQ1648 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) =>
-        Parse(s: s, style: DefaultParseStyle, provider: provider);
+        Parse(
+            provider: provider,
+            s: s,
+            style: FixedPointText.DefaultParseStyle
+        );
     public static FixedQ1648 Parse(string s, NumberStyles style, IFormatProvider? provider) {
         ArgumentNullException.ThrowIfNull(argument: s);
 
-        return Parse(s: s.AsSpan(), style: style, provider: provider);
-    }
-    public static FixedQ1648 Parse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider) {
-        var status = ParseText(
-            s: s,
+        return Parse(
+            s: s.AsSpan(),
             style: style,
-            provider: provider,
-            result: out var result
+            provider: provider
         );
-
-        if (FixedPointParseStatus.Success == status) {
-            return result;
-        }
-
-        if (FixedPointParseStatus.Overflow == status) {
-            throw new OverflowException(message: $"Value is outside the representable {nameof(FixedQ1648)} range.");
-        }
-
-        _ = decimal.Parse(s: s, style: style, provider: (provider ?? CultureInfo.InvariantCulture));
-
-        throw new FormatException(message: $"The input span was not in a valid {nameof(FixedQ1648)} format.");
     }
-    public static bool TryParse(string? s, IFormatProvider? provider, out FixedQ1648 result) =>
-        TryParse(s: s, style: DefaultParseStyle, provider: provider, result: out result);
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out FixedQ1648 result) =>
-        TryParse(s: s, style: DefaultParseStyle, provider: provider, result: out result);
-    public static bool TryParse(string? s, NumberStyles style, IFormatProvider? provider, out FixedQ1648 result) =>
-        TryParse(s: s.AsSpan(), style: style, provider: provider, result: out result);
-    public static bool TryParse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out FixedQ1648 result) {
-        return (FixedPointParseStatus.Success == ParseText(
+    public static FixedQ1648 Parse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider) =>
+        new(Value: FixedPointText.ParseSignedRaw<FixedQ1648>(
+            fractionBitCount: FractionBitCount,
+            parsingDenominator: ParsingDenominator,
+            provider: provider,
             s: s,
+            style: style
+        ));
+    public static bool TryParse(string? s, IFormatProvider? provider, out FixedQ1648 result) =>
+        TryParse(
+            provider: provider,
+            result: out result,
+            s: s,
+            style: FixedPointText.DefaultParseStyle
+        );
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out FixedQ1648 result) =>
+        TryParse(
+            provider: provider,
+            result: out result,
+            s: s,
+            style: FixedPointText.DefaultParseStyle
+        );
+    public static bool TryParse(string? s, NumberStyles style, IFormatProvider? provider, out FixedQ1648 result) =>
+        // A null string forwards as the empty span rather than short-circuiting, so an invalid style surfaces its
+        // ArgumentException — argument validation before data, matching the platform's numeric parsers — while a
+        // valid style still answers false with the default left behind.
+        TryParse(
+            s: s.AsSpan(),
             style: style,
             provider: provider,
             result: out result
-        ));
-    }
-
-    private static FixedPointParseStatus ParseText(
-        ReadOnlySpan<char> s,
-        NumberStyles style,
-        IFormatProvider? provider,
-        out FixedQ1648 result
-    ) {
-        result = default;
-        var status = FixedPointText.Parse(
-            s: s,
-            style: style,
-            provider: provider,
+        );
+    public static bool TryParse(ReadOnlySpan<char> s, NumberStyles style, IFormatProvider? provider, out FixedQ1648 result) {
+        var parsed = FixedPointText.TryParseSignedRaw(
             fractionBitCount: FractionBitCount,
             parsingDenominator: ParsingDenominator,
-            maximumPositiveRaw: long.MaxValue,
-            maximumNegativeMagnitudeRaw: (1UL << 63),
-            rejectExactOutOfRange: false,
-            negative: out var negative,
-            rawMagnitude: out var rawMagnitude
+            provider: provider,
+            rawValue: out var rawValue,
+            s: s,
+            style: style
         );
 
-        if (FixedPointParseStatus.Success == status) {
-            result = new(Value: (negative
-                ? ((rawMagnitude == (1UL << 63)) ? long.MinValue : -((long)rawMagnitude))
-                : ((long)rawMagnitude)));
-        }
+        result = new(Value: rawValue);
 
-        return status;
+        return parsed;
     }
-
     /// <summary>Renders the exact decimal expansion into <paramref name="destination"/>.</summary>
     /// <param name="destination">The span the rendering is written to.</param>
     /// <param name="charsWritten">The characters written, which is zero whenever this call returns
@@ -141,18 +129,15 @@ public readonly partial record struct FixedQ1648 {
     /// expansion rather than re-rendered, and either may be several characters wide, so the required length is
     /// computed from the tokens' own widths rather than from the invariant length.</param>
     /// <returns>Whether the rendering fit.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) {
-        FixedPointText.ValidateGeneralFormat(format: format);
-
-        return FixedPointText.TryFormatSigned(
-            rawValue: Value,
-            fractionBitCount: FractionBitCount,
-            destination: destination,
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) =>
+        FixedPointText.TryFormatSignedGeneral(
             charsWritten: out charsWritten,
-            provider: provider
+            destination: destination,
+            format: format,
+            fractionBitCount: FractionBitCount,
+            provider: provider,
+            rawValue: Value
         );
-    }
-
     /// <summary>Renders the exact decimal expansion as a string.</summary>
     /// <param name="format">An empty format, <c>G</c> or <c>g</c>; any other specifier raises a
     /// <see cref="FormatException"/>.</param>
@@ -160,308 +145,47 @@ public readonly partial record struct FixedQ1648 {
     /// <see cref="NumberFormatInfo.NegativeSign"/> the rendering adopts, spliced into the invariant expansion. The
     /// separator is substituted first, so a sign token that itself contains a period cannot be re-substituted.</param>
     /// <returns>The rendering, character for character what <see cref="TryFormat"/> writes.</returns>
-    public string ToString(string? format, IFormatProvider? formatProvider) {
-        FixedPointText.ValidateGeneralFormat(format: format.AsSpan());
-
-        return FixedPointText.SpliceProviderTokens(invariant: ToString(), provider: formatProvider);
-    }
-
-    static bool INumberBase<FixedQ1648>.TryConvertFromChecked<TOther>(TOther value, out FixedQ1648 result) {
-        if (typeof(TOther) == typeof(FixedQ1648)) {
-            result = Unsafe.As<TOther, FixedQ1648>(source: ref value);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(FixedQ4816)) {
-            var other = Unsafe.As<TOther, FixedQ4816>(source: ref value);
-
-            result = FromFixedQ4816(value: other);
-
-            return true;
-        }
-
-        if (FixedPointConvert.TryGetFloating(value: value, result: out var floating)) {
-            result = FromDoubleChecked(value: floating);
-
-            return true;
-        }
-
-        if (!FixedPointConvert.IsKnownBclNumeric<TOther>()) {
-            result = default;
-
-            return false;
-        }
-
-        try {
-            result = FromDecimalChecked(value: decimal.CreateChecked(value: value));
-
-            return true;
-        } catch (NotSupportedException) {
-            result = default;
-
-            return false;
-        }
-    }
-    static bool INumberBase<FixedQ1648>.TryConvertFromSaturating<TOther>(TOther value, out FixedQ1648 result) {
-        if (typeof(TOther) == typeof(FixedQ1648)) {
-            result = Unsafe.As<TOther, FixedQ1648>(source: ref value);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(FixedQ4816)) {
-            var other = Unsafe.As<TOther, FixedQ4816>(source: ref value);
-            var widened = (((Int128)other.Value) << PeerNarrowShift);
-
-            result = ((widened < long.MinValue)
-                ? MinValue
-                : ((widened > long.MaxValue)
-                    ? MaxValue
-                    : new(Value: ((long)widened))));
-
-            return true;
-        }
-
-        if (FixedPointConvert.TryGetFloating(value: value, result: out var floating)) {
-            result = FromDouble(value: floating);
-
-            return true;
-        }
-
-        if (!FixedPointConvert.IsKnownBclNumeric<TOther>()) {
-            result = default;
-
-            return false;
-        }
-
-        try {
-            result = FromDecimalSaturating(value: decimal.CreateSaturating(value: value));
-
-            return true;
-        } catch (NotSupportedException) {
-            result = default;
-
-            return false;
-        }
-    }
-    static bool INumberBase<FixedQ1648>.TryConvertFromTruncating<TOther>(TOther value, out FixedQ1648 result) {
-        if (typeof(TOther) == typeof(FixedQ1648)) {
-            result = Unsafe.As<TOther, FixedQ1648>(source: ref value);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(FixedQ4816)) {
-            // Width truncation, not range clamping: the exact widened value's low sixty-four bits, mirroring the
-            // pattern the peer-carrier hooks use elsewhere in this folder.
-            var other = Unsafe.As<TOther, FixedQ4816>(source: ref value);
-            var widened = (((Int128)other.Value) << PeerNarrowShift);
-
-            result = new(Value: unchecked((long)widened));
-
-            return true;
-        }
-
-        if (FixedPointConvert.TryGetFloating(value: value, result: out var floating)) {
-            result = FromDouble(value: floating);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(decimal)) {
-            result = FromDecimalTruncating(value: Unsafe.As<TOther, decimal>(source: ref value));
-
-            return true;
-        }
-
-        if (FixedPointConvert.TryScaleTruncating(value: value, fractionBitCount: FractionBitCount, out var scaled)) {
-            result = new(Value: unchecked((long)scaled));
-
-            return true;
-        }
-
-        result = default;
-
-        return false;
-    }
-    static bool INumberBase<FixedQ1648>.TryConvertToChecked<TOther>(FixedQ1648 value, out TOther result) {
-        if (typeof(TOther) == typeof(FixedQ1648)) {
-            result = Unsafe.As<FixedQ1648, TOther>(source: ref value);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(FixedQ4816)) {
-            var converted = value.ToFixedQ4816();
-
-            result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
-
-            return true;
-        }
-
-        if (TrySetFloating(value: value, result: out result)) {
-            return true;
-        }
-
-        if (!FixedPointConvert.IsKnownBclNumeric<TOther>()) {
-            result = default!;
-
-            return false;
-        }
-
-        try {
-            result = TOther.CreateChecked(value: ToDecimal(value: value));
-
-            return true;
-        } catch (NotSupportedException) {
-            result = default!;
-
-            return false;
-        }
-    }
-    static bool INumberBase<FixedQ1648>.TryConvertToSaturating<TOther>(FixedQ1648 value, out TOther result) {
-        if (typeof(TOther) == typeof(FixedQ1648)) {
-            result = Unsafe.As<FixedQ1648, TOther>(source: ref value);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(FixedQ4816)) {
-            var converted = value.ToFixedQ4816();
-
-            result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
-
-            return true;
-        }
-
-        if (TrySetFloating(value: value, result: out result)) {
-            return true;
-        }
-
-        if (!FixedPointConvert.IsKnownBclNumeric<TOther>()) {
-            result = default!;
-
-            return false;
-        }
-
-        try {
-            result = TOther.CreateSaturating(value: ToDecimal(value: value));
-
-            return true;
-        } catch (NotSupportedException) {
-            result = default!;
-
-            return false;
-        }
-    }
-    static bool INumberBase<FixedQ1648>.TryConvertToTruncating<TOther>(FixedQ1648 value, out TOther result) {
-        if (typeof(TOther) == typeof(FixedQ1648)) {
-            result = Unsafe.As<FixedQ1648, TOther>(source: ref value);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(FixedQ4816)) {
-            var converted = value.ToFixedQ4816();
-
-            result = Unsafe.As<FixedQ4816, TOther>(source: ref converted);
-
-            return true;
-        }
-
-        if (FixedPointConvert.IsKnownBclInteger<TOther>()) {
-            // The integer part toward zero, handed to the TARGET's own truncation, mirroring FixedQ4816's hook.
-            result = TOther.CreateTruncating(value: ((Int128)(value.Value / (1L << FractionBitCount))));
-
-            return true;
-        }
-
-        if (TrySetFloating(value: value, result: out result)) {
-            return true;
-        }
-
-        if (!FixedPointConvert.IsKnownBclNumeric<TOther>()) {
-            result = default!;
-
-            return false;
-        }
-
-        try {
-            result = TOther.CreateTruncating(value: ToDecimal(value: value));
-
-            return true;
-        } catch (NotSupportedException) {
-            result = default!;
-
-            return false;
-        }
-    }
-
-    // FixedQ1648's own decimal boundary. FixedPointConvert.ScaleDecimal is only exact through thirty-one fraction
-    // bits (a UInt128 intermediate); at forty-eight this type routes through ScaleDecimalWide's BigInteger
-    // intermediate instead, which has no such ceiling. decimal itself tops out at twenty-eight to twenty-nine
-    // significant digits, fewer than the up-to-forty-eight-digit exact expansion this format's finest raws can
-    // need, so a decimal round trip through these three members is exact wherever decimal's own precision covers
-    // the value and is decimal's own nearest representable otherwise — the same boundary decimal draws for every
-    // consumer of it, not a limitation this type introduces.
-    private static FixedQ1648 FromDecimalChecked(decimal value) {
-        var scaled = FixedPointConvert.ScaleDecimalWide(value: value, fractionBitCount: FractionBitCount);
-
-        if ((scaled < long.MinValue) || (scaled > long.MaxValue)) {
-            throw new OverflowException(message: $"Value is outside the representable {nameof(FixedQ1648)} range.");
-        }
-
-        return new(Value: ((long)scaled));
-    }
-    private static FixedQ1648 FromDecimalSaturating(decimal value) {
-        var scaled = FixedPointConvert.ScaleDecimalWide(value: value, fractionBitCount: FractionBitCount);
-
-        if (scaled < long.MinValue) { return MinValue; }
-        if (scaled > long.MaxValue) { return MaxValue; }
-
-        return new(Value: ((long)scaled));
-    }
-    private static FixedQ1648 FromDecimalTruncating(decimal value) {
-        var scaled = FixedPointConvert.ScaleDecimalWide(value: value, fractionBitCount: FractionBitCount);
-        var wrapped = (scaled & ulong.MaxValue); // low sixty-four bits, exact even for a negative BigInteger
-
-        return new(Value: unchecked((long)(ulong)wrapped));
-    }
-    private static FixedQ1648 FromDoubleChecked(double value) {
-        var scaled = double.Round(x: (value * (1L << FractionBitCount)), mode: MidpointRounding.ToEven);
-
-        if (double.IsNaN(d: scaled) || (scaled < ScaledMinimum) || (scaled > ScaledMaximum)) {
-            throw new OverflowException(message: $"Value is outside the representable {nameof(FixedQ1648)} range.");
-        }
-
-        return new(Value: ((scaled <= ScaledMinimum) ? long.MinValue : ((long)scaled)));
-    }
-    // decimal's twenty-eight-to-twenty-nine significant digits cannot exactly hold every raw this format can name
-    // (the finest ones need up to forty-eight fraction digits), so this bridge rounds to decimal's own nearest
-    // representable rather than this type's. FromDouble/FromInteger/FromRawBits and the FixedQ4816 peer conversion
-    // remain exact; this member exists only for the generic-math TOther bridge.
-    private static decimal ToDecimal(FixedQ1648 value) => (value.Value / ((decimal)(1L << FractionBitCount)));
-    private static bool TrySetFloating<TOther>(FixedQ1648 value, out TOther result)
-        where TOther : INumberBase<TOther> {
-        if (typeof(TOther) == typeof(double)) {
-            var wide = ((double)value);
-
-            result = Unsafe.As<double, TOther>(source: ref wide);
-
-            return true;
-        }
-
-        if (typeof(TOther) == typeof(float)) {
-            var single = MathF.ScaleB(x: ((float)value.Value), n: -FractionBitCount);
-
-            result = Unsafe.As<float, TOther>(source: ref single);
-
-            return true;
-        }
-
-        result = default!;
-
-        return false;
-    }
+    public string ToString(string? format, IFormatProvider? formatProvider) =>
+        FixedPointText.SpliceGeneralFormat(
+            format: format,
+            invariant: ToString(),
+            provider: formatProvider
+        );
+
+    static bool INumberBase<FixedQ1648>.TryConvertFromChecked<TOther>(TOther value, out FixedQ1648 result) =>
+        FixedPointConvert.TryConvertFromChecked<FixedQ1648, TOther>(
+            fractionBitCount: FractionBitCount,
+            result: out result,
+            value: value
+        );
+    static bool INumberBase<FixedQ1648>.TryConvertFromSaturating<TOther>(TOther value, out FixedQ1648 result) =>
+        FixedPointConvert.TryConvertFromSaturating<FixedQ1648, TOther>(
+            fractionBitCount: FractionBitCount,
+            result: out result,
+            value: value
+        );
+    static bool INumberBase<FixedQ1648>.TryConvertFromTruncating<TOther>(TOther value, out FixedQ1648 result) =>
+        FixedPointConvert.TryConvertFromTruncating<FixedQ1648, TOther>(
+            fractionBitCount: FractionBitCount,
+            result: out result,
+            value: value
+        );
+    static bool INumberBase<FixedQ1648>.TryConvertToChecked<TOther>(FixedQ1648 value, out TOther result) =>
+        FixedPointConvert.TryConvertToChecked<FixedQ1648, TOther>(
+            fractionBitCount: FractionBitCount,
+            result: out result,
+            value: value
+        );
+    static bool INumberBase<FixedQ1648>.TryConvertToSaturating<TOther>(FixedQ1648 value, out TOther result) =>
+        FixedPointConvert.TryConvertToSaturating<FixedQ1648, TOther>(
+            fractionBitCount: FractionBitCount,
+            result: out result,
+            value: value
+        );
+    static bool INumberBase<FixedQ1648>.TryConvertToTruncating<TOther>(FixedQ1648 value, out TOther result) =>
+        FixedPointConvert.TryConvertToTruncating<FixedQ1648, TOther>(
+            fractionBitCount: FractionBitCount,
+            result: out result,
+            value: value
+        );
 }

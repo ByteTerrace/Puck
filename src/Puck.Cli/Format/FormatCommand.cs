@@ -2,8 +2,8 @@ namespace Puck.Cli.Format;
 
 // The `puck format` verb: the source rewriters applied in one parse/write per file. Phase 0 always runs
 // the SDK whitespace formatter per project first (the .editorconfig baseline the custom passes layer
-// onto); the syntactic passes then run as one re-parsing pipeline, and the semantic `named-args` pass
-// runs as its own disk phase. The exit code is the worst of the three phases: 1 for drift in a dry mode
+// onto); the syntactic passes then run as one re-parsing pipeline, and the semantic `null-pattern` and
+// `named-args` passes run as their own disk phases. The exit code is the worst of the phases: 1 for drift in a dry mode
 // or a skipped rewrite, 2 for a usage error, a missing root, or a tool failure in write mode.
 internal static class FormatCommand {
     public static int Run(string[] args) {
@@ -24,7 +24,7 @@ internal static class FormatCommand {
         var selected = FormatPasses.DefaultSelection();
 
         if (scanner.Get(name: "Only") is { } only) {
-            selected = only.Split(separator: ',', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            selected = only.Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: ',')
                 .Select(selector: static name => name.ToLowerInvariant())
                 .ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -56,11 +56,15 @@ internal static class FormatCommand {
         var syntacticPasses = FormatPasses.All.Where(predicate: pass => (!pass.Semantic && selected.Contains(item: pass.Name))).ToList();
 
         if (syntacticPasses.Count > 0) {
-            result = Math.Max(val1: result, val2: SourceRewrite.Run(label: "format", rootArgument: root, whatIf: whatIf, verify: verify, passes: syntacticPasses));
+            result = Math.Max(val1: result, val2: SourceRewrite.Run(label: "format", passes: syntacticPasses, rootArgument: root, verify: verify, whatIf: whatIf));
         }
 
-        if (FormatPasses.All.Any(predicate: pass => (pass.Semantic && selected.Contains(item: pass.Name)))) {
-            result = Math.Max(val1: result, val2: NamedArgsPhase.Run(rootArgument: root, whatIf: whatIf, verify: verify));
+        if (selected.Contains(item: "null-pattern")) {
+            result = Math.Max(val1: result, val2: NullPatternPhase.Run(rootArgument: root, verify: verify, whatIf: whatIf));
+        }
+
+        if (selected.Contains(item: "named-args")) {
+            result = Math.Max(val1: result, val2: NamedArgsPhase.Run(rootArgument: root, verify: verify, whatIf: whatIf));
         }
 
         return result;
@@ -73,7 +77,7 @@ internal static class FormatCommand {
         format [<root=src>]   source rewriters for conventions .editorconfig cannot express
 
           -Only <p,p>   restrict to named passes (default: every pass but the three
-                        vertical line-wrappers)
+                        vertical line-wrappers and member-groups)
           -WhatIf       write nothing; exit 1 on any drift, listing the files
           -Verify       write nothing; additionally fail on a rewrite that would
                         introduce syntax errors or a pass that is not a fixed point
@@ -86,7 +90,8 @@ internal static class FormatCommand {
         that own corpus files and needs them restored; in WRITE mode it rewrites any
         whitespace drift in that root — run -WhatIf first on a root you have not
         swept. The semantic named-args pass needs the projects built. A pass whose
-        output would add syntax errors is always dropped and reported, never written.
+        input with syntax errors, or output that would add them, is always dropped
+        and reported, never written.
         Exit codes: 0 clean, 1 drift in a dry mode or a skipped rewrite, 2 usage
         error, missing root, or a tool failure in write mode.
         """;

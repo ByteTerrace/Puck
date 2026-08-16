@@ -15,7 +15,8 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Input\Puck.Input.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Platform\Puck.Platform.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Scripting.Simulation\Puck.Scripting.Simulation.csproj" />
+        <!-- OutputTests.cs exercises XInputGamepadConnection, the sole reason this otherwise platform-neutral test
+             project needs a Puck.Platform.Windows reference. -->
+        <ProjectReference Include="..\..\src\Puck.Platform.Windows\Puck.Platform.Windows.csproj" />
     </ItemGroup>
 </Project>

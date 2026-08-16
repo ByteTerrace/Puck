@@ -11,13 +11,47 @@ namespace Puck.Input;
 /// bar's family glyphs (<c>Puck.Overlays</c>' <c>OverlayIconography</c>).
 /// </summary>
 public static class InputSourceLabels {
+    // The face letters/shapes per family. Nintendo's letters sit in different positions than Xbox's (B is South
+    // and A is East), and the DualSense names its buttons by shape — the whole reason prompts must resolve
+    // through the connected family instead of hardcoding one vendor's letters.
+    private static string DescribeFace(string source, GamepadType family) {
+        if (family == GamepadType.SwitchPro) {
+            return source switch {
+                InputSources.Gamepad.ButtonSouth => "B",
+                InputSources.Gamepad.ButtonEast => "A",
+                InputSources.Gamepad.ButtonWest => "Y",
+                _ => "X",
+            };
+        }
+
+        if (family == GamepadType.PlayStation5) {
+            return source switch {
+                InputSources.Gamepad.ButtonSouth => "X",
+                InputSources.Gamepad.ButtonEast => "O",
+                InputSources.Gamepad.ButtonWest => "Square",
+                _ => "Triangle",
+            };
+        }
+
+        // Xbox, Steam (both generations), and unknown devices: A South, B East, X West, Y North.
+        return source switch {
+            InputSources.Gamepad.ButtonSouth => "A",
+            InputSources.Gamepad.ButtonEast => "B",
+            InputSources.Gamepad.ButtonWest => "X",
+            _ => "Y",
+        };
+    }
+
     /// <summary>Describes a source with the connected family's own vocabulary (face letters/shapes, L1 vs LB vs ZL, Options vs Menu vs Plus).</summary>
     /// <param name="source">The provider-neutral input source id (an <see cref="InputSources"/> control).</param>
     /// <param name="family">The connected controller family; <see cref="GamepadType.Unknown"/> uses Xbox vocabulary.</param>
     /// <returns>The short label, or the source id itself when it is not a control this vocabulary names.</returns>
     public static string Describe(string source, GamepadType family) {
         return source switch {
-            InputSources.Gamepad.ButtonSouth or InputSources.Gamepad.ButtonEast or InputSources.Gamepad.ButtonWest or InputSources.Gamepad.ButtonNorth => DescribeFace(source: source, family: family),
+            InputSources.Gamepad.ButtonSouth or InputSources.Gamepad.ButtonEast or InputSources.Gamepad.ButtonWest or InputSources.Gamepad.ButtonNorth => DescribeFace(
+            family: family,
+            source: source
+        ),
             InputSources.Gamepad.DpadUp => "D-pad Up",
             InputSources.Gamepad.DpadDown => "D-pad Down",
             InputSources.Gamepad.DpadLeft => "D-pad Left",
@@ -99,7 +133,6 @@ public static class InputSourceLabels {
             _ => source,
         };
     }
-
     /// <summary>Describes a source in the family-neutral spoken form ("the south face button"), for prompts that must read correctly on any — or no — connected pad.</summary>
     /// <param name="source">The provider-neutral input source id (an <see cref="InputSources"/> control).</param>
     /// <returns>The spoken description, or the source id itself when it is not a control this vocabulary names.</returns>
@@ -136,37 +169,6 @@ public static class InputSourceLabels {
             InputSources.Gamepad.RightStick => "the right stick",
             InputSources.Gamepad.Gyro or InputSources.Gamepad.Accelerometer or InputSources.Gamepad.Orientation => "the motion sensor",
             _ => source,
-        };
-    }
-
-    // The face letters/shapes per family. Nintendo's letters sit in different positions than Xbox's (B is South
-    // and A is East), and the DualSense names its buttons by shape — the whole reason prompts must resolve
-    // through the connected family instead of hardcoding one vendor's letters.
-    private static string DescribeFace(string source, GamepadType family) {
-        if (family == GamepadType.SwitchPro) {
-            return source switch {
-                InputSources.Gamepad.ButtonSouth => "B",
-                InputSources.Gamepad.ButtonEast => "A",
-                InputSources.Gamepad.ButtonWest => "Y",
-                _ => "X",
-            };
-        }
-
-        if (family == GamepadType.PlayStation5) {
-            return source switch {
-                InputSources.Gamepad.ButtonSouth => "X",
-                InputSources.Gamepad.ButtonEast => "O",
-                InputSources.Gamepad.ButtonWest => "Square",
-                _ => "Triangle",
-            };
-        }
-
-        // Xbox, Steam (both generations), and unknown devices: A South, B East, X West, Y North.
-        return source switch {
-            InputSources.Gamepad.ButtonSouth => "A",
-            InputSources.Gamepad.ButtonEast => "B",
-            InputSources.Gamepad.ButtonWest => "X",
-            _ => "Y",
         };
     }
 }

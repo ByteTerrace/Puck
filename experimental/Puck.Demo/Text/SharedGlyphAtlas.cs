@@ -7,7 +7,7 @@ namespace Puck.Demo.Text;
 /// overlay surfaces (the on-screen console and the binding bar). Two fonts ride the seam: <see cref="MonoFont"/> (the
 /// console/terminal voice, a uniform-grid atlas the overlay cell pack requires) and <see cref="UiFont"/> (the UI
 /// grotesque, tight-packed with GPOS kerning baked into its table). Each resolves PRE-BAKED first — a committed
-/// MTSDF JSON+PNG under Assets/Fonts, produced by the font-atlas bake pipeline (<c>tools/font-atlas</c>; true
+/// imported MTSDF JSON+PNG under Assets/Fonts (true
 /// multi-channel field, kerning restored) — and only the mono
 /// falls back to the runtime GDI+ exact-EDT build (<see cref="GlyphAtlasBuilder.TryBuild"/>) when no file ships. A
 /// single memoized load hands the SAME <see cref="FontAtlas"/> instance to every consumer: identical glyph metrics and
@@ -55,7 +55,7 @@ internal static class SharedGlyphAtlas {
     public static FontAtlas? UiFontSemiBold => s_uiFontSemiBold.Value;
 
     // The bake packs EVERY font's glyphs into this one image (the one-GPU-texture law); each atlas JSON is a view of
-    // it. KEEP IN SYNC with tools/font-atlas/manifest.json's output image name.
+    // it. KEEP IN SYNC with the committed fixed-UI image name under Puck.Text/Assets/Fonts.
     private const string CombinedImageName = "puck-fonts-mtsdf.png";
 
     private static readonly Lazy<FontAtlasImageData?> s_combinedImage = new(

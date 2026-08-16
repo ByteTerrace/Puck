@@ -10,25 +10,20 @@ namespace Puck.Platform;
 public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// <summary>Gets whether the target or capture session has permanently ended.</summary>
     bool IsEnded { get; }
-
     /// <summary>Gets whether the live source extent differs from the attached GPU targets' extent, in which case GPU
     /// publishing is paused until <see cref="AttachGpuTargets"/> is called again with matching targets. Always
     /// <see langword="false"/> when no GPU targets are attached.</summary>
     bool GpuTargetsOutdated { get; }
-
     /// <summary>Gets a monotonically increasing counter of frames copied into the GPU targets; a consumer compares it
     /// against the value it last sampled to skip unchanged frames (the newest-frame-wins drop policy). Never resets
     /// across the feed's lifetime.</summary>
     long GpuRevision { get; }
-
     /// <summary>Gets the index (into <see cref="NativeImageGpuCaptureTargets.SharedTargetHandles"/>) of the most
     /// recently completed GPU copy, or <c>-1</c> until the first copy into the currently attached targets.</summary>
     int LatestGpuSlot { get; }
-
     /// <summary>Gets the live capture source height in pixels; it updates on window resize or monitor mode change and is
     /// the height the consumer should size its GPU targets to.</summary>
     int SourceHeight { get; }
-
     /// <summary>Gets the live capture source width in pixels; it updates on window resize or monitor mode change and is
     /// the width the consumer should size its GPU targets to.</summary>
     int SourceWidth { get; }

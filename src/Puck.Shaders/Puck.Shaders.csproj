@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>Backend-neutral compiled-shader loading: reads a vertex/fragment shader pair's bytecode from an IAssetSource, identifies and validates it as SPIR-V (Vulkan) or a DXBC/DXIL container (Direct3D 12) from its leading magic, and caches the validated bytes by content hash. It compiles nothing itself — the bytecode arrives already compiled, from whichever offline or backend-side compiler produced it.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Shaders</PackageId>
+        <PackageTags>bytecode;dxbc;dxil;shaders;spir-v;validation</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>

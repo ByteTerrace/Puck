@@ -14,6 +14,7 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
     private const byte SelectMask = 0x30;
 
     private readonly IInterruptController m_interrupts;
+
     private byte m_buttons;
     private byte m_previousLine;
     private byte m_select;
@@ -36,16 +37,16 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
 
     /// <inheritdoc/>
     public byte ReadRegister() =>
-        (byte)(0xC0 | m_select | CurrentLine());
+        ((byte)(0xC0 | m_select | CurrentLine()));
     /// <inheritdoc/>
     public void WriteRegister(byte value) {
-        m_select = (byte)(value & SelectMask);
+        m_select = ((byte)(value & SelectMask));
 
         UpdateInterrupt();
     }
     /// <inheritdoc/>
     public void SetButtons(JoypadButtons pressed) {
-        m_buttons = (byte)pressed;
+        m_buttons = ((byte)pressed);
 
         UpdateInterrupt();
     }
@@ -75,7 +76,7 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
             held |= (m_buttons >> 4) & 0x0F;
         }
 
-        return (byte)(~held & 0x0F);
+        return ((byte)(~held & 0x0F));
     }
     // The joypad interrupt fires on the high→low edge of any input line — a line that was released and is now held.
     private void UpdateInterrupt() {

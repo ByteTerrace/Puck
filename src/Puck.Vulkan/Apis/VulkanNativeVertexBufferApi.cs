@@ -142,14 +142,14 @@ public unsafe sealed class VulkanNativeVertexBufferApi : IVulkanVertexBufferApi 
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8),
-                BindBufferMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8),
-                CreateBuffer = (delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8),
-                DestroyBuffer = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8),
-                FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8),
-                GetBufferMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8),
-                MapMemory = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8),
-                UnmapMemory = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8),
+                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
+                BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8)),
+                CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8)),
+                DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8)),
+                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
+                GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8)),
+                MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8)),
+                UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8)),
             }
         );
     }
@@ -157,7 +157,7 @@ public unsafe sealed class VulkanNativeVertexBufferApi : IVulkanVertexBufferApi 
         return m_instancePointers.GetOrAdd(
             key: instanceHandle,
             valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceMemoryProperties"u8),
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
             }
         );
     }

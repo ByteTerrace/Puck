@@ -12,7 +12,6 @@ namespace Puck.Input.Output;
 public interface IGamepadOutput {
     /// <summary>The device this handle drives.</summary>
     InputDeviceId DeviceId { get; }
-
     /// <summary>The output features this device supports.</summary>
     GamepadOutputCapabilities Capabilities { get; }
 
@@ -20,17 +19,14 @@ public interface IGamepadOutput {
     /// <param name="effect">The rumble intensities and duration.</param>
     /// <returns><see langword="true"/> if the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool Rumble(in RumbleEffect effect);
-
     /// <summary>Requests trigger (impulse) rumble.</summary>
     /// <param name="effect">The per-trigger intensities and duration.</param>
     /// <returns><see langword="true"/> if the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool RumbleTriggers(in TriggerRumbleEffect effect);
-
     /// <summary>Sets the controller's RGB indicator.</summary>
     /// <param name="color">The color to display.</param>
     /// <returns><see langword="true"/> if accepted; otherwise <see langword="false"/>.</returns>
     bool SetLed(in LedColor color);
-
     /// <summary>
     /// Applies a typed adaptive-trigger effect to each trigger (L2 = <paramref name="left"/>, R2 =
     /// <paramref name="right"/>), as on the DualSense. The effect is composed into the controller's normal output
@@ -40,7 +36,6 @@ public interface IGamepadOutput {
     /// <param name="right">The right trigger's effect.</param>
     /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool SetTriggerEffect(in TriggerEffectSpec left, in TriggerEffectSpec right);
-
     /// <summary>
     /// Schedules an adaptive-trigger effect (as <see cref="SetTriggerEffect"/>) to be applied when the shared
     /// capture clock (<see cref="IInputClock"/>) reaches <paramref name="fireAtTick"/> — rhythm-grade haptics
@@ -51,7 +46,6 @@ public interface IGamepadOutput {
     /// <param name="fireAtTick">The capture-clock engine tick to apply the effect at.</param>
     /// <returns><see langword="true"/> if the device has adaptive triggers and the effect was accepted; otherwise <see langword="false"/>.</returns>
     bool SetTriggerEffectAt(in TriggerEffectSpec left, in TriggerEffectSpec right, ulong fireAtTick);
-
     /// <summary>
     /// Sends a raw, device-specific output report (the escape hatch for effects without a typed shape, such as
     /// Switch HD-rumble waveforms).

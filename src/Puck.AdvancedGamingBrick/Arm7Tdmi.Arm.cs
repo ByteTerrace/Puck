@@ -15,8 +15,8 @@ public sealed partial class Arm7Tdmi {
         for (var idx = 0; (idx < 4096); ++idx) {
             // Reconstruct the significant opcode bits from the index.
             // high8 = opcode bits [27:20], low4 = opcode bits [7:4].
-            var high8 = (uint)(idx >> 4);
-            var low4 = (uint)(idx & 0xF);
+            var high8 = ((uint)(idx >> 4));
+            var low4 = ((uint)(idx & 0xF));
             var op = (high8 << 20) | (low4 << 4);
 
             table[idx] = PickArmHandler(op: op);
@@ -46,9 +46,9 @@ public sealed partial class Arm7Tdmi {
                 return &ArmSingleDataTransfer;
             default: // 0b000 or 0b001
                 return PickDataProcessingSpaceHandler(
-                    op: op,
                     bit4: bit4,
-                    bit7: bit7
+                    bit7: bit7,
+                    op: op
                 );
         }
     }
@@ -106,11 +106,10 @@ public sealed partial class Arm7Tdmi {
 
         return &ArmDataProcessing;
     }
-
     // --- ARM instruction implementations (static, cpu passed explicitly) ---
 
     private static void ArmBranchExchange(Arm7Tdmi cpu, uint opcode) {
-        var target = cpu.m_gpr[(int)(opcode & 0xFu)];
+        var target = cpu.m_gpr[((int)(opcode & 0xFu))];
 
         if ((target & 1u) != 0u) {
             cpu.m_cpsr |= FlagT;
@@ -127,14 +126,14 @@ public sealed partial class Arm7Tdmi {
             cpu.m_gpr[14] = (cpu.m_gpr[15] - 4u);
         }
 
-        cpu.BranchTo(address: (cpu.m_gpr[15] + (uint)offset));
+        cpu.BranchTo(address: (cpu.m_gpr[15] + ((uint)offset)));
     }
     private static void ArmDataProcessing(Arm7Tdmi cpu, uint opcode) {
         var immediate = ((opcode & (1u << 25)) != 0u);
         var operation = (opcode >> 21) & 0xFu;
         var setFlags = ((opcode & (1u << 20)) != 0u);
-        var rn = (int)((opcode >> 16) & 0xFu);
-        var rd = (int)((opcode >> 12) & 0xFu);
+        var rn = ((int)((opcode >> 16) & 0xFu));
+        var rd = ((int)((opcode >> 12) & 0xFu));
         var shiftByReg = (!immediate && ((opcode & (1u << 4)) != 0u));
         var shifterCarry = ((cpu.m_cpsr & FlagC) != 0u);
         var operandN = cpu.m_gpr[rn];
@@ -150,7 +149,7 @@ public sealed partial class Arm7Tdmi {
 
         if (immediate) {
             var value = opcode & 0xFFu;
-            var rotate = ((int)((opcode >> 8) & 0xFu) * 2);
+            var rotate = (((int)((opcode >> 8) & 0xFu)) * 2);
 
             if (rotate == 0) {
                 operand2 = value;
@@ -159,7 +158,7 @@ public sealed partial class Arm7Tdmi {
                 shifterCarry = ((operand2 & 0x80000000u) != 0u);
             }
         } else {
-            var rm = (int)(opcode & 0xFu);
+            var rm = ((int)(opcode & 0xFu));
             var operandM = cpu.m_gpr[rm];
 
             if (
@@ -169,22 +168,22 @@ public sealed partial class Arm7Tdmi {
                 operandM += 4u;
             }
 
-            var shiftType = (ShiftType)((opcode >> 5) & 0x3u);
+            var shiftType = ((ShiftType)((opcode >> 5) & 0x3u));
             int amount;
 
             if (shiftByReg) {
-                amount = (int)(cpu.m_gpr[(int)((opcode >> 8) & 0xFu)] & 0xFFu);
+                amount = ((int)(cpu.m_gpr[((int)((opcode >> 8) & 0xFu))] & 0xFFu));
             } else {
-                amount = (int)((opcode >> 7) & 0x1Fu);
+                amount = ((int)((opcode >> 7) & 0x1Fu));
             }
 
             operand2 = BarrelShift(
-                cpu: cpu,
-                value: operandM,
-                type: shiftType,
                 amount: amount,
                 byRegister: shiftByReg,
-                carryOut: ref shifterCarry
+                carryOut: ref shifterCarry,
+                cpu: cpu,
+                type: shiftType,
+                value: operandM
             );
         }
 
@@ -200,8 +199,8 @@ public sealed partial class Arm7Tdmi {
                 result = operandN & operand2;
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: setFlags,
                     result: result,
+                    setFlags: setFlags,
                     shifterCarry: shifterCarry
                 );
                 break;
@@ -209,64 +208,64 @@ public sealed partial class Arm7Tdmi {
                 result = operandN ^ operand2;
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: setFlags,
                     result: result,
+                    setFlags: setFlags,
                     shifterCarry: shifterCarry
                 );
                 break;
             case 0x2u: // SUB
                 result = Subtract(
-                    cpu: cpu,
                     a: operandN,
                     b: operand2,
+                    cpu: cpu,
                     setFlags: setFlags
                 );
                 break;
             case 0x3u: // RSB
                 result = Subtract(
-                    cpu: cpu,
                     a: operand2,
                     b: operandN,
+                    cpu: cpu,
                     setFlags: setFlags
                 );
                 break;
             case 0x4u: // ADD
                 result = Add(
-                    cpu: cpu,
                     a: operandN,
                     b: operand2,
+                    cpu: cpu,
                     setFlags: setFlags
                 );
                 break;
             case 0x5u: // ADC
                 result = AddWithCarry(
-                    cpu: cpu,
                     a: operandN,
                     b: operand2,
+                    cpu: cpu,
                     setFlags: setFlags
                 );
                 break;
             case 0x6u: // SBC
                 result = SubtractWithCarry(
-                    cpu: cpu,
                     a: operandN,
                     b: operand2,
+                    cpu: cpu,
                     setFlags: setFlags
                 );
                 break;
             case 0x7u: // RSC
                 result = SubtractWithCarry(
-                    cpu: cpu,
                     a: operand2,
                     b: operandN,
+                    cpu: cpu,
                     setFlags: setFlags
                 );
                 break;
             case 0x8u: // TST
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: true,
                     result: operandN & operand2,
+                    setFlags: true,
                     shifterCarry: shifterCarry
                 );
                 write = false;
@@ -274,26 +273,26 @@ public sealed partial class Arm7Tdmi {
             case 0x9u: // TEQ
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: true,
                     result: operandN ^ operand2,
+                    setFlags: true,
                     shifterCarry: shifterCarry
                 );
                 write = false;
                 break;
             case 0xAu: // CMP
                 _ = Subtract(
-                    cpu: cpu,
                     a: operandN,
                     b: operand2,
+                    cpu: cpu,
                     setFlags: true
                 );
                 write = false;
                 break;
             case 0xBu: // CMN
                 _ = Add(
-                    cpu: cpu,
                     a: operandN,
                     b: operand2,
+                    cpu: cpu,
                     setFlags: true
                 );
                 write = false;
@@ -302,8 +301,8 @@ public sealed partial class Arm7Tdmi {
                 result = operandN | operand2;
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: setFlags,
                     result: result,
+                    setFlags: setFlags,
                     shifterCarry: shifterCarry
                 );
                 break;
@@ -311,8 +310,8 @@ public sealed partial class Arm7Tdmi {
                 result = operand2;
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: setFlags,
                     result: result,
+                    setFlags: setFlags,
                     shifterCarry: shifterCarry
                 );
                 break;
@@ -320,8 +319,8 @@ public sealed partial class Arm7Tdmi {
                 result = operandN & ~operand2;
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: setFlags,
                     result: result,
+                    setFlags: setFlags,
                     shifterCarry: shifterCarry
                 );
                 break;
@@ -329,8 +328,8 @@ public sealed partial class Arm7Tdmi {
                 result = ~operand2;
                 ApplyLogicalFlags(
                     cpu: cpu,
-                    setFlags: setFlags,
                     result: result,
+                    setFlags: setFlags,
                     shifterCarry: shifterCarry
                 );
                 break;
@@ -361,12 +360,11 @@ public sealed partial class Arm7Tdmi {
                 result: result
             );
             SetCarry(
-                cpu: cpu,
-                carry: shifterCarry
+                carry: shifterCarry,
+                cpu: cpu
             );
         }
     }
-
     // Handles indices where S=0 and dataOp ∈ {TST,TEQ,CMP,CMN} — ambiguous at the 12-bit level
     // between PSR transfers and ordinary data processing. Runtime discriminates via the full opcode.
     private static void ArmDataProcessingOrPsr(Arm7Tdmi cpu, uint opcode) {
@@ -408,7 +406,7 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ArmMoveStatusToRegister(Arm7Tdmi cpu, uint opcode) {
         var useSpsr = ((opcode & (1u << 22)) != 0u);
-        var rd = (int)((opcode >> 12) & 0xFu);
+        var rd = ((int)((opcode >> 12) & 0xFu));
 
         cpu.m_gpr[rd] = (useSpsr
             ? cpu.Spsr
@@ -422,13 +420,13 @@ public sealed partial class Arm7Tdmi {
 
         if (immediate) {
             var imm = opcode & 0xFFu;
-            var rotate = ((int)((opcode >> 8) & 0xFu) * 2);
+            var rotate = (((int)((opcode >> 8) & 0xFu)) * 2);
 
             value = ((rotate == 0)
                 ? imm
                 : (imm >> rotate) | (imm << (32 - rotate)));
         } else {
-            value = cpu.m_gpr[(int)(opcode & 0xFu)];
+            value = cpu.m_gpr[((int)(opcode & 0xFu))];
         }
 
         var fields = (opcode >> 16) & 0xFu;
@@ -451,7 +449,7 @@ public sealed partial class Arm7Tdmi {
         }
 
         // Control byte writable only in privileged modes.
-        if (cpu.CurrentMode == (uint)CpuMode.User) {
+        if (cpu.CurrentMode == ((uint)CpuMode.User)) {
             mask &= 0xF0000000u;
         }
 
@@ -464,24 +462,24 @@ public sealed partial class Arm7Tdmi {
         var byteAccess = ((opcode & (1u << 22)) != 0u);
         var writeBack = ((opcode & (1u << 21)) != 0u);
         var load = ((opcode & (1u << 20)) != 0u);
-        var rn = (int)((opcode >> 16) & 0xFu);
-        var rd = (int)((opcode >> 12) & 0xFu);
+        var rn = ((int)((opcode >> 16) & 0xFu));
+        var rd = ((int)((opcode >> 12) & 0xFu));
 
         uint offset;
 
         if (registerOffset) {
-            var operandM = cpu.m_gpr[(int)(opcode & 0xFu)];
-            var shiftType = (ShiftType)((opcode >> 5) & 0x3u);
-            var amount = (int)((opcode >> 7) & 0x1Fu);
+            var operandM = cpu.m_gpr[((int)(opcode & 0xFu))];
+            var shiftType = ((ShiftType)((opcode >> 5) & 0x3u));
+            var amount = ((int)((opcode >> 7) & 0x1Fu));
             var ignored = ((cpu.m_cpsr & FlagC) != 0u);
 
             offset = BarrelShift(
-                cpu: cpu,
-                value: operandM,
-                type: shiftType,
                 amount: amount,
                 byRegister: false,
-                carryOut: ref ignored
+                carryOut: ref ignored,
+                cpu: cpu,
+                type: shiftType,
+                value: operandM
             );
         } else {
             offset = opcode & 0xFFFu;
@@ -499,25 +497,25 @@ public sealed partial class Arm7Tdmi {
         if (load) {
             var data = (byteAccess
                 ? cpu.m_bus.Read8(
-                address: address,
-                access: BusAccessType.NonSequential
+                access: BusAccessType.NonSequential,
+                address: address
             )
                 : ReadWordRotated(
-                cpu: cpu,
-                address: address
+                address: address,
+                cpu: cpu
             ));
 
             cpu.m_bus.Idle(cycles: 1);
 
             WriteBackBase(
-                cpu: cpu,
-                rn: rn,
-                preIndex: preIndex,
-                writeBack: writeBack,
+                add: add,
                 baseAddress: baseAddress,
+                cpu: cpu,
                 indexedAddress: address,
                 offset: offset,
-                add: add
+                preIndex: preIndex,
+                rn: rn,
+                writeBack: writeBack
             );
 
             if (rd == 15) {
@@ -532,27 +530,27 @@ public sealed partial class Arm7Tdmi {
 
             if (byteAccess) {
                 cpu.m_bus.Write8(
+                    access: BusAccessType.NonSequential,
                     address: address,
-                    value: (byte)data,
-                    access: BusAccessType.NonSequential
+                    value: ((byte)data)
                 );
             } else {
                 cpu.m_bus.Write32(
+                    access: BusAccessType.NonSequential,
                     address: address,
-                    value: data,
-                    access: BusAccessType.NonSequential
+                    value: data
                 );
             }
 
             WriteBackBase(
-                cpu: cpu,
-                rn: rn,
-                preIndex: preIndex,
-                writeBack: writeBack,
+                add: add,
                 baseAddress: baseAddress,
+                cpu: cpu,
                 indexedAddress: address,
                 offset: offset,
-                add: add
+                preIndex: preIndex,
+                rn: rn,
+                writeBack: writeBack
             );
         }
 
@@ -564,13 +562,13 @@ public sealed partial class Arm7Tdmi {
         var immediate = ((opcode & (1u << 22)) != 0u);
         var writeBack = ((opcode & (1u << 21)) != 0u);
         var load = ((opcode & (1u << 20)) != 0u);
-        var rn = (int)((opcode >> 16) & 0xFu);
-        var rd = (int)((opcode >> 12) & 0xFu);
+        var rn = ((int)((opcode >> 16) & 0xFu));
+        var rd = ((int)((opcode >> 12) & 0xFu));
         var kind = (opcode >> 5) & 0x3u;
 
         var offset = (immediate
             ? ((opcode >> 4) & 0xF0u) | (opcode & 0xFu)
-            : cpu.m_gpr[(int)(opcode & 0xFu)]);
+            : cpu.m_gpr[((int)(opcode & 0xFu))]);
 
         var baseAddress = cpu.m_gpr[rn];
         var address = baseAddress;
@@ -590,8 +588,8 @@ public sealed partial class Arm7Tdmi {
                     // every normal memory internally, but the 8-bit save bus needs the true low bit to pick which
                     // byte it re-samples across lanes before the rotate below applies (see ReadWordRotated).
                     data = cpu.m_bus.Read16(
-                        address: address,
-                        access: BusAccessType.NonSequential
+                        access: BusAccessType.NonSequential,
+                        address: address
                     );
 
                     if ((address & 1u) != 0u) {
@@ -600,22 +598,22 @@ public sealed partial class Arm7Tdmi {
 
                     break;
                 case 2u: // LDRSB (signed byte)
-                    data = (uint)(sbyte)cpu.m_bus.Read8(
-                        address: address,
-                        access: BusAccessType.NonSequential
-                    );
+                    data = ((uint)((sbyte)cpu.m_bus.Read8(
+                        access: BusAccessType.NonSequential,
+                        address: address
+                    )));
                     break;
                 default: // LDRSH (odd address degrades to signed byte)
                     if ((address & 1u) != 0u) {
-                        data = (uint)(sbyte)cpu.m_bus.Read8(
-                            address: address,
-                            access: BusAccessType.NonSequential
-                        );
+                        data = ((uint)((sbyte)cpu.m_bus.Read8(
+                            access: BusAccessType.NonSequential,
+                            address: address
+                        )));
                     } else {
-                        data = (uint)(short)cpu.m_bus.Read16(
-                            address: address,
-                            access: BusAccessType.NonSequential
-                        );
+                        data = ((uint)((short)cpu.m_bus.Read16(
+                            access: BusAccessType.NonSequential,
+                            address: address
+                        )));
                     }
 
                     break;
@@ -624,14 +622,14 @@ public sealed partial class Arm7Tdmi {
             cpu.m_bus.Idle(cycles: 1);
 
             WriteBackBase(
-                cpu: cpu,
-                rn: rn,
-                preIndex: preIndex,
-                writeBack: writeBack,
+                add: add,
                 baseAddress: baseAddress,
+                cpu: cpu,
                 indexedAddress: address,
                 offset: offset,
-                add: add
+                preIndex: preIndex,
+                rn: rn,
+                writeBack: writeBack
             );
 
             if (rd == 15) {
@@ -642,19 +640,19 @@ public sealed partial class Arm7Tdmi {
         } else {
             cpu.m_bus.Write16(
                 address: address,
-                value: (ushort)cpu.m_gpr[rd],
+                value: ((ushort)cpu.m_gpr[rd]),
                 access: BusAccessType.NonSequential
             );
 
             WriteBackBase(
-                cpu: cpu,
-                rn: rn,
-                preIndex: preIndex,
-                writeBack: writeBack,
+                add: add,
                 baseAddress: baseAddress,
+                cpu: cpu,
                 indexedAddress: address,
                 offset: offset,
-                add: add
+                preIndex: preIndex,
+                rn: rn,
+                writeBack: writeBack
             );
         }
 
@@ -673,10 +671,10 @@ public sealed partial class Arm7Tdmi {
         // Pass the raw (unaligned) address through: the bus forces word alignment internally for every normal
         // memory, but the 8-bit save bus needs the true low bits to pick which byte it re-samples across lanes.
         var data = cpu.m_bus.Read32(
-            address: address,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: address
         );
-        var rotate = (int)((address & 3u) * 8u);
+        var rotate = ((int)((address & 3u) * 8u));
 
         return ((rotate == 0)
             ? data
@@ -688,7 +686,7 @@ public sealed partial class Arm7Tdmi {
         var useUserBank = ((opcode & (1u << 22)) != 0u);
         var writeBack = ((opcode & (1u << 21)) != 0u);
         var load = ((opcode & (1u << 20)) != 0u);
-        var rn = (int)((opcode >> 16) & 0xFu);
+        var rn = ((int)((opcode >> 16) & 0xFu));
         var list = opcode & 0xFFFFu;
 
         if (list == 0u) {
@@ -706,8 +704,8 @@ public sealed partial class Arm7Tdmi {
 
             if (load) {
                 var data = cpu.m_bus.Read32(
-                    address: emptyAddress,
-                    access: BusAccessType.NonSequential
+                    access: BusAccessType.NonSequential,
+                    address: emptyAddress
                 );
 
                 if (writeBack) { cpu.m_gpr[rn] = emptyFinal; }
@@ -730,7 +728,7 @@ public sealed partial class Arm7Tdmi {
 
         var count = BitOperations.PopCount(value: list);
         var baseAddress = cpu.m_gpr[rn];
-        var total = ((uint)count * 4u);
+        var total = (((uint)count) * 4u);
 
         var address = (add
             ? (preIndex
@@ -751,10 +749,10 @@ public sealed partial class Arm7Tdmi {
 
         if (
             transferUser &&
-            (savedMode != (uint)CpuMode.User) &&
-            (savedMode != (uint)CpuMode.System)
+            (savedMode != ((uint)CpuMode.User)) &&
+            (savedMode != ((uint)CpuMode.System))
         ) {
-            cpu.SwitchMode(newMode: (uint)CpuMode.System);
+            cpu.SwitchMode(newMode: ((uint)CpuMode.System));
             swappedBank = true;
         }
 
@@ -770,8 +768,8 @@ public sealed partial class Arm7Tdmi {
 
             if (load) {
                 var data = cpu.m_bus.Read32(
-                    address: address,
-                    access: access
+                    access: access,
+                    address: address
                 );
 
                 if (register == 15) {
@@ -793,9 +791,9 @@ public sealed partial class Arm7Tdmi {
                 }
 
                 cpu.m_bus.Write32(
+                    access: access,
                     address: address,
-                    value: data,
-                    access: access
+                    value: data
                 );
             }
 
@@ -835,10 +833,10 @@ public sealed partial class Arm7Tdmi {
     private static void ArmMultiply(Arm7Tdmi cpu, uint opcode) {
         var accumulate = ((opcode & (1u << 21)) != 0u);
         var setFlags = ((opcode & (1u << 20)) != 0u);
-        var rd = (int)((opcode >> 16) & 0xFu);
-        var rn = (int)((opcode >> 12) & 0xFu);
-        var rs = (int)((opcode >> 8) & 0xFu);
-        var rm = (int)(opcode & 0xFu);
+        var rd = ((int)((opcode >> 16) & 0xFu));
+        var rn = ((int)((opcode >> 12) & 0xFu));
+        var rs = ((int)((opcode >> 8) & 0xFu));
+        var rm = ((int)(opcode & 0xFu));
 
         // Capture the multiplier before the destination write: when rd == rs the early-termination count must use
         // the original value, not the product (hardware reads Rs before storing).
@@ -873,10 +871,10 @@ public sealed partial class Arm7Tdmi {
         var signed = ((opcode & (1u << 22)) != 0u);
         var accumulate = ((opcode & (1u << 21)) != 0u);
         var setFlags = ((opcode & (1u << 20)) != 0u);
-        var rdHigh = (int)((opcode >> 16) & 0xFu);
-        var rdLow = (int)((opcode >> 12) & 0xFu);
-        var rs = (int)((opcode >> 8) & 0xFu);
-        var rm = (int)(opcode & 0xFu);
+        var rdHigh = ((int)((opcode >> 16) & 0xFu));
+        var rdLow = ((int)((opcode >> 12) & 0xFu));
+        var rs = ((int)((opcode >> 8) & 0xFu));
+        var rm = ((int)(opcode & 0xFu));
 
         // Capture the multiplier before the destination writes: when rs == rdLow/rdHigh the early-termination
         // count must use the original value, not the product (hardware reads Rs before storing).
@@ -885,23 +883,23 @@ public sealed partial class Arm7Tdmi {
         ulong result;
 
         if (signed) {
-            var product = ((long)(int)cpu.m_gpr[rm] * (int)multiplier);
+            var product = (((long)((int)cpu.m_gpr[rm])) * ((int)multiplier));
 
             if (accumulate) {
-                product += (long)(((ulong)cpu.m_gpr[rdHigh] << 32) | cpu.m_gpr[rdLow]);
+                product += ((long)((((ulong)cpu.m_gpr[rdHigh]) << 32) | cpu.m_gpr[rdLow]));
             }
 
-            result = (ulong)product;
+            result = ((ulong)product);
         } else {
-            result = ((ulong)cpu.m_gpr[rm] * multiplier);
+            result = (((ulong)cpu.m_gpr[rm]) * multiplier);
 
             if (accumulate) {
-                result += ((ulong)cpu.m_gpr[rdHigh] << 32) | cpu.m_gpr[rdLow];
+                result += (((ulong)cpu.m_gpr[rdHigh]) << 32) | cpu.m_gpr[rdLow];
             }
         }
 
-        cpu.m_gpr[rdLow] = (uint)result;
-        cpu.m_gpr[rdHigh] = (uint)(result >> 32);
+        cpu.m_gpr[rdLow] = ((uint)result);
+        cpu.m_gpr[rdHigh] = ((uint)(result >> 32));
 
         if (setFlags) {
             cpu.m_cpsr = (cpu.m_cpsr & ~(FlagN | FlagZ))
@@ -926,28 +924,28 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ArmSwap(Arm7Tdmi cpu, uint opcode) {
         var byteAccess = ((opcode & (1u << 22)) != 0u);
-        var rn = (int)((opcode >> 16) & 0xFu);
-        var rd = (int)((opcode >> 12) & 0xFu);
-        var rm = (int)(opcode & 0xFu);
+        var rn = ((int)((opcode >> 16) & 0xFu));
+        var rd = ((int)((opcode >> 12) & 0xFu));
+        var rm = ((int)(opcode & 0xFu));
         var address = cpu.m_gpr[rn];
 
         if (byteAccess) {
             var old = cpu.m_bus.Read8(
-                address: address,
-                access: BusAccessType.NonSequential
+                access: BusAccessType.NonSequential,
+                address: address
             );
 
             cpu.m_bus.Write8(
                 address: address,
-                value: (byte)cpu.m_gpr[rm],
+                value: ((byte)cpu.m_gpr[rm]),
                 access: BusAccessType.NonSequential
             );
 
             cpu.m_gpr[rd] = old;
         } else {
             var old = ReadWordRotated(
-                cpu: cpu,
-                address: address
+                address: address,
+                cpu: cpu
             );
 
             cpu.m_bus.Write32(

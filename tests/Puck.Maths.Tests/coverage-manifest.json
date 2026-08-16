@@ -75,6 +75,83 @@
       ]
     },
     {
+      "Id": "Puck.Maths.BeattyQuantization.CertifySlope(Puck.Maths.QuadraticSurd,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantization.FirstFloorDisagreement(Puck.Maths.QuadraticSurd,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantization.QuantizeNearest(Puck.Maths.QuadraticSurd,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.quantize-nearest-vs-cleared-comparison"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate..ctor(Puck.Maths.QuadraticSurd,System.Int32,System.Numerics.BigInteger,System.Int32,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate.DivergenceWitness",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate.FirstDivergence",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate.FractionBits",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate.QuantizedNumerator",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate.RoundingSign",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate.Slope",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BeattyQuantizationCertificate.Verify()",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.first-divergence-vs-brute-force"
+      ]
+    },
+    {
       "Id": "Puck.Maths.BigIntegerFunctions.EnumeratePrimeFactors(System.Numerics.BigInteger)",
       "State": "covered",
       "CoveredBy": [
@@ -2770,6 +2847,13 @@
       ]
     },
     {
+      "Id": "Puck.Maths.ContinuedFraction.Convergents(System.Int64,System.Int64,System.Int64,System.Int64,System.Span<System.Numerics.BigInteger>,System.Span<System.Numerics.BigInteger>)",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.convergents-are-closest-approach-records"
+      ]
+    },
+    {
       "Id": "Puck.Maths.ContinuedFraction.Expand(System.Int64,System.Int64,System.Int64,System.Int64,System.Span<System.Int64>,System.Int32&,System.Int32&)",
       "State": "covered",
       "CoveredBy": [
@@ -4391,6 +4475,55 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedMassProperties.MaximumFractionBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.fraction-bit-count-bound"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.TryBoxBody(System.Int64,System.Int32,System.Int64,System.Int64,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.box-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.TryCapsuleBody(System.Int64,System.Int32,System.Int64,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.capsule-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.TryInvertInertia(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int32,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.inversion-refuses-below-resolution"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.TryInvertMass(System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.inversion-refuses-below-resolution"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.TrySphereBody(System.Int64,System.Int32,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.sphere-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedMassProperties.TryTranslateInertia(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int64,System.Int32,System.Int64,System.Int64,System.Int64,System.Int32,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.parallel-axis-vs-oracle"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedMaterial.Add(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered",
       "CoveredBy": [
@@ -4505,6 +4638,21 @@
         "presented.material-fused-identities",
         "presented.pair-up-rounds-canary",
         "presented.zeta-limits-refuse"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedPointRounding.RoundToNearestTiesToEven(T,T,T)",
+      "State": "covered",
+      "CoveredBy": [
+        "scalar.mul-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedPointRounding.TryRoundRational(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.round-rational-scales-ties-and-refuses",
+        "mass-properties.volumes-vs-oracle"
       ]
     },
     {
@@ -6313,6 +6461,20 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedQ4816.PiQ61",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.pinned-pi-is-correctly-rounded"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ4816.PiQ61FractionBitCount",
+      "State": "covered",
+      "CoveredBy": [
+        "mass-properties.pinned-pi-is-correctly-rounded"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedQ4816.Pow(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
       "State": "covered",
       "CoveredBy": [
@@ -7375,6 +7537,28 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedSymmetricSolve.TryApplySymmetric2(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "symmetric-solve.apply2-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedSymmetricSolve.TryApplySymmetric3(System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int64,System.Int32,System.Int32,System.Int32,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "symmetric-solve.apply3-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedSymmetricSolve.TryInvertSymmetric2(System.Int64,System.Int64,System.Int64,System.Int32,System.Int64&,System.Int64&,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "symmetric-solve.invert2-vs-bareiss",
+        "symmetric-solve.invert2-vs-oracle"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedTickConversion.DurationEngineTicks(Puck.Maths.FixedQ4816)",
       "State": "covered",
       "CoveredBy": [
@@ -7661,6 +7845,14 @@
         "vector.identity-and-negation",
         "vector.normalize-ideal-bound-full-width-sweep",
         "vector.normalize-vs-ideal-and-staged"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedVector3.OrthonormalBasis(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3&,Puck.Maths.FixedVector3&)",
+      "State": "covered",
+      "CoveredBy": [
+        "vector.orthonormal-basis-is-orthogonal-and-deterministic",
+        "vector.orthonormal-basis-tracks-non-unit-magnitude"
       ]
     },
     {
@@ -8015,6 +8207,43 @@
         "presented.substitution-matrix-vs-inflation",
         "presented.substitution-twins-quasicrystal",
         "smoke.presented-functor-twin"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FusedArithmetic.TryDivideMagnitudeRounded(System.UInt128,System.UInt128,System.Int32,System.UInt128&)",
+      "State": "covered",
+      "CoveredBy": [
+        "symmetric-solve.divide-magnitude-rounded-full-width-agrees"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FusedArithmetic.TryMixedScaleDotProduct(System.Int64,System.Int64,System.Int64,System.Int32,System.Int64,System.Int64,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mixed-scale.dot-product-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FusedArithmetic.TryMixedScaleProduct(System.Int64,System.Int32,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mixed-scale.checked-product-matches-representability",
+        "mixed-scale.triple-product-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FusedArithmetic.TryMixedScaleProduct(System.Int64,System.Int32,System.Int64,System.Int32,System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mixed-scale.checked-product-matches-representability",
+        "mixed-scale.triple-product-vs-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FusedArithmetic.TryScaledReciprocal(System.Int64,System.Int32,System.Int32,System.Int64&)",
+      "State": "covered",
+      "CoveredBy": [
+        "mixed-scale.scaled-reciprocal-vs-oracle"
       ]
     },
     {
@@ -18212,6 +18441,13 @@
       "State": "covered",
       "CoveredBy": [
         "sampling.secure-random-intervals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SimplestRational.InOpenInterval(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
+      "State": "covered",
+      "CoveredBy": [
+        "quantization.simplest-rational-minimality"
       ]
     },
     {

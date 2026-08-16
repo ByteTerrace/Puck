@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
+using Puck.GamingBricks;
 using Puck.HumbleGamingBrick.Interfaces;
-using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -30,7 +30,6 @@ internal readonly record struct BessImportReport(
     bool Ime, byte Ie, byte If, byte Lcdc, byte Stat, byte Ly,
     int RomBank, int RamBank
 );
-
 /// <summary>
 /// Loads a BESS-compliant savestate into a running machine and reports the state it restored. Registers, IME, IE, and
 /// the execution state (halted/stopped) round-trip exactly through <see cref="ICpu"/> and
@@ -46,6 +45,7 @@ internal static class BessImporter {
     private const int DivOffset = (MemoryMap.Divider - MemoryMap.IoRegistersStart);
     private const int DmaStartOffset = (MemoryMap.OamDmaSource - MemoryMap.IoRegistersStart);
     private const int HdmaStartOffset = (MemoryMap.HdmaControl - MemoryMap.IoRegistersStart);
+
     // The CGB palette index/data ports: replaying FF68/FF6A (index) as a raw byte ahead of FF69/FF6B (data) arms
     // auto-increment (bit 7) before the loop reaches the data port, so a plain replay of FF69/FF6B corrupts the index
     // via WriteColorRam's own auto-increment — ApplyPalette (BessScope's index/data dance, bit 7 always held low)
@@ -99,8 +99,8 @@ internal static class BessImporter {
         var ie = core[0x15];
         var executionState = core[0x16];
         var registerPage = core.AsSpan(
-            start: Bess.RegisterPageOffset,
-            length: Bess.RegisterPageLength
+            length: Bess.RegisterPageLength,
+            start: Bess.RegisterPageOffset
         ).ToArray();
 
         var scratch = new StateWriter(capacity: Sm83StateCodec.ByteCount);
@@ -116,26 +116,26 @@ internal static class BessImporter {
         );
 
         Sm83StateCodec.Load(
+            a: ((byte)(af >> 8)),
+            b: ((byte)(bc >> 8)),
+            c: ((byte)bc),
             cpu: cpu,
-            scratch: scratch,
-            a: (byte)(af >> 8),
-            f: (byte)(af & 0xF0),
-            b: (byte)(bc >> 8),
-            c: (byte)bc,
-            d: (byte)(de >> 8),
-            e: (byte)de,
-            h: (byte)(hl >> 8),
-            l: (byte)hl,
-            sp: sp,
-            pc: pc,
-            halted: (executionState == 1),
+            d: ((byte)(de >> 8)),
+            e: ((byte)de),
+            f: ((byte)(af & 0xF0)),
+            h: ((byte)(hl >> 8)),
             haltBug: false,
-            lockedUp: false,
+            halted: (executionState == 1),
             ime: ime,
-            interruptEnableCountdown: 0
+            interruptEnableCountdown: 0,
+            l: ((byte)hl),
+            lockedUp: false,
+            pc: pc,
+            scratch: scratch,
+            sp: sp
         );
 
-        interrupts.Enabled = (InterruptKind)ie;
+        interrupts.Enabled = ((InterruptKind)ie);
 
         if (executionState == 2) {
             key1.EnterStop();
@@ -169,11 +169,11 @@ internal static class BessImporter {
                 array: TriggerBitOffsets,
                 value: offset
             ) >= 0) {
-                value = (byte)(value & 0x7F);
+                value = ((byte)(value & 0x7F));
             }
 
             bus.WriteByte(
-                address: (ushort)(MemoryMap.IoRegistersStart + offset),
+                address: ((ushort)(MemoryMap.IoRegistersStart + offset)),
                 value: value
             );
         }
@@ -181,18 +181,18 @@ internal static class BessImporter {
         ApplyBuffer(
             bus: bus,
             core: core,
-            tableOffset: 0x00,
-            start: MemoryMap.WorkRamBank0Start,
             file: file,
-            fillCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1)
+            fillCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1),
+            start: MemoryMap.WorkRamBank0Start,
+            tableOffset: 0x00
         );
         ApplyBuffer(
             bus: bus,
             core: core,
-            tableOffset: 0x08,
-            start: MemoryMap.VideoRamStart,
             file: file,
-            fillCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1)
+            fillCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1),
+            start: MemoryMap.VideoRamStart,
+            tableOffset: 0x08
         );
         ApplyMbcRam(
             cartridge: cartridge,
@@ -234,7 +234,7 @@ internal static class BessImporter {
         // and every record's address falls in 0x0000-0x7FFF or 0xA000-0xBFFF, before any of the writes above ran.
         if (mbc is not null) {
             for (var offset = 0; (offset < mbc.Length); offset += 3) {
-                var address = (ushort)(mbc[offset] | (mbc[(offset + 1)] << 8));
+                var address = ((ushort)(mbc[offset] | (mbc[(offset + 1)] << 8)));
 
                 bus.WriteByte(
                     address: address,
@@ -248,8 +248,8 @@ internal static class BessImporter {
             bankNOffset: out var bankNOffset
         );
         var ramBank = ((cartridge.TryComputeRamWindow(
-            offset: out var ramOffset,
-            length: out var ramLength
+            length: out var ramLength,
+            offset: out var ramOffset
         ) && (ramLength > 0))
             ? (ramOffset / 0x2000)
             : -1);
@@ -257,17 +257,17 @@ internal static class BessImporter {
         return new BessImportReport(
             EmulatorName: name,
             ModelTag: System.Text.Encoding.ASCII.GetString(bytes: core.AsSpan(
-                start: 0x04,
-                length: 4
+                length: 4,
+                start: 0x04
             )),
             Pc: cpu.ProgramCounter,
-            Af: (ushort)((cpu.A << 8) | cpu.F),
-            Bc: (ushort)((cpu.B << 8) | cpu.C),
-            De: (ushort)((cpu.D << 8) | cpu.E),
-            Hl: (ushort)((cpu.H << 8) | cpu.L),
+            Af: ((ushort)((cpu.A << 8) | cpu.F)),
+            Bc: ((ushort)((cpu.B << 8) | cpu.C)),
+            De: ((ushort)((cpu.D << 8) | cpu.E)),
+            Hl: ((ushort)((cpu.H << 8) | cpu.L)),
             Sp: cpu.StackPointer,
             Ime: ime,
-            Ie: (byte)interrupts.Enabled,
+            Ie: ((byte)interrupts.Enabled),
             If: bus.ReadByte(address: MemoryMap.InterruptFlag),
             Lcdc: bus.ReadByte(address: MemoryMap.LcdControl),
             Stat: bus.ReadByte(address: MemoryMap.LcdStatus),
@@ -278,6 +278,7 @@ internal static class BessImporter {
             RamBank: ramBank
         );
     }
+
     // Parses and fully validates a BESS file's block graph, CORE buffer table, and optional MBC payload — against
     // both the file's bounds and the destination machine's region capacities — before any machine state is touched.
     // This pass touches only `file` — no service lookups, no writes — so any InvalidDataException it throws leaves
@@ -305,12 +306,12 @@ internal static class BessImporter {
             }
 
             if (!Bess.TryReadBlock(
-                file: file,
-                offset: cursor,
                 end: end,
-                tag: out var tag,
+                file: file,
+                next: out var next,
+                offset: cursor,
                 payload: out var payload,
-                next: out var next
+                tag: out var tag
             )) {
                 throw new InvalidDataException(message: $"a BESS block at file offset {cursor} is truncated or extends past the file.");
             }
@@ -381,8 +382,8 @@ internal static class BessImporter {
         }
 
         core = core.AsSpan(
-            start: 0,
-            length: Bess.CoreBlockLength
+            length: Bess.CoreBlockLength,
+            start: 0
         ).ToArray();
 
         // (H-10) BESS spec (CORE block): "0x00 | Major BESS version as a 16-bit integer" and "Both major and minor
@@ -482,13 +483,14 @@ internal static class BessImporter {
         }
 
         for (var offset = 0; (offset < mbc.Length); offset += 3) {
-            var address = (ushort)(mbc[offset] | (mbc[(offset + 1)] << 8));
+            var address = ((ushort)(mbc[offset] | (mbc[(offset + 1)] << 8)));
 
             if (!(((address >= 0x0000) && (address <= 0x7FFF)) || ((address >= 0xA000) && (address <= 0xBFFF)))) {
                 throw new InvalidDataException(message: $"the MBC block record at index {(offset / 3)} writes address 0x{address:X4}, outside the spec's 0x0000-0x7FFF and 0xA000-0xBFFF ranges.");
             }
         }
     }
+
     // The permitted shape of a CORE buffer-table entry's declared size against its destination region's capacity —
     // the BESS spec gives some regions (OAM, HRAM, palette) a fixed size instead of the plain upper bound the rest get.
     private enum BufferSizeShape {
@@ -500,14 +502,15 @@ internal static class BessImporter {
         /// <summary>Exactly the destination capacity, or exactly 0 (palette "=0x40 or 0").</summary>
         ExactOrZero,
     }
+
     // One CORE buffer-table entry (a size/file-offset UInt32 pair at Bess.BufferTableOffset+tableOffset) must reference
     // a span that fits entirely within the file, and — when destinationCapacity is given — must match its destination
     // region's permitted size shape; ApplyBuffer/ApplyMbcRam/ApplyPalette trust both once validation has returned, so
     // every entry the importer reads must be checked here first.
     private static void ValidateBufferTable(byte[] core, int tableOffset, int fileLength, string name, int? destinationCapacity = null, BufferSizeShape shape = BufferSizeShape.Range) {
         var absolute = (Bess.BufferTableOffset + tableOffset);
-        var size = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute));
-        var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
 
         if (
             (size < 0) ||
@@ -548,9 +551,9 @@ internal static class BessImporter {
 
         var bytes = writer.ToArray();
 
-        bytes[1] = (byte)(isDoubleSpeed
+        bytes[1] = ((byte)(isDoubleSpeed
             ? 1
-            : 0); // armed:bool is byte 0; isDoubleSpeed:bool is byte 1.
+            : 0)); // armed:bool is byte 0; isDoubleSpeed:bool is byte 1.
 
         key1.LoadState(reader: new StateReader(buffer: bytes));
     }
@@ -577,39 +580,39 @@ internal static class BessImporter {
     // null and skip the fill loop entirely.
     private static void ApplyBuffer(ISystemBus bus, byte[] core, int tableOffset, ushort start, byte[] file, int? fillCapacity = null) {
         var absolute = (Bess.BufferTableOffset + tableOffset);
-        var size = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute));
-        var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
 
         for (var index = 0; (index < size); ++index) {
             bus.WriteByte(
-                address: (ushort)(start + index),
+                address: ((ushort)(start + index)),
                 value: file[(offset + index)]
             );
         }
 
         for (var index = size; (fillCapacity.HasValue && (index < fillCapacity.Value)); ++index) {
             bus.WriteByte(
-                address: (ushort)(start + index),
+                address: ((ushort)(start + index)),
                 value: 0
             );
         }
     }
     private static void ApplyMbcRam(ICartridge cartridge, byte[] core, byte[] file) {
         var absolute = (Bess.BufferTableOffset + 0x10);
-        var size = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute));
-        var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
 
         if (size > 0) {
             cartridge.ImportExternalRam(source: file.AsSpan(
-                start: offset,
-                length: size
+                length: size,
+                start: offset
             ));
         }
     }
     private static void ApplyPalette(ISystemBus bus, byte[] core, int tableOffset, (ushort Index, ushort Data) registers, byte indexRegisterValue, byte[] file) {
         var absolute = (Bess.BufferTableOffset + tableOffset);
-        var size = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute));
-        var offset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4)));
+        var size = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: absolute)));
+        var offset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: core.AsSpan(start: (absolute + 4))));
 
         if (size > 0) {
             BessScope.WriteColorPalette(
@@ -617,8 +620,8 @@ internal static class BessImporter {
                 registers: registers,
                 finalIndexRegister: indexRegisterValue,
                 palette: file.AsSpan(
-                    start: offset,
-                    length: size
+                    length: size,
+                    start: offset
                 )
             );
         }

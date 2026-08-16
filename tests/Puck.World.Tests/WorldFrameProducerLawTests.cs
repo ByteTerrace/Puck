@@ -14,6 +14,7 @@ public sealed class WorldFrameProducerLawTests {
         var sourceKit = Assert.Single(collection: document.Kits);
         var sourceMotion = Assert.IsType<WorldMotionModel.Grounded>(@object: sourceKit.Motion);
         var scalars = Fixtures.TravelerWanderParameters.Scalars.ToDictionary();
+
         scalars = new Dictionary<string, float>(dictionary: scalars) {
             ["forward"] = 1f,
             ["softRadius"] = 0.1f,
@@ -37,15 +38,16 @@ public sealed class WorldFrameProducerLawTests {
         };
 
         using var fixture = Fixtures.FreshServer(definition: document with { Kits = [kit], Population = population });
+
         Assert.Equal(expected: 1, actual: fixture.Server.Population.SetSimulatedCount(count: 1));
         var body = fixture.Server.Population.EntryBody(index: WorldPopulation.LocalSeatCount)!;
         var start = body.FixedPosition;
 
-        for (var tick = 0; tick < 240; tick++) {
+        for (var tick = 0; (tick < 240); tick++) {
             fixture.Step();
         }
 
-        Assert.True(condition: body.FixedPosition.X < (start.X - FixedQ4816.FromDouble(value: 0.5)),
+        Assert.True(condition: (body.FixedPosition.X < (start.X - FixedQ4816.FromDouble(value: 0.5))),
             userMessage: $"world-frame wander never acquired lateral steering: start={start}, end={body.FixedPosition}");
         Assert.NotEqual(expected: FixedQ4816.Zero, actual: body.FixedYaw);
     }

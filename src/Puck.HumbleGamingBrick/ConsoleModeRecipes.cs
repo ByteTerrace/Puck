@@ -1,7 +1,7 @@
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// The per-ROM "boot shim" recipes: which cached hardware-detection bytes to overwrite so a RUNNING GB-compatible game
+/// The per-ROM "boot shim" recipes: which cached hardware-detection bytes to overwrite so a RUNNING SM83-compatible game
 /// switches onto the target model's own code path, no reboot. A dual-mode cartridge reads the console model once at
 /// power-on (register A) and caches the answer; every render routine thereafter branches on that cache. Flipping the
 /// emulated hardware alone leaves the game running its old code (a color game keeps writing color palettes a DMG PPU
@@ -38,8 +38,8 @@ internal static class ConsoleModeRecipes {
     public static ModePoke[] PokesFor(string title, ConsoleModel target) {
         foreach (var (prefix, flags) in Recipes) {
             if (!title.StartsWith(
-                value: prefix,
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: prefix
             )) {
                 continue;
             }
@@ -61,15 +61,14 @@ internal static class ConsoleModeRecipes {
 
         return [];
     }
-
     /// <summary>Returns a value indicating whether a known recipe exists for <paramref name="title"/> — the host distinguishes a real live retarget
     /// (the game re-renders natively) from a presentation-only re-interpretation when it echoes the swap.</summary>
     /// <param name="title">The cartridge header title.</param>
     public static bool HasRecipe(string title) {
         foreach (var (prefix, _) in Recipes) {
             if (title.StartsWith(
-                value: prefix,
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: prefix
             )) {
                 return true;
             }

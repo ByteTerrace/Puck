@@ -53,7 +53,6 @@ internal enum ReplayRefusal {
     [Refusal(door: "replay.tape", condition: "a recorded transfer's content signature disagrees with what its own decoded fields recompute", kind: RefusalKind.Verdict)]
     TransferEventTampered,
 }
-
 /// <summary>Constructs this door's <see cref="InvalidDataException"/>s tagged with the <see cref="ReplayRefusal"/>
 /// each throw site names. <see cref="InvalidDataException"/> is sealed (unlike <c>SdfDocumentException</c> elsewhere
 /// in this catalog, it cannot be subclassed to carry a required <see cref="ReplayRefusal"/> constructor parameter),
@@ -82,11 +81,13 @@ internal static class ReplayRefusalExtensions {
 
         return exception;
     }
-
     /// <summary>Recovers the <see cref="ReplayRefusal"/> a caught exception was raised with, if any.</summary>
     /// <param name="exception">The caught exception.</param>
     /// <returns>The reason, or <see langword="null"/> when the exception was not raised via <see cref="Raise"/>.</returns>
     public static ReplayRefusal? ReasonOf(this Exception exception) {
-        return ((exception.Data[ReasonKey] is ReplayRefusal reason) ? reason : null);
+        return ((exception.Data[ReasonKey] is ReplayRefusal reason)
+            ? reason
+            : null
+        );
     }
 }

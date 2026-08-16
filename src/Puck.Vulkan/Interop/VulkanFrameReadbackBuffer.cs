@@ -7,6 +7,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanFrameReadbackBuffer : IDisposable {
     private bool m_disposed;
+
     private readonly IVulkanFrameReadbackApi m_frameReadbackApi;
 
     /// <summary>Gets the native <c>VkBuffer</c> handle, or zero once disposed.</summary>

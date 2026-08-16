@@ -26,7 +26,6 @@ public sealed class WorldSafeNameLawTests {
         Assert.True(condition: WorldSafeName.TryParse(candidate: atLimit, name: out var parsed, reason: out var atLimitReason), userMessage: atLimitReason);
         Assert.Equal(expected: atLimit, actual: parsed.Value);
     }
-
     [Fact]
     public void TryParse_PastMaxLength_RefusesByName_ControlAtMaxLengthParsesClean() {
         Laws.RefusalWithControl(
@@ -34,7 +33,6 @@ public sealed class WorldSafeNameLawTests {
             deniedOutcome: static () => WorldSafeName.TryParse(candidate: new string(c: 'z', count: (WorldSafeName.MaxLength + 1)), name: out _, reason: out _),
             controlOutcome: static () => WorldSafeName.TryParse(candidate: new string(c: 'z', count: WorldSafeName.MaxLength), name: out _, reason: out _));
     }
-
     // The "impossible case" made real: MintInstanceName's own remarks call the WorldSafeName.TryParse re-check
     // "defensive, not load-bearing ... this can never actually fire", because every component it composes from was
     // ALREADY WorldSafeName-typed and WorldSafeName had no length rule to violate. Two long-but-individually-valid
@@ -67,7 +65,6 @@ public sealed class WorldSafeNameLawTests {
         Assert.Contains(expectedSubstring: "is not a safe name", actualString: reason, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "character limit", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void TryResolve_ComposedNameExceedsMaxLength_RefusesByName_ControlWithShortNamesResolves() {
         var kind = new WorldGroupKind(Name: "party", Roles: [], OwnershipPolicy: WorldGroupOwnershipPolicy.None, Lifetime: WorldGroupLifetime.Persistent, EvictionPolicy: WorldGroupEvictionPolicy.Remove, Capacity: 8);
@@ -93,6 +90,6 @@ public sealed class WorldSafeNameLawTests {
         Laws.RefusalWithControl(
             lawId: "resolver.composed-instance-name-too-long-refused",
             deniedOutcome: () => Resolve(name: new string(c: 'd', count: 150), groupId: new string(c: 'g', count: 150)),
-            controlOutcome: () => Resolve(name: "hall", groupId: "alpha"));
+            controlOutcome: () => Resolve(groupId: "alpha", name: "hall"));
     }
 }

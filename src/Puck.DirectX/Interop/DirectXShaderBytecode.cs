@@ -29,7 +29,7 @@ public sealed unsafe class DirectXShaderBytecode : IDisposable {
     /// <summary>Gets the length, in bytes, of the bytecode.</summary>
     public nuint BufferLength => ((ID3DBlob*)m_blobHandle)->GetBufferSize();
     /// <summary>Gets a pointer to the bytecode bytes.</summary>
-    public nint BufferPointer => (nint)((ID3DBlob*)m_blobHandle)->GetBufferPointer();
+    public nint BufferPointer => ((nint)((ID3DBlob*)m_blobHandle)->GetBufferPointer());
 
     /// <summary>Releases the owned blob. Safe to call more than once.</summary>
     public void Dispose() {

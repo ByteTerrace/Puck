@@ -82,22 +82,8 @@
                 "default": true
               },
               "moveSpeedEnvelope": {
+                "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
                 "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless MoveSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces today\u0027s unclamped behavior exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override. See MotionScalarEnvelope.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "min": {
-                    "description": "The least admitted value (inclusive).",
-                    "type": "number"
-                  },
-                  "max": {
-                    "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
-                    "type": "number"
-                  }
-                },
-                "additionalProperties": false,
                 "default": null
               },
               "declaredSprintChannel": {
@@ -108,7 +94,11 @@
                 ]
               },
               "declaredMoveFrame": {
-                "$ref": "./common.schema.json#/$defs/MotionMoveFrame"
+                "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
+                "enum": [
+                  "Heading",
+                  "World"
+                ]
               }
             },
             "required": [
@@ -212,22 +202,8 @@
                 "default": null
               },
               "topSpeedEnvelope": {
+                "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
                 "description": "The racing-integrity clamp: the inclusive bound the resolved base TopSpeed is pinned to at resolve time \u2014 a live world.row.set kits retune (deliberately admitted even past the bound; WorldDefinitionValidator checks only the envelope\u0027s own shape, never that TopSpeed already sits inside it \u2014 the clamp exists precisely to catch a retune the envelope disagrees with, so requiring conformance up front would refuse the case it exists for), and any future per-seat vehicle stat resolve, both pass through it, or null (the default) for no bound. BoostMultiplier multiplies after this clamp, never before \u2014 the envelope pins the base top speed, boost rides on top, the same sprint-after-clamp precedent MoveSpeedEnvelope established for the grounded arm. The vehicle arm\u0027s resolve deliberately never reads a seated profile\u0027s speed (a kart\u0027s speed is the kit\u0027s), so this is the only seat-time clamp the vehicle arm has \u2014 unlike the grounded arm\u0027s envelope, which bounds a fallback a separate live profile read can diverge from, so grounded\u0027s own baseline is still required to sit inside its own bound. See MotionScalarEnvelope.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "min": {
-                    "description": "The least admitted value (inclusive).",
-                    "type": "number"
-                  },
-                  "max": {
-                    "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
-                    "type": "number"
-                  }
-                },
-                "additionalProperties": false,
                 "default": null
               },
               "declaredSprintChannel": {
@@ -238,7 +214,11 @@
                 ]
               },
               "declaredMoveFrame": {
-                "$ref": "./common.schema.json#/$defs/MotionMoveFrame"
+                "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
+                "enum": [
+                  "Heading",
+                  "World"
+                ]
               }
             },
             "required": [
@@ -329,22 +309,8 @@
                 "default": true
               },
               "thrustSpeedEnvelope": {
+                "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
                 "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless ThrustSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 the same seam as MoveSpeedEnvelope, for this arm\u0027s own thrust speed. null reproduces unclamped behavior exactly; Min == Max pins the effective thrust speed outright regardless of what a profile requests. See MotionScalarEnvelope.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "min": {
-                    "description": "The least admitted value (inclusive).",
-                    "type": "number"
-                  },
-                  "max": {
-                    "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
-                    "type": "number"
-                  }
-                },
-                "additionalProperties": false,
                 "default": null
               },
               "declaredSprintChannel": {
@@ -355,7 +321,11 @@
                 ]
               },
               "declaredMoveFrame": {
-                "$ref": "./common.schema.json#/$defs/MotionMoveFrame"
+                "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
+                "enum": [
+                  "Heading",
+                  "World"
+                ]
               }
             },
             "required": [
@@ -420,54 +390,12 @@
           ],
           "properties": {
             "onPress": {
-              "description": "The rising-edge trigger, or null.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "gate": {
-                  "$ref": "./common.schema.json#/$defs/ActionPredicate3"
-                },
-                "latchSeconds": {
-                  "description": "How long a press stays pending waiting for the gate. 0 means this tick only \u2014 the press fires if the gate is open on its own edge tick and is dropped otherwise. Legitimate only on OnPress: the release channel latches nothing, so a non-zero value on OnRelease is refused by name at validation rather than parsed and discarded.",
-                  "type": "number"
-                },
-                "effects": {
-                  "$ref": "./common.schema.json#/$defs/ActionEffectList"
-                }
-              },
-              "required": [
-                "gate",
-                "latchSeconds",
-                "effects"
-              ],
-              "additionalProperties": false
+              "$ref": "./common.schema.json#/$defs/ActionTrigger",
+              "description": "The rising-edge trigger, or null."
             },
             "onRelease": {
-              "description": "The falling-edge trigger (evaluated immediately, never latched), or null.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "gate": {
-                  "$ref": "./common.schema.json#/$defs/ActionPredicate3"
-                },
-                "latchSeconds": {
-                  "description": "How long a press stays pending waiting for the gate. 0 means this tick only \u2014 the press fires if the gate is open on its own edge tick and is dropped otherwise. Legitimate only on OnPress: the release channel latches nothing, so a non-zero value on OnRelease is refused by name at validation rather than parsed and discarded.",
-                  "type": "number"
-                },
-                "effects": {
-                  "$ref": "./common.schema.json#/$defs/ActionEffectList"
-                }
-              },
-              "required": [
-                "gate",
-                "latchSeconds",
-                "effects"
-              ],
-              "additionalProperties": false
+              "$ref": "./common.schema.json#/$defs/ActionTrigger",
+              "description": "The falling-edge trigger (evaluated immediately, never latched), or null."
             },
             "state": {
               "description": "Named persistent state declarations used by this action and shared by matching names across the kit.",
@@ -601,16 +529,8 @@
                 ],
                 "properties": {
                   "fact": {
-                    "description": "The fact that fires the rule.",
-                    "enum": [
-                      "Grounded",
-                      "Airborne",
-                      "Rising",
-                      "Falling",
-                      "AffectedBy",
-                      "Submerged",
-                      "AtSurface"
-                    ]
+                    "$ref": "./common.schema.json#/$defs/ActionFact",
+                    "description": "The fact that fires the rule."
                   },
                   "effects": {
                     "description": "The effects applied in order.",
@@ -620,31 +540,8 @@
                     }
                   },
                   "gate": {
+                    "$ref": "./common.schema.json#/$defs/ActionPredicate",
                     "description": "An additional predicate that must hold beside Fact, or null for none.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "required": [
-                      "$type"
-                    ],
-                    "anyOf": [
-                      {
-                        "$ref": "./common.schema.json#/$defs/Now"
-                      },
-                      {
-                        "$ref": "./common.schema.json#/$defs/Recently"
-                      },
-                      {
-                        "$ref": "./common.schema.json#/$defs/CompareState"
-                      },
-                      {
-                        "$ref": "./common.schema.json#/$defs/TimerElapsed"
-                      },
-                      {
-                        "$ref": "./common.schema.json#/$defs/All2"
-                      }
-                    ],
                     "default": null
                   },
                   "mode": {

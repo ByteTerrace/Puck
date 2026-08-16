@@ -69,7 +69,7 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
                 deviceHandle,
                 &pipelineInfo,
                 &executableCount,
-                (VkPipelineExecutablePropertiesKhr*)null
+                ((VkPipelineExecutablePropertiesKhr*)null)
             )) ||
             (0 == executableCount)
         ) {
@@ -113,7 +113,7 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
                         deviceHandle,
                         &executableInfo,
                         &statisticCount,
-                        (VkPipelineExecutableStatisticKhr*)null
+                        ((VkPipelineExecutableStatisticKhr*)null)
                     )) ||
                     (0 == statisticCount)
                 ) {
@@ -164,13 +164,12 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
             length: MaxDescriptionSize,
             pointer: namePointer
         );
-        var terminator = span.IndexOf(value: (byte)0);
+        var terminator = span.IndexOf(value: ((byte)0));
 
         return Encoding.UTF8.GetString(bytes: span[..((terminator < 0)
             ? MaxDescriptionSize
             : terminator)]);
     }
-
     // VkPipelineExecutableStatisticValueKHR is an 8-byte union; the format selects how the
     // raw bits are read (0 = bool32, 1 = int64, 2 = uint64, 3 = float64).
     private static string FormatStatisticValue(uint format, ulong rawValue) {
@@ -180,7 +179,7 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
                 : "false"),
             1 => ((long)rawValue).ToString(provider: CultureInfo.InvariantCulture),
             2 => rawValue.ToString(provider: CultureInfo.InvariantCulture),
-            3 => BitConverter.Int64BitsToDouble(value: (long)rawValue).ToString(
+            3 => BitConverter.Int64BitsToDouble(value: ((long)rawValue)).ToString(
                 format: "0.###",
                 provider: CultureInfo.InvariantCulture
             ),
@@ -191,8 +190,8 @@ public unsafe sealed class VulkanNativePipelineStatisticsApi : IVulkanPipelineSt
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                GetPipelineExecutableProperties = (delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetPipelineExecutablePropertiesKHR"u8),
-                GetPipelineExecutableStatistics = (delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetPipelineExecutableStatisticsKHR"u8),
+                GetPipelineExecutableProperties = ((delegate* unmanaged[Cdecl]<nint, VkPipelineInfoKhr*, uint*, VkPipelineExecutablePropertiesKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetPipelineExecutablePropertiesKHR"u8)),
+                GetPipelineExecutableStatistics = ((delegate* unmanaged[Cdecl]<nint, VkPipelineExecutableInfoKhr*, uint*, VkPipelineExecutableStatisticKhr*, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetPipelineExecutableStatisticsKHR"u8)),
             }
         );
     }

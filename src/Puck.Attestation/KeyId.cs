@@ -20,31 +20,37 @@ namespace Puck.Attestation;
 /// platform user id that owns it.
 /// </remarks>
 public sealed record KeyId {
-    /// <summary>The root key's SHA-256 fingerprint (lowercase hex) for this id's whole chain — never a name.</summary>
-    public required string Domain { get; init; }
-
-    /// <summary>The platform user id this key belongs to, or <see langword="null"/> for a root or issuing key.</summary>
-    public string? Subject { get; init; }
-
     /// <summary>One of <see cref="AttestationAlgorithms"/>'s names — curve and hash/scheme both, so the pin fully determines the crypto.</summary>
     public required string Algorithm { get; init; }
-
-    /// <summary>SHA-256 (lowercase hex) of this key's <c>SubjectPublicKeyInfo</c> encoding.</summary>
-    public required string KeyHash { get; init; }
-
+    /// <summary>The root key's SHA-256 fingerprint (lowercase hex) for this id's whole chain — never a name.</summary>
+    public required string Domain { get; init; }
     /// <summary>Whether this id is the base case of the chain: self-referential domain and no subject.</summary>
     public bool IsRoot => (string.Equals(
         a: Domain,
         b: KeyHash,
         comparisonType: StringComparison.Ordinal
     ) && (Subject is null));
+    /// <summary>SHA-256 (lowercase hex) of this key's <c>SubjectPublicKeyInfo</c> encoding.</summary>
+    public required string KeyHash { get; init; }
+    /// <summary>The platform user id this key belongs to, or <see langword="null"/> for a root or issuing key.</summary>
+    public string? Subject { get; init; }
 
     /// <summary>Computes the lowercase-hex SHA-256 fingerprint of a <c>SubjectPublicKeyInfo</c> encoding.</summary>
     /// <param name="subjectPublicKeyInfo">The DER-encoded SPKI bytes exported from an EC key.</param>
     /// <returns>A 64-character lowercase-hex string.</returns>
     public static string ComputeKeyHash(ReadOnlySpan<byte> subjectPublicKeyInfo) =>
         Convert.ToHexStringLower(bytes: SHA256.HashData(source: subjectPublicKeyInfo));
-
+    /// <summary>Builds an issuing key's id: shares its root's domain, carries no subject.</summary>
+    /// <param name="domain">The root fingerprint of the chain this issuing key belongs to.</param>
+    /// <param name="subjectPublicKeyInfo">The issuing key's SPKI bytes.</param>
+    /// <param name="algorithm">The issuing key's signing algorithm.</param>
+    public static KeyId ForIssuing(string domain, ReadOnlySpan<byte> subjectPublicKeyInfo, string algorithm) =>
+        new() {
+            Algorithm = algorithm,
+            Domain = domain,
+            KeyHash = ComputeKeyHash(subjectPublicKeyInfo: subjectPublicKeyInfo),
+            Subject = null,
+        };
     /// <summary>Builds a root id: domain is self-referential (equal to this key's own hash), subject is absent.</summary>
     /// <param name="subjectPublicKeyInfo">The root key's SPKI bytes.</param>
     /// <param name="algorithm">The root key's signing algorithm.</param>
@@ -58,19 +64,6 @@ public sealed record KeyId {
             Subject = null,
         };
     }
-
-    /// <summary>Builds an issuing key's id: shares its root's domain, carries no subject.</summary>
-    /// <param name="domain">The root fingerprint of the chain this issuing key belongs to.</param>
-    /// <param name="subjectPublicKeyInfo">The issuing key's SPKI bytes.</param>
-    /// <param name="algorithm">The issuing key's signing algorithm.</param>
-    public static KeyId ForIssuing(string domain, ReadOnlySpan<byte> subjectPublicKeyInfo, string algorithm) =>
-        new() {
-            Algorithm = algorithm,
-            Domain = domain,
-            KeyHash = ComputeKeyHash(subjectPublicKeyInfo: subjectPublicKeyInfo),
-            Subject = null,
-        };
-
     /// <summary>Builds a subject (per-user) key's id.</summary>
     /// <param name="domain">The root fingerprint of the chain this subject key belongs to.</param>
     /// <param name="subject">The platform user id this key belongs to. Must not be null or whitespace.</param>

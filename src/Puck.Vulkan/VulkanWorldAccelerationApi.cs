@@ -83,7 +83,7 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
                 memoryHandle: aabbMemory,
                 sizeBytes: AabbByteSize
             );
-            var aabbValues = (float*)aabbPointer;
+            var aabbValues = ((float*)aabbPointer);
 
             aabbValues[0] = -1.0f;
             aabbValues[1] = -1.0f;
@@ -152,7 +152,7 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
             // Instance buffer: host-visible and persistently mapped — the world rewrites
             // the live entries every frame before the command buffer is submitted
             // (host-coherent writes are visible to the build by submission).
-            var instanceBufferSize = ((ulong)request.MaxInstanceCount * InstanceByteSize);
+            var instanceBufferSize = (((ulong)request.MaxInstanceCount) * InstanceByteSize);
 
             var (instanceBuffer, instanceMemory) = CreateBuffer(
                 hostVisible: true,
@@ -169,8 +169,8 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
             );
 
             new Span<byte>(
-                length: (int)instanceBufferSize,
-                pointer: (void*)instanceMappedPointer
+                length: ((int)instanceBufferSize),
+                pointer: ((void*)instanceMappedPointer)
             ).Clear();
             var instanceAddress = accelerationStructureApi.GetBufferDeviceAddress(
                 bufferHandle: instanceBuffer,
@@ -314,9 +314,9 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
         // queue submission order).
         accelerationStructureApi.CmdMemoryBarrier(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             destinationAccessMask: AccessAccelerationStructureWriteBit,
             destinationStageMask: PipelineStageAccelerationStructureBuildBit,
+            deviceHandle: deviceHandle,
             sourceAccessMask: AccessAccelerationStructureReadBit,
             sourceStageMask: PipelineStageComputeShaderBit
         );
@@ -341,9 +341,9 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
             // retired first-generation build is carried by the re-record fence wait.
             accelerationStructureApi.CmdMemoryBarrier(
                 commandBufferHandle: commandBufferHandle,
-                deviceHandle: deviceHandle,
                 destinationAccessMask: AccessAccelerationStructureReadBit,
                 destinationStageMask: PipelineStageAccelerationStructureBuildBit,
+                deviceHandle: deviceHandle,
                 sourceAccessMask: AccessAccelerationStructureWriteBit,
                 sourceStageMask: PipelineStageAccelerationStructureBuildBit
             );
@@ -368,9 +368,9 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
         // Publish the fresh TLAS to the compute dispatches that follow.
         accelerationStructureApi.CmdMemoryBarrier(
             commandBufferHandle: commandBufferHandle,
-            deviceHandle: deviceHandle,
             destinationAccessMask: AccessAccelerationStructureReadBit | AccessShaderReadBit,
             destinationStageMask: PipelineStageComputeShaderBit,
+            deviceHandle: deviceHandle,
             sourceAccessMask: AccessAccelerationStructureWriteBit,
             sourceStageMask: PipelineStageAccelerationStructureBuildBit
         );
@@ -393,7 +393,7 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
             return;
         }
 
-        var instance = ((VkAccelerationStructureInstanceKhr*)instanceBufferMappedPointer + index);
+        var instance = (((VkAccelerationStructureInstanceKhr*)instanceBufferMappedPointer) + index);
         // Row-major 3x4: per-axis scale on the diagonal, translation in the last column.
         var transform = instance->Transform;
 
@@ -448,7 +448,7 @@ public unsafe sealed class VulkanWorldAccelerationApi(IVulkanAccelerationStructu
             bufferHandle: bufferHandle,
             deviceHandle: request.DeviceHandle
         );
-        var alignedAddress = ((address + alignment) - 1) & ~((ulong)alignment - 1);
+        var alignedAddress = ((address + alignment) - 1) & ~(((ulong)alignment) - 1);
 
         return (bufferHandle, memoryHandle, alignedAddress);
     }

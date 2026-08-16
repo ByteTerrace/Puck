@@ -9,7 +9,6 @@ public enum AttestationKeyRole {
     /// <summary>The key performs ECDH key agreement feeding an AES-GCM key (sealed attestation).</summary>
     Sealing,
 }
-
 /// <summary>
 /// One algorithm the attestation understands, fully naming curve, signature hash (for signing) or
 /// key-agreement/AEAD scheme (for sealing). <see cref="KeyId.Algorithm"/> stores the <see cref="Name"/> of
@@ -28,18 +27,16 @@ public readonly record struct AttestationAlgorithmDescriptor(
     ECCurve Curve,
     HashAlgorithmName? SignatureHash
 );
-
 /// <summary>
 /// The closed set of algorithm names an attestation may declare, and the table that resolves one to
 /// concrete crypto parameters. Adding a scheme means adding an entry here — the attestation's algorithm field
 /// is a lookup key into this table, never an instruction the message gets to invent.
 /// </summary>
 public static class AttestationAlgorithms {
-    /// <summary>P-256 ECDSA, signing over a SHA-256 digest — the mandatory signing algorithm.</summary>
-    public const string EcdsaP256Sha256 = "ecdsa-p256-sha256";
-
     /// <summary>P-256 ECDH key agreement, HKDF-SHA256 key derivation, AES-256-GCM AEAD — the sealing algorithm.</summary>
     public const string EcdhP256HkdfSha256Aes256Gcm = "ecdh-p256-hkdf-sha256-aes256gcm";
+    /// <summary>P-256 ECDSA, signing over a SHA-256 digest — the mandatory signing algorithm.</summary>
+    public const string EcdsaP256Sha256 = "ecdsa-p256-sha256";
 
     private static readonly Dictionary<string, AttestationAlgorithmDescriptor> Descriptors = BuildTable();
 
@@ -64,14 +61,17 @@ public static class AttestationAlgorithms {
             hash: HashAlgorithmName.SHA256
         );
         Add(
+            hash: null,
             name: EcdhP256HkdfSha256Aes256Gcm,
-            role: AttestationKeyRole.Sealing,
-            hash: null
+            role: AttestationKeyRole.Sealing
         );
 
         return table;
     }
 
+    /// <summary>Determines whether <paramref name="algorithm"/> resolves to a known descriptor without throwing.</summary>
+    /// <param name="algorithm">The candidate algorithm name.</param>
+    public static bool IsKnown(string algorithm) => Descriptors.ContainsKey(key: algorithm);
     /// <summary>Resolves an algorithm name to its concrete parameters.</summary>
     /// <param name="algorithm">A value that must equal one of this class's name constants.</param>
     /// <returns>The resolved descriptor.</returns>
@@ -86,12 +86,7 @@ public static class AttestationAlgorithms {
 
         throw new NotSupportedException(message: $"'{algorithm}' is not an attestation algorithm.");
     }
-
-    /// <summary>Determines whether <paramref name="algorithm"/> resolves to a known descriptor without throwing.</summary>
-    /// <param name="algorithm">The candidate algorithm name.</param>
-    public static bool IsKnown(string algorithm) => Descriptors.ContainsKey(key: algorithm);
 }
-
 /// <summary>
 /// Curve identity for imported keys. An algorithm name promises a curve, and an SPKI blob carries its own —
 /// so every key imported from bytes has the two compared before it is used, or a name promising P-256 would
@@ -110,9 +105,31 @@ public static class AttestationCurves {
         "prime256v1",
         "secp256r1",
     };
-
     private static readonly HashSet<string>[] AliasSets = [NistP256Aliases];
 
+    private static bool Contains(HashSet<string> set, ECCurve curve) =>
+        (set.Contains(item: (curve.Oid.Value ?? string.Empty)) ||
+        set.Contains(item: (curve.Oid.FriendlyName ?? string.Empty)));
+    private static HashSet<string>? FindAliasSet(ECCurve curve) {
+        foreach (var set in AliasSets) {
+            if (Contains(
+                curve: curve,
+                set: set
+            )) {
+                return set;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Determines whether a named curve is P-256 under any of the names the platforms spell it with.</summary>
+    /// <param name="curve">The curve to test.</param>
+    public static bool IsNistP256(ECCurve curve) =>
+        (curve.IsNamed && Contains(
+            curve: curve,
+            set: NistP256Aliases
+        ));
     /// <summary>Determines whether <paramref name="key"/>'s curve is the one <paramref name="expected"/> names.</summary>
     /// <param name="key">The curve reported by an imported key's exported parameters.</param>
     /// <param name="expected">The curve the pinned algorithm's descriptor names.</param>
@@ -129,26 +146,10 @@ public static class AttestationCurves {
 
         return (
             (aliases is not null) &&
-            Contains(set: aliases, curve: key)
+            Contains(
+            curve: key,
+            set: aliases
+        )
         );
     }
-
-    /// <summary>Determines whether a named curve is P-256 under any of the names the platforms spell it with.</summary>
-    /// <param name="curve">The curve to test.</param>
-    public static bool IsNistP256(ECCurve curve) =>
-        (curve.IsNamed && Contains(set: NistP256Aliases, curve: curve));
-
-    private static HashSet<string>? FindAliasSet(ECCurve curve) {
-        foreach (var set in AliasSets) {
-            if (Contains(set: set, curve: curve)) {
-                return set;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool Contains(HashSet<string> set, ECCurve curve) =>
-        (set.Contains(item: (curve.Oid.Value ?? string.Empty)) ||
-        set.Contains(item: (curve.Oid.FriendlyName ?? string.Empty)));
 }

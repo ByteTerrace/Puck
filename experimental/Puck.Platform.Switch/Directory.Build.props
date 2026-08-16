@@ -1,0 +1,17 @@
+<Project>
+
+    <!--
+        Build firewall — DO NOT add <Import> of the repository-root Directory.Build.props.
+
+        This file exists to STOP MSBuild's upward Directory.Build.props discovery at this folder, so this
+        quarantined tree does not inherit the engine's build context from the repository root. The
+        architecture gate is hooked at the root: without this firewall it would run on a project deliberately
+        removed from Puck.slnx and fail it against a ledger that cannot describe it. QUARANTINE MEANS
+        UNGATED, and this pair is what makes that structural rather than a path filter someone maintains.
+
+        No csproj lives here. ISwitchViWindowBackend.cs and ViNativeWindow.cs are the open-source half of the
+        Nintendo Switch (VI) windowing contract — read as prior art, never built here. The licensed backend
+        that implements ISwitchViWindowBackend ships outside this repository.
+    -->
+
+</Project>

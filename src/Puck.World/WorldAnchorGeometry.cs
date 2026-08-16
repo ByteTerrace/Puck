@@ -21,18 +21,31 @@ internal static class WorldAnchorGeometry {
         }
 
         foreach (var placement in definition.Placements) {
-            if (!string.Equals(a: placement.Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
+            if (!string.Equals(
+                a: placement.Id,
+                b: placementId,
+                comparisonType: StringComparison.Ordinal
+            )) {
                 continue;
             }
 
-            var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId);
+            var creation = WorldDefinitionRows.FindCreation(
+                creations: definition.Creations,
+                id: placement.CreationId
+            );
 
-            return ((creation is null) ? placement.Position : StaticShapePosition(placement: placement, creation: creation, shapeId: shapeId));
+            return ((creation is null)
+                ? placement.Position
+                : StaticShapePosition(
+                    creation: creation,
+                    placement: placement,
+                    shapeId: shapeId
+                )
+            );
         }
 
         return Vector3.Zero;
     }
-
     /// <summary>The stamped world position of one shape within a placement (root ∘ scale · local under the yaw), or the
     /// placement root when no shape id resolves.</summary>
     /// <param name="placement">The placement row.</param>
@@ -46,9 +59,15 @@ internal static class WorldAnchorGeometry {
 
         foreach (var shape in (creation.Document.Shapes ?? [])) {
             if (shape.Id == targetShapeId) {
-                var rotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: (placement.YawDegrees * (MathF.PI / 180f)));
+                var rotation = Quaternion.CreateFromAxisAngle(
+                    axis: Vector3.UnitY,
+                    angle: (placement.YawDegrees * (MathF.PI / 180f))
+                );
 
-                return (placement.Position + Vector3.Transform(value: (shape.Position * placement.Scale), rotation: rotation));
+                return (placement.Position + Vector3.Transform(
+                    value: (shape.Position * placement.Scale),
+                    rotation: rotation
+                ));
             }
         }
 

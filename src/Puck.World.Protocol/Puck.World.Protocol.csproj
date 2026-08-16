@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <PropertyGroup>
+        <!-- Protocol payloads select runtime types by reflection. -->
+        <IsAotCompatible>false</IsAotCompatible>
+    </PropertyGroup>
+    <!--
+        Puck.World.Protocol — what a world SAYS: the wire/tape vocabulary every submission into, and every delivery
+        out of, the authoritative server travels as. WorldCommand/WorldMutation/WorldSessionLever,
+        SessionRequest/WorldSnapshot/WorldComposition, WorldScreenOp, WorldAddonLifecycle, WorldDesignation, the
+        SubmissionEnvelope union and its WorldSubmissionCodec, IServerLink/IClientSink/IWorldServerHost, and
+        LoopbackTransport. PlayerIntent, WorldGrant/WorldPrincipal, and the admission door (WorldAdmissionDoor) that
+        verifies a connecting peer's signed attestation against the document's own trust list live in
+        Puck.World.Schema instead — the document's own vocabulary, not wire/tape shape. References
+        Puck.World.Schema for the document shapes a submission carries or a mutation addresses, and Puck.Networking
+        for the transport-neutral frame/wire grammar its codecs frame payloads through. Cannot see a GPU backend, a
+        renderer, Puck.Overlays, Puck.Input, or Puck.World.Server, so nothing built on it can accidentally couple
+        wire framing to a window. Puck.World.Server references this project for the protocol shapes it folds
+        against; Puck.World (the composition root) references it directly too.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Networking\Puck.Networking.csproj" />
+        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+    </ItemGroup>
+</Project>

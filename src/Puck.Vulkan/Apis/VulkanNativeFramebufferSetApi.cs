@@ -208,11 +208,11 @@ public unsafe sealed class VulkanNativeFramebufferSetApi : IVulkanFramebufferSet
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateFramebuffer = (delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateFramebuffer"u8),
-                CreateImageView = (delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImageView"u8),
-                DestroyFramebuffer = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyFramebuffer"u8),
-                DestroyImageView = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImageView"u8),
-                GetSwapchainImagesKhr = (delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetSwapchainImagesKHR"u8),
+                CreateFramebuffer = ((delegate* unmanaged[Cdecl]<nint, in VkFramebufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateFramebuffer"u8)),
+                CreateImageView = ((delegate* unmanaged[Cdecl]<nint, in VkImageViewCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImageView"u8)),
+                DestroyFramebuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyFramebuffer"u8)),
+                DestroyImageView = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImageView"u8)),
+                GetSwapchainImagesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetSwapchainImagesKHR"u8)),
             }
         );
     }

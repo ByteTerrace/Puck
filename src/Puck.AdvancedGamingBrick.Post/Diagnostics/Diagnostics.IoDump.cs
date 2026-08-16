@@ -15,7 +15,7 @@ internal static partial class Diagnostics {
 
         using (instance) {
             var machine = instance.Machine;
-            var bus = (AgbBus)machine.Bus;
+            var bus = ((AgbBus)machine.Bus);
 
             machine.Cpu.Reset();
 

@@ -4,7 +4,6 @@ namespace Puck.Abstractions.Gpu;
 /// A backend-neutral storage buffer handle, with host-visible write access.
 /// </summary>
 public interface IGpuStorageBuffer : IGpuBuffer {
-
     /// <summary>Maps the buffer, copies the supplied data into it from the start, and unmaps it.</summary>
     /// <typeparam name="T">The unmanaged element type of the data.</typeparam>
     /// <param name="data">The data to copy into the buffer.</param>

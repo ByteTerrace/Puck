@@ -1,6 +1,6 @@
+using Puck.GamingBricks;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.Maths;
-using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -33,7 +33,6 @@ internal sealed record BessScopeCapture(
     byte[] Ram, byte[] Vram, byte[] MbcRam, byte[] Oam, byte[] Hram,
     byte[] BackgroundPalette, byte[] ObjectPalette
 );
-
 /// <summary>Captures and fingerprints the BESS-modeled slice of a machine's state.</summary>
 internal static class BessScope {
     /// <summary>The registers backing the CGB color-palette RAM (index port, data port).</summary>
@@ -54,56 +53,56 @@ internal static class BessScope {
         var scratchBuffer = new byte[Sm83StateCodec.ByteCount];
 
         Sm83StateCodec.ReadTail(
-            cpu: cpu,
-            scratch: scratch,
             buffer: scratchBuffer,
+            cpu: cpu,
+            eiPending: out _,
             halted: out var halted,
             ime: out var ime,
-            eiPending: out _
+            scratch: scratch
         );
 
-        var executionState = (byte)(key1.IsStopped
+        var executionState = ((byte)(key1.IsStopped
             ? 2
             : (halted
                 ? 1
-                : 0));
+                : 0)));
         var isColor = model.SupportsColor();
 
         return new BessScopeCapture(
             Pc: cpu.ProgramCounter,
-            Af: (ushort)((cpu.A << 8) | cpu.F),
-            Bc: (ushort)((cpu.B << 8) | cpu.C),
-            De: (ushort)((cpu.D << 8) | cpu.E),
-            Hl: (ushort)((cpu.H << 8) | cpu.L),
+            Af: ((ushort)((cpu.A << 8) | cpu.F)),
+            Bc: ((ushort)((cpu.B << 8) | cpu.C)),
+            De: ((ushort)((cpu.D << 8) | cpu.E)),
+            Hl: ((ushort)((cpu.H << 8) | cpu.L)),
             Sp: cpu.StackPointer,
             Ime: ime,
-            Ie: (byte)interrupts.Enabled,
+            Ie: ((byte)interrupts.Enabled),
             ExecutionState: executionState,
             RegisterPage: ReadRange(
                 bus: bus,
-                start: MemoryMap.IoRegistersStart,
-                length: Bess.RegisterPageLength
+                length: Bess.RegisterPageLength,
+                start: MemoryMap.IoRegistersStart
             ),
             Ram: ReadRange(
                 bus: bus,
-                start: MemoryMap.WorkRamBank0Start,
-                length: 0x2000
+                length: 0x2000,
+                start: MemoryMap.WorkRamBank0Start
             ),
             Vram: ReadRange(
                 bus: bus,
-                start: MemoryMap.VideoRamStart,
-                length: 0x2000
+                length: 0x2000,
+                start: MemoryMap.VideoRamStart
             ),
             MbcRam: cartridge.ExportExternalRam(),
             Oam: ReadRange(
                 bus: bus,
-                start: MemoryMap.ObjectAttributeMemoryStart,
-                length: 0xA0
+                length: 0xA0,
+                start: MemoryMap.ObjectAttributeMemoryStart
             ),
             Hram: ReadRange(
                 bus: bus,
-                start: MemoryMap.HighRamStart,
-                length: 0x7F
+                length: 0x7F,
+                start: MemoryMap.HighRamStart
             ),
             BackgroundPalette: (isColor
             ? ReadColorPalette(
@@ -131,7 +130,7 @@ internal static class BessScope {
     /// <param name="capture">The capture to fingerprint.</param>
     /// <returns>A 64-bit FNV-1a fingerprint.</returns>
     public static ulong Fingerprint(BessScopeCapture capture) {
-        var maskedPage = (byte[])capture.RegisterPage.Clone();
+        var maskedPage = ((byte[])capture.RegisterPage.Clone());
 
         maskedPage[(MemoryMap.OamDmaSource - MemoryMap.IoRegistersStart)] = 0;
         maskedPage[(MemoryMap.HdmaControl - MemoryMap.IoRegistersStart)] = 0;
@@ -167,7 +166,7 @@ internal static class BessScope {
         var bytes = new byte[length];
 
         for (var index = 0; (index < length); ++index) {
-            bytes[index] = bus.ReadByte(address: (ushort)(start + index));
+            bytes[index] = bus.ReadByte(address: ((ushort)(start + index)));
         }
 
         return bytes;
@@ -182,7 +181,7 @@ internal static class BessScope {
         for (var index = 0; (index < palette.Length); ++index) {
             bus.WriteByte(
                 address: registers.Index,
-                value: (byte)index
+                value: ((byte)index)
             );
             palette[index] = bus.ReadByte(address: registers.Data);
         }
@@ -206,7 +205,7 @@ internal static class BessScope {
         for (var index = 0; (index < palette.Length); ++index) {
             bus.WriteByte(
                 address: registers.Index,
-                value: (byte)index
+                value: ((byte)index)
             );
             bus.WriteByte(
                 address: registers.Data,

@@ -1,0 +1,1149 @@
+{
+  "$schema": "./puck.world.def.v1.schema.json",
+  "simulation": {
+    "rateHz": 60
+  },
+  "motion": {
+    "moveSpeed": 8,
+    "turnSpeed": 2.6,
+    "maxSmoothError": 3
+  },
+  "spawnPoints": [
+    {
+      "id": "seat-1",
+      "position": [
+        -12,
+        0,
+        -12
+      ]
+    },
+    {
+      "id": "seat-2",
+      "position": [
+        -10,
+        0,
+        -12
+      ]
+    },
+    {
+      "id": "seat-3",
+      "position": [
+        -12,
+        0,
+        -10
+      ]
+    },
+    {
+      "id": "seat-4",
+      "position": [
+        -10,
+        0,
+        -10
+      ]
+    },
+    {
+      "id": "npc-spawn",
+      "position": [
+        -18,
+        0,
+        -8
+      ],
+      "yawDegrees": -90
+    }
+  ],
+  "render": {
+    "shadows": "Off",
+    "shadowCrowdRadius": 15,
+    "ambientOcclusion": false,
+    "renderScale": "Half",
+    "upscaleSharpness": 0,
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "renderScale": "Half"
+    },
+    "medium": {
+      "shadows": "Medium",
+      "ambientOcclusion": true,
+      "renderScale": "ThreeQuarter"
+    },
+    "high": {
+      "shadows": "High",
+      "ambientOcclusion": true,
+      "renderScale": "Native"
+    }
+  },
+  "screens": [],
+  "cameras": [
+    {
+      "name": "overview",
+      "anchor": null,
+      "rig": {
+        "motion": {
+          "$type": "static",
+          "position": [
+            -12,
+            22,
+            12
+          ],
+          "worldAxes": true
+        },
+        "aim": {
+          "$type": "worldPoint",
+          "target": [
+            -12,
+            2,
+            -12
+          ]
+        },
+        "lens": {
+          "fieldOfViewRadians": 0.9
+        },
+        "smoothRate": 0
+      },
+      "renderWidth": 320,
+      "renderHeight": 240
+    },
+    {
+      "name": "verify-seam-ne",
+      "anchor": null,
+      "rig": {
+        "motion": {
+          "$type": "static",
+          "position": [
+            -10,
+            8,
+            -7.5
+          ],
+          "worldAxes": true
+        },
+        "aim": {
+          "$type": "worldPoint",
+          "target": [
+            0.5,
+            1,
+            -7.5
+          ]
+        },
+        "lens": {
+          "fieldOfViewRadians": 1
+        },
+        "smoothRate": 0
+      },
+      "renderWidth": 1280,
+      "renderHeight": 720
+    },
+    {
+      "name": "verify-seam-sw",
+      "anchor": null,
+      "rig": {
+        "motion": {
+          "$type": "static",
+          "position": [
+            -7.5,
+            8,
+            -10
+          ],
+          "worldAxes": true
+        },
+        "aim": {
+          "$type": "worldPoint",
+          "target": [
+            -7.5,
+            1,
+            0.5
+          ]
+        },
+        "lens": {
+          "fieldOfViewRadians": 1
+        },
+        "smoothRate": 0
+      },
+      "renderWidth": 1280,
+      "renderHeight": 720
+    },
+    {
+      "name": "verify-seam-sw-low",
+      "anchor": null,
+      "rig": {
+        "motion": {
+          "$type": "static",
+          "position": [
+            -7.5,
+            1.3,
+            -4
+          ],
+          "worldAxes": true
+        },
+        "aim": {
+          "$type": "worldPoint",
+          "target": [
+            -7.5,
+            1.1,
+            6
+          ]
+        },
+        "lens": {
+          "fieldOfViewRadians": 1
+        },
+        "smoothRate": 0
+      },
+      "renderWidth": 1280,
+      "renderHeight": 720
+    }
+  ],
+  "population": {
+    "capacity": 4,
+    "reconnectGraceSeconds": 3,
+    "seatActivation": [
+      "Eager",
+      "OnDemand",
+      "OnDemand",
+      "OnDemand"
+    ],
+    "networkPlayers": 0,
+    "defaultPeerSource": {
+      "$type": "producer",
+      "name": "wander"
+    },
+    "seatSpawns": [
+      "seat-1",
+      "seat-2",
+      "seat-3",
+      "seat-4"
+    ],
+    "distribution": {
+      "region": {
+        "$type": "points",
+        "names": [
+          "npc-spawn"
+        ],
+        "halfExtent": 1.5
+      },
+      "fill": {
+        "name": "r2",
+        "offset": 0,
+        "step": 0
+      }
+    },
+    "peerVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "seatVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "peerColors": {
+      "name": "additive",
+      "offset": -4,
+      "step": 0.618034
+    }
+  },
+  "inputHold": {
+    "ceilingSeconds": 0.5,
+    "lowerAfterSeconds": 0.25,
+    "defaultSeconds": 0,
+    "equalizeByDefault": true,
+    "participants": []
+  },
+  "targetRegisters": [
+    {
+      "name": "target",
+      "maximumRange": 50,
+      "maximumHalfAngleDegrees": 30,
+      "requiresLineOfSight": true
+    }
+  ],
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveForward"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "up",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    },
+    {
+      "name": "pitch",
+      "shape": "Bipolar",
+      "role": "Pitch"
+    },
+    {
+      "name": "roll",
+      "shape": "Bipolar",
+      "role": "Roll"
+    },
+    {
+      "name": "jump",
+      "shape": "Binary",
+      "composition": true
+    },
+    {
+      "name": "dash",
+      "shape": "Binary",
+      "composition": true
+    },
+    {
+      "name": "run",
+      "shape": "Binary",
+      "composition": true
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "name": "traverse",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyVerticalGravity",
+        "ApplyVerticalDrive",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "wander",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceWanderIntent"
+      ]
+    },
+    {
+      "name": "attend",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "target": {
+        "$type": "sensed",
+        "scope": "Seats",
+        "range": 16,
+        "halfAngleDegrees": 180,
+        "requiresLineOfSight": false
+      },
+      "operations": [
+        "SenseNearestInCone",
+        "ProduceWanderIntent",
+        "ProduceAttendIntent",
+        "FaceSensorTarget"
+      ]
+    },
+    {
+      "name": "designated",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "target": {
+        "$type": "designated",
+        "register": "target"
+      },
+      "operations": [
+        "SenseNearestInCone",
+        "ProduceAttendIntent",
+        "FaceSensorTarget"
+      ]
+    }
+  ],
+  "kits": [
+    {
+      "name": "vaulter",
+      "bodyMotionProgram": "traverse",
+      "motion": {
+        "$type": "grounded",
+        "moveSpeed": 8,
+        "moveSpeedEnvelope": {
+          "min": 8,
+          "max": 8
+        },
+        "turnSpeed": 2.6,
+        "riseGravity": 28,
+        "fallGravity": 46,
+        "maxFallSpeed": 40,
+        "response": [
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Rising"
+            },
+            "engageRate": 60,
+            "releaseRate": 35
+          },
+          {
+            "gate": {
+              "$type": "now",
+              "fact": "Falling"
+            },
+            "engageRate": 60,
+            "releaseRate": 35
+          },
+          {
+            "engageRate": 90,
+            "releaseRate": 110
+          }
+        ],
+        "sprintMultiplier": 1.6,
+        "sprintChannel": "run",
+        "moveFrame": "World",
+        "facingSnap": false
+      },
+      "producers": {
+        "wander": {
+          "scalars": {
+            "forward": 0.375,
+            "softRadius": 12,
+            "weaveAmplitude": 0.5,
+            "inwardGain": 1.6,
+            "turnScale": 2.5,
+            "weaveFrequencyBase": 0.3,
+            "weaveFrequencyRange": 0.2,
+            "altitudeGain": 0.32,
+            "activityRateBase": 2.2,
+            "activityRateRange": 1.3,
+            "strafeWave": 0,
+            "turnWave": 0,
+            "upWave": 0,
+            "pitchWave": 0,
+            "rollTurn": 0,
+            "pressThreshold": 0,
+            "altitudeBase": 0,
+            "altitudeRange": 0
+          },
+          "channels": {}
+        }
+      },
+      "actions": {
+        "jump": {
+          "state": [
+            {
+              "name": "jumpUses",
+              "kind": "Counter",
+              "initial": 0,
+              "resetFact": "Grounded"
+            }
+          ],
+          "onPress": {
+            "gate": {
+              "$type": "all",
+              "predicates": [
+                {
+                  "$type": "recently",
+                  "fact": "Grounded",
+                  "windowSeconds": 0.09
+                },
+                {
+                  "$type": "compareState",
+                  "state": "jumpUses",
+                  "comparison": "Less",
+                  "value": 1
+                }
+              ]
+            },
+            "latchSeconds": 0.1,
+            "effects": [
+              {
+                "$type": "setVerticalVelocity",
+                "velocity": 11
+              },
+              {
+                "$type": "addState",
+                "state": "jumpUses",
+                "value": 1
+              }
+            ]
+          },
+          "onRelease": {
+            "gate": {
+              "$type": "now",
+              "fact": "Rising"
+            },
+            "latchSeconds": 0,
+            "effects": [
+              {
+                "$type": "scaleVerticalVelocity",
+                "factor": 0.45
+              }
+            ]
+          }
+        }
+      },
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          1,
+          0
+        ],
+        "radius": 0.35
+      },
+      "bodyContact": "Solid"
+    }
+  ],
+  "defaultSeatKit": "vaulter",
+  "assignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 1,
+      "step": 0
+    },
+    "rows": []
+  },
+  "addons": [],
+  "bindingOverlays": [
+    {
+      "bindingBar": {
+        "enabled": true,
+        "hideAfterRestSeconds": 6,
+        "layout": {
+          "buttonSize": 0.075,
+          "centerGap": 0.1,
+          "anchorOffsetY": 0.14,
+          "glyphOffsetRatio": 0.4375,
+          "glyphSizeRatio": 0.53333336,
+          "scale": 0.72
+        }
+      },
+      "id": "quilt-sprint",
+      "document": {
+        "version": "puck.bindings.v1",
+        "modifiers": [],
+        "chords": [
+          {
+            "group": "play",
+            "chord": [],
+            "page": {
+              "id": "base",
+              "entries": [
+                {
+                  "source": "gamepad.rightTrigger",
+                  "channel": "up",
+                  "scale": 1,
+                  "activateOn": null,
+                  "label": "Ascend",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftTrigger",
+                  "channel": "up",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Descend",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.rightStick.x",
+                  "channel": "turn",
+                  "scale": -1,
+                  "activateOn": null,
+                  "label": "Face camera",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.space",
+                  "channel": "jump",
+                  "activateOn": null,
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.space",
+                  "channel": "jump",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonSouth",
+                  "channel": "jump",
+                  "activateOn": null,
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonSouth",
+                  "channel": "jump",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "channel": "dash",
+                  "activateOn": null,
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.buttonEast",
+                  "channel": "dash",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "run",
+                  "activateOn": null,
+                  "label": "Sprint",
+                  "icon": null
+                },
+                {
+                  "source": "gamepad.leftShoulder",
+                  "channel": "run",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "run",
+                  "activateOn": null,
+                  "label": "Sprint",
+                  "icon": null
+                },
+                {
+                  "source": "keyboard.shiftLeft",
+                  "channel": "run",
+                  "activateOn": "Completed",
+                  "label": null,
+                  "icon": null
+                }
+              ],
+              "label": null,
+              "icon": null
+            },
+            "command": null
+          }
+        ],
+        "wheels": [
+          {
+            "id": "play-primary",
+            "group": "play",
+            "holdPages": [
+              "play-wheel"
+            ],
+            "rings": [
+              {
+                "id": "play-wheel-act",
+                "entries": [
+                  {
+                    "source": null,
+                    "command": "editor.enter",
+                    "label": "Editor",
+                    "icon": "edit.place"
+                  },
+                  {
+                    "source": null,
+                    "command": "editor.status",
+                    "label": "Status",
+                    "icon": "action.target"
+                  },
+                  {
+                    "source": null,
+                    "command": "console",
+                    "label": "Console",
+                    "icon": "edit.op"
+                  },
+                  {
+                    "source": null,
+                    "command": "player.channels",
+                    "label": "Channels",
+                    "icon": "edit.link"
+                  },
+                  {
+                    "source": null,
+                    "command": "player.where",
+                    "label": "Where",
+                    "icon": "action.target"
+                  },
+                  {
+                    "source": null,
+                    "command": "player.disengage",
+                    "label": "Disengage",
+                    "icon": "edit.exit"
+                  }
+                ],
+                "label": "Act",
+                "icon": null
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "storage": {
+    "endpoint": null,
+    "userId": null,
+    "discoveryEndpoint": null
+  },
+  "creations": [
+    {
+      "id": "ground",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "ground",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.2,
+              "y": 0.45,
+              "z": 0.85
+            },
+            "emissive": 0,
+            "specular": 0,
+            "shininess": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "ground",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 31.578947,
+              "y": 0.1,
+              "z": 31.578947
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "2f0f4fe6d186b445fce962d7466cf8176aa03f600d48e2311f9e21fd2023f3c4"
+    },
+    {
+      "id": "wall",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "wall",
+        "intent": "Object",
+        "bakeStyle": "classic",
+        "palette": [
+          {
+            "albedo": {
+              "x": 0.55,
+              "y": 0.53,
+              "z": 0.5
+            },
+            "emissive": 0,
+            "specular": 0.1,
+            "shininess": 8
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "slab",
+            "type": "Box",
+            "position": {
+              "x": 0,
+              "y": 2.1143,
+              "z": 0
+            },
+            "rotation": {
+              "isIdentity": true,
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 73.4,
+              "y": 5.4639,
+              "z": 1.3529
+            },
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "mirror": false,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      },
+      "hash": "7fb96d4f261b349cf7eda7bfbe591f09afb2215968c4e37a67496a6867fa0d85"
+    }
+  ],
+  "placements": [
+    {
+      "id": "ground",
+      "creationId": "ground",
+      "position": [
+        -12,
+        0,
+        -12
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "wall-west",
+      "creationId": "wall",
+      "position": [
+        -24,
+        0,
+        -12
+      ],
+      "yawDegrees": 90,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    },
+    {
+      "id": "wall-north",
+      "creationId": "wall",
+      "position": [
+        -12,
+        0,
+        -24
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "distribution": null,
+      "mirror": null,
+      "solid": {
+        "margin": 0
+      }
+    }
+  ],
+  "authoring": {
+    "authoringHeadroomScreens": 4,
+    "authoringHeadroomPlacements": 8,
+    "minPlacementScale": 0.2,
+    "maxPlacementScale": 5,
+    "candidateRadius": 32,
+    "candidateCap": 16,
+    "workbenchFraction": 0.7,
+    "previewDeadlineFrames": 12,
+    "derivedFaceScreens": 4
+  },
+  "speakers": [],
+  "tunes": [],
+  "patches": [],
+  "audio": {
+    "masterGain": 1,
+    "defaultSpeakerRadius": 8,
+    "defaultCurve": "smoothstep",
+    "defaultBedFadeSeconds": 0.5,
+    "listener": "focus",
+    "cues": []
+  },
+  "collision": {
+    "requirements": [
+      "SmoothUnionContact"
+    ],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "host": {
+    "presentation": "Windowed",
+    "backend": "auto",
+    "width": 1920,
+    "height": 1080,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": true,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null,
+    "authority": null
+  },
+  "views": {
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
+    "seatRig": {
+      "motion": {
+        "$type": "orbit",
+        "distance": 5.4626001,
+        "yaw": 0,
+        "pitch": 0.4145069,
+        "pivotOffset": [
+          0,
+          0,
+          0
+        ]
+      },
+      "aim": {
+        "$type": "anchor",
+        "offset": [
+          0,
+          1,
+          0
+        ],
+        "worldAxes": false
+      },
+      "lens": {
+        "fieldOfViewRadians": 0.9599311
+      },
+      "smoothRate": 6
+    },
+    "layouts": []
+  },
+  "looks": [],
+  "lookAssignment": {
+    "sequence": {
+      "name": "r1",
+      "offset": 129,
+      "step": 0
+    },
+    "rows": []
+  },
+  "links": [],
+  "grants": [],
+  "hud": {
+    "defaults": {
+      "enabled": true,
+      "cursor": {
+        "hoverRadius": 32,
+        "sizePx": 7,
+        "role": "TextPrimary"
+      }
+    },
+    "panels": []
+  },
+  "state": [],
+  "schema": "puck.world.def.v1",
+  "documentId": "quilt-nw",
+  "playerDefaults": {
+    "identities": [
+      {
+        "id": "amber",
+        "name": "amber",
+        "color": "#ED8530"
+      },
+      {
+        "id": "cobalt",
+        "name": "cobalt",
+        "color": "#3373D9"
+      },
+      {
+        "id": "moss",
+        "name": "moss",
+        "color": "#4CBD52"
+      },
+      {
+        "id": "violet",
+        "name": "violet",
+        "color": "#A359D6"
+      }
+    ],
+    "neutralColor": "#8C8C8C",
+    "colorSequence": {
+      "name": "additive",
+      "offset": 0,
+      "step": 0.618034
+    },
+    "saturation": 0.65,
+    "value": 0.85,
+    "colorSearchLimit": 64,
+    "noseFactor": 0.35,
+    "pickerThreshold": 0.6,
+    "pickerNeutralColor": "#8C8C8C",
+    "pickerNeutralBlend": 0.5,
+    "seatLook": {
+      "yawSensitivity": 0.001,
+      "pitchSensitivity": 0.001,
+      "invertYaw": false,
+      "invertPitch": false,
+      "arming": "RightButton",
+      "stickLookRate": 2.6
+    }
+  },
+  "references": [
+    {
+      "name": "ne",
+      "document": "quilt-ne.world.json"
+    },
+    {
+      "name": "sw",
+      "document": "quilt-sw.world.json"
+    },
+    {
+      "name": "se",
+      "document": "quilt-se.world.json"
+    },
+    {
+      "name": "island",
+      "document": "quilt-island.world.json"
+    }
+  ],
+  "destinations": [
+    {
+      "name": "ne",
+      "reference": "ne",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
+      "name": "sw",
+      "reference": "sw",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
+      "name": "se",
+      "reference": "se",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
+      "name": "island",
+      "reference": "island",
+      "durability": "persisted",
+      "scope": "global"
+    }
+  ],
+  "adjacencies": [
+    {
+      "name": "east",
+      "destination": "ne",
+      "counterpart": "west",
+      "boundary": {
+        "center": [
+          0,
+          0,
+          -12
+        ],
+        "outwardYawDegrees": 90,
+        "outwardPitchDegrees": 0,
+        "width": 24,
+        "height": 16
+      },
+      "unavailable": "Closed"
+    },
+    {
+      "name": "south",
+      "destination": "sw",
+      "counterpart": "north",
+      "boundary": {
+        "center": [
+          -12,
+          0,
+          0
+        ],
+        "outwardYawDegrees": 0,
+        "outwardPitchDegrees": 0,
+        "width": 24,
+        "height": 16
+      },
+      "unavailable": "Closed"
+    },
+    {
+      "name": "up",
+      "destination": "island",
+      "counterpart": "down-nw",
+      "boundary": {
+        "center": [-12, 2, -12],
+        "outwardYawDegrees": 0,
+        "outwardPitchDegrees": 90,
+        "width": 24,
+        "height": 24
+      },
+      "unavailable": "Closed"
+    }
+  ],
+  "admission": [
+    {
+      "domain": "*",
+      "subject": null,
+      "mode": "FederatedAuthority",
+      "algorithm": "",
+      "publicKey": "",
+      "grants": [
+        { "capability": "Control", "subject": "all" },
+        { "capability": "Drive", "exclusive": true, "budget": 64 },
+        { "capability": "Observe", "budget": 64 }
+      ]
+    }
+  ]
+}

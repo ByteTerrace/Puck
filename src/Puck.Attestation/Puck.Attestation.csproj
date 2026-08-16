@@ -10,6 +10,6 @@
         <RootNamespace>Puck.Attestation</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="System.Formats.Cbor" Version="[9.*, )" />
+        <PackageReference Include="System.Formats.Cbor" Version="[10.*, )" />
     </ItemGroup>
 </Project>

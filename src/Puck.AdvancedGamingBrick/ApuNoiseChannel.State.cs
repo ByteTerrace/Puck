@@ -21,7 +21,6 @@ public sealed partial class ApuNoiseChannel : ISnapshotable {
         writer.WriteBoolean(value: m_lengthEnabled);
         writer.WriteUInt16(value: m_lfsr);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

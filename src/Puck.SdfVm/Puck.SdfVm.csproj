@@ -4,14 +4,14 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <!--
-        The signed-distance-function engine: the instruction ISA, the program representation, the fluent
-        authoring builder, the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
+        The SDF GPU engine: the single-source HLSL shaders (the SDF VM interpreter sdf-vm.hlsli plus the
         world-compositor and fullscreen stages), and the GPU host that runs the VM — SdfWorldEngine (the
         device-explicit pipeline core: beam cull → per-view render → split-screen composite over a viewport
         table of cameras + regions) and SdfEngineNode (the host-model IRenderNode that renders the world into
-        its own offscreen surface for a host to composite). Fully backend-neutral: only the IGpuCompute*
-        seams from Puck.Abstractions, never Vulkan or DirectX types. The C# and the shaders are halves of
-        one engine and must stay in sync.
+        its own offscreen surface for a host to composite). Consumes Puck.SignedDistance for the instruction
+        ISA, the program representation, and the fluent authoring builder. Fully backend-neutral: only the
+        IGpuCompute* seams from Puck.Abstractions, never Vulkan or DirectX types. The C# and the shaders are
+        halves of one engine and must stay in sync.
     -->
     <PropertyGroup>
         <!-- The DirectX Shader Compiler (ships with the Vulkan SDK and the Windows SDK) compiles the single
@@ -21,18 +21,13 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <!-- PngEncoder for the debug-capture readback (SdfEngineNode.RequestCapture). -->
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
-        <!-- Puck.SdfVm.Queries (Queries/) is fixed-point-only by contract — no float, no GPU — so it leans on the
-             shared fixed-point math types directly rather than re-deriving them. Puck.Maths has zero dependencies of
-             its own, so this edge only ever points one way. -->
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <!-- PngEncoder for the debug-capture readback (SdfEngineNode.RequestCapture). -->
-        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
-        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
-        <!-- The font-atlas model + em-space layout (render-agnostic, same engine-services layer): the SdfProgramBuilder
-             Text() helper lays a string out against a FontAtlas and emits one SDF_SHAPE_GLYPH cell per character. -->
-        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+        <!-- The instruction ISA, the packed-word program representation, and the fluent authoring builder — every
+             SdfProgram/SdfProgramBuilder/SdfMaterial reference in this project resolves here. -->
+        <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
     </ItemGroup>
 
     <ItemGroup>

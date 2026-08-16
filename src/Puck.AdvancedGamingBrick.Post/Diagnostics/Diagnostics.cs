@@ -77,8 +77,8 @@ internal static partial class Diagnostics {
 
         if (stateRoundTripIndex >= 0) {
             var romArg = ((((stateRoundTripIndex + 1) < args.Length) && !args[(stateRoundTripIndex + 1)].StartsWith(
-                value: "--",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "--"
             ))
                 ? args[(stateRoundTripIndex + 1)]
                 : null);
@@ -160,8 +160,8 @@ internal static partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (args[index] == "--statetrace") {
                 if (ParityBiosGuard(
-                    mode: "--statetrace",
-                    args: args
+                    args: args,
+                    mode: "--statetrace"
                 )) {
                     exitCode = 2;
 
@@ -193,8 +193,8 @@ internal static partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (args[index] == "--lockstep") {
                 if (ParityBiosGuard(
-                    mode: "--lockstep",
-                    args: args
+                    args: args,
+                    mode: "--lockstep"
                 )) {
                     exitCode = 2;
 
@@ -235,8 +235,8 @@ internal static partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (args[index] == "--trace-cycles") {
                 if (ParityBiosGuard(
-                    mode: "--trace-cycles",
-                    args: args
+                    args: args,
+                    mode: "--trace-cycles"
                 )) {
                     exitCode = 2;
 

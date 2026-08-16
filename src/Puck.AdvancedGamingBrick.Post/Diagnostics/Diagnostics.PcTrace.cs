@@ -21,7 +21,7 @@ internal static partial class Diagnostics {
         using (instance) {
             var machine = instance.Machine;
             var cpu = machine.Cpu;
-            var bus = (AgbBus)machine.Bus;
+            var bus = ((AgbBus)machine.Bus);
             var output = Console.Out;
 
             // Boot through the BIOS reset routine (undo TryLoad's direct boot) so the trace aligns with the oracle's

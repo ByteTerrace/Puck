@@ -166,7 +166,7 @@ internal static partial class Diagnostics {
 
                 Console.WriteLine(value: $"     [{i,2}] ours=0x{ours:X} expected=0x{expectedWait[i]:X} {((ours == expectedWait[i])
                     ? "ok"
-                    : $"d={((long)ours - expectedWait[i])}")}");
+                    : $"d={(((long)ours) - expectedWait[i])}")}");
             }
         }
 

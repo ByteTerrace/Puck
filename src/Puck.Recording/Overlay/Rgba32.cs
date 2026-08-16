@@ -21,28 +21,63 @@ public readonly record struct Rgba32(byte R, byte G, byte B, byte A) {
 
         var span = (value ?? string.Empty).AsSpan().Trim();
 
-        if ((span.Length > 0) && (span[0] == '#')) {
+        if (
+            (span.Length > 0) &&
+            (span[0] == '#')
+        ) {
             span = span[1..];
         }
 
-        if ((span.Length != 6) && (span.Length != 8)) {
+        if (
+            (span.Length != 6) &&
+            (span.Length != 8)
+        ) {
             return false;
         }
 
-        if (!byte.TryParse(s: span[0..2], style: NumberStyles.HexNumber, provider: CultureInfo.InvariantCulture, result: out var r) ||
-            !byte.TryParse(s: span[2..4], style: NumberStyles.HexNumber, provider: CultureInfo.InvariantCulture, result: out var g) ||
-            !byte.TryParse(s: span[4..6], style: NumberStyles.HexNumber, provider: CultureInfo.InvariantCulture, result: out var b)) {
+        if (
+            !byte.TryParse(
+            s: span[0..2],
+            style: NumberStyles.HexNumber,
+            provider: CultureInfo.InvariantCulture,
+            result: out var r
+        ) ||
+            !byte.TryParse(
+            s: span[2..4],
+            style: NumberStyles.HexNumber,
+            provider: CultureInfo.InvariantCulture,
+            result: out var g
+        ) ||
+            !byte.TryParse(
+            s: span[4..6],
+            style: NumberStyles.HexNumber,
+            provider: CultureInfo.InvariantCulture,
+            result: out var b
+        )
+        ) {
             return false;
         }
 
-        var a = (byte)255;
+        var a = ((byte)255);
 
-        if ((span.Length == 8) &&
-            !byte.TryParse(s: span[6..8], style: NumberStyles.HexNumber, provider: CultureInfo.InvariantCulture, result: out a)) {
+        if (
+            (span.Length == 8) &&
+            !byte.TryParse(
+            s: span[6..8],
+            style: NumberStyles.HexNumber,
+            provider: CultureInfo.InvariantCulture,
+            result: out a
+        )
+        ) {
             return false;
         }
 
-        color = new Rgba32(A: a, B: b, G: g, R: r);
+        color = new Rgba32(
+            A: a,
+            B: b,
+            G: g,
+            R: r
+        );
 
         return true;
     }

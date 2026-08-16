@@ -13,6 +13,7 @@ namespace Puck.DirectX;
 public sealed class DirectXGpuAccelerationStructure : IGpuAccelerationStructure {
     private readonly DirectXWorldAccelerationApi m_api;
     private readonly nint m_deviceHandle;
+
     private bool m_created;
     private bool m_disposed;
     private DirectXWorldAccelerationResources m_resources;
@@ -30,7 +31,7 @@ public sealed class DirectXGpuAccelerationStructure : IGpuAccelerationStructure 
     /// <inheritdoc/>
     public bool IsSupported => m_api.SupportsDevice(deviceHandle: m_deviceHandle);
     /// <inheritdoc/>
-    public nint TlasReference => (nint)m_resources.TlasGpuAddress;
+    public nint TlasReference => ((nint)m_resources.TlasGpuAddress);
 
     /// <inheritdoc/>
     public void EnsureCreated(uint maxInstanceCount) {
@@ -41,7 +42,6 @@ public sealed class DirectXGpuAccelerationStructure : IGpuAccelerationStructure 
         m_resources = m_api.CreateResources(deviceHandle: m_deviceHandle, maxInstanceCount: maxInstanceCount);
         m_created = true;
     }
-
     /// <inheritdoc/>
     public void WriteInstance(int index, float halfExtentX, float halfExtentY, float halfExtentZ, float centerX, float centerY, float centerZ, uint instanceIndex, uint visibilityMask) =>
         m_api.WriteInstance(
@@ -57,7 +57,6 @@ public sealed class DirectXGpuAccelerationStructure : IGpuAccelerationStructure 
             worldCenterY: centerY,
             worldCenterZ: centerZ
         );
-
     /// <inheritdoc/>
     public void RecordBuild(nint commandBufferHandle, uint instanceCount, bool includeBlasBuild) =>
         m_api.RecordWorldAccelerationBuild(
@@ -66,7 +65,6 @@ public sealed class DirectXGpuAccelerationStructure : IGpuAccelerationStructure 
             instanceCount: instanceCount,
             resources: in m_resources
         );
-
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {

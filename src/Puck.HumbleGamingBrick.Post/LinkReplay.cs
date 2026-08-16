@@ -12,7 +12,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <param name="Completions">The number of transfers that completed on this side (each raised a serial interrupt).</param>
 /// <param name="TrafficHash">FNV-1a over every completed transfer's final SB byte, in order — a compact stream fingerprint.</param>
 internal readonly record struct LinkSideTraffic(int MasterSends, int Completions, ulong TrafficHash);
-
 /// <summary>The outcome of one linked replay: each side's traffic and its final whole-machine snapshot.</summary>
 /// <param name="First">The first machine's serial-traffic summary.</param>
 /// <param name="Second">The second machine's serial-traffic summary.</param>
@@ -24,7 +23,6 @@ internal readonly record struct LinkReplayResult(
     MachineSnapshot FirstState,
     MachineSnapshot SecondState
 );
-
 /// <summary>
 /// The shared deterministic driver for a linked pair of machines under per-machine input scripts: the seam both the
 /// interactive explorer (<see cref="LinkExplore"/>) and the cross-generation gate (<see cref="LinkGameReplayStage"/>)
@@ -84,7 +82,7 @@ internal static class LinkReplay {
             for (var frame = 0; (frame < frames); ++frame) {
                 firstJoypad.SetButtons(pressed: firstScript.ButtonsAt(frame: frame));
                 secondJoypad.SetButtons(pressed: secondScript.ButtonsAt(frame: frame));
-                session.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                session.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
                 onFrame?.Invoke(obj: frame);
             }
         } finally {

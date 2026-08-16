@@ -18,7 +18,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "AdditionalFile", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void UnreadableManifestIsRefusedRatherThanReadAsAnEmptyLedger() {
         var result = Harness.Analyze(
@@ -28,7 +27,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "could not be read", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void AbsentManifestBlamesTheLedgerRatherThanEveryBrandItCannotJudge() {
         var result = Harness.RunWithoutManifest(source: Sources.BrandedMethod());
@@ -36,7 +34,6 @@ public sealed class ManifestIntegrityTests {
         // The brand cannot be judged without a ledger, so it is not accused of a drift that never happened.
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
     }
-
     [Fact]
     public void MalformedManifestIsRefusedRatherThanReadAsAnEmptyLedger() {
         var result = Harness.Run(source: Sources.Unbranded(), manifestJson: Manifest.Malformed);
@@ -44,21 +41,18 @@ public sealed class ManifestIntegrityTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
     }
-
     [Fact]
     public void ManifestWhoseRootIsNotAnObjectIsRefused() {
         var result = Harness.Run(source: Sources.Unbranded(), manifestJson: "[ 1, 2, 3 ]");
 
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
     }
-
     [Fact]
     public void ManifestDiagnosticIsReportedOnTheLedgerFileItself() {
         var result = Harness.Run(source: Sources.Unbranded(), manifestJson: Manifest.Malformed);
 
         Assert.Equal(expected: Harness.ManifestPath, actual: result.Single(id: "VER006").Location.GetLineSpan().Path);
     }
-
     [Fact]
     public void OneOffSchemaEntryIsReportedWithoutDiscardingEveryOtherEntrysSweep() {
         var manifest = """
@@ -95,14 +89,12 @@ public sealed class ManifestIntegrityTests {
         Assert.Contains(expectedSubstring: "missing-laws", actualString: result.Single(id: "VER006").GetMessage());
         Assert.Contains(expectedSubstring: "deleted-brand", actualString: result.Single(id: "VER002").GetMessage());
     }
-
     [Fact]
     public void MalformedManifestStillFailsABrandedCompilation() {
         var result = Harness.Run(source: Sources.BrandedMethod(), manifestJson: Manifest.Malformed);
 
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
     }
-
     [Fact]
     public void RepeatedEntryKeyIsRefusedRatherThanLettingTheLastCopyDecide() {
         var source = Sources.BrandedMethod();
@@ -140,7 +132,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "Duplicate object member 'target'", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void RepeatedRootMemberIsRefusedRatherThanLettingTheLastCopyReplaceTheLedger() {
         var manifest = """
@@ -167,7 +158,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "Duplicate object member 'entries'", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void ManifestDeclaringAnUnknownSchemaVersionIsRefused() {
         var source = Sources.BrandedMethod();
@@ -183,7 +173,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "999", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void ManifestDeclaringNoSchemaVersionIsRefused() {
         var result = Harness.Run(source: Sources.Unbranded(), manifestJson: "{ \"entries\": {} }");
@@ -191,7 +180,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "format", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void EntryNamingAnAlgorithmNothingImplementsIsRefused() {
         var source = Sources.BrandedMethod();
@@ -208,7 +196,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "not-a-real-algorithm", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void RecordedHashThatIsNotAHashIsReportedAsASchemaFailureNamingTheUnusableValue() {
         var source = Sources.BrandedMethod();
@@ -224,7 +211,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "not-hex", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void RecordedHashInUppercaseHexIsRefusedRatherThanReportedAsADrift() {
         var source = Sources.BrandedMethod();
@@ -241,7 +227,6 @@ public sealed class ManifestIntegrityTests {
         // is honest where a fingerprint drift would not be.
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
     }
-
     [Fact]
     public void TwoFilesNamedLikeTheManifestAreRefusedRatherThanResolvedByOrder() {
         var source = Sources.BrandedMethod();
@@ -260,7 +245,6 @@ public sealed class ManifestIntegrityTests {
         Assert.Equal(expected: new[] { "VER006" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "ambiguous", actualString: result.Single(id: "VER006").GetMessage());
     }
-
     [Fact]
     public void ManifestFileNameIsMatchedWithoutRegardToCase() {
         var source = Sources.BrandedMethod();
@@ -277,7 +261,6 @@ public sealed class ManifestIntegrityTests {
 
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void AdditionalFilesThatAreNotTheManifestAreIgnored() {
         var source = Sources.BrandedMethod();

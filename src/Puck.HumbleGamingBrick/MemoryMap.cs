@@ -52,7 +52,6 @@ public static class MemoryMap {
     public const ushort HighRamStart = 0xFF80;
     /// <summary>The last address of high RAM.</summary>
     public const ushort HighRamEnd = 0xFFFE;
-
     /// <summary>The joypad register (P1/JOYP).</summary>
     public const ushort Joypad = 0xFF00;
     /// <summary>The serial transfer data register (SB).</summary>
@@ -79,7 +78,6 @@ public static class MemoryMap {
     public const ushort WaveRamEnd = 0xFF3F;
     /// <summary>The audio master-control register (NR52): power and per-channel status.</summary>
     public const ushort AudioMasterControl = 0xFF26;
-
     /// <summary>The LCD control register (LCDC).</summary>
     public const ushort LcdControl = 0xFF40;
     /// <summary>The object-attribute-memory DMA source register (DMA).</summary>

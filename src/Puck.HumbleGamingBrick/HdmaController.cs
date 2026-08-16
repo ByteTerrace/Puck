@@ -21,7 +21,6 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     // per step at normal speed, four at double speed (the CPU T-cycle is half a dot there).
     private const int StepTCyclesNormal = 2;
     private const int StepTCyclesDouble = 4;
-
     // The transfer state machine, mirroring the hardware's start-up latency: a requested transfer passes through
     // Pending and Ready (one step each) before bytes move; an HBlank transfer parks in Paused between blocks.
     private const byte StateNone = 0;
@@ -35,6 +34,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     private readonly IKey1 m_key1;
     private readonly SystemMemory m_memory;
     private readonly IPpu m_ppu;
+
     private bool m_active;
     private bool m_allowWakeArm;
     private byte m_chunks;
@@ -147,9 +147,9 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
 
         // Bit 7 is clear while a transfer is live (including parked between HBlank blocks); the low bits are the
         // remaining block count minus one. A completed transfer reads 0xFF, a stopped one 0x80 | remaining.
-        return (byte)(((m_state != StateNone)
+        return ((byte)(((m_state != StateNone)
             ? 0x00
-            : 0x80) | (m_chunks & 0x7F));
+            : 0x80) | (m_chunks & 0x7F)));
     }
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
@@ -159,7 +159,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
 
                 break;
             case MemoryMap.HdmaSourceLow:
-                m_sourceLow = (byte)(value & 0xF0);
+                m_sourceLow = ((byte)(value & 0xF0));
                 m_sourceCursor = 0;
 
                 break;
@@ -168,7 +168,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
 
                 break;
             case MemoryMap.HdmaDestinationLow:
-                m_destinationLow = (byte)(value & 0xF0);
+                m_destinationLow = ((byte)(value & 0xF0));
                 m_destinationCursor = 0;
 
                 break;
@@ -255,17 +255,17 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
         }
     }
     private void TransferByte() {
-        var source = (ushort)(SourceAddress() + m_sourceCursor);
+        var source = ((ushort)(SourceAddress() + m_sourceCursor));
         // A source inside VRAM cannot be read by the unit (it owns VRAM as its destination); those bytes read open bus.
         var invalidSource = ((source >= MemoryMap.VideoRamStart) && (source <= MemoryMap.VideoRamEnd));
         var value = (invalidSource
             ? (byte)0xFF
             : DmaSource.Read(
+            address: source,
             cartridgeSlot: m_cartridgeSlot,
-            memory: m_memory,
-            address: source
+            memory: m_memory
         ));
-        var destination = (ushort)(MemoryMap.VideoRamStart | ((DestinationAddress() + m_destinationCursor) & 0x1FFF));
+        var destination = ((ushort)(MemoryMap.VideoRamStart | ((DestinationAddress() + m_destinationCursor) & 0x1FFF)));
 
         m_memory.WriteVideoRam(
             address: destination,
@@ -282,7 +282,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
 
         // A block boundary: retire the block. A destination that wrapped past the top of VRAM aborts the transfer and
         // clears the destination registers; otherwise an HBlank transfer parks until the next mode-0 entry.
-        if ((ushort)(DestinationAddress() + m_destinationCursor) == 0) {
+        if (((ushort)(DestinationAddress() + m_destinationCursor)) == 0) {
             m_state = StateNone;
             m_remainingBytes = 0;
             m_destinationHigh = 0x00;
@@ -303,8 +303,8 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     private void StartOrStop(byte control) {
         var hblankMode = ((control & 0x80) != 0);
 
-        m_chunks = (byte)(control & 0x7F);
-        m_remainingBytes = (ushort)(BlockSize * (m_chunks + 1));
+        m_chunks = ((byte)(control & 0x7F));
+        m_remainingBytes = ((ushort)(BlockSize * (m_chunks + 1)));
 
         if (m_state != StateNone) {
             // Bit 7 clear stops an in-flight HBlank transfer; a bit-7-set write while live is ignored.
@@ -327,7 +327,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
         }
     }
     private ushort SourceAddress() =>
-        (ushort)((m_sourceHigh << 8) | m_sourceLow);
+        ((ushort)((m_sourceHigh << 8) | m_sourceLow));
     private ushort DestinationAddress() =>
-        (ushort)(MemoryMap.VideoRamStart | ((m_destinationHigh & 0x1F) << 8) | m_destinationLow);
+        ((ushort)(MemoryMap.VideoRamStart | ((m_destinationHigh & 0x1F) << 8) | m_destinationLow));
 }

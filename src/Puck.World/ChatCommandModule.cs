@@ -42,6 +42,442 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
 
+    private CommandResult Allow(CommandContext context, WireArgs args) {
+        if (args.Count is not (1 or 2)) {
+            return CommandResult.Error(output: "[chat.allow: expected <sender-id> [player]]");
+        }
+        if (!WorldSafeName.TryParse(
+            candidate: args[0].ToString(),
+            name: out var senderId,
+            reason: out var nameReason
+        )) {
+            return CommandResult.Error(output: $"[chat.allow: refused — '{args[0]}' {nameReason}]");
+        }
+        if (!TryAuthorizedIdentity(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 1,
+            player: out var player,
+            verb: "chat.allow"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+        if (identity!.Document is not { } document) {
+            return CommandResult.Error(output: $"[chat.allow: p{player} world:{identity.Id} has no owned document to persist into]");
+        }
+        if (WorldDefinitionRows.FindStateRow(
+            rows: document.State,
+            name: InboxRowName
+        ) is null) {
+            return CommandResult.Error(output: $"[chat.allow: p{player} world:{identity.Id} has no '{InboxRowName}' row — declare it first with chat.inbox]");
+        }
+
+        var principal = WorldPrincipal.Document(id: senderId);
+        var subject = GrantSubject.State(name: InboxRowName);
+        var grant = new WorldGrant(
+            Principal: principal,
+            Capability: WorldCapability.Mutate,
+            Subject: subject,
+            Exclusive: false,
+            WriteMask: DocumentWriteMask.Empty.With(kind: WorldDocumentWriteKind.Set)
+        );
+        var candidate = (document with {
+            Grants = [.. WithoutGrantRow(
+                grants: document.Grants,
+                principal: principal,
+                subject: subject
+            ), grant],
+        });
+
+        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: candidate,
+            neighbours: null,
+            reason: out var reason
+        )) {
+            return CommandResult.Error(output: $"[chat.allow: refused — {reason}]");
+        }
+
+        identity.ReplaceDocument(document: candidate);
+        m_worlds.Save();
+
+        return new CommandResult(Output: $"[chat.allow: p{player} world:{identity.Id} allows document:{senderId} mutate state:{InboxRowName}]");
+    }
+    private CommandResult Block(CommandContext context, WireArgs args) {
+        if (args.Count is not (1 or 2)) {
+            return CommandResult.Error(output: "[chat.block: expected <sender-id> [player]]");
+        }
+        if (!WorldSafeName.TryParse(
+            candidate: args[0].ToString(),
+            name: out var senderId,
+            reason: out var nameReason
+        )) {
+            return CommandResult.Error(output: $"[chat.block: refused — '{args[0]}' {nameReason}]");
+        }
+        if (!TryAuthorizedIdentity(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 1,
+            player: out var player,
+            verb: "chat.block"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+        if (identity!.Document is not { } document) {
+            return CommandResult.Error(output: $"[chat.block: p{player} world:{identity.Id} has no owned document to persist into]");
+        }
+
+        var principal = WorldPrincipal.Document(id: senderId);
+        var subject = GrantSubject.State(name: InboxRowName);
+        var without = WithoutGrantRow(
+            grants: document.Grants,
+            principal: principal,
+            subject: subject
+        );
+        var removed = (without.Count != document.Grants.Count);
+        var candidate = (document with { Grants = without });
+
+        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: candidate,
+            neighbours: null,
+            reason: out var reason
+        )) {
+            return CommandResult.Error(output: $"[chat.block: refused — {reason}]");
+        }
+
+        identity.ReplaceDocument(document: candidate);
+        m_worlds.Save();
+
+        return new CommandResult(Output: $"[chat.block: p{player} world:{identity.Id} blocks document:{senderId} on state:{InboxRowName} removed={(removed
+            ? "true"
+            : "false")}]");
+    }
+    private static string DescribeRow(WorldIdentity identity, WorldCellName rowName) {
+        if (
+            !identity.TryReadState(
+            name: rowName,
+            row: out var row
+        ) ||
+            (row.Cells is not { Count: > 0 } cells)
+        ) {
+            return string.Empty;
+        }
+
+        return string.Join(
+            separator: ",",
+            values: cells.Select(selector: cell => $"{cell.Key}:'{cell.Text}'")
+        );
+    }
+    private CommandResult Inbox(CommandContext context, WireArgs args) {
+        if (!TryAuthorizedIdentity(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 0,
+            player: out var player,
+            verb: "chat.inbox"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+        if (identity!.Document is not { } document) {
+            return CommandResult.Error(output: $"[chat.inbox: p{player} world:{identity.Id} has no owned document to persist into]");
+        }
+
+        var hasLog = (WorldDefinitionRows.FindStateRow(
+            rows: document.State,
+            name: LogRowName
+        ) is not null);
+        var hasInbox = (WorldDefinitionRows.FindStateRow(
+            rows: document.State,
+            name: InboxRowName
+        ) is not null);
+
+        if (
+            hasLog &&
+            hasInbox
+        ) {
+            return new CommandResult(Output: $"[chat.inbox: p{player} world:{identity.Id} already declared (log={LogRowName} inbox={InboxRowName} capacity={ChatCapacity})]");
+        }
+
+        var state = document.State.ToList();
+
+        if (!hasLog) {
+            state.Add(item: new WorldStateRow(
+                Name: LogRowName,
+                Kind: CellKind.Text,
+                Capacity: ChatCapacity,
+                Evicts: true
+            ));
+        }
+        if (!hasInbox) {
+            state.Add(item: new WorldStateRow(
+                Name: InboxRowName,
+                Kind: CellKind.Text,
+                Capacity: ChatCapacity,
+                Evicts: true
+            ));
+        }
+
+        var candidate = (document with { State = state });
+
+        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: candidate,
+            neighbours: null,
+            reason: out var reason
+        )) {
+            return CommandResult.Error(output: $"[chat.inbox: refused — {reason}]");
+        }
+
+        identity.ReplaceDocument(document: candidate);
+        m_worlds.Save();
+
+        return new CommandResult(Output: $"[chat.inbox: p{player} world:{identity.Id} declared (log={LogRowName} inbox={InboxRowName} capacity={ChatCapacity})]");
+    }
+    private CommandResult Log(CommandContext context, WireArgs args) {
+        if (
+            (args.Count < 1) ||
+            !args.TryInt(
+            index: 0,
+            value: out var player
+        ) ||
+            (player < 1) ||
+            (player > PlayerRoster.MaxSlots)
+        ) {
+            return CommandResult.Error(output: $"[chat.log: expected <player 1..{PlayerRoster.MaxSlots}> <text...>]");
+        }
+        if (!TryAuthorize(
+            context: context,
+            error: out var authError,
+            player: player,
+            verb: "chat.log"
+        )) {
+            return CommandResult.Error(output: authError);
+        }
+        if (!TryResolvePlayer(
+            error: out var resolveError,
+            identity: out var identity,
+            player: player,
+            verb: "chat.log"
+        )) {
+            return CommandResult.Error(output: resolveError);
+        }
+        if (identity!.Document is null) {
+            return CommandResult.Error(output: $"[chat.log: p{player} world:{identity.Id} has no owned document to persist into]");
+        }
+
+        var text = RawTail(
+            args: in args,
+            argsTailSkip: 1,
+            context: context,
+            skipTokensIncludingVerb: 2
+        );
+
+        if (!identity.TryAppendEvictingText(
+            evictedKey: out var evicted,
+            reason: out var appendReason,
+            rowName: LogRowName,
+            text: text
+        )) {
+            return CommandResult.Error(output: $"[chat.log: p{player} world:{identity.Id} refused — {appendReason} — declare it first with chat.inbox]");
+        }
+
+        m_worlds.Save();
+
+        return new CommandResult(Output: $"[chat.log: p{player} world:{identity.Id} appended{((evicted is { } victim)
+            ? $" evicted={victim}"
+            : string.Empty)}]");
+    }
+    // The raw text tail after skipTokensIncludingVerb whitespace-delimited tokens (verb included) — the SAME
+    // reconstruction-from-raw-line approach WorldStateCommandModule.RawTextTail/IdentityCommandModule.DeliverTextTail
+    // use, so interior spacing in <text...> survives the console tokenizer untouched.
+    private static string RawTail(CommandContext context, in WireArgs args, int skipTokensIncludingVerb, int argsTailSkip) {
+        if (context.Text is { } text) {
+            var span = text.AsSpan().TrimStart();
+
+            for (var skip = 0; (skip < skipTokensIncludingVerb); skip++) {
+                var separator = span.IndexOfAny(
+                    value0: ' ',
+                    value1: '\t'
+                );
+
+                if (separator < 0) {
+                    return string.Empty;
+                }
+
+                span = span[(separator + 1)..].TrimStart();
+            }
+
+            return span.Trim().ToString();
+        }
+
+        return args.Tail(start: argsTailSkip);
+    }
+    private CommandResult Read(CommandContext context, WireArgs args) {
+        if (!TryAuthorizedIdentity(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 0,
+            player: out var player,
+            verb: "chat.read"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+
+        var log = DescribeRow(
+            identity: identity!,
+            rowName: LogRowName
+        );
+        var inbox = DescribeRow(
+            identity: identity!,
+            rowName: InboxRowName
+        );
+
+        return new CommandResult(Output: $"[chat.read: p{player} world:{identity!.Id} log=[{log}] inbox=[{inbox}]]");
+    }
+    // THE owner-only constraint, at the ONE call site every mutating (and, for privacy, every reading) verb in this
+    // module routes through: context.ActingPrincipal() — never a verb argument — must hold Drive over the target
+    // player's body, the SAME primitive player.identity's own authorization already checks
+    // (Server.WorldServer's SessionRequest.SetIdentity arm: "the ACTOR's Drive over the target body").
+    private bool TryAuthorize(CommandContext context, int player, string verb, out string error) {
+        var slot = PlayerRoster.SlotFromDisplay(number: player);
+        var acting = context.ActingPrincipal();
+        var verdict = m_server.Grants.Allows(
+            principal: acting,
+            capability: WorldCapability.Drive,
+            subject: GrantSubject.Body(index: slot)
+        );
+
+        if (!verdict.IsAllowed) {
+            error = $"[{verb}: {acting.Describe()} cannot author player {player}'s identity ({verdict.DescribeDenial()})]";
+
+            return false;
+        }
+
+        error = string.Empty;
+
+        return true;
+    }
+    // Resolves [player] at optionalAt (trailing, default 1) and checks the OWNER-ONLY constraint (ActingPrincipal
+    // holds Drive over the player's body) BEFORE resolving the identity itself — a non-owner is refused before this
+    // door tells them anything about whether the target is even joined.
+    private bool TryAuthorizedIdentity(CommandContext context, in WireArgs args, int optionalAt, string verb, out int player, out WorldIdentity? identity, out string error) {
+        player = 1;
+        identity = null;
+
+        if (
+            (args.Count > optionalAt) &&
+            (!args.TryInt(
+            index: optionalAt,
+            value: out player
+        ) || (player < 1) || (player > PlayerRoster.MaxSlots))
+        ) {
+            error = $"[{verb}: player must be 1..{PlayerRoster.MaxSlots}]";
+
+            return false;
+        }
+
+        return (
+            TryAuthorize(
+            context: context,
+            error: out error,
+            player: player,
+            verb: verb
+        ) &&
+            TryResolvePlayer(
+            error: out error,
+            identity: out identity,
+            player: player,
+            verb: verb
+        )
+        );
+    }
+    private bool TryResolvePlayer(int player, string verb, out WorldIdentity? identity, out string error) {
+        identity = m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: player));
+
+        if (identity is null) {
+            error = $"[{verb}: player {player} is not joined]";
+
+            return false;
+        }
+
+        error = string.Empty;
+
+        return true;
+    }
+    private CommandResult Whisper(CommandContext context, WireArgs args) {
+        if (
+            (args.Count < 2) ||
+            !args.TryInt(
+            index: 0,
+            value: out var player
+        ) ||
+            (player < 1) ||
+            (player > PlayerRoster.MaxSlots)
+        ) {
+            return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
+        }
+        if (!WorldSafeName.TryParse(
+            candidate: args[1].ToString(),
+            name: out var recipientId,
+            reason: out var nameReason
+        )) {
+            return CommandResult.Error(output: $"[chat.whisper: refused — '{args[1]}' {nameReason}]");
+        }
+        if (!TryAuthorize(
+            context: context,
+            error: out var authError,
+            player: player,
+            verb: "chat.whisper"
+        )) {
+            return CommandResult.Error(output: authError);
+        }
+        if (!TryResolvePlayer(
+            error: out var resolveError,
+            identity: out var identity,
+            player: player,
+            verb: "chat.whisper"
+        )) {
+            return CommandResult.Error(output: resolveError);
+        }
+
+        var text = RawTail(
+            args: in args,
+            argsTailSkip: 2,
+            context: context,
+            skipTokensIncludingVerb: 3
+        );
+        var submission = new WorldDocumentSubmission(
+            SourceDocumentId: identity!.Id,
+            OwnerDocumentId: recipientId,
+            Tick: m_server.NextInputTick,
+            Slot: InboxRowName,
+            Kind: WorldDocumentWriteKind.Set,
+            StorageKind: ActionStateKind.Counter,
+            Value: 0L,
+            Text: text
+        );
+        var receipt = m_worlds.Submit(submission: submission);
+
+        return new CommandResult(Output: $"[chat.whisper: from=world:{identity.Id} to=world:{recipientId} verdict={(receipt.Accepted
+            ? "accepted"
+            : "refused")} reason={receipt.Reason}]");
+    }
+    // The document-authored grant row set with any row matching (principal, Mutate, subject) removed — the
+    // upsert-by-key half chat.allow's re-grant and chat.block's revoke both need, since neither goes through the
+    // LIVE table's own TryGrant re-grant merge (a document-authored row is edited directly, like identity.hud edits
+    // the Hud section directly).
+    private static IReadOnlyList<WorldGrant> WithoutGrantRow(IReadOnlyList<WorldGrant> grants, WorldPrincipal principal, GrantSubject subject) =>
+        [.. grants.Where(predicate: grant => !((grant.Principal == principal) && (grant.Capability == WorldCapability.Mutate) && (grant.Subject == subject)))];
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
@@ -86,253 +522,5 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             handler: Read,
             routing: CommandRouting.Immediate
         );
-    }
-
-    private CommandResult Inbox(CommandContext context, WireArgs args) {
-        if (!TryAuthorizedIdentity(context: context, args: in args, optionalAt: 0, verb: "chat.inbox", player: out var player, identity: out var identity, error: out var error)) {
-            return CommandResult.Error(output: error);
-        }
-        if (identity!.Document is not { } document) {
-            return CommandResult.Error(output: $"[chat.inbox: p{player} world:{identity.Id} has no owned document to persist into]");
-        }
-
-        var hasLog = (WorldDefinitionRows.FindStateRow(rows: document.State, name: LogRowName) is not null);
-        var hasInbox = (WorldDefinitionRows.FindStateRow(rows: document.State, name: InboxRowName) is not null);
-
-        if (hasLog && hasInbox) {
-            return new CommandResult(Output: $"[chat.inbox: p{player} world:{identity.Id} already declared (log={LogRowName} inbox={InboxRowName} capacity={ChatCapacity})]");
-        }
-
-        var state = document.State.ToList();
-
-        if (!hasLog) {
-            state.Add(item: new WorldStateRow(Name: LogRowName, Kind: CellKind.Text, Capacity: ChatCapacity, Evicts: true));
-        }
-        if (!hasInbox) {
-            state.Add(item: new WorldStateRow(Name: InboxRowName, Kind: CellKind.Text, Capacity: ChatCapacity, Evicts: true));
-        }
-
-        var candidate = (document with { State = state });
-
-        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason, neighbours: null)) {
-            return CommandResult.Error(output: $"[chat.inbox: refused — {reason}]");
-        }
-
-        identity.ReplaceDocument(document: candidate);
-        m_worlds.Save();
-
-        return new CommandResult(Output: $"[chat.inbox: p{player} world:{identity.Id} declared (log={LogRowName} inbox={InboxRowName} capacity={ChatCapacity})]");
-    }
-    private CommandResult Allow(CommandContext context, WireArgs args) {
-        if (args.Count is not (1 or 2)) {
-            return CommandResult.Error(output: "[chat.allow: expected <sender-id> [player]]");
-        }
-        if (!WorldSafeName.TryParse(candidate: args[0].ToString(), name: out var senderId, reason: out var nameReason)) {
-            return CommandResult.Error(output: $"[chat.allow: refused — '{args[0]}' {nameReason}]");
-        }
-        if (!TryAuthorizedIdentity(context: context, args: in args, optionalAt: 1, verb: "chat.allow", player: out var player, identity: out var identity, error: out var error)) {
-            return CommandResult.Error(output: error);
-        }
-        if (identity!.Document is not { } document) {
-            return CommandResult.Error(output: $"[chat.allow: p{player} world:{identity.Id} has no owned document to persist into]");
-        }
-        if (WorldDefinitionRows.FindStateRow(rows: document.State, name: InboxRowName) is null) {
-            return CommandResult.Error(output: $"[chat.allow: p{player} world:{identity.Id} has no '{InboxRowName}' row — declare it first with chat.inbox]");
-        }
-
-        var principal = WorldPrincipal.Document(id: senderId);
-        var subject = GrantSubject.State(name: InboxRowName);
-        var grant = new WorldGrant(Principal: principal, Capability: WorldCapability.Mutate, Subject: subject, Exclusive: false, WriteMask: DocumentWriteMask.Empty.With(kind: WorldDocumentWriteKind.Set));
-        var candidate = (document with { Grants = [.. WithoutGrantRow(grants: document.Grants, principal: principal, subject: subject), grant] });
-
-        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason, neighbours: null)) {
-            return CommandResult.Error(output: $"[chat.allow: refused — {reason}]");
-        }
-
-        identity.ReplaceDocument(document: candidate);
-        m_worlds.Save();
-
-        return new CommandResult(Output: $"[chat.allow: p{player} world:{identity.Id} allows document:{senderId} mutate state:{InboxRowName}]");
-    }
-    private CommandResult Block(CommandContext context, WireArgs args) {
-        if (args.Count is not (1 or 2)) {
-            return CommandResult.Error(output: "[chat.block: expected <sender-id> [player]]");
-        }
-        if (!WorldSafeName.TryParse(candidate: args[0].ToString(), name: out var senderId, reason: out var nameReason)) {
-            return CommandResult.Error(output: $"[chat.block: refused — '{args[0]}' {nameReason}]");
-        }
-        if (!TryAuthorizedIdentity(context: context, args: in args, optionalAt: 1, verb: "chat.block", player: out var player, identity: out var identity, error: out var error)) {
-            return CommandResult.Error(output: error);
-        }
-        if (identity!.Document is not { } document) {
-            return CommandResult.Error(output: $"[chat.block: p{player} world:{identity.Id} has no owned document to persist into]");
-        }
-
-        var principal = WorldPrincipal.Document(id: senderId);
-        var subject = GrantSubject.State(name: InboxRowName);
-        var without = WithoutGrantRow(grants: document.Grants, principal: principal, subject: subject);
-        var removed = (without.Count != document.Grants.Count);
-        var candidate = (document with { Grants = without });
-
-        // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
-        if (!WorldDefinitionValidator.TryValidate(definition: candidate, reason: out var reason, neighbours: null)) {
-            return CommandResult.Error(output: $"[chat.block: refused — {reason}]");
-        }
-
-        identity.ReplaceDocument(document: candidate);
-        m_worlds.Save();
-
-        return new CommandResult(Output: $"[chat.block: p{player} world:{identity.Id} blocks document:{senderId} on state:{InboxRowName} removed={(removed ? "true" : "false")}]");
-    }
-    private CommandResult Log(CommandContext context, WireArgs args) {
-        if ((args.Count < 1) || !args.TryInt(index: 0, value: out var player) || (player < 1) || (player > PlayerRoster.MaxSlots)) {
-            return CommandResult.Error(output: $"[chat.log: expected <player 1..{PlayerRoster.MaxSlots}> <text...>]");
-        }
-        if (!TryAuthorize(context: context, player: player, verb: "chat.log", error: out var authError)) {
-            return CommandResult.Error(output: authError);
-        }
-        if (!TryResolvePlayer(player: player, verb: "chat.log", identity: out var identity, error: out var resolveError)) {
-            return CommandResult.Error(output: resolveError);
-        }
-        if (identity!.Document is null) {
-            return CommandResult.Error(output: $"[chat.log: p{player} world:{identity.Id} has no owned document to persist into]");
-        }
-
-        var text = RawTail(context: context, args: in args, skipTokensIncludingVerb: 2, argsTailSkip: 1);
-
-        if (!identity.TryAppendEvictingText(rowName: LogRowName, text: text, evictedKey: out var evicted, reason: out var appendReason)) {
-            return CommandResult.Error(output: $"[chat.log: p{player} world:{identity.Id} refused — {appendReason} — declare it first with chat.inbox]");
-        }
-
-        m_worlds.Save();
-
-        return new CommandResult(Output: $"[chat.log: p{player} world:{identity.Id} appended{((evicted is { } victim) ? $" evicted={victim}" : string.Empty)}]");
-    }
-    private CommandResult Whisper(CommandContext context, WireArgs args) {
-        if ((args.Count < 2) || !args.TryInt(index: 0, value: out var player) || (player < 1) || (player > PlayerRoster.MaxSlots)) {
-            return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
-        }
-        if (!WorldSafeName.TryParse(candidate: args[1].ToString(), name: out var recipientId, reason: out var nameReason)) {
-            return CommandResult.Error(output: $"[chat.whisper: refused — '{args[1]}' {nameReason}]");
-        }
-        if (!TryAuthorize(context: context, player: player, verb: "chat.whisper", error: out var authError)) {
-            return CommandResult.Error(output: authError);
-        }
-        if (!TryResolvePlayer(player: player, verb: "chat.whisper", identity: out var identity, error: out var resolveError)) {
-            return CommandResult.Error(output: resolveError);
-        }
-
-        var text = RawTail(context: context, args: in args, skipTokensIncludingVerb: 3, argsTailSkip: 2);
-        var submission = new WorldDocumentSubmission(
-            SourceDocumentId: identity!.Id,
-            OwnerDocumentId: recipientId,
-            Tick: m_server.NextInputTick,
-            Slot: InboxRowName,
-            Kind: WorldDocumentWriteKind.Set,
-            StorageKind: ActionStateKind.Counter,
-            Value: 0L,
-            Text: text);
-        var receipt = m_worlds.Submit(submission: submission);
-
-        return new CommandResult(Output: $"[chat.whisper: from=world:{identity.Id} to=world:{recipientId} verdict={(receipt.Accepted ? "accepted" : "refused")} reason={receipt.Reason}]");
-    }
-    private CommandResult Read(CommandContext context, WireArgs args) {
-        if (!TryAuthorizedIdentity(context: context, args: in args, optionalAt: 0, verb: "chat.read", player: out var player, identity: out var identity, error: out var error)) {
-            return CommandResult.Error(output: error);
-        }
-
-        var log = DescribeRow(identity: identity!, rowName: LogRowName);
-        var inbox = DescribeRow(identity: identity!, rowName: InboxRowName);
-
-        return new CommandResult(Output: $"[chat.read: p{player} world:{identity!.Id} log=[{log}] inbox=[{inbox}]]");
-    }
-    private static string DescribeRow(WorldIdentity identity, WorldCellName rowName) {
-        if (!identity.TryReadState(name: rowName, row: out var row) || (row.Cells is not { Count: > 0 } cells)) {
-            return string.Empty;
-        }
-
-        return string.Join(separator: ",", values: cells.Select(selector: cell => $"{cell.Key}:'{cell.Text}'"));
-    }
-
-    // The document-authored grant row set with any row matching (principal, Mutate, subject) removed — the
-    // upsert-by-key half chat.allow's re-grant and chat.block's revoke both need, since neither goes through the
-    // LIVE table's own TryGrant re-grant merge (a document-authored row is edited directly, like identity.hud edits
-    // the Hud section directly).
-    private static IReadOnlyList<WorldGrant> WithoutGrantRow(IReadOnlyList<WorldGrant> grants, WorldPrincipal principal, GrantSubject subject) =>
-        [.. grants.Where(predicate: grant => !((grant.Principal == principal) && (grant.Capability == WorldCapability.Mutate) && (grant.Subject == subject)))];
-
-    // Resolves [player] at optionalAt (trailing, default 1) and checks the OWNER-ONLY constraint (ActingPrincipal
-    // holds Drive over the player's body) BEFORE resolving the identity itself — a non-owner is refused before this
-    // door tells them anything about whether the target is even joined.
-    private bool TryAuthorizedIdentity(CommandContext context, in WireArgs args, int optionalAt, string verb, out int player, out WorldIdentity? identity, out string error) {
-        player = 1;
-        identity = null;
-
-        if ((args.Count > optionalAt) && (!args.TryInt(index: optionalAt, value: out player) || (player < 1) || (player > PlayerRoster.MaxSlots))) {
-            error = $"[{verb}: player must be 1..{PlayerRoster.MaxSlots}]";
-
-            return false;
-        }
-
-        return (TryAuthorize(context: context, player: player, verb: verb, error: out error) &&
-            TryResolvePlayer(player: player, verb: verb, identity: out identity, error: out error));
-    }
-
-    // THE owner-only constraint, at the ONE call site every mutating (and, for privacy, every reading) verb in this
-    // module routes through: context.ActingPrincipal() — never a verb argument — must hold Drive over the target
-    // player's body, the SAME primitive player.identity's own authorization already checks
-    // (Server.WorldServer's SessionRequest.SetIdentity arm: "the ACTOR's Drive over the target body").
-    private bool TryAuthorize(CommandContext context, int player, string verb, out string error) {
-        var slot = PlayerRoster.SlotFromDisplay(number: player);
-        var acting = context.ActingPrincipal();
-        var verdict = m_server.Grants.Allows(principal: acting, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: slot));
-
-        if (!verdict.IsAllowed) {
-            error = $"[{verb}: {acting.Describe()} cannot author player {player}'s identity ({verdict.DescribeDenial()})]";
-
-            return false;
-        }
-
-        error = string.Empty;
-
-        return true;
-    }
-    private bool TryResolvePlayer(int player, string verb, out WorldIdentity? identity, out string error) {
-        identity = m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: player));
-
-        if (identity is null) {
-            error = $"[{verb}: player {player} is not joined]";
-
-            return false;
-        }
-
-        error = string.Empty;
-
-        return true;
-    }
-
-    // The raw text tail after skipTokensIncludingVerb whitespace-delimited tokens (verb included) — the SAME
-    // reconstruction-from-raw-line approach WorldStateCommandModule.RawTextTail/IdentityCommandModule.DeliverTextTail
-    // use, so interior spacing in <text...> survives the console tokenizer untouched.
-    private static string RawTail(CommandContext context, in WireArgs args, int skipTokensIncludingVerb, int argsTailSkip) {
-        if (context.Text is { } text) {
-            var span = text.AsSpan().TrimStart();
-
-            for (var skip = 0; (skip < skipTokensIncludingVerb); skip++) {
-                var separator = span.IndexOfAny(value0: ' ', value1: '\t');
-
-                if (separator < 0) {
-                    return string.Empty;
-                }
-
-                span = span[(separator + 1)..].TrimStart();
-            }
-
-            return span.Trim().ToString();
-        }
-
-        return args.Tail(start: argsTailSkip);
     }
 }

@@ -151,12 +151,12 @@ public unsafe sealed class VulkanNativeFrameSynchronizationApi : IVulkanFrameSyn
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateFence = (delegate* unmanaged[Cdecl]<nint, in VkFenceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateFence"u8),
-                CreateSemaphore = (delegate* unmanaged[Cdecl]<nint, in VkSemaphoreCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSemaphore"u8),
-                DestroyFence = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyFence"u8),
-                DestroySemaphore = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySemaphore"u8),
-                ResetFences = (delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkResetFences"u8),
-                WaitForFences = (delegate* unmanaged[Cdecl]<nint, uint, in nint, uint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkWaitForFences"u8),
+                CreateFence = ((delegate* unmanaged[Cdecl]<nint, in VkFenceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateFence"u8)),
+                CreateSemaphore = ((delegate* unmanaged[Cdecl]<nint, in VkSemaphoreCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSemaphore"u8)),
+                DestroyFence = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyFence"u8)),
+                DestroySemaphore = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySemaphore"u8)),
+                ResetFences = ((delegate* unmanaged[Cdecl]<nint, uint, in nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkResetFences"u8)),
+                WaitForFences = ((delegate* unmanaged[Cdecl]<nint, uint, in nint, uint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkWaitForFences"u8)),
             }
         );
     }

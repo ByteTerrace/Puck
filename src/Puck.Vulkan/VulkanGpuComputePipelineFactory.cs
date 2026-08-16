@@ -38,7 +38,7 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
                     GpuComputeBindingKind.AccelerationStructure => VulkanDescriptorType.AccelerationStructure,
                     _ => VulkanDescriptorType.StorageBuffer,
                 },
-                StageFlags = (uint)GpuShaderStage.Compute,
+                StageFlags = ((uint)GpuShaderStage.Compute),
             };
         }
 
@@ -48,7 +48,7 @@ public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi co
                 ShaderModuleHandle: computeShaderModule.Handle,
                 DescriptorBindings: descriptorBindings,
                 PushConstantSize: (pushConstantBinding?.Size ?? 0u),
-                PushConstantStageFlags: (uint)(pushConstantBinding?.StageFlags ?? GpuShaderStage.None)
+                PushConstantStageFlags: ((uint)(pushConstantBinding?.StageFlags ?? GpuShaderStage.None))
             ),
             descriptorSetLayoutHandle: out var setLayout,
             pipelineLayoutHandle: out var pipelineLayout,

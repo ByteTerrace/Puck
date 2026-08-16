@@ -21,49 +21,23 @@ namespace Puck.Commands;
 public readonly record struct CommandPrincipal(CommandPrincipalKind Kind, int Index, string? Name, int Generation) {
     /// <summary>The console/script control surface — the identity the text submission door stamps.</summary>
     public static CommandPrincipal Console { get; } = new(
-        Kind: CommandPrincipalKind.Console,
+        Generation: 0,
         Index: 0,
-        Name: null,
-        Generation: 0
+        Kind: CommandPrincipalKind.Console,
+        Name: null
     );
-
     /// <summary>Whether this principal was stamped by a door at all.</summary>
     public bool IsStamped => (Kind != CommandPrincipalKind.Unspecified);
-
-    /// <summary>The seat principal for a 0-based slot.</summary>
-    /// <param name="slot">The 0-based seat slot.</param>
-    /// <returns>The seat principal.</returns>
-    /// <remarks>A mixer must NOT call this to attribute a slot's input: a claimed slot may be answering to a peer or a
-    /// guest module, so synthesizing a seat there attributes the claimant's action to the seat it displaced. Ask
-    /// <see cref="ICommandPrincipalResolver.PrincipalOf"/> instead — the host's roster owns that answer.</remarks>
-    public static CommandPrincipal Seat(int slot) => new(
-        Kind: CommandPrincipalKind.Seat,
-        Index: slot,
-        Name: null,
-        Generation: 0
-    );
 
     /// <summary>The guest-module principal for a descriptor name.</summary>
     /// <param name="name">The module's descriptor name.</param>
     /// <returns>The addon principal.</returns>
     public static CommandPrincipal Addon(string name) => new(
-        Kind: CommandPrincipalKind.Addon,
+        Generation: 0,
         Index: 0,
-        Name: name,
-        Generation: 0
+        Kind: CommandPrincipalKind.Addon,
+        Name: name
     );
-
-    /// <summary>The peer principal for a 0-based entity index.</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    /// <returns>The peer principal.</returns>
-    /// <param name="generation">The positive admission generation.</param>
-    public static CommandPrincipal Peer(int index, int generation) => new(
-        Kind: CommandPrincipalKind.Peer,
-        Index: index,
-        Name: null,
-        Generation: generation
-    );
-
     /// <summary>A short stable label for echoes — <c>seat1</c>…, <c>console</c>, <c>addon:&lt;name&gt;</c>,
     /// <c>peer:&lt;n&gt;:&lt;generation&gt;</c>.</summary>
     /// <returns>The label.</returns>
@@ -74,4 +48,26 @@ public readonly record struct CommandPrincipal(CommandPrincipalKind Kind, int In
         CommandPrincipalKind.Peer => $"peer:{Index}:{Generation}",
         _ => "unstamped",
     };
+    /// <summary>The peer principal for a 0-based entity index.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The peer principal.</returns>
+    /// <param name="generation">The positive admission generation.</param>
+    public static CommandPrincipal Peer(int index, int generation) => new(
+        Generation: generation,
+        Index: index,
+        Kind: CommandPrincipalKind.Peer,
+        Name: null
+    );
+    /// <summary>The seat principal for a 0-based slot.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <returns>The seat principal.</returns>
+    /// <remarks>A mixer must NOT call this to attribute a slot's input: a claimed slot may be answering to a peer or a
+    /// guest module, so synthesizing a seat there attributes the claimant's action to the seat it displaced. Ask
+    /// <see cref="ICommandPrincipalResolver.PrincipalOf"/> instead — the host's roster owns that answer.</remarks>
+    public static CommandPrincipal Seat(int slot) => new(
+        Generation: 0,
+        Index: slot,
+        Kind: CommandPrincipalKind.Seat,
+        Name: null
+    );
 }

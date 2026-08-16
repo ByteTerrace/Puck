@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Forge.Authoring;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -13,37 +14,73 @@ namespace Puck.World;
 /// the dynamic-transform identity of an existing avatar.
 /// </summary>
 internal static class WorldAvatarCatalog {
-    // This procedural SDF look owns a fixed renderer catalog. Simulation population capacity is authored separately.
-    public const int Capacity = WorldLookSource.Catalog.RigCount;
-
     private const int InstructionsPerLeaf = 5;
     private const float LeafBoundRadius = 0.42f;
     private const int MaxLeafCount = 20;
     private const int MinLeafCount = 12;
 
-    private static readonly AvatarRange[] s_ranges;
-    private static readonly AvatarLeaf[] s_leaves;
-    private static readonly ulong[] s_identityHashes;
+    // This procedural SDF look owns a fixed renderer catalog. Simulation population capacity is authored separately.
+    public const int Capacity = WorldLookSource.Catalog.RigCount;
+
+    private static readonly ulong[] IdentityHashes;
+    private static readonly AvatarLeaf[] Leaves;
     // The procedural humanoid's authored content. These identifiers are not an engine vocabulary: another look
     // publishes any part ids its own geometry needs against its own transform slots.
-    private static readonly AuthoredPartTable s_parts = new(slots: [
-        new(PartId: "pelvis", TransformSlot: 0),
-        new(PartId: "abdomen", TransformSlot: 1),
-        new(PartId: "chest", TransformSlot: 2),
-        new(PartId: "head", TransformSlot: 3),
-        new(PartId: "left-upper-arm", TransformSlot: 4),
-        new(PartId: "right-upper-arm", TransformSlot: 5),
-        new(PartId: "left-hand", TransformSlot: 6),
-        new(PartId: "right-hand", TransformSlot: 7),
-        new(PartId: "left-thigh", TransformSlot: 8),
-        new(PartId: "right-thigh", TransformSlot: 9),
-        new(PartId: "left-shin", TransformSlot: 10),
-        new(PartId: "right-shin", TransformSlot: 11),
+    private static readonly AuthoredPartTable Parts = new(slots: [
+        new(
+            PartId: "pelvis",
+            TransformSlot: 0
+        ),
+        new(
+            PartId: "abdomen",
+            TransformSlot: 1
+        ),
+        new(
+            PartId: "chest",
+            TransformSlot: 2
+        ),
+        new(
+            PartId: "head",
+            TransformSlot: 3
+        ),
+        new(
+            PartId: "left-upper-arm",
+            TransformSlot: 4
+        ),
+        new(
+            PartId: "right-upper-arm",
+            TransformSlot: 5
+        ),
+        new(
+            PartId: "left-hand",
+            TransformSlot: 6
+        ),
+        new(
+            PartId: "right-hand",
+            TransformSlot: 7
+        ),
+        new(
+            PartId: "left-thigh",
+            TransformSlot: 8
+        ),
+        new(
+            PartId: "right-thigh",
+            TransformSlot: 9
+        ),
+        new(
+            PartId: "left-shin",
+            TransformSlot: 10
+        ),
+        new(
+            PartId: "right-shin",
+            TransformSlot: 11
+        ),
     ]);
+    private static readonly AvatarRange[] Ranges;
 
     static WorldAvatarCatalog() {
-        s_ranges = new AvatarRange[Capacity];
-        s_identityHashes = new ulong[Capacity];
+        Ranges = new AvatarRange[Capacity];
+        IdentityHashes = new ulong[Capacity];
         var leaves = new List<AvatarLeaf>(capacity: (Capacity * 24));
         var identities = new HashSet<ulong>();
 
@@ -52,151 +89,202 @@ internal static class WorldAvatarCatalog {
             var count = LeafCountFor(avatar: avatar);
 
             for (var bone = 0; (bone < count); bone++) {
-                leaves.Add(item: BuildLeaf(avatar: avatar, bone: bone));
+                leaves.Add(item: BuildLeaf(
+                    avatar: avatar,
+                    bone: bone
+                ));
             }
 
-            s_ranges[avatar] = new AvatarRange(First: first, Count: count);
-            var identity = IdentityHashFor(avatar: avatar, leafCount: count);
+            Ranges[avatar] = new AvatarRange(
+                Count: count,
+                First: first
+            );
+            var identity = IdentityHashFor(
+                avatar: avatar,
+                leafCount: count
+            );
 
             if (!identities.Add(item: identity)) {
                 throw new InvalidOperationException(message: $"Avatar {avatar} generated a duplicate deterministic identity {identity:x16}.");
             }
 
-            s_identityHashes[avatar] = identity;
+            IdentityHashes[avatar] = identity;
         }
 
-        s_leaves = leaves.ToArray();
+        Leaves = leaves.ToArray();
     }
 
     /// <summary>The all-128 rig's frozen dynamic-transform capacity (and leaf-instance count).</summary>
-    public static int DynamicTransformCapacity => s_leaves.Length;
-
+    public static int DynamicTransformCapacity => Leaves.Length;
     /// <summary>The all-128 authored VM instruction total, excluding the static world.</summary>
-    public static int InstructionCapacity => (s_leaves.Length * InstructionsPerLeaf);
-
+    public static int InstructionCapacity => (Leaves.Length * InstructionsPerLeaf);
+    public static int MaxInstructionCount => (MaxLeafCount * InstructionsPerLeaf);
     /// <summary>The minimum and maximum authored instruction counts of any catalog avatar.</summary>
     public static int MinInstructionCount => (MinLeafCount * InstructionsPerLeaf);
-    public static int MaxInstructionCount => (MaxLeafCount * InstructionsPerLeaf);
 
-    /// <summary>Returns the avatar's stable descriptor identity. The digest folds the Puck.Maths R1/R2 source samples
-    /// that author the rig, and catalog construction rejects a collision across the built-in 128.</summary>
-    public static ulong IdentityHash(int avatar) => s_identityHashes[avatar];
+    private static AvatarLeaf BuildLeaf(int avatar, int bone) {
+        var sampleIndex = ((ulong)(((avatar * MaxLeafCount) + bone) + 1));
 
-    /// <summary>Returns the literal avatar-local eyeball attachment point for a first-person camera. It follows the
-    /// catalog's authored head leaf, so camera and morphology cannot silently drift apart.</summary>
-    public static Vector3 EyeOffset(int avatar) {
-        var head = s_leaves[(s_ranges[avatar].First + 3)];
+        var (x, y) = LowDiscrepancy.R2(index: sampleIndex);
+        var ux = ((float)((double)x));
+        var uy = ((float)((double)y));
+        var role = (bone % MinLeafCount);
+        var detailLayer = (bone / MinLeafCount);
+        var anchor = HumanoidAnchor(role: role);
 
-        return ((head.Anchor + head.AuthoredOffset) + new Vector3(x: 0f, y: 0.015f, z: -0.12f));
-    }
-
-    /// <summary>Resolves a published part id to the avatar's stable packed transform slot.</summary>
-    /// <param name="avatar">The avatar index.</param>
-    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="transformSlot">The catalog-relative packed transform slot, or -1 when unresolved.</param>
-    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/>.</returns>
-    public static bool TryPartTransformSlot(int avatar, string partId, out int transformSlot) {
-        if (!s_parts.TryResolve(partId: partId, transformSlot: out var relativeSlot)) {
-            transformSlot = -1;
-
-            return false;
-        }
-
-        transformSlot = (s_ranges[avatar].First + relativeSlot);
-
-        return true;
-    }
-
-    /// <summary>Returns a published part's avatar-local authored rest offset.</summary>
-    /// <param name="avatar">The avatar index.</param>
-    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
-    /// <param name="scale">The look's uniform render scale.</param>
-    /// <param name="offset">The authored rest offset, or zero when unresolved.</param>
-    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/>.</returns>
-    public static bool TryPartOffset(int avatar, string partId, int rig, float scale, out Vector3 offset) {
-        if (!s_parts.TryResolve(partId: partId, transformSlot: out var relativeSlot)) {
-            offset = default;
-
-            return false;
-        }
-
-        var rigRange = s_ranges[((rig < 0) ? avatar : rig)];
-        var leaf = s_leaves[RigLeaf(rigRange: rigRange, offset: relativeSlot)];
-
-        offset = ((leaf.Anchor * scale) + leaf.AuthoredOffset);
-
-        return true;
-    }
-
-    /// <summary>Resolves a published part's live pose from the packed dynamic transforms.</summary>
-    /// <param name="avatar">The avatar index.</param>
-    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
-    /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
-    /// <param name="pose">The live part pose, or default when unresolved.</param>
-    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/> and the slot is packed.</returns>
-    public static bool TryPartPose(int avatar, string partId, int rig, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
-        if (!s_parts.TryResolve(partId: partId, transformSlot: out var relativeSlot)) {
-            pose = default;
-
-            return false;
-        }
-
-        var transformSlot = (s_ranges[avatar].First + relativeSlot);
-
-        if ((uint)transformSlot >= (uint)transforms.Length) {
-            pose = default;
-
-            return false;
-        }
-
-        var packed = transforms[transformSlot];
-        var rigRange = s_ranges[((rig < 0) ? avatar : rig)];
-        var leaf = s_leaves[RigLeaf(rigRange: rigRange, offset: relativeSlot)];
-
-        pose = new SdfAnchor(
-            Position: (packed.Position + Vector3.Transform(value: leaf.AuthoredOffset, rotation: packed.Orientation)),
-            Orientation: packed.Orientation
+        // Extra leaves enrich the same recognizable skeleton with armor/joint/face detail, offset just enough that the
+        // 12-, 24-, and 36-leaf avatars are genuinely different programs rather than repeated coincident geometry.
+        anchor += new Vector3(
+            x: ((ux - 0.5f) * (0.025f + (0.015f * detailLayer))),
+            y: ((uy - 0.5f) * 0.035f),
+            z: ((uy - 0.5f) * (0.045f + (0.015f * detailLayer)))
         );
 
-        return true;
-    }
-
-    /// <summary>Resolves a published part's live pose from a list-backed packed dynamic-transform buffer.</summary>
-    /// <param name="avatar">The avatar index.</param>
-    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
-    /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
-    /// <param name="pose">The live part pose, or default when unresolved.</param>
-    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/> and the slot is packed.</returns>
-    public static bool TryPartPose(int avatar, string partId, int rig, IReadOnlyList<DynamicTransform> transforms, out SdfAnchor pose) {
-        ArgumentNullException.ThrowIfNull(transforms);
-
-        if (!s_parts.TryResolve(partId: partId, transformSlot: out var relativeSlot)) {
-            pose = default;
-
-            return false;
-        }
-
-        var transformSlot = (s_ranges[avatar].First + relativeSlot);
-
-        if ((uint)transformSlot >= (uint)transforms.Count) {
-            pose = default;
-
-            return false;
-        }
-
-        var packed = transforms[transformSlot];
-        var rigRange = s_ranges[((rig < 0) ? avatar : rig)];
-        var leaf = s_leaves[RigLeaf(rigRange: rigRange, offset: relativeSlot)];
-
-        pose = new SdfAnchor(
-            Position: (packed.Position + Vector3.Transform(value: leaf.AuthoredOffset, rotation: packed.Orientation)),
-            Orientation: packed.Orientation
+        var authoredRotation = Quaternion.CreateFromYawPitchRoll(
+            pitch: ((uy - 0.5f) * 0.14f),
+            roll: (((ux + uy) - 1f) * 0.08f),
+            yaw: ((ux - 0.5f) * 0.20f)
         );
+        var gaitAmplitude = ((role >= 8)
+            ? 0.52f
+            : ((role >= 4)
+                ? 0.34f
+                : 0f
+        ));
+        var gaitPhaseOffset = role switch {
+            // Arms counter-swing the opposite leg. Keeping amplitude positive and encoding side in phase avoids
+            // accidentally cancelling the phase shift with a second sign inversion.
+            4 or 6 or 9 or 11 => MathF.PI,
+            _ => 0f,
+        };
 
-        return true;
+        return new AvatarLeaf(
+            Anchor: anchor,
+            AuthoredOffset: new Vector3(
+                x: 0f,
+                y: ((ux - 0.5f) * 0.025f),
+                z: 0f
+            ),
+            AuthoredRotation: authoredRotation,
+            Shape: ((AvatarShape)((((ulong)x.Value) * 4u) >> 32)),
+            Scale: (0.82f + (0.34f * uy)),
+            GaitAmplitude: gaitAmplitude,
+            GaitPhaseOffset: gaitPhaseOffset,
+            UseAccent: ((role == 3) || (role is 6 or 7) || ((detailLayer > 0) && (ux > 0.67f)))
+        );
+    }
+    private static Vector3 HumanoidAnchor(int role) => role switch {
+        0 => new Vector3(
+        x: 0f,
+        y: 0.68f,
+        z: 0f
+    ),       // pelvis
+        1 => new Vector3(
+        x: 0f,
+        y: 0.91f,
+        z: 0f
+    ),       // abdomen
+        2 => new Vector3(
+        x: 0f,
+        y: 1.17f,
+        z: 0f
+    ),       // chest
+        3 => new Vector3(
+        x: 0f,
+        y: 1.48f,
+        z: -0.03f
+    ),   // head
+        4 => new Vector3(
+        x: -0.27f,
+        y: 1.20f,
+        z: 0f
+    ),   // left upper arm
+        5 => new Vector3(
+        x: 0.27f,
+        y: 1.20f,
+        z: 0f
+    ),    // right upper arm
+        6 => new Vector3(
+        x: -0.43f,
+        y: 0.96f,
+        z: 0f
+    ),   // left hand
+        7 => new Vector3(
+        x: 0.43f,
+        y: 0.96f,
+        z: 0f
+    ),    // right hand
+        8 => new Vector3(
+        x: -0.15f,
+        y: 0.49f,
+        z: 0f
+    ),   // left thigh
+        9 => new Vector3(
+        x: 0.15f,
+        y: 0.49f,
+        z: 0f
+    ),    // right thigh
+        10 => new Vector3(
+        x: -0.16f,
+        y: 0.18f,
+        z: -0.05f
+    ), // left shin/foot
+        _ => new Vector3(
+        x: 0.16f,
+        y: 0.18f,
+        z: -0.05f
+    ),   // right shin/foot
+    };
+    private static ulong IdentityHashFor(int avatar, int leafCount) {
+        var hash = Fnv1aHash.Create();
+        var countSample = LowDiscrepancy.R1(index: ((ulong)avatar));
+
+        hash.Add(value: countSample.Value);
+        hash.Add(value: ((uint)leafCount));
+
+        for (var bone = 0; (bone < leafCount); bone++) {
+            var sampleIndex = ((ulong)(((avatar * MaxLeafCount) + bone) + 1));
+
+            var (x, y) = LowDiscrepancy.R2(index: sampleIndex);
+
+            hash.Add(value: x.Value);
+            hash.Add(value: y.Value);
+        }
+
+        return hash.Value;
+    }
+    private static int LeafCountFor(int avatar) {
+        var fraction = LowDiscrepancy.R1(index: ((ulong)avatar));
+        var span = ((MaxLeafCount - MinLeafCount) + 1);
+
+        return (MinLeafCount + ((int)((((ulong)fraction.Value) * ((uint)span)) >> 32)));
+    }
+    // The geometry-source rig for an avatar (a WorldLook.Catalog(Index) pin), clamped to the built-in 128; a negative or
+    // out-of-range pin falls back to the avatar's own index.
+    private static int RigIndex(Func<int, int>? rigFor, int avatar) {
+        var rig = (rigFor?.Invoke(arg: avatar) ?? avatar);
+
+        return ((((uint)rig) < Capacity)
+            ? rig
+            : avatar
+        );
+    }
+    // The rig leaf a slot offset reads: the pinned rig's leaf at the same relative offset, CLAMPED to the rig's last
+    // leaf when the entity's slot range is longer (so a pinned rig with fewer leaves fills the entity's slots safely and
+    // a longer one is truncated — the frozen per-entity slot capacity is never exceeded).
+    private static int RigLeaf(AvatarRange rigRange, int offset) {
+        return (rigRange.First + Math.Min(
+            val1: offset,
+            val2: (rigRange.Count - 1)
+        ));
+    }
+    private static float ScaleFor(Func<int, float>? scaleFor, int avatar) {
+        var scale = (scaleFor?.Invoke(arg: avatar) ?? 1f);
+
+        return ((float.IsFinite(f: scale) && (scale > 0f))
+            ? scale
+            : 1f
+        );
     }
 
     /// <summary>Counts the active catalog leaves and their authored VM instructions for diagnostics.</summary>
@@ -213,17 +301,19 @@ internal static class WorldAvatarCatalog {
         ArgumentNullException.ThrowIfNull(isActive);
 
         var leaves = 0;
-        var bound = Math.Min(val1: capacity, val2: Capacity);
+        var bound = Math.Min(
+            val1: capacity,
+            val2: Capacity
+        );
 
         for (var avatar = 0; (avatar < bound); avatar++) {
             if (isActive(arg: avatar)) {
-                leaves += s_ranges[avatar].Count;
+                leaves += Ranges[avatar].Count;
             }
         }
 
         return (Leaves: leaves, Instructions: (leaves * InstructionsPerLeaf));
     }
-
     /// <summary>Emits every active avatar's distinct leaf chains. Each leaf is its own dynamic cull instance: a tile
     /// touching one hand does not admit the other bones of that avatar or its neighbors.</summary>
     /// <remarks>A <see cref="WorldLook"/> may pin a catalog rig (<paramref name="rigFor"/>) and a uniform render scale
@@ -254,26 +344,52 @@ internal static class WorldAvatarCatalog {
         ArgumentNullException.ThrowIfNull(isActive);
 
         for (var avatar = 0; (avatar < Capacity); avatar++) {
-            if (!probeWorstCase && !isActive(arg: avatar)) {
+            if (
+                !probeWorstCase &&
+                !isActive(arg: avatar)
+            ) {
                 continue;
             }
 
-            var range = s_ranges[avatar];
+            var range = Ranges[avatar];
             // The probe sources every avatar's own rig at unit scale (the frozen worst case); a live build sources the
             // pinned rig's leaves and the look's uniform scale.
-            var rigRange = (probeWorstCase ? range : s_ranges[RigIndex(rigFor: rigFor, avatar: avatar)]);
-            var scale = (probeWorstCase ? 1f : ScaleFor(scaleFor: scaleFor, avatar: avatar));
+            var rigRange = (probeWorstCase
+                ? range
+                : Ranges[RigIndex(
+                    avatar: avatar,
+                    rigFor: rigFor
+                )]
+            );
+            var scale = (probeWorstCase
+                ? 1f
+                : ScaleFor(
+                    avatar: avatar,
+                    scaleFor: scaleFor
+                )
+            );
 
             for (var slot = range.First; (slot < range.End); slot++) {
-                var leaf = s_leaves[RigLeaf(rigRange: rigRange, offset: (slot - range.First))];
-                var material = (leaf.UseAccent ? accentMaterials[avatar] : bodyMaterials[avatar]);
+                var leaf = Leaves[RigLeaf(
+                    rigRange: rigRange,
+                    offset: (slot - range.First)
+                )];
+                var material = (leaf.UseAccent
+                    ? accentMaterials[avatar]
+                    : bodyMaterials[avatar]
+                );
                 var leafScale = (leaf.Scale * scale);
 
                 // The catalog's slot ranges are relative to the OWNING emitter's assigned base; the baked instruction
                 // lanes are absolute indices into the composed buffer, so the base is added exactly here.
                 var packedSlot = (slotBase + slot);
 
-                builder.BeginInstanceDynamic(slot: packedSlot, boundOffset: Vector3.Zero, boundRadius: (LeafBoundRadius * scale), active: true);
+                builder.BeginInstanceDynamic(
+                    slot: packedSlot,
+                    boundOffset: Vector3.Zero,
+                    boundRadius: (LeafBoundRadius * scale),
+                    active: true
+                );
                 var chain = builder
                     .ResetPoint()
                     .TransformDynamic(slot: packedSlot)
@@ -282,28 +398,54 @@ internal static class WorldAvatarCatalog {
 
                 _ = leaf.Shape switch {
                     AvatarShape.Box => chain.Box(
-                        halfExtents: new Vector3(x: (0.105f * leafScale), y: (0.17f * leafScale), z: (0.085f * leafScale)),
-                        round: (0.038f * leafScale),
-                        material: material
+                    halfExtents: new Vector3(
+                        x: (0.105f * leafScale),
+                        y: (0.17f * leafScale),
+                        z: (0.085f * leafScale)
                     ),
+                    round: (0.038f * leafScale),
+                    material: material
+                ),
                     AvatarShape.Capsule => chain.Capsule(
-                        endpoint: new Vector3(x: 0f, y: (0.27f * leafScale), z: 0f),
-                        radius: (0.068f * leafScale),
-                        material: material
+                    endpoint: new Vector3(
+                        x: 0f,
+                        y: (0.27f * leafScale),
+                        z: 0f
                     ),
+                    radius: (0.068f * leafScale),
+                    material: material
+                ),
                     AvatarShape.Cylinder => chain.Cylinder(
-                        radius: (0.082f * leafScale),
-                        halfHeight: (0.155f * leafScale),
-                        material: material
-                    ),
-                    _ => chain.Sphere(radius: (0.108f * leafScale), material: material),
+                    radius: (0.082f * leafScale),
+                    halfHeight: (0.155f * leafScale),
+                    material: material
+                ),
+                    _ => chain.Sphere(
+                    radius: (0.108f * leafScale),
+                    material: material
+                ),
                 };
 
                 builder.EndInstance();
             }
         }
     }
+    /// <summary>Returns the literal avatar-local eyeball attachment point for a first-person camera. It follows the
+    /// catalog's authored head leaf, so camera and morphology cannot silently drift apart.</summary>
+    public static Vector3 EyeOffset(int avatar) {
+        var head = Leaves[(Ranges[avatar].First + 3)];
 
+        return ((head.Anchor + head.AuthoredOffset) + new Vector3(
+            x: 0f,
+            y: 0.015f,
+            z: -0.12f
+        ));
+    }
+    /// <summary>Returns the avatar's stable descriptor identity. The digest folds the Puck.Maths R1/R2 source samples
+    /// that author the rig, and catalog construction rejects a collision across the built-in 128.</summary>
+    public static ulong IdentityHash(int avatar) => IdentityHashes[avatar];
+    /// <summary>Returns the exact authored instruction count for an avatar.</summary>
+    public static int InstructionCount(int avatar) => (Ranges[avatar].Count * InstructionsPerLeaf);
     /// <summary>Packs one avatar's root pose plus movement-driven gait into its frozen leaf slots. A pinned rig sources
     /// the leaf poses (clamped to the entity's own slot range) and the look's uniform scale multiplies the anchor
     /// offsets — rig = avatar, scale = 1 reproduce the pre-look behaviour.</summary>
@@ -317,135 +459,181 @@ internal static class WorldAvatarCatalog {
         int rig = -1,
         float scale = 1f
     ) {
-        var range = s_ranges[avatar];
-        var rigRange = s_ranges[((rig < 0) ? avatar : rig)];
+        var range = Ranges[avatar];
+        var rigRange = Ranges[((rig < 0)
+            ? avatar
+            : rig)];
 
         if (transforms.Length < range.End) {
-            throw new ArgumentException(message: $"The avatar transform span has {transforms.Length} slots; avatar {avatar} requires {range.End}.", paramName: nameof(transforms));
+            throw new ArgumentException(
+                message: $"The avatar transform span has {transforms.Length} slots; avatar {avatar} requires {range.End}.",
+                paramName: nameof(transforms)
+            );
         }
 
         for (var slot = range.First; (slot < range.End); slot++) {
-            var leaf = s_leaves[RigLeaf(rigRange: rigRange, offset: (slot - range.First))];
+            var leaf = Leaves[RigLeaf(
+                rigRange: rigRange,
+                offset: (slot - range.First)
+            )];
             var swing = ((leaf.GaitAmplitude <= 0f)
                 ? Quaternion.Identity
                 : Quaternion.CreateFromAxisAngle(
                     axis: Vector3.UnitX,
                     angle: (leaf.GaitAmplitude * MathF.Sin(x: (gaitPhase + leaf.GaitPhaseOffset)))
-                ));
+                )
+            );
             var orientation = Quaternion.Normalize(value: (swing * rootOrientation));
-            var position = (rootPosition + Vector3.Transform(value: (leaf.Anchor * scale), rotation: rootOrientation));
+            var position = (rootPosition + Vector3.Transform(
+                value: (leaf.Anchor * scale),
+                rotation: rootOrientation
+            ));
 
             transforms[slot] = new DynamicTransform(
-                Position: position,
+                CastsSoftShadow: castsSoftShadow,
                 Orientation: orientation,
-                CastsSoftShadow: castsSoftShadow
+                Position: position
             );
         }
     }
+    /// <summary>Returns a published part's avatar-local authored rest offset.</summary>
+    /// <param name="avatar">The avatar index.</param>
+    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
+    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
+    /// <param name="scale">The look's uniform render scale.</param>
+    /// <param name="offset">The authored rest offset, or zero when unresolved.</param>
+    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/>.</returns>
+    public static bool TryPartOffset(int avatar, string partId, int rig, float scale, out Vector3 offset) {
+        if (!Parts.TryResolve(
+            partId: partId,
+            transformSlot: out var relativeSlot
+        )) {
+            offset = default;
 
-    // The geometry-source rig for an avatar (a WorldLook.Catalog(Index) pin), clamped to the built-in 128; a negative or
-    // out-of-range pin falls back to the avatar's own index.
-    private static int RigIndex(Func<int, int>? rigFor, int avatar) {
-        var rig = (rigFor?.Invoke(arg: avatar) ?? avatar);
-
-        return (((uint)rig < Capacity) ? rig : avatar);
-    }
-    private static float ScaleFor(Func<int, float>? scaleFor, int avatar) {
-        var scale = (scaleFor?.Invoke(arg: avatar) ?? 1f);
-
-        return ((float.IsFinite(f: scale) && (scale > 0f)) ? scale : 1f);
-    }
-
-    // The rig leaf a slot offset reads: the pinned rig's leaf at the same relative offset, CLAMPED to the rig's last
-    // leaf when the entity's slot range is longer (so a pinned rig with fewer leaves fills the entity's slots safely and
-    // a longer one is truncated — the frozen per-entity slot capacity is never exceeded).
-    private static int RigLeaf(AvatarRange rigRange, int offset) {
-        return (rigRange.First + Math.Min(val1: offset, val2: (rigRange.Count - 1)));
-    }
-
-    /// <summary>Returns the exact authored instruction count for an avatar.</summary>
-    public static int InstructionCount(int avatar) => (s_ranges[avatar].Count * InstructionsPerLeaf);
-
-    private static AvatarLeaf BuildLeaf(int avatar, int bone) {
-        var sampleIndex = (ulong)(((avatar * MaxLeafCount) + bone) + 1);
-
-        var (x, y) = LowDiscrepancy.R2(index: sampleIndex);
-        var ux = (float)(double)x;
-        var uy = (float)(double)y;
-        var role = (bone % MinLeafCount);
-        var detailLayer = (bone / MinLeafCount);
-        var anchor = HumanoidAnchor(role: role);
-
-        // Extra leaves enrich the same recognizable skeleton with armor/joint/face detail, offset just enough that the
-        // 12-, 24-, and 36-leaf avatars are genuinely different programs rather than repeated coincident geometry.
-        anchor += new Vector3(
-            x: ((ux - 0.5f) * (0.025f + (0.015f * detailLayer))),
-            y: ((uy - 0.5f) * 0.035f),
-            z: ((uy - 0.5f) * (0.045f + (0.015f * detailLayer)))
-        );
-
-        var authoredRotation = Quaternion.CreateFromYawPitchRoll(
-            yaw: ((ux - 0.5f) * 0.20f),
-            pitch: ((uy - 0.5f) * 0.14f),
-            roll: (((ux + uy) - 1f) * 0.08f)
-        );
-        var gaitAmplitude = ((role >= 8) ? 0.52f : ((role >= 4) ? 0.34f : 0f));
-        var gaitPhaseOffset = role switch {
-            // Arms counter-swing the opposite leg. Keeping amplitude positive and encoding side in phase avoids
-            // accidentally cancelling the phase shift with a second sign inversion.
-            4 or 6 or 9 or 11 => MathF.PI,
-            _ => 0f,
-        };
-
-        return new AvatarLeaf(
-            Anchor: anchor,
-            AuthoredOffset: new Vector3(x: 0f, y: ((ux - 0.5f) * 0.025f), z: 0f),
-            AuthoredRotation: authoredRotation,
-            Shape: (AvatarShape)(((ulong)x.Value * 4u) >> 32),
-            Scale: (0.82f + (0.34f * uy)),
-            GaitAmplitude: gaitAmplitude,
-            GaitPhaseOffset: gaitPhaseOffset,
-            UseAccent: ((role == 3) || (role is 6 or 7) || ((detailLayer > 0) && (ux > 0.67f)))
-        );
-    }
-    private static int LeafCountFor(int avatar) {
-        var fraction = LowDiscrepancy.R1(index: (ulong)avatar);
-        var span = ((MaxLeafCount - MinLeafCount) + 1);
-
-        return (MinLeafCount + (int)(((ulong)fraction.Value * (uint)span) >> 32));
-    }
-    private static ulong IdentityHashFor(int avatar, int leafCount) {
-        var hash = Fnv1aHash.Create();
-        var countSample = LowDiscrepancy.R1(index: (ulong)avatar);
-
-        hash.Add(value: countSample.Value);
-        hash.Add(value: (uint)leafCount);
-
-        for (var bone = 0; (bone < leafCount); bone++) {
-            var sampleIndex = (ulong)(((avatar * MaxLeafCount) + bone) + 1);
-
-            var (x, y) = LowDiscrepancy.R2(index: sampleIndex);
-
-            hash.Add(value: x.Value);
-            hash.Add(value: y.Value);
+            return false;
         }
 
-        return hash.Value;
+        var rigRange = Ranges[((rig < 0)
+            ? avatar
+            : rig)];
+        var leaf = Leaves[RigLeaf(
+            offset: relativeSlot,
+            rigRange: rigRange
+        )];
+
+        offset = ((leaf.Anchor * scale) + leaf.AuthoredOffset);
+
+        return true;
     }
-    private static Vector3 HumanoidAnchor(int role) => role switch {
-        0 => new Vector3(x: 0f, y: 0.68f, z: 0f),       // pelvis
-        1 => new Vector3(x: 0f, y: 0.91f, z: 0f),       // abdomen
-        2 => new Vector3(x: 0f, y: 1.17f, z: 0f),       // chest
-        3 => new Vector3(x: 0f, y: 1.48f, z: -0.03f),   // head
-        4 => new Vector3(x: -0.27f, y: 1.20f, z: 0f),   // left upper arm
-        5 => new Vector3(x: 0.27f, y: 1.20f, z: 0f),    // right upper arm
-        6 => new Vector3(x: -0.43f, y: 0.96f, z: 0f),   // left hand
-        7 => new Vector3(x: 0.43f, y: 0.96f, z: 0f),    // right hand
-        8 => new Vector3(x: -0.15f, y: 0.49f, z: 0f),   // left thigh
-        9 => new Vector3(x: 0.15f, y: 0.49f, z: 0f),    // right thigh
-        10 => new Vector3(x: -0.16f, y: 0.18f, z: -0.05f), // left shin/foot
-        _ => new Vector3(x: 0.16f, y: 0.18f, z: -0.05f),   // right shin/foot
-    };
+    /// <summary>Resolves a published part's live pose from the packed dynamic transforms.</summary>
+    /// <param name="avatar">The avatar index.</param>
+    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
+    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
+    /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
+    /// <param name="pose">The live part pose, or default when unresolved.</param>
+    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/> and the slot is packed.</returns>
+    public static bool TryPartPose(int avatar, string partId, int rig, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
+        if (!Parts.TryResolve(
+            partId: partId,
+            transformSlot: out var relativeSlot
+        )) {
+            pose = default;
+
+            return false;
+        }
+
+        var transformSlot = (Ranges[avatar].First + relativeSlot);
+
+        if (((uint)transformSlot) >= ((uint)transforms.Length)) {
+            pose = default;
+
+            return false;
+        }
+
+        var packed = transforms[transformSlot];
+        var rigRange = Ranges[((rig < 0)
+            ? avatar
+            : rig)];
+        var leaf = Leaves[RigLeaf(
+            offset: relativeSlot,
+            rigRange: rigRange
+        )];
+
+        pose = new SdfAnchor(
+            Position: (packed.Position + Vector3.Transform(
+                value: leaf.AuthoredOffset,
+                rotation: packed.Orientation
+            )),
+            Orientation: packed.Orientation
+        );
+
+        return true;
+    }
+    /// <summary>Resolves a published part's live pose from a list-backed packed dynamic-transform buffer.</summary>
+    /// <param name="avatar">The avatar index.</param>
+    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
+    /// <param name="rig">The pinned catalog rig, or -1 for the entity's own rig.</param>
+    /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
+    /// <param name="pose">The live part pose, or default when unresolved.</param>
+    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/> and the slot is packed.</returns>
+    public static bool TryPartPose(int avatar, string partId, int rig, IReadOnlyList<DynamicTransform> transforms, out SdfAnchor pose) {
+        ArgumentNullException.ThrowIfNull(transforms);
+
+        if (!Parts.TryResolve(
+            partId: partId,
+            transformSlot: out var relativeSlot
+        )) {
+            pose = default;
+
+            return false;
+        }
+
+        var transformSlot = (Ranges[avatar].First + relativeSlot);
+
+        if (((uint)transformSlot) >= ((uint)transforms.Count)) {
+            pose = default;
+
+            return false;
+        }
+
+        var packed = transforms[transformSlot];
+        var rigRange = Ranges[((rig < 0)
+            ? avatar
+            : rig)];
+        var leaf = Leaves[RigLeaf(
+            offset: relativeSlot,
+            rigRange: rigRange
+        )];
+
+        pose = new SdfAnchor(
+            Position: (packed.Position + Vector3.Transform(
+                value: leaf.AuthoredOffset,
+                rotation: packed.Orientation
+            )),
+            Orientation: packed.Orientation
+        );
+
+        return true;
+    }
+    /// <summary>Resolves a published part id to the avatar's stable packed transform slot.</summary>
+    /// <param name="avatar">The avatar index.</param>
+    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
+    /// <param name="transformSlot">The catalog-relative packed transform slot, or -1 when unresolved.</param>
+    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/>.</returns>
+    public static bool TryPartTransformSlot(int avatar, string partId, out int transformSlot) {
+        if (!Parts.TryResolve(
+            partId: partId,
+            transformSlot: out var relativeSlot
+        )) {
+            transformSlot = -1;
+
+            return false;
+        }
+
+        transformSlot = (Ranges[avatar].First + relativeSlot);
+
+        return true;
+    }
 
     private enum AvatarShape : byte {
         Box,

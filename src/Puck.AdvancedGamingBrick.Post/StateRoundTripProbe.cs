@@ -29,16 +29,16 @@ internal static class StateRoundTripProbe {
     /// <returns><see langword="true"/> when every check passed, paired with a one-line detail.</returns>
     public static (bool Pass, string Detail) Run(byte[] rom, string label, ReadOnlyMemory<byte> bios) {
         var (frameOk, frameDetail, size) = FrameBoundaryCheck(
-            rom: rom,
-            bios: bios
+            bios: bios,
+            rom: rom
         );
         var (midOk, midDetail) = MidFrameCheck(
-            rom: rom,
-            bios: bios
+            bios: bios,
+            rom: rom
         );
         var (doubleOk, doubleDetail) = DoubleRestoreCheck(
-            rom: rom,
-            bios: bios
+            bios: bios,
+            rom: rom
         );
 
         var pass = (frameOk && midOk && doubleOk);
@@ -63,21 +63,21 @@ internal static class StateRoundTripProbe {
         var machine = host.Machine;
 
         RunFrames(
-            machine: machine,
-            frames: WarmupFrames
+            frames: WarmupFrames,
+            machine: machine
         );
 
         var snapshot = machine.Snapshot();
         var baseline = RecordFramesInto(
-            machine: machine,
-            frames: RecordFrames
+            frames: RecordFrames,
+            machine: machine
         );
 
         machine.Restore(snapshot: snapshot);
 
         var replay = RecordFramesInto(
-            machine: machine,
-            frames: RecordFrames
+            frames: RecordFrames,
+            machine: machine
         );
 
         var (ok, detail) = Compare(
@@ -87,7 +87,6 @@ internal static class StateRoundTripProbe {
 
         return (ok, $"{detail} (snapshot at cycle {snapshot.TakenAt})", snapshot.Size);
     }
-
     // Mid-frame snapshot: advance to a mid-scanline point at an instruction boundary, then the same compare.
     private static (bool Ok, string Detail) MidFrameCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
         using var host = PostMachine.Build(
@@ -97,8 +96,8 @@ internal static class StateRoundTripProbe {
         var machine = host.Machine;
 
         RunFrames(
-            machine: machine,
-            frames: WarmupFrames
+            frames: WarmupFrames,
+            machine: machine
         );
 
         // Step whole instructions until the master clock sits roughly half-way through a frame — a mid-scanline
@@ -114,15 +113,15 @@ internal static class StateRoundTripProbe {
         var intoFrame = (atCycle % AdvancedGamingBrickMachine.CyclesPerFrame);
         var snapshot = machine.Snapshot();
         var baseline = RecordFramesInto(
-            machine: machine,
-            frames: RecordFrames
+            frames: RecordFrames,
+            machine: machine
         );
 
         machine.Restore(snapshot: snapshot);
 
         var replay = RecordFramesInto(
-            machine: machine,
-            frames: RecordFrames
+            frames: RecordFrames,
+            machine: machine
         );
 
         var (ok, detail) = Compare(
@@ -132,7 +131,6 @@ internal static class StateRoundTripProbe {
 
         return (ok, $"{detail} (snapshot {intoFrame} cycles into frame)");
     }
-
     // Double-restore invariant: snapshot∘restore reproduces the image, and is idempotent.
     private static (bool Ok, string Detail) DoubleRestoreCheck(byte[] rom, ReadOnlyMemory<byte> bios) {
         using var host = PostMachine.Build(
@@ -142,15 +140,15 @@ internal static class StateRoundTripProbe {
         var machine = host.Machine;
 
         RunFrames(
-            machine: machine,
-            frames: WarmupFrames
+            frames: WarmupFrames,
+            machine: machine
         );
 
         var original = machine.Snapshot();
 
         RunFrames(
-            machine: machine,
-            frames: RecordFrames
+            frames: RecordFrames,
+            machine: machine
         );
 
         machine.Restore(snapshot: original);
@@ -174,7 +172,6 @@ internal static class StateRoundTripProbe {
             _ = machine.RunFrame();
         }
     }
-
     // Per-frame fingerprints: the framebuffer hash and the CPU register+CPSR hash after each of `frames` whole frames.
     private static (ulong Frame, ulong Registers)[] RecordFramesInto(AdvancedGamingBrickMachine machine, int frames) {
         var record = new (ulong Frame, ulong Registers)[frames];

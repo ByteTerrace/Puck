@@ -18,7 +18,6 @@ public enum SdfGalleryExhibit {
     LogSphereRunDoc,
     DriftMonolith,
 }
-
 /// <summary>
 /// The SDF torture museum's state — a cycling curated tour INSIDE the fullscreen SDF-debug mode. <c>sdf.gallery</c>
 /// enters (the first exhibit) then advances; <c>sdf.gallery &lt;name|index&gt;</c> jumps; <c>sdf.gallery off</c> exits
@@ -140,32 +139,26 @@ public sealed class SdfGalleryScene {
             ]
         ),
     ];
+
     private int m_index = -1;
     private int m_revision;
 
     /// <summary>The active exhibit index (0-based), or -1 when the gallery is OFF (the plain debug subject renders).</summary>
     public int Index => m_index;
-
     /// <summary>Whether the gallery is showing an exhibit (the mode renders it in place of the debug subject).</summary>
     public bool Active => (m_index >= 0);
-
     /// <summary>The active exhibit kind — valid only while <see cref="Active"/> (the emitter dispatches on it).</summary>
     public SdfGalleryExhibit Exhibit => Exhibits[m_index].Kind;
-
     /// <summary>The active exhibit's title, or empty when the gallery is off — the overlay plaque card's headline
     /// (the diegetic museum tour's stdout plaque names the same title).</summary>
     public string CurrentTitle => (Active ? Exhibits[m_index].Title : "");
-
     /// <summary>The active exhibit's jump name, or empty when the gallery is off (the plaque card's metadata line).</summary>
     public string CurrentName => (Active ? Exhibits[m_index].Name : "");
-
     /// <summary>The exhibit count (the tour length).</summary>
     public static int Count => Exhibits.Length;
-
     /// <summary>Bumped on every enter/advance/jump/off — the mode folds it into its revision so the frame source
     /// rebuilds the program to the active exhibit (mirrors <see cref="SdfDebugScene.Revision"/>).</summary>
     public int Revision => m_revision;
-
     /// <summary>The active exhibit's fixed SNAP pose (target/yaw/pitch/distance), or null when the gallery is off (the
     /// pad orbit resumes). Snapped — applied verbatim so each exhibit holds its authored framing.</summary>
     public (Vector3 Target, float Yaw, float Pitch, float Distance, bool Sprite)? CameraFrame {
@@ -189,7 +182,6 @@ public sealed class SdfGalleryScene {
 
         return Announce();
     }
-
     /// <summary>Jumps to an exhibit by index (clamped into range). Prints the plaque and bumps the revision.</summary>
     /// <returns>A one-line status.</returns>
     public string Jump(int index) {
@@ -198,7 +190,6 @@ public sealed class SdfGalleryScene {
 
         return Announce();
     }
-
     /// <summary>Jumps to an exhibit by jump name (case-insensitive), or returns usage when the name is unknown (no state
     /// change on a miss). Prints the plaque and bumps the revision on a hit.</summary>
     /// <returns>A one-line status, or usage on an unknown name.</returns>
@@ -214,7 +205,6 @@ public sealed class SdfGalleryScene {
 
         return $"[sdf.gallery: unknown exhibit '{name}' — {Names()}]";
     }
-
     /// <summary>Exits the tour back to the plain debug subject (no-op when already off). Bumps the revision on change.</summary>
     /// <returns>A one-line status.</returns>
     public string Off() {
@@ -227,7 +217,6 @@ public sealed class SdfGalleryScene {
 
         return "[sdf.gallery off — back to the plain debug subject]";
     }
-
     /// <summary>Lists every exhibit (index + jump name + title) for the console.</summary>
     public string List() {
         var lines = new System.Text.StringBuilder(value: "[sdf.gallery — the torture museum]");

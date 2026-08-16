@@ -44,7 +44,7 @@ internal static class Bess {
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: length,
-            value: (uint)payload.Length
+            value: ((uint)payload.Length)
         );
         destination.AddRange(collection: length);
         destination.AddRange(collection: payload.ToArray());
@@ -82,7 +82,7 @@ internal static class Bess {
             return false;
         }
 
-        firstBlockOffset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: footer[..4]);
+        firstBlockOffset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: footer[..4]));
 
         return (
             (firstBlockOffset >= 0) &&
@@ -112,10 +112,10 @@ internal static class Bess {
             return false;
         }
 
-        var length = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: file.Slice(
-            start: (offset + 4),
-            length: 4
-        ));
+        var length = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: file.Slice(
+            length: 4,
+            start: (offset + 4)
+        )));
         var payloadEnd = ((offset + 8) + length);
 
         if (
@@ -127,12 +127,12 @@ internal static class Bess {
         }
 
         tag = Encoding.ASCII.GetString(bytes: file.Slice(
-            start: offset,
-            length: 4
+            length: 4,
+            start: offset
         ));
         payload = file.Slice(
-            start: (offset + 8),
-            length: length
+            length: length,
+            start: (offset + 8)
         );
         next = payloadEnd;
 
@@ -153,8 +153,8 @@ internal static class Bess {
         var bytes = new byte[4];
 
         Encoding.ASCII.GetBytes(
-            chars: tag,
-            bytes: bytes
+            bytes: bytes,
+            chars: tag
         );
         destination.AddRange(collection: bytes);
     }

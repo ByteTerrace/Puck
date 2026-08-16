@@ -4,6 +4,7 @@ using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SdfVm.Debug;
 using Puck.SdfVm.Views;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm.Bench;
 
@@ -22,11 +23,16 @@ internal sealed class DynamicMatrixBenchFrameSource : ISdfFrameSource {
 
     private readonly SdfBenchScene m_bench = new();
     private readonly SdfDebugRenderer m_renderer = new();
+
     private readonly bool m_backendIsDirectX;
+
     private SdfProgram? m_program;
+
     private int m_builtRevision = -1;
+
     private float m_elapsedSeconds;
     private bool m_exitRequested;
+
     // The most recently packed per-frame dynamic transforms — cached so the POST-FINISH frames (returned once
     // SdfBenchScene.Running goes false, while the host drains its exit request) keep supplying however many slots the
     // LAST uploaded program requires. TryPackStormTransforms returns false once Running is false, so re-calling it
@@ -51,7 +57,7 @@ internal sealed class DynamicMatrixBenchFrameSource : ISdfFrameSource {
         _ = m_bench.SetWarmFrames(frames: warmFrames);
         _ = m_bench.SetSampleFrames(frames: sampleFrames);
         _ = ((singleRung is { } rung)
-            ? m_bench.StartDynamicMatrixRung(placement: rung.Placement, moving: rung.Moving, count: rung.Count)
+            ? m_bench.StartDynamicMatrixRung(count: rung.Count, moving: rung.Moving, placement: rung.Placement)
             : m_bench.StartDynamicMatrix());
     }
 
@@ -60,11 +66,9 @@ internal sealed class DynamicMatrixBenchFrameSource : ISdfFrameSource {
     /// source can read back the PREVIOUS produced frame's GPU pass timings and CPU rebuild cost from inside its own
     /// <see cref="CaptureFrame"/> — exactly where <see cref="SdfBenchScene.Advance"/> documents it should be fed.</summary>
     public SdfEngineNode? Node { get; set; }
-
     /// <summary>The host terminal control — set by the composition root once the host is built. Requested to exit the
     /// moment the bench run finishes (<see cref="SdfBenchScene.Running"/> goes false).</summary>
     public ITerminalControl? Terminal { get; set; }
-
     /// <summary>Whether the run has finished and an exit was requested — the composition root's own sanity check that
     /// the process is exiting because the matrix completed, not because the window was closed externally.</summary>
     public bool ExitRequested => m_exitRequested;
@@ -80,10 +84,10 @@ internal sealed class DynamicMatrixBenchFrameSource : ISdfFrameSource {
         Span<double> passMilliseconds = stackalloc double[SdfEngineNode.PassTimingCount];
         var passCount = 0;
         var frameMs = 0.0;
-        var hasTimings = ((Node is { } node) && node.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out passCount, frame: out frameMs));
-        var beam = (hasTimings ? SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "beam") : 0.0);
-        var views = (hasTimings ? SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "views") : 0.0);
-        var composite = (hasTimings ? SdfEngineNode.PassMilliseconds(passMilliseconds: passMilliseconds, passCount: passCount, label: "composite") : 0.0);
+        var hasTimings = ((Node is { } node) && node.TryReadPassTimings(frame: out frameMs, passCount: out passCount, passMilliseconds: passMilliseconds));
+        var beam = (hasTimings ? SdfEngineNode.PassMilliseconds(label: "beam", passCount: passCount, passMilliseconds: passMilliseconds) : 0.0);
+        var views = (hasTimings ? SdfEngineNode.PassMilliseconds(label: "views", passCount: passCount, passMilliseconds: passMilliseconds) : 0.0);
+        var composite = (hasTimings ? SdfEngineNode.PassMilliseconds(label: "composite", passCount: passCount, passMilliseconds: passMilliseconds) : 0.0);
 
         m_bench.Advance(
             hasTimings: hasTimings,
@@ -97,7 +101,7 @@ internal sealed class DynamicMatrixBenchFrameSource : ISdfFrameSource {
             instanceGridRebuildMs: Node?.LastInstanceGridRebuildMilliseconds
         );
 
-        var view = BuildView(width: width, height: height);
+        var view = BuildView(height: height, width: width);
 
         if (!m_bench.Running) {
             // The run finished (SdfBenchScene.Finish already printed the table to stdout). Request the terminal exit
@@ -109,7 +113,7 @@ internal sealed class DynamicMatrixBenchFrameSource : ISdfFrameSource {
                 Terminal?.RequestExit();
             }
 
-            return new SdfFrame(Program: m_program!, ProgramChanged: false, Views: [view], Time: m_elapsedSeconds, WarpAmount: 0f) {
+            return new SdfFrame(Program: m_program!, ProgramChanged: false, Time: m_elapsedSeconds, Views: [view], WarpAmount: 0f) {
                 DynamicTransforms = m_lastTransforms,
             };
         }
@@ -126,22 +130,22 @@ internal sealed class DynamicMatrixBenchFrameSource : ISdfFrameSource {
 
         m_lastTransforms = (m_bench.TryPackStormTransforms(transforms: out var packed) ? packed : []);
 
-        return new SdfFrame(Program: m_program!, ProgramChanged: programChanged, Views: [view], Time: m_elapsedSeconds, WarpAmount: 0f) {
+        return new SdfFrame(Program: m_program!, ProgramChanged: programChanged, Time: m_elapsedSeconds, Views: [view], WarpAmount: 0f) {
             DynamicTransforms = m_lastTransforms,
         };
     }
 
     private SdfViewSnapshot BuildView(uint width, uint height) {
         var pose = (m_bench.CameraFrame ?? (Vector3.Zero, 0f, 0f, 10f, false));
-        var eye = (pose.Target + OrbitRig.Offset(yaw: pose.Yaw, pitch: pose.Pitch, distance: pose.Distance));
+        var eye = (pose.Target + OrbitRig.Offset(distance: pose.Distance, pitch: pose.Pitch, yaw: pose.Yaw));
         var camera = CameraSnapshot.LookAt(
+            fieldOfViewRadians: FieldOfViewRadians,
             position: eye,
             target: pose.Target,
-            fieldOfViewRadians: FieldOfViewRadians,
-            viewportWidth: width,
-            viewportHeight: height
+            viewportHeight: height,
+            viewportWidth: width
         );
 
-        return new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f));
+        return new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f));
     }
 }

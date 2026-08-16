@@ -1,7 +1,7 @@
 using System.Numerics;
 using Puck.Forge.Authoring;
 using Puck.Maths;
-using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -14,38 +14,40 @@ public sealed class WorldAdjacencyCornerContactLawTests {
     [Fact]
     public void DerivedCornerProjectionSuppliesGroundWhenBothDirectWorldsEnd() {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
+
         source = source with {
             Placements = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
             References = [
-                new WorldReference(WorldSafeName.Parse("unused-east-ref"), "unused-east.world.json"),
-                new WorldReference(WorldSafeName.Parse("unused-south-ref"), "unused-south.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "unused-east-ref"), "unused-east.world.json"),
+                new WorldReference(WorldSafeName.Parse(candidate: "unused-south-ref"), "unused-south.world.json"),
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse("unused-east"), "unused-east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse("unused-south"), "unused-south-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "unused-east"), "unused-east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(WorldSafeName.Parse(candidate: "unused-south"), "unused-south-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse("east"), "unused-east", "west", Boundary(yaw: 90f)),
-                new WorldAdjacency(WorldSafeName.Parse("south"), "unused-south", "north", Boundary(yaw: 0f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "east"), "unused-east", "west", Boundary(yaw: 90f)),
+                new WorldAdjacency(WorldSafeName.Parse(candidate: "south"), "unused-south", "north", Boundary(yaw: 0f)),
             ],
         };
         var corner = Fixtures.BuildGradientUpDocument(gradientUp: false);
         using var fixture = Fixtures.FreshServer(definition: source);
+
         fixture.Server.Adjacencies = new CornerSource(definition: corner);
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
-        fixture.Server.Body(index: actor.Index)!.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        fixture.Server.Body(index: actor.Index)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 3f, yawRadians: 0f, z: 0f);
 
-        for (var tick = 0; tick < 480; tick++) {
+        for (var tick = 0; (tick < 480); tick++) {
             fixture.Step();
         }
 
         var body = fixture.Server.Body(index: actor.Index)!;
-        Assert.True(body.Grounded, userMessage: $"the body fell through the derived corner projection; y={body.Position.Y:0.###}");
-        Assert.True(body.Position.Y > 0f, userMessage: $"the projected corner ground never arrested the fall; y={body.Position.Y:0.###}");
-    }
 
+        Assert.True(body.Grounded, userMessage: $"the body fell through the derived corner projection; y={body.Position.Y:0.###}");
+        Assert.True((body.Position.Y > 0f), userMessage: $"the projected corner ground never arrested the fall; y={body.Position.Y:0.###}");
+    }
     /// <summary>The seam strip a crossing body occupies is served for its whole length. Local ground ends at the
     /// authored edge, ownership changes hands at the far side of the deadband, and the ticks in between — plus the
     /// ticks a handoff takes to drain, during which the body keeps walking — must all get vertical support from the
@@ -63,22 +65,21 @@ public sealed class WorldAdjacencyCornerContactLawTests {
 
         using var walk = SeamWalk(local: local);
         var restingY = walk.Settle();
-        var handoff = ((float)(double)threshold);
+        var handoff = ((float)((double)threshold));
 
         // Walk far enough past the handoff plane to cover a transfer that takes many ticks to drain, and no farther
         // than the neighbour's own floor reaches.
         while (walk.Body.Position.Z < (handoff + 4f)) {
             walk.Step(forward: -FixedQ4816.One);
 
-            Assert.True(walk.Body.Position.Y >= (restingY - GroundTolerance),
+            Assert.True((walk.Body.Position.Y >= (restingY - GroundTolerance)),
                 userMessage: $"the body lost ground in the seam strip at z={walk.Body.Position.Z:0.####} (authored edge 0, handoff {handoff:0.####}); y={walk.Body.Position.Y:0.####} resting={restingY:0.####}");
-            Assert.True((walk.Body.Position.Z <= 0f) || walk.Body.Grounded,
+            Assert.True(((walk.Body.Position.Z <= 0f) || walk.Body.Grounded),
                 userMessage: $"the body was airborne over the neighbour's floor at z={walk.Body.Position.Z:0.####}");
         }
 
-        Assert.True(walk.Body.Position.Z > handoff, userMessage: "the walk never reached the handoff plane");
+        Assert.True((walk.Body.Position.Z > handoff), userMessage: "the walk never reached the handoff plane");
     }
-
     /// <summary>Walking off the far rim of the neighbour's own floor still falls: the overlap defers the ground
     /// decision to the neighbour's geometry rather than manufacturing ground everywhere past a boundary.</summary>
     [Fact]
@@ -91,10 +92,9 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             walk.Step(forward: -FixedQ4816.One);
         }
 
-        Assert.True(walk.Body.Position.Z > rim, userMessage: $"the body stopped before the neighbour's far rim at z={walk.Body.Position.Z:0.###}");
-        Assert.True(walk.Body.Position.Y < (restingY - 1f), userMessage: $"the body was still supported past the neighbour's own floor; y={walk.Body.Position.Y:0.###}");
+        Assert.True((walk.Body.Position.Z > rim), userMessage: $"the body stopped before the neighbour's far rim at z={walk.Body.Position.Z:0.###}");
+        Assert.True((walk.Body.Position.Y < (restingY - 1f)), userMessage: $"the body was still supported past the neighbour's own floor; y={walk.Body.Position.Y:0.###}");
     }
-
     /// <summary>Walking off this world's own outer rim, away from any authored boundary, still falls.</summary>
     [Fact]
     public void WalkingOffTheOwnOuterRimStillFalls() {
@@ -106,9 +106,8 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             walk.Step(forward: FixedQ4816.One);
         }
 
-        Assert.True(walk.Body.Position.Y < (restingY - 1f), userMessage: $"the body was supported past its own outer rim; y={walk.Body.Position.Y:0.###} z={walk.Body.Position.Z:0.###}");
+        Assert.True((walk.Body.Position.Y < (restingY - 1f)), userMessage: $"the body was supported past its own outer rim; y={walk.Body.Position.Y:0.###} z={walk.Body.Position.Z:0.###}");
     }
-
     /// <summary>A neighbour that has delivered no compiled field answers no, and the wrapper then leaves the local
     /// field's own decision byte-identical — which is what lets the authored <c>unavailable: closed</c> treatment be
     /// the one thing that decides the outcome, rather than a silently different trajectory.</summary>
@@ -122,7 +121,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         _ = starved.Settle();
         _ = bare.Settle();
 
-        for (var tick = 0; tick < 600; tick++) {
+        for (var tick = 0; (tick < 600); tick++) {
             starved.Step(forward: -FixedQ4816.One);
             bare.Step(forward: -FixedQ4816.One);
 
@@ -131,8 +130,8 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
     }
 
-    private const float FloorHalfExtent = 12f;
     private const float BoxLocalHalfExtent = 0.38f;
+    private const float FloorHalfExtent = 12f;
     private const float GroundTolerance = 0.01f;
 
     private static WorldAdjacencyBoundary Boundary(float yaw) => new(
@@ -142,7 +141,6 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         Width: 8f,
         Height: 8f
     );
-
     private static WorldAdjacencyBoundary SeamBoundary(float outwardYaw) => new(
         Center: Vector3.Zero,
         OutwardYawDegrees: outwardYaw,
@@ -150,7 +148,6 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         Width: (FloorHalfExtent * 2f),
         Height: 16f
     );
-
     // Two flat worlds meeting exactly at the z = 0 plane: the local floor spans z in [-24, 0] and the neighbour's
     // spans [0, 24], so neither has any geometry on the other's side of the seam.
     private static WorldDefinition SeamDocument(float floorCenterZ) {
@@ -189,16 +186,15 @@ public sealed class WorldAdjacencyCornerContactLawTests {
                 new WorldSpawnPoint(Id: "seat-3", Position: new Vector3(x: 4f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-4", Position: new Vector3(x: 6f, y: 1f, z: spawn)),
             ],
-            References = [new WorldReference(WorldSafeName.Parse("beyond-ref"), "beyond.world.json")],
-            Destinations = [new WorldDestination(WorldSafeName.Parse("beyond"), "beyond-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
-            Adjacencies = [new WorldAdjacency(WorldSafeName.Parse("seam"), "beyond", "seam", SeamBoundary(outwardYaw: ((floorCenterZ < 0f) ? 0f : 180f)))],
+            References = [new WorldReference(WorldSafeName.Parse(candidate: "beyond-ref"), "beyond.world.json")],
+            Destinations = [new WorldDestination(WorldSafeName.Parse(candidate: "beyond"), "beyond-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
+            Adjacencies = [new WorldAdjacency(WorldSafeName.Parse(candidate: "seam"), "beyond", "seam", SeamBoundary(outwardYaw: ((floorCenterZ < 0f) ? 0f : 180f)))],
         };
     }
-
     private static SeamWalker SeamWalk(WorldDefinition local, bool neighbourHasField = true, bool attachSource = true) {
         var neighbourDefinition = SeamDocument(floorCenterZ: FloorHalfExtent);
 
-        Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(local: local, neighbour: neighbourDefinition, depth: out var depth, reason: out var depthReason), userMessage: depthReason);
+        Assert.True(WorldAdjacencyPolicy.TryDeriveOverlap(depth: out var depth, local: local, neighbour: neighbourDefinition, reason: out var depthReason), userMessage: depthReason);
         Assert.True(WorldAdjacencyPolicy.TryReciprocalHysteresis(definition: local, depth: out var hysteresis, reason: out var hysteresisReason), userMessage: hysteresisReason);
         Assert.True(WorldAdjacencyPolicy.TryVerticalSettleDeadband(definition: local, depth: out var settle, reason: out var settleReason), userMessage: settleReason);
 
@@ -208,7 +204,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
 
         if (attachSource) {
             fixture.Server.Adjacencies = new SeamSource(
-                neighbour: new SeamNeighbour(definition: neighbourDefinition, counterpartFrame: neighbourFrame, hasField: neighbourHasField),
+                neighbour: new SeamNeighbour(counterpartFrame: neighbourFrame, definition: neighbourDefinition, hasField: neighbourHasField),
                 sourceFrame: sourceFrame,
                 neighbourFrame: neighbourFrame,
                 depth: depth,
@@ -217,7 +213,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
 
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
 
         return new SeamWalker(fixture: fixture, body: fixture.Server.Body(index: actor.Index)!);
     }
@@ -228,9 +224,9 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         /// <summary>Settles the body onto its own floor and returns the resting height every later sample is
         /// compared against. Measured, never a pinned pose.</summary>
         public float Settle() {
-            body.Pose(x: 0f, y: 1f, z: -2f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+            body.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 1f, yawRadians: 0f, z: -2f);
 
-            for (var tick = 0; tick < 240; tick++) {
+            for (var tick = 0; (tick < 240); tick++) {
                 fixture.Step();
             }
 
@@ -238,15 +234,12 @@ public sealed class WorldAdjacencyCornerContactLawTests {
 
             return body.Position.Y;
         }
-
         public void Step(FixedQ4816 forward) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: 0, value: forward));
             fixture.Step();
         }
-
         public void Dispose() => fixture.Dispose();
     }
-
     private sealed class SeamSource : IWorldAdjacencySource {
         private readonly WorldAdjacencyProjection[] m_projections;
 
@@ -254,13 +247,13 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             m_projections = [new WorldAdjacencyProjection(
                 Name: "seam",
                 Neighbour: neighbour,
-                Path: [new WorldAdjacencyFramePair(Neighbour: neighbourFrame, Source: sourceFrame, OverlapDepth: depth, OwnershipThreshold: ownershipThreshold)],
+                Path: [new WorldAdjacencyFramePair(Neighbour: neighbourFrame, OverlapDepth: depth, OwnershipThreshold: ownershipThreshold, Source: sourceFrame)],
                 OverlapDepth: depth,
                 Direct: true
             )];
         }
 
-        public WorldEntityAddress LocalEntityAddress(int index) => new(Authority: "source", Index: index, Generation: 0);
+        public WorldEntityAddress LocalEntityAddress(int index) => new(Authority: "source", Generation: 0, Index: index);
         public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Overlap;
         public void BeginTick(ulong tick) { }
         public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
@@ -269,25 +262,25 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
     }
-
     private sealed class SeamNeighbour : IWorldAdjacencyNeighbour {
         private readonly WorldSolidField? m_field;
 
         public SeamNeighbour(WorldDefinition definition, WorldFaceFrame counterpartFrame, bool hasField) {
             Definition = definition;
             CounterpartFrame = counterpartFrame;
-            Assert.True(WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
+            Assert.True(WorldSolidField.TryBuild(built: out var field, definition: definition, reason: out var reason), userMessage: reason);
             m_field = (hasField ? field : null);
         }
 
         public string Authority => "neighbour";
+        public WorldFaceFrame CounterpartFrame { get; }
         public WorldDefinition Definition { get; }
         public int DefinitionRevision => 0;
-        public WorldFaceFrame CounterpartFrame { get; }
-        public ulong SnapshotTick => 0;
-        public int SnapshotRevision => 0;
-        public float InterpolationAlpha => 0f;
         public int EntityCapacity => 0;
+        public float InterpolationAlpha => 0f;
+        public int SnapshotRevision => 0;
+        public ulong SnapshotTick => 0;
+
         public bool IsEntityActive(int index) => false;
         public WorldEntityAddress EntityAddress(int index) => default;
         public Vector3 PreviousPosition(int index) => Vector3.Zero;
@@ -305,7 +298,6 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             return (m_field is not null);
         }
     }
-
     private sealed class CornerSource : IWorldAdjacencySource {
         private readonly CornerNeighbour m_neighbour;
         private readonly WorldAdjacencyProjection[] m_projections;
@@ -315,6 +307,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             var east = Boundary(yaw: 90f).CompileFrame();
             var south = Boundary(yaw: 0f).CompileFrame();
             var depth = FixedQ4816.One;
+
             m_projections = [new WorldAdjacencyProjection(
                 Name: "corner:east+south",
                 Neighbour: m_neighbour,
@@ -327,7 +320,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             )];
         }
 
-        public WorldEntityAddress LocalEntityAddress(int index) => new(Authority: "source", Index: index, Generation: 0);
+        public WorldEntityAddress LocalEntityAddress(int index) => new(Authority: "source", Generation: 0, Index: index);
         public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Overlap;
         public void BeginTick(ulong tick) { }
         public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
@@ -336,24 +329,24 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
     }
-
     private sealed class CornerNeighbour : IWorldAdjacencyNeighbour {
         private readonly WorldSolidField m_field;
 
         public CornerNeighbour(WorldDefinition definition) {
             Definition = definition;
-            Assert.True(WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
+            Assert.True(WorldSolidField.TryBuild(built: out var field, definition: definition, reason: out var reason), userMessage: reason);
             m_field = field!;
         }
 
         public string Authority => "corner";
+        public WorldFaceFrame CounterpartFrame => Boundary(yaw: 0f).CompileFrame();
         public WorldDefinition Definition { get; }
         public int DefinitionRevision => 0;
-        public WorldFaceFrame CounterpartFrame => Boundary(yaw: 0f).CompileFrame();
-        public ulong SnapshotTick => 0;
-        public int SnapshotRevision => 0;
-        public float InterpolationAlpha => 0f;
         public int EntityCapacity => 0;
+        public float InterpolationAlpha => 0f;
+        public int SnapshotRevision => 0;
+        public ulong SnapshotTick => 0;
+
         public bool IsEntityActive(int index) => false;
         public WorldEntityAddress EntityAddress(int index) => default;
         public Vector3 PreviousPosition(int index) => Vector3.Zero;

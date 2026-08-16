@@ -11,6 +11,7 @@ namespace Puck.AdvancedGamingBrick;
 public sealed partial class ApuWaveChannel {
     // Two 16-byte banks (32 four-bit samples each) = 64 samples total.
     private readonly byte[] m_waveRam = new byte[0x20];
+
     private int m_frequency;
     private int m_frequencyTimer;
     private int m_samplePosition;
@@ -33,7 +34,6 @@ public sealed partial class ApuWaveChannel {
     /// <summary>Reads a wave-RAM byte through the CPU window (0x90–0x9F), which addresses the bank not playing.</summary>
     /// <param name="index">The byte index within the 16-byte window (0–15).</param>
     public byte ReadRam(int index) => m_waveRam[(CpuBankBase + (index & 0xF))];
-
     /// <summary>Writes a wave-RAM byte through the CPU window (0x90–0x9F).</summary>
     /// <param name="index">The byte index within the 16-byte window (0–15).</param>
     /// <param name="value">The byte to store.</param>
@@ -87,7 +87,6 @@ public sealed partial class ApuWaveChannel {
             }
         }
     }
-
     /// <summary>Sets the DAC enable, bank mode, and bank number (NR30); clearing the DAC silences the channel.</summary>
     public void WriteEnable(byte value) {
         m_twoBank = ((value & 0x20) != 0);
@@ -98,19 +97,16 @@ public sealed partial class ApuWaveChannel {
             m_enabled = false;
         }
     }
-
     /// <summary>Reads back NR30 (DAC/bank mode/bank number).</summary>
-    public byte ReadEnable() => (byte)((m_twoBank
+    public byte ReadEnable() => ((byte)((m_twoBank
         ? 0x20
         : 0) | (m_bank << 6) | (m_dacEnabled
         ? 0x80
-        : 0));
-
+        : 0)));
     /// <summary>Reloads the length counter (NR31).</summary>
     public void WriteLength(byte value) {
         m_lengthCounter = (256 - value);
     }
-
     /// <summary>Sets the coarse output volume (NR32): mute / 100% / 50% / 25%, or the AGB 75% override (bit 7).</summary>
     public void WriteVolume(byte value) {
         m_forceVolume75 = ((value & 0x80) != 0);
@@ -121,21 +117,18 @@ public sealed partial class ApuWaveChannel {
             _ => 4, // 0 → mute (a 4-bit sample shifted right by 4 is always 0)
         };
     }
-
     /// <summary>Reads back NR32 (volume field + the 75% override bit).</summary>
     public byte ReadVolume() {
         var field = m_volumeShift switch { 0 => 1, 1 => 2, 2 => 3, _ => 0 };
 
-        return (byte)((field << 5) | (m_forceVolume75
+        return ((byte)((field << 5) | (m_forceVolume75
             ? 0x80
-            : 0));
+            : 0)));
     }
-
     /// <summary>Sets the low byte of the frequency (NR33).</summary>
     public void WriteFrequencyLow(byte value) {
         m_frequency = (m_frequency & 0x700) | value;
     }
-
     /// <summary>Sets the high frequency bits and control (NR34); bit 7 triggers the channel.</summary>
     public void WriteControl(byte value) {
         m_frequency = (m_frequency & 0xFF) | ((value & 0x7) << 8);
@@ -151,12 +144,10 @@ public sealed partial class ApuWaveChannel {
             }
         }
     }
-
     /// <summary>Reads back NR34's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => (byte)(m_lengthEnabled
+    public byte ReadControl() => ((byte)(m_lengthEnabled
         ? 0x40
-        : 0);
-
+        : 0));
     /// <summary>Clocks the length counter (256&#160;Hz), disabling the channel when it reaches zero.</summary>
     public void ClockLength() {
         if (

@@ -28,13 +28,11 @@ public sealed class HeldCapabilityGrants {
         if (
             (grantor is not IHeldCapabilityLeaseSource source) ||
             !source.TryResolveHeldLease(
-                capabilityType: typeof(TCapability),
-                lease: out var parent
-            )
+            capabilityType: typeof(TCapability),
+            lease: out var parent
+        )
         ) {
-            throw new InvalidOperationException(
-                message: $"The grantor does not hold a live {typeof(TCapability).FullName} capability that can be delegated."
-            );
+            throw new InvalidOperationException(message: $"The grantor does not hold a live {typeof(TCapability).FullName} capability that can be delegated.");
         }
 
         var lease = new HeldCapabilityLease(
@@ -46,7 +44,8 @@ public sealed class HeldCapabilityGrants {
 
         return (revocable
             ? lease
-            : null);
+            : null
+        );
     }
 
     internal IReadOnlyDictionary<Type, HeldCapabilityLease> Leases => m_leases;

@@ -48,7 +48,6 @@ internal sealed class LinkInputScript {
 
         return held;
     }
-
     /// <summary>Parses a text script — one <c>frame&#160;BUTTONS</c> keyframe per non-empty, non-<c>#</c>-comment line,
     /// where BUTTONS is <c>None</c> or a <c>+</c>/<c>,</c>-separated list of button names (Right, Left, Up, Down, A, B,
     /// Select, Start; case-insensitive). Used by the interactive explorer; the gate itself hard-codes its frozen
@@ -78,8 +77,8 @@ internal sealed class LinkInputScript {
                 : line[(space + 1)..].Trim());
 
             if (!int.TryParse(
-                s: frameToken,
-                result: out var frame
+                result: out var frame,
+                s: frameToken
             )) {
                 throw new FormatException(message: $"link-script line '{raw}' does not start with a frame number");
             }
@@ -89,7 +88,6 @@ internal sealed class LinkInputScript {
 
         return new LinkInputScript(keyframes: [.. keyframes]);
     }
-
     /// <summary>Parses a button token: <c>None</c> or a <c>+</c>/<c>,</c>-separated list of button names.</summary>
     /// <param name="text">The token to parse.</param>
     /// <returns>The combined button flags.</returns>
@@ -98,8 +96,8 @@ internal sealed class LinkInputScript {
         var buttons = JoypadButtons.None;
 
         foreach (var name in text.Split(
-            separator: ['+', ','],
-            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+            separator: ['+', ',']
         )) {
             buttons |= name.ToLowerInvariant() switch {
                 "none" => JoypadButtons.None,

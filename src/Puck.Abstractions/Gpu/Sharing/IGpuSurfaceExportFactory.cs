@@ -14,7 +14,6 @@ public interface IGpuSurfaceExportFactory {
     /// <param name="height">The height, in pixels.</param>
     /// <returns>A new, owning <see cref="IGpuExportableRenderTarget"/>.</returns>
     IGpuExportableRenderTarget CreateExportableTarget(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height);
-
     /// <summary>Creates an exportable compute storage image backed by shared GPU memory on the given device — the
     /// compute-dispatch counterpart of <see cref="CreateExportableTarget"/>, for handing a compute result to another
     /// backend zero-copy.</summary>

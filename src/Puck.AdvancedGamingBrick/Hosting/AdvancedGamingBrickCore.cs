@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 
 namespace Puck.AdvancedGamingBrick;
 
@@ -37,15 +36,12 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public ulong CyclesPerSecond =>
         MachineCyclesPerSecond;
-
     /// <inheritdoc/>
     public long NativeFrameIndex =>
         (m_machine.Cycles / AdvancedGamingBrickMachine.CyclesPerFrame);
-
     /// <inheritdoc/>
     public long CycleCount =>
         m_machine.Cycles;
-
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_machine.Framebuffer;
@@ -62,37 +58,31 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
             y: input.Tilt.Y
         );
     }
-
     /// <inheritdoc/>
     public void RunCycles(long cycles) =>
         _ = m_machine.RunCycles(cycles: cycles);
-
     /// <inheritdoc/>
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();
         m_machine.SerializeState(writer: m_timeTravelWriter);
         return SnapshotBuffer.CopyWrittenState(
-            writer: m_timeTravelWriter,
-            buffer: ref buffer
+            buffer: ref buffer,
+            writer: m_timeTravelWriter
         );
     }
-
     /// <inheritdoc/>
     public void RestoreState(byte[] buffer, int length) =>
         m_machine.RestoreState(reader: new StateReader(
         buffer: buffer,
-        start: 0,
-        length: length
+        length: length,
+        start: 0
     ));
-
     /// <inheritdoc/>
     public ITimeTravelLookahead<MachinePadState> CreateLookahead() =>
         new AdvancedGamingBrickLookahead(instance: m_instance.Fork());
-
     /// <inheritdoc/>
     public void ConfigureAudio(int sampleRate) =>
         m_machine.Apu.ConfigureOutput(sampleRate: sampleRate);
-
     /// <inheritdoc/>
     public int DrainAudioSamples(Span<short> destination) =>
         m_machine.Apu.DrainSamples(destination: destination);
@@ -121,7 +111,6 @@ internal sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
             Console.Error.WriteLine(value: $"[advanced-machine-host] battery-save flush to '{savePath}' failed ({exception.Message}); retrying on the next flush.");
         }
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         FlushSave(force: true);

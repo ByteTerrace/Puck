@@ -6,7 +6,7 @@ namespace Puck.Abstractions.Gpu;
 /// native resource behind the handles it returns.
 /// </summary>
 public interface IGpuSurfaceImport : IDisposable {
-    /// <summary>Imports a shared handle and returns a native image view handle ready for sampling. Idempotent for a
+    /// <summary>Imports a shared handle and returns native image and image-view handles ready for transfer and sampling. Idempotent for a
     /// repeated handle: both backends cache the opened image, so a producer can pass the same stable handle every
     /// frame without re-importing. The returned handle is owned by this import object — the caller never destroys
     /// it — and stays valid until this object is disposed (on Vulkan, a later call with a different
@@ -16,6 +16,6 @@ public interface IGpuSurfaceImport : IDisposable {
     /// <param name="format">The pixel format.</param>
     /// <param name="width">The width, in pixels.</param>
     /// <param name="height">The height, in pixels.</param>
-    /// <returns>The native image view handle, owned by this import object.</returns>
-    nint Import(IGpuDeviceContext deviceContext, nint sharedHandle, GpuPixelFormat format, uint width, uint height);
+    /// <returns>The native image and image-view handles, owned by this import object.</returns>
+    GpuImportedSurface Import(IGpuDeviceContext deviceContext, nint sharedHandle, GpuPixelFormat format, uint width, uint height);
 }

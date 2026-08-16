@@ -2,7 +2,7 @@ namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// One byte a live device swap writes into work/high RAM to flip a game's cached hardware-detection state onto the
-/// TARGET model's code path — the "boot shim" for a running cartridge. A GB-compatible game reads the console model
+/// TARGET model's code path — the "boot shim" for a running cartridge. An SM83-compatible game reads the console model
 /// once at power-on (register A) and caches the answer; every rendering routine thereafter branches on that cache, so
 /// changing the emulated hardware alone leaves the game running its old code. A per-ROM recipe supplies the small set
 /// of cached bytes to overwrite so the running game re-detects — position, party, and progress in shared RAM are

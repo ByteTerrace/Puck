@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Add a tunable mouse-look sensitivity for one Puck.World seat without changing the other shipped worlds' behavior.",
-      "expected_output": "Reads the views and documents references, searches Puck.World.Data for existing vocabulary before designing anything, authors the value in the document model with a behavior-preserving default, validates it, sweeps every shipped world, binds it through the existing seat-camera path, and adds a read-back in the same change instead of introducing a flag or baked constant.",
+      "expected_output": "Reads the views and documents references, searches Puck.World.Schema for existing vocabulary before designing anything, authors the value in the document model with a behavior-preserving default, validates it, sweeps every shipped world, binds it through the existing seat-camera path, and adds a read-back in the same change instead of introducing a flag or baked constant.",
       "files": []
     },
     {

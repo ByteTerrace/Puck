@@ -9,7 +9,7 @@ namespace Puck.Vulkan;
 public sealed class VulkanGpuVertexBufferFactory(IVulkanVertexBufferFactory vertexBufferFactory) : IGpuVertexBufferFactory {
     /// <inheritdoc/>
     public IGpuVertexBuffer Create(IGpuDeviceContext deviceContext, byte[] vertexData, uint strideBytes) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
 
         return vertexBufferFactory.Create(
             logicalDevice: vkContext.LogicalDevice,

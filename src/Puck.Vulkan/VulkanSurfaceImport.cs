@@ -17,6 +17,7 @@ public sealed class VulkanSurfaceImport : IDisposable {
     private readonly IVulkanExternalMemoryApi m_externalMemoryApi;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
+
     private VulkanCommandResources? m_commandResources;
     private VulkanLogicalDevice? m_device;
     private bool m_disposed;
@@ -27,6 +28,10 @@ public sealed class VulkanSurfaceImport : IDisposable {
     private nint m_memoryHandle;
     private nint m_sharedHandle;
     private uint m_width;
+
+    /// <summary>Gets the native <c>VkImage</c> handle of the current import, or zero before the first successful
+    /// <see cref="Import"/>.</summary>
+    public nint ImageHandle => m_imageHandle;
 
     /// <summary>Initializes a shared-surface importer.</summary>
     /// <param name="externalMemoryApi">The external-memory API used to import the shared allocation.</param>
@@ -130,7 +135,6 @@ public sealed class VulkanSurfaceImport : IDisposable {
 
         return m_imageViewHandle;
     }
-
 
     // The shared image is produced by Direct3D 12 (which has no Vulkan layout). Bring it into the shader-read
     // layout once; the producer's per-frame writes land in the same memory and are ordered by its GPU fence.

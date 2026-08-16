@@ -36,7 +36,6 @@ public sealed class ReplayRateZeroLawTests {
 
         Assert.Equal(expected: 0UL, actual: stepWidth);
     }
-
     [Fact]
     public void RateZeroWithARecordedTick_RefusesByNameRatherThanThrowingUnnamed() {
         // THE DISCRIMINATOR against the pre-fix behavior: a rate-0 tape that somehow recorded a tick is the ONE
@@ -47,7 +46,6 @@ public sealed class ReplayRateZeroLawTests {
 
         Assert.Contains(expectedSubstring: "RateZeroCarriesTicks", actualString: exception.Message);
     }
-
     [Fact]
     public void NonZeroRate_IsUnaffectedAndStillDerivesTheOrdinaryStepWidth() {
         // The control: an ordinary authored rate must resolve EXACTLY as EngineTicks.PerRate always has, ticks
@@ -56,7 +54,6 @@ public sealed class ReplayRateZeroLawTests {
         Assert.Equal(expected: EngineTicks.PerRate(ratePerSecond: 240U), actual: WorldReplaySnapshot.ResolveStepWidth(simulationRate: 240U, recordedTickCount: 5));
     }
 }
-
 /// <summary>
 /// F8's law: a <c>.puckreplay</c> tape's header stamps the RECORD-START rate, never the live rate as it happens to
 /// stand when <c>replay.stop</c> is typed — and a mid-capture rebuild that changes the rate stops the recording
@@ -69,7 +66,7 @@ public sealed class ReplayRateStampLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f8-rate-change-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -117,7 +114,6 @@ public sealed class ReplayRateStampLawTests {
             TryDeleteFile(path: path);
         }
     }
-
     [Fact]
     public void MidCaptureRebuildKeepingTheSameRate_KeepsRecording() {
         // THE CONTROL: a rebuild that does NOT change the rate must never trip the auto-stop — only a genuine rate
@@ -126,7 +122,7 @@ public sealed class ReplayRateStampLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f8-rate-same-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -172,7 +168,6 @@ public sealed class ReplayRateStampLawTests {
 
         return (path, WorldDefinitionFileSource.ComputeContentHash(content: bytes));
     }
-
     private static void TryDeleteFile(string path) {
         try {
             File.Delete(path: path);
@@ -180,7 +175,6 @@ public sealed class ReplayRateStampLawTests {
         }
     }
 }
-
 /// <summary>
 /// F9's law: <c>replay.stop</c> while paused must not drop the pause lever it just armed — the tape's last recorded
 /// fact must be the pause that was live when the recording stopped, never silently discarded because it never
@@ -193,7 +187,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f9-pause-stop-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -222,7 +216,6 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Single(collection: persisted.Ticks);
         Assert.Contains(collection: persisted.Ticks[0].Authority, filter: entry => (entry.GetType().Name == "RateLever"));
     }
-
     [Fact]
     public void StopWithNoPendingLever_CarriesNoRateLeverEntry() {
         // THE CONTROL: an ordinary stop with nothing pending must not manufacture a lever entry out of nowhere.
@@ -230,7 +223,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f9-no-pause-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -249,7 +242,6 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Single(collection: persisted.Ticks);
         Assert.DoesNotContain(collection: persisted.Ticks[0].Authority, filter: entry => (entry.GetType().Name == "RateLever"));
     }
-
     // G5 — THE LEVER FLUSH REORDERS ARBITRARY AUTHORITY. StopRecording used to fold the WHOLE pending bucket — every
     // authority kind and every pending intent, not just the rate lever — onto the last CLOSED tick: a command
     // submitted while paused would replay BEFORE the tick it actually followed, and recording it there would claim
@@ -261,7 +253,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g5-discard-non-lever-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -293,7 +285,6 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Single(collection: persisted.Ticks);
         Assert.DoesNotContain(collection: persisted.Ticks[0].Authority, filter: entry => (entry.GetType().Name == "Grant"));
     }
-
     // G5's OTHER edge: a recording stopped before its very first step has NO closed tick to fold a pending lever
     // onto at all — the tape's own wire shape (WorldReplaySnapshot) carries no header/trailer slot outside the
     // per-tick Ticks list a lever fact could attach to without one, so this case drops the lever BY DESIGN rather
@@ -304,7 +295,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g5-zero-tick-lever-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -323,7 +314,6 @@ public sealed class ReplayPendingLeverFlushLawTests {
         Assert.Empty(collection: persisted.Ticks);
     }
 }
-
 /// <summary>
 /// G6's law: <c>replay.stop</c> resolving the tape's own on-disk path (<see cref="WorldReplayTape.PathFor"/>, which
 /// creates the <c>Replays</c> directory as a side effect) USED TO run BEFORE
@@ -352,7 +342,7 @@ public sealed class ReplayStopFailureLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: []);
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g6-unwritable-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");

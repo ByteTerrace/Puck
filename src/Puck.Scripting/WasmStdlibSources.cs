@@ -11,7 +11,6 @@ namespace Puck.Scripting;
 /// root rather than hard-coding a directory of its own.</param>
 /// <param name="Emit">Produces the complete text of the artifact.</param>
 public readonly record struct WasmStdlibSource(string RelativePath, Func<string> Emit);
-
 /// <summary>
 /// The ordered registry of every generated WASM standard-library artifact. Callers iterate
 /// <see cref="All"/> instead of naming an individual emitter, so adding a future artifact — another ported
@@ -33,16 +32,16 @@ public static class WasmStdlibSources {
     /// <summary>Gets the registry, in the order artifacts are written and reported.</summary>
     public static IReadOnlyList<WasmStdlibSource> All { get; } = [
         new WasmStdlibSource(
-        RelativePath: "wasm/puck-stdlib/src/fixed_generated.rs",
-        Emit: FixedQ4816RustPort.EmitGenerated
-    ),
+            Emit: FixedQ4816RustPort.EmitGenerated,
+            RelativePath: "wasm/puck-stdlib/src/fixed_generated.rs"
+        ),
         new WasmStdlibSource(
-        RelativePath: "wasm/puck-stdlib/src/fixed_vectors.rs",
-        Emit: FixedQ4816RustPort.EmitVectors
-    ),
+            Emit: FixedQ4816RustPort.EmitVectors,
+            RelativePath: "wasm/puck-stdlib/src/fixed_vectors.rs"
+        ),
         new WasmStdlibSource(
-        RelativePath: "wasm/puck-stdlib/src/abi_generated.rs",
-        Emit: AddonAbiRustPort.EmitGenerated
-    ),
+            Emit: AddonAbiRustPort.EmitGenerated,
+            RelativePath: "wasm/puck-stdlib/src/abi_generated.rs"
+        ),
     ];
 }

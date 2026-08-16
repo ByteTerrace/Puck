@@ -17,6 +17,7 @@ namespace Puck.Vulkan.Interop;
 /// </remarks>
 public static unsafe class VulkanProcResolver {
     private static readonly Lock SyncRoot = new();
+
     private static delegate* unmanaged[Cdecl]<nint, byte*, nint> CachedGetDeviceProcAddr;
     private static delegate* unmanaged[Cdecl]<nint, byte*, nint> CachedGetInstanceProcAddr;
 
@@ -40,7 +41,6 @@ public static unsafe class VulkanProcResolver {
             return 0;
         }
     }
-
     /// <summary>Resolves a required instance-level procedure through <c>vkGetInstanceProcAddr</c>.</summary>
     /// <param name="instanceHandle">The native <c>VkInstance</c> handle the procedure is scoped to.</param>
     /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateDevice"u8</c>).</param>
@@ -72,7 +72,6 @@ public static unsafe class VulkanProcResolver {
             );
         }
     }
-
     /// <summary>Resolves a required device-level procedure through <c>vkGetDeviceProcAddr</c>.</summary>
     /// <param name="deviceHandle">The native <c>VkDevice</c> handle the procedure is scoped to.</param>
     /// <param name="functionName">The UTF-8 name of the procedure (for example, <c>"vkCreateBuffer"u8</c>).</param>
@@ -111,7 +110,7 @@ public static unsafe class VulkanProcResolver {
     private static delegate* unmanaged[Cdecl]<nint, byte*, nint> GetDeviceProcAddr() {
         lock (SyncRoot) {
             if (CachedGetDeviceProcAddr is null) {
-                CachedGetDeviceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr");
+                CachedGetDeviceProcAddr = ((delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetDeviceProcAddr"));
             }
 
             return CachedGetDeviceProcAddr;
@@ -120,7 +119,7 @@ public static unsafe class VulkanProcResolver {
     private static delegate* unmanaged[Cdecl]<nint, byte*, nint> GetInstanceProcAddr() {
         lock (SyncRoot) {
             if (CachedGetInstanceProcAddr is null) {
-                CachedGetInstanceProcAddr = (delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr");
+                CachedGetInstanceProcAddr = ((delegate* unmanaged[Cdecl]<nint, byte*, nint>)VulkanNativeLibrary.GetExport(functionName: "vkGetInstanceProcAddr"));
             }
 
             return CachedGetInstanceProcAddr;

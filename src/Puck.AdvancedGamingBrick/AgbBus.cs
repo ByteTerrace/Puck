@@ -23,6 +23,7 @@ public sealed partial class AgbBus : IAgbBus {
     private static readonly int[] Ws1Seq = { 4, 1 };
     private static readonly int[] Ws2Seq = { 8, 1 };
     private static readonly int[] SramWait = { 4, 3, 2, 8 };
+
     private readonly byte[] m_bios;
     private readonly byte[] m_ewram = new byte[0x40000];
     private readonly byte[] m_iwram = new byte[0x8000];
@@ -35,6 +36,7 @@ public sealed partial class AgbBus : IAgbBus {
     private readonly IAgbSerialController m_serial;
     private readonly IAgbPpu m_ppu;
     private readonly IAgbApu m_apu;
+
     private uint m_openBus;
     private uint m_prevFetchHalf;
     private uint m_dmaOpenBus;
@@ -60,12 +62,13 @@ public sealed partial class AgbBus : IAgbBus {
     private int m_ws2N;
     private int m_ws2S;
     private int m_sram;
-
     // Game-pak prefetch buffer (WAITCNT bit 14): an 8-halfword FIFO that loads sequential ROM data in the
     // background during non-ROM accesses, letting future code fetches hit the buffer for 1 cycle instead of the
     // full ROM wait-state. Modelled on the hardware prefetch behavior.
     private bool m_prefetchEnabled;
+
     private readonly ushort[] m_prefetchSlots = new ushort[8];
+
     private uint m_prefetchAddr;
     private uint m_prefetchLoad;
     private int m_prefetchWait;
@@ -118,7 +121,6 @@ public sealed partial class AgbBus : IAgbBus {
 
     /// <summary>Reads an I/O register halfword without advancing the clock — for the I/O-read differential dump.</summary>
     public ushort DebugReadIo(uint offset) => ReadIoHalf(offset: offset);
-
     /// <summary>Reads a halfword without advancing the clock, the prefetch buffer, the open-bus latch, or any
     /// DMA/EEPROM burst state — a side-effect-free peek for the trace/disassembly verbs. Routed the same way as
     /// <see cref="Read16"/>, region by region, but through the pure accessor at each region instead of the
@@ -130,11 +132,10 @@ public sealed partial class AgbBus : IAgbBus {
     /// opcode" value a live out-of-BIOS data read would see, not necessarily the byte at the requested address.</summary>
     /// <param name="address">The 32-bit CPU address to peek; the hardware forces halfword alignment.</param>
     /// <returns>The 16-bit value at <paramref name="address"/>.</returns>
-    public ushort DebugRead16(uint address) => (ushort)DebugReadRegion(
+    public ushort DebugRead16(uint address) => ((ushort)DebugReadRegion(
         address: address & ~1u,
         width: 2
-    );
-
+    ));
     /// <summary>Reads a word without advancing the clock, the prefetch buffer, the open-bus latch, or any
     /// DMA/EEPROM burst state. See <see cref="DebugRead16"/> for the region-by-region side-effect notes.</summary>
     /// <param name="address">The 32-bit CPU address to peek; the hardware forces word alignment.</param>
@@ -143,16 +144,14 @@ public sealed partial class AgbBus : IAgbBus {
         address: address & ~3u,
         width: 4
     );
-
     /// <summary>Reads one byte without advancing the clock, prefetch buffer, open-bus latch, or DMA/EEPROM burst
     /// state — a side-effect-free peek for <c>agb.peek</c>. See <see cref="DebugRead16"/> for the region notes.</summary>
     /// <param name="address">The 32-bit CPU address to peek.</param>
     /// <returns>The 8-bit value at <paramref name="address"/>.</returns>
-    public byte DebugRead8(uint address) => (byte)DebugReadRegion(
+    public byte DebugRead8(uint address) => ((byte)DebugReadRegion(
         address: address,
         width: 1
-    );
-
+    ));
     /// <summary>Forces one byte into the bus WITHOUT advancing the clock — the debug MUTATION behind <c>agb.poke</c>,
     /// outside replay determinism. Routed through the ordinary region write (RAM/palette/VRAM/OAM/save take it; ROM is
     /// read-only), but with no clock charge and no DMA/prefetch bookkeeping.</summary>
@@ -160,22 +159,20 @@ public sealed partial class AgbBus : IAgbBus {
     /// <param name="value">The byte to store.</param>
     public void DebugWrite8(uint address, byte value) => WriteRegion(
         address: address,
-        width: 1,
-        value: value
+        value: value,
+        width: 1
     );
-
     /// <summary>Sets the KEYINPUT register (0x04000130). The value is active-low: bit 0 = A, bit 1 = B,
     /// bit 2 = Select, bit 3 = Start, bits 4–7 = D-pad (R/L/U/D), bits 8–9 = shoulder (R/L).
     /// A set bit means the button is <b>released</b>; a clear bit means <b>pressed</b>.</summary>
     public void SetKeyInput(ushort keys) {
-        m_io[0x130] = (byte)(keys & 0xFF);
-        m_io[0x131] = (byte)((keys >> 8) & 0x03);
+        m_io[0x130] = ((byte)(keys & 0xFF));
+        m_io[0x131] = ((byte)((keys >> 8) & 0x03));
         EvaluateKeypadIrq();
     }
 
     /// <inheritdoc/>
     public bool IrqPending => m_interrupts.Synchronizer;
-
     /// <inheritdoc/>
     public bool Synchronizer => m_interrupts.Synchronizer;
 
@@ -187,7 +184,6 @@ public sealed partial class AgbBus : IAgbBus {
 
         return previous;
     }
-
     /// <inheritdoc/>
     public void EndDmaStall(bool previous) => m_dmaStalling = previous;
 
@@ -250,7 +246,6 @@ public sealed partial class AgbBus : IAgbBus {
             }
         }
     }
-
     // Fires the scheduler events now due (PPU/SIO callbacks), then activates any DMA their flags requested. Called
     // from the per-cycle loop at the exact event cycle, so PPU register state and timed-DMA triggers land on the
     // exact cycle. The activated DMA itself runs via RunPending at the next bus access. No bus access happens here,
@@ -259,7 +254,6 @@ public sealed partial class AgbBus : IAgbBus {
         m_scheduler.FireDue();
         ActivateTimedDmas();
     }
-
     // Brings the APU up to the master clock. The APU is sample-generating, not event-scheduled, so it is advanced in
     // coarse spans (each instruction boundary) by however many cycles elapsed — the cycle-critical FIFO/Direct-Sound
     // path is driven separately by the per-cycle timer overflow, not by this.
@@ -267,7 +261,7 @@ public sealed partial class AgbBus : IAgbBus {
         var delta = (m_scheduler.Now - m_apuClock);
 
         if (delta > 0) {
-            m_apu.Step(cycles: (int)delta);
+            m_apu.Step(cycles: ((int)delta));
             m_apuClock = m_scheduler.Now;
         }
     }
@@ -301,15 +295,15 @@ public sealed partial class AgbBus : IAgbBus {
         // so it must run on this access path (not inside the per-cycle event loop) to avoid re-entering StepClocks.
         if (m_apu.ConsumeFifoARefill()) {
             m_dma.OnFifo(
-                fifo: 0,
-                bus: this
+                bus: this,
+                fifo: 0
             );
         }
 
         if (m_apu.ConsumeFifoBRefill()) {
             m_dma.OnFifo(
-                fifo: 1,
-                bus: this
+                bus: this,
+                fifo: 1
             );
         }
 
@@ -335,97 +329,94 @@ public sealed partial class AgbBus : IAgbBus {
     public byte Read8(uint address, BusAccessType access) {
         RunPendingDma();
         BusTrace(
+            access: access,
+            address: address,
             op: 'R',
-            address: address,
-            width: 1,
-            access: access
+            width: 1
         );
-        var value = (byte)ReadRegion(
+        var value = ((byte)ReadRegion(
+            access: access,
             address: address,
-            width: 1,
-            access: access
-        );
+            width: 1
+        ));
 
         ChargeData(
             address: address,
             cost: AccessCycles(
+                access: access,
                 address: address,
-                width: 1,
-                access: access
+                width: 1
             )
         );
 
         return value;
     }
-
     /// <inheritdoc/>
     public ushort Read16(uint address, BusAccessType access) {
         RunPendingDma();
         BusTrace(
-            op: 'R',
+            access: access,
             address: address,
-            width: 2,
-            access: access
+            op: 'R',
+            width: 2
         );
         // Pass the raw address: ReadRegion aligns for the wide-bus regions, but the 8-bit save bus re-samples the
         // byte at the RAW address across both lanes, so a raw-address caller (LDM, the aligned DMA engine) must
         // reach it unmasked. (Most load instructions pre-align at the CPU, which hardware-aligns those accesses.)
-        var value = (ushort)ReadRegion(
+        var value = ((ushort)ReadRegion(
+            access: access,
             address: address,
-            width: 2,
-            access: access
-        );
+            width: 2
+        ));
 
         ChargeData(
             address: address,
             cost: AccessCycles(
+                access: access,
                 address: address,
-                width: 2,
-                access: access
+                width: 2
             )
         );
 
         return value;
     }
-
     /// <inheritdoc/>
     public uint Read32(uint address, BusAccessType access) {
         RunPendingDma();
         BusTrace(
-            op: 'R',
+            access: access,
             address: address,
-            width: 4,
-            access: access
+            op: 'R',
+            width: 4
         );
         // Raw address for the same reason as Read16: the save region's byte select needs the low bits.
         var value = ReadRegion(
+            access: access,
             address: address,
-            width: 4,
-            access: access
+            width: 4
         );
 
         ChargeData(
             address: address,
             cost: AccessCycles(
+                access: access,
                 address: address,
-                width: 4,
-                access: access
+                width: 4
             )
         );
 
         return value;
     }
-
     /// <inheritdoc/>
     public ushort ReadCode16(uint address, BusAccessType access) {
         RunPendingDma();
         access = ApplyDmaFetchBreak(access: access);
         ConsumeDmaOpenBusFetch();
         BusTrace(
-            op: 'F',
+            access: access,
             address: address,
-            width: 2,
-            access: access
+            op: 'F',
+            width: 2
         );
         m_executingInBios = (address < 0x4000u);
         var region = (address >> 24);
@@ -457,17 +448,17 @@ public sealed partial class AgbBus : IAgbBus {
             );
 
             m_inCodeFetch = true;
-            var miss = (ushort)ReadRegion(
+            var miss = ((ushort)ReadRegion(
+                access: access,
                 address: address & ~1u,
-                width: 2,
-                access: access
-            );
+                width: 2
+            ));
 
             m_inCodeFetch = false;
             var missCost = AccessCycles(
+                access: access,
                 address: address,
-                width: 2,
-                access: access
+                width: 2
             );
 
             // The prefetch unit cannot run ahead while the CPU is using the ROM bus for this fetch, so the miss
@@ -483,17 +474,17 @@ public sealed partial class AgbBus : IAgbBus {
         }
 
         m_inCodeFetch = true;
-        var value = (ushort)ReadRegion(
+        var value = ((ushort)ReadRegion(
+            access: access,
             address: address & ~1u,
-            width: 2,
-            access: access
-        );
+            width: 2
+        ));
 
         m_inCodeFetch = false;
         var cost = AccessCycles(
+            access: access,
             address: address,
-            width: 2,
-            access: access
+            width: 2
         );
 
         if (!DisablePrefetch) {
@@ -507,17 +498,16 @@ public sealed partial class AgbBus : IAgbBus {
         );
         return value;
     }
-
     /// <inheritdoc/>
     public uint ReadCode32(uint address, BusAccessType access) {
         RunPendingDma();
         access = ApplyDmaFetchBreak(access: access);
         ConsumeDmaOpenBusFetch();
         BusTrace(
-            op: 'F',
+            access: access,
             address: address,
-            width: 4,
-            access: access
+            op: 'F',
+            width: 4
         );
         m_executingInBios = (address < 0x4000u);
         var region = (address >> 24);
@@ -537,7 +527,7 @@ public sealed partial class AgbBus : IAgbBus {
                 var (lo, extra1) = PrefetchRead();
                 var (hi, extra2) = PrefetchRead();
                 StepClocks(n: ((1 + extra1) + extra2));
-                var word = (uint)(lo | (hi << 16));
+                var word = ((uint)(lo | (hi << 16)));
 
                 LatchArmFetch(value: word);
                 return word;
@@ -550,16 +540,16 @@ public sealed partial class AgbBus : IAgbBus {
 
             m_inCodeFetch = true;
             var miss = ReadRegion(
+                access: access,
                 address: address & ~3u,
-                width: 4,
-                access: access
+                width: 4
             );
 
             m_inCodeFetch = false;
             var missCost = AccessCycles(
+                access: access,
                 address: address,
-                width: 4,
-                access: access
+                width: 4
             );
 
             // See ReadCode16: a ROM-bus miss advances the clock but does NOT fill the prefetch buffer.
@@ -570,16 +560,16 @@ public sealed partial class AgbBus : IAgbBus {
 
         m_inCodeFetch = true;
         var value = ReadRegion(
+            access: access,
             address: address & ~3u,
-            width: 4,
-            access: access
+            width: 4
         );
 
         m_inCodeFetch = false;
         var cost = AccessCycles(
+            access: access,
             address: address,
-            width: 4,
-            access: access
+            width: 4
         );
 
         if (!DisablePrefetch) {
@@ -590,46 +580,44 @@ public sealed partial class AgbBus : IAgbBus {
         LatchArmFetch(value: value);
         return value;
     }
-
     /// <inheritdoc/>
     public void Write8(uint address, byte value, BusAccessType access) {
         RunPendingDma();
         BusTrace(
-            op: 'W',
+            access: access,
             address: address,
-            width: 1,
-            access: access
+            op: 'W',
+            width: 1
         );
         WriteRegion(
             address: address,
-            width: 1,
-            value: value
+            value: value,
+            width: 1
         );
         ChargeData(
             address: address,
             cost: AccessCycles(
+                access: access,
                 address: address,
-                width: 1,
-                access: access
+                width: 1
             )
         );
     }
-
     /// <inheritdoc/>
     public void Write16(uint address, ushort value, BusAccessType access) {
         RunPendingDma();
         BusTrace(
-            op: 'W',
+            access: access,
             address: address,
-            width: 2,
-            access: access
+            op: 'W',
+            width: 2
         );
 
         // A DMA transfer's write drives the external bus, and that value lingers there past the burst: an
         // undriven CPU read during the consuming instruction or the one after it sees the DMA value, not the
         // prefetch echo (the "DMA-lingering" open bus). A halfword transfer mirrors into both lanes.
         if (m_dmaActive) {
-            m_dmaOpenBus = ((uint)value << 16) | value;
+            m_dmaOpenBus = (((uint)value) << 16) | value;
             m_dmaOpenBusWindow = 2;
         }
 
@@ -637,27 +625,26 @@ public sealed partial class AgbBus : IAgbBus {
         // see the low bit to pick which byte of the value it stores and where.
         WriteRegion(
             address: address,
-            width: 2,
-            value: value
+            value: value,
+            width: 2
         );
         ChargeData(
             address: address,
             cost: AccessCycles(
+                access: access,
                 address: address,
-                width: 2,
-                access: access
+                width: 2
             )
         );
     }
-
     /// <inheritdoc/>
     public void Write32(uint address, uint value, BusAccessType access) {
         RunPendingDma();
         BusTrace(
-            op: 'W',
+            access: access,
             address: address,
-            width: 4,
-            access: access
+            op: 'W',
+            width: 4
         );
 
         // See Write16: the last DMA-transferred word lingers on the bus for the post-burst open-bus window.
@@ -668,19 +655,18 @@ public sealed partial class AgbBus : IAgbBus {
 
         WriteRegion(
             address: address,
-            width: 4,
-            value: value
+            value: value,
+            width: 4
         );
         ChargeData(
             address: address,
             cost: AccessCycles(
+                access: access,
                 address: address,
-                width: 4,
-                access: access
+                width: 4
             )
         );
     }
-
     /// <inheritdoc/>
     public void Idle(int cycles) {
         RunPendingDma();
@@ -793,7 +779,7 @@ public sealed partial class AgbBus : IAgbBus {
         // across every lane, so a raw-address caller (LDM, the unit-aligned DMA engine) reaches it unmasked. A read
         // nothing drives (an unmapped region, BIOS beyond its image) leaves the open-bus latch untouched — the bus
         // simply keeps its previous value.
-        var aligned = address & ~(uint)(width - 1);
+        var aligned = address & ~((uint)(width - 1));
         uint value;
 
         switch (address >> 24) {
@@ -853,9 +839,9 @@ public sealed partial class AgbBus : IAgbBus {
             case 0xC:
             case 0xD:
                 value = ReadRom(
+                    access: access,
                     address: aligned,
-                    width: width,
-                    access: access
+                    width: width
                 );
 
                 break;
@@ -878,7 +864,6 @@ public sealed partial class AgbBus : IAgbBus {
 
         return value;
     }
-
     // The debug-peek counterpart of ReadRegion: same region decode, but every case is the pure accessor (no clock
     // charge, no open-bus latch update, no burst-counter/DMA state). Callers pre-align address to the access width.
     private uint DebugReadRegion(uint address, int width) => (address >> 24) switch {
@@ -921,10 +906,9 @@ public sealed partial class AgbBus : IAgbBus {
         var offset = address & 0xFFFFFFu;
 
         return ((width == 4)
-            ? DebugReadIo(offset: offset) | ((uint)DebugReadIo(offset: (offset + 2u)) << 16)
+            ? DebugReadIo(offset: offset) | (((uint)DebugReadIo(offset: (offset + 2u))) << 16)
             : DebugReadIo(offset: offset));
     }
-
     // Reads the cartridge ROM directly (the pure byte accessor), deliberately bypassing the game-pak burst-page
     // counter that ReadRom's DMA branch mutates — a CPU/debug read never drives that counter on hardware either.
     private uint DebugReadRom(uint address, int width) {
@@ -940,15 +924,15 @@ public sealed partial class AgbBus : IAgbBus {
     private void WriteRegion(uint address, int width, uint value) {
         // Aligned address for the wide-bus regions (the CPU forces 16/32-bit accesses to their natural alignment);
         // the save region below deliberately uses the raw address for its 8-bit byte select.
-        var aligned = address & ~(uint)(width - 1);
+        var aligned = address & ~((uint)(width - 1));
 
         switch (address >> 24) {
             case RegionEwram:
                 AgbArrayAccess.Write(
                     array: m_ewram,
                     index: aligned & 0x3FFFFu,
-                    width: width,
-                    value: value
+                    value: value,
+                    width: width
                 );
 
                 break;
@@ -956,16 +940,16 @@ public sealed partial class AgbBus : IAgbBus {
                 AgbArrayAccess.Write(
                     array: m_iwram,
                     index: aligned & 0x7FFFu,
-                    width: width,
-                    value: value
+                    value: value,
+                    width: width
                 );
 
                 break;
             case RegionIo:
                 WriteIo(
                     address: aligned,
-                    width: width,
-                    value: value
+                    value: value,
+                    width: width
                 );
 
                 break;
@@ -974,8 +958,8 @@ public sealed partial class AgbBus : IAgbBus {
             case RegionOam:
                 m_ppu.WriteVideo(
                     address: aligned,
-                    width: width,
-                    value: value
+                    value: value,
+                    width: width
                 );
 
                 break;
@@ -984,7 +968,7 @@ public sealed partial class AgbBus : IAgbBus {
                 // The save region is an 8-bit bus; wider stores write the byte selected by the low address bits.
                 m_cartridge.WriteSave(
                     address: address & 0xFFFFu,
-                    value: (byte)(value >> (int)((address & (uint)(width - 1)) * 8u))
+                    value: ((byte)(value >> ((int)((address & ((uint)(width - 1))) * 8u))))
                 );
 
                 break;
@@ -1000,7 +984,7 @@ public sealed partial class AgbBus : IAgbBus {
                         m_cartridge.IsEeprom &&
                         ((address >> 24) == 0x0Du)
                     ) {
-                        m_cartridge.WriteEeprom(value: (ushort)value);
+                        m_cartridge.WriteEeprom(value: ((ushort)value));
 
                         break;
                     }
@@ -1016,7 +1000,7 @@ public sealed partial class AgbBus : IAgbBus {
                     ) {
                         m_cartridge.WriteGpio(
                             register: offset & ~1u,
-                            value: (ushort)value
+                            value: ((ushort)value)
                         );
                     } else if (
                         m_cartridge.HasTilt &&
@@ -1024,7 +1008,7 @@ public sealed partial class AgbBus : IAgbBus {
                     ) {
                         m_cartridge.WriteTilt(
                             offset: offset,
-                            value: (byte)value
+                            value: ((byte)value)
                         );
                     }
 
@@ -1035,7 +1019,6 @@ public sealed partial class AgbBus : IAgbBus {
                 break;
         }
     }
-
     // The BIOS ROM is readable only by code executing within it: a code fetch returns the real bytes and latches
     // the fetched opcode word; a data read returns real bytes only while executing in the BIOS, else that opcode —
     // lane-selected by the accessed address, like any undriven 32-bit bus value. Past the image (0x4000–0x01FFFFFF)
@@ -1069,20 +1052,18 @@ public sealed partial class AgbBus : IAgbBus {
             width: width
         )
             : SelectLane(
-            value: m_lastBiosOpcode,
             address: address,
+            value: m_lastBiosOpcode,
             width: width
         ));
     }
-
     // Selects the byte/halfword lane the accessed address sees within a 32-bit bus value — the hardware
     // memory-data-register shift by 8*(addr&3) applied to narrow reads of an undriven or latch-backed word.
     private static uint SelectLane(uint value, uint address, int width) => width switch {
-        1 => (value >> (int)((address & 3u) * 8u)) & 0xFFu,
-        2 => (value >> (int)((address & 2u) * 8u)) & 0xFFFFu,
+        1 => (value >> ((int)((address & 3u) * 8u))) & 0xFFu,
+        2 => (value >> ((int)((address & 2u) * 8u))) & 0xFFFFu,
         _ => value,
     };
-
     // The 32-bit word an undriven read observes: normally the most recent bus value (refreshed by every code
     // fetch via the pipeline latches below); for a two-fetch window after a DMA burst, the last DMA-transferred
     // value — hardware leaves the DMA's final value on the external bus until the pipeline's fetches replace it,
@@ -1090,21 +1071,18 @@ public sealed partial class AgbBus : IAgbBus {
     private uint OpenBusWord() => ((m_dmaOpenBusWindow > 0)
         ? m_dmaOpenBus
         : m_openBus);
-
     // An undriven read, lane-selected to the accessed address.
     private uint OpenBusValue(uint address, int width) => SelectLane(
         value: OpenBusWord(),
         address: address,
         width: width
     );
-
     // Each code fetch consumes one step of the post-DMA lingering window (the pipeline re-drives the bus).
     private void ConsumeDmaOpenBusFetch() {
         if (m_dmaOpenBusWindow > 0) {
             --m_dmaOpenBusWindow;
         }
     }
-
     // A DMA burst that just stole the bus breaks the game-pak prefetch run: the CPU's next opcode fetch is forced
     // non-sequential and the abandoned prefetch run restarts, so a fetch that would have hit the prefetched stream
     // instead pays the non-sequential wait (the dma/force-nseq hardware behavior). No-op on non-ROM code (where N
@@ -1125,7 +1103,6 @@ public sealed partial class AgbBus : IAgbBus {
 
         return BusAccessType.NonSequential;
     }
-
     // The CPU pipeline's fetch drives the external bus, so every code fetch refreshes the open-bus latch. A 32-bit
     // (ARM) fetch latches the fetched word ([$+8] relative to the executing instruction). A 16-bit (THUMB) fetch
     // fills the two halves in a region-dependent way: the 16-bit-bus
@@ -1196,18 +1173,18 @@ public sealed partial class AgbBus : IAgbBus {
                             sequential: true
                         );
 
-                        return (uint)(low | ((uint)high << 16));
+                        return ((uint)(low | (((uint)high) << 16)));
                     }
             }
         }
 
         return width switch {
             1 => m_cartridge.ReadRom(offset: offset),
-            2 => (uint)(m_cartridge.ReadRom(offset: offset) | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8)),
-            _ => (uint)(m_cartridge.ReadRom(offset: offset)
+            2 => ((uint)(m_cartridge.ReadRom(offset: offset) | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8))),
+            _ => ((uint)(m_cartridge.ReadRom(offset: offset)
                 | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8)
                 | (m_cartridge.ReadRom(offset: (offset + 2u)) << 16)
-                | (m_cartridge.ReadRom(offset: (offset + 3u)) << 24)),
+                | (m_cartridge.ReadRom(offset: (offset + 3u)) << 24))),
         };
     }
     private uint ReadSave(uint address, int width) {
@@ -1217,7 +1194,7 @@ public sealed partial class AgbBus : IAgbBus {
 
         return width switch {
             1 => b,
-            2 => (uint)(b * 0x0101u),
+            2 => ((uint)(b * 0x0101u)),
             _ => (b * 0x01010101u),
         };
     }
@@ -1236,7 +1213,7 @@ public sealed partial class AgbBus : IAgbBus {
             ? (byte)ReadIoHalf(offset: offset & ~1u)
             : (byte)(ReadIoHalf(offset: offset & ~1u) >> 8)),
             2 => ReadIoHalf(offset: offset),
-            _ => ReadIoHalf(offset: offset) | ((uint)ReadIoHalf(offset: (offset + 2u)) << 16),
+            _ => ReadIoHalf(offset: offset) | (((uint)ReadIoHalf(offset: (offset + 2u))) << 16),
         };
     }
     private void WriteIo(uint address, int width, uint value) {
@@ -1250,20 +1227,20 @@ public sealed partial class AgbBus : IAgbBus {
         // read-modify-write cannot distinguish from "no change" (HALTCNT reads back 0), so apply bytes directly.
         if (
             (offset <= 0x301u) &&
-            ((offset + (uint)width) > 0x300u)
+            ((offset + ((uint)width)) > 0x300u)
         ) {
             if (
                 (offset <= 0x300u) &&
-                ((offset + (uint)width) > 0x300u)
+                ((offset + ((uint)width)) > 0x300u)
             ) {
-                m_postFlag = (byte)(value >> (int)((0x300u - offset) * 8u));
+                m_postFlag = ((byte)(value >> ((int)((0x300u - offset) * 8u))));
             }
 
             if (
                 (offset <= 0x301u) &&
-                ((offset + (uint)width) > 0x301u)
+                ((offset + ((uint)width)) > 0x301u)
             ) {
-                Halt(stop: (((value >> (int)((0x301u - offset) * 8u)) & 0x80u) != 0u));
+                Halt(stop: (((value >> ((int)((0x301u - offset) * 8u))) & 0x80u) != 0u));
             }
 
             return;
@@ -1283,7 +1260,7 @@ public sealed partial class AgbBus : IAgbBus {
             for (var i = 0; (i < width); ++i) {
                 m_apu.WriteFifoByte(
                     fifo: fifo,
-                    value: (byte)(value >> (8 * i))
+                    value: ((byte)(value >> (8 * i)))
                 );
             }
 
@@ -1309,29 +1286,27 @@ public sealed partial class AgbBus : IAgbBus {
             case 2:
                 WriteIoHalf(
                     offset: offset,
-                    value: (ushort)value
+                    value: ((ushort)value)
                 );
 
                 break;
             default:
                 WriteIoHalf(
                     offset: offset,
-                    value: (ushort)value
+                    value: ((ushort)value)
                 );
                 WriteIoHalf(
                     offset: (offset + 2u),
-                    value: (ushort)(value >> 16)
+                    value: ((ushort)(value >> 16))
                 );
 
                 break;
         }
     }
-
     // The open bus seen when reading a write-only or unmapped I/O register: the most recent value on the CPU bus
     // (the per-fetch pipeline latch, or the post-DMA lingering value), selected to the accessed halfword — the
     // hardware's memory-data-register shifted by `8*(addr&3)`.
-    private ushort OpenBusHalf(uint offset) => (ushort)(OpenBusWord() >> (int)((offset & 2u) * 8u));
-
+    private ushort OpenBusHalf(uint offset) => ((ushort)(OpenBusWord() >> ((int)((offset & 2u) * 8u))));
     // The I/O page is a 16-bit space; reads and writes of other widths decompose into halfword accesses, which
     // are routed to the owning peripheral or fall through to the open bus (NOT the last written value).
     private ushort ReadIoHalf(uint offset) {
@@ -1399,8 +1374,8 @@ public sealed partial class AgbBus : IAgbBus {
 
         switch (offset) {
             case 0x132u: return m_keyControl; // KEYCNT (keypad IRQ control)
-            case 0x130u: return (ushort)((m_io[0x131] << 8) | m_io[0x130]); // KEYINPUT
-            case 0x204u: return (ushort)((m_io[0x205] << 8) | m_io[0x204]);  // WAITCNT (fully readable)
+            case 0x130u: return ((ushort)((m_io[0x131] << 8) | m_io[0x130])); // KEYINPUT
+            case 0x204u: return ((ushort)((m_io[0x205] << 8) | m_io[0x204]));  // WAITCNT (fully readable)
             case 0x300u: return m_postFlag; // POSTFLG (bit 0); HALTCNT (high byte) is write-only, reads 0
         }
 
@@ -1466,9 +1441,9 @@ public sealed partial class AgbBus : IAgbBus {
 
             m_dmaActive = true;
             m_dma.WriteRegister(
+                bus: this,
                 offset: offset,
-                value: value,
-                bus: this
+                value: value
             );
             m_dmaActive = prevDma;
 
@@ -1504,15 +1479,14 @@ public sealed partial class AgbBus : IAgbBus {
                                  // commercial games see the A+B+Start+Select soft-reset combo and reboot forever.
         }
 
-        m_io[offset] = (byte)value;
-        m_io[(offset + 1u)] = (byte)(value >> 8);
+        m_io[offset] = ((byte)value);
+        m_io[(offset + 1u)] = ((byte)(value >> 8));
 
         // WAITCNT (0x04000204) reconfigures the game-pak wait-states.
         if (offset == 0x204u) {
             UpdateWaitControl(value: value);
         }
     }
-
     // The serial subsystem's routed halfwords: SIO 0x120-0x12A, RCNT 0x134, JOY 0x140 and 0x150-0x158. The gaps
     // around them are decoded-but-empty (they read as driven zeros in ReadIoHalf's fallback, not open bus).
     private static bool IsSerialRegister(uint offset) =>
@@ -1520,7 +1494,6 @@ public sealed partial class AgbBus : IAgbBus {
         || (offset == 0x134u)
         || (offset == 0x140u)
         || ((offset >= 0x150u) && (offset < 0x15Au)));
-
     // KEYCNT (0x132): check the keypad IRQ condition against the current KEYINPUT state and request an IRQ if met.
     // OR mode (bit 15 = 0): any selected key is pressed (KEYINPUT bit = 0).
     // AND mode (bit 15 = 1): all selected keys are pressed — vacuously true when 0 keys are selected.
@@ -1529,8 +1502,8 @@ public sealed partial class AgbBus : IAgbBus {
             return;
         }
 
-        var selected = (uint)(m_keyControl & 0x03FFu);
-        var keyInput = (uint)((m_io[0x131] << 8) | m_io[0x130]) & 0x03FFu; // 0 = pressed, 1 = released
+        var selected = ((uint)(m_keyControl & 0x03FFu));
+        var keyInput = ((uint)((m_io[0x131] << 8) | m_io[0x130])) & 0x03FFu; // 0 = pressed, 1 = released
         var pressed = selected & ~keyInput;
 
         bool condition;
@@ -1591,7 +1564,6 @@ public sealed partial class AgbBus : IAgbBus {
     }
 
     private static readonly bool DisablePrefetch = (Environment.GetEnvironmentVariable(variable: "PUCK_NO_PREFETCH") == "1");
-
     // Per-access bus trace, mirroring the reference oracle's bus-trace format, so the two access streams diff
     // directly to localise cycle divergences. Logs the running clock (committed + uncommitted) BEFORE the access.
     private static readonly bool BusTraceEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_BUSTRACE") == "1");
@@ -1643,7 +1615,7 @@ public sealed partial class AgbBus : IAgbBus {
             if ((m_prefetchLoad & 0x1FFFEu) != 0) {
                 var offset = m_prefetchLoad & 0x01FFFFFFu;
 
-                m_prefetchSlots[(m_prefetchLoad >> 1) & 7] = (ushort)(m_cartridge.ReadRom(offset: offset) | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8));
+                m_prefetchSlots[(m_prefetchLoad >> 1) & 7] = ((ushort)(m_cartridge.ReadRom(offset: offset) | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8)));
                 m_prefetchLoad += 2;
             }
 
@@ -1727,8 +1699,8 @@ public sealed partial class AgbBus : IAgbBus {
                     seq: m_ws0S,
                     width: width,
                     access: RomBurstAccess(
-                        address: address,
-                        access: access
+                        access: access,
+                        address: address
                     )
                 );
             case 0xA:
@@ -1738,8 +1710,8 @@ public sealed partial class AgbBus : IAgbBus {
                     seq: m_ws1S,
                     width: width,
                     access: RomBurstAccess(
-                        address: address,
-                        access: access
+                        access: access,
+                        address: address
                     )
                 );
             case 0xC:
@@ -1749,8 +1721,8 @@ public sealed partial class AgbBus : IAgbBus {
                     seq: m_ws2S,
                     width: width,
                     access: RomBurstAccess(
-                        address: address,
-                        access: access
+                        access: access,
+                        address: address
                     )
                 );
             case 0xE:
@@ -1762,7 +1734,6 @@ public sealed partial class AgbBus : IAgbBus {
                 return 1;
         }
     }
-
     // A sequential game-pak access that lands on a 128 KiB page boundary restarts the cartridge's burst (the previous
     // burst ended after the page's last half-word, 0x1FFFE), so it pays a fresh non-sequential first-access cost.
     private static BusAccessType RomBurstAccess(uint address, BusAccessType access) {

@@ -50,7 +50,7 @@ arrive as `puck.synth.v1` documents, flattened once at registration.
 
 ## Tune hosting (`TuneMachineSource.cs`)
 
-Hosts a `puck.audio.v1` tune through the `Puck.Forge` compile chain over a
+Hosts a `puck.audio.v1` tune through the `Puck.World.Forge` compile chain over a
 synchronous emulator core, acquired while referenced and released when
 orphaned.
 

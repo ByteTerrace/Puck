@@ -21,23 +21,22 @@ internal static class RomCatalog {
             var fullPath = Path.Combine(
                 path1: root,
                 path2: relativePath.Replace(
-                    oldChar: '/',
-                    newChar: Path.DirectorySeparatorChar
+                    newChar: Path.DirectorySeparatorChar,
+                    oldChar: '/'
                 )
             );
 
             if (File.Exists(path: fullPath)) {
                 resolved.Add(item: new RomCase(
+                    FullPath: fullPath,
                     Group: group,
-                    Name: name,
-                    FullPath: fullPath
+                    Name: name
                 ));
             }
         }
 
         return resolved;
     }
-
     /// <summary>Enumerates the ARM/Thumb fuzz-corpus ROMs, which by the harness convention live in a sibling
     /// <c>FuzzARM</c> directory beside the conformance-corpus root.</summary>
     /// <param name="root">The resolved conformance-corpus root, or <see langword="null"/> when no corpus is available.</param>
@@ -61,9 +60,9 @@ internal static class RomCatalog {
         ];
 
         return Resolve(
-            root: fuzzArmRoot,
+            cases: known,
             group: "arm-fuzz",
-            cases: known
+            root: fuzzArmRoot
         );
     }
 }

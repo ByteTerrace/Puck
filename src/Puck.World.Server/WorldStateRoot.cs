@@ -9,7 +9,7 @@ namespace Puck.World.Server;
 /// verification runs today, multiple headless hosts on one machine at the destination.
 /// </summary>
 public static class WorldStateRoot {
-    private static string? s_override;
+    private static string? OverridePath;
 
     /// <summary>Applies the boot-time override. Call at most once, before any store or tape is constructed —
     /// state must not split across two roots inside one process lifetime.</summary>
@@ -18,17 +18,17 @@ public static class WorldStateRoot {
     public static void Override(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
-        if (s_override is not null) {
+        if (OverridePath is not null) {
             throw new InvalidOperationException(message: "the world state root was already overridden this boot");
         }
 
-        s_override = Path.GetFullPath(path: path);
+        OverridePath = Path.GetFullPath(path: path);
     }
-
     /// <summary>Resolves the effective state root: the boot override when present, else the per-user default.</summary>
     public static string Resolve() =>
-        s_override ?? Path.Combine(
+        (OverridePath ?? Path.Combine(
             path1: Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData),
             path2: "Puck",
-            path3: "World");
+            path3: "World"
+        ));
 }

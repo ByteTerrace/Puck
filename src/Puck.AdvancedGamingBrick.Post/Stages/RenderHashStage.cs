@@ -7,7 +7,6 @@ internal enum RenderFloorSource {
     /// <summary>Under the commercial-ROM directory (<c>--games</c> / <c>PUCK_AGB_GAMES</c>).</summary>
     Games,
 }
-
 /// <summary>One deterministic render-hash floor: a ROM run for a fixed number of instructions whose framebuffer must hash
 /// to a known value.</summary>
 /// <param name="Source">Which root the ROM lives under.</param>
@@ -19,7 +18,6 @@ internal enum RenderFloorSource {
 /// such a floor skips when only the zeroed BIOS stub is present, since it would otherwise render a blank screen and
 /// mismatch. Simple direct-boot demos (the ppu screens) are BIOS-independent and set this <see langword="false"/>.</param>
 internal sealed record RenderFloor(RenderFloorSource Source, string RelativePath, string Name, long Steps, ulong ExpectedHash, bool NeedsBios);
-
 /// <summary>
 /// Tier-B stage: deterministic render-hash floors. Each floor boots a ROM, runs it for a fixed number of instructions,
 /// and hashes the framebuffer; because the core is fully deterministic, a known-good render must reproduce its FNV-1a
@@ -42,7 +40,6 @@ internal sealed class RenderHashStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "render-hash";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.B;
@@ -66,7 +63,7 @@ internal sealed class RenderHashStage : IPostStage {
             // rather than false-fail; it only reproduces its floor with a real replacement BIOS.
             if (
                 floor.NeedsBios &&
-                (context.BiosImage.Span.IndexOfAnyExcept(value: (byte)0) < 0)
+                (context.BiosImage.Span.IndexOfAnyExcept(value: ((byte)0)) < 0)
             ) {
                 continue;
             }
@@ -74,8 +71,8 @@ internal sealed class RenderHashStage : IPostStage {
             var fullPath = Path.Combine(
                 path1: root,
                 path2: floor.RelativePath.Replace(
-                    oldChar: '/',
-                    newChar: Path.DirectorySeparatorChar
+                    newChar: Path.DirectorySeparatorChar,
+                    oldChar: '/'
                 )
             );
 

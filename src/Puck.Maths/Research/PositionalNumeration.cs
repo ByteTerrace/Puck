@@ -5,43 +5,60 @@ namespace Puck.Maths;
 /// <summary>A canonical most-significant-digit-first positional numeration system.</summary>
 public sealed class PositionalNumerationSystem {
     public PositionalNumerationSystem(int radix = 2) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(radix, 2);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            radix,
+            2
+        );
         Radix = radix;
     }
 
     public int Radix { get; }
 
+    public BigInteger Evaluate(IReadOnlyList<int> digits) {
+        ArgumentNullException.ThrowIfNull(digits);
+        if (digits.Count == 0) {
+            throw new ArgumentException(
+                message: "a representation cannot be empty",
+                paramName: nameof(digits)
+            );
+        }
+        var value = BigInteger.Zero;
+
+        foreach (var digit in digits) {
+            if (
+                (digit < 0) ||
+                (digit >= Radix)
+            ) {
+                throw new ArgumentOutOfRangeException(
+                    nameof(digits),
+                    "a digit lies outside the radix"
+                );
+            }
+            value = ((value * Radix) + digit);
+        }
+        return value;
+    }
     public IReadOnlyList<int> Represent(BigInteger value) {
         ArgumentOutOfRangeException.ThrowIfNegative(value);
         if (value.IsZero) { return [0]; }
         var leastFirst = new List<int>();
 
         while (value > 0) {
-            value = BigInteger.DivRem(dividend: value, divisor: Radix, remainder: out var digit);
-            leastFirst.Add(item: (int)digit);
+            value = BigInteger.DivRem(
+                dividend: value,
+                divisor: Radix,
+                remainder: out var digit
+            );
+            leastFirst.Add(item: ((int)digit));
         }
         leastFirst.Reverse();
         return leastFirst;
     }
-    public BigInteger Evaluate(IReadOnlyList<int> digits) {
-        ArgumentNullException.ThrowIfNull(digits);
-        if (digits.Count == 0) { throw new ArgumentException(message: "a representation cannot be empty", paramName: nameof(digits)); }
-        var value = BigInteger.Zero;
-
-        foreach (var digit in digits) {
-            if ((digit < 0) || (digit >= Radix)) {
-                throw new ArgumentOutOfRangeException(nameof(digits), "a digit lies outside the radix");
-            }
-            value = ((value * Radix) + digit);
-        }
-        return value;
-    }
 }
-
 /// <summary>A deterministic positional-digit acceptor.</summary>
 public sealed class PositionalDigitAutomaton {
-    private readonly int[,] m_transitions;
     private readonly bool[] m_accepting;
+    private readonly int[,] m_transitions;
 
     private PositionalDigitAutomaton(int radix, int[,] transitions, bool[] accepting) {
         Radix = radix;
@@ -53,30 +70,6 @@ public sealed class PositionalDigitAutomaton {
     public int StartState => 0;
     public int StateCount => m_accepting.Length;
 
-    public int Transition(int state, int digit) {
-        if ((state < 0) || (state >= StateCount)) { throw new ArgumentOutOfRangeException(paramName: nameof(state)); }
-        if ((digit < 0) || (digit >= Radix)) { throw new ArgumentOutOfRangeException(paramName: nameof(digit)); }
-        return m_transitions[state, digit];
-    }
-    public bool IsAccepting(int state) => m_accepting[state];
-
-    internal static PositionalDigitAutomaton FromLiteral(int radix, IReadOnlyList<int> word) {
-        ArgumentNullException.ThrowIfNull(word);
-        if (word.Count == 0) { throw new ArgumentException(message: "the literal word cannot be empty", paramName: nameof(word)); }
-        var dead = (word.Count + 1);
-        var transitions = new int[(word.Count + 2), radix];
-
-        for (var state = 0; (state <= dead); ++state) {
-            for (var digit = 0; (digit < radix); ++digit) { transitions[state, digit] = dead; }
-        }
-        for (var index = 0; (index < word.Count); ++index) {
-            transitions[index, word[index]] = (index + 1);
-        }
-        var accepting = new bool[(word.Count + 2)];
-
-        accepting[word.Count] = true;
-        return new PositionalDigitAutomaton(accepting: accepting, radix: radix, transitions: transitions);
-    }
     internal static PositionalDigitAutomaton AtLeast(PositionalNumerationSystem system, BigInteger cutoff) {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentOutOfRangeException.ThrowIfNegative(cutoff);
@@ -119,11 +112,47 @@ public sealed class PositionalDigitAutomaton {
             accepting[(((length + 1) * 3) + comparison)] = true;
         }
         // Start in the equal-comparison state.
-        return RebaseStart(new PositionalDigitAutomaton(accepting: accepting, radix: system.Radix, transitions: transitions), 1);
+        return RebaseStart(
+            new PositionalDigitAutomaton(
+                accepting: accepting,
+                radix: system.Radix,
+                transitions: transitions
+            ),
+            1
+        );
+    }
+    internal static PositionalDigitAutomaton FromLiteral(int radix, IReadOnlyList<int> word) {
+        ArgumentNullException.ThrowIfNull(word);
+        if (word.Count == 0) {
+            throw new ArgumentException(
+                message: "the literal word cannot be empty",
+                paramName: nameof(word)
+            );
+        }
+        var dead = (word.Count + 1);
+        var transitions = new int[(word.Count + 2), radix];
+
+        for (var state = 0; (state <= dead); ++state) {
+            for (var digit = 0; (digit < radix); ++digit) { transitions[state, digit] = dead; }
+        }
+        for (var index = 0; (index < word.Count); ++index) {
+            transitions[index, word[index]] = (index + 1);
+        }
+        var accepting = new bool[(word.Count + 2)];
+
+        accepting[word.Count] = true;
+        return new PositionalDigitAutomaton(
+            accepting: accepting,
+            radix: radix,
+            transitions: transitions
+        );
     }
 
     private static PositionalDigitAutomaton RebaseStart(PositionalDigitAutomaton source, int oldStart) {
-        var map = Enumerable.Range(count: source.StateCount, start: 0).ToArray();
+        var map = Enumerable.Range(
+            count: source.StateCount,
+            start: 0
+        ).ToArray();
 
         (map[0], map[oldStart]) = (map[oldStart], map[0]);
         var inverse = new int[map.Length];
@@ -138,14 +167,30 @@ public sealed class PositionalDigitAutomaton {
                 transitions[inverse[state], digit] = inverse[source.m_transitions[state, digit]];
             }
         }
-        return new PositionalDigitAutomaton(accepting: accepting, radix: source.Radix, transitions: transitions);
+        return new PositionalDigitAutomaton(
+            accepting: accepting,
+            radix: source.Radix,
+            transitions: transitions
+        );
+    }
+
+    public bool IsAccepting(int state) => m_accepting[state];
+    public int Transition(int state, int digit) {
+        if (
+            (state < 0) ||
+            (state >= StateCount)
+        ) { throw new ArgumentOutOfRangeException(paramName: nameof(state)); }
+        if (
+            (digit < 0) ||
+            (digit >= Radix)
+        ) { throw new ArgumentOutOfRangeException(paramName: nameof(digit)); }
+        return m_transitions[state, digit];
     }
 }
-
 /// <summary>A positional DFAO obtained by product-composing finitely many acceptors.</summary>
 public sealed class PositionalOutputAutomaton {
-    private readonly int[,] m_transitions;
     private readonly BigInteger[] m_outputs;
+    private readonly int[,] m_transitions;
 
     private PositionalOutputAutomaton(
         PositionalNumerationSystem system,
@@ -159,19 +204,16 @@ public sealed class PositionalOutputAutomaton {
     public int StateCount => m_outputs.Length;
     public PositionalNumerationSystem System { get; }
 
-    public BigInteger Output(BigInteger value) {
-        var state = 0;
-
-        foreach (var digit in System.Represent(value: value)) { state = m_transitions[state, digit]; }
-        return m_outputs[state];
-    }
     public static PositionalOutputAutomaton Build(
         PositionalNumerationSystem system,
         IReadOnlyList<(PositionalDigitAutomaton Automaton, BigInteger Output)> components) {
         ArgumentNullException.ThrowIfNull(system);
         ArgumentNullException.ThrowIfNull(components);
         if (components.Any(predicate: component => (component.Automaton.Radix != system.Radix))) {
-            throw new ArgumentException(message: "every component must use the output system radix", paramName: nameof(components));
+            throw new ArgumentException(
+                message: "every component must use the output system radix",
+                paramName: nameof(components)
+            );
         }
 
         var states = new List<int[]>();
@@ -188,7 +230,10 @@ public sealed class PositionalOutputAutomaton {
                 var target = new int[components.Count];
 
                 for (var index = 0; (index < components.Count); ++index) {
-                    target[index] = components[index].Automaton.Transition(states[stateIndex][index], digit);
+                    target[index] = components[index].Automaton.Transition(
+                        states[stateIndex][index],
+                        digit
+                    );
                 }
                 row[digit] = AddState(state: target);
             }
@@ -207,18 +252,31 @@ public sealed class PositionalOutputAutomaton {
                 if (!components[index].Automaton.IsAccepting(state: states[stateIndex][index])) { continue; }
                 var candidate = components[index].Output;
 
-                if (!outputs[stateIndex].IsZero && (outputs[stateIndex] != candidate)) {
+                if (
+                    !outputs[stateIndex].IsZero &&
+                    (outputs[stateIndex] != candidate)
+                ) {
                     throw new InvalidOperationException(message: "overlapping positional automata assign conflicting outputs");
                 }
                 outputs[stateIndex] = candidate;
             }
         }
-        return new PositionalOutputAutomaton(outputs: outputs, system: system, transitions: transitions);
+        return new PositionalOutputAutomaton(
+            outputs: outputs,
+            system: system,
+            transitions: transitions
+        );
 
         int AddState(int[] state) {
-            var key = string.Join(separator: ',', values: state);
+            var key = string.Join(
+                separator: ',',
+                values: state
+            );
 
-            if (indexes.TryGetValue(key: key, value: out var existing)) { return existing; }
+            if (indexes.TryGetValue(
+                key: key,
+                value: out var existing
+            )) { return existing; }
             var index = states.Count;
 
             states.Add(item: state);
@@ -226,5 +284,11 @@ public sealed class PositionalOutputAutomaton {
             pending.Enqueue(item: index);
             return index;
         }
+    }
+    public BigInteger Output(BigInteger value) {
+        var state = 0;
+
+        foreach (var digit in System.Represent(value: value)) { state = m_transitions[state, digit]; }
+        return m_outputs[state];
     }
 }

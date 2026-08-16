@@ -13,7 +13,6 @@ internal sealed class RumbleDeviceStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "rumble-device";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

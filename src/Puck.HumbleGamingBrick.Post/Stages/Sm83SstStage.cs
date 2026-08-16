@@ -47,7 +47,6 @@ internal sealed class Sm83SstStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "sst-sm83";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.B;

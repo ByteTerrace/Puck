@@ -3,12 +3,14 @@
 `Puck.World` is the live game: a document-driven, network-shaped local
 multiplayer world of up to 128 simulated players (four local seats plus
 autonomous stand-ins), rendered through the SDF engine and scripted end to end
-over its own console. This project is the composition root of a three-project
+over its own console. This project is the composition root of a multi-project
 split, and this README is the entry point — each sibling owns its own depth:
 
 | Project | Owns |
 |---|---|
-| [`Puck.World.Data`](../Puck.World.Data/README.md) | The `puck.world.def.v1` document model and wire protocol (`Protocol/`) |
+| [`Puck.World.Schema`](../Puck.World.Schema/README.md) | What a world IS — the `puck.world.def.v1` document model |
+| [`Puck.World.Protocol`](../Puck.World.Protocol/README.md) | What a world SAYS — the wire/tape protocol |
+| [`Puck.Networking`](../Puck.Networking/README.md) | The world-agnostic wire substrate — the frame grammar and reader/writer pair |
 | [`Puck.World.Server`](../Puck.World.Server/README.md) | The authoritative runtime: the tick, entity table, grants, addons, owned worlds, storage, replay |
 | `Puck.World` (this project) | The client, presentation, console command modules, assets, and `Program.cs` |
 
@@ -40,7 +42,7 @@ by that remote authority. Listening and connecting remain separate boot modes.
 Both are zero by default (no socket ever opens). A connection
 crosses TWO doors before either side sees a submission: `WorldHelloDoor`
 (protocol-version compatibility) and, once that passes, `WorldAdmissionDoor`
-(`Puck.World.Data`'s `Protocol/WorldAdmissionDoor.cs`) — a challenge-response
+(`Puck.World.Schema`'s `WorldAdmissionDoor.cs`) — a challenge-response
 identity check over `Puck.Attestation`'s signed attestations against the
 world document's own `admission` section. A world authoring no `admission`
 entries admits no remote peer at all, and no traveller from another authority
@@ -175,10 +177,16 @@ Facts a script needs:
   render root, overlays, the audio device, gamepads). `WorldUiCommandModule`
   and `WorldWheelCommandModule` are CORE-registered too but resolve their one
   presentation dependency as OPTIONAL and refuse BY NAME at use headless.
-- `WorldHost.cs` — `AddWorldGpuHost` (windowing, allocator, the selected
-  backend) and its headless twin `AddWorldHeadlessHost` (the launcher's
-  headless terminal + an optional standalone precision waiter); the two are
-  never called together.
+- The windowed and headless host blocks are OS-branched calls into the
+  launcher/platform family rather than a single `WorldHost.cs`:
+  `WorldBootComposition.AddWorldPresentation` calls
+  `Puck.Launcher.Windows.AddWindowsHostedPresentation`/
+  `Puck.Launcher.Linux.AddLinuxHostedPresentation` (windowing, allocator, the
+  selected backend) around its own `AddLauncherTerminal`/`AddBackendSwitcher`
+  calls; `Program.cs`'s headless branch calls
+  `Puck.Launcher.AddLauncherHeadlessTerminal` plus, on Windows, a standalone
+  `Puck.Platform.Windows.AddWindowsPrecisionWaiter`. The two boot shapes are
+  never composed together.
 - `WorldSimulation.cs` / `HeadlessWorldSimulation.cs` — the two boot shapes'
   `IFixedStepSimulation`s. Windowed: per exact tick, the client submits seat
   intents, the shared server-step shell runs, then the client post-step
@@ -255,7 +263,8 @@ Facts a script needs:
 - `WorldAvatarCatalog.cs`, `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs` —
   the deterministic avatar catalog (a distinct animated humanoid rig per
   population slot, authored without RNG state) and rig compilation.
-- `RecordingTap.cs` — the render-tap capture path (below).
+- `WorldRecordingCommandModule.cs` — the recording-session command surface;
+  generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/` — the checked-in worlds (`worlds/*.world.json`, count them there
   rather than here: `play` — the hub and boot default — `dive`, `kart`, `jump`
   — the four-world charter's whole game roster, 2026-08-06 — plus `studio`, a
@@ -263,13 +272,15 @@ Facts a script needs:
   floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout
   composing front/three-quarter/side/back at once; and the `quilt-*` documents,
   test content for adjacency and corner-crossing work, outside the
-  charter roster and not game worlds), the default recording document
+  charter roster and not game worlds — each a `basis` delta over the
+  `quilt-base` template, the worked example of document composition; see
+  `src/Puck.World.Schema/README.md`, "Document composition"), the default recording document
   (`recordings/`), two shipped
   WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world
   today — the `arcade` addon was ported to a world `rules` section and its
   compiled guest deleted before the addons themselves went unmounted), a
   hand-authored SM83 cartridge ROM (`roms/`: `arcade-quest.gbc`, also unhosted
-  today — see `src/Puck.Forge/Games/README.md`), and an example `puck.sdf.v1`
+  today — see `src/Puck.World.Forge/Games/README.md`), and an example `puck.sdf.v1`
   document (`sdf/`).
 
 ## The world as data
@@ -277,7 +288,7 @@ Facts a script needs:
 Everything durable is a document field; everything live is a console verb;
 there is no `PUCK_*` configuration surface for this game. The document
 families, their serialization contract, and the strict-parse rules are
-[`Puck.World.Data`](../Puck.World.Data/README.md)'s to describe. Live editing
+[`Puck.World.Schema`](../Puck.World.Schema/README.md)'s to describe. Live editing
 is one mutation vocabulary — validate the whole candidate, apply at the tick
 boundary, journal, `world.undo` by replay — owned by
 [`Puck.World.Server`](../Puck.World.Server/README.md). `world.save` writes a
@@ -298,14 +309,59 @@ ceiling. Each kit independently authors `bodyContact: "Overlap" | "Solid"`
 silently change with that choice. The deterministic sweep-and-prune
 broadphase's potential, narrowphase, and resolved pair counts are included in
 `world.contacts` so crowd cost and behaviour are observable on the real path.
+The fixed collider vocabulary and generic contact geometry live in
+`Puck.Physics`; World retains document compilation, authority, pair selection,
+grounding/walkability, obstruction reporting, and body-state writes.
+
+World-space creation text uses the document's optional `text` catalog. Every
+font row has a stable name, a path relative to the world document, a
+`sha256-64/...` content pin, explicit Unicode scalar ranges, and an optional
+zero-based `faceIndex` for TTC/OTC collections. `Puck.Text` loads OpenType bytes
+carrying TrueType quadratic or CFF/CFF2 cubic outlines and generates the SDF atlas
+in process; all
+declared fonts are packed into the renderer's single glyph texture. A
+`textRuns[]` row selects a font by name with `font`, or uses `defaultFont` when
+it omits one. There is no absolute-path or ambient system-font fallback.
+`world.text [font]` reads the active catalog. Catalog changes are definition
+topology, so use `world.load`/`world.reload`; both preflight the asset path,
+content pin, rasterization, packing, and every creation run's glyph coverage
+before submitting the rebuild.
+
+Creation text emits as real emboss/engrave SDF geometry on every placement
+shape: a static placement stamps it into the static program, and an animated,
+inhabited, or attached placement carries it through the replay stamp pool — the
+run rides the registration's root transform, so lettering follows the body or
+the placed root while timeline frames move the shapes. A `textRuns[]` row may
+also author `maxWidth` (greedy glyph-level wrapping), `align`
+(`left`/`center`/`right` against the block's widest line), `tracking` (em), and
+`lineSpacing` (a line-height multiplier). Layout is Unicode-scalar based;
+complex shaping and bidirectional script handling are not yet part of the World
+contract.
+
+Dense reading text authors as a screen instead: either a `screens[]` row or a
+placement's creation-face override may use `{ "$type": "text", "lines": [...],
+"font": ..., "columns": ..., "rows": ..., "foreground": "#RRGGBB",
+"background": "#RRGGBB" }`. It renders through the engine's per-cell
+glyph-decal tier off the same packed font atlas — a fixed monospace cell grid
+(capped by the engine's per-screen decal cell budget), sampled at shade time
+with no per-glyph geometry cost, bypassing the CRT image pipeline. Signs,
+plaques, and monitors belong on this tier; short sculptural lettering stays a
+text run.
+
+Federated adjacency and remote-session projection currently deliver a neighbour's
+document but not its pinned font asset bytes. Those projections omit the remote
+creation text until federation gains asset transport and multi-world atlas merging;
+the locally loaded world's text remains fully rendered.
 
 ## The diegetic screens
 
 Three primitives, split cleanly: a **surface** (a `WorldScreen` slab in the
 document), a **source** (the signal it carries — a closed `WorldScreenSource`
-hierarchy: test pattern, booted machine, webcam, compositor capture, or a
-jumbotron view of this same world through a placeable `WorldCamera`), and a
-**route** (whether a player may engage it, and within what radius).
+hierarchy: none, test pattern, booted machine, webcam, compositor capture, a
+jumbotron view of this same world through a placeable `WorldCamera`, the
+diegetic console, an authored QR code, a remote-session projection, or
+decal-rendered reading text), and a **route** (whether a player may engage it,
+and within what radius).
 
 **A booted MACHINE is authoritative server state, not presentation-fed**
 (owner ruling, 2026-08-03). `Puck.World.Server.WorldMachineHost` owns
@@ -333,7 +389,7 @@ capture, or a jumbotron view — bound through `screen.source <index> <kind>`
 present machine first, through the ordered domain) and `screen.eject` (which
 routes to whichever half — machine or
 local producer — actually holds the slot). A QR is the one source with no
-per-frame cost at all: `QrEncoder` (in `Puck.World.Data`) resolves the module
+per-frame cost at all: `QrEncoder` (in `Puck.World.Schema`) resolves the module
 grid and the binder rasterizes it ONCE at author time, then re-uploads the
 unchanged buffer only after a device loss. `world.identify <screenIndex>
 [ecLevel]` (`WorldIdentifyCommandModule`) is a composition over that same live
@@ -361,18 +417,19 @@ inside `WorldServer.Step`; engagement authority rides the grant table's
 
 The world records itself to WebM/Matroska through the recording graph in
 `Puck.Recording` (`puck.recording.v1` — resolved at boot from `--recording`
-or `Assets/recordings/default.recording.json`). The render root is wrapped
-once in a capturing node; arming a session (`capture.start`/`capture.stop`/
-`capture.status`) reads captured frames back to CPU pixels and composites
-capture-only overlays that never appear in the game window. The tap is free
-when idle.
+or `Assets/recordings/default.recording.json`). `capture.start` arms Hosting's
+generic frame-capture controller with a `RecordingSession`; Launcher supplies
+the exact final root surface immediately before presentation, and the active
+presenter reads GPU surfaces back to CPU pixels. The session composites
+capture-only overlays that never appear in the game window. While idle the
+controller performs no readback or sink work.
 
 Playback time is WALL-CLOCK time, not engine time: the shipped document sets
 `clock: "Wall"`, so blocks are stamped from QPC when the frame reaches the
 sink. `Sim` stamps from the engine tick clock instead but forbids audio rows.
-The two diverge under capture — the readback is synchronous per captured
-frame, so the frame rate roughly halves while recording (frames are never
-produced, not dropped; `capture.status` reports the drop count separately).
+The two diverge under capture. GPU readback is synchronous per captured frame
+and can reduce live throughput; `world.fps` exposes that impact while
+`capture.status` reports frames the recording queue dropped separately.
 A `Timecode` overlay reads its own clock and is not rebased, while the
 container timeline is, so the burnt-in number leads playback position by the
 arm-to-first-packet latency.
@@ -437,20 +494,11 @@ adjacency/federation stress run: four ground worlds plus the floating island,
 with human and autonomous handoffs, retained controls and camera routing,
 cross-host contact, derived corner peers, and routed read-backs. Each
 builds what it needs and exits nonzero on a miss. `ordered-domain`,
-`headless-boot`, `lane-present-deletion`, `hud-document`,
-`engagement-dissolution`, and (at the repository root)
-`verification/authority` are QUARANTINED (`authority`/
-`engagement-dissolution` 2026-08-06 — `authority`'s cases 04-06 assumed the
-retired `default` world's `screen:0` and mounted addon, and
-`engagement-dissolution`'s every phase from (b) on assumed the same
-`screen:0` to `screen.insert`/`player.engage` against — no shipped world
-authors a `screens` or `addons` row today; the other four by the earlier
-2026-08-06 owner ruling) — each is a stub that prints a pointer and exits 3;
-see each stub's own header for what it used to prove and the live
-run-the-app recipe (or, for `authority`, the successor:
-`tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests`, not yet in
-`Puck.slnx`, expected to absorb `engagement-dissolution`'s engage/disengage
-phases too) that replaced it.
+`headless-boot`, `lane-present-deletion`, `hud-document`, and
+`engagement-dissolution` have no committed battery at all — validate them by
+running the app. Principal/grant enforcement and engage/disengage authority
+are proved by `AuthorityAdministrationLawTests` and `EngageAuthorityLawTests`
+in `tests/Puck.World.Tests`.
 
 The former World proof suite (proof.cs and its standalone harnesses) was quarantined
 out of the build on 2026-08-02 with the rest of `experimental/`; nothing has

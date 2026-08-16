@@ -11,12 +11,12 @@ namespace Puck.Attestation.Tests;
 /// called. Interoperability tests translate only at the byte boundary.
 /// </summary>
 internal static class IndependentAttestationImplementation {
-    internal const string SigningAlgorithm = "ecdsa-p256-sha256";
-    internal const string SealingAlgorithm = "ecdh-p256-hkdf-sha256-aes256gcm";
+    internal const ulong KeyBindingPayloadKind = 2UL;
     internal const string KeyBindingPurpose = "key-binding";
     internal const ulong OpaquePayloadKind = 1UL;
-    internal const ulong KeyBindingPayloadKind = 2UL;
     internal const ulong SealedPayloadKind = 3UL;
+    internal const string SealingAlgorithm = "ecdh-p256-hkdf-sha256-aes256gcm";
+    internal const string SigningAlgorithm = "ecdsa-p256-sha256";
 
     private static readonly byte[] AeadLabel = "puck.attestation.sealed.aad.v1"u8.ToArray();
     private static readonly byte[] HkdfLabel = "puck.attestation.sealed.v1"u8.ToArray();
@@ -25,27 +25,24 @@ internal static class IndependentAttestationImplementation {
         var fingerprint = Fingerprint(bytes: subjectPublicKeyInfo);
 
         return new IndependentId(
-            Domain: fingerprint,
-            Subject: null,
             Algorithm: SigningAlgorithm,
-            KeyHash: fingerprint
+            Domain: fingerprint,
+            KeyHash: fingerprint,
+            Subject: null
         );
     }
-
     internal static IndependentId IssuingId(string domain, ReadOnlySpan<byte> subjectPublicKeyInfo) => new(
         Domain: domain,
         Subject: null,
         Algorithm: SigningAlgorithm,
         KeyHash: Fingerprint(bytes: subjectPublicKeyInfo)
     );
-
     internal static IndependentId SubjectId(string domain, string subject, ReadOnlySpan<byte> subjectPublicKeyInfo, string algorithm = SigningAlgorithm) => new(
         Domain: domain,
         Subject: subject,
         Algorithm: algorithm,
         KeyHash: Fingerprint(bytes: subjectPublicKeyInfo)
     );
-
     internal static byte[] SignKeyBinding(
         string domain,
         ECDsa signingKey,
@@ -56,22 +53,20 @@ internal static class IndependentAttestationImplementation {
     ) {
         var payload = EncodeKeyBinding(targetId: targetId, targetSubjectPublicKeyInfo: targetSubjectPublicKeyInfo);
         var header = new IndependentHeader(
-            Domain: domain,
-            Subject: null,
             Algorithm: SigningAlgorithm,
-            Purpose: KeyBindingPurpose,
-            NotBefore: notBefore,
-            NotAfter: notAfter,
             Audience: null,
-            Sequence: null
+            Domain: domain,
+            NotAfter: notAfter,
+            NotBefore: notBefore,
+            Purpose: KeyBindingPurpose,
+            Sequence: null,
+            Subject: null
         );
 
-        return SignAttestation(header: header, payloadKind: KeyBindingPayloadKind, payload: payload, signingKey: signingKey);
+        return SignAttestation(header: header, payload: payload, payloadKind: KeyBindingPayloadKind, signingKey: signingKey);
     }
-
     internal static byte[] SignClaim(IndependentHeader header, ulong payloadKind, ReadOnlySpan<byte> payload, ECDsa signingKey) =>
-        SignAttestation(header: header, payloadKind: payloadKind, payload: payload, signingKey: signingKey);
-
+        SignAttestation(header: header, payload: payload, payloadKind: payloadKind, signingKey: signingKey);
     internal static byte[] VerifyChain(
         ReadOnlySpan<byte> rootToIssuingWire,
         ReadOnlySpan<byte> issuingToSubjectWire,
@@ -86,18 +81,18 @@ internal static class IndependentAttestationImplementation {
 
         VerifyAttestation(
             attestation: rootToIssuing,
-            pinnedId: trustedRootId,
-            pinnedSubjectPublicKeyInfo: trustedRootSubjectPublicKeyInfo,
-            expectedPurpose: KeyBindingPurpose,
             expectedPayloadKind: KeyBindingPayloadKind,
-            now: now
+            expectedPurpose: KeyBindingPurpose,
+            now: now,
+            pinnedId: trustedRootId,
+            pinnedSubjectPublicKeyInfo: trustedRootSubjectPublicKeyInfo
         );
 
         var issuing = DecodeKeyBinding(bytes: rootToIssuing.Payload);
 
         RequireSelfCertifying(binding: issuing);
 
-        if ((issuing.TargetId.Subject is not null) || !string.Equals(issuing.TargetId.Domain, trustedRootId.Domain, StringComparison.Ordinal)) {
+        if ((issuing.TargetId.Subject is not null) || !string.Equals(a: issuing.TargetId.Domain, b: trustedRootId.Domain, comparisonType: StringComparison.Ordinal)) {
             throw new CryptographicException(message: "The independently verified issuing binding has the wrong identity shape.");
         }
 
@@ -116,7 +111,7 @@ internal static class IndependentAttestationImplementation {
 
         RequireSelfCertifying(binding: subject);
 
-        if ((subject.TargetId.Subject is null) || !string.Equals(subject.TargetId.Domain, trustedRootId.Domain, StringComparison.Ordinal)) {
+        if ((subject.TargetId.Subject is null) || !string.Equals(a: subject.TargetId.Domain, b: trustedRootId.Domain, comparisonType: StringComparison.Ordinal)) {
             throw new CryptographicException(message: "The independently verified subject binding has the wrong identity shape.");
         }
 
@@ -127,7 +122,7 @@ internal static class IndependentAttestationImplementation {
             pinnedId: subject.TargetId,
             pinnedSubjectPublicKeyInfo: subject.SubjectPublicKeyInfo,
             expectedPurpose: expectedPurpose,
-            expectedPayloadKind: claim.Header.Purpose == KeyBindingPurpose ? KeyBindingPayloadKind : claim.PayloadKind,
+            expectedPayloadKind: ((claim.Header.Purpose == KeyBindingPurpose) ? KeyBindingPayloadKind : claim.PayloadKind),
             now: now
         );
 
@@ -135,41 +130,39 @@ internal static class IndependentAttestationImplementation {
             throw new CryptographicException(message: "The independently verified claim has an invalid payload kind.");
         }
 
-        if (!string.Equals(claim.Header.Audience, expectedAudience, StringComparison.Ordinal)) {
+        if (!string.Equals(a: claim.Header.Audience, b: expectedAudience, comparisonType: StringComparison.Ordinal)) {
             throw new CryptographicException(message: "The independently verified claim has the wrong audience.");
         }
 
-        if (!string.Equals(claim.Header.Subject, subject.TargetId.Subject, StringComparison.Ordinal)) {
+        if (!string.Equals(a: claim.Header.Subject, b: subject.TargetId.Subject, comparisonType: StringComparison.Ordinal)) {
             throw new CryptographicException(message: "The independently verified claim has the wrong subject.");
         }
 
         return claim.Payload;
     }
-
     internal static byte[] EncodeHeader(IndependentHeader header) {
         var writer = NewWriter();
 
         writer.WriteStartArray(definiteLength: 9);
-        WriteHeaderFields(writer: writer, header: header);
+        WriteHeaderFields(header: header, writer: writer);
         writer.WriteEndArray();
 
         return writer.Encode();
     }
-
     internal static byte[] Seal(
         IndependentId recipientId,
         ReadOnlySpan<byte> recipientSubjectPublicKeyInfo,
         ReadOnlySpan<byte> headerBytes,
         ReadOnlySpan<byte> plaintext
     ) {
-        if (!string.Equals(Fingerprint(bytes: recipientSubjectPublicKeyInfo), recipientId.KeyHash, StringComparison.Ordinal)) {
+        if (!string.Equals(a: Fingerprint(bytes: recipientSubjectPublicKeyInfo), b: recipientId.KeyHash, comparisonType: StringComparison.Ordinal)) {
             throw new CryptographicException(message: "The independent sealing recipient id does not identify its public key.");
         }
 
         using var recipient = ECDiffieHellman.Create();
         using var ephemeral = ECDiffieHellman.Create(curve: ECCurve.NamedCurves.nistP256);
 
-        recipient.ImportSubjectPublicKeyInfo(source: recipientSubjectPublicKeyInfo, bytesRead: out var recipientBytesRead);
+        recipient.ImportSubjectPublicKeyInfo(bytesRead: out var recipientBytesRead, source: recipientSubjectPublicKeyInfo);
         RequireEntireSubjectPublicKeyInfo(bytesRead: recipientBytesRead, encodedLength: recipientSubjectPublicKeyInfo.Length);
 
         var context = EncodeRecipientContext(recipientId: recipientId);
@@ -190,7 +183,7 @@ internal static class IndependentAttestationImplementation {
                 );
             }
 
-            return EncodeSealedPayload(new IndependentSealedPayload(
+            return EncodeSealedPayload(payload: new IndependentSealedPayload(
                 RecipientId: recipientId,
                 EphemeralSubjectPublicKeyInfo: ephemeral.ExportSubjectPublicKeyInfo(),
                 Nonce: nonce,
@@ -201,11 +194,10 @@ internal static class IndependentAttestationImplementation {
             CryptographicOperations.ZeroMemory(buffer: key);
         }
     }
-
     internal static byte[] Unseal(ReadOnlySpan<byte> sealedPayloadBytes, ECDiffieHellman recipientPrivateKey, ReadOnlySpan<byte> headerBytes) {
         var payload = DecodeSealedPayload(bytes: sealedPayloadBytes);
 
-        if (!string.Equals(Fingerprint(bytes: recipientPrivateKey.ExportSubjectPublicKeyInfo()), payload.RecipientId.KeyHash, StringComparison.Ordinal)) {
+        if (!string.Equals(a: Fingerprint(bytes: recipientPrivateKey.ExportSubjectPublicKeyInfo()), b: payload.RecipientId.KeyHash, comparisonType: StringComparison.Ordinal)) {
             throw new CryptographicException(message: "The independent unsealer received the wrong private key.");
         }
 
@@ -237,7 +229,7 @@ internal static class IndependentAttestationImplementation {
     }
 
     private static byte[] SignAttestation(IndependentHeader header, ulong payloadKind, ReadOnlySpan<byte> payload, ECDsa signingKey) {
-        var signedPortion = EncodeSignedPortion(header: header, payloadKind: payloadKind, payload: payload);
+        var signedPortion = EncodeSignedPortion(header: header, payload: payload, payloadKind: payloadKind);
         var signature = signingKey.SignData(
             data: signedPortion,
             hashAlgorithm: HashAlgorithmName.SHA256,
@@ -252,19 +244,17 @@ internal static class IndependentAttestationImplementation {
 
         return writer.Encode();
     }
-
     private static byte[] EncodeSignedPortion(IndependentHeader header, ulong payloadKind, ReadOnlySpan<byte> payload) {
         var writer = NewWriter();
 
         writer.WriteStartArray(definiteLength: 11);
-        WriteHeaderFields(writer: writer, header: header);
+        WriteHeaderFields(header: header, writer: writer);
         writer.WriteUInt64(value: payloadKind);
         writer.WriteByteString(value: payload);
         writer.WriteEndArray();
 
         return writer.Encode();
     }
-
     private static void WriteHeaderFields(CborWriter writer, IndependentHeader header) {
         writer.WriteUInt64(value: 1UL);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
@@ -276,7 +266,6 @@ internal static class IndependentAttestationImplementation {
         WriteOptionalText(writer: writer, value: header.Audience);
         WriteOptionalUInt(writer: writer, value: header.Sequence);
     }
-
     private static byte[] EncodeKeyBinding(IndependentId targetId, ReadOnlySpan<byte> targetSubjectPublicKeyInfo) {
         var writer = NewWriter();
 
@@ -290,11 +279,10 @@ internal static class IndependentAttestationImplementation {
 
         return writer.Encode();
     }
-
     private static IndependentAttestation DecodeAttestation(ReadOnlySpan<byte> wire) {
         var outer = NewReader(bytes: wire);
 
-        ExpectArray(reader: outer, length: 2);
+        ExpectArray(length: 2, reader: outer);
 
         var signedPortion = outer.ReadByteString();
         var signature = outer.ReadByteString();
@@ -304,7 +292,7 @@ internal static class IndependentAttestationImplementation {
 
         var reader = NewReader(bytes: signedPortion);
 
-        ExpectArray(reader: reader, length: 11);
+        ExpectArray(length: 11, reader: reader);
 
         if (reader.ReadUInt64() != 1UL) {
             throw new FormatException(message: "The independent decoder only accepts v1.");
@@ -328,17 +316,16 @@ internal static class IndependentAttestationImplementation {
 
         return new IndependentAttestation(
             Header: header,
-            PayloadKind: payloadKind,
             Payload: payload,
-            SignedPortion: signedPortion,
-            Signature: signature
+            PayloadKind: payloadKind,
+            Signature: signature,
+            SignedPortion: signedPortion
         );
     }
-
     private static IndependentBinding DecodeKeyBinding(ReadOnlySpan<byte> bytes) {
         var reader = NewReader(bytes: bytes);
 
-        ExpectArray(reader: reader, length: 5);
+        ExpectArray(length: 5, reader: reader);
 
         var id = new IndependentId(
             Domain: ReadFingerprint(reader: reader),
@@ -351,9 +338,8 @@ internal static class IndependentAttestationImplementation {
         reader.ReadEndArray();
         RequireConsumed(reader: reader);
 
-        return new IndependentBinding(TargetId: id, SubjectPublicKeyInfo: spki);
+        return new IndependentBinding(SubjectPublicKeyInfo: spki, TargetId: id);
     }
-
     private static void VerifyAttestation(
         IndependentAttestation attestation,
         IndependentId pinnedId,
@@ -363,21 +349,21 @@ internal static class IndependentAttestationImplementation {
         long now
     ) {
         if (
-            !string.Equals(attestation.Header.Domain, pinnedId.Domain, StringComparison.Ordinal) ||
-            !string.Equals(attestation.Header.Subject, pinnedId.Subject, StringComparison.Ordinal) ||
-            !string.Equals(attestation.Header.Algorithm, pinnedId.Algorithm, StringComparison.Ordinal) ||
-            !string.Equals(attestation.Header.Purpose, expectedPurpose, StringComparison.Ordinal) ||
+            !string.Equals(a: attestation.Header.Domain, b: pinnedId.Domain, comparisonType: StringComparison.Ordinal) ||
+            !string.Equals(a: attestation.Header.Subject, b: pinnedId.Subject, comparisonType: StringComparison.Ordinal) ||
+            !string.Equals(a: attestation.Header.Algorithm, b: pinnedId.Algorithm, comparisonType: StringComparison.Ordinal) ||
+            !string.Equals(a: attestation.Header.Purpose, b: expectedPurpose, comparisonType: StringComparison.Ordinal) ||
             (attestation.PayloadKind != expectedPayloadKind) ||
             (now < attestation.Header.NotBefore) ||
             (now > attestation.Header.NotAfter) ||
-            !string.Equals(Fingerprint(bytes: pinnedSubjectPublicKeyInfo), pinnedId.KeyHash, StringComparison.Ordinal)
+            !string.Equals(a: Fingerprint(bytes: pinnedSubjectPublicKeyInfo), b: pinnedId.KeyHash, comparisonType: StringComparison.Ordinal)
         ) {
             throw new CryptographicException(message: "An independent attestation policy check failed.");
         }
 
         using var verifier = ECDsa.Create();
 
-        verifier.ImportSubjectPublicKeyInfo(source: pinnedSubjectPublicKeyInfo, bytesRead: out var verifierBytesRead);
+        verifier.ImportSubjectPublicKeyInfo(bytesRead: out var verifierBytesRead, source: pinnedSubjectPublicKeyInfo);
         RequireEntireSubjectPublicKeyInfo(bytesRead: verifierBytesRead, encodedLength: pinnedSubjectPublicKeyInfo.Length);
 
         if (!verifier.VerifyData(
@@ -389,19 +375,16 @@ internal static class IndependentAttestationImplementation {
             throw new CryptographicException(message: "An independent attestation signature check failed.");
         }
     }
-
     private static void RequireSelfCertifying(IndependentBinding binding) {
-        if (!string.Equals(Fingerprint(bytes: binding.SubjectPublicKeyInfo), binding.TargetId.KeyHash, StringComparison.Ordinal)) {
+        if (!string.Equals(a: Fingerprint(bytes: binding.SubjectPublicKeyInfo), b: binding.TargetId.KeyHash, comparisonType: StringComparison.Ordinal)) {
             throw new CryptographicException(message: "An independent attestation binding is not self-certifying.");
         }
     }
-
     private static void RequireEntireSubjectPublicKeyInfo(int bytesRead, int encodedLength) {
         if (bytesRead != encodedLength) {
-            throw new CryptographicException(message: $"The independent implementation found {encodedLength - bytesRead} trailing byte(s) after a SubjectPublicKeyInfo value.");
+            throw new CryptographicException(message: $"The independent implementation found {(encodedLength - bytesRead)} trailing byte(s) after a SubjectPublicKeyInfo value.");
         }
     }
-
     private static byte[] EncodeSealedPayload(IndependentSealedPayload payload) {
         var writer = NewWriter();
 
@@ -418,11 +401,10 @@ internal static class IndependentAttestationImplementation {
 
         return writer.Encode();
     }
-
     private static IndependentSealedPayload DecodeSealedPayload(ReadOnlySpan<byte> bytes) {
         var reader = NewReader(bytes: bytes);
 
-        ExpectArray(reader: reader, length: 8);
+        ExpectArray(length: 8, reader: reader);
 
         var id = new IndependentId(
             Domain: ReadFingerprint(reader: reader),
@@ -438,13 +420,12 @@ internal static class IndependentAttestationImplementation {
         reader.ReadEndArray();
         RequireConsumed(reader: reader);
 
-        if (!string.Equals(id.Algorithm, SealingAlgorithm, StringComparison.Ordinal) || (nonce.Length != 12) || (tag.Length != 16)) {
+        if (!string.Equals(a: id.Algorithm, b: SealingAlgorithm, comparisonType: StringComparison.Ordinal) || (nonce.Length != 12) || (tag.Length != 16)) {
             throw new FormatException(message: "The independent sealed payload has the wrong algorithm, nonce, or tag shape.");
         }
 
-        return new IndependentSealedPayload(id, ephemeral, nonce, tag, ciphertext);
+        return new IndependentSealedPayload(Ciphertext: ciphertext, EphemeralSubjectPublicKeyInfo: ephemeral, Nonce: nonce, RecipientId: id, Tag: tag);
     }
-
     private static byte[] DeriveKey(ECDiffieHellman privateKey, ECDiffieHellmanPublicKey publicKey, ReadOnlySpan<byte> recipientContext) {
         var secret = privateKey.DeriveRawSecretAgreement(otherPartyPublicKey: publicKey);
 
@@ -465,18 +446,17 @@ internal static class IndependentAttestationImplementation {
             CryptographicOperations.ZeroMemory(buffer: secret);
         }
     }
-
     private static byte[] EncodeRecipientContext(IndependentId recipientId) {
         var domain = Convert.FromHexString(s: recipientId.Domain);
-        var subject = recipientId.Subject is null ? null : Encoding.UTF8.GetBytes(s: recipientId.Subject);
+        var subject = ((recipientId.Subject is null) ? null : Encoding.UTF8.GetBytes(s: recipientId.Subject));
         var algorithm = Encoding.UTF8.GetBytes(s: recipientId.Algorithm);
         var keyHash = Convert.FromHexString(s: recipientId.KeyHash);
-        var result = new byte[domain.Length + 1 + (subject is null ? 0 : sizeof(uint) + subject.Length) + sizeof(uint) + algorithm.Length + keyHash.Length];
+        var result = new byte[(((((domain.Length + 1) + ((subject is null) ? 0 : (sizeof(uint) + subject.Length))) + sizeof(uint)) + algorithm.Length) + keyHash.Length)];
         var offset = 0;
 
         domain.CopyTo(array: result, index: offset);
         offset += domain.Length;
-        result[offset++] = subject is null ? (byte)0 : (byte)1;
+        result[offset++] = ((subject is null) ? (byte)0 : (byte)1);
 
         if (subject is not null) {
             BinaryPrimitives.WriteUInt32BigEndian(destination: result.AsSpan(start: offset), value: checked((uint)subject.Length));
@@ -493,9 +473,8 @@ internal static class IndependentAttestationImplementation {
 
         return result;
     }
-
     private static byte[] BindAssociatedData(ReadOnlySpan<byte> headerBytes, ReadOnlySpan<byte> recipientContext) {
-        var result = new byte[AeadLabel.Length + sizeof(ulong) + headerBytes.Length + recipientContext.Length];
+        var result = new byte[(((AeadLabel.Length + sizeof(ulong)) + headerBytes.Length) + recipientContext.Length)];
         var offset = 0;
 
         AeadLabel.CopyTo(array: result, index: offset);
@@ -508,25 +487,19 @@ internal static class IndependentAttestationImplementation {
 
         return result;
     }
-
     private static string Fingerprint(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(bytes: SHA256.HashData(source: bytes));
-
     private static CborWriter NewWriter() => new(conformanceMode: CborConformanceMode.Strict);
-
     private static CborReader NewReader(ReadOnlySpan<byte> bytes) => new(data: bytes.ToArray(), conformanceMode: CborConformanceMode.Strict);
-
     private static void ExpectArray(CborReader reader, int length) {
         if (reader.ReadStartArray() != length) {
             throw new FormatException(message: $"The independent decoder expected a {length}-element array.");
         }
     }
-
     private static void RequireConsumed(CborReader reader) {
         if (reader.BytesRemaining != 0) {
             throw new FormatException(message: "The independent decoder found trailing bytes.");
         }
     }
-
     private static void WriteOptionalText(CborWriter writer, string? value) {
         if (value is null) {
             writer.WriteNull();
@@ -534,7 +507,6 @@ internal static class IndependentAttestationImplementation {
             writer.WriteTextString(value: value);
         }
     }
-
     private static string? ReadOptionalText(CborReader reader) {
         if (reader.PeekState() != CborReaderState.Null) {
             return reader.ReadTextString();
@@ -544,7 +516,6 @@ internal static class IndependentAttestationImplementation {
 
         return null;
     }
-
     private static void WriteOptionalUInt(CborWriter writer, ulong? value) {
         if (value is null) {
             writer.WriteNull();
@@ -552,7 +523,6 @@ internal static class IndependentAttestationImplementation {
             writer.WriteUInt64(value: value.Value);
         }
     }
-
     private static ulong? ReadOptionalUInt(CborReader reader) {
         if (reader.PeekState() != CborReaderState.Null) {
             return reader.ReadUInt64();
@@ -562,7 +532,6 @@ internal static class IndependentAttestationImplementation {
 
         return null;
     }
-
     private static string ReadFingerprint(CborReader reader) {
         var bytes = reader.ReadByteString();
 
@@ -573,9 +542,7 @@ internal static class IndependentAttestationImplementation {
         return Convert.ToHexStringLower(bytes: bytes);
     }
 }
-
 internal sealed record IndependentId(string Domain, string? Subject, string Algorithm, string KeyHash);
-
 internal sealed record IndependentHeader(
     string Domain,
     string? Subject,
@@ -586,7 +553,6 @@ internal sealed record IndependentHeader(
     string? Audience,
     ulong? Sequence
 );
-
 internal sealed record IndependentAttestation(
     IndependentHeader Header,
     ulong PayloadKind,
@@ -594,9 +560,7 @@ internal sealed record IndependentAttestation(
     byte[] SignedPortion,
     byte[] Signature
 );
-
 internal sealed record IndependentBinding(IndependentId TargetId, byte[] SubjectPublicKeyInfo);
-
 internal sealed record IndependentSealedPayload(
     IndependentId RecipientId,
     byte[] EphemeralSubjectPublicKeyInfo,

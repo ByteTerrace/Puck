@@ -57,19 +57,17 @@ internal static class CitationsCommand {
 
     // The families the console actually uses. A dotted token outside them is some other kind of name and
     // is not this verb's business.
-    private static readonly Regex s_family = new(
-        pattern: @"^(world|player|screen|editor|identity|chat|replay|storage|capture|audio|view|speaker|channel|wire)\.",
-        options: RegexOptions.Compiled);
-
+    private static readonly Regex Family = new(
+        options: RegexOptions.Compiled,
+        pattern: @"^(world|player|screen|editor|identity|chat|replay|storage|capture|audio|view|speaker|channel|wire)\.");
     // A verb-shaped token: lowercase head, at least one dotted segment. Trailing argument text inside the
     // same span is ignored — `world.row.set views.seatRig` cites `world.row.set`.
-    private static readonly Regex s_markdownToken = new(
-        pattern: @"`([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^`]*`",
-        options: RegexOptions.Compiled);
-    private static readonly Regex s_xmlDocToken = new(
-        pattern: @"<c>([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^<]*</c>",
-        options: RegexOptions.Compiled);
-
+    private static readonly Regex MarkdownToken = new(
+        options: RegexOptions.Compiled,
+        pattern: @"`([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^`]*`");
+    private static readonly Regex XmlDocToken = new(
+        options: RegexOptions.Compiled,
+        pattern: @"<c>([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)[^<]*</c>");
     // A verb registration's own name argument — the lower bound the staleness gate rests on.
     //
     // ANCHORED TO LINE START, which is the whole discriminator: a command registration spells `name:` on its
@@ -78,16 +76,15 @@ internal static class CitationsCommand {
     // "audio.masterGain", …)` in the document validator, for one. An unanchored pattern sweeps those in too:
     // a sweep confident enough to refuse a run must be narrow enough to be right, or it becomes the accusing
     // instrument it exists to replace.
-    private static readonly Regex s_registration = new(
-        pattern: @"^\s*name:\s*""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""",
-        options: RegexOptions.Compiled);
-
+    private static readonly Regex Registration = new(
+        options: RegexOptions.Compiled,
+        pattern: @"^\s*name:\s*""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""");
     // Any verb-shaped string literal in source: a refusal door, a HUD binding token, a session lever, a
     // document member path. Not a console verb, but a name the code genuinely carries — a document citing
     // one is describing a real mechanism, not a dead verb.
-    private static readonly Regex s_sourceLiteral = new(
-        pattern: @"""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""",
-        options: RegexOptions.Compiled);
+    private static readonly Regex SourceLiteral = new(
+        options: RegexOptions.Compiled,
+        pattern: @"""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""");
 
     public static int Run(string[] args) {
         var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Value(name: "enumeration");
@@ -127,14 +124,14 @@ internal static class CitationsCommand {
         // The narrowing is a real guard, not tidiness. Line-anchoring alone is FORMATTING-DEPENDENT: the
         // validator's `RequireGain(value: …, name: "audio.masterGain", …)` is family-shaped and escapes the
         // sweep only because it sits mid-line, and this repository's formatter wraps calls argument-per-line
-        // as its dominant style. One catch-up pass over Puck.World.Data would put that `name:` at line start
+        // as its dominant style. One catch-up pass over Puck.World.Schema would put that `name:` at line start
         // and exit-3 a perfectly current enumeration. A gate whose correctness depends on how a neighbouring
         // file happens to be wrapped is not a gate. Excluding the projects that cannot contain a registration
         // closes the class outright rather than betting on layout.
         var commandRoot = $"{Path.DirectorySeparatorChar}Puck.World{Path.DirectorySeparatorChar}";
-        var commandFiles = sourceFiles.Where(predicate: path => path.Contains(value: commandRoot, comparisonType: StringComparison.Ordinal)).ToArray();
-        var registered = SweepLiterals(files: commandFiles, pattern: s_registration);
-        var literals = SweepLiterals(files: sourceFiles, pattern: s_sourceLiteral);
+        var commandFiles = sourceFiles.Where(predicate: path => path.Contains(comparisonType: StringComparison.Ordinal, value: commandRoot)).ToArray();
+        var registered = SweepLiterals(files: commandFiles, pattern: Registration);
+        var literals = SweepLiterals(files: sourceFiles, pattern: SourceLiteral);
 
         // THE STALENESS GATE. A literally-registered verb the enumeration lacks proves the file is behind
         // the tree. Refuse rather than report — see this file's header.
@@ -155,7 +152,7 @@ internal static class CitationsCommand {
             return 3;
         }
 
-        var unresolved = Scan(root: root, sourceFiles: sourceFiles, enumerated: enumerated, literals: literals);
+        var unresolved = Scan(enumerated: enumerated, literals: literals, root: root, sourceFiles: sourceFiles);
 
         Console.WriteLine(value: $"citations: {enumerated.Count} enumerated verb(s), {registered.Count} registered in source, {literals.Count} verb-shaped literal(s); {unresolved.Count} unresolved citation(s).");
 
@@ -179,21 +176,20 @@ internal static class CitationsCommand {
         var skills = Path.Combine(path1: root, path2: ".claude", path3: "skills");
 
         if (Directory.Exists(path: skills)) {
-            var markdown = Directory.EnumerateFiles(path: skills, searchPattern: "*.md", searchOption: SearchOption.AllDirectories)
+            var markdown = Directory.EnumerateFiles(path: skills, searchOption: SearchOption.AllDirectories, searchPattern: "*.md")
                 .OrderBy(keySelector: static path => path, comparer: StringComparer.Ordinal);
 
             foreach (var file in markdown) {
-                Collect(root: root, file: file, pattern: s_markdownToken, enumerated: enumerated, literals: literals, unresolved: unresolved);
+                Collect(enumerated: enumerated, file: file, literals: literals, pattern: MarkdownToken, root: root, unresolved: unresolved);
             }
         }
 
         foreach (var file in sourceFiles) {
-            Collect(root: root, file: file, pattern: s_xmlDocToken, enumerated: enumerated, literals: literals, unresolved: unresolved);
+            Collect(enumerated: enumerated, file: file, literals: literals, pattern: XmlDocToken, root: root, unresolved: unresolved);
         }
 
         return unresolved;
     }
-
     // One file's citations. A token repeated in a file reports once — the reader fixes the name, not each
     // occurrence.
     private static void Collect(string root, string file, Regex pattern, HashSet<string> enumerated, HashSet<string> literals, List<Citation> unresolved) {
@@ -206,17 +202,16 @@ internal static class CitationsCommand {
             foreach (Match match in pattern.Matches(input: line)) {
                 var token = match.Groups[1].Value;
 
-                if (!s_family.IsMatch(input: token) || enumerated.Contains(item: token) || literals.Contains(item: token)) {
+                if (!Family.IsMatch(input: token) || enumerated.Contains(item: token) || literals.Contains(item: token)) {
                     continue;
                 }
 
                 if (seen.Add(item: token)) {
-                    unresolved.Add(item: new Citation(File: CliPaths.ToDisplay(relativeTo: root, fullPath: file), Line: number, Token: token));
+                    unresolved.Add(item: new Citation(File: CliPaths.ToDisplay(fullPath: file, relativeTo: root), Line: number, Token: token));
                 }
             }
         }
     }
-
     private static HashSet<string> ReadEnumeration(string path) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -230,7 +225,6 @@ internal static class CitationsCommand {
 
         return names;
     }
-
     private static HashSet<string> SweepLiterals(IReadOnlyList<string> files, Regex pattern) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 

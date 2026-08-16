@@ -27,7 +27,6 @@ internal sealed class LockAnalyzer : ISourceAnalyzer {
         ["Monitor"] = "monitor",
         ["Interlocked"] = "interlocked",
     };
-
     // Instance synchronization types, recorded where they are DECLARED.
     private static readonly Dictionary<string, string> InstanceLockTypes = new(comparer: StringComparer.Ordinal) {
         ["Lock"] = "lock-type",
@@ -129,7 +128,7 @@ internal sealed class LockAnalyzer : ISourceAnalyzer {
             // [MethodImpl(MethodImplOptions.Synchronized)] — a whole-method monitor lock.
             case AttributeSyntax attribute
                 when ((SimpleTypeName(type: attribute.Name) is "MethodImpl" or "MethodImplAttribute")
-                    && attribute.ToString().Contains(value: "Synchronized", comparisonType: StringComparison.Ordinal)): {
+                    && attribute.ToString().Contains(comparisonType: StringComparison.Ordinal, value: "Synchronized")): {
                     var (start, end) = ScanJsonl.LineRange(location: attribute.GetLocation());
 
                     return ("synchronized-method", Condense(text: attribute.ToString()), start, end);
@@ -139,7 +138,6 @@ internal sealed class LockAnalyzer : ISourceAnalyzer {
                 return null;
         }
     }
-
     // Rightmost identifier of an invocation receiver: Monitor -> Monitor, System.Threading.Monitor ->
     // Monitor. Anything else (a call result, an indexer) yields null and is not a static lock class.
     private static string? ReceiverTypeName(ExpressionSyntax expression) => expression switch {
@@ -147,7 +145,6 @@ internal sealed class LockAnalyzer : ISourceAnalyzer {
         MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText,
         _ => null
     };
-
     // Rightmost identifier of a possibly-qualified/nullable type name: System.Threading.Lock -> Lock,
     // SemaphoreSlim? -> SemaphoreSlim. Generics and arrays keep their suffix and simply fail to match the
     // lock-type set, as intended.
@@ -161,7 +158,6 @@ internal sealed class LockAnalyzer : ISourceAnalyzer {
 
         return name.TrimEnd('?', ' ');
     }
-
     // Collapses a node's source text to a trimmed single line and caps the length, so every record is a
     // readable one-liner rather than a wrapped, indented fragment.
     private static string Condense(string text) {

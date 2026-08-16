@@ -16,8 +16,8 @@ internal static class DigitalNetClaims {
         const int MaximumOrder = 14;
 
         var directionNumbers = new uint[DigitalNetSampler.PlaneDirectionNumberCount];
-        var points = new uint[2 << MaximumOrder];
-        var occupancy = new bool[1 << MaximumOrder];
+        var points = new uint[(2 << MaximumOrder)];
+        var occupancy = new bool[(1 << MaximumOrder)];
 
         DigitalNetSampler.BuildPlaneDirectionNumbers(destination: directionNumbers);
 
@@ -25,20 +25,19 @@ internal static class DigitalNetClaims {
             var count = (1 << order);
 
             for (var index = 0; (index < count); ++index) {
-                var point = DigitalNetSampler.SamplePlane(index: ((uint)index), directionNumbers: directionNumbers, scramble: (X: 0U, Y: 0U));
+                var point = DigitalNetSampler.SamplePlane(directionNumbers: directionNumbers, index: ((uint)index), scramble: (X: 0U, Y: 0U));
 
-                points[2 * index] = point.X;
-                points[(2 * index) + 1] = point.Y;
+                points[(2 * index)] = point.X;
+                points[((2 * index) + 1)] = point.Y;
             }
 
-            if (!IsPlaneNet(points: points.AsSpan(start: 0, length: (2 * count)), order: order, occupancy: occupancy.AsSpan(start: 0, length: count))) {
+            if (!IsPlaneNet(points: points.AsSpan(length: (2 * count), start: 0), order: order, occupancy: occupancy.AsSpan(length: count, start: 0))) {
                 return $"the unshifted (0, m, 2)-net property fails at order {order}";
             }
         }
 
         return null;
     }
-
     /// <summary>Ports <c>DigitalNetStage.CheckShiftedNetProperty</c> and <c>CheckShuffledNetProperty</c>: the net
     /// property surviving a spread of pseudorandom digital shifts, and every shuffled index block being itself a
     /// net.</summary>
@@ -47,9 +46,9 @@ internal static class DigitalNetClaims {
         const int ShiftSampleCount = 64;
 
         var directionNumbers = new uint[DigitalNetSampler.PlaneDirectionNumberCount];
-        var points = new uint[2 << Order];
-        var occupancy = new bool[1 << Order];
-        var indices = new uint[1 << Order];
+        var points = new uint[(2 << Order)];
+        var occupancy = new bool[(1 << Order)];
+        var indices = new uint[(1 << Order)];
 
         DigitalNetSampler.BuildPlaneDirectionNumbers(destination: directionNumbers);
 
@@ -70,11 +69,11 @@ internal static class DigitalNetClaims {
                 for (var index = 0; (index < count); ++index) {
                     var point = DigitalNetSampler.SamplePlane(index: indices[index], directionNumbers: directionNumbers, scramble: scramble);
 
-                    points[2 * index] = point.X;
-                    points[(2 * index) + 1] = point.Y;
+                    points[(2 * index)] = point.X;
+                    points[((2 * index) + 1)] = point.Y;
                 }
 
-                if (!IsPlaneNet(points: points.AsSpan(start: 0, length: (2 * count)), order: order, occupancy: occupancy.AsSpan(start: 0, length: count))) {
+                if (!IsPlaneNet(points: points.AsSpan(length: (2 * count), start: 0), order: order, occupancy: occupancy.AsSpan(length: count, start: 0))) {
                     return $"the digital shift (0x{scramble.X:X8}, 0x{scramble.Y:X8}) loses the net property at order {order}";
                 }
             }
@@ -82,7 +81,7 @@ internal static class DigitalNetClaims {
 
         // Every ShuffleIndex-permuted block of indices is ITSELF a net, unshifted -- the deeper structural fact the
         // aligned-block law alone does not state.
-        var shuffled = new uint[1 << Order];
+        var shuffled = new uint[(1 << Order)];
 
         foreach (var seed in ShuffleSeeds) {
             for (var order = 1; (order <= Order); ++order) {
@@ -95,11 +94,11 @@ internal static class DigitalNetClaims {
                 for (var index = 0; (index < count); ++index) {
                     var point = DigitalNetSampler.SamplePlane(index: shuffled[index], directionNumbers: directionNumbers, scramble: (X: 0U, Y: 0U));
 
-                    points[2 * index] = point.X;
-                    points[(2 * index) + 1] = point.Y;
+                    points[(2 * index)] = point.X;
+                    points[((2 * index) + 1)] = point.Y;
                 }
 
-                if (!IsPlaneNet(points: points.AsSpan(start: 0, length: (2 * count)), order: order, occupancy: occupancy.AsSpan(start: 0, length: count))) {
+                if (!IsPlaneNet(points: points.AsSpan(length: (2 * count), start: 0), order: order, occupancy: occupancy.AsSpan(length: count, start: 0))) {
                     return $"shuffle seed 0x{seed:X8} loses the net property at order {order}";
                 }
             }
@@ -107,7 +106,6 @@ internal static class DigitalNetClaims {
 
         return null;
     }
-
     /// <summary>Ports <c>DigitalNetStage.CheckRadicalInverse</c>'s full breadth: dimension zero against plain bit
     /// reversal over a dense prefix and a full-range odd-stride sweep, reaching direction numbers 12 through 31 that
     /// sampling.digital-net-identities-and-net-property's 4096-index sweep cannot.</summary>
@@ -120,7 +118,7 @@ internal static class DigitalNetClaims {
         DigitalNetSampler.BuildBitReversalDirectionNumbers(destination: directionNumbers);
 
         for (var index = 0U; (index < PrefixLength); ++index) {
-            var sampled = DigitalNetSampler.Sample(index: index, directionNumbers: directionNumbers, scramble: 0U);
+            var sampled = DigitalNetSampler.Sample(directionNumbers: directionNumbers, index: index, scramble: 0U);
             var reversed = ReverseBitsIndependently(value: index);
 
             if (sampled != reversed) { return $"the radical inverse of {index} is 0x{sampled:X8}, not the independently reversed 0x{reversed:X8}"; }
@@ -128,7 +126,7 @@ internal static class DigitalNetClaims {
 
         for (var position = 0L; (position < (1L << 32)); position += FullRangeStride) {
             var index = ((uint)position);
-            var sampled = DigitalNetSampler.Sample(index: index, directionNumbers: directionNumbers, scramble: 0U);
+            var sampled = DigitalNetSampler.Sample(directionNumbers: directionNumbers, index: index, scramble: 0U);
             var reversed = ReverseBitsIndependently(value: index);
 
             if (sampled != reversed) { return $"the radical inverse of {index} is 0x{sampled:X8}, not the independently reversed 0x{reversed:X8}"; }
@@ -136,7 +134,6 @@ internal static class DigitalNetClaims {
 
         return null;
     }
-
     /// <summary>Ports <c>DigitalNetStage.CheckSampleTable</c>'s reproducibility check and
     /// <c>CheckQuantizedCoverage</c>: two builds agree bit for bit, and one full period of shuffled, shifted draws
     /// visits every azimuth entry -- and independently every radius entry -- of the cone direction table exactly
@@ -156,8 +153,8 @@ internal static class DigitalNetClaims {
 
         var order = ConeDirectionTable.TableIndexBitCount;
         var directionNumbers = new uint[DigitalNetSampler.PlaneDirectionNumberCount];
-        var indices = new uint[1 << order];
-        var points = new uint[2 << order];
+        var indices = new uint[(1 << order)];
+        var points = new uint[(2 << order)];
         var azimuthSeen = new bool[ConeDirectionTable.AzimuthEntryCount];
         var radiusSeen = new bool[ConeDirectionTable.RadiusEntryCount];
 
@@ -173,16 +170,16 @@ internal static class DigitalNetClaims {
             for (var index = 0; (index < indices.Length); ++index) {
                 var point = DigitalNetSampler.SamplePlane(index: indices[index], directionNumbers: directionNumbers, scramble: scramble);
 
-                points[2 * index] = point.X;
-                points[(2 * index) + 1] = point.Y;
+                points[(2 * index)] = point.X;
+                points[((2 * index) + 1)] = point.Y;
             }
 
             Array.Clear(array: azimuthSeen);
             Array.Clear(array: radiusSeen);
 
             for (var index = 0; (index < indices.Length); ++index) {
-                var azimuth = ((int)HighBits(value: points[2 * index], count: order));
-                var radius = ((int)HighBits(value: points[(2 * index) + 1], count: order));
+                var azimuth = ((int)HighBits(value: points[(2 * index)], count: order));
+                var radius = ((int)HighBits(value: points[((2 * index) + 1)], count: order));
 
                 if (azimuthSeen[azimuth] || radiusSeen[radius]) {
                     return $"seed 0x{seed:X8} revisits table entry ({azimuth}, {radius}) within one period of {indices.Length} draws";
@@ -207,7 +204,7 @@ internal static class DigitalNetClaims {
             occupancy[..count].Clear();
 
             for (var index = 0; (index < count); ++index) {
-                var key = ((((int)HighBits(value: points[2 * index], count: horizontal)) << vertical) | ((int)HighBits(value: points[(2 * index) + 1], count: vertical)));
+                var key = (((int)HighBits(value: points[(2 * index)], count: horizontal)) << vertical) | ((int)HighBits(value: points[((2 * index) + 1)], count: vertical));
 
                 if (occupancy[key]) { return false; }
 
@@ -217,12 +214,10 @@ internal static class DigitalNetClaims {
 
         return true;
     }
-
     /// <summary>Returns a value's leading bits, right aligned; a zero-bit request is the whole interval, written out
     /// because a shift by the word's own width is masked away rather than producing zero.</summary>
     private static uint HighBits(uint value, int count) =>
         ((0 == count) ? 0U : (value >>> (32 - count)));
-
     /// <summary>Reverses a word's bits with its own loop, independent of any shipped reversal helper.</summary>
     private static uint ReverseBitsIndependently(uint value) {
         var reversed = 0U;

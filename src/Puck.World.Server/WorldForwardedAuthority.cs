@@ -7,13 +7,12 @@ namespace Puck.World.Server;
 /// id alone: two minters feeding one server must not be able to choose the same number, or one lane's release would
 /// silence the other's held state.</remarks>
 public static class WorldFederatedIntentLease {
-    private static long s_next;
+    private static long NextLeaseId;
 
     /// <summary>Returns a lease id no other holder will be given.</summary>
     /// <returns>The lease id.</returns>
-    public static long Next() => Interlocked.Increment(location: ref s_next);
+    public static long Next() => Interlocked.Increment(location: ref NextLeaseId);
 }
-
 /// <summary>One authority a departed traveler's acts are forwarded to, whether it is hosted in this process or
 /// reached over a socket. A caller that resolves a traveler's onward route holds one of these and never branches on
 /// where that authority lives.</summary>
@@ -23,21 +22,18 @@ public interface IWorldForwardedAuthority {
     /// <param name="reason">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the intent was accepted.</returns>
     bool TryForwardIntent(in IntentSubmission submission, out string reason);
-
     /// <summary>Forwards one typed submission to the traveler's current authority.</summary>
     /// <param name="payload">The submission payload, already rebound to the destination body index.</param>
     /// <param name="result">The typed completion on success.</param>
     /// <param name="reason">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the submission reached a typed result.</returns>
     bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason);
-
     /// <summary>Resolves the traveler's current observable authority epoch.</summary>
     /// <param name="route">The route description on success.</param>
     /// <param name="reason">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when a route was described.</returns>
     bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason);
 }
-
 /// <summary>
 /// The forwarded-authority arm for a traveler whose current authority is a <see cref="WorldServer"/> in this
 /// process. It is the same act a federated peer performs over a socket, minus the socket: the credential still
@@ -53,11 +49,12 @@ public interface IWorldForwardedAuthority {
 /// route MUST <see cref="Dispose"/> it, or the destination keeps republishing the last image it was handed.</para>
 /// </remarks>
 public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDisposable {
-    private readonly WorldServer m_server;
     private readonly string m_endpoint;
-    private readonly string m_sourceAuthority;
-    private readonly WorldMobilityIdentity m_mobility;
     private readonly long m_leaseId;
+    private readonly WorldMobilityIdentity m_mobility;
+    private readonly WorldServer m_server;
+    private readonly string m_sourceAuthority;
+
     private bool m_disposed;
 
     /// <summary>Initializes a forwarded arm over a colocated destination server.</summary>
@@ -81,29 +78,20 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <summary>Gets the destination authority this arm forwards to.</summary>
     public WorldServer Server => m_server;
 
-    /// <summary>Stamps a payload's embedded principal with the identity the door resolved.</summary>
-    /// <param name="payload">The decoded payload.</param>
-    /// <param name="principal">The acting principal.</param>
-    /// <returns>The payload carrying <paramref name="principal"/>.</returns>
-    public static WorldSubmissionPayload StampPrincipal(WorldSubmissionPayload payload, WorldPrincipal principal) => payload switch {
-        WorldSubmissionPayload.Command command => new WorldSubmissionPayload.Command(Value: (command.Value with { Principal = principal })),
-        WorldSubmissionPayload.Session session => new WorldSubmissionPayload.Session(Value: (session.Value with { Principal = principal })),
-        WorldSubmissionPayload.Mutation mutation => new WorldSubmissionPayload.Mutation(Value: (mutation.Value with { Principal = principal })),
-        _ => payload,
-    };
+    private bool TryResolvePrincipal(out WorldPrincipal principal, out string reason) {
+        if (!m_server.TryTransferredPrincipal(
+            mobility: in m_mobility,
+            principal: out principal,
+            sourceAuthority: m_sourceAuthority
+        )) {
+            reason = $"traveler {m_mobility.Incarnation} has no committed credential at this authority";
 
-    /// <summary>Reports whether a transferred principal still owns its body. MUST be called inside
-    /// <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>, paired with the act it authorizes.</summary>
-    /// <param name="server">The authority holding the population.</param>
-    /// <param name="principal">The principal to test.</param>
-    /// <returns><see langword="true"/> when the principal is the live owner of its body index.</returns>
-    public static bool IsLiveTransferredPrincipal(WorldServer server, WorldPrincipal principal) {
-        ArgumentNullException.ThrowIfNull(argument: server);
+            return false;
+        }
 
-        return ((principal.Kind == PrincipalKind.Peer) &&
-            ((uint)principal.Index < (uint)server.Population.Capacity) &&
-            server.Population.IsActive(index: principal.Index) &&
-            (server.Population.PeerPrincipal(index: principal.Index) == principal));
+        reason = string.Empty;
+
+        return true;
     }
 
     /// <summary>Describes one live body's complete observable authority epoch. MUST be called inside
@@ -114,8 +102,11 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     /// <returns>The route description.</returns>
     /// <exception cref="InvalidOperationException">The principal names no body.</exception>
     public static WorldAuthorityRouteDescription DescribeRoute(WorldServer server, string endpoint, WorldPrincipal principal) =>
-        DescribeRoute(server: server, endpoint: endpoint, bodyIndex: principal.Index);
-
+        DescribeRoute(
+            server: server,
+            endpoint: endpoint,
+            bodyIndex: principal.Index
+        );
     /// <summary>Describes one live body's complete observable authority epoch by index.</summary>
     /// <remarks>Callers hold <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>. A presentation route seeds from
     /// this before publishing the route, so no interval exists in which a consumer holds the route and no
@@ -128,15 +119,16 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
     public static WorldAuthorityRouteDescription DescribeRoute(WorldServer server, string endpoint, int bodyIndex) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
-        var body = server.Population.EntryBody(index: bodyIndex) ??
-            throw new InvalidOperationException(message: $"body:{bodyIndex} at '{server.AuthorityIdentity}' has no body to describe");
+        var body = (server.Population.EntryBody(index: bodyIndex) ??
+            throw new InvalidOperationException(message: $"body:{bodyIndex} at '{server.AuthorityIdentity}' has no body to describe"));
 
         return new WorldAuthorityRouteDescription(
             Endpoint: endpoint,
             Entity: new WorldEntityAddress(
                 Authority: server.AuthorityIdentity,
                 Index: bodyIndex,
-                Generation: server.Population.Generation(index: bodyIndex)),
+                Generation: server.Population.Generation(index: bodyIndex)
+            ),
             Tick: (server.NextInputTick - 1UL),
             Position: body.FixedPosition,
             Orientation: body.FixedOrientation,
@@ -145,9 +137,43 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             Look: server.Population.LookIndex(index: bodyIndex),
             CatalogRig: server.Population.CatalogRig(index: bodyIndex),
             PlacementId: server.Population.InhabitantPlacementId(index: bodyIndex),
-            Definition: server.Definition);
+            Definition: server.Definition
+        );
     }
+    /// <summary>Releases the held-input lease this arm owns.</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
 
+        m_disposed = true;
+        m_server.ReleaseFederatedIntents(leaseId: m_leaseId);
+    }
+    /// <summary>Reports whether a transferred principal still owns its body. MUST be called inside
+    /// <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>, paired with the act it authorizes.</summary>
+    /// <param name="server">The authority holding the population.</param>
+    /// <param name="principal">The principal to test.</param>
+    /// <returns><see langword="true"/> when the principal is the live owner of its body index.</returns>
+    public static bool IsLiveTransferredPrincipal(WorldServer server, WorldPrincipal principal) {
+        ArgumentNullException.ThrowIfNull(argument: server);
+
+        return (
+            (principal.Kind == PrincipalKind.Peer) &&
+            (((uint)principal.Index) < ((uint)server.Population.Capacity)) &&
+            server.Population.IsActive(index: principal.Index) &&
+            (server.Population.PeerPrincipal(index: principal.Index) == principal)
+        );
+    }
+    /// <summary>Stamps a payload's embedded principal with the identity the door resolved.</summary>
+    /// <param name="payload">The decoded payload.</param>
+    /// <param name="principal">The acting principal.</param>
+    /// <returns>The payload carrying <paramref name="principal"/>.</returns>
+    public static WorldSubmissionPayload StampPrincipal(WorldSubmissionPayload payload, WorldPrincipal principal) => payload switch {
+        WorldSubmissionPayload.Command command => new WorldSubmissionPayload.Command(Value: (command.Value with { Principal = principal })),
+        WorldSubmissionPayload.Session session => new WorldSubmissionPayload.Session(Value: (session.Value with { Principal = principal })),
+        WorldSubmissionPayload.Mutation mutation => new WorldSubmissionPayload.Mutation(Value: (mutation.Value with { Principal = principal })),
+        _ => payload,
+    };
     /// <summary>Applies one already-decoded submission to a live transferred body, resolving the acting principal
     /// from the destination's own transfer table. Runs the liveness test and the act it authorizes as one gated
     /// operation.</summary>
@@ -164,29 +190,59 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         result = null;
 
-        if (!server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, mobility: in mobility, principal: out var principal)) {
+        if (!server.TryTransferredPrincipal(
+            mobility: in mobility,
+            principal: out var principal,
+            sourceAuthority: sourceAuthority
+        )) {
             reason = "the credential names no committed transfer body";
 
             return false;
         }
 
         var applied = server.ExecuteAuthorityOperation(operation: () => {
-            if (!IsLiveTransferredPrincipal(server: server, principal: principal)) {
-                return (Live: false, Result: (WorldSubmissionResult?)null);
+            if (!IsLiveTransferredPrincipal(
+                principal: principal,
+                server: server
+            )) {
+                return (Live: false, Result: ((WorldSubmissionResult?)null));
             }
 
-            var stamped = StampPrincipal(payload: payload, principal: principal);
+            var stamped = StampPrincipal(
+                payload: payload,
+                principal: principal
+            );
 
-            if ((stamped is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
-                server.Population.TryCaptureTransferredPeer(index: principal.Index, peer: out var peer)) {
+            if (
+                (stamped is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
+                server.Population.TryCaptureTransferredPeer(
+                index: principal.Index,
+                peer: out var peer
+            )
+            ) {
                 server.DisconnectPeerConnection(peer: peer);
 
-                return (Live: true, Result: (WorldSubmissionResult?)new WorldSubmissionResult.Session(new SessionReply(Accepted: true, AssignedIndex: (principal.Index + 1), RosterEcho: string.Empty, Reason: string.Empty)));
+                return (Live: true, Result: ((WorldSubmissionResult?)new WorldSubmissionResult.Session(Reply: new SessionReply(
+                    Accepted: true,
+                    AssignedIndex: (principal.Index + 1),
+                    RosterEcho: string.Empty,
+                    Reason: string.Empty
+                ))));
             }
 
             WorldSubmissionResult? captured = null;
 
-            server.Submit(envelope: new SubmissionEnvelope(ConnectionId: principal.Index, SessionGeneration: principal.Generation, Sequence: 0, CorrelationId: 0, Principal: principal, Payload: stamped), completion: value => captured = value);
+            server.Submit(
+                envelope: new SubmissionEnvelope(
+                    ConnectionId: principal.Index,
+                    SessionGeneration: principal.Generation,
+                    Sequence: 0,
+                    CorrelationId: 0,
+                    Principal: principal,
+                    Payload: stamped
+                ),
+                completion: value => captured = value
+            );
 
             return (Live: true, Result: captured);
         });
@@ -202,45 +258,28 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         return true;
     }
-
-    /// <inheritdoc/>
-    public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
-        if (!TryResolvePrincipal(principal: out var principal, reason: out reason)) {
-            return false;
-        }
-
-        var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
-        var accepted = m_server.ExecuteAuthorityOperation(operation: () => {
-            if (!IsLiveTransferredPrincipal(server: m_server, principal: principal)) {
-                return false;
-            }
-
-            m_server.PublishFederatedIntent(leaseId: m_leaseId, submission: in stamped);
-
-            return true;
-        });
-
-        reason = (accepted ? string.Empty : "the traveler is no longer live at this authority");
-
-        return accepted;
-    }
-
-    /// <inheritdoc/>
-    public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
-        TryApplySubmission(server: m_server, sourceAuthority: m_sourceAuthority, mobility: in m_mobility, payload: payload, result: out result, reason: out reason);
-
     /// <inheritdoc/>
     public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
         route = default;
 
-        if (!TryResolvePrincipal(principal: out var principal, reason: out reason)) {
+        if (!TryResolvePrincipal(
+            principal: out var principal,
+            reason: out reason
+        )) {
             return false;
         }
 
         var described = m_server.ExecuteAuthorityOperation(operation: () =>
-            (IsLiveTransferredPrincipal(server: m_server, principal: principal)
-                ? DescribeRoute(server: m_server, endpoint: m_endpoint, principal: principal)
-                : (WorldAuthorityRouteDescription?)null));
+            (IsLiveTransferredPrincipal(
+            principal: principal,
+            server: m_server
+        )
+            ? DescribeRoute(
+                endpoint: m_endpoint,
+                principal: principal,
+                server: m_server
+            )
+            : (WorldAuthorityRouteDescription?)null));
 
         if (described is not { } resolved) {
             reason = "the traveler is no longer live at this authority";
@@ -253,26 +292,47 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         return true;
     }
-
-    /// <summary>Releases the held-input lease this arm owns.</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-        m_server.ReleaseFederatedIntents(leaseId: m_leaseId);
-    }
-
-    private bool TryResolvePrincipal(out WorldPrincipal principal, out string reason) {
-        if (!m_server.TryTransferredPrincipal(sourceAuthority: m_sourceAuthority, mobility: in m_mobility, principal: out principal)) {
-            reason = $"traveler {m_mobility.Incarnation} has no committed credential at this authority";
-
+    /// <inheritdoc/>
+    public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
+        if (!TryResolvePrincipal(
+            principal: out var principal,
+            reason: out reason
+        )) {
             return false;
         }
 
-        reason = string.Empty;
+        var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
+        var accepted = m_server.ExecuteAuthorityOperation(operation: () => {
+            if (!IsLiveTransferredPrincipal(
+                principal: principal,
+                server: m_server
+            )) {
+                return false;
+            }
 
-        return true;
+            m_server.PublishFederatedIntent(
+                leaseId: m_leaseId,
+                submission: in stamped
+            );
+
+            return true;
+        });
+
+        reason = (accepted
+            ? string.Empty
+            : "the traveler is no longer live at this authority"
+        );
+
+        return accepted;
     }
+    /// <inheritdoc/>
+    public bool TryForwardSubmission(WorldSubmissionPayload payload, out WorldSubmissionResult? result, out string reason) =>
+        TryApplySubmission(
+            mobility: in m_mobility,
+            payload: payload,
+            reason: out reason,
+            result: out result,
+            server: m_server,
+            sourceAuthority: m_sourceAuthority
+        );
 }

@@ -14,7 +14,7 @@ namespace Puck.Cli.Format;
 // one Compilation (so a call's method symbol — framework or in-repo — resolves) referencing that
 // project's real build closure, then runs NamedArgsRewriter against each file's semantic model. Symbol
 // binding tolerates unrelated errors elsewhere, so a call is named whenever ITS own method resolves.
-// Writes CRLF like SourceRewrite; -WhatIf and -Verify report drift only.
+// Preserves source newline trivia like SourceRewrite; -WhatIf and -Verify report drift only.
 internal static class NamedArgsPhase {
     // Fallback when a project has not been built (no generated global-usings file to read): the SDK's
     // default ImplicitUsings set. A built project supplies its real global usings.
@@ -29,7 +29,7 @@ internal static class NamedArgsPhase {
         """;
 
     public static int Run(string rootArgument, bool whatIf, bool verify) {
-        if (!SourceFiles.TryEnumerate(rootArgument: rootArgument, scanRoot: out _, files: out var targetFiles)) {
+        if (!SourceFiles.TryEnumerate(files: out var targetFiles, rootArgument: rootArgument, scanRoot: out _)) {
             return 2;
         }
 
@@ -88,7 +88,7 @@ internal static class NamedArgsPhase {
             fileCount: targetFiles.Length,
             drifted: drifted,
             whatIf: (whatIf || verify),
-            problems: [("would introduce syntax errors — SKIPPED", corrupted)]);
+            problems: [("have syntax errors before or after rewriting — SKIPPED", corrupted)]);
     }
 
     // Names the target files of ONE project against a compilation of that project's trees and its real
@@ -137,7 +137,7 @@ internal static class NamedArgsPhase {
 
             var relative = CliPaths.ToDisplay(fullPath: file);
 
-            if (RewriteIo.IntroducesErrors(original: original, rewritten: rewritten)) {
+            if (RewriteIo.HasSyntaxErrors(original: original, rewritten: rewritten)) {
                 corrupted.Add(item: relative);
 
                 continue;
@@ -148,7 +148,7 @@ internal static class NamedArgsPhase {
             // named-args only ADDS names where absent, so a second run is a no-op — idempotent by
             // construction. -Verify still audits (report drift, never write) plus the guard.
             if (!whatIf && !verify) {
-                RewriteIo.WriteCrlf(file: file, text: rewritten);
+                RewriteIo.WriteText(file: file, text: rewritten);
             }
         }
 
@@ -162,10 +162,10 @@ internal static class NamedArgsPhase {
     // (bin/**/*.dll, minus the project's own output and native DLLs), unioned with the shared framework
     // assemblies. Both need a prior build; without one, `degraded` is set and only the framework set plus
     // a default usings list are used, so coverage is reduced.
-    private static CSharpCompilation BuildProjectCompilation(string projectRoot, IEnumerable<SyntaxTree> trees, CSharpParseOptions parseOptions, out bool degraded) {
+    internal static CSharpCompilation BuildProjectCompilation(string projectRoot, IEnumerable<SyntaxTree> trees, CSharpParseOptions parseOptions, out bool degraded) {
         var objDirectory = Path.Combine(path1: projectRoot, path2: "obj");
         var globalUsingsFile = (Directory.Exists(path: objDirectory)
-            ? Directory.EnumerateFiles(path: objDirectory, searchPattern: "*.GlobalUsings.g.cs", searchOption: SearchOption.AllDirectories).FirstOrDefault()
+            ? Directory.EnumerateFiles(path: objDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*.GlobalUsings.g.cs").FirstOrDefault()
             : null);
         var globalUsings = CSharpSyntaxTree.ParseText(
             text: ((globalUsingsFile is not null) ? File.ReadAllText(path: globalUsingsFile) : DefaultGlobalUsings),
@@ -176,21 +176,21 @@ internal static class NamedArgsPhase {
         // (obj/**/generated/**/*.cs), include it so calls into generated types resolve too; otherwise
         // those calls are reported as unresolved and left positional.
         var generatedTrees = (Directory.Exists(path: objDirectory)
-            ? Directory.EnumerateFiles(path: objDirectory, searchPattern: "*.cs", searchOption: SearchOption.AllDirectories)
-                .Where(predicate: static path => path.Contains(value: $"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}", comparisonType: StringComparison.OrdinalIgnoreCase))
+            ? Directory.EnumerateFiles(path: objDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*.cs")
+                .Where(predicate: static path => path.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: $"{Path.DirectorySeparatorChar}generated{Path.DirectorySeparatorChar}"))
                 .Select(selector: path => CSharpSyntaxTree.ParseText(text: File.ReadAllText(path: path), options: parseOptions, path: path))
             : Enumerable.Empty<SyntaxTree>());
 
         var frameworkDlls = ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(separator: Path.PathSeparator, options: StringSplitOptions.RemoveEmptyEntries)
-            .Where(predicate: static path => path.EndsWith(value: ".dll", comparisonType: StringComparison.OrdinalIgnoreCase));
+            .Split(options: StringSplitOptions.RemoveEmptyEntries, separator: Path.PathSeparator)
+            .Where(predicate: static path => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".dll"));
         var projectName = Path.GetFileNameWithoutExtension(path: (Directory.EnumerateFiles(path: projectRoot, searchPattern: "*.csproj").FirstOrDefault() ?? ""));
         var binDirectory = Path.Combine(path1: projectRoot, path2: "bin");
         var outputDlls = (Directory.Exists(path: binDirectory)
-            ? Directory.EnumerateFiles(path: binDirectory, searchPattern: "*.dll", searchOption: SearchOption.AllDirectories)
+            ? Directory.EnumerateFiles(path: binDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*.dll")
                 .Where(predicate: path =>
                     (!string.Equals(a: Path.GetFileNameWithoutExtension(path: path), b: projectName, comparisonType: StringComparison.OrdinalIgnoreCase)
-                    && !path.Contains(value: $"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}", comparisonType: StringComparison.OrdinalIgnoreCase)))
+                    && !path.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: $"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}")))
             : Enumerable.Empty<string>());
 
         // Built dependency assemblies and package assemblies win over the framework on a name clash —
@@ -242,11 +242,11 @@ internal static class NamedArgsPhase {
                 }
 
                 foreach (var asset in compile.EnumerateObject()) {
-                    if (asset.Name.EndsWith(value: "_._", comparisonType: StringComparison.Ordinal)) {
+                    if (asset.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "_._")) {
                         continue;
                     }
 
-                    var relative = asset.Name.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar);
+                    var relative = asset.Name.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/');
                     var resolved = packageRoots
                         .Select(selector: packageRoot => Path.Combine(path1: packageRoot, path2: libraryPath.GetString()!, path3: relative))
                         .FirstOrDefault(predicate: File.Exists);
@@ -260,7 +260,6 @@ internal static class NamedArgsPhase {
 
         return results;
     }
-
     // Some assemblies in a build output are native and are not valid managed metadata references.
     // CreateFromFile is lazy (it would not throw until the compilation reads the file), so probe the PE
     // eagerly: HasMetadata is true only for managed assemblies and — unlike GetAssemblyName — reads no
@@ -275,7 +274,6 @@ internal static class NamedArgsPhase {
             return null;
         }
     }
-
     // Coverage probe: a call whose symbol binds to nothing (no symbol, no candidate) is one named-args
     // must leave positional. Driving this to zero is the point of the real build closure; a nonzero count
     // means the references are still incomplete. `nameof(...)` is syntactically an invocation but a

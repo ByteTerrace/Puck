@@ -12,7 +12,7 @@
     ],
     "properties": {
       "name": {
-        "description": "The rule\u0027s stable name \u2014 unique within the section, the UpsertWorldRule/RemoveWorldRule key, and the world.rules read-back line. A WorldCellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name (naming the offending character) at the JSON converter before a document can hold one. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
+        "description": "The rule\u0027s stable name \u2014 unique within the section, the WorldMutation.UpsertWorldRule/WorldMutation.RemoveWorldRule key, and the world.rules read-back line. A WorldCellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name (naming the offending character) at the JSON converter before a document can hold one. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
         "type": "string"
       },
       "effects": {
@@ -23,31 +23,8 @@
         }
       },
       "gate": {
+        "$ref": "./common.schema.json#/$defs/ActionPredicate",
         "description": "The predicate that must hold, or null for always.",
-        "type": [
-          "object",
-          "null"
-        ],
-        "required": [
-          "$type"
-        ],
-        "anyOf": [
-          {
-            "$ref": "./common.schema.json#/$defs/Now"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/Recently"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/CompareState"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/TimerElapsed"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/All2"
-          }
-        ],
         "default": null
       },
       "mode": {

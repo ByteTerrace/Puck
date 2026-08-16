@@ -39,17 +39,15 @@ public sealed class DerivedFaceReservationLawTests {
             reason: out var reason,
             neighbours: null), userMessage: reason);
     }
-
     [Fact]
     public void RaisingTheReservationPastBoot_RefusesByName_LoweringItApplies() {
         using var fixture = FreshServer();
 
         Laws.RefusalWithControl(
             lawId: "derived-face-reservation.raise-past-boot",
-            deniedOutcome: () => ApplyAndObserveChange(fixture: fixture, derivedFaceScreens: (BootReservation + 1)),
-            controlOutcome: () => ApplyAndObserveChange(fixture: fixture, derivedFaceScreens: (BootReservation - 1)));
+            deniedOutcome: () => ApplyAndObserveChange(derivedFaceScreens: (BootReservation + 1), fixture: fixture),
+            controlOutcome: () => ApplyAndObserveChange(derivedFaceScreens: (BootReservation - 1), fixture: fixture));
     }
-
     [Fact]
     public void TheRefusalNamesTheBandAndTheAskedForWidth() {
         using var fixture = FreshServer();
@@ -61,14 +59,13 @@ public sealed class DerivedFaceReservationLawTests {
             }
         };
 
-        _ = ApplyAndObserveChange(fixture: fixture, derivedFaceScreens: (BootReservation + 1));
+        _ = ApplyAndObserveChange(derivedFaceScreens: (BootReservation + 1), fixture: fixture);
 
         Assert.Contains(collection: refusals, filter: reason =>
-            reason.Contains(value: "derivedFaceScreens", comparisonType: StringComparison.Ordinal) &&
+            (reason.Contains(comparisonType: StringComparison.Ordinal, value: "derivedFaceScreens") &&
             reason.Contains(value: (BootReservation + 1).ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal) &&
-            reason.Contains(value: BootReservation.ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal));
+            reason.Contains(value: BootReservation.ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal)));
     }
-
     [Fact]
     public void SettingTheReservationToExactlyTheBootBandIsNotRefused() {
         // The boundary the refusal must NOT swallow: equal is not greater. Observed through the refusal echo rather
@@ -83,7 +80,7 @@ public sealed class DerivedFaceReservationLawTests {
             }
         };
 
-        _ = ApplyAndObserveChange(fixture: fixture, derivedFaceScreens: BootReservation);
+        _ = ApplyAndObserveChange(derivedFaceScreens: BootReservation, fixture: fixture);
 
         Assert.Empty(collection: refusals);
     }

@@ -26,7 +26,6 @@ public readonly record struct TimeTravelStatus(
     int RunaheadLeadFrames,
     int FastForwardFactor
 );
-
 /// <summary>
 /// Optional time-travel capability for an <see cref="IScreenMachine"/> — machine-neutral rewind, runahead, and
 /// fast-forward built once over the snapshot surface every deterministic core already exposes, mirroring
@@ -42,7 +41,6 @@ public interface ITimeTravelMachine {
     /// deltas between); disarming clears the captured history.</summary>
     /// <param name="enabled">Whether to capture rewind history.</param>
     void SetRewindEnabled(bool enabled);
-
     /// <summary>Rewinds the authoritative machine to the oldest captured instant within the requested native-frame
     /// window. When the history has no instant in that window, lands on the nearest older instant instead, then resumes
     /// forward from there. A no-op when the ring is empty or disarmed.</summary>
@@ -50,13 +48,11 @@ public interface ITimeTravelMachine {
     /// <returns>The number of native frames actually rewound, which may exceed <paramref name="frames"/> only when the
     /// history has no captured instant inside the requested window; 0 when nothing was captured.</returns>
     int RewindBy(int frames);
-
     /// <summary>Arms (or, with 0, disarms) runahead: a persistent lookahead fork kept <paramref name="frames"/> frames
     /// ahead of the authoritative machine on predicted input, whose framebuffer the machine presents while the real
     /// machine stays the tick-locked authority and the sole audio source.</summary>
     /// <param name="frames">The number of frames to run ahead (clamped), or 0 to disarm.</param>
     void SetRunahead(int frames);
-
     /// <summary>Sets the fast-forward factor — the number of exact tick segments run per submission, clamped to at least
     /// 1. A factor of N advances the machine N times faster in emulated time while presenting one frame per submit.</summary>
     /// <param name="factor">The exact-segment repeat count (1 = realtime).</param>

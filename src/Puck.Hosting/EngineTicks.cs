@@ -38,5 +38,5 @@ public static class EngineTicks {
     /// <param name="ticks">The number of engine ticks to convert.</param>
     /// <returns>The duration of <paramref name="ticks"/> ticks in seconds.</returns>
     public static double ToSeconds(ulong ticks) =>
-        ((double)ticks / PerSecond);
+        (((double)ticks) / PerSecond);
 }

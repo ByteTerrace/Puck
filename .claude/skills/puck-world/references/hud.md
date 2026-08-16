@@ -1,7 +1,7 @@
 # The HUD — document-authored overlay panels
 
 The HUD is a world-document section rendered through the banded overlay
-pipeline. Document side: `src/Puck.World.Data/WorldHud.cs` +
+pipeline. Document side: `src/Puck.World.Schema/WorldHud.cs` +
 `HudValidation.cs` (schema details in [documents.md](documents.md)). Render
 side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 `src/Puck.Overlays/HudWriter.cs`, `UnifiedOverlayNode.cs`,
@@ -136,7 +136,7 @@ or silently-empty interpolation.
 
 **`HudTemplate.TryParse` is the ONLY parse of this grammar anywhere, and the
 render path is not one of its callers.** `Puck.Overlays` cannot reference
-`Puck.World.Data` (the architecture boundary), so `WorldHudFeed` parses on the
+`Puck.World.Schema` (the architecture boundary), so `WorldHudFeed` parses on the
 structure rebuild and hands the overlay PRE-PARSED runs
 (`OverlayHudTemplateSegment`: literal-or-placeholder); `HudWriter` only
 substitutes, and carries no grammar at all. This is deliberately NOT the
@@ -295,10 +295,8 @@ no `EchoTap` tick-later arrival, and a refusal leaves the document untouched.
 
 ## Verifying
 
-`docs/verification/hud-document/` is QUARANTINED (2026-08-06 — its
-`hud-skip-writer-emission` sabotage patch's context hunk predates
-`EmitSeatPanels`, so it no longer applies; see that directory's README).
-Validate by RUNNING THE APP; the ad hoc recipes below are the live method.
+No committed battery covers the HUD document. Validate by RUNNING THE APP;
+the ad hoc recipes below are the live method.
 Ad hoc, world scope: `world.row.set hud.panels` a panel with a bound gauge,
 `world.wait`, read `world.hud`, screenshot for the pixel assertion, then
 exercise one refusal (a fifth panel, or an unknown binding) and confirm the

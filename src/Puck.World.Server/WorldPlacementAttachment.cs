@@ -35,13 +35,16 @@ public static class WorldPlacementAttachment {
         position = default;
         yawRadians = default;
 
-        if ((uint)attach.BodyIndex >= (uint)population.Capacity) {
+        if (((uint)attach.BodyIndex) >= ((uint)population.Capacity)) {
             reason = $"body:{attach.BodyIndex} is outside the {population.Capacity}-slot entity table";
 
             return false;
         }
 
-        if (!population.IsActive(index: attach.BodyIndex) || (population.EntryBody(index: attach.BodyIndex) is not { } body)) {
+        if (
+            !population.IsActive(index: attach.BodyIndex) ||
+            (population.EntryBody(index: attach.BodyIndex) is not { } body)
+        ) {
             reason = $"body:{attach.BodyIndex} is not an active population entry";
 
             return false;

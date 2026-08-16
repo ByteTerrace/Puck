@@ -39,6 +39,28 @@ internal struct QuadraticSurdRecurrence {
     /// <summary>Gets <c>Q</c>, the denominator of the current state.</summary>
     internal BigInteger StateQ { get; private set; }
 
+    /// <summary>Starts the recurrence at a state that already satisfies the divisibility invariant.</summary>
+    /// <param name="radicandProduct">The radicand <c>N</c> of the canonical form.</param>
+    /// <param name="radicandRoot"><c>⌊√N⌋</c>.</param>
+    /// <param name="stateP">The numerator offset <c>P</c> of the start state.</param>
+    /// <param name="stateQ">The denominator <c>Q</c> of the start state; it must divide <c>N − P²</c>.</param>
+    /// <returns>The recurrence positioned at that state, unscaled.</returns>
+    /// <remarks>
+    /// The caller supplies <c>⌊√N⌋</c> because a start built from an ideal already has it, and asserts that <c>Q</c>
+    /// divides <c>N − P²</c>, which the ideal's defining congruence guarantees. No scaling happens, so the caller's
+    /// <c>(P, Q)</c> stay the ones its own identities are written against.
+    /// </remarks>
+    internal static QuadraticSurdRecurrence FromDividingState(
+        BigInteger radicandProduct,
+        BigInteger radicandRoot,
+        BigInteger stateP,
+        BigInteger stateQ) =>
+        new(
+            radicandProduct: radicandProduct,
+            radicandRoot: radicandRoot,
+            stateP: stateP,
+            stateQ: stateQ
+        );
     /// <summary>Starts the recurrence at the quadratic irrational <c>(p + q·√d) / r</c>.</summary>
     /// <param name="rationalNumerator">The rational part <c>p</c> of the numerator.</param>
     /// <param name="surdCoefficient">The coefficient <c>q</c> of the surd.</param>
@@ -75,25 +97,6 @@ internal struct QuadraticSurdRecurrence {
             stateQ: stateQ
         );
     }
-
-    /// <summary>Starts the recurrence at a state that already satisfies the divisibility invariant.</summary>
-    /// <param name="radicandProduct">The radicand <c>N</c> of the canonical form.</param>
-    /// <param name="radicandRoot"><c>⌊√N⌋</c>.</param>
-    /// <param name="stateP">The numerator offset <c>P</c> of the start state.</param>
-    /// <param name="stateQ">The denominator <c>Q</c> of the start state; it must divide <c>N − P²</c>.</param>
-    /// <returns>The recurrence positioned at that state, unscaled.</returns>
-    /// <remarks>
-    /// The caller supplies <c>⌊√N⌋</c> because a start built from an ideal already has it, and asserts that <c>Q</c>
-    /// divides <c>N − P²</c>, which the ideal's defining congruence guarantees. No scaling happens, so the caller's
-    /// <c>(P, Q)</c> stay the ones its own identities are written against.
-    /// </remarks>
-    internal static QuadraticSurdRecurrence FromDividingState(
-        BigInteger radicandProduct,
-        BigInteger radicandRoot,
-        BigInteger stateP,
-        BigInteger stateQ) =>
-        new(radicandProduct: radicandProduct, radicandRoot: radicandRoot, stateP: stateP, stateQ: stateQ);
-
     /// <summary>Returns the partial quotient of the current state and advances to the next one.</summary>
     /// <returns>The partial quotient <c>⌊(P + √N) / Q⌋</c> of the state held on entry.</returns>
     internal BigInteger Step() {
@@ -101,7 +104,8 @@ internal struct QuadraticSurdRecurrence {
         // sits just below ⌊√N⌋ + 1, which is the bound that floors correctly once the sign flips the inequality.
         var quotient = ((0 < StateQ.Sign)
             ? (StateP + m_radicandRoot).FloorDivide(divisor: StateQ)
-            : ((StateP + m_radicandRoot) + BigInteger.One).FloorDivide(divisor: StateQ));
+            : ((StateP + m_radicandRoot) + BigInteger.One).FloorDivide(divisor: StateQ)
+        );
         var nextP = ((quotient * StateQ) - StateP);
 
         StateQ = ((m_radicandProduct - (nextP * nextP)) / StateQ);
@@ -110,7 +114,6 @@ internal struct QuadraticSurdRecurrence {
         return quotient;
     }
 }
-
 /// <summary>
 /// The eventually periodic continued-fraction expansion of a quadratic irrational, driven one partial quotient at a
 /// time until the state repeats.
@@ -124,6 +127,7 @@ internal struct QuadraticSurdRecurrence {
 /// </remarks>
 internal sealed class QuadraticSurdExpansion {
     private readonly Dictionary<(BigInteger P, BigInteger Q), int> m_seen;
+
     private QuadraticSurdRecurrence m_recurrence;
 
     /// <summary>Starts the expansion of the quadratic irrational <c>(p + q·√d) / r</c>.</summary>
@@ -137,10 +141,10 @@ internal sealed class QuadraticSurdExpansion {
         BigInteger radicand,
         BigInteger denominator) {
         m_recurrence = QuadraticSurdRecurrence.FromQuadraticIrrational(
-            rationalNumerator: rationalNumerator,
-            surdCoefficient: surdCoefficient,
+            denominator: denominator,
             radicand: radicand,
-            denominator: denominator
+            rationalNumerator: rationalNumerator,
+            surdCoefficient: surdCoefficient
         );
         m_seen = [];
         Quotient = BigInteger.Zero;
@@ -149,21 +153,24 @@ internal sealed class QuadraticSurdExpansion {
         PeriodLength = -1;
     }
 
-    /// <summary>Gets the partial quotient of the current position.</summary>
-    internal BigInteger Quotient { get; private set; }
-    /// <summary>Gets the index of the current position.</summary>
-    internal int Index { get; private set; }
-    /// <summary>Gets the index where the repeating block begins, once the expansion has closed.</summary>
-    internal int PeriodStart { get; private set; }
-    /// <summary>Gets the length of the repeating block, once the expansion has closed.</summary>
-    internal int PeriodLength { get; private set; }
     /// <summary>Gets the number of partial quotients in the pre-period and one period block.</summary>
     internal int Count => (PeriodStart + PeriodLength);
+    /// <summary>Gets the index of the current position.</summary>
+    internal int Index { get; private set; }
+    /// <summary>Gets the length of the repeating block, once the expansion has closed.</summary>
+    internal int PeriodLength { get; private set; }
+    /// <summary>Gets the index where the repeating block begins, once the expansion has closed.</summary>
+    internal int PeriodStart { get; private set; }
+    /// <summary>Gets the partial quotient of the current position.</summary>
+    internal BigInteger Quotient { get; private set; }
 
     /// <summary>Advances to the next partial quotient.</summary>
     /// <returns><see langword="true"/> when a further partial quotient is available; <see langword="false"/> once the state repeats, which is where the period is settled.</returns>
     internal bool MoveNext() {
-        if (m_seen.TryGetValue(key: (m_recurrence.StateP, m_recurrence.StateQ), value: out var repeatAt)) {
+        if (m_seen.TryGetValue(
+            key: (m_recurrence.StateP, m_recurrence.StateQ),
+            value: out var repeatAt
+        )) {
             PeriodStart = repeatAt;
             PeriodLength = (m_seen.Count - repeatAt);
 
@@ -171,7 +178,10 @@ internal sealed class QuadraticSurdExpansion {
         }
 
         Index = m_seen.Count;
-        m_seen.Add(key: (m_recurrence.StateP, m_recurrence.StateQ), value: Index);
+        m_seen.Add(
+            key: (m_recurrence.StateP, m_recurrence.StateQ),
+            value: Index
+        );
         Quotient = m_recurrence.Step();
 
         return true;

@@ -17,12 +17,36 @@ internal static class OpusHead {
     public static byte[] Build(int channelCount, int preSkipSamples, int inputSampleRate) {
         var payload = new byte[19];
 
-        Encoding.ASCII.GetBytes(chars: "OpusHead", bytes: payload.AsSpan(start: 0, length: 8));
+        Encoding.ASCII.GetBytes(
+            chars: "OpusHead",
+            bytes: payload.AsSpan(
+                length: 8,
+                start: 0
+            )
+        );
         payload[8] = 1;
-        payload[9] = (byte)channelCount;
-        BinaryPrimitives.WriteUInt16LittleEndian(destination: payload.AsSpan(start: 10, length: 2), value: (ushort)preSkipSamples);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: payload.AsSpan(start: 12, length: 4), value: (uint)inputSampleRate);
-        BinaryPrimitives.WriteInt16LittleEndian(destination: payload.AsSpan(start: 16, length: 2), value: 0);
+        payload[9] = ((byte)channelCount);
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            destination: payload.AsSpan(
+                length: 2,
+                start: 10
+            ),
+            value: ((ushort)preSkipSamples)
+        );
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            destination: payload.AsSpan(
+                length: 4,
+                start: 12
+            ),
+            value: ((uint)inputSampleRate)
+        );
+        BinaryPrimitives.WriteInt16LittleEndian(
+            destination: payload.AsSpan(
+                length: 2,
+                start: 16
+            ),
+            value: 0
+        );
         payload[18] = 0;
 
         return payload;

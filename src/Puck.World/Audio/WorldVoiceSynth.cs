@@ -16,7 +16,6 @@ public enum WorldVoiceFilterMode {
     /// <summary>The SVF high-pass tap.</summary>
     HighPass,
 }
-
 /// <summary>
 /// The flat runtime parameter block one trigger voices from — a post-<see cref="SynthPatchCanonicalizer.Normalize"/>
 /// <see cref="SynthPatchDocument"/> converted once at registration (never per sample): duty is pre-scaled to a Q32
@@ -89,7 +88,6 @@ public readonly record struct WorldVoicePatch(
         );
     }
 }
-
 /// <summary>
 /// The world's deterministic voice synth: 32 voices in a fixed struct array, zero steady-state
 /// allocation, fixed-point end to end. Sine is a <see cref="FixedComplex"/> rotor (one complex multiply per
@@ -104,22 +102,23 @@ public readonly record struct WorldVoicePatch(
 /// broken oldest-first — the policy that never robs a fresh attack to keep a dying tail.
 /// </summary>
 public sealed class WorldVoiceSynth {
-    /// <summary>The fixed voice count.</summary>
-    public const int VoiceCount = 32;
+    private const long PeakQ32 = (65536L << 16);
+    // 2π and the phase→radians bridge in Q16: rotor step angle = phaseIncrementQ32 · 2π >> 32.
+    private const long TwoPiRawQ16 = 411775L;
+
     /// <summary>The control-rate interval in samples: pitch/rotor updates and rotor renormalization run once per
     /// interval — vibrato and sweeps move at millihertz scales, so 64 samples (1.33 ms) is inaudibly coarse and
     /// keeps the per-sample path multiply-only.</summary>
     public const int ControlIntervalFrames = 64;
     /// <summary>The mixer rate every frame unit in <c>puck.synth.v1</c> is denominated in.</summary>
     public const int SampleRate = 48_000;
+    /// <summary>The fixed voice count.</summary>
+    public const int VoiceCount = 32;
 
-    // 2π and the phase→radians bridge in Q16: rotor step angle = phaseIncrementQ32 · 2π >> 32.
-    private const long TwoPiRawQ16 = 411775L;
-    private const long PeakQ32 = (65536L << 16);
+    private ulong m_nextTriggerOrdinal;
 
     private readonly Voice[] m_voices = new Voice[VoiceCount];
     private readonly int[] m_monoAccumulator = new int[WorldAudioMixer.MaxBlockFrames];
-    private ulong m_nextTriggerOrdinal;
 
     private enum EnvelopePhase {
         Attack,
@@ -165,77 +164,6 @@ public sealed class WorldVoiceSynth {
         }
     }
 
-    /// <summary>Starts a voice. Allocation prefers a free slot, then steals the quietest (oldest on ties).</summary>
-    /// <param name="patch">The runtime parameter block.</param>
-    /// <param name="seed">The trigger seed — noise voices reproduce bit for bit from it.</param>
-    /// <param name="gainQ16">The voice gain, Q16.</param>
-    /// <param name="emitterId">The emitter the voice is bound to, or -1 for an unbound (proof-driven) voice.</param>
-    /// <returns>The voice slot used.</returns>
-    public int Trigger(in WorldVoicePatch patch, ulong seed, int gainQ16, int emitterId = -1) {
-        var slot = AllocateVoice();
-        ref var voice = ref m_voices[slot];
-
-        voice = default;
-        voice.Active = true;
-        voice.EmitterId = emitterId;
-        voice.Patch = patch;
-        voice.GainQ16 = gainQ16;
-        voice.TriggerOrdinal = m_nextTriggerOrdinal++;
-        voice.Rotor = FixedComplex.MultiplicativeIdentity;
-        // Start the triangle LFO at its zero crossing (quarter turn) so vibrato onsets at the base pitch.
-        voice.VibratoPhase = (1U << 30);
-        voice.VibratoIncrement = ((patch.VibratoDepthMillihertz > 0)
-            ? ((uint)((((ulong)patch.VibratoRateMillihertz) << 32) / (1000UL * SampleRate)))
-            : 0U);
-        voice.Noise = Pcg32XshRr.Create(state: seed, stream: 1UL);
-
-        if (patch.AttackFrames > 0) {
-            voice.Envelope = EnvelopePhase.Attack;
-            voice.EnvelopeLevelQ32 = 0L;
-            voice.EnvelopeStepQ32 = CeilingStep(travelQ32: PeakQ32, frames: patch.AttackFrames);
-        } else {
-            EnterPostAttack(voice: ref voice);
-        }
-
-        UpdateControlRate(voice: ref voice);
-
-        return slot;
-    }
-
-    /// <summary>Renders every active voice, summed and saturated, into a mono span — the pure surface both the
-    /// audio thread and the offline proof drive. Advances all voice state by <paramref name="frames"/>.</summary>
-    /// <param name="destination">The mono s16 destination (at least <paramref name="frames"/> long).</param>
-    /// <param name="frames">The frame count (at most <see cref="WorldAudioMixer.MaxBlockFrames"/>).</param>
-    public void Render(Span<short> destination, int frames) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: frames, other: WorldAudioMixer.MaxBlockFrames);
-
-        var accumulator = m_monoAccumulator.AsSpan(start: 0, length: frames);
-
-        accumulator.Clear();
-
-        for (var i = 0; (i < VoiceCount); i++) {
-            if (m_voices[i].Active) {
-                RenderVoice(voice: ref m_voices[i], accumulator: accumulator);
-            }
-        }
-
-        for (var n = 0; (n < frames); n++) {
-            destination[n] = ((short)Math.Clamp(value: accumulator[n], min: -32767, max: 32767));
-        }
-    }
-
-    /// <summary>Renders the voices bound to one emitter additively into an int accumulator (s16 domain, unsaturated)
-    /// — the mixer's per-emitter tap. Advances only those voices.</summary>
-    /// <param name="emitterId">The emitter binding to render.</param>
-    /// <param name="accumulator">The pre-cleared mono accumulator.</param>
-    internal void RenderBound(int emitterId, Span<int> accumulator) {
-        for (var i = 0; (i < VoiceCount); i++) {
-            if (m_voices[i].Active && (m_voices[i].EmitterId == emitterId)) {
-                RenderVoice(voice: ref m_voices[i], accumulator: accumulator);
-            }
-        }
-    }
-
     /// <summary>Frees every emitter-bound voice whose emitter is absent from <paramref name="emitters"/> — a row
     /// that left the table takes its voices with it (they would otherwise sound from nowhere forever).</summary>
     /// <param name="emitters">The current snapshot's emitter table.</param>
@@ -243,7 +171,10 @@ public sealed class WorldVoiceSynth {
         for (var i = 0; (i < VoiceCount); i++) {
             ref var voice = ref m_voices[i];
 
-            if (!voice.Active || (voice.EmitterId < 0)) {
+            if (
+                !voice.Active ||
+                (voice.EmitterId < 0)
+            ) {
                 continue;
             }
 
@@ -262,34 +193,183 @@ public sealed class WorldVoiceSynth {
             }
         }
     }
+    /// <summary>Renders the voices bound to one emitter additively into an int accumulator (s16 domain, unsaturated)
+    /// — the mixer's per-emitter tap. Advances only those voices.</summary>
+    /// <param name="emitterId">The emitter binding to render.</param>
+    /// <param name="accumulator">The pre-cleared mono accumulator.</param>
+    internal void RenderBound(int emitterId, Span<int> accumulator) {
+        for (var i = 0; (i < VoiceCount); i++) {
+            if (
+                m_voices[i].Active &&
+                (m_voices[i].EmitterId == emitterId)
+            ) {
+                RenderVoice(
+                    voice: ref m_voices[i],
+                    accumulator: accumulator
+                );
+            }
+        }
+    }
 
+    private int AllocateVoice() {
+        var quietest = 0;
+        var quietestLevel = long.MaxValue;
+        var quietestOrdinal = ulong.MaxValue;
+
+        for (var i = 0; (i < VoiceCount); i++) {
+            ref var voice = ref m_voices[i];
+
+            if (!voice.Active) {
+                return i;
+            }
+
+            if (
+                (voice.EnvelopeLevelQ32 < quietestLevel) ||
+                ((voice.EnvelopeLevelQ32 == quietestLevel) && (voice.TriggerOrdinal < quietestOrdinal))
+            ) {
+                quietest = i;
+                quietestLevel = voice.EnvelopeLevelQ32;
+                quietestOrdinal = voice.TriggerOrdinal;
+            }
+        }
+
+        return quietest;
+    }
+    private static int ApplyFilter(ref Voice voice, int sample) {
+        if (voice.Patch.FilterMode == WorldVoiceFilterMode.Bypass) {
+            return sample;
+        }
+
+        // Chamberlin SVF, Q16: one integrator pair per voice, taps low/band/high.
+        var f = ((long)voice.Patch.FilterCoefficientQ16);
+        var q = ((long)voice.Patch.FilterDampingQ16);
+
+        voice.FilterLow += ((int)((f * voice.FilterBand) >> 16));
+
+        var high = ((sample - voice.FilterLow) - ((int)((q * voice.FilterBand) >> 16)));
+
+        voice.FilterBand += ((int)((f * high) >> 16));
+
+        return (voice.Patch.FilterMode switch {
+            WorldVoiceFilterMode.LowPass => voice.FilterLow,
+            WorldVoiceFilterMode.BandPass => voice.FilterBand,
+            _ => high,
+        });
+    }
+    // Ceiling division keeps every envelope phase within its DECLARED frame count — a truncated step would leave a
+    // sub-step residue that overstays the phase by several samples.
+    private static long CeilingStep(long travelQ32, int frames) =>
+        travelQ32.CeilingDivide(divisor: ((long)frames));
     private static void EnterPostAttack(ref Voice voice) {
         if (voice.Patch.DecayFrames > 0) {
             voice.Envelope = EnvelopePhase.Decay;
             voice.EnvelopeLevelQ32 = PeakQ32;
-            voice.EnvelopeStepQ32 = CeilingStep(travelQ32: (PeakQ32 - (((long)voice.Patch.SustainQ16) << 16)), frames: voice.Patch.DecayFrames);
+            voice.EnvelopeStepQ32 = CeilingStep(
+                travelQ32: (PeakQ32 - (((long)voice.Patch.SustainQ16) << 16)),
+                frames: voice.Patch.DecayFrames
+            );
         } else {
             voice.Envelope = EnvelopePhase.Sustain;
             voice.EnvelopeLevelQ32 = (((long)voice.Patch.SustainQ16) << 16);
         }
     }
-
-    // Ceiling division keeps every envelope phase within its DECLARED frame count — a truncated step would leave a
-    // sub-step residue that overstays the phase by several samples.
-    private static long CeilingStep(long travelQ32, int frames) =>
-        travelQ32.CeilingDivide(divisor: ((long)frames));
     private static void EnterRelease(ref Voice voice) {
-        if ((voice.Patch.ReleaseFrames > 0) && (voice.EnvelopeLevelQ32 > 0L)) {
+        if (
+            (voice.Patch.ReleaseFrames > 0) &&
+            (voice.EnvelopeLevelQ32 > 0L)
+        ) {
             voice.Envelope = EnvelopePhase.Release;
-            voice.EnvelopeStepQ32 = CeilingStep(travelQ32: voice.EnvelopeLevelQ32, frames: voice.Patch.ReleaseFrames);
+            voice.EnvelopeStepQ32 = CeilingStep(
+                travelQ32: voice.EnvelopeLevelQ32,
+                frames: voice.Patch.ReleaseFrames
+            );
         } else {
             voice.Active = false;
         }
     }
+    private static int OscillatorSample(ref Voice voice) {
+        switch (voice.Patch.Oscillator) {
+            case SynthOscillator.Sine:
+                voice.Rotor *= voice.RotorStep;
 
+                return ((int)voice.Rotor.Imaginary.Value);
+            case SynthOscillator.Saw: {
+                    voice.Phase += voice.PhaseIncrement;
+
+                    return ((int)(((long)(voice.Phase >> 15)) - 65536L));
+                }
+            case SynthOscillator.Triangle: {
+                    voice.Phase += voice.PhaseIncrement;
+
+                    var saw = (((long)(voice.Phase >> 15)) - 65536L);
+
+                    return ((int)(65536L - (2L * Math.Abs(value: saw))));
+                }
+            case SynthOscillator.Noise: {
+                    var draw = voice.Noise.NextUInt32();
+                    var white = ((((int)(draw >> 16)) - 32768) * 2);
+                    var polynomial = voice.Patch.Polynomial;
+
+                    if (polynomial == 0) {
+                        return white;
+                    }
+
+                    // One-pole tilt: k darkens as the low seven bits rise; the top bit flips to the high-pass
+                    // complement (bright family). A minimum-viable character map — liftable when patches want more.
+                    var k = ((128 - (polynomial & 127)) << 9);
+
+                    voice.NoiseTiltState += ((int)((((long)k) * (white - voice.NoiseTiltState)) >> 16));
+
+                    return ((polynomial < 128)
+                        ? voice.NoiseTiltState
+                        : (white - voice.NoiseTiltState)
+                    );
+                }
+            case SynthOscillator.Pulse:
+            default: {
+                    voice.Phase += voice.PhaseIncrement;
+
+                    var raw = ((voice.Phase < voice.Patch.DutyThresholdQ32)
+                        ? 65536
+                        : -65536
+                    );
+
+                    return (raw - voice.Patch.DutyDcOffsetQ16);
+                }
+        }
+    }
+    private static void RenderVoice(ref Voice voice, Span<int> accumulator) {
+        for (var n = 0; (n < accumulator.Length); n++) {
+            if (voice.ControlCountdown <= 0) {
+                UpdateControlRate(voice: ref voice);
+            }
+
+            var level = StepEnvelope(voice: ref voice);
+
+            if (!voice.Active) {
+                return;
+            }
+
+            var oscillator = OscillatorSample(voice: ref voice);
+            var shaped = ApplyFilter(
+                sample: ((int)((((long)oscillator) * level) >> 16)),
+                voice: ref voice
+            );
+            var scaled = ((int)((((long)shaped) * voice.GainQ16) >> 16));
+
+            accumulator[n] += ((int)((((long)scaled) * 32767L) >> 16));
+            voice.VibratoPhase += voice.VibratoIncrement;
+            voice.TotalFrames++;
+            voice.ControlCountdown--;
+        }
+    }
     // Advances the envelope by one sample; returns the level Q16 (0 with Active cleared once done).
     private static int StepEnvelope(ref Voice voice) {
-        if ((voice.Patch.DurationFrames > 0) && (voice.TotalFrames >= voice.Patch.DurationFrames) && (voice.Envelope != EnvelopePhase.Release)) {
+        if (
+            (voice.Patch.DurationFrames > 0) &&
+            (voice.TotalFrames >= voice.Patch.DurationFrames) &&
+            (voice.Envelope != EnvelopePhase.Release)
+        ) {
             EnterRelease(voice: ref voice);
 
             if (!voice.Active) {
@@ -333,7 +413,6 @@ public sealed class WorldVoiceSynth {
 
         return ((int)(voice.EnvelopeLevelQ32 >> 16));
     }
-
     // Re-evaluates pitch (base + sweep + triangle vibrato) and rebuilds the phase increment + sine rotor step;
     // renormalizes the rotor against multiply drift. Runs once per control interval.
     private static void UpdateControlRate(ref Voice voice) {
@@ -351,7 +430,11 @@ public sealed class WorldVoiceSynth {
             pitch += ((voice.Patch.VibratoDepthMillihertz * triangle) >> 16);
         }
 
-        pitch = Math.Clamp(value: pitch, min: 1L, max: SynthPatchDocument.MaxPitchMillihertz);
+        pitch = Math.Clamp(
+            max: SynthPatchDocument.MaxPitchMillihertz,
+            min: 1L,
+            value: pitch
+        );
         voice.PhaseIncrement = ((uint)((((ulong)pitch) << 32) / (1000UL * SampleRate)));
 
         if (voice.Patch.Oscillator == SynthOscillator.Sine) {
@@ -363,114 +446,82 @@ public sealed class WorldVoiceSynth {
 
         voice.ControlCountdown = ControlIntervalFrames;
     }
-    private static int OscillatorSample(ref Voice voice) {
-        switch (voice.Patch.Oscillator) {
-            case SynthOscillator.Sine:
-                voice.Rotor *= voice.RotorStep;
 
-                return ((int)voice.Rotor.Imaginary.Value);
-            case SynthOscillator.Saw: {
-                    voice.Phase += voice.PhaseIncrement;
+    /// <summary>Renders every active voice, summed and saturated, into a mono span — the pure surface both the
+    /// audio thread and the offline proof drive. Advances all voice state by <paramref name="frames"/>.</summary>
+    /// <param name="destination">The mono s16 destination (at least <paramref name="frames"/> long).</param>
+    /// <param name="frames">The frame count (at most <see cref="WorldAudioMixer.MaxBlockFrames"/>).</param>
+    public void Render(Span<short> destination, int frames) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: frames,
+            other: WorldAudioMixer.MaxBlockFrames
+        );
 
-                    return ((int)(((long)(voice.Phase >> 15)) - 65536L));
-                }
-            case SynthOscillator.Triangle: {
-                    voice.Phase += voice.PhaseIncrement;
+        var accumulator = m_monoAccumulator.AsSpan(
+            length: frames,
+            start: 0
+        );
 
-                    var saw = (((long)(voice.Phase >> 15)) - 65536L);
-
-                    return ((int)(65536L - (2L * Math.Abs(value: saw))));
-                }
-            case SynthOscillator.Noise: {
-                    var draw = voice.Noise.NextUInt32();
-                    var white = ((((int)(draw >> 16)) - 32768) * 2);
-                    var polynomial = voice.Patch.Polynomial;
-
-                    if (polynomial == 0) {
-                        return white;
-                    }
-
-                    // One-pole tilt: k darkens as the low seven bits rise; the top bit flips to the high-pass
-                    // complement (bright family). A minimum-viable character map — liftable when patches want more.
-                    var k = ((128 - (polynomial & 127)) << 9);
-
-                    voice.NoiseTiltState += ((int)((((long)k) * (white - voice.NoiseTiltState)) >> 16));
-
-                    return ((polynomial < 128) ? voice.NoiseTiltState : (white - voice.NoiseTiltState));
-                }
-            case SynthOscillator.Pulse:
-            default: {
-                    voice.Phase += voice.PhaseIncrement;
-
-                    var raw = ((voice.Phase < voice.Patch.DutyThresholdQ32) ? 65536 : -65536);
-
-                    return (raw - voice.Patch.DutyDcOffsetQ16);
-                }
-        }
-    }
-    private static int ApplyFilter(ref Voice voice, int sample) {
-        if (voice.Patch.FilterMode == WorldVoiceFilterMode.Bypass) {
-            return sample;
-        }
-
-        // Chamberlin SVF, Q16: one integrator pair per voice, taps low/band/high.
-        var f = ((long)voice.Patch.FilterCoefficientQ16);
-        var q = ((long)voice.Patch.FilterDampingQ16);
-
-        voice.FilterLow += ((int)((f * voice.FilterBand) >> 16));
-
-        var high = ((sample - voice.FilterLow) - ((int)((q * voice.FilterBand) >> 16)));
-
-        voice.FilterBand += ((int)((f * high) >> 16));
-
-        return (voice.Patch.FilterMode switch {
-            WorldVoiceFilterMode.LowPass => voice.FilterLow,
-            WorldVoiceFilterMode.BandPass => voice.FilterBand,
-            _ => high,
-        });
-    }
-    private static void RenderVoice(ref Voice voice, Span<int> accumulator) {
-        for (var n = 0; (n < accumulator.Length); n++) {
-            if (voice.ControlCountdown <= 0) {
-                UpdateControlRate(voice: ref voice);
-            }
-
-            var level = StepEnvelope(voice: ref voice);
-
-            if (!voice.Active) {
-                return;
-            }
-
-            var oscillator = OscillatorSample(voice: ref voice);
-            var shaped = ApplyFilter(voice: ref voice, sample: ((int)((((long)oscillator) * level) >> 16)));
-            var scaled = ((int)((((long)shaped) * voice.GainQ16) >> 16));
-
-            accumulator[n] += ((int)((((long)scaled) * 32767L) >> 16));
-            voice.VibratoPhase += voice.VibratoIncrement;
-            voice.TotalFrames++;
-            voice.ControlCountdown--;
-        }
-    }
-    private int AllocateVoice() {
-        var quietest = 0;
-        var quietestLevel = long.MaxValue;
-        var quietestOrdinal = ulong.MaxValue;
+        accumulator.Clear();
 
         for (var i = 0; (i < VoiceCount); i++) {
-            ref var voice = ref m_voices[i];
-
-            if (!voice.Active) {
-                return i;
-            }
-
-            if ((voice.EnvelopeLevelQ32 < quietestLevel) ||
-                ((voice.EnvelopeLevelQ32 == quietestLevel) && (voice.TriggerOrdinal < quietestOrdinal))) {
-                quietest = i;
-                quietestLevel = voice.EnvelopeLevelQ32;
-                quietestOrdinal = voice.TriggerOrdinal;
+            if (m_voices[i].Active) {
+                RenderVoice(
+                    voice: ref m_voices[i],
+                    accumulator: accumulator
+                );
             }
         }
 
-        return quietest;
+        for (var n = 0; (n < frames); n++) {
+            destination[n] = ((short)Math.Clamp(
+                value: accumulator[n],
+                min: -32767,
+                max: 32767
+            ));
+        }
+    }
+    /// <summary>Starts a voice. Allocation prefers a free slot, then steals the quietest (oldest on ties).</summary>
+    /// <param name="patch">The runtime parameter block.</param>
+    /// <param name="seed">The trigger seed — noise voices reproduce bit for bit from it.</param>
+    /// <param name="gainQ16">The voice gain, Q16.</param>
+    /// <param name="emitterId">The emitter the voice is bound to, or -1 for an unbound (proof-driven) voice.</param>
+    /// <returns>The voice slot used.</returns>
+    public int Trigger(in WorldVoicePatch patch, ulong seed, int gainQ16, int emitterId = -1) {
+        var slot = AllocateVoice();
+        ref var voice = ref m_voices[slot];
+
+        voice = default;
+        voice.Active = true;
+        voice.EmitterId = emitterId;
+        voice.Patch = patch;
+        voice.GainQ16 = gainQ16;
+        voice.TriggerOrdinal = m_nextTriggerOrdinal++;
+        voice.Rotor = FixedComplex.MultiplicativeIdentity;
+        // Start the triangle LFO at its zero crossing (quarter turn) so vibrato onsets at the base pitch.
+        voice.VibratoPhase = (1U << 30);
+        voice.VibratoIncrement = ((patch.VibratoDepthMillihertz > 0)
+            ? ((uint)((((ulong)patch.VibratoRateMillihertz) << 32) / (1000UL * SampleRate)))
+            : 0U
+        );
+        voice.Noise = Pcg32XshRr.Create(
+            state: seed,
+            stream: 1UL
+        );
+
+        if (patch.AttackFrames > 0) {
+            voice.Envelope = EnvelopePhase.Attack;
+            voice.EnvelopeLevelQ32 = 0L;
+            voice.EnvelopeStepQ32 = CeilingStep(
+                travelQ32: PeakQ32,
+                frames: patch.AttackFrames
+            );
+        } else {
+            EnterPostAttack(voice: ref voice);
+        }
+
+        UpdateControlRate(voice: ref voice);
+
+        return slot;
     }
 }

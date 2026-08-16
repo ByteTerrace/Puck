@@ -22,13 +22,13 @@ internal static class LandingCommand {
             return Usage();
         }
 
-        if (!TryParse(args: args, against: out var against, baseRef: out var baseRef, error: out var parseError)) {
+        if (!TryParse(against: out var against, args: args, baseRef: out var baseRef, error: out var parseError)) {
             Console.Error.WriteLine(value: $"ERROR: {parseError}");
 
             return 2;
         }
 
-        if (!Git.TryResolve(revision: against, resolved: out var tip, error: out var tipError)) {
+        if (!Git.TryResolve(error: out var tipError, resolved: out var tip, revision: against)) {
             Console.Error.WriteLine(value: $"ERROR: --against '{against}': {tipError}");
 
             return 2;
@@ -38,7 +38,7 @@ internal static class LandingCommand {
             return RefuseMissingBase(tip: tip);
         }
 
-        if (!Git.TryResolve(revision: baseRef, resolved: out var authoringBase, error: out var baseError)) {
+        if (!Git.TryResolve(error: out var baseError, resolved: out var authoringBase, revision: baseRef)) {
             Console.Error.WriteLine(value: $"ERROR: --base '{baseRef}': {baseError}");
 
             return 2;
@@ -93,16 +93,17 @@ internal static class LandingCommand {
         var unaccounted = LandingDiff.Subtract(left: againstTip, right: againstBase);
 
         if (unaccounted.Count != 0) {
-            return Refuse(tip: tip, authoringBase: authoringBase, unaccounted: unaccounted);
+            return Refuse(authoringBase: authoringBase, tip: tip, unaccounted: unaccounted);
         }
 
-        ReportGitAccept(tip: tip, authoringBase: authoringBase, intended: againstBase);
+        ReportGitAccept(authoringBase: authoringBase, intended: againstBase, tip: tip);
 
         // HEAD-BINDING HOLE, deliberately not solved here: this source integration cannot prove the invoked puck
         // assembly was built from the checkout's HEAD. A stale published puck.exe can retain the old git-only
         // landing command and never enter this code, so external enforcement must bind the executable to HEAD.
         // Recording that limit is in scope; adding a second bootstrap/update mechanism is not.
         var canaryExit = CanaryCommand.Run(args: []);
+
         if (canaryExit == 0) {
             Console.WriteLine(value: $"PASS: landing accepted — git-loss check and automatic canaries passed given base {authoringBase[..12]}.");
             Console.WriteLine(value: "      The git component proves the landing only relative to what you say you built on.");
@@ -142,7 +143,6 @@ internal static class LandingCommand {
 
         return 2;
     }
-
     private static void ReportGitAccept(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> intended) {
         var files = 0;
         var lines = 0;
@@ -156,7 +156,6 @@ internal static class LandingCommand {
         Console.WriteLine(value: $"landing: {lines} deleted line(s) across {files} file(s) — every one accounted for by this landing's own change set.");
         Console.WriteLine(value: $"landing git component: clean given base {authoringBase[..12]}; running the automatic canary set next.");
     }
-
     // The refusal names the COMMITS whose content is being dropped, not just the lines: "you deleted 306 lines" is a
     // puzzle, "you are dropping <hash> The mouse learns to pick things up" is an instruction.
     private static int Refuse(string tip, string authoringBase, IReadOnlyDictionary<string, List<string>> unaccounted) {
@@ -190,13 +189,11 @@ internal static class LandingCommand {
 
         return 1;
     }
-
     private static string Clip(string text) {
         var trimmed = text.Trim();
 
         return ((trimmed.Length <= 100) ? trimmed : (trimmed[..100] + "…"));
     }
-
     private static bool TryParse(string[] args, out string against, out string? baseRef, out string error) {
         against = string.Empty;
         baseRef = null;
@@ -206,22 +203,22 @@ internal static class LandingCommand {
             switch (args[index]) {
                 case "--against":
                 case "--base": {
-                    var name = args[index];
+                        var name = args[index];
 
-                    if ((index + 1) >= args.Length) {
-                        error = $"{name} needs a value.";
+                        if ((index + 1) >= args.Length) {
+                            error = $"{name} needs a value.";
 
-                        return false;
+                            return false;
+                        }
+
+                        if (name == "--against") {
+                            against = args[++index];
+                        } else {
+                            baseRef = args[++index];
+                        }
+
+                        break;
                     }
-
-                    if (name == "--against") {
-                        against = args[++index];
-                    } else {
-                        baseRef = args[++index];
-                    }
-
-                    break;
-                }
                 default:
                     error = $"unknown argument '{args[index]}'.";
 
@@ -237,7 +234,6 @@ internal static class LandingCommand {
 
         return true;
     }
-
     private static int Usage() {
         Console.Error.WriteLine(
             value:

@@ -32,9 +32,8 @@ internal static class PresentedZetaClaims {
             for (var target = 0; (target < order); ++target) { arrows[((source * order) + target)] = (source, target, material.One); }
         }
 
-        return Presentations.Quiver<TValue, TOps>(objectCount: order, arrows: arrows, material: material);
+        return Presentations.Quiver<TValue, TOps>(arrows: arrows, material: material, objectCount: order);
     }
-
     private static long Key(int source, int target, int order) =>
         ((source * order) + target);
 
@@ -64,41 +63,41 @@ internal static class PresentedZetaClaims {
         const int Exponent = 9;
 
         var likelyAlgebra = PresentedAlgebra<UnitInterval32, MostLikelyPathMaterial>.Create(
-            presentation: CodiscreteQuiver<UnitInterval32, MostLikelyPathMaterial>(order: Order, material: default)
+            presentation: CodiscreteQuiver<UnitInterval32, MostLikelyPathMaterial>(material: default, order: Order)
         );
         var tropicalAlgebra = PresentedAlgebra<FixedQ4816, TropicalMaterial>.Create(
-            presentation: CodiscreteQuiver<FixedQ4816, TropicalMaterial>(order: Order, material: default)
+            presentation: CodiscreteQuiver<FixedQ4816, TropicalMaterial>(material: default, order: Order)
         );
-        var keys = (long[])[Key(source: 0, target: 1, order: Order), Key(source: 1, target: 2, order: Order), Key(source: 2, target: 3, order: Order), Key(source: 3, target: 4, order: Order)];
-        var likelyCoefficients = (UnitInterval32[])[
+        var keys = ((long[])[Key(order: Order, source: 0, target: 1), Key(order: Order, source: 1, target: 2), Key(order: Order, source: 2, target: 3), Key(order: Order, source: 3, target: 4)]);
+        var likelyCoefficients = ((UnitInterval32[])[
             UnitInterval32.Create(value: (UnitOneRaw >> Exponent)), UnitInterval32.Create(value: (UnitOneRaw >> Exponent)),
             UnitInterval32.Create(value: (UnitOneRaw >> Exponent)), UnitInterval32.Create(value: (UnitOneRaw >> Exponent)),
-        ];
-        var tropicalCoefficients = (FixedQ4816[])[
+        ]);
+        var tropicalCoefficients = ((FixedQ4816[])[
             FixedQ4816.FromInteger(value: Exponent), FixedQ4816.FromInteger(value: Exponent),
             FixedQ4816.FromInteger(value: Exponent), FixedQ4816.FromInteger(value: Exponent),
-        ];
-        var likelyElement = likelyAlgebra.FromSupport(keys: keys, coefficients: likelyCoefficients);
-        var tropicalElement = tropicalAlgebra.FromSupport(keys: keys, coefficients: tropicalCoefficients);
-        var likelyTotal = likelyAlgebra.TruncatedSum(value: likelyElement, bound: (Order - 1));
+        ]);
+        var likelyElement = likelyAlgebra.FromSupport(coefficients: likelyCoefficients, keys: keys);
+        var tropicalElement = tropicalAlgebra.FromSupport(coefficients: tropicalCoefficients, keys: keys);
+        var likelyTotal = likelyAlgebra.TruncatedSum(bound: (Order - 1), value: likelyElement);
 
-        if (!tropicalAlgebra.TrySumOverAllLengths(value: tropicalElement, total: out var tropicalTotal, obstruction: out var tropicalObstruction)) {
+        if (!tropicalAlgebra.TrySumOverAllLengths(obstruction: out var tropicalObstruction, total: out var tropicalTotal, value: tropicalElement)) {
             return $"the tropical star was refused on the five-object chain, attempting {tropicalObstruction.Attempted}, where the exact idempotent material carries no such obstruction";
         }
 
-        var threeHopKey = Key(source: 0, target: 3, order: Order);
-        var fourHopKey = Key(source: 0, target: 4, order: Order);
+        var threeHopKey = Key(order: Order, source: 0, target: 3);
+        var fourHopKey = Key(order: Order, source: 0, target: 4);
         var threeHopCost = tropicalTotal[key: threeHopKey];
         var fourHopCost = tropicalTotal[key: fourHopKey];
         var threeHopLikelihood = likelyTotal[key: threeHopKey];
         var fourHopLikelihood = likelyTotal[key: fourHopKey];
 
         if (threeHopCost != FixedQ4816.FromInteger(value: (3 * Exponent))) {
-            return $"the three-hop tropical cost is {threeHopCost.Value}, expected exactly {3 * Exponent} at Q16";
+            return $"the three-hop tropical cost is {threeHopCost.Value}, expected exactly {(3 * Exponent)} at Q16";
         }
 
         if (fourHopCost != FixedQ4816.FromInteger(value: (4 * Exponent))) {
-            return $"the four-hop tropical cost is {fourHopCost.Value}, expected exactly {4 * Exponent} at Q16, where the tropical material names it exactly and never underflows";
+            return $"the four-hop tropical cost is {fourHopCost.Value}, expected exactly {(4 * Exponent)} at Q16, where the tropical material names it exactly and never underflows";
         }
 
         if (UnitInterval32.Zero == threeHopLikelihood) {
@@ -120,15 +119,13 @@ internal static class PresentedZetaClaims {
         mixed = ((mixed ^ (mixed >> 30)) * 0xBF58476D1CE4E5B9UL);
         mixed = ((mixed ^ (mixed >> 27)) * 0x94D049BB133111EBUL);
 
-        return (mixed ^ (mixed >> 31));
+        return mixed ^ (mixed >> 31);
     }
-
     private static ulong DrawRaw(ref ulong counter) {
         counter += 1UL;
 
         return (MixIndex(index: counter) % (UnitOneRaw + 1UL));
     }
-
     /// <summary>Rounds an exact non-negative dyadic value to the closed-unit grid, ties to even — re-derived here
     /// rather than borrowed from <see cref="UnitInterval32"/> or from <c>Oracles.cs</c>, which is the whole point of
     /// an oracle.</summary>
@@ -185,12 +182,12 @@ internal static class PresentedZetaClaims {
                 left[term] = UnitInterval32.Create(value: leftRaw);
                 right[term] = UnitInterval32.Create(value: rightRaw);
 
-                var exact = (((BigInteger)chargeRaw * (BigInteger)leftRaw) * (BigInteger)rightRaw);
+                var exact = ((((BigInteger)chargeRaw) * ((BigInteger)leftRaw)) * ((BigInteger)rightRaw));
 
                 if (exact > winningExact) { winningExact = exact; }
             }
 
-            var fused = material.FusedChargedSum(charges: charges, left: left, right: right, lane: ChargeLane.General);
+            var fused = material.FusedChargedSum(charges: charges, lane: ChargeLane.General, left: left, right: right);
             var expected = RoundTiesToEvenLocal(exact: winningExact, shift: 64);
 
             if (fused.Value != expected) {

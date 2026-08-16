@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -18,6 +19,10 @@ public sealed record SdfWorldRenderSpec(
     uint Width,
     uint Height
 ) {
+    /// <summary>The carve-bake brick pool's voxel capacity (see <see cref="SdfWorldEngineOptions.BrickPoolVoxelCapacity"/>),
+    /// frozen at construction. Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
+    /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
+    public int BrickPoolVoxelCapacity { get; init; } = SdfWorldEngine.DefaultBrickPoolVoxelCapacity;
     /// <summary>An optional PNG path; the first rendered frame is read back and written there.</summary>
     public string? CapturePath { get; init; }
     /// <summary>Child render nodes keyed by viewport slot (each supplies its slot's surface instead of an SDF
@@ -46,20 +51,15 @@ public sealed record SdfWorldRenderSpec(
     /// <summary>A floor on the program buffer's packed-word capacity — the capacity envelope for a frame source
     /// that hot-swaps programs larger than the first frame's.</summary>
     public int ProgramWordCapacity { get; init; }
-    /// <summary>A floor on the compositor's viewport capacity — the capacity envelope for a frame source whose
-    /// per-frame view count grows past the first frame's (a split-screen host whose players join later). The engine
-    /// composites each frame's actual <see cref="SdfFrame.Views"/> count, up to this envelope; without a floor the
-    /// capacity freezes at the first frame's count (the pre-existing behavior).</summary>
-    public int ViewportCapacity { get; init; }
-    /// <summary>The carve-bake brick pool's voxel capacity (see <see cref="SdfWorldEngineOptions.BrickPoolVoxelCapacity"/>),
-    /// frozen at construction. Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
-    /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
-    public int BrickPoolVoxelCapacity { get; init; } = SdfWorldEngine.DefaultBrickPoolVoxelCapacity;
-    /// <summary>Screen-source providers keyed by the program-declared screen index (the diegetic-screen seam).</summary>
-    public IReadOnlyDictionary<int, Func<nint>>? ScreenSources { get; init; }
+    /// <summary>The resolved <c>PUCK_RAY_QUERY</c> toggle, or <see langword="null"/> to let <see cref="SdfEngineNode"/>
+    /// fall back to the environment/default. Parallel to <see cref="Timing"/>; see
+    /// <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults it yet.</summary>
+    public bool? RayQuery { get; init; }
     /// <summary>Screen-light color providers, parallel to <see cref="ScreenSources"/>: the colored glow each screen
     /// emits into the room (its framebuffer average), keyed by screen index.</summary>
     public IReadOnlyDictionary<int, Func<Vector3>>? ScreenLights { get; init; }
+    /// <summary>Screen-source providers keyed by the program-declared screen index (the diegetic-screen seam).</summary>
+    public IReadOnlyDictionary<int, Func<nint>>? ScreenSources { get; init; }
     // NOTE: screen-surface TRANSFORM providers are read straight off FrameSource.ScreenSurfaceTransforms (see
     // ISdfFrameSource) rather than threaded through their own spec field — a caller's own type coupling would
     // otherwise grow just to spell SdfScreenSurfaceTransform in its render-assembly call site.
@@ -70,8 +70,9 @@ public sealed record SdfWorldRenderSpec(
     /// verb, or the run-doc <c>host.timing</c> field) — this value only seeds that shared control at construction, the
     /// lowest precedence tier beneath a programmatic arm and the run-doc composition seed.</summary>
     public bool? Timing { get; init; }
-    /// <summary>The resolved <c>PUCK_RAY_QUERY</c> toggle, or <see langword="null"/> to let <see cref="SdfEngineNode"/>
-    /// fall back to the environment/default. Parallel to <see cref="Timing"/>; see
-    /// <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults it yet.</summary>
-    public bool? RayQuery { get; init; }
+    /// <summary>A floor on the compositor's viewport capacity — the capacity envelope for a frame source whose
+    /// per-frame view count grows past the first frame's (a split-screen host whose players join later). The engine
+    /// composites each frame's actual <see cref="SdfFrame.Views"/> count, up to this envelope; without a floor the
+    /// capacity freezes at the first frame's count (the pre-existing behavior).</summary>
+    public int ViewportCapacity { get; init; }
 }

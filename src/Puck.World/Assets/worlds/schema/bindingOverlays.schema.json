@@ -84,37 +84,7 @@
                   }
                 },
                 "page": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "entries": {
-                      "$ref": "./common.schema.json#/$defs/BindingPageEntryDefinitionList"
-                    },
-                    "label": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "icon": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "default": null
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "entries"
-                  ],
-                  "additionalProperties": false,
+                  "$ref": "./common.schema.json#/$defs/BindingPageDefinition",
                   "default": null
                 },
                 "command": {
@@ -232,37 +202,7 @@
                 "rings": {
                   "type": "array",
                   "items": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "entries": {
-                        "$ref": "./common.schema.json#/$defs/BindingPageEntryDefinitionList"
-                      },
-                      "label": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "icon": {
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "default": null
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "entries"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "./common.schema.json#/$defs/BindingPageDefinition"
                   }
                 },
                 "style": {

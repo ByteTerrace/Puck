@@ -9,19 +9,21 @@ namespace Puck.Overlays;
 /// no GPU types.
 /// </summary>
 public sealed class ConsolePanelWriter {
+    private const string PromptPrefix = "> ";
+    private const string Title = "CONSOLE";
+
+    /// <summary>The visible-column cap one row is clipped to.</summary>
+    public const int MaxColumns = 120;
     /// <summary>The visible-row cap — enough scrollback to read a verb exchange. The panel's whole element and text
     /// reservation is derived from this and <see cref="MaxColumns"/>.</summary>
     public const int MaxRows = 16;
-    /// <summary>The visible-column cap one row is clipped to.</summary>
-    public const int MaxColumns = 120;
     /// <summary>The <see cref="Title"/> literal's character count — the ONE source <see cref="OverlayChannelLeases"/>
     /// reads for its text-word reservation. Every <c>WriteText</c> call for <see cref="Title"/> clamps to this
     /// constant, so an edit to <see cref="Title"/> that forgets to update it truncates the drawn title (reported,
     /// never silent — see <see cref="OverlayFrameBuilder.Refused"/>) instead of quietly overrunning the reservation.</summary>
     public const int TitleChars = 7;
 
-    private const string PromptPrefix = "> ";
-    private const string Title = "CONSOLE";
+    private readonly IConsoleTapeSource m_source;
 
     static ConsolePanelWriter() {
         System.Diagnostics.Debug.Assert(
@@ -29,8 +31,6 @@ public sealed class ConsolePanelWriter {
             message: "ConsolePanelWriter.Title's length drifted from TitleChars — update TitleChars (and OverlayChannelLeases' ConsoleTextWords, which reads it) to match."
         );
     }
-
-    private readonly IConsoleTapeSource m_source;
 
     /// <summary>Initializes a new instance of the <see cref="ConsolePanelWriter"/> class.</summary>
     /// <param name="source">The console-tape snapshot source.</param>
@@ -65,14 +65,14 @@ public sealed class ConsolePanelWriter {
         var availableWidth = ((builder.Width - (2f * margin)) - (2f * pad));
         var availableHeight = (((builder.Height * 0.55f) - bandHeight) - (2f * pad));
         var cols = Math.Clamp(
-            value: ((int)(availableWidth / cellWidth)),
+            max: MaxColumns,
             min: 8,
-            max: MaxColumns
+            value: ((int)(availableWidth / cellWidth))
         );
         var rows = Math.Clamp(
-            value: ((int)(availableHeight / cellHeight)),
+            max: MaxRows,
             min: 4,
-            max: MaxRows
+            value: ((int)(availableHeight / cellHeight))
         );
         var panelWidth = ((cols * cellWidth) + (2f * pad));
         var panelHeight = ((bandHeight + (2f * pad)) + (rows * cellHeight));
@@ -111,8 +111,8 @@ public sealed class ConsolePanelWriter {
         for (var row = 0; ((row < historyRows) && ((firstShown + row) < lines.Count)); row++) {
             var line = lines[(firstShown + row)];
             var isEcho = line.Text.StartsWith(
-                value: PromptPrefix,
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: PromptPrefix
             );
 
             // A refused row takes the same danger hue the toast channel uses for a rejection, so the panel and the toast

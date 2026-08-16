@@ -86,7 +86,7 @@ public sealed class CartridgeHeader {
     /// <c>0x33</c> with new code <c>"01"</c>) — the gate for the boot ROM's title-based colorization and timing paths.</summary>
     public bool IsFirstPartyGame =>
         ((OldLicenseeCode == FirstPartyOldLicensee)
-        || ((OldLicenseeCode == NewLicenseeSentinel) && (NewLicenseeCode0 == (byte)'0') && (NewLicenseeCode1 == (byte)'1')));
+        || ((OldLicenseeCode == NewLicenseeSentinel) && (NewLicenseeCode0 == ((byte)'0')) && (NewLicenseeCode1 == ((byte)'1'))));
 
     /// <summary>Parses the header out of a full ROM image.</summary>
     /// <param name="rom">The cartridge ROM image; must be at least <c>0x0150</c> bytes.</param>
@@ -105,11 +105,11 @@ public sealed class CartridgeHeader {
         var typeCode = rom[CartridgeTypeOffset];
 
         DecodeType(
-            typeCode: typeCode,
-            mapper: out var mapper,
-            hasRam: out var hasRam,
             hasBattery: out var hasBattery,
-            hasRumble: out var hasRumble
+            hasRam: out var hasRam,
+            hasRumble: out var hasRumble,
+            mapper: out var mapper,
+            typeCode: typeCode
         );
 
         return new CartridgeHeader(
@@ -201,7 +201,7 @@ public sealed class CartridgeHeader {
                 break;
             }
 
-            _ = builder.Append(value: (char)value);
+            _ = builder.Append(value: ((char)value));
         }
 
         return builder.ToString().TrimEnd();

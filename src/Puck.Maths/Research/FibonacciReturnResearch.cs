@@ -13,7 +13,6 @@ public enum FibonacciReturnAnalysisStatus {
     /// <summary>A maximal right return and at least one exact period decomposition were found.</summary>
     Classified
 }
-
 /// <summary>
 /// An exact computational witness for <c>FibonacciPeriodDecomposition</c> in the Lean development.
 /// </summary>
@@ -33,35 +32,49 @@ public readonly record struct FibonacciPeriodDecompositionCertificate(
     FibonacciFactorCounts RootCounts,
     BigInteger CentralFactorLength
 ) {
+    /// <summary>Gets the exact strip cutoff <c>τ²</c>.</summary>
+    public static QuadraticSurd StripCutoff =>
+        (FibonacciResearch.GoldenRatio * FibonacciResearch.GoldenRatio);
     /// <summary>Gets the exact strip quantity <c>|l·τ−k|</c>.</summary>
     public QuadraticSurd StripError =>
         ((QuadraticSurd.Rational(value: ShortBlockCount) * FibonacciResearch.GoldenRatio) -
             QuadraticSurd.Rational(value: LongBlockCount)).Abs();
 
-    /// <summary>Gets the exact strip cutoff <c>τ²</c>.</summary>
-    public static QuadraticSurd StripCutoff =>
-        (FibonacciResearch.GoldenRatio * FibonacciResearch.GoldenRatio);
-
     /// <summary>Rechecks every clause of the corresponding Lean predicate.</summary>
     public bool Verify(FibonacciRulerWordIndex word) {
         ArgumentNullException.ThrowIfNull(word);
-        if ((Start.Sign < 0) || (Overlap.Sign < 0) || (Root.Sign <= 0) ||
-            (Phase <= 0) || (ShortBlockCount.Sign < 0) || (LongBlockCount.Sign < 0) ||
-            (ShortBlockCount.IsZero && LongBlockCount.IsZero)) {
+        if (
+            (Start.Sign < 0) ||
+            (Overlap.Sign < 0) ||
+            (Root.Sign <= 0) ||
+            (Phase <= 0) ||
+            (ShortBlockCount.Sign < 0) ||
+            (LongBlockCount.Sign < 0) ||
+            (ShortBlockCount.IsZero && LongBlockCount.IsZero)
+        ) {
             return false;
         }
-        if (!FibonacciReturnResearch.AreEqualBaseFactors(leftStart: Start, length: Overlap, rightStart: (Start + Root), word: word)) {
+        if (!FibonacciReturnResearch.AreEqualBaseFactors(
+            leftStart: Start,
+            length: Overlap,
+            rightStart: (Start + Root),
+            word: word
+        )) {
             return false;
         }
 
-        var expectedCounts = word.FactorCounts(length: Root, start: Start);
+        var expectedCounts = word.FactorCounts(
+            length: Root,
+            start: Start
+        );
 
         var (phaseMinusOne, phaseValue) = FibonacciResearch.FibonacciPair(index: (Phase - 1));
         var phasePlusOne = (phaseMinusOne + phaseValue);
         var phasePlusTwo = (phaseValue + phasePlusOne);
         var expectedCentralLength = FibonacciReturnResearch.CentralFactorLength(phase: Phase);
 
-        return ((RootCounts == expectedCounts) &&
+        return (
+            (RootCounts == expectedCounts) &&
             (CentralFactorLength == expectedCentralLength) &&
             (Overlap <= CentralFactorLength) &&
             (Root == ((ShortBlockCount * phasePlusOne) + (LongBlockCount * phasePlusTwo))) &&
@@ -69,10 +82,10 @@ public readonly record struct FibonacciPeriodDecompositionCertificate(
                 ((ShortBlockCount * phaseValue) + (LongBlockCount * phasePlusOne))) &&
             (RootCounts.TrueCount ==
                 ((ShortBlockCount * phaseMinusOne) + (LongBlockCount * phaseValue))) &&
-            (StripError < StripCutoff));
+            (StripError < StripCutoff)
+        );
     }
 }
-
 /// <summary>
 /// The canonical-phase data of one maximal right return, including the two signed coordinates
 /// that remain to be proved non-negative in the Lean development.
@@ -95,51 +108,40 @@ public readonly record struct FibonacciCanonicalReturnProfile(
     private static QuadraticSurd BaseSlope =>
         (QuadraticSurd.One - (QuadraticSurd.One / FibonacciResearch.GoldenRatio));
 
-    /// <summary>Gets whether this is in the overlap range used by the Lean maximal-return theorem.</summary>
-    public bool HasRichOverlap => (MaximalOverlap >= 3);
-
-    /// <summary>Gets whether both canonical Cassini-inverse coordinates are natural numbers.</summary>
-    public bool CoordinatesAreNonnegative =>
-        ((ShortCoordinate.Sign >= 0) && (LongCoordinate.Sign >= 0));
-
-    /// <summary>Gets the signed mechanical discrepancy <c>root·τ⁻² − trueCount</c>.</summary>
-    public QuadraticSurd SignedMechanicalError =>
-        ((QuadraticSurd.Rational(value: Root) * BaseSlope) -
-        QuadraticSurd.Rational(value: RootCounts.TrueCount));
-
-    /// <summary>Gets the absolute mechanical discrepancy.</summary>
-    public QuadraticSurd MechanicalError => SignedMechanicalError.Abs();
-
-    /// <summary>Gets the canonical cutoff <c>τ^(-phase)</c>.</summary>
-    public QuadraticSurd MechanicalCutoff =>
-        (QuadraticSurd.One / FibonacciResearch.GoldenPower(exponent: Phase));
-
-    /// <summary>Gets whether the exact mechanical-error inequality proved in Lean holds.</summary>
-    public bool MechanicalBoundHolds => (MechanicalError < MechanicalCutoff);
-
+    /// <summary>
+    /// Gets whether the two convergent denominators used by the Lean bracket fit inside
+    /// <c>maximalOverlap+1</c>.
+    /// </summary>
+    public bool ApproximantDenominatorsFit {
+        get {
+            var (_, phasePlusTwo) = FibonacciResearch.FibonacciPair(index: (Phase + 1));
+            return (phasePlusTwo <= (MaximalOverlap + BigInteger.One));
+        }
+    }
+    /// <summary>Gets the sum of the two exact convergent-error magnitudes.</summary>
+    public QuadraticSurd ApproximantErrorRadius =>
+        (ShortApproximantError.Abs() + LongApproximantError.Abs());
+    /// <summary>
+    /// Gets whether the neighboring-error radius is exactly the canonical mechanical cutoff.
+    /// This is the executable form of the Fibonacci power identity used by the Lean proof.
+    /// </summary>
+    public bool ApproximantRadiusMatchesCutoff => (ApproximantErrorRadius == MechanicalCutoff);
+    /// <summary>Gets whether the two consecutive convergent errors have opposite signs.</summary>
+    public bool ApproximantsBracketSlope =>
+        (((ShortApproximantError.Sign < 0) && (LongApproximantError.Sign > 0)) ||
+        ((ShortApproximantError.Sign > 0) && (LongApproximantError.Sign < 0)));
     /// <summary>Gets the exact coordinate-strip quantity <c>|l·τ−k|</c>.</summary>
     public QuadraticSurd CoordinateStripError =>
         ((QuadraticSurd.Rational(value: ShortCoordinate) * FibonacciResearch.GoldenRatio) -
             QuadraticSurd.Rational(value: LongCoordinate)).Abs();
-
     /// <summary>Gets whether the coordinates lie in the open strip <c>|l·τ−k| &lt; τ²</c>.</summary>
     public bool CoordinateStripHolds =>
         (CoordinateStripError < FibonacciPeriodDecompositionCertificate.StripCutoff);
-
-    /// <summary>
-    /// Gets the error of the short neighboring convergent
-    /// <c>F_(phase+1)·τ⁻² − F_(phase−1)</c>.
-    /// </summary>
-    public QuadraticSurd ShortApproximantError {
-        get {
-            var (phaseMinusOne, phaseValue) = FibonacciResearch.FibonacciPair(index: (Phase - 1));
-            var phasePlusOne = (phaseMinusOne + phaseValue);
-
-            return ((QuadraticSurd.Rational(value: phasePlusOne) * BaseSlope) -
-                QuadraticSurd.Rational(value: phaseMinusOne));
-        }
-    }
-
+    /// <summary>Gets whether both canonical Cassini-inverse coordinates are natural numbers.</summary>
+    public bool CoordinatesAreNonnegative =>
+        ((ShortCoordinate.Sign >= 0) && (LongCoordinate.Sign >= 0));
+    /// <summary>Gets whether this is in the overlap range used by the Lean maximal-return theorem.</summary>
+    public bool HasRichOverlap => (MaximalOverlap >= 3);
     /// <summary>
     /// Gets the error of the long neighboring convergent
     /// <c>F_(phase+2)·τ⁻² − F_phase</c>.
@@ -153,63 +155,30 @@ public readonly record struct FibonacciCanonicalReturnProfile(
                 QuadraticSurd.Rational(value: phaseValue));
         }
     }
-
-    /// <summary>Gets whether the two consecutive convergent errors have opposite signs.</summary>
-    public bool ApproximantsBracketSlope =>
-        (((ShortApproximantError.Sign < 0) && (LongApproximantError.Sign > 0)) ||
-        ((ShortApproximantError.Sign > 0) && (LongApproximantError.Sign < 0)));
-
-    /// <summary>Gets the sum of the two exact convergent-error magnitudes.</summary>
-    public QuadraticSurd ApproximantErrorRadius =>
-        (ShortApproximantError.Abs() + LongApproximantError.Abs());
-
+    /// <summary>Gets whether the exact mechanical-error inequality proved in Lean holds.</summary>
+    public bool MechanicalBoundHolds => (MechanicalError < MechanicalCutoff);
+    /// <summary>Gets the canonical cutoff <c>τ^(-phase)</c>.</summary>
+    public QuadraticSurd MechanicalCutoff =>
+        (QuadraticSurd.One / FibonacciResearch.GoldenPower(exponent: Phase));
+    /// <summary>Gets the absolute mechanical discrepancy.</summary>
+    public QuadraticSurd MechanicalError => SignedMechanicalError.Abs();
     /// <summary>
-    /// Gets whether the neighboring-error radius is exactly the canonical mechanical cutoff.
-    /// This is the executable form of the Fibonacci power identity used by the Lean proof.
+    /// Gets the error of the short neighboring convergent
+    /// <c>F_(phase+1)·τ⁻² − F_(phase−1)</c>.
     /// </summary>
-    public bool ApproximantRadiusMatchesCutoff => (ApproximantErrorRadius == MechanicalCutoff);
-
-    /// <summary>
-    /// Gets whether the two convergent denominators used by the Lean bracket fit inside
-    /// <c>maximalOverlap+1</c>.
-    /// </summary>
-    public bool ApproximantDenominatorsFit {
+    public QuadraticSurd ShortApproximantError {
         get {
-            var (_, phasePlusTwo) = FibonacciResearch.FibonacciPair(index: (Phase + 1));
-            return (phasePlusTwo <= (MaximalOverlap + BigInteger.One));
+            var (phaseMinusOne, phaseValue) = FibonacciResearch.FibonacciPair(index: (Phase - 1));
+            var phasePlusOne = (phaseMinusOne + phaseValue);
+
+            return ((QuadraticSurd.Rational(value: phasePlusOne) * BaseSlope) -
+                QuadraticSurd.Rational(value: phaseMinusOne));
         }
     }
-
-    /// <summary>Rechecks maximality and every stored exact field, without assuming the conjecture.</summary>
-    public bool Verify(FibonacciRulerWordIndex word) {
-        ArgumentNullException.ThrowIfNull(word);
-        if ((Start.Sign < 0) || (Root.Sign <= 0) || (MaximalOverlap.Sign < 0) || (Phase <= 0)) {
-            return false;
-        }
-        if (!FibonacciReturnResearch.AreEqualBaseFactors(
-            leftStart: Start,
-            length: MaximalOverlap,
-            rightStart: (Start + Root),
-            word: word
-        )) {
-            return false;
-        }
-        if (word.BaseLetterAt(index: (Start + MaximalOverlap)) ==
-            word.BaseLetterAt(index: ((Start + Root) + MaximalOverlap))) {
-            return false;
-        }
-
-        var expectedCounts = word.FactorCounts(length: Root, start: Start);
-        var expectedPhase = FibonacciReturnResearch.LeastCentralPhaseCovering(overlap: MaximalOverlap);
-        var expectedCoordinates = FibonacciReturnResearch.ReturnCoordinates(counts: expectedCounts, phase: expectedPhase);
-
-        return ((RootCounts == expectedCounts) &&
-            (Phase == expectedPhase) &&
-            (ShortCoordinate == expectedCoordinates.ShortCoordinate) &&
-            (LongCoordinate == expectedCoordinates.LongCoordinate) &&
-            (CentralFactorLength == FibonacciReturnResearch.CentralFactorLength(phase: Phase)) &&
-            (MaximalOverlap <= CentralFactorLength));
-    }
+    /// <summary>Gets the signed mechanical discrepancy <c>root·τ⁻² − trueCount</c>.</summary>
+    public QuadraticSurd SignedMechanicalError =>
+        ((QuadraticSurd.Rational(value: Root) * BaseSlope) -
+        QuadraticSurd.Rational(value: RootCounts.TrueCount));
 
     /// <summary>
     /// Converts the profile to the exact Lean period-decomposition certificate when the two
@@ -218,9 +187,11 @@ public readonly record struct FibonacciCanonicalReturnProfile(
     public bool TryGetPeriodDecomposition(
         out FibonacciPeriodDecompositionCertificate certificate
     ) {
-        if (!CoordinatesAreNonnegative ||
+        if (
+            !CoordinatesAreNonnegative ||
             (ShortCoordinate.IsZero && LongCoordinate.IsZero) ||
-            !CoordinateStripHolds) {
+            !CoordinateStripHolds
+        ) {
             certificate = default;
             return false;
         }
@@ -237,8 +208,50 @@ public readonly record struct FibonacciCanonicalReturnProfile(
         );
         return true;
     }
-}
+    /// <summary>Rechecks maximality and every stored exact field, without assuming the conjecture.</summary>
+    public bool Verify(FibonacciRulerWordIndex word) {
+        ArgumentNullException.ThrowIfNull(word);
+        if (
+            (Start.Sign < 0) ||
+            (Root.Sign <= 0) ||
+            (MaximalOverlap.Sign < 0) ||
+            (Phase <= 0)
+        ) {
+            return false;
+        }
+        if (!FibonacciReturnResearch.AreEqualBaseFactors(
+            leftStart: Start,
+            length: MaximalOverlap,
+            rightStart: (Start + Root),
+            word: word
+        )) {
+            return false;
+        }
+        if (word.BaseLetterAt(index: (Start + MaximalOverlap)) ==
+            word.BaseLetterAt(index: ((Start + Root) + MaximalOverlap))) {
+            return false;
+        }
 
+        var expectedCounts = word.FactorCounts(
+            length: Root,
+            start: Start
+        );
+        var expectedPhase = FibonacciReturnResearch.LeastCentralPhaseCovering(overlap: MaximalOverlap);
+        var expectedCoordinates = FibonacciReturnResearch.ReturnCoordinates(
+            counts: expectedCounts,
+            phase: expectedPhase
+        );
+
+        return (
+            (RootCounts == expectedCounts) &&
+            (Phase == expectedPhase) &&
+            (ShortCoordinate == expectedCoordinates.ShortCoordinate) &&
+            (LongCoordinate == expectedCoordinates.LongCoordinate) &&
+            (CentralFactorLength == FibonacciReturnResearch.CentralFactorLength(phase: Phase)) &&
+            (MaximalOverlap <= CentralFactorLength)
+        );
+    }
+}
 /// <summary>A bounded analysis of one concrete repeated Fibonacci factor.</summary>
 public sealed record FibonacciMaximalReturnAnalysis(
     FibonacciReturnAnalysisStatus Status,
@@ -254,7 +267,6 @@ public sealed record FibonacciMaximalReturnAnalysis(
     /// </summary>
     public FibonacciCanonicalReturnProfile? CanonicalProfile { get; init; }
 }
-
 /// <summary>
 /// Exact executable probes for maximal right returns of the characteristic Fibonacci word.
 /// </summary>
@@ -264,103 +276,6 @@ public sealed record FibonacciMaximalReturnAnalysis(
 /// heuristically, and distinguish a disproved return from an inconclusive bounded extension search.
 /// </remarks>
 public static class FibonacciReturnResearch {
-    /// <summary>Returns the central-factor length <c>F_(phase+3)−2</c> at a positive phase.</summary>
-    public static BigInteger CentralFactorLength(int phase) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(phase, 1);
-        var (phasePlusOne, phasePlusTwo) = FibonacciResearch.FibonacciPair(index: (phase + 1));
-        return ((phasePlusOne + phasePlusTwo) - 2);
-    }
-
-    /// <summary>Returns the least positive phase whose central factor covers an overlap.</summary>
-    public static int LeastCentralPhaseCovering(BigInteger overlap) {
-        if (overlap.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(overlap)); }
-        for (var phase = 1; ; phase = checked((phase + 1))) {
-            if (CentralFactorLength(phase: phase) >= overlap) { return phase; }
-        }
-    }
-
-    /// <summary>
-    /// Applies the signed Cassini inverse at one positive phase to a Fibonacci Parikh vector.
-    /// The result is Lean's <c>fibonacciShortCoordinate</c> and
-    /// <c>fibonacciLongCoordinate</c>, before either sign is assumed.
-    /// </summary>
-    public static (BigInteger ShortCoordinate, BigInteger LongCoordinate) ReturnCoordinates(
-        int phase,
-        FibonacciFactorCounts counts
-    ) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(phase, 1);
-        if ((counts.FalseCount.Sign < 0) || (counts.TrueCount.Sign < 0)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(counts));
-        }
-
-        var (phaseMinusOne, phaseValue) = FibonacciResearch.FibonacciPair(index: (phase - 1));
-        var phasePlusOne = (phaseMinusOne + phaseValue);
-        var determinant = (((phase & 1) == 1) ? BigInteger.One : -BigInteger.One);
-
-        return (
-            (determinant * ((counts.FalseCount * phaseValue) - (counts.TrueCount * phasePlusOne))),
-            (determinant * ((counts.TrueCount * phaseValue) - (counts.FalseCount * phaseMinusOne)))
-        );
-    }
-
-    /// <summary>
-    /// Creates the canonical profile of a known maximal right return and rejects a non-maximal claim.
-    /// </summary>
-    public static FibonacciCanonicalReturnProfile ProfileCanonicalMaximalReturn(
-        FibonacciRulerWordIndex word,
-        BigInteger start,
-        BigInteger root,
-        BigInteger maximalOverlap
-    ) {
-        ArgumentNullException.ThrowIfNull(word);
-        if (start.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(start)); }
-        if (root.Sign <= 0) { throw new ArgumentOutOfRangeException(paramName: nameof(root)); }
-        if (maximalOverlap.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(maximalOverlap)); }
-        if (!AreEqualBaseFactors(leftStart: start, length: maximalOverlap, rightStart: (start + root), word: word) ||
-            (word.BaseLetterAt(index: (start + maximalOverlap)) ==
-                word.BaseLetterAt(index: ((start + root) + maximalOverlap)))) {
-            throw new ArgumentException(
-                message: "the supplied overlap is not the first right mismatch",
-                paramName: nameof(maximalOverlap)
-            );
-        }
-
-        var phase = LeastCentralPhaseCovering(overlap: maximalOverlap);
-        var counts = word.FactorCounts(length: root, start: start);
-        var coordinates = ReturnCoordinates(counts: counts, phase: phase);
-
-        return new FibonacciCanonicalReturnProfile(
-            start,
-            root,
-            maximalOverlap,
-            phase,
-            counts,
-            coordinates.ShortCoordinate,
-            coordinates.LongCoordinate,
-            CentralFactorLength(phase: phase)
-        );
-    }
-
-    /// <summary>Checks equality of two finite base-word factors without materializing either prefix.</summary>
-    public static bool AreEqualBaseFactors(
-        FibonacciRulerWordIndex word,
-        BigInteger leftStart,
-        BigInteger rightStart,
-        BigInteger length
-    ) {
-        ArgumentNullException.ThrowIfNull(word);
-        if (leftStart.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(leftStart)); }
-        if (rightStart.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(rightStart)); }
-        if (length.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(length)); }
-
-        for (var offset = BigInteger.Zero; (offset < length); ++offset) {
-            if (word.BaseLetterAt(index: (leftStart + offset)) != word.BaseLetterAt(index: (rightStart + offset))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /// <summary>
     /// Extends a known return to its first right mismatch and finds every exact Lean-shaped decomposition.
     /// </summary>
@@ -384,10 +299,18 @@ public static class FibonacciReturnResearch {
         if (root.Sign <= 0) { throw new ArgumentOutOfRangeException(paramName: nameof(root)); }
         if (requestedOverlap.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(requestedOverlap)); }
         if (searchLimit < requestedOverlap) {
-            throw new ArgumentOutOfRangeException(nameof(searchLimit), "the search limit must cover the requested overlap");
+            throw new ArgumentOutOfRangeException(
+                nameof(searchLimit),
+                "the search limit must cover the requested overlap"
+            );
         }
 
-        if (!AreEqualBaseFactors(leftStart: start, length: requestedOverlap, rightStart: (start + root), word: word)) {
+        if (!AreEqualBaseFactors(
+            leftStart: start,
+            length: requestedOverlap,
+            rightStart: (start + root),
+            word: word
+        )) {
             return new FibonacciMaximalReturnAnalysis(
                 FibonacciReturnAnalysisStatus.NotAReturn,
                 start,
@@ -425,10 +348,16 @@ public static class FibonacciReturnResearch {
             start: start,
             word: word
         );
-        var decompositions = FindPeriodDecompositions(overlap: maximalOverlap.Value, root: root, start: start, word: word);
+        var decompositions = FindPeriodDecompositions(
+            overlap: maximalOverlap.Value,
+            root: root,
+            start: start,
+            word: word
+        );
         var status = ((decompositions.Count == 0)
             ? FibonacciReturnAnalysisStatus.NoDecomposition
-            : FibonacciReturnAnalysisStatus.Classified);
+            : FibonacciReturnAnalysisStatus.Classified
+        );
 
         return new FibonacciMaximalReturnAnalysis(
             Decompositions: decompositions,
@@ -439,7 +368,34 @@ public static class FibonacciReturnResearch {
             Status: status
         ) { CanonicalProfile = canonicalProfile };
     }
+    /// <summary>Checks equality of two finite base-word factors without materializing either prefix.</summary>
+    public static bool AreEqualBaseFactors(
+        FibonacciRulerWordIndex word,
+        BigInteger leftStart,
+        BigInteger rightStart,
+        BigInteger length
+    ) {
+        ArgumentNullException.ThrowIfNull(word);
+        if (leftStart.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(leftStart)); }
+        if (rightStart.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(rightStart)); }
+        if (length.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(length)); }
 
+        for (var offset = BigInteger.Zero; (offset < length); ++offset) {
+            if (word.BaseLetterAt(index: (leftStart + offset)) != word.BaseLetterAt(index: (rightStart + offset))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    /// <summary>Returns the central-factor length <c>F_(phase+3)−2</c> at a positive phase.</summary>
+    public static BigInteger CentralFactorLength(int phase) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            phase,
+            1
+        );
+        var (phasePlusOne, phasePlusTwo) = FibonacciResearch.FibonacciPair(index: (phase + 1));
+        return ((phasePlusOne + phasePlusTwo) - 2);
+    }
     /// <summary>
     /// Finds every positive phase satisfying the exact clauses of Lean's
     /// <c>FibonacciPeriodDecomposition start overlap root</c>.
@@ -454,10 +410,18 @@ public static class FibonacciReturnResearch {
         if (start.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(start)); }
         if (overlap.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(overlap)); }
         if (root.Sign <= 0) { throw new ArgumentOutOfRangeException(paramName: nameof(root)); }
-        if (!AreEqualBaseFactors(leftStart: start, length: overlap, rightStart: (start + root), word: word)) { return []; }
+        if (!AreEqualBaseFactors(
+            leftStart: start,
+            length: overlap,
+            rightStart: (start + root),
+            word: word
+        )) { return []; }
 
         var result = new List<FibonacciPeriodDecompositionCertificate>();
-        var rootCounts = word.FactorCounts(length: root, start: start);
+        var rootCounts = word.FactorCounts(
+            length: root,
+            start: start
+        );
         var previous = BigInteger.Zero;
         var current = BigInteger.One;
 
@@ -465,11 +429,18 @@ public static class FibonacciReturnResearch {
             var next = (previous + current);
 
             if (next > root) { break; }
-            var (shortBlockCount, longBlockCount) = ReturnCoordinates(counts: rootCounts, phase: phase);
+            var (shortBlockCount, longBlockCount) = ReturnCoordinates(
+                counts: rootCounts,
+                phase: phase
+            );
             var centralLength = FibonacciReturnResearch.CentralFactorLength(phase: phase);
 
-            if ((shortBlockCount.Sign >= 0) && (longBlockCount.Sign >= 0) &&
-                !(shortBlockCount.IsZero && longBlockCount.IsZero) && (overlap <= centralLength)) {
+            if (
+                (shortBlockCount.Sign >= 0) &&
+                (longBlockCount.Sign >= 0) &&
+                !(shortBlockCount.IsZero && longBlockCount.IsZero) &&
+                (overlap <= centralLength)
+            ) {
                 var certificate = new FibonacciPeriodDecompositionCertificate(
                     CentralFactorLength: centralLength,
                     LongBlockCount: longBlockCount,
@@ -490,5 +461,94 @@ public static class FibonacciReturnResearch {
         }
 
         return result;
+    }
+    /// <summary>Returns the least positive phase whose central factor covers an overlap.</summary>
+    public static int LeastCentralPhaseCovering(BigInteger overlap) {
+        if (overlap.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(overlap)); }
+        for (var phase = 1; ; phase = checked((phase + 1))) {
+            if (CentralFactorLength(phase: phase) >= overlap) { return phase; }
+        }
+    }
+    /// <summary>
+    /// Creates the canonical profile of a known maximal right return and rejects a non-maximal claim.
+    /// </summary>
+    public static FibonacciCanonicalReturnProfile ProfileCanonicalMaximalReturn(
+        FibonacciRulerWordIndex word,
+        BigInteger start,
+        BigInteger root,
+        BigInteger maximalOverlap
+    ) {
+        ArgumentNullException.ThrowIfNull(word);
+        if (start.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(start)); }
+        if (root.Sign <= 0) { throw new ArgumentOutOfRangeException(paramName: nameof(root)); }
+        if (maximalOverlap.Sign < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(maximalOverlap)); }
+        if (
+            !AreEqualBaseFactors(
+            leftStart: start,
+            length: maximalOverlap,
+            rightStart: (start + root),
+            word: word
+        ) ||
+            (word.BaseLetterAt(index: (start + maximalOverlap)) ==
+                word.BaseLetterAt(index: ((start + root) + maximalOverlap)))
+        ) {
+            throw new ArgumentException(
+                message: "the supplied overlap is not the first right mismatch",
+                paramName: nameof(maximalOverlap)
+            );
+        }
+
+        var phase = LeastCentralPhaseCovering(overlap: maximalOverlap);
+        var counts = word.FactorCounts(
+            length: root,
+            start: start
+        );
+        var coordinates = ReturnCoordinates(
+            counts: counts,
+            phase: phase
+        );
+
+        return new FibonacciCanonicalReturnProfile(
+            start,
+            root,
+            maximalOverlap,
+            phase,
+            counts,
+            coordinates.ShortCoordinate,
+            coordinates.LongCoordinate,
+            CentralFactorLength(phase: phase)
+        );
+    }
+    /// <summary>
+    /// Applies the signed Cassini inverse at one positive phase to a Fibonacci Parikh vector.
+    /// The result is Lean's <c>fibonacciShortCoordinate</c> and
+    /// <c>fibonacciLongCoordinate</c>, before either sign is assumed.
+    /// </summary>
+    public static (BigInteger ShortCoordinate, BigInteger LongCoordinate) ReturnCoordinates(
+        int phase,
+        FibonacciFactorCounts counts
+    ) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            phase,
+            1
+        );
+        if (
+            (counts.FalseCount.Sign < 0) ||
+            (counts.TrueCount.Sign < 0)
+        ) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(counts));
+        }
+
+        var (phaseMinusOne, phaseValue) = FibonacciResearch.FibonacciPair(index: (phase - 1));
+        var phasePlusOne = (phaseMinusOne + phaseValue);
+        var determinant = (((phase & 1) == 1)
+            ? BigInteger.One
+            : -BigInteger.One
+        );
+
+        return (
+            (determinant * ((counts.FalseCount * phaseValue) - (counts.TrueCount * phasePlusOne))),
+            (determinant * ((counts.TrueCount * phaseValue) - (counts.FalseCount * phaseMinusOne)))
+        );
     }
 }

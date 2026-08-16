@@ -13,7 +13,6 @@ public enum DiscreteMeasureCompilationFailure {
     /// <summary>A normalized coefficient does not fit signed 64-bit storage.</summary>
     CoefficientOutOfRange,
 }
-
 /// <summary>
 /// An allocation-free, bounded execution form of <see cref="DiscreteMeasure"/> over signed 64-bit indices and results.
 /// </summary>
@@ -77,37 +76,52 @@ public readonly record struct CompiledDiscreteMeasure64 {
         m_backend = BackendKind.Quadratic;
     }
 
-    /// <summary>Gets a value indicating whether this value was produced by successful compilation.</summary>
-    public bool IsValid => (m_backend != BackendKind.Invalid);
+    private bool IsZeroRate => m_backend switch {
+        BackendKind.Rational => ((IntegralRate == 0L) && (FractionalRateNumerator == 0L)),
+        BackendKind.Quadratic => ((m_quadraticRateRational == 0L) && (m_quadraticRateSurd == 0L)),
+        _ => false,
+    };
+
+    /// <summary>Gets the positive denominator of the rate's reduced proper fractional part.</summary>
+    public long FractionalRateDenominator { get; }
+    /// <summary>Gets the numerator of the rate's reduced proper fractional part for the rational backend.</summary>
+    public long FractionalRateNumerator { get; }
+    /// <summary>Gets the integral part of the non-negative rate for the rational backend; zero for the quadratic backend.</summary>
+    public long IntegralRate { get; }
     /// <summary>Gets a value indicating whether the unit-interval allocation repeats periodically.</summary>
     public bool IsPeriodic => (IsValid
         ? (m_period > 0L)
-        : throw new InvalidOperationException(message: "the compiled measure is default-initialized"));
+        : throw new InvalidOperationException(message: "the compiled measure is default-initialized")
+    );
     /// <summary>Gets a value indicating whether this value uses the bounded real-quadratic floor kernel.</summary>
     public bool IsQuadratic => (m_backend == BackendKind.Quadratic);
-    /// <summary>Gets the integral part of the non-negative rate for the rational backend; zero for the quadratic backend.</summary>
-    public long IntegralRate { get; }
-    /// <summary>Gets the numerator of the rate's reduced proper fractional part for the rational backend.</summary>
-    public long FractionalRateNumerator { get; }
-    /// <summary>Gets the positive denominator of the rate's reduced proper fractional part.</summary>
-    public long FractionalRateDenominator { get; }
-    /// <summary>Gets the numerator of the normalized rational offset in <c>[0, 1)</c>.</summary>
-    public long OffsetNumerator { get; }
+    /// <summary>Gets a value indicating whether this value was produced by successful compilation.</summary>
+    public bool IsValid => (m_backend != BackendKind.Invalid);
     /// <summary>Gets the positive denominator of the normalized rational offset.</summary>
     public long OffsetDenominator { get; }
+    /// <summary>Gets the numerator of the normalized rational offset in <c>[0, 1)</c>.</summary>
+    public long OffsetNumerator { get; }
     /// <summary>Gets the exact period of the unit-interval allocation.</summary>
     public long Period => (!IsValid
         ? throw new InvalidOperationException(message: "the compiled measure is default-initialized")
         : (IsPeriodic
             ? m_period
-            : throw new InvalidOperationException(message: "an irrational-rate measure is aperiodic")));
+            : throw new InvalidOperationException(message: "an irrational-rate measure is aperiodic")
+    ));
 
     internal static bool TryCompile(
         DiscreteMeasure source,
         out CompiledDiscreteMeasure64 compiled,
         out DiscreteMeasureCompilationFailure failure) {
-        if (!source.Rate.IsRational || !source.Offset.IsRational) {
-            return TryCompileQuadratic(compiled: out compiled, failure: out failure, source: source);
+        if (
+            !source.Rate.IsRational ||
+            !source.Offset.IsRational
+        ) {
+            return TryCompileQuadratic(
+                compiled: out compiled,
+                failure: out failure,
+                source: source
+            );
         }
 
         var integralRate = source.Rate.Floor();
@@ -116,302 +130,62 @@ public readonly record struct CompiledDiscreteMeasure64 {
             (integralRate * source.Rate.Denominator)
         );
 
-        if (!TryNonNegativeInt64(value: integralRate, result: out var boundedIntegralRate) ||
-            !TryNonNegativeInt64(value: fractionalNumerator, result: out var boundedFractionalNumerator) ||
-            !TryPositiveInt64(value: source.Rate.Denominator, result: out var boundedFractionalDenominator) ||
-            !TryNonNegativeInt64(value: source.Offset.RationalNumerator, result: out var boundedOffsetNumerator) ||
-            !TryPositiveInt64(value: source.Offset.Denominator, result: out var boundedOffsetDenominator)) {
+        if (
+            !TryNonNegativeInt64(
+            result: out var boundedIntegralRate,
+            value: integralRate
+        ) ||
+            !TryNonNegativeInt64(
+            result: out var boundedFractionalNumerator,
+            value: fractionalNumerator
+        ) ||
+            !TryPositiveInt64(
+            value: source.Rate.Denominator,
+            result: out var boundedFractionalDenominator
+        ) ||
+            !TryNonNegativeInt64(
+            value: source.Offset.RationalNumerator,
+            result: out var boundedOffsetNumerator
+        ) ||
+            !TryPositiveInt64(
+            value: source.Offset.Denominator,
+            result: out var boundedOffsetDenominator
+        )
+        ) {
             compiled = default;
             failure = DiscreteMeasureCompilationFailure.CoefficientOutOfRange;
             return false;
         }
 
         compiled = new CompiledDiscreteMeasure64(
-            integralRate: boundedIntegralRate,
-            fractionalRateNumerator: boundedFractionalNumerator,
             fractionalRateDenominator: boundedFractionalDenominator,
-            offsetNumerator: boundedOffsetNumerator,
-            offsetDenominator: boundedOffsetDenominator
+            fractionalRateNumerator: boundedFractionalNumerator,
+            integralRate: boundedIntegralRate,
+            offsetDenominator: boundedOffsetDenominator,
+            offsetNumerator: boundedOffsetNumerator
         );
         failure = DiscreteMeasureCompilationFailure.None;
         return true;
     }
 
-    private static bool TryCompileQuadratic(
-        DiscreteMeasure source,
-        out CompiledDiscreteMeasure64 compiled,
-        out DiscreteMeasureCompilationFailure failure) {
-        // Unreachable through the public surface: DiscreteMeasure.Create validates the shared quadratic field with
-        // `rate + offset`, so a constructed measure's operands always have a common radical part.
-        if (!QuadraticSurd.TryCommonRadicalParts(left: source.Rate, result: out var common, right: source.Offset)) {
-            compiled = default;
-            failure = DiscreteMeasureCompilationFailure.CoefficientOutOfRange;
-            return false;
-        }
-
-        var denominator = source.Rate.Denominator.LeastCommonMultiple(other: source.Offset.Denominator);
-        var rateScale = (denominator / source.Rate.Denominator);
-        var offsetScale = (denominator / source.Offset.Denominator);
-        var rateRational = (source.Rate.RationalNumerator * rateScale);
-        var rateSurd = (common.LeftSurdNumerator * rateScale);
-        var offsetRational = (source.Offset.RationalNumerator * offsetScale);
-        var offsetSurd = (common.RightSurdNumerator * offsetScale);
-        var radicand = common.Radicand;
-
-        if (!TryInt64Coefficient(result: out var boundedRateRational, value: rateRational) ||
-            !TryInt64Coefficient(result: out var boundedRateSurd, value: rateSurd) ||
-            !TryInt64Coefficient(result: out var boundedOffsetRational, value: offsetRational) ||
-            !TryInt64Coefficient(result: out var boundedOffsetSurd, value: offsetSurd) ||
-            !TryPositiveInt64(result: out var boundedDenominator, value: denominator) ||
-            (radicand <= BigInteger.One) || (radicand > ulong.MaxValue)) {
-            compiled = default;
-            failure = DiscreteMeasureCompilationFailure.CoefficientOutOfRange;
-            return false;
-        }
-
-        // Cumulative, unit lookup, and inverse probes need at most one boundary beyond either signed-long endpoint.
-        // Prove at compile time that those core-domain products fit the bounded exact floor kernel. Wider range endpoints
-        // are checked per query and may still return false without throwing.
-        var maximumIndexMagnitude = ((BigInteger.One << 63) + 1);
-        var maximumRationalMagnitude =
-            ((BigInteger.Abs(value: rateRational) * maximumIndexMagnitude) + BigInteger.Abs(value: offsetRational));
-        var maximumSurdMagnitude =
-            ((BigInteger.Abs(value: rateSurd) * maximumIndexMagnitude) + BigInteger.Abs(value: offsetSurd));
-        var maximumRootRadicand = ((maximumSurdMagnitude * maximumSurdMagnitude) * radicand);
-        var maximumBoundedRootRadicand = ((BigInteger)Int128.MaxValue * Int128.MaxValue);
-
-        if ((maximumRationalMagnitude > (BigInteger)Int128.MaxValue) ||
-            (maximumRootRadicand > maximumBoundedRootRadicand)) {
-            compiled = default;
-            failure = (source.Rate.IsRational
-                ? DiscreteMeasureCompilationFailure.IrrationalOffset
-                : DiscreteMeasureCompilationFailure.IrrationalRate);
-            return false;
-        }
-
-        var period = ((source.Rate.IsRational && (source.Rate.Denominator <= long.MaxValue))
-            ? (long)source.Rate.Denominator
-            : 0L);
-
-        compiled = new CompiledDiscreteMeasure64(
-            denominator: boundedDenominator,
-            offsetRational: boundedOffsetRational,
-            offsetSurd: boundedOffsetSurd,
-            period: period,
-            radicand: (ulong)radicand,
-            rateRational: boundedRateRational,
-            rateSurd: boundedRateSurd
+    private bool OffsetCarry(long fractionalRemainder) =>
+        (
+            ((((Int128)fractionalRemainder) * OffsetDenominator) +
+             (((Int128)OffsetNumerator) * FractionalRateDenominator)) >=
+            (((Int128)FractionalRateDenominator) * OffsetDenominator)
         );
-        failure = DiscreteMeasureCompilationFailure.None;
-        return true;
-    }
-
-    /// <summary>Attempts to return the cumulative amount at signed integer boundary <paramref name="index"/>.</summary>
-    public bool TryCumulative(long index, out long cumulative) {
-        cumulative = 0L;
-        return (TryBoundary(boundary: out var boundary, index: index) && TryInt64(value: boundary, result: out cumulative));
-    }
-
-    /// <summary>Returns the cumulative amount at signed integer boundary <paramref name="index"/>.</summary>
-    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
-    /// <exception cref="OverflowException">The exact cumulative amount does not fit a <see cref="long"/>.</exception>
-    public long Cumulative(long index) {
-        ThrowIfInvalid();
-        if (TryCumulative(index: index, cumulative: out var cumulative)) { return cumulative; }
-        throw new OverflowException(message: "the cumulative amount exceeds signed 64-bit storage");
-    }
-
-    /// <summary>Attempts to return the amount assigned to unit interval <c>[index, index + 1)</c>.</summary>
-    /// <remarks><paramref name="index"/> may be <see cref="long.MaxValue"/>; its exclusive boundary is held in 128 bits.</remarks>
-    public bool TryAmountAt(long index, out long amount) {
-        ThrowIfInvalid();
-
-        if (m_backend == BackendKind.Quadratic) {
-            amount = 0L;
-            var first = (Int128)index;
-
-            return (TryBoundary(boundary: out var start, index: first) &&
-                TryBoundary(boundary: out var end, index: (first + Int128.One)) &&
-                TryDifferenceInt64(left: end, result: out amount, right: start));
+    private void ThrowIfInvalid() {
+        if (!IsValid) {
+            throw new InvalidOperationException(message: "the compiled measure is default-initialized");
         }
-
-        // One floor division, not two boundary evaluations: advance the proper-fraction remainder by p directly.
-        // Since 0 <= remainder,p < q, the advance crosses at most one q boundary.
-        var scaledFraction = (((Int128)FractionalRateNumerator) * index);
-        // The compiled denominator is positive, so the floored remainder lies in [0, denominator) and narrows exactly.
-        var remainder = ((long)scaledFraction.FloorModulo(modulus: ((Int128)FractionalRateDenominator)));
-        var advanced = (((Int128)remainder) + FractionalRateNumerator);
-        var fractionalAdvance = Int128.Zero;
-
-        if (advanced >= FractionalRateDenominator) {
-            advanced -= FractionalRateDenominator;
-            fractionalAdvance = Int128.One;
-        }
-        var offsetChange = (
-            (OffsetCarry(fractionalRemainder: ((long)advanced)) ? Int128.One : Int128.Zero) -
-            (OffsetCarry(fractionalRemainder: remainder) ? Int128.One : Int128.Zero)
-        );
-
-        return TryInt64(
-            value: ((((Int128)IntegralRate) + fractionalAdvance) + offsetChange),
-            result: out amount
-        );
     }
-
-    /// <summary>Returns the amount assigned to unit interval <c>[index, index + 1)</c>.</summary>
-    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
-    /// <exception cref="OverflowException">The exact amount does not fit a <see cref="long"/>.</exception>
-    public long AmountAt(long index) {
-        if (TryAmountAt(index: index, amount: out var amount)) { return amount; }
-        throw new OverflowException(message: "the unit-interval amount exceeds signed 64-bit storage");
-    }
-
-    /// <summary>Attempts to return the amount assigned to <c>[start, start + length)</c>.</summary>
-    /// <returns>
-    /// <see langword="false"/> when <paramref name="length"/> is negative or the exact amount exceeds signed 64-bit
-    /// storage.
-    /// </returns>
-    public bool TryAmountOver(long start, long length, out long amount) {
-        ThrowIfInvalid();
-        if (length < 0) {
-            amount = 0;
-            return false;
-        }
-
-        var first = ((Int128)start);
-        var end = (first + length);
-
-        amount = 0L;
-        return (TryBoundary(boundary: out var firstBoundary, index: first) &&
-            TryBoundary(boundary: out var endBoundary, index: end) &&
-            TryDifferenceInt64(left: endBoundary, result: out amount, right: firstBoundary));
-    }
-
-    /// <summary>Returns the amount assigned to <c>[start, start + length)</c>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
-    /// <exception cref="OverflowException">The exact range amount does not fit a <see cref="long"/>.</exception>
-    public long AmountOver(long start, long length) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
-        if (TryAmountOver(start: start, length: length, amount: out var amount)) { return amount; }
-        throw new OverflowException(message: "the range amount exceeds signed 64-bit storage");
-    }
-
-    /// <summary>Attempts to return the amount assigned to half-open interval <c>[start, end)</c>.</summary>
-    public bool TryAmountBetween(long start, long end, out long amount) {
-        ThrowIfInvalid();
-        if (end < start) {
-            amount = 0;
-            return false;
-        }
-
-        amount = 0L;
-        return (TryBoundary(boundary: out var firstBoundary, index: start) &&
-            TryBoundary(boundary: out var endBoundary, index: end) &&
-            TryDifferenceInt64(left: endBoundary, result: out amount, right: firstBoundary));
-    }
-
-    /// <summary>Returns the amount assigned to half-open interval <c>[start, end)</c>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="end"/> precedes <paramref name="start"/>.</exception>
-    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
-    /// <exception cref="OverflowException">The exact interval amount does not fit a <see cref="long"/>.</exception>
-    public long AmountBetween(long start, long end) {
-        if (end < start) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(end),
-                message: "the end boundary must not precede the start boundary"
-            );
-        }
-        if (TryAmountBetween(start: start, end: end, amount: out var amount)) { return amount; }
-        throw new OverflowException(message: "the interval amount exceeds signed 64-bit storage");
-    }
-
-    /// <summary>Attempts to map <c>[start, start + length)</c> to a signed-64-bit output interval.</summary>
-    public bool TryMap(long start, long length, out long mappedStart, out long mappedLength) {
-        ThrowIfInvalid();
-        if ((length < 0) ||
-            !TryCumulative(index: start, cumulative: out mappedStart) ||
-            !TryAmountOver(start: start, length: length, amount: out mappedLength)) {
-            mappedStart = 0;
-            mappedLength = 0;
-            return false;
-        }
-        return true;
-    }
-
-    /// <summary>Maps <c>[start, start + length)</c> to a signed-64-bit output interval.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
-    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
-    /// <exception cref="OverflowException">The mapped start or length does not fit a <see cref="long"/>.</exception>
-    public (long Start, long Length) Map(long start, long length) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
-        if (TryMap(start: start, length: length, mappedStart: out var mappedStart, mappedLength: out var mappedLength)) {
-            return (Start: mappedStart, Length: mappedLength);
-        }
-        throw new OverflowException(message: "the mapped interval exceeds signed 64-bit storage");
-    }
-
-    /// <summary>
-    /// Attempts to find the least signed-64-bit boundary whose cumulative amount is at least <paramref name="amount"/>.
-    /// </summary>
-    /// <remarks>The bounded inverse uses at most 64 monotone boundary probes and performs no allocation.</remarks>
-    public bool TryLowerBound(long amount, out long index) {
-        ThrowIfInvalid();
-        if (IsZeroRate) {
-            index = 0;
-            return false;
-        }
-
-        return TryLowerBoundCore(amount: amount, index: out index);
-    }
-
-    /// <summary>Returns the least signed-64-bit boundary whose cumulative amount is at least <paramref name="amount"/>.</summary>
-    /// <exception cref="InvalidOperationException">The rate is zero or this value is default-initialized.</exception>
-    /// <exception cref="OverflowException">The mathematical lower bound lies outside the signed-64-bit index domain.</exception>
-    public long LowerBound(long amount) {
-        ThrowIfInvalid();
-        if (IsZeroRate) { throw new InvalidOperationException(message: "the zero measure has no inverse"); }
-        if (TryLowerBoundCore(amount: amount, index: out var index)) { return index; }
-        throw new OverflowException(message: "the lower-bound index lies outside signed 64-bit storage");
-    }
-
-    /// <summary>Attempts to return the signed-64-bit input interval that owns <paramref name="outputIndex"/>.</summary>
-    public bool TryIndexContaining(long outputIndex, out long inputIndex) {
-        ThrowIfInvalid();
-        if (IsZeroRate ||
-            !TryLowerBoundCore(amount: ((Int128)outputIndex + Int128.One), index: out var upper) ||
-            (upper == long.MinValue)) {
-            inputIndex = 0;
-            return false;
-        }
-
-        inputIndex = (upper - 1L);
-        return true;
-    }
-
-    /// <summary>Returns the signed-64-bit input interval that owns <paramref name="outputIndex"/>.</summary>
-    /// <exception cref="InvalidOperationException">The rate is zero or this value is default-initialized.</exception>
-    /// <exception cref="OverflowException">The owning interval lies outside the signed-64-bit index domain.</exception>
-    public long IndexContaining(long outputIndex) {
-        ThrowIfInvalid();
-        if (IsZeroRate) { throw new InvalidOperationException(message: "the zero measure assigns no output index"); }
-        if (TryIndexContaining(outputIndex: outputIndex, inputIndex: out var inputIndex)) { return inputIndex; }
-        throw new OverflowException(message: "the owning interval lies outside signed 64-bit storage");
-    }
-
-    private bool IsZeroRate => m_backend switch {
-        BackendKind.Rational => ((IntegralRate == 0L) && (FractionalRateNumerator == 0L)),
-        BackendKind.Quadratic => ((m_quadraticRateRational == 0L) && (m_quadraticRateSurd == 0L)),
-        _ => false,
-    };
-
     private bool TryBoundary(Int128 index, out Int128 boundary) {
         ThrowIfInvalid();
 
         if (m_backend == BackendKind.Quadratic) {
             try {
-                var rationalNumerator = checked((((Int128)m_quadraticRateRational * index) + m_quadraticOffsetRational));
-                var surdNumerator = checked((((Int128)m_quadraticRateSurd * index) + m_quadraticOffsetSurd));
+                var rationalNumerator = checked(((((Int128)m_quadraticRateRational) * index) + m_quadraticOffsetRational));
+                var surdNumerator = checked(((((Int128)m_quadraticRateSurd) * index) + m_quadraticOffsetSurd));
 
                 return TryQuadraticFloor(
                     denominator: m_quadraticDenominator,
@@ -432,28 +206,161 @@ public readonly record struct CompiledDiscreteMeasure64 {
         var (fractionalQuotient, flooredRemainder) = scaledFraction.FloorDivRem(divisor: ((Int128)FractionalRateDenominator));
         // The compiled denominator is positive, so the floored remainder lies in [0, denominator) and narrows exactly.
         var fractionalRemainder = ((long)flooredRemainder);
-        var carry = (OffsetCarry(fractionalRemainder: fractionalRemainder) ? Int128.One : Int128.Zero);
+        var carry = (OffsetCarry(fractionalRemainder: fractionalRemainder)
+            ? Int128.One
+            : Int128.Zero
+        );
 
         boundary = ((whole + fractionalQuotient) + carry);
         return true;
     }
-    private bool OffsetCarry(long fractionalRemainder) =>
-        (
-            ((((Int128)fractionalRemainder) * OffsetDenominator) +
-             (((Int128)OffsetNumerator) * FractionalRateDenominator)) >=
-            (((Int128)FractionalRateDenominator) * OffsetDenominator)
+    private static bool TryCompileQuadratic(
+        DiscreteMeasure source,
+        out CompiledDiscreteMeasure64 compiled,
+        out DiscreteMeasureCompilationFailure failure) {
+        // Unreachable through the public surface: DiscreteMeasure.Create validates the shared quadratic field with
+        // `rate + offset`, so a constructed measure's operands always have a common radical part.
+        if (!QuadraticSurd.TryCommonRadicalParts(
+            left: source.Rate,
+            result: out var common,
+            right: source.Offset
+        )) {
+            compiled = default;
+            failure = DiscreteMeasureCompilationFailure.CoefficientOutOfRange;
+            return false;
+        }
+
+        var denominator = source.Rate.Denominator.LeastCommonMultiple(other: source.Offset.Denominator);
+        var rateScale = (denominator / source.Rate.Denominator);
+        var offsetScale = (denominator / source.Offset.Denominator);
+        var rateRational = (source.Rate.RationalNumerator * rateScale);
+        var rateSurd = (common.LeftSurdNumerator * rateScale);
+        var offsetRational = (source.Offset.RationalNumerator * offsetScale);
+        var offsetSurd = (common.RightSurdNumerator * offsetScale);
+        var radicand = common.Radicand;
+
+        if (
+            !TryInt64Coefficient(
+            result: out var boundedRateRational,
+            value: rateRational
+        ) ||
+            !TryInt64Coefficient(
+            result: out var boundedRateSurd,
+            value: rateSurd
+        ) ||
+            !TryInt64Coefficient(
+            result: out var boundedOffsetRational,
+            value: offsetRational
+        ) ||
+            !TryInt64Coefficient(
+            result: out var boundedOffsetSurd,
+            value: offsetSurd
+        ) ||
+            !TryPositiveInt64(
+            result: out var boundedDenominator,
+            value: denominator
+        ) ||
+            (radicand <= BigInteger.One) ||
+            (radicand > ulong.MaxValue)
+        ) {
+            compiled = default;
+            failure = DiscreteMeasureCompilationFailure.CoefficientOutOfRange;
+            return false;
+        }
+
+        // Cumulative, unit lookup, and inverse probes need at most one boundary beyond either signed-long endpoint.
+        // Prove at compile time that those core-domain products fit the bounded exact floor kernel. Wider range endpoints
+        // are checked per query and may still return false without throwing.
+        var maximumIndexMagnitude = ((BigInteger.One << 63) + 1);
+        var maximumRationalMagnitude =
+            ((BigInteger.Abs(value: rateRational) * maximumIndexMagnitude) + BigInteger.Abs(value: offsetRational));
+        var maximumSurdMagnitude =
+            ((BigInteger.Abs(value: rateSurd) * maximumIndexMagnitude) + BigInteger.Abs(value: offsetSurd));
+        var maximumRootRadicand = ((maximumSurdMagnitude * maximumSurdMagnitude) * radicand);
+        var maximumBoundedRootRadicand = (((BigInteger)Int128.MaxValue) * Int128.MaxValue);
+
+        if (
+            (maximumRationalMagnitude > ((BigInteger)Int128.MaxValue)) ||
+            (maximumRootRadicand > maximumBoundedRootRadicand)
+        ) {
+            compiled = default;
+            failure = (source.Rate.IsRational
+                ? DiscreteMeasureCompilationFailure.IrrationalOffset
+                : DiscreteMeasureCompilationFailure.IrrationalRate
+            );
+            return false;
+        }
+
+        var period = ((source.Rate.IsRational && (source.Rate.Denominator <= long.MaxValue))
+            ? (long)source.Rate.Denominator
+            : 0L
         );
+
+        compiled = new CompiledDiscreteMeasure64(
+            denominator: boundedDenominator,
+            offsetRational: boundedOffsetRational,
+            offsetSurd: boundedOffsetSurd,
+            period: period,
+            radicand: ((ulong)radicand),
+            rateRational: boundedRateRational,
+            rateSurd: boundedRateSurd
+        );
+        failure = DiscreteMeasureCompilationFailure.None;
+        return true;
+    }
+    private static bool TryDifferenceInt64(Int128 left, Int128 right, out long result) {
+        try {
+            return TryInt64(
+                result: out result,
+                value: checked((left - right))
+            );
+        } catch (OverflowException) {
+            result = 0L;
+            return false;
+        }
+    }
+    private static bool TryInt64(Int128 value, out long result) {
+        if (
+            (value < long.MinValue) ||
+            (value > long.MaxValue)
+        ) {
+            result = 0L;
+            return false;
+        }
+        result = ((long)value);
+        return true;
+    }
+    private static bool TryInt64Coefficient(BigInteger value, out long result) {
+        if (
+            (value < long.MinValue) ||
+            (value > long.MaxValue)
+        ) {
+            result = 0L;
+            return false;
+        }
+        result = ((long)value);
+        return true;
+    }
     private bool TryLowerBoundCore(Int128 amount, out long index) {
         var minimum = ((Int128)long.MinValue);
         var maximum = ((Int128)long.MaxValue);
 
-        if (!TryBoundary(boundary: out var minimumBoundary, index: minimum)) {
+        if (!TryBoundary(
+            boundary: out var minimumBoundary,
+            index: minimum
+        )) {
             index = 0;
             return false;
         }
 
         if (minimumBoundary >= amount) {
-            if (TryBoundary(boundary: out var precedingBoundary, index: (minimum - Int128.One)) && (precedingBoundary < amount)) {
+            if (
+                TryBoundary(
+                boundary: out var precedingBoundary,
+                index: (minimum - Int128.One)
+            ) &&
+                (precedingBoundary < amount)
+            ) {
                 index = long.MinValue;
                 return true;
             }
@@ -461,7 +368,13 @@ public readonly record struct CompiledDiscreteMeasure64 {
             index = 0;
             return false;
         }
-        if (!TryBoundary(boundary: out var maximumBoundary, index: maximum) || (maximumBoundary < amount)) {
+        if (
+            !TryBoundary(
+            boundary: out var maximumBoundary,
+            index: maximum
+        ) ||
+            (maximumBoundary < amount)
+        ) {
             index = 0;
             return false;
         }
@@ -472,7 +385,10 @@ public readonly record struct CompiledDiscreteMeasure64 {
         while ((upper - lower) > Int128.One) {
             var middle = (lower + ((upper - lower) >> 1));
 
-            if (!TryBoundary(boundary: out var middleBoundary, index: middle)) {
+            if (!TryBoundary(
+                boundary: out var middleBoundary,
+                index: middle
+            )) {
                 index = 0;
                 return false;
             }
@@ -486,10 +402,27 @@ public readonly record struct CompiledDiscreteMeasure64 {
         index = ((long)upper);
         return true;
     }
-    private void ThrowIfInvalid() {
-        if (!IsValid) {
-            throw new InvalidOperationException(message: "the compiled measure is default-initialized");
+    private static bool TryNonNegativeInt64(BigInteger value, out long result) {
+        if (
+            (value.Sign < 0) ||
+            (value > long.MaxValue)
+        ) {
+            result = 0L;
+            return false;
         }
+        result = ((long)value);
+        return true;
+    }
+    private static bool TryPositiveInt64(BigInteger value, out long result) {
+        if (
+            (value.Sign <= 0) ||
+            (value > long.MaxValue)
+        ) {
+            result = 0L;
+            return false;
+        }
+        result = ((long)value);
+        return true;
     }
     private static bool TryQuadraticFloor(
         Int128 rationalNumerator,
@@ -498,27 +431,39 @@ public readonly record struct CompiledDiscreteMeasure64 {
         long denominator,
         out Int128 floor) {
         var surdMagnitude = UnsignedMagnitude(value: surdNumerator);
-        var surdSquare = UInt256.Multiply(left: surdMagnitude, right: surdMagnitude);
+        var surdSquare = UInt256.Multiply(
+            left: surdMagnitude,
+            right: surdMagnitude
+        );
 
-        if (!surdSquare.TryMultiply(factor: radicand, result: out var rootRadicand)) {
+        if (!surdSquare.TryMultiply(
+            factor: radicand,
+            result: out var rootRadicand
+        )) {
             floor = Int128.Zero;
             return false;
         }
 
         var rootFloorUnsigned = rootRadicand.SquareRoot();
 
-        if (rootFloorUnsigned > (UInt128)Int128.MaxValue) {
+        if (rootFloorUnsigned > ((UInt128)Int128.MaxValue)) {
             floor = Int128.Zero;
             return false;
         }
 
-        var rootFloor = (Int128)rootFloorUnsigned;
-        var exactRoot = (UInt256.Multiply(left: rootFloorUnsigned, right: rootFloorUnsigned) == rootRadicand);
+        var rootFloor = ((Int128)rootFloorUnsigned);
+        var exactRoot = (UInt256.Multiply(
+            left: rootFloorUnsigned,
+            right: rootFloorUnsigned
+        ) == rootRadicand);
 
         try {
             var lowerNumerator = ((surdNumerator >= Int128.Zero)
                 ? checked((rationalNumerator + rootFloor))
-                : checked(((rationalNumerator - rootFloor) - (exactRoot ? Int128.Zero : Int128.One))));
+                : checked(((rationalNumerator - rootFloor) - (exactRoot
+                    ? Int128.Zero
+                    : Int128.One)))
+            );
             var candidate = lowerNumerator.FloorDivide(divisor: ((Int128)denominator));
             var threshold = checked((((candidate + Int128.One) * denominator) - rationalNumerator));
             bool reachesNext;
@@ -527,9 +472,12 @@ public readonly record struct CompiledDiscreteMeasure64 {
                 if (threshold <= Int128.Zero) {
                     reachesNext = true;
                 } else {
-                    var magnitude = (UInt128)threshold;
+                    var magnitude = ((UInt128)threshold);
 
-                    reachesNext = (rootRadicand >= UInt256.Multiply(left: magnitude, right: magnitude));
+                    reachesNext = (rootRadicand >= UInt256.Multiply(
+                        left: magnitude,
+                        right: magnitude
+                    ));
                 }
             } else {
                 if (threshold > Int128.Zero) {
@@ -537,11 +485,17 @@ public readonly record struct CompiledDiscreteMeasure64 {
                 } else {
                     var magnitude = UnsignedMagnitude(value: threshold);
 
-                    reachesNext = (rootRadicand <= UInt256.Multiply(left: magnitude, right: magnitude));
+                    reachesNext = (rootRadicand <= UInt256.Multiply(
+                        left: magnitude,
+                        right: magnitude
+                    ));
                 }
             }
 
-            floor = (reachesNext ? checked((candidate + Int128.One)) : candidate);
+            floor = (reachesNext
+                ? checked((candidate + Int128.One))
+                : candidate
+            );
             return true;
         } catch (OverflowException) {
             floor = Int128.Zero;
@@ -550,45 +504,277 @@ public readonly record struct CompiledDiscreteMeasure64 {
     }
     private static UInt128 UnsignedMagnitude(Int128 value) => ((value >= Int128.Zero)
         ? (UInt128)value
-        : ((UInt128)(-(value + Int128.One)) + UInt128.One));
-    private static bool TryInt64(Int128 value, out long result) {
-        if ((value < long.MinValue) || (value > long.MaxValue)) {
-            result = 0L;
+        : (((UInt128)(-(value + Int128.One))) + UInt128.One)
+    );
+
+    /// <summary>Returns the amount assigned to unit interval <c>[index, index + 1)</c>.</summary>
+    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
+    /// <exception cref="OverflowException">The exact amount does not fit a <see cref="long"/>.</exception>
+    public long AmountAt(long index) {
+        if (TryAmountAt(
+            amount: out var amount,
+            index: index
+        )) { return amount; }
+        throw new OverflowException(message: "the unit-interval amount exceeds signed 64-bit storage");
+    }
+    /// <summary>Returns the amount assigned to half-open interval <c>[start, end)</c>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="end"/> precedes <paramref name="start"/>.</exception>
+    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
+    /// <exception cref="OverflowException">The exact interval amount does not fit a <see cref="long"/>.</exception>
+    public long AmountBetween(long start, long end) {
+        if (end < start) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(end),
+                message: "the end boundary must not precede the start boundary"
+            );
+        }
+        if (TryAmountBetween(
+            amount: out var amount,
+            end: end,
+            start: start
+        )) { return amount; }
+        throw new OverflowException(message: "the interval amount exceeds signed 64-bit storage");
+    }
+    /// <summary>Returns the amount assigned to <c>[start, start + length)</c>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
+    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
+    /// <exception cref="OverflowException">The exact range amount does not fit a <see cref="long"/>.</exception>
+    public long AmountOver(long start, long length) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
+        if (TryAmountOver(
+            amount: out var amount,
+            length: length,
+            start: start
+        )) { return amount; }
+        throw new OverflowException(message: "the range amount exceeds signed 64-bit storage");
+    }
+    /// <summary>Returns the cumulative amount at signed integer boundary <paramref name="index"/>.</summary>
+    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
+    /// <exception cref="OverflowException">The exact cumulative amount does not fit a <see cref="long"/>.</exception>
+    public long Cumulative(long index) {
+        ThrowIfInvalid();
+        if (TryCumulative(
+            cumulative: out var cumulative,
+            index: index
+        )) { return cumulative; }
+        throw new OverflowException(message: "the cumulative amount exceeds signed 64-bit storage");
+    }
+    /// <summary>Returns the signed-64-bit input interval that owns <paramref name="outputIndex"/>.</summary>
+    /// <exception cref="InvalidOperationException">The rate is zero or this value is default-initialized.</exception>
+    /// <exception cref="OverflowException">The owning interval lies outside the signed-64-bit index domain.</exception>
+    public long IndexContaining(long outputIndex) {
+        ThrowIfInvalid();
+        if (IsZeroRate) { throw new InvalidOperationException(message: "the zero measure assigns no output index"); }
+        if (TryIndexContaining(
+            inputIndex: out var inputIndex,
+            outputIndex: outputIndex
+        )) { return inputIndex; }
+        throw new OverflowException(message: "the owning interval lies outside signed 64-bit storage");
+    }
+    /// <summary>Returns the least signed-64-bit boundary whose cumulative amount is at least <paramref name="amount"/>.</summary>
+    /// <exception cref="InvalidOperationException">The rate is zero or this value is default-initialized.</exception>
+    /// <exception cref="OverflowException">The mathematical lower bound lies outside the signed-64-bit index domain.</exception>
+    public long LowerBound(long amount) {
+        ThrowIfInvalid();
+        if (IsZeroRate) { throw new InvalidOperationException(message: "the zero measure has no inverse"); }
+        if (TryLowerBoundCore(
+            amount: amount,
+            index: out var index
+        )) { return index; }
+        throw new OverflowException(message: "the lower-bound index lies outside signed 64-bit storage");
+    }
+    /// <summary>Maps <c>[start, start + length)</c> to a signed-64-bit output interval.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
+    /// <exception cref="InvalidOperationException">This value is default-initialized.</exception>
+    /// <exception cref="OverflowException">The mapped start or length does not fit a <see cref="long"/>.</exception>
+    public (long Start, long Length) Map(long start, long length) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: length);
+        if (TryMap(
+            length: length,
+            mappedLength: out var mappedLength,
+            mappedStart: out var mappedStart,
+            start: start
+        )) {
+            return (Start: mappedStart, Length: mappedLength);
+        }
+        throw new OverflowException(message: "the mapped interval exceeds signed 64-bit storage");
+    }
+    /// <summary>Attempts to return the amount assigned to unit interval <c>[index, index + 1)</c>.</summary>
+    /// <remarks><paramref name="index"/> may be <see cref="long.MaxValue"/>; its exclusive boundary is held in 128 bits.</remarks>
+    public bool TryAmountAt(long index, out long amount) {
+        ThrowIfInvalid();
+
+        if (m_backend == BackendKind.Quadratic) {
+            amount = 0L;
+            var first = ((Int128)index);
+
+            return (
+                TryBoundary(
+                boundary: out var start,
+                index: first
+            ) &&
+                TryBoundary(
+                boundary: out var end,
+                index: (first + Int128.One)
+            ) &&
+                TryDifferenceInt64(
+                left: end,
+                result: out amount,
+                right: start
+            )
+            );
+        }
+
+        // One floor division, not two boundary evaluations: advance the proper-fraction remainder by p directly.
+        // Since 0 <= remainder,p < q, the advance crosses at most one q boundary.
+        var scaledFraction = (((Int128)FractionalRateNumerator) * index);
+        // The compiled denominator is positive, so the floored remainder lies in [0, denominator) and narrows exactly.
+        var remainder = ((long)scaledFraction.FloorModulo(modulus: ((Int128)FractionalRateDenominator)));
+        var advanced = (((Int128)remainder) + FractionalRateNumerator);
+        var fractionalAdvance = Int128.Zero;
+
+        if (advanced >= FractionalRateDenominator) {
+            advanced -= FractionalRateDenominator;
+            fractionalAdvance = Int128.One;
+        }
+        var offsetChange = (
+            (OffsetCarry(fractionalRemainder: ((long)advanced))
+            ? Int128.One
+            : Int128.Zero) -
+            (OffsetCarry(fractionalRemainder: remainder)
+            ? Int128.One
+            : Int128.Zero)
+        );
+
+        return TryInt64(
+            value: ((((Int128)IntegralRate) + fractionalAdvance) + offsetChange),
+            result: out amount
+        );
+    }
+    /// <summary>Attempts to return the amount assigned to half-open interval <c>[start, end)</c>.</summary>
+    public bool TryAmountBetween(long start, long end, out long amount) {
+        ThrowIfInvalid();
+        if (end < start) {
+            amount = 0;
             return false;
         }
-        result = ((long)value);
+
+        amount = 0L;
+        return (
+            TryBoundary(
+            boundary: out var firstBoundary,
+            index: start
+        ) &&
+            TryBoundary(
+            boundary: out var endBoundary,
+            index: end
+        ) &&
+            TryDifferenceInt64(
+            left: endBoundary,
+            result: out amount,
+            right: firstBoundary
+        )
+        );
+    }
+    /// <summary>Attempts to return the amount assigned to <c>[start, start + length)</c>.</summary>
+    /// <returns>
+    /// <see langword="false"/> when <paramref name="length"/> is negative or the exact amount exceeds signed 64-bit
+    /// storage.
+    /// </returns>
+    public bool TryAmountOver(long start, long length, out long amount) {
+        ThrowIfInvalid();
+        if (length < 0) {
+            amount = 0;
+            return false;
+        }
+
+        var first = ((Int128)start);
+        var end = (first + length);
+
+        amount = 0L;
+        return (
+            TryBoundary(
+            boundary: out var firstBoundary,
+            index: first
+        ) &&
+            TryBoundary(
+            boundary: out var endBoundary,
+            index: end
+        ) &&
+            TryDifferenceInt64(
+            left: endBoundary,
+            result: out amount,
+            right: firstBoundary
+        )
+        );
+    }
+    /// <summary>Attempts to return the cumulative amount at signed integer boundary <paramref name="index"/>.</summary>
+    public bool TryCumulative(long index, out long cumulative) {
+        cumulative = 0L;
+        return (
+            TryBoundary(
+            boundary: out var boundary,
+            index: index
+        ) &&
+            TryInt64(
+            result: out cumulative,
+            value: boundary
+        )
+        );
+    }
+    /// <summary>Attempts to return the signed-64-bit input interval that owns <paramref name="outputIndex"/>.</summary>
+    public bool TryIndexContaining(long outputIndex, out long inputIndex) {
+        ThrowIfInvalid();
+        if (
+            IsZeroRate ||
+            !TryLowerBoundCore(
+            amount: (((Int128)outputIndex) + Int128.One),
+            index: out var upper
+        ) ||
+            (upper == long.MinValue)
+        ) {
+            inputIndex = 0;
+            return false;
+        }
+
+        inputIndex = (upper - 1L);
         return true;
     }
-    private static bool TryDifferenceInt64(Int128 left, Int128 right, out long result) {
-        try {
-            return TryInt64(result: out result, value: checked((left - right)));
-        } catch (OverflowException) {
-            result = 0L;
+    /// <summary>
+    /// Attempts to find the least signed-64-bit boundary whose cumulative amount is at least <paramref name="amount"/>.
+    /// </summary>
+    /// <remarks>The bounded inverse uses at most 64 monotone boundary probes and performs no allocation.</remarks>
+    public bool TryLowerBound(long amount, out long index) {
+        ThrowIfInvalid();
+        if (IsZeroRate) {
+            index = 0;
             return false;
         }
+
+        return TryLowerBoundCore(
+            amount: amount,
+            index: out index
+        );
     }
-    private static bool TryNonNegativeInt64(BigInteger value, out long result) {
-        if ((value.Sign < 0) || (value > long.MaxValue)) {
-            result = 0L;
+    /// <summary>Attempts to map <c>[start, start + length)</c> to a signed-64-bit output interval.</summary>
+    public bool TryMap(long start, long length, out long mappedStart, out long mappedLength) {
+        ThrowIfInvalid();
+        if (
+            (length < 0) ||
+            !TryCumulative(
+            cumulative: out mappedStart,
+            index: start
+        ) ||
+            !TryAmountOver(
+            amount: out mappedLength,
+            length: length,
+            start: start
+        )
+        ) {
+            mappedStart = 0;
+            mappedLength = 0;
             return false;
         }
-        result = ((long)value);
-        return true;
-    }
-    private static bool TryPositiveInt64(BigInteger value, out long result) {
-        if ((value.Sign <= 0) || (value > long.MaxValue)) {
-            result = 0L;
-            return false;
-        }
-        result = ((long)value);
-        return true;
-    }
-    private static bool TryInt64Coefficient(BigInteger value, out long result) {
-        if ((value < long.MinValue) || (value > long.MaxValue)) {
-            result = 0L;
-            return false;
-        }
-        result = (long)value;
         return true;
     }
 
@@ -598,32 +784,56 @@ public readonly record struct CompiledDiscreteMeasure64 {
         Quadratic,
     }
     private readonly record struct UInt256(UInt128 High, UInt128 Low) : IComparable<UInt256> {
+        private static int BitLength(UInt128 value) {
+            var high = ((ulong)(value >> 64));
+
+            return ((high != 0UL)
+                ? (128 - BitOperations.LeadingZeroCount(value: high))
+                : (64 - BitOperations.LeadingZeroCount(value: ((ulong)value)))
+            );
+        }
+        private UInt256 ShiftLeftTwoBits() => new(
+            High: (High << 2) | (Low >> 126),
+            Low: (Low << 2)
+        );
+        private uint TwoBits(int pairIndex) {
+            var bitIndex = (pairIndex * 2);
+
+            return ((bitIndex < 128)
+                ? (uint)((Low >> bitIndex) & 3)
+                : (uint)((High >> (bitIndex - 128)) & 3)
+            );
+        }
+        private UInt256 WithLowBits(uint bits) => new(
+            High: High,
+            Low: Low | bits
+        );
+
+        public int CompareTo(UInt256 other) {
+            var highComparison = High.CompareTo(value: other.High);
+
+            return ((highComparison != 0)
+                ? highComparison
+                : Low.CompareTo(value: other.Low)
+            );
+        }
         public static UInt256 Multiply(UInt128 left, UInt128 right) {
-            var leftLow = (ulong)left;
-            var leftHigh = (ulong)(left >> 64);
-            var rightLow = (ulong)right;
-            var rightHigh = (ulong)(right >> 64);
-            var lowProduct = ((UInt128)leftLow * rightLow);
-            var leftCross = ((UInt128)leftHigh * rightLow);
-            var rightCross = ((UInt128)leftLow * rightHigh);
-            var middle = (((lowProduct >> 64) + (ulong)leftCross) + (ulong)rightCross);
-            var low = ((UInt128)(ulong)lowProduct) | (middle << 64);
-            var high = (((((UInt128)leftHigh * rightHigh) +
+            var leftLow = ((ulong)left);
+            var leftHigh = ((ulong)(left >> 64));
+            var rightLow = ((ulong)right);
+            var rightHigh = ((ulong)(right >> 64));
+            var lowProduct = (((UInt128)leftLow) * rightLow);
+            var leftCross = (((UInt128)leftHigh) * rightLow);
+            var rightCross = (((UInt128)leftLow) * rightHigh);
+            var middle = (((lowProduct >> 64) + ((ulong)leftCross)) + ((ulong)rightCross));
+            var low = ((UInt128)((ulong)lowProduct)) | (middle << 64);
+            var high = ((((((UInt128)leftHigh) * rightHigh) +
                 (leftCross >> 64)) + (rightCross >> 64)) + (middle >> 64));
 
-            return new UInt256(High: high, Low: low);
-        }
-        public bool TryMultiply(ulong factor, out UInt256 result) {
-            var lowProduct = Multiply(left: Low, right: factor);
-            var highProduct = Multiply(left: High, right: factor);
-
-            if ((highProduct.High != UInt128.Zero) ||
-                ((UInt128.MaxValue - lowProduct.High) < highProduct.Low)) {
-                result = default;
-                return false;
-            }
-            result = new UInt256(High: (lowProduct.High + highProduct.Low), Low: lowProduct.Low);
-            return true;
+            return new UInt256(
+                High: high,
+                Low: low
+            );
         }
         public UInt128 SquareRoot() {
             if (High == UInt128.Zero) {
@@ -637,7 +847,10 @@ public readonly record struct CompiledDiscreteMeasure64 {
             for (; (pairIndex >= 0); --pairIndex) {
                 remainder = remainder.ShiftLeftTwoBits().WithLowBits(bits: TwoBits(pairIndex: pairIndex));
                 root <<= 1;
-                var trial = new UInt256(High: (root >> 127), Low: (root << 1) | UInt128.One);
+                var trial = new UInt256(
+                    High: (root >> 127),
+                    Low: (root << 1) | UInt128.One
+                );
 
                 if (remainder >= trial) {
                     remainder -= trial;
@@ -646,19 +859,28 @@ public readonly record struct CompiledDiscreteMeasure64 {
             }
             return root;
         }
+        public bool TryMultiply(ulong factor, out UInt256 result) {
+            var lowProduct = Multiply(
+                left: Low,
+                right: factor
+            );
+            var highProduct = Multiply(
+                left: High,
+                right: factor
+            );
 
-        private static int BitLength(UInt128 value) {
-            var high = ((ulong)(value >> 64));
-
-            return ((high != 0UL)
-                ? (128 - BitOperations.LeadingZeroCount(value: high))
-                : (64 - BitOperations.LeadingZeroCount(value: (ulong)value)));
-        }
-
-        public int CompareTo(UInt256 other) {
-            var highComparison = High.CompareTo(value: other.High);
-
-            return ((highComparison != 0) ? highComparison : Low.CompareTo(value: other.Low));
+            if (
+                (highProduct.High != UInt128.Zero) ||
+                ((UInt128.MaxValue - lowProduct.High) < highProduct.Low)
+            ) {
+                result = default;
+                return false;
+            }
+            result = new UInt256(
+                High: (lowProduct.High + highProduct.Low),
+                Low: lowProduct.Low
+            );
+            return true;
         }
 
         public static bool operator <(UInt256 left, UInt256 right) => (left.CompareTo(other: right) < 0);
@@ -666,22 +888,15 @@ public readonly record struct CompiledDiscreteMeasure64 {
         public static bool operator <=(UInt256 left, UInt256 right) => (left.CompareTo(other: right) <= 0);
         public static bool operator >=(UInt256 left, UInt256 right) => (left.CompareTo(other: right) >= 0);
         public static UInt256 operator -(UInt256 left, UInt256 right) {
-            var borrow = ((left.Low < right.Low) ? UInt128.One : UInt128.Zero);
+            var borrow = ((left.Low < right.Low)
+                ? UInt128.One
+                : UInt128.Zero
+            );
 
-            return new UInt256(High: ((left.High - right.High) - borrow), Low: (left.Low - right.Low));
-        }
-
-        private UInt256 ShiftLeftTwoBits() => new(
-            High: (High << 2) | (Low >> 126),
-            Low: (Low << 2)
-        );
-        private UInt256 WithLowBits(uint bits) => new(High: High, Low: Low | bits);
-        private uint TwoBits(int pairIndex) {
-            var bitIndex = (pairIndex * 2);
-
-            return ((bitIndex < 128)
-                ? (uint)((Low >> bitIndex) & 3)
-                : (uint)((High >> (bitIndex - 128)) & 3));
+            return new UInt256(
+                High: ((left.High - right.High) - borrow),
+                Low: (left.Low - right.Low)
+            );
         }
     }
 }

@@ -20,7 +20,6 @@ public enum AttestationTrustMode {
     /// </summary>
     Vouches,
 }
-
 /// <summary>
 /// One trust list entry: a pinned id, the actual key bytes it names (needed for offline verification — a
 /// hash alone cannot verify a signature), whether it signs directly or vouches, and which slots it reaches.
@@ -53,6 +52,18 @@ public sealed record TrustListEntry(
     TimeSpan? RootBindingMaximumAge = null,
     TimeSpan? SubjectBindingMaximumAge = null
 ) {
+    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
+        if (
+            (value is not null) &&
+            ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                message: "An attestation maximum age must be positive and expressible as whole wire seconds.",
+                paramName: name
+            );
+        }
+    }
+
     /// <summary>
     /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
     /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
@@ -63,9 +74,18 @@ public sealed record TrustListEntry(
     /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
     public void Validate() {
-        ValidateOptionalDuration(value: MaximumAge, name: nameof(MaximumAge));
-        ValidateOptionalDuration(value: RootBindingMaximumAge, name: nameof(RootBindingMaximumAge));
-        ValidateOptionalDuration(value: SubjectBindingMaximumAge, name: nameof(SubjectBindingMaximumAge));
+        ValidateOptionalDuration(
+            value: MaximumAge,
+            name: nameof(MaximumAge)
+        );
+        ValidateOptionalDuration(
+            value: RootBindingMaximumAge,
+            name: nameof(RootBindingMaximumAge)
+        );
+        ValidateOptionalDuration(
+            value: SubjectBindingMaximumAge,
+            name: nameof(SubjectBindingMaximumAge)
+        );
 
         if (!string.Equals(
             a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
@@ -102,7 +122,7 @@ public sealed record TrustListEntry(
             );
 
             if (bytesRead != PublicKeySubjectPublicKeyInfo.Length) {
-                throw new CryptographicException(message: $"The SubjectPublicKeyInfo contains {PublicKeySubjectPublicKeyInfo.Length - bytesRead} trailing byte(s).");
+                throw new CryptographicException(message: $"The SubjectPublicKeyInfo contains {(PublicKeySubjectPublicKeyInfo.Length - bytesRead)} trailing byte(s).");
             }
         } catch (CryptographicException exception) {
             throw new ArgumentException(
@@ -139,20 +159,7 @@ public sealed record TrustListEntry(
             throw new ArgumentException(message: "A directly-signing trust list entry cannot author binding-age policy because no binding is walked beneath it.");
         }
     }
-
-    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
-        if (
-            (value is not null) &&
-            ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: name,
-                message: "An attestation maximum age must be positive and expressible as whole wire seconds."
-            );
-        }
-    }
 }
-
 /// <summary>
 /// The authored set of issuers a world accepts (README.md, "Signed attestation"). An empty list
 /// honours no foreign claim — deny by default like every other capability; the engine compiles in no root.
@@ -191,10 +198,22 @@ public sealed record TrustList {
         TimeSpan? defaultSubjectBindingMaximumAge = null,
         TimeSpan? replayAcceptanceHorizon = null
     ) {
-        ValidateOptionalDuration(value: defaultMaximumAge, name: nameof(defaultMaximumAge));
-        ValidateOptionalDuration(value: defaultRootBindingMaximumAge, name: nameof(defaultRootBindingMaximumAge));
-        ValidateOptionalDuration(value: defaultSubjectBindingMaximumAge, name: nameof(defaultSubjectBindingMaximumAge));
-        ValidateOptionalDuration(value: replayAcceptanceHorizon, name: nameof(replayAcceptanceHorizon));
+        ValidateOptionalDuration(
+            value: defaultMaximumAge,
+            name: nameof(defaultMaximumAge)
+        );
+        ValidateOptionalDuration(
+            value: defaultRootBindingMaximumAge,
+            name: nameof(defaultRootBindingMaximumAge)
+        );
+        ValidateOptionalDuration(
+            value: defaultSubjectBindingMaximumAge,
+            name: nameof(defaultSubjectBindingMaximumAge)
+        );
+        ValidateOptionalDuration(
+            value: replayAcceptanceHorizon,
+            name: nameof(replayAcceptanceHorizon)
+        );
 
         var seen = new HashSet<(string Domain, string? Subject, AttestationTrustMode Mode)>();
 
@@ -204,7 +223,7 @@ public sealed record TrustList {
         // SignedAttestation copies everything at its boundary).
         var defensiveEntries = new TrustListEntry[entries.Count];
 
-        for (var index = 0; index < defensiveEntries.Length; index++) {
+        for (var index = 0; (index < defensiveEntries.Length); index++) {
             var source = entries[index];
             var entry = source with {
                 PublicKeySubjectPublicKeyInfo = source.PublicKeySubjectPublicKeyInfo.ToArray(),
@@ -228,66 +247,19 @@ public sealed record TrustList {
         Entries = Array.AsReadOnly(array: defensiveEntries.Select(selector: CreateDetachedEntry).ToArray());
     }
 
-    /// <summary>Gets a detached, read-only snapshot of the trusted entries in authored order.</summary>
-    public IReadOnlyList<TrustListEntry> Entries { get; }
-
     /// <summary>The verifier's default maximum claim age when an entry does not override it, or <see langword="null"/> for no ceiling.</summary>
     public TimeSpan? DefaultMaximumAge { get; }
-
     /// <summary>The default maximum age for a cold-root-to-issuing binding, or <see langword="null"/> for no verifier-side ceiling beyond the signed window.</summary>
     public TimeSpan? DefaultRootBindingMaximumAge { get; }
-
     /// <summary>The default maximum age for an issuing-to-subject binding, or <see langword="null"/> for no verifier-side ceiling beyond the signed window.</summary>
     public TimeSpan? DefaultSubjectBindingMaximumAge { get; }
-
+    /// <summary>Gets a detached, read-only snapshot of the trusted entries in authored order.</summary>
+    public IReadOnlyList<TrustListEntry> Entries { get; }
     /// <summary>
     /// The verifier-wide finite horizon for every sequenced claim. It defines signed replay epochs and the
     /// earliest safe mark-retention deadline. <see langword="null"/> means sequenced claims are refused.
     /// </summary>
     public TimeSpan? ReplayAcceptanceHorizon { get; }
-
-    /// <summary>Finds the <see cref="AttestationTrustMode.Vouches"/> entry for a domain, or <see langword="null"/> if that domain is not trusted to vouch.</summary>
-    /// <param name="domain">The root fingerprint to look up.</param>
-    /// <returns>A detached copy of the matching entry, or <see langword="null"/> when no vouching root matches.</returns>
-    public TrustListEntry? FindVouchingRoot(string domain) {
-        var entry = FindVouchingRootForVerification(domain: domain);
-
-        return (entry is null) ? null : CreateDetachedEntry(entry: entry);
-    }
-
-    /// <summary>Finds the verifier-owned vouching-root snapshot without exposing it outside the assembly.</summary>
-    /// <param name="domain">The root fingerprint to look up.</param>
-    /// <returns>The verifier-owned matching entry, or <see langword="null"/> when no vouching root matches.</returns>
-    internal TrustListEntry? FindVouchingRootForVerification(string domain) {
-        foreach (var entry in m_entries) {
-            if (
-                (entry.Mode == AttestationTrustMode.Vouches) &&
-                string.Equals(
-                a: entry.PinnedId.Domain,
-                b: domain,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return entry;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Finds the <see cref="AttestationTrustMode.SignsDirectly"/> entry pinning one subject's own signing key,
-    /// or <see langword="null"/> if no such key is pinned. A direct pin is strictly more specific than a
-    /// vouching root, so the verifier consults this first.
-    /// </summary>
-    /// <param name="domain">The claim's domain (the pinned key's own root fingerprint).</param>
-    /// <param name="subject">The claim's subject.</param>
-    /// <returns>A detached copy of the matching entry, or <see langword="null"/> when no direct signer matches.</returns>
-    public TrustListEntry? FindDirectSigner(string domain, string? subject) {
-        var entry = FindDirectSignerForVerification(domain: domain, subject: subject);
-
-        return (entry is null) ? null : CreateDetachedEntry(entry: entry);
-    }
 
     /// <summary>Finds the verifier-owned direct-signer snapshot without exposing it outside the assembly.</summary>
     /// <param name="domain">The claim's root fingerprint.</param>
@@ -318,29 +290,75 @@ public sealed record TrustList {
 
         return null;
     }
+    /// <summary>Finds the verifier-owned vouching-root snapshot without exposing it outside the assembly.</summary>
+    /// <param name="domain">The root fingerprint to look up.</param>
+    /// <returns>The verifier-owned matching entry, or <see langword="null"/> when no vouching root matches.</returns>
+    internal TrustListEntry? FindVouchingRootForVerification(string domain) {
+        foreach (var entry in m_entries) {
+            if (
+                (entry.Mode == AttestationTrustMode.Vouches) &&
+                string.Equals(
+                a: entry.PinnedId.Domain,
+                b: domain,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return entry;
+            }
+        }
 
-    /// <summary>The maximum age a claim from <paramref name="entry"/> may be accepted at, or <see langword="null"/> for no ceiling.</summary>
-    public TimeSpan? MaximumAgeFor(TrustListEntry entry) => (entry.MaximumAge ?? DefaultMaximumAge);
-
-    /// <summary>The maximum age for a root-to-issuing binding admitted by <paramref name="entry"/>.</summary>
-    public TimeSpan? RootBindingMaximumAgeFor(TrustListEntry entry) => (entry.RootBindingMaximumAge ?? DefaultRootBindingMaximumAge);
-
-    /// <summary>The maximum age for an issuing-to-subject binding admitted by <paramref name="entry"/>.</summary>
-    public TimeSpan? SubjectBindingMaximumAgeFor(TrustListEntry entry) => (entry.SubjectBindingMaximumAge ?? DefaultSubjectBindingMaximumAge);
+        return null;
+    }
 
     private static TrustListEntry CreateDetachedEntry(TrustListEntry entry) => entry with {
         PublicKeySubjectPublicKeyInfo = entry.PublicKeySubjectPublicKeyInfo.ToArray(),
     };
-
     private static void ValidateOptionalDuration(TimeSpan? value, string name) {
         if (
             (value is not null) &&
             ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
         ) {
             throw new ArgumentOutOfRangeException(
-                paramName: name,
-                message: "An attestation maximum age or replay horizon must be positive and expressible as whole wire seconds."
+                message: "An attestation maximum age or replay horizon must be positive and expressible as whole wire seconds.",
+                paramName: name
             );
         }
     }
+
+    /// <summary>
+    /// Finds the <see cref="AttestationTrustMode.SignsDirectly"/> entry pinning one subject's own signing key,
+    /// or <see langword="null"/> if no such key is pinned. A direct pin is strictly more specific than a
+    /// vouching root, so the verifier consults this first.
+    /// </summary>
+    /// <param name="domain">The claim's domain (the pinned key's own root fingerprint).</param>
+    /// <param name="subject">The claim's subject.</param>
+    /// <returns>A detached copy of the matching entry, or <see langword="null"/> when no direct signer matches.</returns>
+    public TrustListEntry? FindDirectSigner(string domain, string? subject) {
+        var entry = FindDirectSignerForVerification(
+            domain: domain,
+            subject: subject
+        );
+
+        return ((entry is null)
+            ? null
+            : CreateDetachedEntry(entry: entry)
+        );
+    }
+    /// <summary>Finds the <see cref="AttestationTrustMode.Vouches"/> entry for a domain, or <see langword="null"/> if that domain is not trusted to vouch.</summary>
+    /// <param name="domain">The root fingerprint to look up.</param>
+    /// <returns>A detached copy of the matching entry, or <see langword="null"/> when no vouching root matches.</returns>
+    public TrustListEntry? FindVouchingRoot(string domain) {
+        var entry = FindVouchingRootForVerification(domain: domain);
+
+        return ((entry is null)
+            ? null
+            : CreateDetachedEntry(entry: entry)
+        );
+    }
+    /// <summary>The maximum age a claim from <paramref name="entry"/> may be accepted at, or <see langword="null"/> for no ceiling.</summary>
+    public TimeSpan? MaximumAgeFor(TrustListEntry entry) => (entry.MaximumAge ?? DefaultMaximumAge);
+    /// <summary>The maximum age for a root-to-issuing binding admitted by <paramref name="entry"/>.</summary>
+    public TimeSpan? RootBindingMaximumAgeFor(TrustListEntry entry) => (entry.RootBindingMaximumAge ?? DefaultRootBindingMaximumAge);
+    /// <summary>The maximum age for an issuing-to-subject binding admitted by <paramref name="entry"/>.</summary>
+    public TimeSpan? SubjectBindingMaximumAgeFor(TrustListEntry entry) => (entry.SubjectBindingMaximumAge ?? DefaultSubjectBindingMaximumAge);
 }

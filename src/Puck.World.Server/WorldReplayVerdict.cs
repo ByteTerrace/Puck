@@ -16,12 +16,11 @@ namespace Puck.World;
 /// <param name="Replayed">The fresh re-drive's tail hash.</param>
 /// <param name="DivergedAt">The first tick at which the traces differ, or <c>-1</c> when they never do.</param>
 public readonly record struct WorldReplayVerdict(int Ticks, ulong Recorded, ulong Replayed, int DivergedAt) {
-    /// <summary>Gets whether the fresh re-drive reproduced the live session on EVERY tick.</summary>
-    public bool Match => DivergedAt < 0;
-
     /// <summary>Gets whether the traces differ from the very first tick, which indicts the starting state rather than
     /// the simulation's trajectory.</summary>
-    public bool DivergedAtStart => DivergedAt == 0;
+    public bool DivergedAtStart => (DivergedAt == 0);
+    /// <summary>Gets whether the fresh re-drive reproduced the live session on EVERY tick.</summary>
+    public bool Match => (DivergedAt < 0);
 
     /// <summary>Renders the shared verdict fragment both replay verbs report, naming the divergence tick when there is
     /// one.</summary>
@@ -33,7 +32,8 @@ public readonly record struct WorldReplayVerdict(int Ticks, ulong Recorded, ulon
 
         var where = (DivergedAtStart
             ? "at tick 0 (the starting state itself differs)"
-            : $"first at tick {DivergedAt} of {Ticks} (the starting state matched)");
+            : $"first at tick {DivergedAt} of {Ticks} (the starting state matched)"
+        );
 
         return $"MISMATCH {where} | live tail=0x{Recorded:X16} replayed=0x{Replayed:X16}";
     }

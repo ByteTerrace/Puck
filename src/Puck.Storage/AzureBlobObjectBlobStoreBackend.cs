@@ -40,7 +40,11 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
         AzureBlobObjectStorageTarget target,
         ObjectBlobAddress address
     ) {
-        var (containerClient, keyPrefixRoot) = GetContainerProjection(forList: false, objectId: address.ObjectId, target: target);
+        var (containerClient, keyPrefixRoot) = GetContainerProjection(
+            forList: false,
+            objectId: address.ObjectId,
+            target: target
+        );
         var key = ObjectBlobAddressPath.GetNormalizedKey(address: address);
 
         return (containerClient, containerClient.GetBlobClient(blobName: $"{keyPrefixRoot}{key}"));
@@ -75,10 +79,8 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
 
         return (forList
             ? (GetListServiceClient(target: target).GetBlobContainerClient(blobContainerName: root), $"{edgeNamespace}/")
-            : (GetServiceClient(target: target).GetBlobContainerClient(blobContainerName: edgeNamespace), $"{root}/"));
-    }
-    private BlobServiceClient GetServiceClient(AzureBlobObjectStorageTarget target) {
-        return GetServiceClient(connectionString: target.ConnectionString, serviceUri: target.ServiceUri, description: "target");
+            : (GetServiceClient(target: target).GetBlobContainerClient(blobContainerName: edgeNamespace), $"{root}/")
+        );
     }
     // LIST can never be served through the platform edge, under any circumstance: the edge's path rewrite has no
     // segment for a query-string-only List Blobs/Containers request to occupy, so it 404s unconditionally before
@@ -98,7 +100,18 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
 
         var direct = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: directEndpoint);
 
-        return GetServiceClient(connectionString: direct.ConnectionString, serviceUri: direct.ServiceUri, description: "DirectEndpoint");
+        return GetServiceClient(
+            connectionString: direct.ConnectionString,
+            serviceUri: direct.ServiceUri,
+            description: "DirectEndpoint"
+        );
+    }
+    private BlobServiceClient GetServiceClient(AzureBlobObjectStorageTarget target) {
+        return GetServiceClient(
+            connectionString: target.ConnectionString,
+            serviceUri: target.ServiceUri,
+            description: "target"
+        );
     }
     private BlobServiceClient GetServiceClient(string? connectionString, Uri? serviceUri, string description) {
         if (connectionString is { Length: > 0 }) {
@@ -132,11 +145,60 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
         // The service clients hold no unmanaged handles; the credential can (managed-identity/broker token pipes), so
         // dispose it when it was ever materialized. Guarded on IDisposable so a credential type that is not disposable
         // (the common case) is a harmless no-op.
-        if (m_defaultAzureCredential.IsValueCreated && (m_defaultAzureCredential.Value is IDisposable disposable)) {
+        if (
+            m_defaultAzureCredential.IsValueCreated &&
+            (m_defaultAzureCredential.Value is IDisposable disposable)
+        ) {
             disposable.Dispose();
         }
 
         m_blobServiceClients.Clear();
+    }
+    public async ValueTask<IReadOnlyList<string>> ListAsync(
+        ObjectStorageTarget target,
+        Guid objectId,
+        string keyPrefix,
+        CancellationToken cancellationToken = default
+    ) {
+        var azureTarget = ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(
+            description: "an Azure Blob target",
+            target: target
+        );
+
+        var (containerClient, keyPrefixRoot) = GetContainerProjection(
+            forList: true,
+            objectId: objectId,
+            target: azureTarget
+        );
+        var blobPrefix = $"{keyPrefixRoot}{ObjectBlobAddressPath.GetNormalizedPrefix(keyPrefix: keyPrefix)}";
+        var keys = new List<string>();
+
+        try {
+            await foreach (var item in containerClient.GetBlobsAsync(
+                cancellationToken: cancellationToken,
+                prefix: blobPrefix,
+                states: BlobStates.None,
+                traits: BlobTraits.None
+            )) {
+                // keyPrefixRoot is the segment the account's stored layout puts in front of a key (the edge namespace
+                // going direct, nothing raw); strip it back off so every listed key is object-relative, the same shape
+                // a read/write address carries — a discovered key addresses a read without translation.
+                keys.Add(item: ((keyPrefixRoot.Length > 0)
+                    ? item.Name[keyPrefixRoot.Length..]
+                    : item.Name));
+            }
+        } catch (RequestFailedException ex) when (((ex.Status == 404) && (azureTarget.EdgeNamespace is not { Length: > 0 }))) {
+            // Only the raw/dev-emulator shape self-manages containers (WriteAsync creates one on demand), so only
+            // THERE does a 404 legitimately mean "nothing written yet." An edge-shaped target's per-object container
+            // is platform-managed — created at onboarding, never by this client, so never legitimately absent — and
+            // by the time control reaches here it has already resolved DirectEndpoint rather than the edge
+            // (GetListServiceClient refuses by name before ever sending a request otherwise), so a 404 through that
+            // direct connection is a genuine anomaly (a misconfigured endpoint, or an object that was never
+            // onboarded) and must propagate, not read as an empty prefix.
+            return [];
+        }
+
+        return keys;
     }
     public async ValueTask<ObjectBlobContent?> ReadAsync(
         ObjectStorageTarget target,
@@ -145,7 +207,10 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
     ) {
         var blobClient = GetBlobClient(
             address: address,
-            target: ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(target: target, description: "an Azure Blob target")
+            target: ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(
+                description: "an Azure Blob target",
+                target: target
+            )
         );
 
         try {
@@ -172,7 +237,10 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
         string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     ) {
-        var azureTarget = ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(target: target, description: "an Azure Blob target");
+        var azureTarget = ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(
+            description: "an Azure Blob target",
+            target: target
+        );
 
         var (containerClient, blobClient) = GetBlobClients(
             address: address,
@@ -194,13 +262,15 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
                 { "CanRead", "Enabled" },
                 { "CanWrite", "Enabled" },
             }
-            : null);
+            : null
+        );
 
         if (mode == ObjectBlobWriteMode.Overwrite) {
             // An if-match guards the overwrite (optimistic concurrency); its absence keeps the unconditional overwrite.
             var conditions = ((ifMatchVersion is not null)
                 ? new BlobRequestConditions { IfMatch = new ETag(etag: ifMatchVersion) }
-                : null);
+                : null
+            );
 
             try {
                 var response = await blobClient.UploadAsync(
@@ -209,9 +279,17 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
                     cancellationToken
                 );
 
-                return new ObjectBlobWriteResult(Succeeded: true, PreconditionFailed: false, VersionToken: response.Value.ETag.ToString());
+                return new ObjectBlobWriteResult(
+                    Succeeded: true,
+                    PreconditionFailed: false,
+                    VersionToken: response.Value.ETag.ToString()
+                );
             } catch (RequestFailedException ex) when ((ex.Status == 412)) {
-                return new ObjectBlobWriteResult(Succeeded: false, PreconditionFailed: true, VersionToken: null);
+                return new ObjectBlobWriteResult(
+                    PreconditionFailed: true,
+                    Succeeded: false,
+                    VersionToken: null
+                );
             }
         }
 
@@ -235,42 +313,18 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
                 cancellationToken
             );
 
-            return new ObjectBlobWriteResult(Succeeded: true, PreconditionFailed: false, VersionToken: response.Value.ETag.ToString());
+            return new ObjectBlobWriteResult(
+                Succeeded: true,
+                PreconditionFailed: false,
+                VersionToken: response.Value.ETag.ToString()
+            );
         } catch (RequestFailedException ex) when ((ex.Status is 409 or 412)) {
             // The blob already existed — a create-only loss, not an if-match precondition failure.
-            return new ObjectBlobWriteResult(Succeeded: false, PreconditionFailed: false, VersionToken: null);
+            return new ObjectBlobWriteResult(
+                PreconditionFailed: false,
+                Succeeded: false,
+                VersionToken: null
+            );
         }
-    }
-    public async ValueTask<IReadOnlyList<string>> ListAsync(
-        ObjectStorageTarget target,
-        Guid objectId,
-        string keyPrefix,
-        CancellationToken cancellationToken = default
-    ) {
-        var azureTarget = ObjectStorageTarget.Require<AzureBlobObjectStorageTarget>(target: target, description: "an Azure Blob target");
-
-        var (containerClient, keyPrefixRoot) = GetContainerProjection(forList: true, objectId: objectId, target: azureTarget);
-        var blobPrefix = $"{keyPrefixRoot}{ObjectBlobAddressPath.GetNormalizedPrefix(keyPrefix: keyPrefix)}";
-        var keys = new List<string>();
-
-        try {
-            await foreach (var item in containerClient.GetBlobsAsync(cancellationToken: cancellationToken, prefix: blobPrefix, states: BlobStates.None, traits: BlobTraits.None)) {
-                // keyPrefixRoot is the segment the account's stored layout puts in front of a key (the edge namespace
-                // going direct, nothing raw); strip it back off so every listed key is object-relative, the same shape
-                // a read/write address carries — a discovered key addresses a read without translation.
-                keys.Add(item: ((keyPrefixRoot.Length > 0) ? item.Name[keyPrefixRoot.Length..] : item.Name));
-            }
-        } catch (RequestFailedException ex) when (((ex.Status == 404) && (azureTarget.EdgeNamespace is not { Length: > 0 }))) {
-            // Only the raw/dev-emulator shape self-manages containers (WriteAsync creates one on demand), so only
-            // THERE does a 404 legitimately mean "nothing written yet." An edge-shaped target's per-object container
-            // is platform-managed — created at onboarding, never by this client, so never legitimately absent — and
-            // by the time control reaches here it has already resolved DirectEndpoint rather than the edge
-            // (GetListServiceClient refuses by name before ever sending a request otherwise), so a 404 through that
-            // direct connection is a genuine anomaly (a misconfigured endpoint, or an object that was never
-            // onboarded) and must propagate, not read as an empty prefix.
-            return [];
-        }
-
-        return keys;
     }
 }

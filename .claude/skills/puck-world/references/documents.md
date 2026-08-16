@@ -1,6 +1,6 @@
 # The document families
 
-Three versioned JSON families, all owned by `src/Puck.World.Data`.
+Three versioned JSON families, all owned by `src/Puck.World.Schema`.
 `puck.world.def.v1` (`WorldDefinition.cs`) describes a world. An identity is not
 a separate schema — it is an ordinary `WorldDefinition` document carrying an
 `identity` section, one file per owned world (see "Owned-world identities"
@@ -8,7 +8,7 @@ below). The other two are EGRESS documents, never authored by hand and never
 loaded as a world: `puck.world.projection.v1` (`WorldProjection.cs`) and
 `puck.world.counterpart.v1` (`WorldCounterpartAttestation.cs`) — see
 "Disclosure" below. All three carry a root `Extensions` bag under
-`Puck.Abstractions.Documents.DocumentExtensionsPolicy`.
+`Puck.World.DocumentExtensionsPolicy`.
 
 ## Disclosure — what leaves an authority
 
@@ -31,7 +31,10 @@ disclosure decision: it has no member for `rules`, `grants`, `state`, `market`,
 `bodyMotionPrograms`, or `portals`, and its `WorldProjectedKit` row has none for
 a kit's `producers`/`actions`. `adjacencies`/`destinations`/`references`/
 `interactions` DO cross: `WorldAdjacencyPolicy.TryDeriveOverlap` reads them from
-both sides of a seam and must derive the same depth on each.
+both sides of a seam and must derive the same depth on each. `metadata` crosses
+in reduced form — `WorldProjectedMetadata` carries `title`/`description` only;
+`authors`, `tags`, and `custom` never cross (`custom` is an unbounded author
+scratch bag that may hold notes never meant to leave the authority).
 `WorldProjection.ToDefinition` hydrates a received projection back into a
 `WorldDefinition` (undisclosed sections take their neutral built-in defaults) so
 no downstream consumer changed type; a hydrated document is never saved,
@@ -52,6 +55,7 @@ unauthored default), `radius`, `selfOnly`) redacts snapshot ENTRIES per sink at
 - Disclosure — what leaves an authority
 - `puck.world.def.v1`
   - Authored randomness — SOURCE x SITE x MOMENT
+- Document composition (`basis`)
 - The validator — the one thick gate
 - Serialization (`WorldDefinitionSerialization.cs`)
 - Identity conventions
@@ -73,7 +77,7 @@ members in declaration (= canonical-write) order: `Motion`, `SpawnPoints`,
 `Hud`, `State`, `InputHold` (its own type, `WorldInputHoldAuthoring`, is the
 AUTHORED seconds shape — `WorldDefinition.CompiledInputHold` is the compiled
 ticks form runtime code consumes; see `WorldInputHoldSettings`'s remarks) —
-plus 15 trailing OPTIONAL members (each `[JsonIgnore(Condition =
+plus 17 trailing OPTIONAL members (each `[JsonIgnore(Condition =
 WhenWritingNull)]` with a `= null` default, so an existing document declaring
 none of them round-trips unchanged): `Rules` (see below), `Identity`,
 `Groups`, `Properties`, `Interactions`, `Generation`, `Generators`, `Water`
@@ -84,9 +88,15 @@ trust list every ingress crosses — key-bearing rows for the TCP identity door,
 keyless `federatedAuthority` rows for travellers an authenticated authority
 hands over; deny-by-default, an absent/empty section admits neither), `Market` (`WorldMarketSection`, `WorldMarket.cs` — the local
 auction house's config and live listing ledger; null IS today's no-market
-behavior, falling back to `WorldMarketSection.Empty`), and `Adjacencies`
+behavior, falling back to `WorldMarketSection.Empty`), `Adjacencies`
 (`WorldAdjacencies.cs` — invisible reciprocal authority boundaries; null
-names no seamless neighbours) — plus `Schema`
+names no seamless neighbours), `Text` (`TextFontCatalogDefinition` — the
+named, hash-pinned world-space font catalog; null declares no fonts), and
+`Metadata` (`WorldMetadataSection`, `WorldMetadata.cs` — author-facing
+`title`/`description`/`authors`/`tags` plus a free-form `custom` bag; nothing
+in the engine reads or dispatches on it, and it is distinct from `Extensions`
+below, which exists to catch a misspelled top-level section name rather than
+to hold content) — plus `Schema`
 and the `[JsonExtensionData]` `Extensions` bag. There is no `Wander`/`Scene`
 member and no `WorldSceneRow` type any more — both retired; scenery is
 authored through `Placements` now.
@@ -96,9 +106,14 @@ none has a `WorldSection` axis or a `MutationKind` ordinal, so nothing
 mutates them in session and no grant subject names them:
 
 - **`References`** (`WorldReferences.cs`) — `IReadOnlyList<WorldReference>?`,
-  each row `(WorldSafeName Name, string Document)`. This is what a portal
-  facet's `destination` resolves against: Play's own `references` section
-  names the three dungeons by document path.
+  each row `(WorldSafeName Name, string? Document, Guid? Owner, WorldSafeName?
+  World)` — exactly one of `Document` (a local document path) or
+  `Owner`+`World` together (a remote owner-named world; worlds ARE users) is
+  authored, never both, never neither. `NeighbourKey` (computed, never
+  serialized) folds whichever arm was authored into the one opaque string
+  every `IWorldNeighbourResolver` call site resolves against. This is what a
+  portal facet's `destination` resolves against: Play's own `references`
+  section names the three dungeons by document path.
 - **`Portals`** (`WorldPortals.cs`) — `WorldPortalsSection(WorldPortalDefaults
   PortalDefaults)`, whose `travel` is `Party` (the traveling seat's whole
   active local-seat party) or `Body` (one seat). It is the world-scope default
@@ -127,6 +142,16 @@ mutates them in session and no grant subject names them:
   failure channel; the compiler derives overlap and diagonal corner interest.
   Runtime, transfer, and verification details live in
   [adjacency-and-federation.md](adjacency-and-federation.md).
+- **`Metadata`** (`WorldMetadataSection`, `WorldMetadata.cs`) — free-form
+  author-facing facts: `title`, `description`, `authors` (each an optional
+  Entra `oid`, checked with `WorldEntraObjectId.IsValid`), `tags`, and a
+  `custom` bag (`IDictionary<string, JsonElement>`). Nothing in the engine
+  reads any member here. `title`/`description` cross to a Presentation-tier
+  peer as `WorldProjectedMetadata`; `authors`/`tags`/`custom` never do (see
+  "Disclosure" above). `custom` follows `WorldDocumentBasis`'s ordinary
+  nested-object merge rule with its two carve-outs: a key literally named
+  `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
+  a delta deletes the inherited key rather than storing a literal null.
 
 The `WorldSection` enum (`Protocol/WorldGrant.cs`, 31 members, declared
 order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
@@ -137,7 +162,7 @@ Groups, Properties, Interactions, PlayerDefaults, Market`. It is the grant subje
 `WorldDefinition`'s own member list above: `Channels`,
 `TargetRegisters`, `BodyMotionPrograms`, `Storage`, `Identity`,
 `Generation`, `Generators`, `Water`, `References`, `Portals`, `Simulation`,
-`Destinations`, `Admission`, and `Adjacencies` carry no dispatch axis of their own (some
+`Destinations`, `Admission`, `Adjacencies`, `Text`, and `Metadata` carry no dispatch axis of their own (some
 names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `DefaultSeatKit`/`Assignment` dispatch through `Spawns`/`Bindings`/`Looks`/
 `Kits` respectively; `PlayerDefaults` dispatches through
@@ -145,7 +170,7 @@ names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `CreateMarketListing`/`PlaceMarketBid`/`BuyoutMarketListing`/
 `CancelMarketListing`/`SettleMarketListing` family).
 
-`rules` (`WorldRule`, `Puck.World.Data/WorldRules.cs`) is the OPTIONAL
+`rules` (`WorldRule`, `Puck.World.Schema/WorldRules.cs`) is the OPTIONAL
 world-scoped rule section — the SAME `ActionPredicate`/`ActionEffect`/
 `ActionTriggerMode` primitive a kit's per-body actions use, one level up.
 Optional deliberately: a new REQUIRED section would refuse every existing
@@ -259,7 +284,7 @@ the four shipped worlds author no `rules` section today, so there is no
 worked example to cite; the pattern still governs the first world that adds
 one.
 
-`state` (`WorldStateRow`, `Puck.World.Data/WorldState.cs`) is genre-neutral
+`state` (`WorldStateRow`, `Puck.World.Schema/WorldState.cs`) is genre-neutral
 game state — score, rounds, inventory, flags. **A slot is a table with one
 key, and there is ONE authored spelling for both.** A row names itself,
 declares its `kind`, and carries EITHER a bare `value` — sugar for the one
@@ -355,7 +380,7 @@ lifts the floor.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** The
 rule lives in `WorldStateReservedCells.TryValidateReservedCell`
-(`Puck.World.Data/WorldState.cs`), called from `WorldDefinitionValidator`'s state
+(`Puck.World.Schema/WorldState.cs`), called from `WorldDefinitionValidator`'s state
 walk — which runs at boot, at every live mutation and on every undo-replay entry
 — AND from the `UpsertStateCell` compose arm, so a hand-authored file and a
 console verb refuse by the same code, with the verb naming it at the verb. A
@@ -378,7 +403,7 @@ the addon ABI channel stay raw. `min`/`max` are BOTH-OR-NEITHER on a numeric
 row (a half-declared range refuses); when both are present every cell must
 fall inside — the range a HUD gauge bound to `state.<row>` or
 `state.<row>.<key>` reads (see [hud.md](hud.md)). The row `name` and every
-cell `key` are `WorldCellName` (`Puck.World.Data/WorldSafeName.cs`) — a
+cell `key` are `WorldCellName` (`Puck.World.Schema/WorldSafeName.cs`) — a
 validated type that cannot hold an empty, unsafe, or DOTTED value, refused at
 JSON parse naming the character; the dot-free rule is what makes
 `state.<row>.<key>` parse unambiguously (the engine-minted `"$value"` slot
@@ -398,7 +423,7 @@ cell instead of refusing (in-place rewrites of an existing key never grow the
 row, so they can never trigger it, and never move that key's age — true
 insertion-order FIFO, not LRU). Requires a declared `capacity` — refused by
 name without one, which also covers a slot row, since a slot never declares
-one. The composition itself (`WorldStateCellWriter.ApplyEviction`, `Puck.World.Data`,
+one. The composition itself (`WorldStateCellWriter.ApplyEviction`, `Puck.World.Schema`,
 2026-08-06) is a SHARED pure function: `WorldServer.TryCompose`'s
 `UpsertStateCell` arm calls it for the running world's own document (so a live
 write and every `world.undo` journal re-composition reproduce the identical
@@ -475,9 +500,42 @@ arena scaffold — the one that also authors `water`), `kart` (the racing arena)
 fifth document, `studio`, ships beside them as a non-game DEV CANVAS for character/creation work — neutral floor,
 no scenery or crowd, four anchored camera eyes and a `sheet` layout composing four angles at once — reached only
 with `--world` and never from Play. Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`,
-`quilt-island`) ship beside them as non-game adjacency/federation stress content. All ten carry the full required
-top-level set, so a change that adds a required top-level section sweeps ten documents. The loader is
+`quilt-island`) ship beside them as non-game adjacency/federation stress content — each a `basis` delta over the
+eleventh document, the `quilt-base` template (see "Document composition" below). The six FLAT documents (the four
+game worlds, `studio`, `quilt-base`) carry the full required top-level set, so a change that adds a required
+top-level section sweeps those six; the deltas inherit it. The loader is
 `src/Puck.World/WorldDefinitionLoader.cs`.
+
+## Document composition (`basis`)
+
+`WorldDefinition.Basis` is the document-composition member: a file naming a `basis` (a file path resolved against
+its own directory) is a DELTA over that document — templates/prefabs for similar worlds. The mechanism is
+`WorldDocumentBasis` (`Puck.World.Schema/WorldDocumentBasis.cs`), invoked from `WorldDefinitionFileSource` on EVERY
+file load (boot, `world.load`/`world.reload`, the replay re-drive's apply-boundary re-read, and both neighbour
+resolvers), composing on the raw JSON trees BEFORE the strict parse — a partial template cannot model-parse
+(required members), so the model only ever sees the finished composition, and the consumed `basis` member is
+stripped: a LIVE document always carries `Basis == null`, the validator refuses anything else, and every wire
+egress (replica, replay embed) is self-contained by construction. Merge rules: objects merge member-wise
+(recursive), omitted inherits, authored `null` clears, a `$type`-changed union object replaces wholesale, and a
+row list whose rows all carry the settled identity vocabulary (first of `id`/`name`/`index` on every row of BOTH
+sides) merges BY KEY in basis order — new keys append, `{"<key>": …, "$drop": true}` tombstones remove (a stale
+tombstone refuses by name), a leading `{"$replace": true}` row replaces wholesale. `$drop`/`$replace` are
+compose-time vocabulary only; chains are depth-capped (`WorldDocumentBasis.MaxChainDepth`, 8) and cycles refuse by
+name. The content pin folds the WHOLE chain's raw bytes (`ComputeChainContentHash`, length-delimited,
+derived-first), so editing a template moves every derived document's pin — flat documents keep the undelimited
+single-file pin unchanged. `world.save` preserves the derivation of the file it OVERWRITES
+(`SavePreservingBasis`): it peeks the target's `basis` at save time (the file is the one truth — nothing caches
+derivation between load and save), computes the merge-inverse diff (`WorldDocumentBasis.Diff`), PROVES it by
+re-merging before writing, and degrades to a flat save with a named note when it cannot (basis unreadable,
+deleted, or the delta cannot reproduce the document). Read-backs: `world.status` echoes `basis <path|none>`;
+`world.save`'s echo names the preserved basis or the flat-save note. Storage composes a synced delta too:
+`IWorldDocumentSource`/`WorldDefinitionFileSource.TryComposeChain` generalize the chain walk onto any byte source,
+and `Puck.World.Server`'s `WorldStorageDocumentSource` resolves basis members against a flat cloud
+`puck/worlds/basis/{name}` namespace (`WorldOwnedWorldSync.BasisAddressFor`) — the storage neighbour resolver and
+`storage.pull` both compose before parsing, exactly like a directory load. `storage.push` pushes the whole chain
+(each link its own blob) via `WorldDefinitionFileSource.TryResolveChainFiles`, deduplicated per push call when two
+owned worlds share a basis. Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
+`StorageCompositionLawTests.cs`.
 
 **Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
 declares WHICH motion model it advances on, alongside `BodyMotionProgram`
@@ -622,8 +680,9 @@ aggregated STRING list (`"Invalid WorldDefinition: …"`); the one
 enum-reasoned section is HUD (`HudValidationException` carrying `HudRefusal`,
 folded in as `hud.<Reason>: …`). A null required section fails earlier with
 `"Incomplete WorldDefinition: <name> is required."` (`RequireSections` checks
-27 nullable members; the struct sections `motion`/`wander`/`population`
-cannot be absent-null).
+31 nullable REQUIRED members — every OPTIONAL trailing member above, `Metadata`
+included, gets no `Require` call; the struct sections `motion`/`wander`/
+`population` cannot be absent-null).
 
 Notable validator constants: `MaxCameras = 64`,
 `MaxSurfaceDimension = 4096`, `MaxLookScale = 16f`. Screen indices are
@@ -757,7 +816,7 @@ catalog — never a hard boot failure.
 ids, case-insensitive unique names, hex color — `ValidatePlayerDefaults` in
 `WorldDefinitionValidator.cs`) and persists each immediately.
 
-**`WorldIdentity`** (`Puck.World.Data/WorldIdentity.cs`) is the runtime
+**`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
 (`WorldIdentityDefinition(Id, Name, Color, MoveSpeedState, TurnSpeedState,
 Controllers)`): `MoveSpeed`/`TurnSpeed` read
@@ -889,7 +948,7 @@ radial with one six-sector action ring. Presentation and the live verbs:
 
 ## Capacity constants
 
-- `WorldPopulationLimits` (`Puck.World.Data`): `CapacityCeiling = 128`,
+- `WorldPopulationLimits` (`Puck.World.Schema`): `CapacityCeiling = 128`,
   `LocalSeatCount = 4` (indices 0–3) — single-sourced against
   `WorldClient.EntityCapacity` (the F3 reconciliation, 2026-08-06; see
   [SKILL.md](../SKILL.md)'s "Boundaries" section). There is no
@@ -910,7 +969,7 @@ radial with one six-sector action ring. Presentation and the live verbs:
   from the probe, `TryFit(candidate)` at every apply; unconfigured reads as
   "fits".
 
-## Routing map (one line each, all under `src/Puck.World.Data/`)
+## Routing map (one line each, all under `src/Puck.World.Schema/`)
 
 - `WorldJsonPayload.cs` — the single door for author-supplied JSON text
   (`TryParse`, `IsParseFailure`, 120-char elided rejections).
@@ -965,6 +1024,5 @@ No engine gate. Build (`dotnet build Puck.slnx -c Release` — architecture
 lanes + XML-doc diagnostics) and RUN `Puck.World`, round-tripping the
 affected document over stdin (`world.status`, `world.save`, `world.load`).
 Committed runner: `docs/verification/strict-definition-parse/run.ps1`.
-`docs/verification/hud-document/` is QUARANTINED (2026-08-06 — see
-[hud.md](hud.md)'s "Verifying" section); validate HUD document changes by
-running the app.
+Validate HUD document changes by running the app — see [hud.md](hud.md)'s
+"Verifying" section for the recipe.

@@ -26,16 +26,16 @@ public sealed class TiltSensorComponent : ITiltSensor, ISnapshotable {
     }
     /// <inheritdoc/>
     public void SetTilt(float x, float y) {
-        m_x = (Center + (int)(Math.Clamp(
-            value: x,
+        m_x = (Center + ((int)(Math.Clamp(
+            max: 1f,
             min: -1f,
-            max: 1f
-        ) * Range));
-        m_y = (Center - (int)(Math.Clamp(
-            value: y,
+            value: x
+        ) * Range)));
+        m_y = (Center - ((int)(Math.Clamp(
+            max: 1f,
             min: -1f,
-            max: 1f
-        ) * Range));
+            value: y
+        ) * Range)));
     }
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {

@@ -36,7 +36,6 @@ public readonly struct OsTimeCorrelator {
             osReference: osReference
         );
     }
-
     /// <summary>Converts an OS stamp to engine ticks, clamped to <c>[reference, ceiling]</c>.</summary>
     /// <param name="osStamp">The event's OS timestamp (same 32-bit base as the pin).</param>
     /// <param name="engineCeiling">The current <see cref="InputClock.NowTicks"/>; the result never exceeds it.</param>
@@ -46,7 +45,7 @@ public readonly struct OsTimeCorrelator {
             throw new InvalidOperationException(message: "The OS time correlator must be created with OsTimeCorrelator.Pin before use.");
         }
 
-        var osDelta = (ulong)unchecked((osStamp - m_osReference));
+        var osDelta = ((ulong)unchecked((osStamp - m_osReference)));
 
         // floor(osDelta × PerSecond ÷ osFrequency), overflow-safe (split whole/fraction), exact.
         var whole = (osDelta / m_osFrequency);
@@ -60,6 +59,7 @@ public readonly struct OsTimeCorrelator {
 
         return ((engineTick > engineCeiling)
             ? engineCeiling
-            : engineTick);
+            : engineTick
+        );
     }
 }

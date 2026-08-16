@@ -49,6 +49,8 @@ internal sealed class WorldEditorMouse {
     // convention, mirrored by WorldSeatViewInput.ArmingButtonIndex).
     private const int LeftButton = 0;
 
+    private static readonly SearchValues<char> Whitespace = SearchValues.Create(values: " \t");
+
     private readonly TextCommandSource m_console;
     private readonly WorldEditorDrag m_drag;
     private readonly WorldCursorFeed m_feed;
@@ -56,6 +58,7 @@ internal sealed class WorldEditorMouse {
     private readonly PlayerRoster m_roster;
     private readonly WorldEditorSession m_session;
     private readonly WorldSeatViewports m_viewports;
+
     // Per-slot policy memory (the slot the pointer rides can move with the keyboard): the previous frame's held
     // state (the edge derivation), whether the live drag in the channel is THIS policy's (a stick/verb drag must
     // never be committed by a mouse release), the system-release count sampled at press (the synthetic-release
@@ -100,92 +103,12 @@ internal sealed class WorldEditorMouse {
         m_viewports = viewports;
     }
 
-    /// <summary>Advances the policy one produced frame: derives this frame's left-button edge for the pointer's
-    /// seat, acts on it, and follows a live mouse drag with the cursor.</summary>
-    public void Tick() {
-        var slot = WorldPointerSlot.Resolve(roster: m_roster);
-
-        // A mouse drag whose seat the pointer no longer rides (the keyboard moved mid-hold) has lost its hand:
-        // cancel it — the drag never existed — and forget that slot's edge memory so the new occupant starts clean.
-        for (var other = 0; (other < PlayerRoster.MaxSlots); other++) {
-            if ((other != slot) && m_dragging[other]) {
-                m_dragging[other] = false;
-                m_wasDown[other] = false;
-                CancelNarrated(slot: other, reason: "the pointer left the seat mid-drag");
-            }
-        }
-
-        var status = m_feed.Status;
-        var down = m_pointer.IsButtonDown(slot: slot, button: LeftButton);
-        var was = m_wasDown[slot];
-
-        m_wasDown[slot] = down;
-
-        if (down && !was) {
-            OnPress(slot: slot, status: in status);
-        }
-
-        if (down && m_dragging[slot]) {
-            Follow(slot: slot, status: in status);
-        }
-
-        if (!down && was) {
-            OnRelease(slot: slot, status: in status);
+    // Cancel the channel's drag with the honest reason narrated once, act-scale, on the refusal stream.
+    private void CancelNarrated(int slot, string reason) {
+        if (m_drag.Cancel(slot: slot) is { } echo) {
+            Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} drag cancelled — {reason}; {echo}");
         }
     }
-
-    // The press act: select what the cursor hovers (through the existing verb), and grab a draggable row into the
-    // pending channel. Inert outside editor mode, with the cursor hidden, and on HUD panels (UI, not world).
-    private void OnPress(int slot, in WorldCursorStatus status) {
-        if (!m_session.IsEditing(slot: slot) || !status.Visible || (m_feed.HoverPanelId is not null)) {
-            return;
-        }
-
-        if (m_feed.HoverTarget is not { } target) {
-            // A click on nothing clears the selection — the editor's existing clear act, through the same door.
-            m_console.Enqueue(line: $"editor.select none {PlayerRoster.DisplayNumber(slot: slot)}");
-
-            return;
-        }
-
-        var selection = new EditorSelection(Section: target.Section, Id: target.Id, Index: target.Index);
-
-        if (SelectLine(slot: slot, section: target.Section, key: ((target.Section == WorldSection.Screens) ? target.Index.ToString(provider: CultureInfo.InvariantCulture) : target.Id)) is not { } line) {
-            // A key no console line can carry verbatim (an embedded quote — the document boundary admits any
-            // non-blank id, so such rows are REACHABLE) refuses the WHOLE press: selection could not dispatch, and
-            // grabbing a row the editor never considered selected would split the gesture's two halves.
-            Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} press on {selection.Describe()} refused: its key cannot ride a console line (embedded quote) — editor.select/world.row.set address it directly");
-
-            return;
-        }
-
-        m_console.Enqueue(line: line);
-
-        // Only the channel's draggable kinds grab on press; everything else (spawns, cameras) is click-select only,
-        // as is a press while another drag already holds the channel (the click was still a select).
-        if ((target.Section is not (WorldSection.Screens or WorldSection.Placements or WorldSection.Speakers)) || m_drag.IsDragging(slot: slot)) {
-            return;
-        }
-
-        if (!m_drag.TryGrab(slot: slot, selection: in selection, error: out var reason)) {
-            // An undraggable row of a draggable section (an anchored speaker): the click selected it; say why it
-            // did not grab, act-scale, on the refusal stream.
-            Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} press on {selection.Describe()} did not grab: {reason}");
-
-            return;
-        }
-
-        m_dragging[slot] = true;
-        m_pressReleases[slot] = m_pointer.SystemReleaseCount(slot: slot);
-        m_grabOrigin[slot] = target.Focus;
-        // The cursor grabbed the row somewhere on its proxy, not at its exact origin: the press-time plane point is
-        // the follow's baseline, so the row moves by the cursor's own plane travel instead of jumping under it.
-        // World space only — the frame-space mapping is re-derived every frame.
-        m_pressPointKnown[slot] = TryPlanePoint(slot: slot, status: in status, planeY: target.Focus.Y, point: out var point);
-        m_pressPoint[slot] = point;
-        Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} dragging {selection.Describe()} — release drops it, editor.cancel aborts");
-    }
-
     // The per-frame follow: re-map the cursor through the LIVE client→frame mapping and re-cast the ray against the
     // grab plane. With the cursor hidden or outside the viewport the pending row holds its last pose (a release out
     // there cancels rather than commits).
@@ -202,7 +125,12 @@ internal sealed class WorldEditorMouse {
             return;
         }
 
-        if (!TryPlanePoint(slot: slot, status: in status, planeY: m_grabOrigin[slot].Y, point: out var point)) {
+        if (!TryPlanePoint(
+            slot: slot,
+            status: in status,
+            planeY: m_grabOrigin[slot].Y,
+            point: out var point
+        )) {
             return;
         }
 
@@ -213,9 +141,88 @@ internal sealed class WorldEditorMouse {
             m_pressPointKnown[slot] = true;
         }
 
-        m_drag.MoveTo(slot: slot, intent: (m_grabOrigin[slot] + (point - m_pressPoint[slot])));
+        m_drag.MoveTo(
+            slot: slot,
+            intent: (m_grabOrigin[slot] + (point - m_pressPoint[slot]))
+        );
     }
+    // The press act: select what the cursor hovers (through the existing verb), and grab a draggable row into the
+    // pending channel. Inert outside editor mode, with the cursor hidden, and on HUD panels (UI, not world).
+    private void OnPress(int slot, in WorldCursorStatus status) {
+        if (
+            !m_session.IsEditing(slot: slot) ||
+            !status.Visible ||
+            (m_feed.HoverPanelId is not null)
+        ) {
+            return;
+        }
 
+        if (m_feed.HoverTarget is not { } target) {
+            // A click on nothing clears the selection — the editor's existing clear act, through the same door.
+            m_console.Enqueue(line: $"editor.select none {PlayerRoster.DisplayNumber(slot: slot)}");
+
+            return;
+        }
+
+        var selection = new EditorSelection(
+            Section: target.Section,
+            Id: target.Id,
+            Index: target.Index
+        );
+
+        if (SelectLine(
+            slot: slot,
+            section: target.Section,
+            key: ((target.Section == WorldSection.Screens)
+            ? target.Index.ToString(provider: CultureInfo.InvariantCulture)
+            : target.Id)
+        ) is not { } line) {
+            // A key no console line can carry verbatim (an embedded quote — the document boundary admits any
+            // non-blank id, so such rows are REACHABLE) refuses the WHOLE press: selection could not dispatch, and
+            // grabbing a row the editor never considered selected would split the gesture's two halves.
+            Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} press on {selection.Describe()} refused: its key cannot ride a console line (embedded quote) — editor.select/world.row.set address it directly");
+
+            return;
+        }
+
+        m_console.Enqueue(line: line);
+
+        // Only the channel's draggable kinds grab on press; everything else (spawns, cameras) is click-select only,
+        // as is a press while another drag already holds the channel (the click was still a select).
+        if (
+            (target.Section is not (WorldSection.Screens or WorldSection.Placements or WorldSection.Speakers)) ||
+            m_drag.IsDragging(slot: slot)
+        ) {
+            return;
+        }
+
+        if (!m_drag.TryGrab(
+            error: out var reason,
+            selection: in selection,
+            slot: slot
+        )) {
+            // An undraggable row of a draggable section (an anchored speaker): the click selected it; say why it
+            // did not grab, act-scale, on the refusal stream.
+            Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} press on {selection.Describe()} did not grab: {reason}");
+
+            return;
+        }
+
+        m_dragging[slot] = true;
+        m_pressReleases[slot] = m_pointer.SystemReleaseCount(slot: slot);
+        m_grabOrigin[slot] = target.Focus;
+        // The cursor grabbed the row somewhere on its proxy, not at its exact origin: the press-time plane point is
+        // the follow's baseline, so the row moves by the cursor's own plane travel instead of jumping under it.
+        // World space only — the frame-space mapping is re-derived every frame.
+        m_pressPointKnown[slot] = TryPlanePoint(
+            slot: slot,
+            status: in status,
+            planeY: target.Focus.Y,
+            point: out var point
+        );
+        m_pressPoint[slot] = point;
+        Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} dragging {selection.Describe()} — release drops it, editor.cancel aborts");
+    }
     // The release act: cancel a synthetic or out-of-viewport release, drop an unmoved click silently, and commit
     // everything else as the channel's one whole-row mutation under the seat's own principal.
     private void OnRelease(int slot, in WorldCursorStatus status) {
@@ -230,36 +237,55 @@ internal sealed class WorldEditorMouse {
         }
 
         if (m_pointer.SystemReleaseCount(slot: slot) != m_pressReleases[slot]) {
-            CancelNarrated(slot: slot, reason: "focus was lost mid-drag (synthetic release)");
+            CancelNarrated(
+                reason: "focus was lost mid-drag (synthetic release)",
+                slot: slot
+            );
 
             return;
         }
 
         if (!status.Visible) {
-            CancelNarrated(slot: slot, reason: $"released outside the seat viewport ({status.Reason})");
+            CancelNarrated(
+                slot: slot,
+                reason: $"released outside the seat viewport ({status.Reason})"
+            );
 
             return;
         }
 
-        if ((m_drag.PendingPosition(slot: slot) is { } pending) && (pending == m_grabOrigin[slot])) {
+        if (
+            (m_drag.PendingPosition(slot: slot) is { } pending) &&
+            (pending == m_grabOrigin[slot])
+        ) {
             // An unmoved release is a click, and its selection already landed: nothing to mutate, nothing to say.
             _ = m_drag.Cancel(slot: slot);
 
             return;
         }
 
-        if (m_drag.Release(slot: slot, principal: m_roster.PrincipalOf(slot: slot)) is { } echo) {
+        if (m_drag.Release(
+            slot: slot,
+            principal: m_roster.PrincipalOf(slot: slot)
+        ) is { } echo) {
             Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} {echo}");
         }
     }
-
-    // Cancel the channel's drag with the honest reason narrated once, act-scale, on the refusal stream.
-    private void CancelNarrated(int slot, string reason) {
-        if (m_drag.Cancel(slot: slot) is { } echo) {
-            Console.Error.WriteLine(value: $"[editor.mouse] seat {PlayerRoster.DisplayNumber(slot: slot)} drag cancelled — {reason}; {echo}");
+    // The row-select line a press dispatches: `editor.select <section> <key> <seat>`. A key the console line cannot
+    // carry verbatim is quoted (whitespace) or refused here (an embedded quote — null) rather than dispatched
+    // mangled.
+    private static string? SelectLine(int slot, WorldSection section, string key) {
+        if (key.Contains(value: '"')) {
+            return null;
         }
-    }
 
+        var token = (key.AsSpan().ContainsAny(values: Whitespace)
+            ? $"\"{key}\""
+            : key
+        );
+
+        return $"editor.select {section.ToString().ToLowerInvariant()} {token} {PlayerRoster.DisplayNumber(slot: slot)}";
+    }
     // The cursor's world point on the horizontal plane at planeY: the shared ray derivation cast from this frame's
     // camera, accepted only forward of the eye and within the editor's pick reach (a near-horizon ray otherwise
     // slings the row toward infinity).
@@ -273,7 +299,11 @@ internal sealed class WorldEditorMouse {
         }
 
         var camera = view.Camera;
-        var direction = WorldCursorFeed.RayDirection(camera: in camera, localX: status.Local.X, localY: status.Local.Y);
+        var direction = WorldCursorFeed.RayDirection(
+            camera: in camera,
+            localX: status.Local.X,
+            localY: status.Local.Y
+        );
 
         if (MathF.Abs(x: direction.Y) < 1e-6f) {
             return false;
@@ -281,7 +311,10 @@ internal sealed class WorldEditorMouse {
 
         var t = ((planeY - camera.Position.Y) / direction.Y);
 
-        if ((t <= 0f) || ((t * direction.Length()) > WorldEditorPicker.MaxPickReach)) {
+        if (
+            (t <= 0f) ||
+            ((t * direction.Length()) > WorldEditorPicker.MaxPickReach)
+        ) {
             return false;
         }
 
@@ -290,17 +323,64 @@ internal sealed class WorldEditorMouse {
         return true;
     }
 
-    // The row-select line a press dispatches: `editor.select <section> <key> <seat>`. A key the console line cannot
-    // carry verbatim is quoted (whitespace) or refused here (an embedded quote — null) rather than dispatched
-    // mangled.
-    private static string? SelectLine(int slot, WorldSection section, string key) {
-        if (key.Contains(value: '"')) {
-            return null;
+    /// <summary>Advances the policy one produced frame: derives this frame's left-button edge for the pointer's
+    /// seat, acts on it, and follows a live mouse drag with the cursor.</summary>
+    public void Tick() {
+        var slot = WorldPointerSlot.Resolve(roster: m_roster);
+
+        // A mouse drag whose seat the pointer no longer rides (the keyboard moved mid-hold) has lost its hand:
+        // cancel it — the drag never existed — and forget that slot's edge memory so the new occupant starts clean.
+        for (var other = 0; (other < PlayerRoster.MaxSlots); other++) {
+            if (
+                (other != slot) &&
+                m_dragging[other]
+            ) {
+                m_dragging[other] = false;
+                m_wasDown[other] = false;
+                CancelNarrated(
+                    reason: "the pointer left the seat mid-drag",
+                    slot: other
+                );
+            }
         }
 
-        var token = (key.AsSpan().ContainsAny(values: s_whitespace) ? $"\"{key}\"" : key);
+        var status = m_feed.Status;
+        var down = m_pointer.IsButtonDown(
+            button: LeftButton,
+            slot: slot
+        );
+        var was = m_wasDown[slot];
 
-        return $"editor.select {section.ToString().ToLowerInvariant()} {token} {PlayerRoster.DisplayNumber(slot: slot)}";
+        m_wasDown[slot] = down;
+
+        if (
+            down &&
+            !was
+        ) {
+            OnPress(
+                slot: slot,
+                status: in status
+            );
+        }
+
+        if (
+            down &&
+            m_dragging[slot]
+        ) {
+            Follow(
+                slot: slot,
+                status: in status
+            );
+        }
+
+        if (
+            !down &&
+            was
+        ) {
+            OnRelease(
+                slot: slot,
+                status: in status
+            );
+        }
     }
-    private static readonly SearchValues<char> s_whitespace = SearchValues.Create(values: " \t");
 }

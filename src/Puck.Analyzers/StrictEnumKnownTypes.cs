@@ -47,27 +47,22 @@ internal sealed class StrictEnumKnownTypes {
         EnumerableOpenGenericType = enumerableOpenGenericType;
     }
 
-    /// <summary><c>System.Text.Json.Serialization.JsonSerializerContext</c>. Resolving is the gate for this analyzer doing anything at all.</summary>
-    public INamedTypeSymbol JsonSerializerContextType { get; }
-
-    /// <summary><c>System.Text.Json.Serialization.JsonSerializableAttribute</c>.</summary>
-    public INamedTypeSymbol? JsonSerializableAttributeType { get; }
-
-    /// <summary><c>System.Text.Json.Serialization.JsonSourceGenerationOptionsAttribute</c>, whose <c>Converters</c> named argument is the closed-generic registration list for an enum that cannot carry the attribute at its own declaration (<c>CommandPhase</c>).</summary>
-    public INamedTypeSymbol? JsonSourceGenerationOptionsAttributeType { get; }
-
+    /// <summary>The open generic <c>System.Collections.Generic.IEnumerable&lt;T&gt;</c>, used to find a collection's element type (including a dictionary's <c>KeyValuePair&lt;TKey, TValue&gt;</c>, which is then walked like any other struct).</summary>
+    public INamedTypeSymbol? EnumerableOpenGenericType { get; }
     /// <summary><c>System.Text.Json.Serialization.JsonConverterAttribute</c> — presence on a type (any converter, strict or bespoke) is what this gate accepts as "explicitly handled".</summary>
     public INamedTypeSymbol? JsonConverterAttributeType { get; }
-
-    /// <summary><c>System.Text.Json.Serialization.JsonIgnoreAttribute</c> — a bare use (or an explicit <c>Condition: JsonIgnoreCondition.Always</c>) removes the member from the reachability walk entirely.</summary>
-    public INamedTypeSymbol? JsonIgnoreAttributeType { get; }
-
-    /// <summary><c>System.Text.Json.Serialization.JsonDerivedTypeAttribute</c> — names one member of a polymorphic family the walk must also cover.</summary>
-    public INamedTypeSymbol? JsonDerivedTypeAttributeType { get; }
-
     /// <summary>The open generic <c>System.Text.Json.Serialization.JsonConverter&lt;T&gt;</c>, walked up a converter class's base-type chain to recover the exact type it converts.</summary>
     public INamedTypeSymbol? JsonConverterOpenGenericType { get; }
-
+    /// <summary><c>System.Text.Json.Serialization.JsonDerivedTypeAttribute</c> — names one member of a polymorphic family the walk must also cover.</summary>
+    public INamedTypeSymbol? JsonDerivedTypeAttributeType { get; }
+    /// <summary><c>System.Text.Json.Serialization.JsonIgnoreAttribute</c> — a bare use (or an explicit <c>Condition: JsonIgnoreCondition.Always</c>) removes the member from the reachability walk entirely.</summary>
+    public INamedTypeSymbol? JsonIgnoreAttributeType { get; }
+    /// <summary><c>System.Text.Json.Serialization.JsonSerializableAttribute</c>.</summary>
+    public INamedTypeSymbol? JsonSerializableAttributeType { get; }
+    /// <summary><c>System.Text.Json.Serialization.JsonSerializerContext</c>. Resolving is the gate for this analyzer doing anything at all.</summary>
+    public INamedTypeSymbol JsonSerializerContextType { get; }
+    /// <summary><c>System.Text.Json.Serialization.JsonSourceGenerationOptionsAttribute</c>, whose <c>Converters</c> named argument is the closed-generic registration list for an enum that cannot carry the attribute at its own declaration (<c>CommandPhase</c>).</summary>
+    public INamedTypeSymbol? JsonSourceGenerationOptionsAttributeType { get; }
     /// <summary>
     /// The open generic <c>System.Text.Json.Serialization.JsonStringEnumConverter&lt;TEnum&gt;</c> — the BCL's own
     /// generic string-enum converter, and the base <c>Puck.Abstractions.Documents.StrictEnumConverter&lt;TEnum&gt;</c>
@@ -78,9 +73,6 @@ internal sealed class StrictEnumKnownTypes {
     /// BCL type in this repository's registered converters that is a factory in name only.
     /// </summary>
     public INamedTypeSymbol? JsonStringEnumConverterOpenGenericType { get; }
-
-    /// <summary>The open generic <c>System.Collections.Generic.IEnumerable&lt;T&gt;</c>, used to find a collection's element type (including a dictionary's <c>KeyValuePair&lt;TKey, TValue&gt;</c>, which is then walked like any other struct).</summary>
-    public INamedTypeSymbol? EnumerableOpenGenericType { get; }
 
     /// <summary>Whether <paramref name="type"/> is one of the fixed BCL leaves the walk never recurses into.</summary>
     public static bool IsKnownLeaf(ITypeSymbol type) {
@@ -107,7 +99,6 @@ internal sealed class StrictEnumKnownTypes {
 
         return false;
     }
-
     /// <summary>Resolves every marker type against <paramref name="compilation"/>, or <see langword="null"/> when the compilation carries no <c>JsonSerializerContext</c> at all — the precondition for anything else here mattering.</summary>
     public static StrictEnumKnownTypes? Resolve(Compilation compilation) {
         var jsonSerializerContextType = compilation.GetTypeByMetadataName(fullyQualifiedMetadataName: "System.Text.Json.Serialization.JsonSerializerContext");

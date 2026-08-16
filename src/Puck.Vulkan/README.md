@@ -24,9 +24,24 @@ deps        Puck.Abstractions (display / surface kinds, IAllocator), Puck.Shader
 > unsafe plumbing. Do not "tidy up" by reducing accessibility. Every public type and member
 > is XML-documented and validated against the official Vulkan specification.
 
+## ✨ Key features
+
+- *No binding generator, no wrapper library:* the loader is resolved and every struct is
+  mirrored by hand against the Vulkan spec, behind small, interface-driven APIs.
+- *A resilient frame loop:* `VulkanFramePresenter.Present` turns swapchain lifecycle codes
+  (`SuboptimalKhr`, `ErrorOutOfDateKhr`, not-ready) into an actionable outcome enum instead of
+  exceptions, and only (re)records a frame's command buffer after its in-flight fence proves
+  prior work retired.
+- *Scored physical-device selection:* `VulkanPhysicalDeviceSelector` keeps only devices that
+  expose both a graphics- and a present-capable queue family, then scores discrete over
+  integrated over virtual over CPU.
+- *Injected allocation, no hard `Puck.Platform` dependency:* unmanaged marshaling memory comes
+  through an injected `IAllocator`, so this library has no dependency on a concrete allocator
+  or platform implementation.
+
 ---
 
-## Layers
+## 📐 Structure
 
 The library is six cooperating layers, one per folder. Read them as a stack: **Bindings**
 at the bottom (raw data), **Factories** plus the frame presenter at the top (the entry
@@ -118,7 +133,7 @@ treated as hard failures by the frame presenter — see below.
 
 ---
 
-## Bootstrap order
+## 🚀 Quick start — bootstrap order
 
 Resources must be created in a strict order. Assuming the factories are already wired up
 (each holding the API dependencies it needs):
@@ -235,7 +250,7 @@ before relying on a path, and fall back otherwise:
 
 ---
 
-## Notes for agents
+## Constraints and invariants
 
 - **Don't reach for raw `vkXxx`.** Go through an `IVulkan*Api`; if a call is missing, add it
   to the relevant API interface + `VulkanNative*Api` implementation, not inline.
@@ -246,11 +261,38 @@ before relying on a path, and fall back otherwise:
   on `OutOfDate` / `Suboptimal` / `NotReady`.
 - **Public is intentional.** Wide visibility is a deliberate design choice for this layer; a
   large public surface is not a smell here.
-- **Abstraction / shader inputs come from elsewhere.** `NativeDisplayKind` / `NativeSurfaceBinding`
-  and the `IAllocator` it marshals through are from `Puck.Abstractions`; `ShaderStageInfo` is from
-  `Puck.Shaders`. This library doesn't open windows, compile shaders, or pick a concrete allocator — it
-  consumes those, so it has no dependency on `Puck.Platform`.
 - **Bindings are spec-faithful mirrors.** A `Vk*` struct is a byte-identical ABI mirror of its
   `vulkan_core.h` counterpart (deviations are flagged `EXCEPTION` in the type's `<remarks>`);
   document and use fields by their Vulkan-spec meaning.
 - See the [generated API reference](../../docs/api) for full member docs.
+
+## 📋 Core types
+
+Beyond the factory/API/interop triads in [Capabilities](#capabilities):
+`VulkanException`, `VulkanResultExtensions` (`.IsSuccess()`/`.ThrowIfFailed(operation)`),
+`VulkanFramePresenter`, `VulkanPhysicalDeviceSelector`, `VulkanQueueSubmitter`,
+`VulkanNativeLibrary` (loader resolution and `LibraryPathOverride`),
+`VulkanMarshalHelpers`, and the small value types `VulkanQueueFamilySelection`,
+`VulkanPushConstantBinding`, `VulkanVertexBufferBinding`, `VulkanShaderStageFlags`.
+
+## 🧪 Verification
+
+There is no dedicated `Puck.Vulkan.Tests` project; the backend is verified by
+running the engine on Vulkan and by `puck parity`, which boots the real
+windowed `Puck.World` on both backends and compares the same fenced composed
+frame under the relaxed envelope:
+
+```powershell
+dotnet build Puck.slnx -c Release
+dotnet src/Puck.Cli/publish/Puck.Cli.dll parity
+```
+
+## 📦 Packaging
+
+`ByteTerrace.Puck.Vulkan` depends on `Puck.Abstractions` (display/surface
+kinds, `IAllocator`) and `Puck.Shaders` (`ShaderStageInfo`, compiled SPIR-V).
+`Puck.Vulkan.Presentation`, `Puck.World`, and both launcher backends
+(`Puck.Launcher.Windows`, `Puck.Launcher.Linux`) depend on it for the Vulkan
+backend; it has no hard dependency on `Puck.Platform` or a concrete
+allocator, and it carries no windowing or shader-compilation dependency of
+its own.

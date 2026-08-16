@@ -7,6 +7,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanSurface : IDisposable {
     private bool m_disposed;
+
     private readonly IVulkanSurfaceApi m_surfaceApi;
 
     /// <summary>Gets the native display kind the surface was created for.</summary>

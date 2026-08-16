@@ -78,7 +78,6 @@ internal static class InfraredRom {
         0xE0, 0x56,
         0xC9,
     ];
-
     // Receive (0x012D): arms RP's data-read-enable with its own LED bit held off (so self-sensing never contributes —
     // every sampled bit is purely the peer's), then samples once per settle window until the caller-baked bit count is
     // reached. Registers: DE = receive cursor, C = bits received, B = settle counter, A = scratch.
@@ -106,7 +105,7 @@ internal static class InfraredRom {
     private static readonly byte[] Receive = [
         0x3E, 0xC0,
         0xE0, 0x56,
-        0x11, (byte)(ReceiveBufferAddress & 0xFF), (byte)(ReceiveBufferAddress >> 8),
+        0x11, ((byte)(ReceiveBufferAddress & 0xFF)), ((byte)(ReceiveBufferAddress >> 8)),
         0x0E, 0x00,
         0x06, SettleCount,
         0x05,
@@ -119,13 +118,14 @@ internal static class InfraredRom {
         0x13,
         0x0C,
         0x79,
-        0xEA, (byte)(ProgressAddress & 0xFF), (byte)(ProgressAddress >> 8),
+        0xEA, ((byte)(ProgressAddress & 0xFF)), ((byte)(ProgressAddress >> 8)),
         0xFE, 0x00, // patched with the expected receive bit count
         0x20, 0xE9,
         0x3E, CompletionMarker,
-        0xEA, (byte)(CompletionMarkerAddress & 0xFF), (byte)(CompletionMarkerAddress >> 8),
+        0xEA, ((byte)(CompletionMarkerAddress & 0xFF)), ((byte)(CompletionMarkerAddress >> 8)),
         0xC9,
     ];
+
     // Offset of Receive's "cp <expected count>" operand within the Receive array — patched per ROM.
     private const int ReceiveExpectedCountOffset = 29;
 
@@ -140,13 +140,12 @@ internal static class InfraredRom {
             var value = sourceBytes[index];
 
             for (var bit = 0; (bit < 8); ++bit) {
-                bits[((index * 8) + bit)] = (byte)((value >> (7 - bit)) & 0x01);
+                bits[((index * 8) + bit)] = ((byte)((value >> (7 - bit)) & 0x01));
             }
         }
 
         return bits;
     }
-
     /// <summary>Creates the TRANSMIT-then-RECEIVE side's ROM: sends <paramref name="patternBits"/> first, then listens
     /// for <paramref name="expectedReceiveCount"/> bits. Pair with the peer's <see cref="CreateSecondary"/> so the
     /// transmit phase lands inside the peer's matching receive phase.</summary>
@@ -162,9 +161,9 @@ internal static class InfraredRom {
             // 0x010C  18 FE      jr   $                    ; spin
             dispatcher: [
                 0x31, 0xFE, 0xFF,
-                0x21, (byte)(PatternBase & 0xFF), (byte)(PatternBase >> 8),
-                0xCD, (byte)(TransmitAddress & 0xFF), (byte)(TransmitAddress >> 8),
-                0xCD, (byte)(ReceiveAddress & 0xFF), (byte)(ReceiveAddress >> 8),
+                0x21, ((byte)(PatternBase & 0xFF)), ((byte)(PatternBase >> 8)),
+                0xCD, ((byte)(TransmitAddress & 0xFF)), ((byte)(TransmitAddress >> 8)),
+                0xCD, ((byte)(ReceiveAddress & 0xFF)), ((byte)(ReceiveAddress >> 8)),
                 0x18, 0xFE,
             ],
             patternBits: patternBits,
@@ -184,9 +183,9 @@ internal static class InfraredRom {
             // 0x010C  18 FE      jr   $                    ; spin
             dispatcher: [
                 0x31, 0xFE, 0xFF,
-                0xCD, (byte)(ReceiveAddress & 0xFF), (byte)(ReceiveAddress >> 8),
-                0x21, (byte)(PatternBase & 0xFF), (byte)(PatternBase >> 8),
-                0xCD, (byte)(TransmitAddress & 0xFF), (byte)(TransmitAddress >> 8),
+                0xCD, ((byte)(ReceiveAddress & 0xFF)), ((byte)(ReceiveAddress >> 8)),
+                0x21, ((byte)(PatternBase & 0xFF)), ((byte)(PatternBase >> 8)),
+                0xCD, ((byte)(TransmitAddress & 0xFF)), ((byte)(TransmitAddress >> 8)),
                 0x18, 0xFE,
             ],
             patternBits: patternBits,
@@ -212,10 +211,10 @@ internal static class InfraredRom {
             index: ReceiveAddress
         );
 
-        rom[(ReceiveAddress + ReceiveExpectedCountOffset)] = (byte)expectedReceiveCount;
+        rom[(ReceiveAddress + ReceiveExpectedCountOffset)] = ((byte)expectedReceiveCount);
 
         for (var index = 0; (index < patternBits.Length); ++index) {
-            rom[(PatternBase + index)] = (byte)(patternBits[index] & 0x01);
+            rom[(PatternBase + index)] = ((byte)(patternBits[index] & 0x01));
         }
 
         rom[(PatternBase + patternBits.Length)] = 0xFF;

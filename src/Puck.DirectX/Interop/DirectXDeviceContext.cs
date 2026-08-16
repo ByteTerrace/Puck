@@ -26,6 +26,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private readonly long m_adapterLuid;
     private readonly IDirectXDeviceApi m_deviceApi;
     private readonly Func<long>? m_adapterLuidProvider;
+
     private nint m_commandQueue;
     private DirectXDevice? m_device;
     private bool m_disposed;
@@ -42,7 +43,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         ) {
     }
-
     /// <summary>Initializes a new instance bound to a fixed adapter LUID.</summary>
     /// <param name="adapterLuid">The adapter LUID to create the device on, or zero for the default adapter.</param>
     /// <param name="deviceApi">The device API used to create the device on a specific adapter.</param>
@@ -55,7 +55,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_deviceApi = deviceApi;
         FeatureLevel = minimumFeatureLevel;
     }
-
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
     /// <param name="adapterLuidProvider">Resolves the adapter LUID to create the device on (zero for the default adapter); invoked once, on first use.</param>
     /// <param name="deviceApi">The device API used to create the device on a specific adapter.</param>
@@ -128,7 +127,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             void* debugInterface;
             var debugIid = ID3D12Debug.IID_Guid;
 
-            if (PInvoke.D3D12GetDebugInterface(riid: in debugIid, ppvDebug: &debugInterface).Succeeded) {
+            if (PInvoke.D3D12GetDebugInterface(ppvDebug: &debugInterface, riid: in debugIid).Succeeded) {
                 ((ID3D12Debug*)debugInterface)->EnableDebugLayer();
                 _ = ((IUnknown*)debugInterface)->Release();
             }
@@ -151,7 +150,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         var infoQueueIid = ID3D12InfoQueue.IID_Guid;
 
         if (((IUnknown*)m_device.Handle)->QueryInterface(ppvObject: out infoQueuePtr, riid: in infoQueueIid).Succeeded) {
-            m_infoQueue = (nint)infoQueuePtr;
+            m_infoQueue = ((nint)infoQueuePtr);
         }
 
         var queueDesc = new D3D12_COMMAND_QUEUE_DESC {
@@ -160,23 +159,23 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         ((ID3D12Device*)m_device.Handle)->CreateCommandQueue(
             pDesc: in queueDesc,
-            riid: ID3D12CommandQueue.IID_Guid,
-            ppCommandQueue: out var commandQueue
+            ppCommandQueue: out var commandQueue,
+            riid: ID3D12CommandQueue.IID_Guid
         );
-        m_commandQueue = (nint)commandQueue;
+        m_commandQueue = ((nint)commandQueue);
 
         ((ID3D12Device*)m_device.Handle)->CreateFence(
-            InitialValue: 0,
             Flags: default,
-            riid: ID3D12Fence.IID_Guid,
-            ppFence: out var idleFence
+            InitialValue: 0,
+            ppFence: out var idleFence,
+            riid: ID3D12Fence.IID_Guid
         );
-        m_idleFence = (nint)idleFence;
+        m_idleFence = ((nint)idleFence);
         m_idleFenceValue = 1;
         m_idleFenceEvent = PInvoke.CreateEvent(
-            lpEventAttributes: (SECURITY_ATTRIBUTES*)null,
-            bManualReset: false,
             bInitialState: false,
+            bManualReset: false,
+            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
             lpName: default(PCWSTR)
         );
 
@@ -195,7 +194,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private static void EnsureShaderModelFloor(nint deviceHandle) {
         const D3D_SHADER_MODEL RequiredShaderModel = D3D_SHADER_MODEL.D3D_SHADER_MODEL_6_6;
 
-        var device = (ID3D12Device*)deviceHandle;
+        var device = ((ID3D12Device*)deviceHandle);
         var shaderModel = new D3D12_FEATURE_DATA_SHADER_MODEL {
             HighestShaderModel = RequiredShaderModel,
         };
@@ -206,8 +205,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         try {
             device->CheckFeatureSupport(
                 Feature: D3D12_FEATURE.D3D12_FEATURE_SHADER_MODEL,
-                pFeatureSupportData: &shaderModel,
-                FeatureSupportDataSize: (uint)sizeof(D3D12_FEATURE_DATA_SHADER_MODEL)
+                FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_SHADER_MODEL)),
+                pFeatureSupportData: &shaderModel
             );
             queried = true;
         } catch {
@@ -222,12 +221,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         }
 
         var reported = (queried
-            ? $"{((int)shaderModel.HighestShaderModel >> 4)}.{(int)shaderModel.HighestShaderModel & 0xF}"
+            ? $"{(((int)shaderModel.HighestShaderModel) >> 4)}.{((int)shaderModel.HighestShaderModel) & 0xF}"
             : "unknown (feature query failed)");
 
         throw new InvalidOperationException(message:
-            ((($"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are " +
-            "compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 ") +
+            ((((string)$"Direct3D 12 device reports Shader Model {reported}, below the required 6.6 floor. Puck's DXIL kernels are compiled at Shader Model 6.6 and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 ") +
             "(Turing), RTX 4070 (Ada), Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which ") +
             "clear Shader Model 6.6 on current drivers; update your GPU driver or run on supported hardware."));
     }
@@ -236,14 +234,14 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         var deviceIid = ID3D12Device.IID_Guid;
 
         PInvoke.D3D12CreateDevice(
+            MinimumFeatureLevel: ((D3D_FEATURE_LEVEL)minimumFeatureLevel),
             pAdapter: null,
-            MinimumFeatureLevel: (D3D_FEATURE_LEVEL)minimumFeatureLevel,
-            riid: deviceIid,
-            ppDevice: &device
+            ppDevice: &device,
+            riid: deviceIid
         ).ThrowIfFailed(operation: "D3D12CreateDevice");
 
         return new DirectXDevice(
-            deviceHandle: (nint)device,
+            deviceHandle: ((nint)device),
             featureLevel: minimumFeatureLevel
         );
     }
@@ -252,7 +250,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     public void WaitIdle() {
         EnsureCreated();
 
-        var fence = (ID3D12Fence*)m_idleFence;
+        var fence = ((ID3D12Fence*)m_idleFence);
         var value = m_idleFenceValue;
 
         ((ID3D12CommandQueue*)m_commandQueue)->Signal(Value: value, pFence: fence);
@@ -260,7 +258,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         if (fence->GetCompletedValue() < value) {
             fence->SetEventOnCompletion(Value: value, hEvent: m_idleFenceEvent);
-            _ = PInvoke.WaitForSingleObject(hHandle: m_idleFenceEvent, dwMilliseconds: uint.MaxValue);
+            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_idleFenceEvent);
         }
 
         DrainDebugMessages();
@@ -273,7 +271,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        var infoQueue = (ID3D12InfoQueue*)m_infoQueue;
+        var infoQueue = ((ID3D12InfoQueue*)m_infoQueue);
         var count = infoQueue->GetNumStoredMessages();
 
         for (var index = 0UL; (index < count); index++) {
@@ -286,17 +284,17 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                 continue;
             }
 
-            var buffer = new byte[(int)length];
+            var buffer = new byte[((int)length)];
 
             fixed (byte* pointer = buffer) {
-                var message = (D3D12_MESSAGE*)pointer;
+                var message = ((D3D12_MESSAGE*)pointer);
 
                 infoQueue->GetMessage(MessageIndex: index, pMessage: message, pMessageByteLength: &length);
 
                 var description = new string(
-                    value: (sbyte*)message->pDescription,
+                    length: ((int)((message->DescriptionByteLength > 0) ? (message->DescriptionByteLength - 1) : 0)),
                     startIndex: 0,
-                    length: (int)((message->DescriptionByteLength > 0) ? (message->DescriptionByteLength - 1) : 0)
+                    value: ((sbyte*)message->pDescription)
                 );
 
                 Console.Error.WriteLine(value: $"[d3d12-debug] {message->Severity}: {description}");
@@ -345,7 +343,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         // m_device is now null, so this rebuilds a fresh device + queue + fence + event.
         EnsureCreated();
     }
-
     /// <summary>Releases the command queue and the owned device. Safe to call more than once.</summary>
     public void Dispose() {
         if (m_disposed) {

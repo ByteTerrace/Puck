@@ -180,13 +180,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             SType = StructureTypePhysicalDeviceIdProperties,
         };
         var properties2 = new VkPhysicalDeviceProperties2 {
-            PNext = (nint)(&idProperties),
+            PNext = ((nint)(&idProperties)),
             SType = StructureTypePhysicalDeviceProperties2,
         };
 
         getPhysicalDeviceProperties2(
             physicalDeviceHandle,
-            (nint)(&properties2)
+            ((nint)(&properties2))
         );
 
         if (0 == idProperties.DeviceLuidValid) {
@@ -195,7 +195,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
         // The 8-byte LUID is laid out exactly as a Win32 LUID (LowPart then HighPart), matching DxgiInterop's
         // packing, so reading it as a little-endian long yields a value directly comparable to a DXGI adapter LUID.
-        return *(long*)idProperties.DeviceLuid;
+        return *((long*)idProperties.DeviceLuid);
     }
     /// <inheritdoc/>
     public IReadOnlyList<VkQueueFamilyInfo> GetQueueFamilies(nint instanceHandle, nint physicalDeviceHandle) {
@@ -237,8 +237,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                 ));
 
                 queueFamilies[index] = new VkQueueFamilyInfo(
-                    Flags: (VkQueueFlags)properties.QueueFlags,
-                    Index: (uint)index,
+                    Flags: ((VkQueueFlags)properties.QueueFlags),
+                    Index: ((uint)index),
                     QueueCount: properties.QueueCount
                 );
             }
@@ -406,7 +406,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
 
             Marshal.Copy(
                 destination: presentModes,
-                length: (int)modeCount,
+                length: ((int)modeCount),
                 source: modeBuffer,
                 startIndex: 0
             );
@@ -477,7 +477,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                 );
                 if (graphicsQueueFamilyIndex < queueFamilyCount) {
                     var properties = Marshal.PtrToStructure<VkQueueFamilyProperties>(ptr: IntPtr.Add(
-                        offset: checked(((int)graphicsQueueFamilyIndex * structureSize)),
+                        offset: checked((((int)graphicsQueueFamilyIndex) * structureSize)),
                         pointer: queueFamilyBuffer
                     ));
 
@@ -513,7 +513,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             (VkResult.Success != enumerateDeviceExtensionProperties(
                 physicalDeviceHandle,
                 0,
-                (nint)(&count),
+                ((nint)(&count)),
                 0
             )) ||
             (0 == count)
@@ -529,8 +529,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             var result = enumerateDeviceExtensionProperties(
                 physicalDeviceHandle,
                 0,
-                (nint)(&count),
-                (nint)propertiesPointer
+                ((nint)(&count)),
+                ((nint)propertiesPointer)
             );
 
             if (
@@ -541,7 +541,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             }
 
             for (var index = 0; (index < count); index++) {
-                var name = Marshal.PtrToStringUTF8(ptr: (nint)propertiesPointer[index].ExtensionName);
+                var name = Marshal.PtrToStringUTF8(ptr: ((nint)propertiesPointer[index].ExtensionName));
 
                 if (string.Equals(
                     a: name,
@@ -615,17 +615,17 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             length: FeatureBlockByteSize,
             pointer: featureBlock
         ).Clear();
-        *(uint*)featureBlock = structureType;
+        *((uint*)featureBlock) = structureType;
         var features2 = new VkPhysicalDeviceFeatures2 {
-            PNext = (nint)featureBlock,
+            PNext = ((nint)featureBlock),
             SType = StructureTypePhysicalDeviceFeatures2,
         };
 
         getPhysicalDeviceFeatures2(
             physicalDeviceHandle,
-            (nint)(&features2)
+            ((nint)(&features2))
         );
-        return (0 != *(uint*)(featureBlock + FeatureFlagOffset));
+        return (0 != *((uint*)(featureBlock + FeatureFlagOffset)));
     }
 
     private static unsafe void ValidatePhysicalDeviceInputs(nint instanceHandle, nint physicalDeviceHandle) {
@@ -678,17 +678,17 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         return m_pointers.GetOrAdd(
             key: instanceHandle,
             valueFactory: static handle => new InstancePointers {
-                EnumeratePhysicalDevices = (delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkEnumeratePhysicalDevices"u8),
-                GetPhysicalDeviceProperties = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceProperties"u8),
-                GetPhysicalDeviceQueueFamilyProperties = (delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceQueueFamilyProperties"u8),
-                GetPhysicalDeviceSurfaceSupportKhr = (delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8),
-                GetPhysicalDeviceSurfaceCapabilitiesKhr = (delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8),
-                GetPhysicalDeviceSurfaceFormatsKhr = (delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8),
-                GetPhysicalDeviceSurfacePresentModesKhr = (delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8),
-                GetPhysicalDeviceFeatures = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceFeatures"u8),
-                GetPhysicalDeviceFeatures2 = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceFeatures2"u8),
-                GetPhysicalDeviceProperties2 = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceProperties2"u8),
-                EnumerateDeviceExtensionProperties = (delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkEnumerateDeviceExtensionProperties"u8),
+                EnumeratePhysicalDevices = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkEnumeratePhysicalDevices"u8, instanceHandle: handle)),
+                GetPhysicalDeviceProperties = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceProperties"u8, instanceHandle: handle)),
+                GetPhysicalDeviceQueueFamilyProperties = ((delegate* unmanaged[Cdecl]<nint, ref uint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceQueueFamilyProperties"u8, instanceHandle: handle)),
+                GetPhysicalDeviceSurfaceSupportKhr = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out uint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceSupportKHR"u8, instanceHandle: handle)),
+                GetPhysicalDeviceSurfaceCapabilitiesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, out VkSurfaceCapabilitiesKhr, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceCapabilitiesKHR"u8, instanceHandle: handle)),
+                GetPhysicalDeviceSurfaceFormatsKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfaceFormatsKHR"u8, instanceHandle: handle)),
+                GetPhysicalDeviceSurfacePresentModesKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ref uint, nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceSurfacePresentModesKHR"u8, instanceHandle: handle)),
+                GetPhysicalDeviceFeatures = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceFeatures"u8, instanceHandle: handle)),
+                GetPhysicalDeviceFeatures2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkGetPhysicalDeviceFeatures2"u8, instanceHandle: handle)),
+                GetPhysicalDeviceProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkGetPhysicalDeviceProperties2"u8, instanceHandle: handle)),
+                EnumerateDeviceExtensionProperties = ((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkEnumerateDeviceExtensionProperties"u8, instanceHandle: handle)),
             }
         );
     }

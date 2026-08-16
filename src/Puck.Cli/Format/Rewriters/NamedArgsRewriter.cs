@@ -25,19 +25,19 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
     }
 
     public override SyntaxNode? VisitInvocationExpression(InvocationExpressionSyntax node) {
-        var visited = (InvocationExpressionSyntax)base.VisitInvocationExpression(node: node)!;
+        var visited = ((InvocationExpressionSyntax)base.VisitInvocationExpression(node: node)!);
 
         return ((Rebuild(originalCall: node, visitedList: visited.ArgumentList) is { } rebuilt) ? visited.WithArgumentList(argumentList: rebuilt) : visited);
     }
     public override SyntaxNode? VisitObjectCreationExpression(ObjectCreationExpressionSyntax node) {
-        var visited = (ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node: node)!;
+        var visited = ((ObjectCreationExpressionSyntax)base.VisitObjectCreationExpression(node: node)!);
 
         return (((visited.ArgumentList is { } list) && (Rebuild(originalCall: node, visitedList: list) is { } rebuilt))
             ? visited.WithArgumentList(argumentList: rebuilt)
             : visited);
     }
     public override SyntaxNode? VisitImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node) {
-        var visited = (ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(node: node)!;
+        var visited = ((ImplicitObjectCreationExpressionSyntax)base.VisitImplicitObjectCreationExpression(node: node)!);
 
         return ((Rebuild(originalCall: node, visitedList: visited.ArgumentList) is { } rebuilt) ? visited.WithArgumentList(argumentList: rebuilt) : visited);
     }
@@ -56,6 +56,7 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
         }
 
         var arguments = visitedList.Arguments;
+        var originalArguments = OriginalArguments(call: originalCall);
         var parameters = method.Parameters;
         var namedCount = arguments.Count(predicate: static argument => (argument.NameColon is not null));
 
@@ -89,7 +90,7 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
 
         if (sortable
             && !writtenNames.SequenceEqual(second: writtenNames.OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal))
-            && arguments.Any(predicate: static argument => ExpressionSafety.HasSideEffect(expression: argument.Expression))) {
+            && originalArguments.Any(predicate: argument => ExpressionSafety.HasSideEffect(expression: argument.Expression, model: m_model))) {
             return null;
         }
 
@@ -118,7 +119,7 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
                 : argument.RefKindKeyword.WithLeadingTrivia().WithTrailingTrivia(SyntaxFactory.Space));
             var bareExpression = argument.Expression.WithoutLeadingTrivia().WithoutTrailingTrivia();
 
-            entries[index] = (parameters[index].Name, SyntaxFactory.Argument(nameColon: nameColon, refKindKeyword: refKind, expression: bareExpression));
+            entries[index] = (parameters[index].Name, SyntaxFactory.Argument(expression: bareExpression, nameColon: nameColon, refKindKeyword: refKind));
         }
 
         var ordered = (sortable
@@ -128,9 +129,16 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
                 .ToArray()
             : Array.ConvertAll(array: entries, converter: static entry => entry.Argument));
 
-        return visitedList.WithArguments(arguments: RewriteShaping.ReorderInPlace(original: arguments, ordered: ordered));
+        return visitedList.WithArguments(arguments: RewriteShaping.ReorderInPlace(ordered: ordered, original: arguments));
     }
-
+    // SemanticModel only accepts nodes from its own syntax tree. Child visits may have rebuilt the
+    // argument list already, so evaluation-safety is always inspected on the original bound call.
+    private static SeparatedSyntaxList<ArgumentSyntax> OriginalArguments(SyntaxNode call) => call switch {
+        InvocationExpressionSyntax invocation => invocation.ArgumentList.Arguments,
+        ObjectCreationExpressionSyntax creation => creation.ArgumentList!.Arguments,
+        ImplicitObjectCreationExpressionSyntax creation => creation.ArgumentList.Arguments,
+        _ => default,
+    };
     // True when the parameter carries System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembersAttribute
     // — the trim/AOT dataflow annotation that pins its argument to the declared position.
     private static bool HasTrimAnnotation(IParameterSymbol parameter) => parameter.GetAttributes().Any(predicate: static attribute =>

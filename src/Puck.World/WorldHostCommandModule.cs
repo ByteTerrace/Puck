@@ -1,7 +1,7 @@
 using System.Globalization;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.Launcher;
 using Puck.World.Server;
 
@@ -20,40 +20,50 @@ namespace Puck.World;
 /// <c>world.target</c> / <c>world.timing</c> own those. <c>world.host</c>'s three columns make the split visible:
 /// which fields the CLI overrode (DOCUMENT vs RESOLVED) and which levers have drifted (DOCUMENT vs LIVE).</remarks>
 internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettings hostSettings, PresentPacingControl pacing) : ICommandModule {
+    private static string Bool(bool value) => (value
+        ? "true"
+        : "false"
+    );
+    // The three-way read-back: DOCUMENT (the coalesced authored row), RESOLVED (the boot values after CLI override), and
+    // LIVE (the two session levers). One line, pipe-separated, so it stays greppable over stdout.
+    private string DescribeHost() {
+        var document = server.Definition.Host;
+        var targetRate = ((pacing.TargetHertz > 0.0)
+            ? pacing.TargetHertz.ToString(provider: CultureInfo.InvariantCulture)
+            : "display"
+        );
+
+        return (((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
+            ? WorldBackendPreference.DirectX
+            : WorldBackendPreference.Vulkan))} ") +
+            $"width={hostSettings.Width} height={hostSettings.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: hostSettings.SurfaceFormat)} ") +
+            $"fullscreen={Bool(value: hostSettings.Fullscreen)} presentMode={PresentModeToken(mode: hostSettings.PresentMode)} ") +
+            $"targetHertz={HertzToken(hertz: hostSettings.TargetHertz)} exitAfterSeconds={hostSettings.ExitAfterSeconds} ") +
+            $"rayQuery={Bool(value: hostSettings.RayQuery)} timing={Bool(value: hostSettings.Timing)} genlock={Genlock(value: hostSettings.Genlock)}}} ") +
+            $"live {{targetHertz={targetRate} timing={(GpuTimingControl.Shared.Armed
+            ? "on"
+            : "off")}}}]");
+    }
+    private static string DescribeRow(WorldHostDefaults host) =>
+        ((((string)$"backend={((host.BackendDraw is not null)
+            ? "<draw>"
+            : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
+        $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
+        $"exitAfterSeconds={host.ExitAfterSeconds} rayQuery={Bool(value: host.RayQuery)} timing={Bool(value: host.Timing)} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)}");
+    private static string Endpoint(string? value) => (value ?? "(local)");
+    private static string Genlock(string? value) => (value ?? "(none)");
+    private static string HertzToken(double hertz) => hertz.ToString(provider: CultureInfo.InvariantCulture);
+    private static string PresentModeToken(PresentMode mode) => mode.ToString().ToLowerInvariant();
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.host",
             description: "Reads the host section three ways (Immediate): the DOCUMENT row (the authored host defaults, absence coalesced to the built-in default), the RESOLVED boot values (the document overlaid by the CLI window/backend flags), and the LIVE lever values (world.target's present Hz + world.timing's armed state) — so an author sees which fields the CLI overrode and which levers have drifted.",
-            handler: (_, args) => (args.Count == 0
-                ? new CommandResult(Output: DescribeHost())
-                : CommandResult.Error(output: $"[world.host: unrecognized '{args[0]}' — expected no arguments]"))
+            handler: (_, args) => ((args.Count == 0)
+            ? new CommandResult(Output: DescribeHost())
+            : CommandResult.Error(output: $"[world.host: unrecognized '{args[0]}' — expected no arguments]"))
         );
     }
-
-    // The three-way read-back: DOCUMENT (the coalesced authored row), RESOLVED (the boot values after CLI override), and
-    // LIVE (the two session levers). One line, pipe-separated, so it stays greppable over stdout.
-    private string DescribeHost() {
-        var document = server.Definition.Host;
-        var targetRate = ((pacing.TargetHertz > 0.0) ? pacing.TargetHertz.ToString(provider: CultureInfo.InvariantCulture) : "display");
-
-        return (((((($"[world.host: document {{{DescribeRow(host: document)}}} " +
-            $"resolved {{backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX ? WorldBackendPreference.DirectX : WorldBackendPreference.Vulkan))} ") +
-            $"width={hostSettings.Width} height={hostSettings.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: hostSettings.SurfaceFormat)} ") +
-            $"fullscreen={Bool(value: hostSettings.Fullscreen)} presentMode={PresentModeToken(mode: hostSettings.PresentMode)} ") +
-            $"targetHertz={HertzToken(hertz: hostSettings.TargetHertz)} exitAfterSeconds={hostSettings.ExitAfterSeconds} ") +
-            $"rayQuery={Bool(value: hostSettings.RayQuery)} timing={Bool(value: hostSettings.Timing)} genlock={Genlock(value: hostSettings.Genlock)}}} ") +
-            $"live {{targetHertz={targetRate} timing={(GpuTimingControl.Shared.Armed ? "on" : "off")}}}]");
-    }
-    private static string DescribeRow(WorldHostDefaults host) =>
-        ((($"backend={((host.BackendDraw is not null) ? "<draw>" : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} " +
-        $"surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
-        $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
-        $"exitAfterSeconds={host.ExitAfterSeconds} rayQuery={Bool(value: host.RayQuery)} timing={Bool(value: host.Timing)} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)}");
-    private static string Bool(bool value) => (value ? "true" : "false");
-    private static string HertzToken(double hertz) => hertz.ToString(provider: CultureInfo.InvariantCulture);
-    private static string Genlock(string? value) => (value ?? "(none)");
-    private static string Endpoint(string? value) => (value ?? "(local)");
-    private static string PresentModeToken(PresentMode mode) => mode.ToString().ToLowerInvariant();
 }

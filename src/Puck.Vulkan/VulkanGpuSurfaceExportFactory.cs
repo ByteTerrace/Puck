@@ -18,7 +18,7 @@ public sealed class VulkanGpuSurfaceExportFactory(
 ) : IGpuSurfaceExportFactory {
     /// <inheritdoc/>
     public IGpuExportableRenderTarget CreateExportableTarget(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
 
         return new VulkanGpuExportableRenderTarget(
             commandBufferRecordingApi: commandBufferRecordingApi,
@@ -34,10 +34,9 @@ public sealed class VulkanGpuSurfaceExportFactory(
             width: width
         );
     }
-
     /// <inheritdoc/>
     public IGpuExportableStorageImage CreateExportableStorageImage(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
         var logicalDevice = vkContext.LogicalDevice;
         var deviceHandle = logicalDevice.Handle;
         var vkFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format);

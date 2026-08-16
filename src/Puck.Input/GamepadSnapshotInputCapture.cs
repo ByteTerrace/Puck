@@ -17,7 +17,11 @@ public sealed class GamepadSnapshotInputCapture : ISnapshotInputCapture {
         ArgumentNullException.ThrowIfNull(router);
 
         m_arbiter = arbiter;
-        m_capture = new GamepadCaptureSource(router: router, clock: clock, isActiveFor: isActiveFor);
+        m_capture = new GamepadCaptureSource(
+            clock: clock,
+            isActiveFor: isActiveFor,
+            router: router
+        );
     }
 
     /// <inheritdoc/>

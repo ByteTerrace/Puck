@@ -27,11 +27,6 @@ public readonly record struct UnitFraction32(uint Value)
       IAdditiveIdentity<UnitFraction32, UnitFraction32>,
       ISpanFormattable,
       ISpanParsable<UnitFraction32> {
-    /// <summary>The number of fractional bits in the UQ0.32 layout (<c>32</c>); every bit is fractional.</summary>
-    public const int FractionBitCount = 32;
-    /// <summary>The total number of bits in the underlying storage (<c>32</c>).</summary>
-    public const int TotalBitCount = (8 * sizeof(uint));
-
     private const ulong FractionBitMask = (RawOne - 1UL);
     // The widest canonical rendering is '0' + '.' + 32 fraction digits.
     private const int MaximumFormattedLength = (2 + FractionBitCount);
@@ -42,9 +37,12 @@ public readonly record struct UnitFraction32(uint Value)
     private const ulong RawOne = (1UL << FractionBitCount);
     private const double RawOneInverse = (1d / RawOne);
 
-    private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(
-        fractionBitCount: FractionBitCount
-    );
+    /// <summary>The number of fractional bits in the UQ0.32 layout (<c>32</c>); every bit is fractional.</summary>
+    public const int FractionBitCount = 32;
+    /// <summary>The total number of bits in the underlying storage (<c>32</c>).</summary>
+    public const int TotalBitCount = (8 * sizeof(uint));
+
+    private static readonly UInt128 ParsingDenominator = FixedPointText.CreateParsingDenominator(fractionBitCount: FractionBitCount);
 
     /// <summary>Converts a <see cref="UnitFraction32"/> to its exact <see cref="double"/> value.</summary>
     /// <param name="value">The value to convert.</param>
@@ -190,223 +188,6 @@ public readonly record struct UnitFraction32(uint Value)
     /// <summary>Gets the value zero.</summary>
     public static UnitFraction32 Zero => default;
 
-    /// <summary>Adds two values, saturating to <see cref="MaxValue"/> instead of wrapping on overflow.</summary>
-    /// <param name="x">The first addend.</param>
-    /// <param name="y">The second addend.</param>
-    /// <returns>The sum <c><paramref name="x"/> + <paramref name="y"/></c>, clamped to <see cref="MaxValue"/> when it would overflow.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static UnitFraction32 AddSaturating(UnitFraction32 x, UnitFraction32 y) =>
-        new(Value: ((uint)Math.Min(
-        val1: (((ulong)x.Value) + y.Value),
-        val2: ((ulong)RawMaxValue)
-    )));
-    /// <summary>Restricts <paramref name="value"/> to the inclusive range <c>[<paramref name="minimum"/>, <paramref name="maximum"/>]</c>.</summary>
-    /// <param name="value">The value to clamp.</param>
-    /// <param name="minimum">The inclusive lower bound.</param>
-    /// <param name="maximum">The inclusive upper bound.</param>
-    /// <returns><paramref name="minimum"/> when <paramref name="value"/> is below it, <paramref name="maximum"/> when above it, otherwise <paramref name="value"/>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="minimum"/> is greater than <paramref name="maximum"/>. The diagnosis is the platform's own <c>Math.Clamp</c> surfacing through the forward, so it names NO parameter.</exception>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static UnitFraction32 Clamp(UnitFraction32 value, UnitFraction32 minimum, UnitFraction32 maximum) =>
-        new(Value: Math.Clamp(
-        value: value.Value,
-        min: minimum.Value,
-        max: maximum.Value
-    ));
-    /// <summary>Converts a <see cref="double"/> to a <see cref="UnitFraction32"/>, rounding to nearest with ties to even.</summary>
-    /// <param name="value">The value to convert.</param>
-    /// <returns>The nearest representable <see cref="UnitFraction32"/>, clamped to <c>[0, <see cref="MaxValue"/>]</c>. Inputs at or above one, as well as negative and not-a-number inputs, clamp into range.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static UnitFraction32 FromDouble(double value) {
-        var scaled = double.Round(
-            x: (value * RawOne),
-            mode: MidpointRounding.ToEven
-        );
-        // Not-a-number is folded BEFORE the cast, the same way UnitInterval32 folds it. NaN survives both Round and
-        // Clamp, and a NaN-to-unsigned conversion has no result the CLI specifies: x64 happens to yield zero, so the
-        // documented clamp-into-range behaviour was resting on one architecture's choice. Stating it here makes the
-        // answer the same everywhere, which is what the family's cross-machine conversion contract already promised.
-        if (double.IsNaN(d: scaled)) { return default; }
-
-        var clamped = double.Clamp(
-            value: scaled,
-            min: 0d,
-            max: RawMaxValue
-        );
-
-        return new(Value: ((uint)clamped));
-    }
-    /// <summary>Constructs a <see cref="UnitFraction32"/> directly from a raw storage bit pattern.</summary>
-    /// <param name="value">The pre-scaled raw value to wrap, interpreted as the real number <c><paramref name="value"/> / 2³²</c>.</param>
-    /// <returns>A <see cref="UnitFraction32"/> whose <see cref="Value"/> equals <paramref name="value"/>.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static UnitFraction32 FromRawBits(uint value) =>
-        new(Value: value);
-    /// <summary>Returns the greater of two values.</summary>
-    /// <param name="x">The first value to compare.</param>
-    /// <param name="y">The second value to compare.</param>
-    /// <returns>Whichever of <paramref name="x"/> and <paramref name="y"/> is greater.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static UnitFraction32 Max(UnitFraction32 x, UnitFraction32 y) =>
-        new(Value: Math.Max(
-        val1: x.Value,
-        val2: y.Value
-    ));
-    /// <summary>Returns the lesser of two values.</summary>
-    /// <param name="x">The first value to compare.</param>
-    /// <param name="y">The second value to compare.</param>
-    /// <returns>Whichever of <paramref name="x"/> and <paramref name="y"/> is lesser.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static UnitFraction32 Min(UnitFraction32 x, UnitFraction32 y) =>
-        new(Value: Math.Min(
-        val1: x.Value,
-        val2: y.Value
-    ));
-    /// <summary>Subtracts <paramref name="y"/> from <paramref name="x"/>, saturating to <see cref="MinValue"/> (zero) instead of wrapping on underflow.</summary>
-    /// <param name="x">The minuend.</param>
-    /// <param name="y">The subtrahend.</param>
-    /// <returns>The difference <c><paramref name="x"/> − <paramref name="y"/></c>, clamped to zero when <paramref name="y"/> exceeds <paramref name="x"/>.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static UnitFraction32 SubtractSaturating(UnitFraction32 x, UnitFraction32 y) {
-        var z = (((ulong)x.Value) - y.Value) & FractionBitMask;
-        var keep = (0UL - Convert.ToUInt64(value: (z <= x.Value)));
-
-        return new(Value: ((uint)(z & keep)));
-    }
-    /// <summary>Compares this instance with a boxed <see cref="UnitFraction32"/> and indicates their relative order.</summary>
-    /// <param name="obj">The object to compare with this instance, or <see langword="null"/>.</param>
-    /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="obj"/>; a <see langword="null"/> <paramref name="obj"/> sorts first.</returns>
-    /// <exception cref="ArgumentException"><paramref name="obj"/> is neither <see langword="null"/> nor a <see cref="UnitFraction32"/>.</exception>
-    public int CompareTo(object? obj) {
-        if (obj is null) { return 1; }
-        if (obj is UnitFraction32 other) { return CompareTo(other: other); }
-
-        throw new ArgumentException(
-            message: $"Object must be of type {nameof(UnitFraction32)}.",
-            paramName: nameof(obj)
-        );
-    }
-    /// <summary>Compares this instance with another <see cref="UnitFraction32"/> and indicates their relative order.</summary>
-    /// <param name="other">The value to compare with this instance.</param>
-    /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="other"/>.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public int CompareTo(UnitFraction32 other) =>
-        Value.CompareTo(value: other.Value);
-    /// <summary>Parses a character span into a <see cref="UnitFraction32"/>.</summary>
-    /// <param name="s">The span of characters to parse, an unsigned decimal fraction such as <c>"0.5"</c> whose exact value is at most <see cref="MaxValue"/>. A literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding, even when rounding would land it back on the grid.</param>
-    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
-    /// <returns>The value represented by <paramref name="s"/>.</returns>
-    /// <exception cref="FormatException"><paramref name="s"/> is not a valid, in-range <see cref="UnitFraction32"/> literal.</exception>
-    public static UnitFraction32 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
-        if (!TryParseCore(
-            s: s,
-            provider: provider,
-            result: out var result
-        )) {
-            throw new FormatException(message: $"The input span was not in a valid {nameof(UnitFraction32)} format.");
-        }
-
-        return result;
-    }
-    /// <summary>Parses a string into a <see cref="UnitFraction32"/>.</summary>
-    /// <param name="s">The string to parse, an unsigned decimal fraction such as <c>"0.5"</c> whose exact value is at most <see cref="MaxValue"/>. A literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding, even when rounding would land it back on the grid.</param>
-    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
-    /// <returns>The value represented by <paramref name="s"/>.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="s"/> is <see langword="null"/>.</exception>
-    /// <exception cref="FormatException"><paramref name="s"/> is not a valid, in-range <see cref="UnitFraction32"/> literal.</exception>
-    public static UnitFraction32 Parse(string s, IFormatProvider? provider) {
-        ArgumentNullException.ThrowIfNull(argument: s);
-
-        return Parse(
-            s: s.AsSpan(),
-            provider: provider
-        );
-    }
-    /// <summary>Tries to parse a character span into a <see cref="UnitFraction32"/>.</summary>
-    /// <param name="s">The span of characters to parse, an unsigned decimal fraction whose exact value is at most <see cref="MaxValue"/>; a literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding.</param>
-    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
-    /// <param name="result">When this method returns, the parsed value on success or the default value on failure.</param>
-    /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>.</returns>
-    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UnitFraction32 result) =>
-        TryParseCore(
-        s: s,
-        provider: provider,
-        result: out result
-    );
-    /// <summary>Tries to parse a string into a <see cref="UnitFraction32"/>.</summary>
-    /// <param name="s">The string to parse, or <see langword="null"/>: an unsigned decimal fraction whose exact value is at most <see cref="MaxValue"/>; a literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding.</param>
-    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
-    /// <param name="result">When this method returns, the parsed value on success or the default value on failure.</param>
-    /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>. A <see langword="null"/> <paramref name="s"/> returns <see langword="false"/>.</returns>
-    public static bool TryParse(string? s, IFormatProvider? provider, out UnitFraction32 result) {
-        if (s is null) {
-            result = default;
-
-            return false;
-        }
-
-        return TryParseCore(
-            s: s.AsSpan(),
-            provider: provider,
-            result: out result
-        );
-    }
-
-    // Parses and quantizes directly from the decimal digits. Out-of-range text (including the unrepresentable 1.0) is
-    // rejected outright, and arbitrarily long fractions cannot double-round through an intermediate decimal value.
-    private static bool TryParseCore(ReadOnlySpan<char> s, IFormatProvider? provider, out UnitFraction32 result) {
-        result = default;
-
-        if (FixedPointParseStatus.Success != FixedPointText.Parse(
-            s: s,
-            style: NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite | NumberStyles.AllowDecimalPoint,
-            provider: provider,
-            fractionBitCount: FractionBitCount,
-            parsingDenominator: ParsingDenominator,
-            maximumPositiveRaw: RawMaxValue,
-            maximumNegativeMagnitudeRaw: 0UL,
-            rejectExactOutOfRange: true,
-            negative: out _,
-            rawMagnitude: out var rawValue
-        )) {
-            return false;
-        }
-
-        result = new(Value: ((uint)rawValue));
-
-        return true;
-    }
-
-    /// <summary>Tries to format this value into the provided character span.</summary>
-    /// <param name="destination">The span to write the formatted characters into.</param>
-    /// <param name="charsWritten">When this method returns, the number of characters written to <paramref name="destination"/>.</param>
-    /// <param name="format">Ignored; the value is always rendered as its exact decimal expansion.</param>
-    /// <param name="provider">Ignored; formatting always uses the invariant culture.</param>
-    /// <returns><see langword="true"/> when <paramref name="destination"/> was large enough; otherwise <see langword="false"/>.</returns>
-    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) =>
-        TryFormatCore(
-        destination: destination,
-        charsWritten: out charsWritten
-    );
-    /// <summary>Returns the exact decimal string representation of this value.</summary>
-    /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2³²</c> fraction always terminates within thirty-two digits).</returns>
-    public override string ToString() {
-        Span<char> buffer = stackalloc char[MaximumFormattedLength];
-
-        _ = TryFormatCore(
-            destination: buffer,
-            charsWritten: out var charsWritten
-        );
-
-        return new string(value: buffer[..charsWritten]);
-    }
-    /// <summary>Returns the exact decimal string representation of this value.</summary>
-    /// <param name="format">Ignored; the value is always rendered as its exact decimal expansion.</param>
-    /// <param name="formatProvider">Ignored; formatting always uses the invariant culture.</param>
-    /// <returns>The exact, invariant-culture decimal expansion of this value.</returns>
-    public string ToString(string? format, IFormatProvider? formatProvider) =>
-        ToString();
-
     // Renders the exact decimal expansion (a /2^32 fraction always terminates within 32 digits) without routing
     // through double. The integer part is always '0'; returns false when destination is too small.
     private bool TryFormatCore(Span<char> destination, out int charsWritten) {
@@ -439,5 +220,220 @@ public readonly record struct UnitFraction32(uint Value)
         charsWritten += fractionChars;
 
         return true;
+    }
+    // Parses and quantizes directly from the decimal digits. Out-of-range text (including the unrepresentable 1.0) is
+    // rejected outright, and arbitrarily long fractions cannot double-round through an intermediate decimal value.
+    private static bool TryParseCore(ReadOnlySpan<char> s, IFormatProvider? provider, out UnitFraction32 result) {
+        result = default;
+
+        if (FixedPointParseStatus.Success != FixedPointText.Parse(
+            fractionBitCount: FractionBitCount,
+            maximumNegativeMagnitudeRaw: 0UL,
+            maximumPositiveRaw: RawMaxValue,
+            negative: out _,
+            parsingDenominator: ParsingDenominator,
+            provider: provider,
+            rawMagnitude: out var rawValue,
+            rejectExactOutOfRange: true,
+            s: s,
+            style: NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite | NumberStyles.AllowDecimalPoint
+        )) {
+            return false;
+        }
+
+        result = new(Value: ((uint)rawValue));
+
+        return true;
+    }
+
+    /// <summary>Adds two values, saturating to <see cref="MaxValue"/> instead of wrapping on overflow.</summary>
+    /// <param name="x">The first addend.</param>
+    /// <param name="y">The second addend.</param>
+    /// <returns>The sum <c><paramref name="x"/> + <paramref name="y"/></c>, clamped to <see cref="MaxValue"/> when it would overflow.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static UnitFraction32 AddSaturating(UnitFraction32 x, UnitFraction32 y) =>
+        new(Value: ((uint)Math.Min(
+            val1: (((ulong)x.Value) + y.Value),
+            val2: ((ulong)RawMaxValue)
+        )));
+    /// <summary>Restricts <paramref name="value"/> to the inclusive range <c>[<paramref name="minimum"/>, <paramref name="maximum"/>]</c>.</summary>
+    /// <param name="value">The value to clamp.</param>
+    /// <param name="minimum">The inclusive lower bound.</param>
+    /// <param name="maximum">The inclusive upper bound.</param>
+    /// <returns><paramref name="minimum"/> when <paramref name="value"/> is below it, <paramref name="maximum"/> when above it, otherwise <paramref name="value"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="minimum"/> is greater than <paramref name="maximum"/>. The diagnosis is the platform's own <c>Math.Clamp</c> surfacing through the forward, so it names NO parameter.</exception>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static UnitFraction32 Clamp(UnitFraction32 value, UnitFraction32 minimum, UnitFraction32 maximum) =>
+        new(Value: Math.Clamp(
+            value: value.Value,
+            min: minimum.Value,
+            max: maximum.Value
+        ));
+    /// <summary>Compares this instance with a boxed <see cref="UnitFraction32"/> and indicates their relative order.</summary>
+    /// <param name="obj">The object to compare with this instance, or <see langword="null"/>.</param>
+    /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="obj"/>; a <see langword="null"/> <paramref name="obj"/> sorts first.</returns>
+    /// <exception cref="ArgumentException"><paramref name="obj"/> is neither <see langword="null"/> nor a <see cref="UnitFraction32"/>.</exception>
+    public int CompareTo(object? obj) {
+        if (obj is null) { return 1; }
+        if (obj is UnitFraction32 other) { return CompareTo(other: other); }
+
+        throw new ArgumentException(
+            message: $"Object must be of type {nameof(UnitFraction32)}.",
+            paramName: nameof(obj)
+        );
+    }
+    /// <summary>Compares this instance with another <see cref="UnitFraction32"/> and indicates their relative order.</summary>
+    /// <param name="other">The value to compare with this instance.</param>
+    /// <returns>A negative value, zero, or a positive value according to whether this instance precedes, equals, or follows <paramref name="other"/>.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public int CompareTo(UnitFraction32 other) =>
+        Value.CompareTo(value: other.Value);
+    /// <summary>Converts a <see cref="double"/> to a <see cref="UnitFraction32"/>, rounding to nearest with ties to even.</summary>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The nearest representable <see cref="UnitFraction32"/>, clamped to <c>[0, <see cref="MaxValue"/>]</c>. Inputs at or above one, as well as negative and not-a-number inputs, clamp into range.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static UnitFraction32 FromDouble(double value) {
+        var scaled = double.Round(
+            mode: MidpointRounding.ToEven,
+            x: (value * RawOne)
+        );
+        // Not-a-number is folded BEFORE the cast, the same way UnitInterval32 folds it. NaN survives both Round and
+        // Clamp, and a NaN-to-unsigned conversion has no result the CLI specifies: x64 happens to yield zero, so the
+        // documented clamp-into-range behaviour was resting on one architecture's choice. Stating it here makes the
+        // answer the same everywhere, which is what the family's cross-machine conversion contract already promised.
+        if (double.IsNaN(d: scaled)) { return default; }
+
+        var clamped = double.Clamp(
+            max: RawMaxValue,
+            min: 0d,
+            value: scaled
+        );
+
+        return new(Value: ((uint)clamped));
+    }
+    /// <summary>Constructs a <see cref="UnitFraction32"/> directly from a raw storage bit pattern.</summary>
+    /// <param name="value">The pre-scaled raw value to wrap, interpreted as the real number <c><paramref name="value"/> / 2³²</c>.</param>
+    /// <returns>A <see cref="UnitFraction32"/> whose <see cref="Value"/> equals <paramref name="value"/>.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static UnitFraction32 FromRawBits(uint value) =>
+        new(Value: value);
+    /// <summary>Returns the greater of two values.</summary>
+    /// <param name="x">The first value to compare.</param>
+    /// <param name="y">The second value to compare.</param>
+    /// <returns>Whichever of <paramref name="x"/> and <paramref name="y"/> is greater.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static UnitFraction32 Max(UnitFraction32 x, UnitFraction32 y) =>
+        new(Value: Math.Max(
+            val1: x.Value,
+            val2: y.Value
+        ));
+    /// <summary>Returns the lesser of two values.</summary>
+    /// <param name="x">The first value to compare.</param>
+    /// <param name="y">The second value to compare.</param>
+    /// <returns>Whichever of <paramref name="x"/> and <paramref name="y"/> is lesser.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static UnitFraction32 Min(UnitFraction32 x, UnitFraction32 y) =>
+        new(Value: Math.Min(
+            val1: x.Value,
+            val2: y.Value
+        ));
+    /// <summary>Parses a character span into a <see cref="UnitFraction32"/>.</summary>
+    /// <param name="s">The span of characters to parse, an unsigned decimal fraction such as <c>"0.5"</c> whose exact value is at most <see cref="MaxValue"/>. A literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding, even when rounding would land it back on the grid.</param>
+    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
+    /// <returns>The value represented by <paramref name="s"/>.</returns>
+    /// <exception cref="FormatException"><paramref name="s"/> is not a valid, in-range <see cref="UnitFraction32"/> literal.</exception>
+    public static UnitFraction32 Parse(ReadOnlySpan<char> s, IFormatProvider? provider) {
+        if (!TryParseCore(
+            provider: provider,
+            result: out var result,
+            s: s
+        )) {
+            throw new FormatException(message: $"The input span was not in a valid {nameof(UnitFraction32)} format.");
+        }
+
+        return result;
+    }
+    /// <summary>Parses a string into a <see cref="UnitFraction32"/>.</summary>
+    /// <param name="s">The string to parse, an unsigned decimal fraction such as <c>"0.5"</c> whose exact value is at most <see cref="MaxValue"/>. A literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding, even when rounding would land it back on the grid.</param>
+    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
+    /// <returns>The value represented by <paramref name="s"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="s"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException"><paramref name="s"/> is not a valid, in-range <see cref="UnitFraction32"/> literal.</exception>
+    public static UnitFraction32 Parse(string s, IFormatProvider? provider) {
+        ArgumentNullException.ThrowIfNull(argument: s);
+
+        return Parse(
+            s: s.AsSpan(),
+            provider: provider
+        );
+    }
+    /// <summary>Subtracts <paramref name="y"/> from <paramref name="x"/>, saturating to <see cref="MinValue"/> (zero) instead of wrapping on underflow.</summary>
+    /// <param name="x">The minuend.</param>
+    /// <param name="y">The subtrahend.</param>
+    /// <returns>The difference <c><paramref name="x"/> − <paramref name="y"/></c>, clamped to zero when <paramref name="y"/> exceeds <paramref name="x"/>.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static UnitFraction32 SubtractSaturating(UnitFraction32 x, UnitFraction32 y) {
+        var z = (((ulong)x.Value) - y.Value) & FractionBitMask;
+        var keep = (0UL - Convert.ToUInt64(value: (z <= x.Value)));
+
+        return new(Value: ((uint)(z & keep)));
+    }
+    /// <summary>Returns the exact decimal string representation of this value.</summary>
+    /// <returns>The exact, invariant-culture decimal expansion of this value (a <c>/2³²</c> fraction always terminates within thirty-two digits).</returns>
+    public override string ToString() {
+        Span<char> buffer = stackalloc char[MaximumFormattedLength];
+
+        _ = TryFormatCore(
+            charsWritten: out var charsWritten,
+            destination: buffer
+        );
+
+        return new string(value: buffer[..charsWritten]);
+    }
+    /// <summary>Returns the exact decimal string representation of this value.</summary>
+    /// <param name="format">Ignored; the value is always rendered as its exact decimal expansion.</param>
+    /// <param name="formatProvider">Ignored; formatting always uses the invariant culture.</param>
+    /// <returns>The exact, invariant-culture decimal expansion of this value.</returns>
+    public string ToString(string? format, IFormatProvider? formatProvider) =>
+        ToString();
+    /// <summary>Tries to format this value into the provided character span.</summary>
+    /// <param name="destination">The span to write the formatted characters into.</param>
+    /// <param name="charsWritten">When this method returns, the number of characters written to <paramref name="destination"/>.</param>
+    /// <param name="format">Ignored; the value is always rendered as its exact decimal expansion.</param>
+    /// <param name="provider">Ignored; formatting always uses the invariant culture.</param>
+    /// <returns><see langword="true"/> when <paramref name="destination"/> was large enough; otherwise <see langword="false"/>.</returns>
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider) =>
+        TryFormatCore(
+            charsWritten: out charsWritten,
+            destination: destination
+        );
+    /// <summary>Tries to parse a character span into a <see cref="UnitFraction32"/>.</summary>
+    /// <param name="s">The span of characters to parse, an unsigned decimal fraction whose exact value is at most <see cref="MaxValue"/>; a literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding.</param>
+    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
+    /// <param name="result">When this method returns, the parsed value on success or the default value on failure.</param>
+    /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>.</returns>
+    public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out UnitFraction32 result) =>
+        TryParseCore(
+            provider: provider,
+            result: out result,
+            s: s
+        );
+    /// <summary>Tries to parse a string into a <see cref="UnitFraction32"/>.</summary>
+    /// <param name="s">The string to parse, or <see langword="null"/>: an unsigned decimal fraction whose exact value is at most <see cref="MaxValue"/>; a literal above <see cref="MaxValue"/> — including everything in <c>(MaxValue, 1)</c> — is refused before rounding.</param>
+    /// <param name="provider">The format provider that supplies the numeric conventions, or <see langword="null"/> to use the invariant culture.</param>
+    /// <param name="result">When this method returns, the parsed value on success or the default value on failure.</param>
+    /// <returns><see langword="true"/> when <paramref name="s"/> was parsed successfully; otherwise <see langword="false"/>. A <see langword="null"/> <paramref name="s"/> returns <see langword="false"/>.</returns>
+    public static bool TryParse(string? s, IFormatProvider? provider, out UnitFraction32 result) {
+        if (s is null) {
+            result = default;
+
+            return false;
+        }
+
+        return TryParseCore(
+            s: s.AsSpan(),
+            provider: provider,
+            result: out result
+        );
     }
 }

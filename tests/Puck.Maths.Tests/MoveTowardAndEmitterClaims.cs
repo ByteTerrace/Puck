@@ -44,8 +44,7 @@ internal static class MoveTowardAndEmitterClaims {
             _ = FixedVector3.MoveToward(current: Vector(x: 0, y: 0, z: 0), target: Vector(x: 1, y: 0, z: 0), maxDelta: FixedQ4816.FromRawBits(value: -1));
 
             return "MoveToward accepted a negative maxDelta";
-        }
-        catch (ArgumentOutOfRangeException refusal) {
+        } catch (ArgumentOutOfRangeException refusal) {
             if ("maxDelta" != refusal.ParamName) {
                 return $"MoveToward's negative-step refusal names '{refusal.ParamName}' rather than 'maxDelta'";
             }
@@ -57,7 +56,7 @@ internal static class MoveTowardAndEmitterClaims {
             var separation = (target - current).Length;
 
             // A degenerate segment answers the target, which is also the current point, at every step size.
-            if (current != FixedVector3.MoveToward(current: current, target: current, maxDelta: separation)) {
+            if (current != FixedVector3.MoveToward(current: current, maxDelta: separation, target: current)) {
                 return $"MoveToward from {current} to itself did not answer that point";
             }
 
@@ -72,7 +71,7 @@ internal static class MoveTowardAndEmitterClaims {
             foreach (var reach in new[] { separation, (separation + FixedQ4816.One), FixedQ4816.FromInteger(value: 1000), }) {
                 if (reach < separation) { continue; }
 
-                var landed = FixedVector3.MoveToward(current: current, target: target, maxDelta: reach);
+                var landed = FixedVector3.MoveToward(current: current, maxDelta: reach, target: target);
 
                 if (landed != target) {
                     return $"a step of {reach} from {current} toward {target} (separated by {separation}) landed on {landed} rather than the target";
@@ -84,7 +83,7 @@ internal static class MoveTowardAndEmitterClaims {
 
                 if ((step <= FixedQ4816.Zero) || (step >= separation)) { continue; }
 
-                var moved = FixedVector3.MoveToward(current: current, target: target, maxDelta: step);
+                var moved = FixedVector3.MoveToward(current: current, maxDelta: step, target: target);
                 var travelled = (moved - current).Length;
                 var remaining = (target - moved).Length;
 
@@ -126,7 +125,6 @@ internal static class MoveTowardAndEmitterClaims {
 
         return null;
     }
-
     /// <summary>Proves both <see cref="FixedQ4816RustPort"/> emitters are PURE — two calls produce byte-identical text,
     /// and neither disturbs the other — and that the numeric constants they claim to read from the live
     /// <see cref="FixedQ4816"/> type are the values that type currently holds, rather than literals transcribed once and
@@ -160,13 +158,13 @@ internal static class MoveTowardAndEmitterClaims {
         // invariant decimal the emitter writes. A renamed or mis-referenced source constant stops appearing.
         (string Name, long Value)[] constants = [
             (nameof(FixedQ4816.Atan2HalfPiQ61), FixedQ4816.Atan2HalfPiQ61),
-            (nameof(FixedQ4816.Atan2PiQ61), FixedQ4816.Atan2PiQ61),
+            (nameof(FixedQ4816.PiQ61), FixedQ4816.PiQ61),
         ];
 
         foreach (var (name, value) in constants) {
             var text = value.ToString(provider: CultureInfo.InvariantCulture);
 
-            if (!generated.Contains(value: text, comparisonType: StringComparison.Ordinal)) {
+            if (!generated.Contains(comparisonType: StringComparison.Ordinal, value: text)) {
                 return $"the emitted Rust does not carry {name}'s live value {text}";
             }
         }
@@ -177,7 +175,7 @@ internal static class MoveTowardAndEmitterClaims {
         var probe = FixedQ4816.FromInteger(value: 1);
         var probeSin = FixedQ4816.Sin(angle: probe).Value.ToString(provider: CultureInfo.InvariantCulture);
 
-        return (vectors.Contains(value: probeSin, comparisonType: StringComparison.Ordinal)
+        return (vectors.Contains(comparisonType: StringComparison.Ordinal, value: probeSin)
             ? null
             : $"the emitted vectors do not carry the live Sin(1) raw value {probeSin}");
     }

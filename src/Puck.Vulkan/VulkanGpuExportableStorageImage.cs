@@ -22,6 +22,7 @@ public sealed partial class VulkanGpuExportableStorageImage : IGpuExportableStor
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly VulkanLogicalDevice m_logicalDevice;
     private readonly nint m_memoryHandle;
+
     private bool m_disposed;
     private nint m_imageHandle;
     private nint m_imageViewHandle;
@@ -84,7 +85,6 @@ public sealed partial class VulkanGpuExportableStorageImage : IGpuExportableStor
         // the unconditional per-frame fence on the Direct3D 12 exportable storage image.
         m_logicalDevice.WaitIdle();
     }
-
     /// <summary>Releases the image view, the exportable image and its memory, and closes the exported shared
     /// handle. Safe to call more than once.</summary>
     public void Dispose() {

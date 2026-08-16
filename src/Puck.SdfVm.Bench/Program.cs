@@ -1,41 +1,37 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
-using Puck.DirectX.Presentation;
 using Puck.Hosting;
 using Puck.Launcher;
-using Puck.Memory;
-using Puck.Platform;
+using Puck.Launcher.Windows;
 using Puck.SdfVm;
 using Puck.SdfVm.Bench;
 using Puck.SdfVm.Debug;
-using Puck.Vulkan.Presentation;
+using Puck.SignedDistance;
 
 // Puck.SdfVm.Bench — a GPU/CPU ceiling-measurement harness for contributed dynamic geometry. Boots the same
 // generic Launcher + SdfWorldRenderBuilder assembly Puck.World composes (no game glue), drives
 // DynamicMatrixBenchFrameSource through SdfBenchScene's DynamicMatrix ladder, and exits when it finishes.
 // --backend vulkan|directx (default vulkan), --width/--height (default 1920x1080, pinned across the whole
 // matrix), --warm/--samples (default 20/300) per configuration.
-var hostsOnDirectX = string.Equals(a: ReadOption(args: args, name: "--backend", fallback: "vulkan"), b: "directx", comparisonType: StringComparison.OrdinalIgnoreCase);
-var width = uint.Parse(s: ReadOption(args: args, name: "--width", fallback: "1920"));
-var height = uint.Parse(s: ReadOption(args: args, name: "--height", fallback: "1080"));
-var warmFrames = int.Parse(s: ReadOption(args: args, name: "--warm", fallback: "20"));
-var sampleFrames = int.Parse(s: ReadOption(args: args, name: "--samples", fallback: "300"));
+var hostsOnDirectX = string.Equals(a: ReadOption(args: args, fallback: "vulkan", name: "--backend"), b: "directx", comparisonType: StringComparison.OrdinalIgnoreCase);
+var width = uint.Parse(s: ReadOption(args: args, fallback: "1920", name: "--width"));
+var height = uint.Parse(s: ReadOption(args: args, fallback: "1080", name: "--height"));
+var warmFrames = int.Parse(s: ReadOption(args: args, fallback: "20", name: "--warm"));
+var sampleFrames = int.Parse(s: ReadOption(args: args, fallback: "300", name: "--samples"));
 // A bisection-point single-rung run (--n given): --placement clustered|uniform|far-corners (default clustered),
 // --moving true|false (default false). Omitting --n runs the full 30-cell ladder.
 (SdfBenchPlacement Placement, bool Moving, int Count)? singleRung = null;
 if (ReadOptionOrNull(args: args, name: "--n") is { } nToken) {
-    var placementToken = ReadOption(args: args, name: "--placement", fallback: "clustered");
+    var placementToken = ReadOption(args: args, fallback: "clustered", name: "--placement");
     var placement = placementToken.ToLowerInvariant() switch {
         "uniform" => SdfBenchPlacement.Uniform,
         "far-corners" or "farcorners" => SdfBenchPlacement.FarCorners,
         _ => SdfBenchPlacement.Clustered,
     };
-    var moving = bool.Parse(value: ReadOption(args: args, name: "--moving", fallback: "false"));
+    var moving = bool.Parse(value: ReadOption(args: args, fallback: "false", name: "--moving"));
 
     singleRung = (placement, moving, int.Parse(s: nToken));
 }
@@ -44,12 +40,11 @@ if (hostsOnDirectX && !OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor:
 
     return 1;
 }
-
 // The bench harness arms GPU timing PROGRAMMATICALLY — the documented highest-precedence source (see
 // GpuTimingControl's type remarks: "the bench harness arms it at suite start") — before the host boots, so every
 // produced frame from frame 1 onward is timed and no live console switch is needed.
 GpuTimingControl.Shared.SetArmed(armed: true);
-var frameSource = new DynamicMatrixBenchFrameSource(warmFrames: warmFrames, sampleFrames: sampleFrames, backendIsDirectX: hostsOnDirectX, singleRung: singleRung);
+var frameSource = new DynamicMatrixBenchFrameSource(backendIsDirectX: hostsOnDirectX, sampleFrames: sampleFrames, singleRung: singleRung, warmFrames: warmFrames);
 var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
 services.Configure<NativeWindowOptions>(configureOptions: options => {
@@ -68,24 +63,7 @@ services.AddSingleton(implementationInstance: new PresentationOptions {
 });
 services.AddSingleton(implementationInstance: new ExternalClockRegistry(electionPolicy: null));
 services.AddLauncherTerminal();
-services.AddPlatformWindowing();
-services.AddPuckAllocator();
-if (hostsOnDirectX) {
-    services.AddDirectXPresenter();
-    services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
-        Name: "directx",
-        Presenter: (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)
-            ? sp.GetRequiredService<DirectXSurfacePresenter>()
-            : throw new PlatformNotSupportedException(message: "Direct3D 12 requires Windows 10 or newer."))
-    ));
-} else {
-    services.AddVulkanPresenter();
-    services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
-    services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
-        Name: "vulkan",
-        Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()
-    ));
-}
+services.AddWindowsHostedPresentation(hostsOnDirectX: hostsOnDirectX);
 services.AddBackendSwitcher(preferredBackend: (hostsOnDirectX ? "directx" : "vulkan"));
 services.AddSingleton<IRenderNode>(implementationFactory: sp => {
     var viewGpuServices = new SdfViewGpuServices(
@@ -100,8 +78,8 @@ services.AddSingleton<IRenderNode>(implementationFactory: sp => {
         services: viewGpuServices,
         spec: new SdfWorldRenderSpec(
             FrameSource: frameSource,
-            Width: width,
-            Height: height
+            Height: height,
+            Width: width
         ) {
             DynamicTransformCapacity = probeDynamicTransforms,
             HostsOnDirectX = hostsOnDirectX,
@@ -122,7 +100,6 @@ frameSource.Terminal = host.Services.GetRequiredService<ITerminalControl>();
 Console.Error.WriteLine(value: $"[sdf-bench] backend={(hostsOnDirectX ? "directx" : "vulkan")} {width}x{height} warm={warmFrames} samples={sampleFrames}{((singleRung is { } r) ? $" single-rung={r.Placement} moving={r.Moving} n={r.Count}" : " matrix (30 cells)")}");
 await host.RunAsync();
 return (frameSource.ExitRequested ? 0 : 1);
-
 // Measures EVERY rung of the DynamicMatrix ladder (cheap — CPU-only program builds, never rendered) and takes the
 // per-axis MAX, so the engine's frozen buffers (constructed ONCE, off the first captured frame) are guaranteed to fit
 // every later rung without an UploadProgram rejection. Static and dynamic instances do NOT pack to the same word

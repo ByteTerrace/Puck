@@ -9,18 +9,18 @@ namespace Puck.Overlays;
 /// emission; no GPU types (a surface is a writer, never a new shader).
 /// </summary>
 public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
-    /// <summary>The projected chips one seat draws. The host admits the nearest rows to the camera up to this
-    /// count; anything past it is refused at the gizmo channel's own boundary, attributed.</summary>
-    public const int MaxChipsPerSeat = 16;
-
+    private const float ChipAlpha = 0.9f;
     // A viewport eased/shrunk to nothing has nowhere to place a chip — the guard the bar and the HUD both apply
     // before opening a clip scope on the region.
     private const float MinRegionExtent = 0.05f;
     // The gizmo plate half-extent, px — deliberately below the binding bar's reference chip so a gizmo reads as a
     // marker in the world, not a pressable control.
     private const float PlateHalf = 12f;
-    private const float ChipAlpha = 0.9f;
     private const float RingAlpha = 0.35f;
+
+    /// <summary>The projected chips one seat draws. The host admits the nearest rows to the camera up to this
+    /// count; anything past it is refused at the gizmo channel's own boundary, attributed.</summary>
+    public const int MaxChipsPerSeat = 16;
 
     private readonly IEditorGizmoSource m_source;
 
@@ -33,26 +33,11 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
         m_source = source;
     }
 
-    /// <summary>Emits this frame's per-seat gizmo records, when a snapshot has been published.</summary>
-    /// <param name="builder">The frame builder.</param>
-    /// <exception cref="InvalidOperationException">The published frame carries more seats than
-    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
-    public void Emit(OverlayFrameBuilder builder) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        if (!m_source.TrySnapshot(frame: out var frame)) {
-            return;
-        }
-
-        var seats = frame.Seats.Span;
-
-        OverlaySeatLoop.Emit(
+    void IOverlaySeatEmitter<OverlayGizmoSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) =>
+        EmitSeat(
             builder: builder,
-            seats: seats,
-            writerName: nameof(EditorGizmoWriter),
-            writer: this
+            seat: in seat
         );
-    }
 
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) {
         var chips = seat.Chips.Span;
@@ -121,9 +106,24 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
         builder.EndClip();
     }
 
-    void IOverlaySeatEmitter<OverlayGizmoSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) =>
-        EmitSeat(
+    /// <summary>Emits this frame's per-seat gizmo records, when a snapshot has been published.</summary>
+    /// <param name="builder">The frame builder.</param>
+    /// <exception cref="InvalidOperationException">The published frame carries more seats than
+    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
+    public void Emit(OverlayFrameBuilder builder) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
+        if (!m_source.TrySnapshot(frame: out var frame)) {
+            return;
+        }
+
+        var seats = frame.Seats.Span;
+
+        OverlaySeatLoop.Emit(
             builder: builder,
-            seat: in seat
+            seats: seats,
+            writerName: nameof(EditorGizmoWriter),
+            writer: this
         );
+    }
 }

@@ -46,7 +46,7 @@ internal static class MonotonicPartitionerClaims {
                     remainingRanks[value] = remainingRank;
                 }
 
-                var routed = MonotonicPartitioner.GetBucketIdDangerous(value: (ushort)value, bucketCount: bucketCount);
+                var routed = MonotonicPartitioner.GetBucketIdDangerous(bucketCount: bucketCount, value: ((ushort)value));
 
                 Assert.True(
                     condition: (routed == owners[value]),
@@ -55,7 +55,7 @@ internal static class MonotonicPartitionerClaims {
             }
 
             var floorShare = (MaxValueCount / bucketCount);
-            var ceilingShare = ((MaxValueCount + bucketCount - 1) / bucketCount);
+            var ceilingShare = (((MaxValueCount + bucketCount) - 1) / bucketCount);
 
             for (var bucket = 0; (bucket < bucketCount); ++bucket) {
                 var population = bucketPopulations[bucket];
@@ -69,7 +69,6 @@ internal static class MonotonicPartitionerClaims {
 
         return null;
     }
-
     /// <summary>Full-value-domain proof that <see cref="MonotonicPartitioner.GetMetrics(ushort, int)"/> agrees with
     /// an independently derived reference chain-walk — rank, jump count, migration distance and velocity — at bucket
     /// counts that span the fast checkpoint path (1), the slow tail-stream path (100) and the maximum (1024). Mirrors
@@ -78,9 +77,9 @@ internal static class MonotonicPartitionerClaims {
         const int MaxBucketCount = MonotonicPartitioner.MaxBucketCount;
         const int MaxValueCount = MonotonicPartitioner.MaxValueCount;
 
-        foreach (var bucketCount in (ReadOnlySpan<int>)[1, 100, 1024,]) {
+        foreach (var bucketCount in ((ReadOnlySpan<int>)[1, 100, 1024,])) {
             for (var value = 0; (value < MaxValueCount); ++value) {
-                var metrics = MonotonicPartitioner.GetMetrics(value: (ushort)value, bucketCount: bucketCount);
+                var metrics = MonotonicPartitioner.GetMetrics(bucketCount: bucketCount, value: ((ushort)value));
                 var expectedRank = NormalizedRank(value: value);
                 var jumpCount = 0;
                 var migrationDistance = 0;
@@ -88,7 +87,7 @@ internal static class MonotonicPartitionerClaims {
                 var remainingRank = expectedRank;
 
                 while (0 != remainingRank) {
-                    var nextJump = (((MaxValueCount - 1 - owner) / remainingRank) + 1);
+                    var nextJump = ((((MaxValueCount - 1) - owner) / remainingRank) + 1);
 
                     if (nextJump > MaxBucketCount) {
                         break;
@@ -120,7 +119,6 @@ internal static class MonotonicPartitionerClaims {
 
         return null;
     }
-
     /// <summary>Pins the <see cref="Guid"/> overloads' exact wire mapping — the documented trailing-entropy hash — as
     /// a protocol contract rather than mere self-agreement between the two internal overloads: an independently
     /// computed little-endian read of bytes 12..15, bias-free widened into [1, 65534], routed through the same
@@ -131,58 +129,57 @@ internal static class MonotonicPartitionerClaims {
 
         for (var sample = 0; (sample < 64); ++sample) {
             for (var i = 0; (i < guidBytes.Length); ++i) {
-                guidBytes[i] = ((byte)((sample * 37) + (i * 11) + 5));
+                guidBytes[i] = ((byte)(((sample * 37) + (i * 11)) + 5));
             }
 
             var guid = new Guid(b: guidBytes);
             var entropy = ((uint)(guidBytes[12] | (guidBytes[13] << 8) | (guidBytes[14] << 16) | (guidBytes[15] << 24)));
             var expectedHash = ((ushort)(((65534UL * entropy) >> 32) + 1));
 
-            foreach (var bucketCount in (ReadOnlySpan<int>)[1, 64, 353, 1024,]) {
+            foreach (var bucketCount in ((ReadOnlySpan<int>)[1, 64, 353, 1024,])) {
                 Assert.True(
                     condition: (
-                        MonotonicPartitioner.GetBucketId(value: guid, bucketCount: bucketCount) ==
-                        MonotonicPartitioner.GetBucketId(value: expectedHash, bucketCount: bucketCount)
+                        MonotonicPartitioner.GetBucketId(bucketCount: bucketCount, value: guid) ==
+                        MonotonicPartitioner.GetBucketId(bucketCount: bucketCount, value: expectedHash)
                     ),
                     userMessage: $"Guid overload disagreed with the independently computed trailing-entropy hash route at sample {sample}, bucket count {bucketCount}"
                 );
                 Assert.True(
                     condition: (
-                        MonotonicPartitioner.GetBucketIdDangerous(value: guid, bucketCount: bucketCount) ==
-                        MonotonicPartitioner.GetBucketIdDangerous(value: expectedHash, bucketCount: bucketCount)
+                        MonotonicPartitioner.GetBucketIdDangerous(bucketCount: bucketCount, value: guid) ==
+                        MonotonicPartitioner.GetBucketIdDangerous(bucketCount: bucketCount, value: expectedHash)
                     ),
                     userMessage: $"Guid dangerous overload disagreed with the independently computed trailing-entropy hash route at sample {sample}, bucket count {bucketCount}"
                 );
             }
 
             Assert.Equal(
-                expected: MonotonicPartitioner.GetMetrics(value: expectedHash, bucketCount: 353),
-                actual: MonotonicPartitioner.GetMetrics(value: guid, bucketCount: 353)
+                expected: MonotonicPartitioner.GetMetrics(bucketCount: 353, value: expectedHash),
+                actual: MonotonicPartitioner.GetMetrics(bucketCount: 353, value: guid)
             );
         }
 
         return null;
     }
-
     /// <summary>The checked entry points refuse an out-of-range bucket count by throwing
     /// <see cref="ArgumentOutOfRangeException"/> naming <c>bucketCount</c>, rather than routing to a meaningless
     /// index or clamping silently. Mirrors the refusal checks at the end of <c>MonotonicPartitionerStage.Run</c>.</summary>
     public static string? BucketCountOutOfRangeRefusesSurface() {
         Assert.Equal(
             expected: "bucketCount",
-            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetBucketId(value: (ushort)0, bucketCount: 0)).ParamName
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetBucketId(bucketCount: 0, value: ((ushort)0))).ParamName
         );
         Assert.Equal(
             expected: "bucketCount",
-            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetBucketId(value: (ushort)0, bucketCount: (MonotonicPartitioner.MaxBucketCount + 1))).ParamName
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetBucketId(bucketCount: (MonotonicPartitioner.MaxBucketCount + 1), value: ((ushort)0))).ParamName
         );
         Assert.Equal(
             expected: "bucketCount",
-            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetBucketId(value: Guid.Empty, bucketCount: 0)).ParamName
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetBucketId(bucketCount: 0, value: Guid.Empty)).ParamName
         );
         Assert.Equal(
             expected: "bucketCount",
-            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetMetrics(value: (ushort)0, bucketCount: 0)).ParamName
+            actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => MonotonicPartitioner.GetMetrics(bucketCount: 0, value: ((ushort)0))).ParamName
         );
 
         return null;
@@ -201,11 +198,11 @@ internal static class MonotonicPartitionerClaims {
         var priorQuotient = (MaxValueCount / donorBucket);
         var priorRemainder = (MaxValueCount % donorBucket);
         var priorDonationTotal = (
-            (owner * (priorQuotient - jumpQuotient)) +
-            Math.Min(owner, priorRemainder) -
-            Math.Min(owner, jumpRemainder)
+            ((owner * (priorQuotient - jumpQuotient)) +
+            Math.Min(val1: owner, val2: priorRemainder)) -
+            Math.Min(val1: owner, val2: jumpRemainder)
         );
-        var donationThreshold = (((MaxValueCount - 1 - owner) / jumpAtBucketCount) + 1);
+        var donationThreshold = ((((MaxValueCount - 1) - owner) / jumpAtBucketCount) + 1);
 
         remainingRank = (priorDonationTotal + (remainingRank - donationThreshold));
         owner = donorBucket;
@@ -215,7 +212,7 @@ internal static class MonotonicPartitionerClaims {
             return 0;
         }
 
-        var jumpAtBucketCount = (((MonotonicPartitioner.MaxValueCount - 1 - owner) / remainingRank) + 1);
+        var jumpAtBucketCount = ((((MonotonicPartitioner.MaxValueCount - 1) - owner) / remainingRank) + 1);
 
         return ((jumpAtBucketCount > MonotonicPartitioner.MaxBucketCount) ? 0 : jumpAtBucketCount);
     }

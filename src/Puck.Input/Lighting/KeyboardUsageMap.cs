@@ -114,7 +114,6 @@ public static class KeyboardUsageMap {
                 return false;
         }
     }
-
     /// <summary>
     /// Resolves a lamp's input binding (usage page + usage) to the <see cref="InputSources.Keyboard"/> source
     /// string a binding table targets. Only the keyboard page (<see cref="KeyboardUsagePage"/>) is mapped; any
@@ -131,10 +130,18 @@ public static class KeyboardUsageMap {
             return false;
         }
 
-        if (!TryGetKeyCode(usage: usage, key: out var key, character: out var character)) {
+        if (!TryGetKeyCode(
+            character: out var character,
+            key: out var key,
+            usage: usage
+        )) {
             return false;
         }
 
-        return KeyboardSourceMap.TryGetSource(key: key, character: character, source: out source);
+        return KeyboardSourceMap.TryGetSource(
+            character: character,
+            key: key,
+            source: out source
+        );
     }
 }

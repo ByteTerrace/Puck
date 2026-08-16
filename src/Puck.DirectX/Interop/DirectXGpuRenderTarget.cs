@@ -20,6 +20,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
     private readonly IDirectXDeviceContext m_deviceContext;
     private readonly GCHandle m_commandBufferToken;
     private readonly GCHandle m_imageViewToken;
+
     private bool m_disposed;
     private nint m_renderTarget;
     private nint m_rtvHeap;
@@ -33,7 +34,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         Width = width;
         Height = height;
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         CreateRenderTarget(device: device, format: format, height: height, width: width);
 
@@ -45,10 +46,10 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
 
         device->CreateDescriptorHeap(
             pDescriptorHeapDesc: in heapDesc,
-            riid: ID3D12DescriptorHeap.IID_Guid,
-            ppvHeap: out var srvHeap
+            ppvHeap: out var srvHeap,
+            riid: ID3D12DescriptorHeap.IID_Guid
         );
-        m_srvHeap = (nint)srvHeap;
+        m_srvHeap = ((nint)srvHeap);
 
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = format,
@@ -59,30 +60,30 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         srvDesc.Anonymous.Texture2D = new D3D12_TEX2D_SRV { MipLevels = 1, };
 
         device->CreateShaderResourceView(
-            pResource: (ID3D12Resource*)m_renderTarget,
+            pResource: ((ID3D12Resource*)m_renderTarget),
             pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)srvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)srvHeap))
         );
 
         device->CreateCommandAllocator(
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
+            ppCommandAllocator: out var commandAllocator,
             riid: ID3D12CommandAllocator.IID_Guid,
-            ppCommandAllocator: out var commandAllocator
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
 
         device->CreateCommandList(
             nodeMask: 0,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
-            pCommandAllocator: (ID3D12CommandAllocator*)commandAllocator,
+            pCommandAllocator: ((ID3D12CommandAllocator*)commandAllocator),
             pInitialState: null,
+            ppCommandList: out var commandList,
             riid: ID3D12GraphicsCommandList.IID_Guid,
-            ppCommandList: out var commandList
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
         ((ID3D12GraphicsCommandList*)commandList)->Close();
 
         var state = new DirectXCommandBufferState {
-            Allocator = (nint)commandAllocator,
-            CommandList = (nint)commandList,
+            Allocator = ((nint)commandAllocator),
+            CommandList = ((nint)commandList),
         };
 
         m_commandBufferToken = GCHandle.Alloc(value: state);
@@ -98,7 +99,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
     /// <inheritdoc/>
     public nint CommandBufferHandle => GCHandle.ToIntPtr(value: m_commandBufferToken);
     /// <inheritdoc/>
-    public nint FramebufferHandle => (nint)GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)m_rtvHeap).ptr;
+    public nint FramebufferHandle => ((nint)GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_rtvHeap)).ptr);
     /// <inheritdoc/>
     public uint Height { get; }
     /// <inheritdoc/>
@@ -141,7 +142,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
             ppvResource: &renderTarget,
             riidResource: in resourceIid
         );
-        m_renderTarget = (nint)renderTarget;
+        m_renderTarget = ((nint)renderTarget);
 
         var rtvHeapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
             NumDescriptors = 1,
@@ -150,15 +151,15 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
 
         device->CreateDescriptorHeap(
             pDescriptorHeapDesc: in rtvHeapDesc,
-            riid: ID3D12DescriptorHeap.IID_Guid,
-            ppvHeap: out var rtvHeap
+            ppvHeap: out var rtvHeap,
+            riid: ID3D12DescriptorHeap.IID_Guid
         );
-        m_rtvHeap = (nint)rtvHeap;
+        m_rtvHeap = ((nint)rtvHeap);
 
         device->CreateRenderTargetView(
-            pResource: (ID3D12Resource*)renderTarget,
+            pResource: ((ID3D12Resource*)renderTarget),
             pDesc: null,
-            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)rtvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)rtvHeap))
         );
     }
 
@@ -171,7 +172,7 @@ public sealed unsafe class DirectXGpuRenderTarget : IGpuRenderTarget {
         m_disposed = true;
 
         if (m_commandBufferToken.IsAllocated) {
-            var state = (DirectXCommandBufferState)m_commandBufferToken.Target!;
+            var state = ((DirectXCommandBufferState)m_commandBufferToken.Target!);
 
             Release(pointer: ref state.CommandList);
             Release(pointer: ref state.Allocator);

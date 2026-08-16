@@ -26,12 +26,12 @@ internal static class ArmFuzzProbe {
         MachineProbe.RunUntilSettled(machine: machine);
 
         var marker = machine.Machine.Bus.Read32(
-            address: EwramStart,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: EwramStart
         );
 
         return (((marker != MarkerArm) && (marker != MarkerThumb))
             ? (true, "all tests passed")
-            : (false, $"failure marker '{(char)(marker & 0xFFu)}' dumped to EWRAM (0x{marker:X8})"));
+            : (false, $"failure marker '{((char)(marker & 0xFFu))}' dumped to EWRAM (0x{marker:X8})"));
     }
 }

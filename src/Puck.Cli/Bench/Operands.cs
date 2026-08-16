@@ -19,23 +19,21 @@ internal static class Operands {
     public static readonly QuadraticAlgebra<FixedQ4816> DualFix = QuadraticAlgebra<FixedQ4816>.Create(p: FixedQ4816.Zero, q: FixedQ4816.Zero);
     public static readonly QuadraticAlgebra<FixedQuaternion> DualQuat = QuadraticAlgebra<FixedQuaternion>.Create(p: FixedQuaternion.AdditiveIdentity, q: FixedQuaternion.AdditiveIdentity);
     public static readonly ulong NonSquare = QuadraticExtensionField64.SmallestNonSquare(baseField: PrimeField64.Create(modulus: Modulus));
-    public static readonly QuadraticAlgebra<ModP> ModAlg = QuadraticAlgebra<ModP>.Create(p: new ModP(Value: 0UL, Modulus: Modulus), q: new ModP(Value: NonSquare, Modulus: Modulus));
+    public static readonly QuadraticAlgebra<ModP> ModAlg = QuadraticAlgebra<ModP>.Create(p: new ModP(Modulus: Modulus, Value: 0UL), q: new ModP(Modulus: Modulus, Value: NonSquare));
 
     // Raw with |value| in [2^31, 2^40): forces the Int128 wide path in both the fused kernel and the hand-written type.
     public static long WideRaw(Random rng) {
-        var magnitude = rng.NextInt64(minValue: (1L << 31), maxValue: (1L << 40));
+        var magnitude = rng.NextInt64(maxValue: (1L << 40), minValue: (1L << 31));
 
         return ((0 == rng.Next(maxValue: 2)) ? magnitude : -magnitude);
     }
-
     // Raw with |value| < 2^31: narrow operands — the window in which every kernel measured here, multiply and norm,
     // hand-written and generic, takes its long fast tier instead of the Int128 fallback.
     public static long NarrowRaw(Random rng) =>
-        rng.NextInt64(minValue: -((1L << 31) - 1L), maxValue: ((1L << 31) - 1L));
+        rng.NextInt64(maxValue: ((1L << 31) - 1L), minValue: -((1L << 31) - 1L));
     public static ulong RandomResidue(Random rng) =>
-        ((ulong)rng.NextInt64(minValue: 0L, maxValue: (long)Modulus));
+        ((ulong)rng.NextInt64(maxValue: ((long)Modulus), minValue: 0L));
 }
-
 // A residue in F_p carried as a value plus its modulus (copied verbatim from that bench and its
 // verifier), so the generic-math operators reduce without a static modulus. Identity elements carry modulus zero; each
 // binary operation adopts the operative (non-zero) modulus of its operands.
@@ -46,8 +44,8 @@ internal readonly record struct ModP(ulong Value, ulong Modulus)
       IUnaryNegationOperators<ModP, ModP>,
       IAdditiveIdentity<ModP, ModP>,
       IMultiplicativeIdentity<ModP, ModP> {
-    static ModP IAdditiveIdentity<ModP, ModP>.AdditiveIdentity => new(Value: 0UL, Modulus: 0UL);
-    static ModP IMultiplicativeIdentity<ModP, ModP>.MultiplicativeIdentity => new(Value: 1UL, Modulus: 0UL);
+    static ModP IAdditiveIdentity<ModP, ModP>.AdditiveIdentity => new(Modulus: 0UL, Value: 0UL);
+    static ModP IMultiplicativeIdentity<ModP, ModP>.MultiplicativeIdentity => new(Modulus: 0UL, Value: 1UL);
 
     public static ModP operator +(ModP left, ModP right) {
         var modulus = Operative(left: left, right: right);
@@ -56,7 +54,7 @@ internal readonly record struct ModP(ulong Value, ulong Modulus)
 
         var sum = (left.Value + right.Value);
 
-        return new(Value: ((sum >= modulus) ? (sum - modulus) : sum), Modulus: modulus);
+        return new(Modulus: modulus, Value: ((sum >= modulus) ? (sum - modulus) : sum));
     }
     public static ModP operator -(ModP left, ModP right) {
         var modulus = Operative(left: left, right: right);
@@ -70,7 +68,7 @@ internal readonly record struct ModP(ulong Value, ulong Modulus)
 
         if (0UL == modulus) { return new(Value: unchecked((left.Value * right.Value)), Modulus: 0UL); }
 
-        return new(Value: ((ulong)(((UInt128)left.Value * right.Value) % modulus)), Modulus: modulus);
+        return new(Value: ((ulong)((((UInt128)left.Value) * right.Value) % modulus)), Modulus: modulus);
     }
     public static ModP operator -(ModP value) {
         if ((0UL == value.Modulus) || (0UL == value.Value)) { return new(Value: unchecked((0UL - value.Value)), Modulus: value.Modulus); }

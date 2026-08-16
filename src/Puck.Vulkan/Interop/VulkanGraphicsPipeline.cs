@@ -8,6 +8,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanGraphicsPipeline : IGpuPipeline {
     private bool m_disposed;
+
     private readonly IVulkanGraphicsPipelineApi m_graphicsPipelineApi;
 
     /// <summary>Gets the native <c>VkDescriptorSetLayout</c> handle, or zero once disposed.</summary>

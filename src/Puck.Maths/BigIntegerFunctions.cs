@@ -47,70 +47,6 @@ public static class BigIntegerFunctions {
 
         return shift;
     }
-
-    /// <summary>Returns a nontrivial divisor of an odd composite by a deterministic cycle walk over <c>y² + addend</c>.</summary>
-    /// <param name="value">The odd composite to split; it must not be a prime power of a value the walk cannot separate.</param>
-    /// <returns>A divisor strictly between one and <paramref name="value"/>.</returns>
-    /// <remarks>
-    /// <para>
-    /// Floyd's two-rate walk, restarted at the next offset whenever a walk collapses onto the modulus itself, so the
-    /// split is deterministic and depends on nothing but the operand. This is the arbitrary-width counterpart to
-    /// <see cref="PrimeKernels.FindFactor(ulong)"/>, which is Brent's walk over a Montgomery ring: that refinement buys
-    /// its speed from batching the greatest-common-divisor across a register-sized stride, which is exactly what a
-    /// <see cref="BigInteger"/> operand cannot amortize, so the two are genuinely different algorithms rather than one
-    /// written twice.
-    /// </para>
-    /// <para>
-    /// The search is BOUNDED, and the bound is a termination guarantee rather than a performance target. The offset
-    /// sequence has no natural end, so an operand that is secretly prime — one whose primality gate answered wrongly —
-    /// admits no nontrivial divisor for any offset and would otherwise spin here forever. The budget is sixty-four times
-    /// the fourth root of the operand, which is the walk's own expected cost with two orders of magnitude of headroom:
-    /// it scales with the operand instead of capping it, so no value this method is contracted to accept can reach it.
-    /// Being bounded is not the same as being quick — a large operand's bound is itself large — but the loop now ends.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException"><paramref name="value"/> did not split within the budget, so it was not the odd composite this method requires.</exception>
-    private static BigInteger FindDivisor(BigInteger value) =>
-        (TrySplit(value: value, budget: ((64 * SquareRoot(value: SquareRoot(value: value))) + 4096), divisor: out var divisor)
-            ? divisor
-            : throw new InvalidOperationException(message: $"The cycle-walk splitter exhausted its step budget on {value}, which is therefore not the odd composite it requires. A prime reaching here means a primality gate upstream answered wrongly."));
-
-    /// <summary>Attempts a split within an explicit step budget, reporting exhaustion instead of throwing.</summary>
-    /// <param name="value">The odd value to split.</param>
-    /// <param name="budget">The walk steps this attempt may spend.</param>
-    /// <param name="divisor">A divisor strictly between one and <paramref name="value"/>, when one was found.</param>
-    /// <returns><see langword="true"/> when a divisor was found; otherwise <see langword="false"/>.</returns>
-    /// <remarks>Separate from <see cref="FindDivisor(BigInteger)"/> because the two callers want opposite things from
-    /// exhaustion. A composite that must split treats it as a broken precondition — something upstream lied. A refutation
-    /// attempt above the primality proof boundary treats it as an answer: this value resisted, so it is reported as
-    /// probably prime rather than factored.</remarks>
-    private static bool TrySplit(BigInteger value, BigInteger budget, out BigInteger divisor) {
-        for (var addend = BigInteger.One; ; ++addend) {
-            var slow = new BigInteger(value: 2);
-            var fast = new BigInteger(value: 2);
-            var candidate = BigInteger.One;
-
-            do {
-                if (budget.Sign <= 0) {
-                    divisor = BigInteger.Zero;
-
-                    return false;
-                }
-
-                --budget;
-                slow = (((slow * slow) + addend) % value);
-                fast = (((fast * fast) + addend) % value);
-                fast = (((fast * fast) + addend) % value);
-                candidate = BigInteger.GreatestCommonDivisor(left: BigInteger.Abs(value: (slow - fast)), right: value);
-            } while (candidate.IsOne);
-
-            if (candidate != value) {
-                divisor = candidate;
-
-                return true;
-            }
-        }
-    }
     /// <summary>Splits a value into rational primes, appending each to a flat accumulator.</summary>
     /// <param name="value">The value to split.</param>
     /// <param name="flat">The accumulator the primes are appended to, in no particular order.</param>
@@ -167,7 +103,11 @@ public static class BigIntegerFunctions {
                     continue;
                 }
 
-                if (!TrySplit(value: current, budget: RefutationBudget, divisor: out divisor)) {
+                if (!TrySplit(
+                    budget: RefutationBudget,
+                    divisor: out divisor,
+                    value: current
+                )) {
                     // Exhausting the refutation is not a primality proof. This method's return contract says every
                     // item is prime, so an uncertifiable residual is refused rather than appended: reporting it would
                     // silently weaken the contract from proved primes to probable ones for every caller.
@@ -179,6 +119,76 @@ public static class BigIntegerFunctions {
 
             pending.Push(item: divisor);
             pending.Push(item: (current / divisor));
+        }
+    }
+    /// <summary>Returns a nontrivial divisor of an odd composite by a deterministic cycle walk over <c>y² + addend</c>.</summary>
+    /// <param name="value">The odd composite to split; it must not be a prime power of a value the walk cannot separate.</param>
+    /// <returns>A divisor strictly between one and <paramref name="value"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// Floyd's two-rate walk, restarted at the next offset whenever a walk collapses onto the modulus itself, so the
+    /// split is deterministic and depends on nothing but the operand. This is the arbitrary-width counterpart to
+    /// <see cref="PrimeKernels.FindFactor(ulong)"/>, which is Brent's walk over a Montgomery ring: that refinement buys
+    /// its speed from batching the greatest-common-divisor across a register-sized stride, which is exactly what a
+    /// <see cref="BigInteger"/> operand cannot amortize, so the two are genuinely different algorithms rather than one
+    /// written twice.
+    /// </para>
+    /// <para>
+    /// The search is BOUNDED, and the bound is a termination guarantee rather than a performance target. The offset
+    /// sequence has no natural end, so an operand that is secretly prime — one whose primality gate answered wrongly —
+    /// admits no nontrivial divisor for any offset and would otherwise spin here forever. The budget is sixty-four times
+    /// the fourth root of the operand, which is the walk's own expected cost with two orders of magnitude of headroom:
+    /// it scales with the operand instead of capping it, so no value this method is contracted to accept can reach it.
+    /// Being bounded is not the same as being quick — a large operand's bound is itself large — but the loop now ends.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException"><paramref name="value"/> did not split within the budget, so it was not the odd composite this method requires.</exception>
+    private static BigInteger FindDivisor(BigInteger value) =>
+        (TrySplit(
+            value: value,
+            budget: ((64 * SquareRoot(value: SquareRoot(value: value))) + 4096),
+            divisor: out var divisor
+        )
+            ? divisor
+            : throw new InvalidOperationException(message: $"The cycle-walk splitter exhausted its step budget on {value}, which is therefore not the odd composite it requires. A prime reaching here means a primality gate upstream answered wrongly.")
+        );
+    /// <summary>Attempts a split within an explicit step budget, reporting exhaustion instead of throwing.</summary>
+    /// <param name="value">The odd value to split.</param>
+    /// <param name="budget">The walk steps this attempt may spend.</param>
+    /// <param name="divisor">A divisor strictly between one and <paramref name="value"/>, when one was found.</param>
+    /// <returns><see langword="true"/> when a divisor was found; otherwise <see langword="false"/>.</returns>
+    /// <remarks>Separate from <see cref="FindDivisor(BigInteger)"/> because the two callers want opposite things from
+    /// exhaustion. A composite that must split treats it as a broken precondition — something upstream lied. A refutation
+    /// attempt above the primality proof boundary treats it as an answer: this value resisted, so it is reported as
+    /// probably prime rather than factored.</remarks>
+    private static bool TrySplit(BigInteger value, BigInteger budget, out BigInteger divisor) {
+        for (var addend = BigInteger.One; ; ++addend) {
+            var slow = new BigInteger(value: 2);
+            var fast = new BigInteger(value: 2);
+            var candidate = BigInteger.One;
+
+            do {
+                if (budget.Sign <= 0) {
+                    divisor = BigInteger.Zero;
+
+                    return false;
+                }
+
+                --budget;
+                slow = (((slow * slow) + addend) % value);
+                fast = (((fast * fast) + addend) % value);
+                fast = (((fast * fast) + addend) % value);
+                candidate = BigInteger.GreatestCommonDivisor(
+                    left: BigInteger.Abs(value: (slow - fast)),
+                    right: value
+                );
+            } while (candidate.IsOne);
+
+            if (candidate != value) {
+                divisor = candidate;
+
+                return true;
+            }
         }
     }
 
@@ -208,7 +218,10 @@ public static class BigIntegerFunctions {
 
         var flat = new List<BigInteger>();
 
-        Factor(value: value, flat: flat);
+        Factor(
+            flat: flat,
+            value: value
+        );
         flat.Sort();
 
         return flat;
@@ -245,9 +258,16 @@ public static class BigIntegerFunctions {
         var minusOne = (value - BigInteger.One);
 
         foreach (var witnessBase in PrimeKernels.WitnessBases) {
-            var residue = BigInteger.ModPow(value: new BigInteger(value: witnessBase), exponent: oddPart, modulus: value);
+            var residue = BigInteger.ModPow(
+                value: new BigInteger(value: witnessBase),
+                exponent: oddPart,
+                modulus: value
+            );
 
-            if (residue.IsOne || (residue == minusOne)) { continue; }
+            if (
+                residue.IsOne ||
+                (residue == minusOne)
+            ) { continue; }
 
             var composite = true;
 
@@ -295,7 +315,10 @@ public static class BigIntegerFunctions {
     /// <exception cref="ArgumentException"><paramref name="value"/> shares a factor with <paramref name="modulus"/>, so it has no inverse there.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="modulus"/> is not positive.</exception>
     public static BigInteger ModularInverse(BigInteger value, BigInteger modulus) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: modulus, other: BigInteger.One);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: modulus,
+            other: BigInteger.One
+        );
 
         var previousRemainder = modulus;
         var remainder = value.FloorModulo(modulus: modulus);
@@ -380,7 +403,10 @@ public static class BigIntegerFunctions {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="oddPrime"/> is below three or is even.</exception>
     public static bool TrySquareRootModuloOddPrime(BigInteger value, BigInteger oddPrime, out BigInteger root) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: oddPrime, other: new BigInteger(value: 3));
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: oddPrime,
+            other: new BigInteger(value: 3)
+        );
 
         if (oddPrime.IsEven) {
             throw new ArgumentOutOfRangeException(
@@ -399,13 +425,21 @@ public static class BigIntegerFunctions {
 
         var halfOrder = ((oddPrime - BigInteger.One) >> 1);
 
-        if (!BigInteger.ModPow(value: residue, exponent: halfOrder, modulus: oddPrime).IsOne) {
+        if (!BigInteger.ModPow(
+            exponent: halfOrder,
+            modulus: oddPrime,
+            value: residue
+        ).IsOne) {
             root = BigInteger.Zero;
 
             return false;
         }
         if (3 == (oddPrime & 3)) {
-            root = BigInteger.ModPow(value: residue, exponent: ((oddPrime + BigInteger.One) >> 2), modulus: oddPrime);
+            root = BigInteger.ModPow(
+                value: residue,
+                exponent: ((oddPrime + BigInteger.One) >> 2),
+                modulus: oddPrime
+            );
 
             return true;
         }
@@ -417,11 +451,27 @@ public static class BigIntegerFunctions {
         // Any nonresidue seeds the descent; the ascending search terminates because half the residues qualify.
         var seed = new BigInteger(value: 2);
 
-        while (BigInteger.ModPow(value: seed, exponent: halfOrder, modulus: oddPrime).IsOne) { ++seed; }
+        while (BigInteger.ModPow(
+            exponent: halfOrder,
+            modulus: oddPrime,
+            value: seed
+        ).IsOne) { ++seed; }
 
-        var scale = BigInteger.ModPow(value: seed, exponent: oddPart, modulus: oddPrime);
-        var candidate = BigInteger.ModPow(value: residue, exponent: ((oddPart + BigInteger.One) >> 1), modulus: oddPrime);
-        var square = BigInteger.ModPow(value: residue, exponent: oddPart, modulus: oddPrime);
+        var scale = BigInteger.ModPow(
+            exponent: oddPart,
+            modulus: oddPrime,
+            value: seed
+        );
+        var candidate = BigInteger.ModPow(
+            value: residue,
+            exponent: ((oddPart + BigInteger.One) >> 1),
+            modulus: oddPrime
+        );
+        var square = BigInteger.ModPow(
+            exponent: oddPart,
+            modulus: oddPrime,
+            value: residue
+        );
         var order = twoExponent;
 
         // Each round halves the two-part of the residual's order, so the loop runs at most that many times.

@@ -2,7 +2,7 @@
 
 Every non-intent submission crosses the client/server boundary as ONE
 `SubmissionEnvelope` into ONE FIFO — never split by kind. Files:
-`src/Puck.World.Data/Protocol/SubmissionEnvelope.cs`,
+`src/Puck.World.Protocol/Protocol/SubmissionEnvelope.cs`,
 `WorldSubmissionPayload.cs`, `WorldSubmissionResult.cs`,
 `LoopbackTransport.cs`, `IServerLink.cs`, `IClientSink.cs`,
 `IWorldServerHost.cs`; the drain lives in
@@ -137,17 +137,11 @@ wire); the downstream reply is a NEW small grammar
 (`Server/WorldTcpWireFormat.cs`) carrying exactly the Completion lane
 (`WorldSubmissionResult`), not one of `WorldSubmissionCodec`'s twelve leaves,
 and not the streamed snapshot/definition/composition/lever lanes `WorldOutputHub`
-scaffolds. `--connect <host:port>` (`Puck.World.WorldRemoteClient`) is a
-minimal, self-contained stdin client speaking this same Hello + leaf-codec
-grammar directly, not a second composition graph. Its stdin grammar is exactly
-`player.where <n>` — the one token that keeps its console spelling, because it
-IS that query asked over the socket — plus the harness's own `peer.*` tokens:
-the two mutation verbs `peer.hud.panel.remove <id>` and
-`peer.hud.element.remove <panel> <element>`, client-local `peer.sleep <ms>`, and
-`peer.quit`. The `peer.` prefix is what keeps this surface from reading as a
-console verb; the console reaches the same HUD section through
-`world.row.set hud.panels`/`world.row.remove hud.panels`, which have no
-element-level door of their own.
+scaffolds. `--connect <host:port>` does not speak this door as a client: it
+enqueues a federation transfer (`WorldInstanceHost.EnqueueTransfer` with
+`TransferDestination.Remote`) authenticated over `Puck.Networking.IAuthenticator`
+(`WorldAttestedAuthenticator`, a signed claim over the challenge — never a
+shared secret), a separate dialect from the Hello + leaf-codec grammar above.
 `world.peers`
 (`WorldNetworkCommandModule`) echoes the connection table.
 
@@ -216,8 +210,7 @@ row.
 
 ## Verifying
 
-`docs/verification/ordered-domain/` is QUARANTINED (2026-08-06, owner
-ruling — its fixture/transcript drifts at the repo's change rate faster than
-repair is worth); no runner remains, only its README. Verify the ordering contract by
-RUNNING THE APP: one stdin batch interleaving a grant and the command that
-needs it, plus the reversed order as the discriminating control.
+No committed battery covers the ordered-domain envelope. Verify the ordering
+contract by RUNNING THE APP: one stdin batch interleaving a grant and the
+command that needs it, plus the reversed order as the discriminating
+control.

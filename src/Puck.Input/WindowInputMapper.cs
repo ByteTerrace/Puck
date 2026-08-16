@@ -20,25 +20,57 @@ public static class WindowInputMapper {
     public static InputSignal ToInputSignal(in WindowInputEvent inputEvent) {
         switch (inputEvent.Kind) {
             case WindowInputKind.Key:
-                if (!KeyboardSourceMap.TryGetSource(key: inputEvent.Key, character: inputEvent.Character, source: out var source)) {
+                if (!KeyboardSourceMap.TryGetSource(
+                    character: inputEvent.Character,
+                    key: inputEvent.Key,
+                    source: out var source
+                )) {
                     throw new ArgumentOutOfRangeException(paramName: nameof(inputEvent));
                 }
 
                 return ((inputEvent.Phase == CommandPhase.Completed)
-                    ? InputSignal.Release(source: source, deviceId: inputEvent.DeviceId)
-                    : InputSignal.Press(source: source, deviceId: inputEvent.DeviceId));
+                    ? InputSignal.Release(
+                        source: source,
+                        deviceId: inputEvent.DeviceId
+                    )
+                    : InputSignal.Press(
+                        source: source,
+                        deviceId: inputEvent.DeviceId
+                    )
+                );
             case WindowInputKind.Text:
-                return InputSignal.Typed(source: InputSources.Keyboard.Text, text: (inputEvent.Text ?? string.Empty), deviceId: inputEvent.DeviceId);
+                return InputSignal.Typed(
+                    source: InputSources.Keyboard.Text,
+                    text: (inputEvent.Text ?? string.Empty),
+                    deviceId: inputEvent.DeviceId
+                );
             case WindowInputKind.PointerMove:
-                return InputSignal.Axis(source: InputSources.Mouse.Motion, value: inputEvent.Vector, deviceId: inputEvent.DeviceId, transient: true);
+                return InputSignal.Axis(
+                    source: InputSources.Mouse.Motion,
+                    value: inputEvent.Vector,
+                    deviceId: inputEvent.DeviceId,
+                    transient: true
+                );
             case WindowInputKind.PointerButton:
-                var buttonSource = InputSources.Mouse.Button(number: checked(inputEvent.ButtonIndex + 1));
+                var buttonSource = InputSources.Mouse.Button(number: checked((inputEvent.ButtonIndex + 1)));
 
                 return ((inputEvent.Phase is CommandPhase.Completed or CommandPhase.Canceled)
-                    ? InputSignal.Release(source: buttonSource, deviceId: inputEvent.DeviceId)
-                    : InputSignal.Press(source: buttonSource, deviceId: inputEvent.DeviceId));
+                    ? InputSignal.Release(
+                        source: buttonSource,
+                        deviceId: inputEvent.DeviceId
+                    )
+                    : InputSignal.Press(
+                        source: buttonSource,
+                        deviceId: inputEvent.DeviceId
+                    )
+                );
             case WindowInputKind.PointerWheel:
-                return InputSignal.Axis(source: InputSources.Mouse.Wheel, value: inputEvent.Vector, deviceId: inputEvent.DeviceId, transient: true);
+                return InputSignal.Axis(
+                    source: InputSources.Mouse.Wheel,
+                    value: inputEvent.Vector,
+                    deviceId: inputEvent.DeviceId,
+                    transient: true
+                );
             default:
                 throw new ArgumentOutOfRangeException(paramName: nameof(inputEvent));
         }

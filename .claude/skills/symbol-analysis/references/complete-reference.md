@@ -107,7 +107,7 @@ verified here:
 
 - **Constructor cascade.**
   `references CaptureFrame --containing Puck.Abstractions.Capture` reports
-  `src/Puck.Hosting/CapturingRenderNode.cs:74` under
+  `src/Puck.Hosting/FrameCaptureController.cs:169` under
   `CaptureFrame.CaptureFrame(Surface, long, ulong)` — the constructor — because
   the site is `new CaptureFrame(…)`. **`--strict` on a type therefore hides
   every construction site** (verified: strict drops exactly that location).

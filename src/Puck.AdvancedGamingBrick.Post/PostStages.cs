@@ -23,16 +23,16 @@ internal static class PostStages {
             new SolarDeviceStage(),
             // Tier B — reference conformance suites (r12 verdict register; skip when the corpus is absent).
             new ConformanceRomStage(
-        group: "cpu",
-        cases: [("arm/arm.gba", "arm"), ("thumb/thumb.gba", "thumb"), ("memory/memory.gba", "memory")]
+        cases: [("arm/arm.gba", "arm"), ("thumb/thumb.gba", "thumb"), ("memory/memory.gba", "memory")],
+        group: "cpu"
     ),
             new ConformanceRomStage(
-        group: "save",
-        cases: [("save/none.gba", "none"), ("save/sram.gba", "sram"), ("save/flash64.gba", "flash64"), ("save/flash128.gba", "flash128")]
+        cases: [("save/none.gba", "none"), ("save/sram.gba", "sram"), ("save/flash64.gba", "flash64"), ("save/flash128.gba", "flash128")],
+        group: "save"
     ),
             new ConformanceRomStage(
-        group: "misc",
-        cases: [("nes/nes.gba", "nes")]
+        cases: [("nes/nes.gba", "nes")],
+        group: "misc"
     ),
             // Tier B — ARM/Thumb fuzz-corpus coverage (EWRAM failure marker; skip when absent).
             new ArmFuzzStage(),
@@ -43,44 +43,44 @@ internal static class PostStages {
             // visually correct.
             new RenderHashStage(floors: [
                 new RenderFloor(
-        Source: RenderFloorSource.Corpus,
-        RelativePath: "ppu/shades.gba",
-        Name: "ppu/shades",
-        Steps: 6_000_000,
         ExpectedHash: 0x19E7C5AF1FB0BF25ul,
-        NeedsBios: false
+        Name: "ppu/shades",
+        NeedsBios: false,
+        RelativePath: "ppu/shades.gba",
+        Source: RenderFloorSource.Corpus,
+        Steps: 6_000_000
     ),
                 new RenderFloor(
-        Source: RenderFloorSource.Corpus,
-        RelativePath: "ppu/hello.gba",
-        Name: "ppu/hello",
-        Steps: 6_000_000,
         ExpectedHash: 0x62B76C0E0223A81Cul,
-        NeedsBios: false
-    ),
-                new RenderFloor(
+        Name: "ppu/hello",
+        NeedsBios: false,
+        RelativePath: "ppu/hello.gba",
         Source: RenderFloorSource.Corpus,
-        RelativePath: "ppu/stripes.gba",
-        Name: "ppu/stripes",
-        Steps: 6_000_000,
+        Steps: 6_000_000
+    ),
+                new RenderFloor(
         ExpectedHash: 0x2F1E64B48356B525ul,
-        NeedsBios: false
+        Name: "ppu/stripes",
+        NeedsBios: false,
+        RelativePath: "ppu/stripes.gba",
+        Source: RenderFloorSource.Corpus,
+        Steps: 6_000_000
     ),
                 new RenderFloor(
-        Source: RenderFloorSource.Games,
-        RelativePath: "A.gba",
-        Name: "A (commercial RPG)",
-        Steps: 120_000_000,
         ExpectedHash: 0x634D863B8CE386E8ul,
-        NeedsBios: true
+        Name: "A (commercial RPG)",
+        NeedsBios: true,
+        RelativePath: "A.gba",
+        Source: RenderFloorSource.Games,
+        Steps: 120_000_000
     ),
                 new RenderFloor(
-        Source: RenderFloorSource.Games,
-        RelativePath: "AGS Aging Cartridge (World) (v7.1).gba",
-        Name: "AGS menu",
-        Steps: 6_000_000,
         ExpectedHash: 0x64044FC6D20B9C93ul,
-        NeedsBios: true
+        Name: "AGS menu",
+        NeedsBios: true,
+        RelativePath: "AGS Aging Cartridge (World) (v7.1).gba",
+        Source: RenderFloorSource.Games,
+        Steps: 6_000_000
     ),
             ]),
             // Tier B — reference suites with known partial conformance (measurement, not a gate; skip when the ROM is absent).

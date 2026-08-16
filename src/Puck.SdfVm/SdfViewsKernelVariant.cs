@@ -1,3 +1,5 @@
+using Puck.SignedDistance;
+
 namespace Puck.SdfVm;
 
 /// <summary>
@@ -21,19 +23,10 @@ public enum SdfViewsKernelVariant {
     /// instruction stream provably touches no stripped op or shape.</summary>
     CoreOps = 1,
 }
-
 /// <summary>Selects the Stage 1 views kernel variant for a program — the host half of the <c>SDF_CORE_OPS</c>
 /// contract. KEEP the exotic sets IN SYNC with the <c>#ifndef SDF_CORE_OPS</c> strips in sdf-vm.hlsli: an op or shape
 /// stripped there must answer <see cref="SdfViewsKernelVariant.Full"/> here, or the core variant silently no-ops it.</summary>
 public static class SdfViewsKernelVariants {
-    /// <summary>Selects the views kernel variant for <paramref name="program"/> — <see cref="SdfViewsKernelVariant.CoreOps"/>
-    /// exactly when <see cref="FirstExoticTouch"/> finds nothing. Deterministic and data-driven: the same program
-    /// always selects the same variant on every backend.</summary>
-    /// <param name="program">The program about to be uploaded.</param>
-    /// <returns>The variant the engine should dispatch Stage 1 with.</returns>
-    public static SdfViewsKernelVariant Select(SdfProgram program) =>
-        ((FirstExoticTouch(program: program) is null) ? SdfViewsKernelVariant.CoreOps : SdfViewsKernelVariant.Full);
-
     /// <summary>The first exotic op/shape the program's instruction stream touches (a human-readable name for the
     /// selection log), or <see langword="null"/> when the whole stream is core — the histogram walk behind
     /// <see cref="Select"/>.</summary>
@@ -66,7 +59,7 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.SampledRegion:
                             break;
                         default:
-                            return $"shape {(SdfShapeType)instruction.Shape}";
+                            return $"shape {((SdfShapeType)instruction.Shape)}";
                     }
 
                     break;
@@ -77,4 +70,14 @@ public static class SdfViewsKernelVariants {
 
         return null;
     }
+    /// <summary>Selects the views kernel variant for <paramref name="program"/> — <see cref="SdfViewsKernelVariant.CoreOps"/>
+    /// exactly when <see cref="FirstExoticTouch"/> finds nothing. Deterministic and data-driven: the same program
+    /// always selects the same variant on every backend.</summary>
+    /// <param name="program">The program about to be uploaded.</param>
+    /// <returns>The variant the engine should dispatch Stage 1 with.</returns>
+    public static SdfViewsKernelVariant Select(SdfProgram program) =>
+        ((FirstExoticTouch(program: program) is null)
+            ? SdfViewsKernelVariant.CoreOps
+            : SdfViewsKernelVariant.Full
+        );
 }

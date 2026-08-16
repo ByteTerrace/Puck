@@ -22,7 +22,6 @@ internal enum LegKind {
     /// shape, a closure licence, a measured floor. Honest self-standing pinning.</summary>
     Structural,
 }
-
 /// <summary>WHICH sharing a <see cref="LegKind.SharedSubstrate"/> leg admits to.</summary>
 internal enum ShareFlavor {
     /// <summary>Not a shared-substrate leg.</summary>
@@ -48,7 +47,6 @@ internal enum ShareFlavor {
     /// than a shared kernel. Neither side wraps the other and neither is the presented object read twice.</summary>
     SharedUpstream,
 }
-
 /// <summary>
 /// One leg of one gate statement: what stands against what, what the two share, and where the evidence the leg leans on
 /// lives. The factories are the only constructors used, so illegal combinations — a flavorless shared-substrate leg, a
@@ -77,7 +75,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// <param name="against">The independently authored reference.</param>
     /// <returns>The leg.</returns>
     public static Leg Classical(string subject, string against) =>
-        new(Kind: LegKind.Classical, Flavor: ShareFlavor.None, Subject: subject, Against: against, Shared: "", Citation: "", Absolute: "");
+        new(Absolute: "", Against: against, Citation: "", Flavor: ShareFlavor.None, Kind: LegKind.Classical, Shared: "", Subject: subject);
     /// <summary>Agreement with a PUBLISHED or independently hand-derived constant table. Classical by provenance: the
     /// table was authored outside this tree's arithmetic. A constant captured from the subject's own output is a
     /// regression pin — <see cref="Structural"/> — and never this.</summary>
@@ -92,14 +90,14 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     public static Leg PublishedConstant(string subject, string table, string provenance) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: provenance);
 
-        return new(Kind: LegKind.Classical, Flavor: ShareFlavor.None, Subject: subject, Against: table, Shared: "", Citation: provenance, Absolute: "");
+        return new(Absolute: "", Against: table, Citation: provenance, Flavor: ShareFlavor.None, Kind: LegKind.Classical, Shared: "", Subject: subject);
     }
     /// <summary>Agreement with the presented charged algebra object.</summary>
     /// <param name="subject">The computation under test.</param>
     /// <param name="against">The presented-object side.</param>
     /// <returns>The leg.</returns>
     public static Leg PresentedTwin(string subject, string against) =>
-        new(Kind: LegKind.PresentedTwin, Flavor: ShareFlavor.None, Subject: subject, Against: against, Shared: "", Citation: "", Absolute: "");
+        new(Absolute: "", Against: against, Citation: "", Flavor: ShareFlavor.None, Kind: LegKind.PresentedTwin, Shared: "", Subject: subject);
     /// <summary>Agreement with a second shipped implementation in this tree that shares no code and no rounding
     /// substrate with the subject.</summary>
     /// <param name="subject">The computation under test.</param>
@@ -108,7 +106,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// pinned; required, because the leg's trust is exactly that envelope's.</param>
     /// <returns>The leg.</returns>
     public static Leg InTreeIndependent(string subject, string against, string envelope) =>
-        new(Kind: LegKind.InTreeIndependent, Flavor: ShareFlavor.None, Subject: subject, Against: against, Shared: "", Citation: envelope, Absolute: "");
+        new(Absolute: "", Against: against, Citation: envelope, Flavor: ShareFlavor.None, Kind: LegKind.InTreeIndependent, Shared: "", Subject: subject);
     /// <summary>Agreement where both sides round through a house fused rounding kernel.</summary>
     /// <param name="subject">The computation under test.</param>
     /// <param name="against">The other side.</param>
@@ -116,7 +114,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// siblinghood.</param>
     /// <returns>The leg.</returns>
     public static Leg FusedSubstrate(string subject, string against, string shared) =>
-        new(Kind: LegKind.SharedSubstrate, Flavor: ShareFlavor.FusedSubstrate, Subject: subject, Against: against, Shared: shared, Citation: "", Absolute: "");
+        new(Absolute: "", Against: against, Citation: "", Flavor: ShareFlavor.FusedSubstrate, Kind: LegKind.SharedSubstrate, Shared: shared, Subject: subject);
     /// <summary>Agreement where both sides call the same EXACT, non-rounding kernel.</summary>
     /// <param name="subject">The computation under test.</param>
     /// <param name="against">The other side.</param>
@@ -125,7 +123,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// pins it.</param>
     /// <returns>The leg.</returns>
     public static Leg SharedExactKernel(string subject, string against, string shared, string envelope) =>
-        new(Kind: LegKind.SharedSubstrate, Flavor: ShareFlavor.SharedExactKernel, Subject: subject, Against: against, Shared: shared, Citation: envelope, Absolute: "");
+        new(Absolute: "", Against: against, Citation: envelope, Flavor: ShareFlavor.SharedExactKernel, Kind: LegKind.SharedSubstrate, Shared: shared, Subject: subject);
     /// <summary>A CARRIAGE-ONLY agreement: one side delegates to or wraps the other's code, so agreement proves the
     /// wiring and never the kernel.</summary>
     /// <param name="subject">The computation under test.</param>
@@ -135,7 +133,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// required, because carriage proves nothing without it.</param>
     /// <returns>The leg.</returns>
     public static Leg DelegationTwin(string subject, string against, string shared, string envelope) =>
-        new(Kind: LegKind.SharedSubstrate, Flavor: ShareFlavor.DelegationTwin, Subject: subject, Against: against, Shared: shared, Citation: envelope, Absolute: "");
+        new(Absolute: "", Against: against, Citation: envelope, Flavor: ShareFlavor.DelegationTwin, Kind: LegKind.SharedSubstrate, Shared: shared, Subject: subject);
     /// <summary>A FAITHFUL-CARRIAGE agreement: the reference transcribes a rule the subject's own code carries, or is
     /// built from the subject's own output, so agreement proves the carriage and never the rule.</summary>
     /// <param name="subject">The computation under test.</param>
@@ -146,26 +144,26 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// the owed item.</param>
     /// <returns>The leg.</returns>
     public static Leg FaithfulCarriage(string subject, string against, string transcribes, string witness) =>
-        new(Kind: LegKind.SharedSubstrate, Flavor: ShareFlavor.Transcription, Subject: subject, Against: against, Shared: transcribes, Citation: witness, Absolute: "");
+        new(Absolute: "", Against: against, Citation: witness, Flavor: ShareFlavor.Transcription, Kind: LegKind.SharedSubstrate, Shared: transcribes, Subject: subject);
     /// <summary>Agreement where both sides live inside the presented world.</summary>
     /// <param name="subject">The computation under test.</param>
     /// <param name="against">The other side.</param>
     /// <param name="shared">The presented kernel, presentation or material both sides reach.</param>
     /// <returns>The leg.</returns>
     public static Leg IntraPresented(string subject, string against, string shared) =>
-        new(Kind: LegKind.SharedSubstrate, Flavor: ShareFlavor.IntraPresented, Subject: subject, Against: against, Shared: shared, Citation: "", Absolute: "");
+        new(Absolute: "", Against: against, Citation: "", Flavor: ShareFlavor.IntraPresented, Kind: LegKind.SharedSubstrate, Shared: shared, Subject: subject);
     /// <summary>Agreement where both sides are built from a common upstream computation neither owns.</summary>
     /// <param name="subject">The computation under test.</param>
     /// <param name="against">The other side.</param>
     /// <param name="shared">The upstream computation both sides consume.</param>
     /// <returns>The leg.</returns>
     public static Leg SharedUpstream(string subject, string against, string shared) =>
-        new(Kind: LegKind.SharedSubstrate, Flavor: ShareFlavor.SharedUpstream, Subject: subject, Against: against, Shared: shared, Citation: "", Absolute: "");
+        new(Absolute: "", Against: against, Citation: "", Flavor: ShareFlavor.SharedUpstream, Kind: LegKind.SharedSubstrate, Shared: shared, Subject: subject);
     /// <summary>A self-standing statement: no second computation is involved.</summary>
     /// <param name="statement">What is pinned.</param>
     /// <returns>The leg.</returns>
     public static Leg Structural(string statement) =>
-        new(Kind: LegKind.Structural, Flavor: ShareFlavor.None, Subject: statement, Against: "", Shared: "", Citation: "", Absolute: "");
+        new(Absolute: "", Against: "", Citation: "", Flavor: ShareFlavor.None, Kind: LegKind.Structural, Shared: "", Subject: statement);
     /// <summary>A self-standing statement pinning behaviour AS OBSERVED where the subject's own XML doc says something
     /// else. Structural — nothing is compared with a second computation — but spelled apart from
     /// <see cref="Structural"/> so the divergence lands in the ledger's doc-gap register by construction. Rule 4 forbids
@@ -181,7 +179,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     public static Leg PinnedAsObserved(string statement, string documented) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: documented);
 
-        return new(Kind: LegKind.Structural, Flavor: ShareFlavor.None, Subject: statement, Against: "", Shared: "", Citation: (DocGapMarker + " " + documented), Absolute: "");
+        return new(Absolute: "", Against: "", Citation: ((DocGapMarker + " ") + documented), Flavor: ShareFlavor.None, Kind: LegKind.Structural, Shared: "", Subject: statement);
     }
     /// <summary>A RELATIVE statement — two disciplines required to DIFFER — with the absolute sibling named beside it. A
     /// divergence canary cannot fail on a second rounding, so the absolute leg is part of the declaration. Classified
@@ -192,7 +190,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
     /// or <c>owed:&lt;text&gt;</c>.</param>
     /// <returns>The leg.</returns>
     public static Leg RelativeCanary(string subject, string against, string absolute) =>
-        new(Kind: LegKind.Structural, Flavor: ShareFlavor.None, Subject: subject, Against: against, Shared: "", Citation: "", Absolute: absolute);
+        new(Absolute: absolute, Against: against, Citation: "", Flavor: ShareFlavor.None, Kind: LegKind.Structural, Shared: "", Subject: subject);
 
     /// <summary>Gets whether this leg is an agreement between two computations rather than a self-standing statement.</summary>
     public bool IsAgreement =>
@@ -205,7 +203,7 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
         (Flavor == ShareFlavor.Transcription);
     /// <summary>Gets whether this leg pins behaviour as observed against the subject's own XML doc.</summary>
     public bool IsDocGap =>
-        Citation.StartsWith(value: DocGapMarker, comparisonType: StringComparison.Ordinal);
+        Citation.StartsWith(comparisonType: StringComparison.Ordinal, value: DocGapMarker);
     /// <summary>Gets what the XML doc claims, for a doc-gap leg; empty for every other leg.</summary>
     public string Documented =>
         (IsDocGap ? Citation[DocGapMarker.Length..].Trim() : "");
@@ -234,7 +232,6 @@ internal readonly record struct Leg(LegKind Kind, ShareFlavor Flavor, string Sub
             _ => "",
         };
 }
-
 /// <summary>The SHAPE a law combinator makes, reported by the combinator itself at entry so the gate can check the
 /// declaration against what actually ran rather than against the case's name.</summary>
 internal enum LawShape {
@@ -254,7 +251,6 @@ internal enum LawShape {
     /// <summary>A claim body, which makes whatever statements it makes.</summary>
     Claim,
 }
-
 /// <summary>
 /// Records which <see cref="LawShape"/>s a running law case actually exercised. Each combinator in <see cref="Laws"/>
 /// reports at entry; <see cref="LawTests"/> observes one case's run and hands the set to the leg gate, which asserts
@@ -269,7 +265,6 @@ internal static class LawShapes {
     /// <param name="shape">The combinator's shape.</param>
     public static void Report(LawShape shape) =>
         t_observed |= (1 << ((int)shape));
-
     /// <summary>Runs one law case and returns the set of shapes it reported.</summary>
     /// <param name="run">The case body.</param>
     /// <returns>The reported shapes as a bit set over <see cref="LawShape"/>.</returns>
@@ -280,7 +275,6 @@ internal static class LawShapes {
 
         return t_observed;
     }
-
     /// <summary>Tests whether an observed set contains a shape.</summary>
     /// <param name="observed">The set returned by <see cref="Observe"/>.</param>
     /// <param name="shape">The shape to test for.</param>

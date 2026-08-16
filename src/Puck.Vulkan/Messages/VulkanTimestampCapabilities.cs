@@ -12,5 +12,5 @@ public readonly record struct VulkanTimestampCapabilities(float PeriodNanosecond
     /// <summary>Gets a mask selecting the meaningful low-order bits of a raw timestamp value, derived from <see cref="GraphicsQueueValidBits"/>.</summary>
     public ulong ValidBitsMask => ((GraphicsQueueValidBits >= 64u)
         ? ulong.MaxValue
-        : ((1UL << (int)GraphicsQueueValidBits) - 1UL));
+        : ((1UL << ((int)GraphicsQueueValidBits)) - 1UL));
 }

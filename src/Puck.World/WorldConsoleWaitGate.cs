@@ -20,16 +20,6 @@ internal sealed class WorldConsoleWaitGate : ITextCommandHoldGate {
     /// <summary>Gets the last completed simulation tick published to this gate.</summary>
     public ulong Tick { get; private set; }
 
-    /// <summary>Publishes a completed simulation tick, releasing the wire once the armed release tick is reached.</summary>
-    /// <param name="tick">The number of fixed ticks the simulation has completed.</param>
-    public void PublishTick(ulong tick) {
-        Tick = tick;
-
-        if (m_armed && (tick >= m_releaseTick)) {
-            m_armed = false;
-        }
-    }
-
     /// <summary>Holds the wire until the simulation has completed <paramref name="ticks"/> further ticks.</summary>
     /// <param name="ticks">The number of ticks to wait, counted from the last completed tick.</param>
     /// <returns>The tick the wire releases on.</returns>
@@ -39,13 +29,23 @@ internal sealed class WorldConsoleWaitGate : ITextCommandHoldGate {
 
         return m_releaseTick;
     }
-
     /// <summary>Whether the queued console stream is currently held — the <c>HoldGate</c> delegate.</summary>
     /// <returns><see langword="true"/> while the armed release tick is still in the future.</returns>
     public bool IsHolding() {
         return m_armed;
     }
+    /// <summary>Publishes a completed simulation tick, releasing the wire once the armed release tick is reached.</summary>
+    /// <param name="tick">The number of fixed ticks the simulation has completed.</param>
+    public void PublishTick(ulong tick) {
+        Tick = tick;
 
+        if (
+            m_armed &&
+            (tick >= m_releaseTick)
+        ) {
+            m_armed = false;
+        }
+    }
     /// <summary>Force-releases an armed hold whose release tick can no longer be reached — the boot world stopped
     /// advancing (paused, or an authored <c>rateHz</c> of 0) while a wait was armed, so <see cref="PublishTick"/>
     /// will never fire again to satisfy it on its own. A hold that can never complete must never be left hanging:

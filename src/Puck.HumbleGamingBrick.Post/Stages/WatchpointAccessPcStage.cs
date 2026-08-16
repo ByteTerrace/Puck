@@ -32,7 +32,6 @@ internal sealed class WatchpointAccessPcStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "watchpoint-access-pc";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -43,8 +42,8 @@ internal sealed class WatchpointAccessPcStage : IPostStage {
             ("continuous", static instance => instance.Machine.Run(tCycles: 256)),
             ("frame", static instance => instance.Machine.Run(tCycles: PostMachine.TCyclesPerFrame)),
             ("step", static instance => RunSteps(
-            instance: instance,
-            count: 2
+            count: 2,
+            instance: instance
         )),
             ("until", static instance => RunUntil(
             instance: instance,
@@ -54,14 +53,14 @@ internal sealed class WatchpointAccessPcStage : IPostStage {
 
         foreach (var (mode, advance) in legs) {
             if (RunLeg(
-                mode: mode,
-                read: false,
-                write: true,
-                watchAddress: WriteWatchAddress,
+                advance: advance,
+                expectedIsWrite: true,
                 expectedPc: WriteInstructionPc,
                 expectedValue: WriteValue,
-                expectedIsWrite: true,
-                advance: advance
+                mode: mode,
+                read: false,
+                watchAddress: WriteWatchAddress,
+                write: true
             ) is { } writeFailure) {
                 return PostStageOutcome.Fail(detail: writeFailure);
             }
@@ -69,20 +68,20 @@ internal sealed class WatchpointAccessPcStage : IPostStage {
             // "step" only needs 2 steps to reach the WRITE; the READ is the 3rd instruction, so its own leg needs one more.
             var readAdvance = ((mode == "step")
                 ? (static instance => RunSteps(
-                instance: instance,
-                count: 3
+                count: 3,
+                instance: instance
             ))
                 : advance);
 
             if (RunLeg(
-                mode: mode,
-                read: true,
-                write: false,
-                watchAddress: ReadWatchAddress,
+                advance: readAdvance,
+                expectedIsWrite: false,
                 expectedPc: ReadInstructionPc,
                 expectedValue: ReadValue,
-                expectedIsWrite: false,
-                advance: readAdvance
+                mode: mode,
+                read: true,
+                watchAddress: ReadWatchAddress,
+                write: false
             ) is { } readFailure) {
                 return PostStageOutcome.Fail(detail: readFailure);
             }
@@ -120,9 +119,9 @@ internal sealed class WatchpointAccessPcStage : IPostStage {
 
         if (!bus.TryTakeWatchHit(
             address: out var hitAddress,
-            value: out var hitValue,
             isWrite: out var hitIsWrite,
-            pc: out var hitPc
+            pc: out var hitPc,
+            value: out var hitValue
         )) {
             return $"{mode}/{(write
                 ? "write"

@@ -20,17 +20,18 @@ namespace Puck.Maths;
 /// instances with <see cref="Create(ulong, ulong)"/> or <see cref="FromRawBits"/>.
 /// </remarks>
 public struct Pcg32XshRr {
+    private const string MultiplierError = "multiplier must be congruent to 1 (mod 4) for the state to have full period";
+    private const string StreamError = "stream id must not exceed 2^63 - 1";
+    private const ulong TwoLn2Q30 = 1488522236UL; // round(2·ln 2 · 2^30)
+
     /// <summary>The default state multiplier — the PCG reference implementation's 64-bit LCG constant.</summary>
     public const ulong DefaultMultiplier = 6364136223846793005UL;
     /// <summary>The largest valid stream id (<c>2⁶³ − 1</c>); each id selects a distinct odd increment (see remarks for the correlation caveat).</summary>
     public const ulong MaxStream = ((1UL << 63) - 1UL);
 
-    private const string MultiplierError = "multiplier must be congruent to 1 (mod 4) for the state to have full period";
-    private const string StreamError = "stream id must not exceed 2^63 - 1";
-    private const ulong TwoLn2Q30 = 1488522236UL; // round(2·ln 2 · 2^30)
-
     private readonly ulong m_increment;
     private readonly ulong m_multiplier;
+
     private ulong m_state;
 
     private Pcg32XshRr(ulong increment, ulong multiplier, ulong state) {
@@ -39,16 +40,58 @@ public struct Pcg32XshRr {
         m_state = state;
     }
 
+    // A nearly-divisionless bounded draw: take the high 32 bits of draw·bound, rejecting the small biased
+    // window (threshold = 2^32 mod bound) so every value in [0, bound) is exactly equally likely.
+    private uint Sample(uint exclusiveHigh) {
+        var product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
+        var lowBits = unchecked((uint)product);
+
+        if (lowBits < exclusiveHigh) {
+            var threshold = unchecked((((uint)(-((int)exclusiveHigh))) % exclusiveHigh));
+
+            while (lowBits < threshold) {
+                product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
+                lowBits = unchecked((uint)product);
+            }
+        }
+
+        return ((uint)(product >> 32));
+    }
+
+    /// <summary>Skips the generator forward by <paramref name="count"/> draws in logarithmic time.</summary>
+    /// <param name="count">The number of single-draw advances to apply; <c>2⁶⁴ − n</c> steps backward by <c>n</c>.</param>
+    /// <remarks>Only whole-state advances are counted: a bounded draw that internally rejected samples consumed more
+    /// than one advance, so seek arithmetic must count advances, not calls.</remarks>
+    public void Advance(ulong count) {
+        // The affine skip: compose (state -> state·m + c) with itself by binary exponentiation.
+        var accumulatedMultiplier = 1UL;
+        var accumulatedIncrement = 0UL;
+        var currentMultiplier = m_multiplier;
+        var currentIncrement = m_increment;
+
+        while (count > 0UL) {
+            if ((count & 1UL) != 0UL) {
+                accumulatedMultiplier = unchecked((accumulatedMultiplier * currentMultiplier));
+                accumulatedIncrement = unchecked(((accumulatedIncrement * currentMultiplier) + currentIncrement));
+            }
+
+            currentIncrement = unchecked(((currentMultiplier + 1UL) * currentIncrement));
+            currentMultiplier = unchecked((currentMultiplier * currentMultiplier));
+            count >>= 1;
+        }
+
+        m_state = unchecked(((accumulatedMultiplier * m_state) + accumulatedIncrement));
+    }
     /// <summary>Creates a generator from a seed and a stream id using the default multiplier.</summary>
     /// <param name="state">The seed; every 64-bit value is valid (there are no weak seeds).</param>
     /// <param name="stream">The stream id in <c>[0, <see cref="MaxStream"/>]</c>; distinct ids select distinct odd increments — prefer small consecutive ids (see remarks for the <c>2^62</c> correlation caveat).</param>
     /// <returns>A ready-to-draw generator.</returns>
     public static Pcg32XshRr Create(ulong state, ulong stream) =>
         Create(
-        multiplier: DefaultMultiplier,
-        state: state,
-        stream: stream
-    );
+            multiplier: DefaultMultiplier,
+            state: state,
+            stream: stream
+        );
     /// <summary>Creates a generator from a seed, a stream id, and an explicit state multiplier.</summary>
     /// <param name="multiplier">The LCG state multiplier; must be congruent to 1 (mod 4) so the state has full period. Prefer <see cref="DefaultMultiplier"/>.</param>
     /// <param name="state">The seed; every 64-bit value is valid (there are no weak seeds).</param>
@@ -112,69 +155,6 @@ public struct Pcg32XshRr {
             state: state
         );
     }
-
-    /// <summary>Gets the raw stream increment — persist alongside <see cref="State"/> and <see cref="Multiplier"/> to snapshot the generator.</summary>
-    public readonly ulong Increment => m_increment;
-    /// <summary>Gets the raw state multiplier — persist alongside <see cref="State"/> and <see cref="Increment"/> to snapshot the generator.</summary>
-    public readonly ulong Multiplier => m_multiplier;
-    /// <summary>Gets the raw state — persist alongside <see cref="Increment"/> and <see cref="Multiplier"/> to snapshot the generator.</summary>
-    public readonly ulong State => m_state;
-
-    /// <summary>Skips the generator forward by <paramref name="count"/> draws in logarithmic time.</summary>
-    /// <param name="count">The number of single-draw advances to apply; <c>2⁶⁴ − n</c> steps backward by <c>n</c>.</param>
-    /// <remarks>Only whole-state advances are counted: a bounded draw that internally rejected samples consumed more
-    /// than one advance, so seek arithmetic must count advances, not calls.</remarks>
-    public void Advance(ulong count) {
-        // The affine skip: compose (state -> state·m + c) with itself by binary exponentiation.
-        var accumulatedMultiplier = 1UL;
-        var accumulatedIncrement = 0UL;
-        var currentMultiplier = m_multiplier;
-        var currentIncrement = m_increment;
-
-        while (count > 0UL) {
-            if ((count & 1UL) != 0UL) {
-                accumulatedMultiplier = unchecked((accumulatedMultiplier * currentMultiplier));
-                accumulatedIncrement = unchecked(((accumulatedIncrement * currentMultiplier) + currentIncrement));
-            }
-
-            currentIncrement = unchecked(((currentMultiplier + 1UL) * currentIncrement));
-            currentMultiplier = unchecked((currentMultiplier * currentMultiplier));
-            count >>= 1;
-        }
-
-        m_state = unchecked(((accumulatedMultiplier * m_state) + accumulatedIncrement));
-    }
-    /// <summary>Draws the next 32 uniformly random bits.</summary>
-    /// <returns>A uniformly distributed 32-bit value.</returns>
-    public uint NextUInt32() {
-        // Advance the state; permute the pre-advance state (reference convention): xorshift-high, then rotate by
-        // the top five bits.
-        var oldState = m_state;
-
-        m_state = unchecked(((oldState * m_multiplier) + m_increment));
-
-        return uint.RotateRight(
-            rotateAmount: ((int)(oldState >> 59)),
-            value: unchecked((uint)(((oldState >> 18) ^ oldState) >> 27))
-        );
-    }
-    /// <summary>Draws a uniformly random value from an inclusive range.</summary>
-    /// <param name="minimum">One end of the inclusive range.</param>
-    /// <param name="maximum">The other end of the inclusive range; the bounds may be given in either order.</param>
-    /// <returns>A uniformly distributed value in <c>[min(minimum, maximum), max(minimum, maximum)]</c>, unbiased.</returns>
-    /// <remarks>Rejection sampling may consume more than one state advance per call (deterministically — the same
-    /// state always draws the same value).</remarks>
-    public uint NextUInt32(uint minimum, uint maximum) {
-        if (maximum < minimum) {
-            (minimum, maximum) = (maximum, minimum);
-        }
-
-        var range = (maximum - minimum);
-
-        return ((range != uint.MaxValue)
-            ? unchecked((Sample(exclusiveHigh: (range + 1U)) + minimum))
-            : NextUInt32());
-    }
     /// <summary>Draws one standard-normal value (mean zero, unit deviation).</summary>
     /// <returns>A normally distributed <see cref="FixedQ4816"/>; magnitudes cap at ≈6.66σ (probability ≈ 10⁻¹¹).</returns>
     /// <remarks>Consumes exactly two advances and discards the underlying pair's second value; use <see cref="NextGaussianPair"/> when both are wanted.</remarks>
@@ -219,6 +199,38 @@ public struct Pcg32XshRr {
 
         return (new FixedQ4816(Value: first), new FixedQ4816(Value: second));
     }
+    /// <summary>Draws the next 32 uniformly random bits.</summary>
+    /// <returns>A uniformly distributed 32-bit value.</returns>
+    public uint NextUInt32() {
+        // Advance the state; permute the pre-advance state (reference convention): xorshift-high, then rotate by
+        // the top five bits.
+        var oldState = m_state;
+
+        m_state = unchecked(((oldState * m_multiplier) + m_increment));
+
+        return uint.RotateRight(
+            rotateAmount: ((int)(oldState >> 59)),
+            value: unchecked((uint)(((oldState >> 18) ^ oldState) >> 27))
+        );
+    }
+    /// <summary>Draws a uniformly random value from an inclusive range.</summary>
+    /// <param name="minimum">One end of the inclusive range.</param>
+    /// <param name="maximum">The other end of the inclusive range; the bounds may be given in either order.</param>
+    /// <returns>A uniformly distributed value in <c>[min(minimum, maximum), max(minimum, maximum)]</c>, unbiased.</returns>
+    /// <remarks>Rejection sampling may consume more than one state advance per call (deterministically — the same
+    /// state always draws the same value).</remarks>
+    public uint NextUInt32(uint minimum, uint maximum) {
+        if (maximum < minimum) {
+            (minimum, maximum) = (maximum, minimum);
+        }
+
+        var range = (maximum - minimum);
+
+        return ((range != uint.MaxValue)
+            ? unchecked((Sample(exclusiveHigh: (range + 1U)) + minimum))
+            : NextUInt32()
+        );
+    }
     /// <summary>Draws a uniformly random fraction in <c>[0, 1)</c> at UQ0.16 resolution.</summary>
     /// <returns>A uniformly distributed <see cref="UnitFraction16"/> (the draw's top sixteen bits).</returns>
     public UnitFraction16 NextUnitFraction16() =>
@@ -237,29 +249,18 @@ public struct Pcg32XshRr {
     public void Shuffle<TElement>(Span<TElement> values) {
         for (var i = (values.Length - 1); (i > 0); --i) {
             var j = ((int)NextUInt32(
-                minimum: 0U,
-                maximum: ((uint)i)
+                maximum: ((uint)i),
+                minimum: 0U
             ));
 
             (values[i], values[j]) = (values[j], values[i]);
         }
     }
 
-    // A nearly-divisionless bounded draw: take the high 32 bits of draw·bound, rejecting the small biased
-    // window (threshold = 2^32 mod bound) so every value in [0, bound) is exactly equally likely.
-    private uint Sample(uint exclusiveHigh) {
-        var product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-        var lowBits = unchecked((uint)product);
-
-        if (lowBits < exclusiveHigh) {
-            var threshold = unchecked((((uint)(-((int)exclusiveHigh))) % exclusiveHigh));
-
-            while (lowBits < threshold) {
-                product = unchecked((((ulong)NextUInt32()) * exclusiveHigh));
-                lowBits = unchecked((uint)product);
-            }
-        }
-
-        return ((uint)(product >> 32));
-    }
+    /// <summary>Gets the raw stream increment — persist alongside <see cref="State"/> and <see cref="Multiplier"/> to snapshot the generator.</summary>
+    public readonly ulong Increment => m_increment;
+    /// <summary>Gets the raw state multiplier — persist alongside <see cref="State"/> and <see cref="Increment"/> to snapshot the generator.</summary>
+    public readonly ulong Multiplier => m_multiplier;
+    /// <summary>Gets the raw state — persist alongside <see cref="Increment"/> and <see cref="Multiplier"/> to snapshot the generator.</summary>
+    public readonly ulong State => m_state;
 }

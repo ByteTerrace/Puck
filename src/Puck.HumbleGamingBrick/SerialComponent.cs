@@ -37,6 +37,7 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     private readonly IInterruptController m_interrupts;
     private readonly IKey1 m_key1;
     private readonly ITimer m_timer;
+
     private int m_bitsRemaining;
     private byte m_control;
     private byte m_data;
@@ -72,13 +73,11 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
-
     /// <summary>An optional observer invoked with the byte an internal-clock transfer sends, at the instant the transfer
     /// starts. It is a host-side observation seam — conformance harnesses use it to read a ROM's serial output — and is
     /// not emulated state: it is never serialized, so setting it cannot perturb determinism, and it is <see
     /// langword="null"/> in a normal run. It observes alongside the link peer, never instead of it.</summary>
     public Action<byte>? ByteTransmitted { get; set; }
-
     /// <summary>An optional observer invoked with each byte the program WRITES to the serial data register (SB), at the
     /// write itself — the value the program intends to send, before any transfer is armed. Like <see
     /// cref="ByteTransmitted"/> it is a pure host-side observation seam, never serialized and <see langword="null"/> in a
@@ -89,7 +88,6 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     /// acceptance-suite result signature, whose output routine deliberately re-arms a transfer that has not finished
     /// at the normal clock.</summary>
     public Action<byte>? ByteQueued { get; set; }
-
     /// <summary>An optional observer invoked the instant a transfer's eighth bit shifts — the same instant this port
     /// raises its serial interrupt — carrying the final shifted-in byte (SB). It fires for BOTH roles: an internal-clock
     /// (master) transfer completing in <see cref="Tick"/> and an external-clock (slave) transfer completing under the
@@ -98,10 +96,14 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     /// counts completed exchanges (serial IRQs) on each side of a cable, master and slave alike, without the cartridge's
     /// cooperation.</summary>
     public Action<byte>? TransferCompleted { get; set; }
-
     /// <summary>Gets whether a link peer is attached (see <see cref="SerialLinkSession"/>).</summary>
     public bool IsLinked =>
         (m_peer is not null);
+
+    /// <summary>Gets whether a transfer is armed or in flight (SC bit 7 set) — the port has not yet shifted its eighth
+    /// bit, so severing the cable now would abandon a round no console can recover from.</summary>
+    internal bool IsTransferActive =>
+        ((m_control & TransferActive) == TransferActive);
 
     /// <inheritdoc/>
     public void Tick() {
@@ -129,9 +131,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
         var outgoing = ((m_data & 0x80) != 0);
         var incoming = (m_peer?.ShiftBit(incoming: outgoing) ?? true);
 
-        m_data = (byte)((m_data << 1) | (incoming
+        m_data = ((byte)((m_data << 1) | (incoming
             ? 0x01
-            : 0x00));
+            : 0x00)));
 
         if (--m_bitsRemaining == 0) {
             m_control &= unchecked((byte)~TransferActive);
@@ -159,9 +161,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
 
         // The fast-clock bit does not exist on DMG silicon: a write to it is simply dropped, so it can never surface
         // through DivBit() or a later read.
-        m_control = (byte)(value & (m_supportsColor
+        m_control = ((byte)(value & (m_supportsColor
             ? MeaningfulMask
-            : (byte)(MeaningfulMask & ~FastClock)));
+            : (byte)(MeaningfulMask & ~FastClock))));
 
         // A write that starts a transfer arms the eight-bit counter. On the internal clock this port then drives the
         // exchange, shifting on the free-running DIV bit's falling edges (the write does not re-phase the counter — the
@@ -264,9 +266,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
 
         var outgoing = ((m_data & 0x80) != 0);
 
-        m_data = (byte)((m_data << 1) | (incoming
+        m_data = ((byte)((m_data << 1) | (incoming
             ? 0x01
-            : 0x00));
+            : 0x00)));
 
         if (
             ((m_control & TransferActive) == TransferActive) &&

@@ -8,6 +8,7 @@ namespace Puck.Cli.Canary;
 /// <summary><c>puck canary</c> — bounded, two-leg behavioral proofs against the real Puck.World executable.</summary>
 internal static class CanaryCommand {
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 420);
+
     private const string ScratchPrefix = "puck-canary-";
 
     public static int Run(string[] args) {
@@ -15,7 +16,7 @@ internal static class CanaryCommand {
             return Usage();
         }
 
-        if (!TryParse(args: args, selection: out var selection, error: out var parseError)) {
+        if (!TryParse(args: args, error: out var parseError, selection: out var selection)) {
             Console.Error.WriteLine(value: $"ERROR: {parseError}");
 
             return 2;
@@ -23,7 +24,7 @@ internal static class CanaryCommand {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
-        if (!CanaryManifestLoader.TryLoadAll(repositoryRoot: repositoryRoot, manifests: out var manifests, error: out var manifestError)) {
+        if (!CanaryManifestLoader.TryLoadAll(error: out var manifestError, manifests: out var manifests, repositoryRoot: repositoryRoot)) {
             Console.Error.WriteLine(value: $"ERROR: {manifestError}");
 
             return 2;
@@ -35,7 +36,7 @@ internal static class CanaryCommand {
             return 0;
         }
 
-        if (!TrySelect(selection: selection, manifests: manifests, selected: out var selected, error: out var selectionError)) {
+        if (!TrySelect(error: out var selectionError, manifests: manifests, selected: out var selected, selection: selection)) {
             Console.Error.WriteLine(value: $"ERROR: {selectionError}");
 
             return 2;
@@ -61,6 +62,7 @@ internal static class CanaryCommand {
         Console.WriteLine(value: "canary: building Puck.World once (Release).");
 
         CliProcessResult build;
+
         try {
             build = CliProcess.RunCaptured(
                 fileName: "dotnet",
@@ -68,16 +70,16 @@ internal static class CanaryCommand {
                 input: string.Empty,
                 timeout: RemainingBudget(clock: suiteClock)
             );
-        } catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception) {
+        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
             Console.Error.WriteLine(value: $"ERROR: could not start the one Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 
             return 2;
         }
 
         if (build.TimedOut || (build.ExitCode != 0)) {
-            Console.Error.WriteLine(value: build.TimedOut
+            Console.Error.WriteLine(value: (build.TimedOut
                 ? $"ERROR: the one Puck.World build exceeded the {SuiteBudget.TotalSeconds:0}-second whole-suite budget."
-                : $"ERROR: the one Puck.World build exited {build.ExitCode}.");
+                : $"ERROR: the one Puck.World build exited {build.ExitCode}."));
             PrintCaptured(result: build);
 
             return 2;
@@ -92,6 +94,7 @@ internal static class CanaryCommand {
 
         var failed = false;
         var infrastructureFailed = false;
+
         foreach (var manifest in manifests) {
             var positive = RunLeg(manifest: manifest, leg: manifest.Positive, artifact: artifact, suiteClock: suiteClock);
             var discriminating = RunLeg(manifest: manifest, leg: manifest.Discriminating, artifact: artifact, suiteClock: suiteClock);
@@ -101,6 +104,7 @@ internal static class CanaryCommand {
 
             var positivePassed = positive.Passed;
             var discriminatingPassed = discriminating.Passed;
+
             infrastructureFailed |= ((positive.InfrastructureError is not null) || (discriminating.InfrastructureError is not null));
             var positiveOnDiscriminating = CanaryAssertions.Evaluate(leg: manifest.Positive, transcript: discriminating.Transcript);
             var turnedRed = !positiveOnDiscriminating.Passed;
@@ -137,11 +141,10 @@ internal static class CanaryCommand {
 
         return 0;
     }
-
     private static CanaryLegRun RunLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, Stopwatch suiteClock) {
         try {
-            return RunLegCore(manifest: manifest, leg: leg, artifact: artifact, suiteClock: suiteClock);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
+            return RunLegCore(artifact: artifact, leg: leg, manifest: manifest, suiteClock: suiteClock);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
             return CanaryLegRun.InfrastructureFailure(
                 leg: leg,
                 runDirectory: "not-created",
@@ -149,23 +152,29 @@ internal static class CanaryCommand {
             );
         }
     }
-
     private static CanaryLegRun RunLegCore(CanaryManifest manifest, CanaryLeg leg, string artifact, Stopwatch suiteClock) {
         var runDirectory = CreateRunDirectory(id: manifest.Id, leg: leg.Name);
         var stateDirectory = Path.Combine(path1: runDirectory, path2: "state");
         var stdoutPath = Path.Combine(path1: runDirectory, path2: "stdout.log");
         var stderrPath = Path.Combine(path1: runDirectory, path2: "stderr.log");
-        var input = File.ReadAllText(path: leg.ScriptPath).Replace(oldValue: "{run}", newValue: runDirectory.Replace(oldChar: '\\', newChar: '/'), comparisonType: StringComparison.Ordinal);
+        var input = File.ReadAllText(path: leg.ScriptPath).Replace(oldValue: "{run}", newValue: runDirectory.Replace(newChar: '/', oldChar: '\\'), comparisonType: StringComparison.Ordinal);
         var executionWorld = leg.WorldPath;
         var authorityExecutionWorld = leg.AuthorityWorldPath;
-        string? federationKeyPath = null;
+        string? clientFederationKeyPath = null;
+        string? authorityFederationKeyPath = null;
 
         if (leg.AuthorityWorldPath is not null) {
-            (executionWorld, authorityExecutionWorld) = PrepareFederatedWorlds(leg: leg, runDirectory: runDirectory);
-            federationKeyPath = Path.Combine(path1: runDirectory, path2: "federation.key");
-            var federationKey = new byte[32];
-            System.Security.Cryptography.RandomNumberGenerator.Fill(data: federationKey);
-            File.WriteAllBytes(path: federationKeyPath, bytes: federationKey);
+            // Each side gets its OWN ECDSA identity, pinned into the OTHER side's admission rows —
+            // WorldAttestedAuthenticator verifies a signed claim against the reading world's own trust list, never a
+            // shared bearer secret one process could sign the other's namespace with.
+            var clientIdentity = GenerateFederationIdentity();
+            var authorityIdentity = GenerateFederationIdentity();
+
+            (executionWorld, authorityExecutionWorld) = PrepareFederatedWorlds(authorityIdentity: authorityIdentity, clientIdentity: clientIdentity, leg: leg, runDirectory: runDirectory);
+            clientFederationKeyPath = Path.Combine(path1: runDirectory, path2: "client-federation.key");
+            authorityFederationKeyPath = Path.Combine(path1: runDirectory, path2: "authority-federation.key");
+            File.WriteAllBytes(path: clientFederationKeyPath, bytes: clientIdentity.Pkcs8);
+            File.WriteAllBytes(path: authorityFederationKeyPath, bytes: authorityIdentity.Pkcs8);
         }
 
         if (!input.EndsWith(value: '\n')) {
@@ -178,18 +187,19 @@ internal static class CanaryCommand {
 
         var remaining = RemainingBudget(clock: suiteClock);
         var timeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
+
         if (timeout <= TimeSpan.Zero) {
             return CanaryLegRun.BudgetExpired(leg: leg, runDirectory: runDirectory);
         }
 
         CliProcessResult process;
         AuthorityCompanion? authority = null;
+
         try {
             if (authorityExecutionWorld is { } authorityWorld) {
-                authority = AuthorityCompanion.Start(artifact: artifact, world: authorityWorld, stateDirectory: Path.Combine(path1: runDirectory, path2: "authority-state"), seconds: (manifest.Seconds + 2), federationKeyPath: federationKeyPath!);
-                if (!authority.WaitUntilListening(timeout: TimeSpan.FromSeconds(5))) {
-                    authority.Dispose();
-                    return CanaryLegRun.InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: "companion authority did not report a bound listener within 5 seconds");
+                authority = AuthorityCompanion.Start(artifact: artifact, world: authorityWorld, stateDirectory: Path.Combine(path1: runDirectory, path2: "authority-state"), seconds: (manifest.Seconds + 2), federationKeyPath: authorityFederationKeyPath!);
+                if (!authority.WaitUntilListening(timeout: TimeSpan.FromSeconds(seconds: 5))) {
+                    return CanaryLegRun.InfrastructureFailure(leg: leg, reason: "companion authority did not report a bound listener within 5 seconds", runDirectory: runDirectory);
                 }
             }
 
@@ -199,7 +209,7 @@ internal static class CanaryCommand {
                     artifact,
                     "--world", executionWorld,
                     .. (leg.Connect ? new[] { "--connect", "127.0.0.1:38473" } : []),
-                    .. (federationKeyPath is null ? [] : new[] { "--federation-key-file", federationKeyPath }),
+                    .. ((clientFederationKeyPath is null) ? [] : new[] { "--federation-key-file", clientFederationKeyPath }),
                     "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                     "--state-dir", stateDirectory,
                     "--headless", ((manifest.BootShape == CanaryBootShape.Headless) ? "true" : "false"),
@@ -207,9 +217,11 @@ internal static class CanaryCommand {
                 input: input,
                 timeout: timeout
             );
-        } catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception) {
+        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
             return CanaryLegRun.InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: exception.Message.ReplaceLineEndings(replacementText: " "));
         } finally {
+            // Disposed exactly once here — an earlier early-return above must never also dispose, or the second
+            // Dispose() throws on the already-released Process handle.
             if (authority is not null) {
                 File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: "authority-stdout.log"), contents: authority.Stdout, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: "authority-stderr.log"), contents: authority.Stderr, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -222,7 +234,7 @@ internal static class CanaryCommand {
 
         var transcript = new CanaryTranscript(RunDirectory: runDirectory, Stderr: SplitLines(text: process.Stderr), Stdout: SplitLines(text: process.Stdout));
         var assertions = CanaryAssertions.Evaluate(leg: leg, transcript: transcript);
-        var invariants = EvaluateRunnerInvariants(manifest: manifest, leg: leg, process: process, transcript: transcript, executionWorld: executionWorld);
+        var invariants = EvaluateRunnerInvariants(executionWorld: executionWorld, leg: leg, manifest: manifest, process: process, transcript: transcript);
 
         return new CanaryLegRun(
             Assertions: assertions,
@@ -236,41 +248,113 @@ internal static class CanaryCommand {
         );
     }
 
-    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory) {
-        const string endpoint = "127.0.0.1:38473";
+    /// <summary>One authority's throwaway federation-identity keypair — a fresh ECDSA P-256 key, its self-certifying
+    /// domain fingerprint, and its SPKI bytes ready to pin into a peer's admission row.</summary>
+    private readonly record struct FederationIdentity(string Domain, string PublicKeyBase64, byte[] Pkcs8);
+
+    /// <summary>The subject the canary's connecting-out process signs its claims as. It authors no host.authority
+    /// of its own (it never listens for federation in this fixture), so Puck.World's own boot-instance fallback
+    /// names it — see Program.cs's own remarks on why that fallback exists.</summary>
+    private const string CanaryClientAuthoritySubject = Puck.World.WorldDefinitionLoader.BootInstanceName;
+
+    private static FederationIdentity GenerateFederationIdentity() {
+        using var ecdsa = System.Security.Cryptography.ECDsa.Create(curve: System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var spki = ecdsa.ExportSubjectPublicKeyInfo();
+        var fingerprint = System.Security.Cryptography.SHA256.HashData(source: spki);
+
+        return new FederationIdentity(
+            Domain: Convert.ToHexStringLower(bytes: fingerprint),
+            PublicKeyBase64: Convert.ToBase64String(inArray: spki),
+            Pkcs8: ecdsa.ExportPkcs8PrivateKey()
+        );
+    }
+    private static JsonObject AdmissionRow(FederationIdentity peer, string peerSubject) => new() {
+        ["domain"] = peer.Domain,
+        ["subject"] = peerSubject,
+        ["mode"] = "SignsDirectly",
+        ["algorithm"] = "ecdsa-p256-sha256",
+        ["publicKey"] = peer.PublicKeyBase64,
+        ["grants"] = new JsonArray(),
+    };
+    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
+        const string Endpoint = "127.0.0.1:38473";
         var sourceDirectory = Path.GetDirectoryName(path: leg.WorldPath)!;
         var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
+
         Directory.CreateDirectory(path: federatedDirectory);
 
-        foreach (var source in Directory.GetFiles(path: sourceDirectory, searchPattern: "*.world.json", searchOption: SearchOption.TopDirectoryOnly)) {
+        foreach (var source in Directory.GetFiles(path: sourceDirectory, searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*.world.json")) {
             File.Copy(sourceFileName: source, destFileName: Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: source)), overwrite: true);
         }
 
         var authoritySource = leg.AuthorityWorldPath!;
         var authorityTarget = Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: authoritySource));
+
         if (!File.Exists(path: authorityTarget)) {
-            File.Copy(sourceFileName: authoritySource, destFileName: authorityTarget, overwrite: true);
+            File.Copy(destFileName: authorityTarget, overwrite: true, sourceFileName: authoritySource);
         }
 
         var root = (JsonNode.Parse(json: File.ReadAllText(path: authorityTarget))?.AsObject()
-            ?? throw new InvalidOperationException("authority world is not a JSON object"));
-        var host = (root["host"]?.AsObject() ?? throw new InvalidOperationException("authority world has no host object"));
-        host["listen"] = endpoint;
-        host["authority"] = endpoint;
-        if (root["population"] is JsonObject population) {
-            population["capacity"] = Math.Max(8, population["capacity"]?.GetValue<int>() ?? 8);
-            population["networkPlayers"] = Math.Max(4, population["networkPlayers"]?.GetValue<int>() ?? 4);
-        }
-        File.WriteAllText(path: authorityTarget, contents: root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            ?? throw new InvalidOperationException(message: "authority world is not a JSON object"));
 
-        return (leg.Connect ? leg.WorldPath : Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: leg.WorldPath)), authorityTarget);
+        // The authority world may be a delta over a `basis` template (the quilt documents are), so an edited member
+        // is created when absent — an added member deep-merges over the template at load — and the population floor
+        // reads the composed document, never the delta alone, so a template-authored capacity above the floor is
+        // kept rather than clamped back down. The same composed read carries forward whatever admission rows the
+        // basis already authors (a wildcard FederatedAuthority arrival row, typically) — this door's own key-bearing
+        // row is ADDED to that set, never a replacement of it.
+        var composedCapacity = 8;
+        var composedNetworkPlayers = 4;
+        var composedAdmission = new JsonArray();
+
+        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: authorityTarget, reason: out _, tree: out var composed)) {
+            if (composed!["population"] is JsonObject composedPopulation) {
+                composedCapacity = Math.Max(val1: composedCapacity, val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity));
+                composedNetworkPlayers = Math.Max(val1: composedNetworkPlayers, val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers));
+            }
+            if (composed["admission"] is JsonArray composedRows) {
+                foreach (var row in composedRows) {
+                    composedAdmission.Add(item: row?.DeepClone());
+                }
+            }
+        }
+
+        if (root["host"] is not JsonObject host) {
+            host = new JsonObject();
+            root["host"] = host;
+        }
+
+        host["listen"] = Endpoint;
+        host["authority"] = Endpoint;
+
+        if (root["population"] is not JsonObject population) {
+            population = new JsonObject();
+            root["population"] = population;
+        }
+
+        population["capacity"] = composedCapacity;
+        population["networkPlayers"] = composedNetworkPlayers;
+        // The federation door verifies a claim against THIS document's own admission rows — pin the client's key
+        // (proving as CanaryClientAuthoritySubject, since it authors no host.authority of its own) alongside
+        // whatever the basis already authors, so WorldAttestedAuthenticator has a key-bearing row to build a trust
+        // list from AND the pre-existing FederatedAuthority row still decides what an admitted arrival is minted.
+        composedAdmission.Add(value: AdmissionRow(peer: clientIdentity, peerSubject: CanaryClientAuthoritySubject));
+        root["admission"] = composedAdmission;
+        File.WriteAllText(path: authorityTarget, contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        // The client side never needs editing: it authors no host.authority (so it signs as the boot-instance
+        // fallback, see CanaryClientAuthoritySubject's own remarks) and it never listens for federation in this
+        // fixture, so it never verifies an inbound claim and needs no admission rows of its own. A --connect leg
+        // therefore still boots from the pristine, unmodified checked-in asset.
+        return ((leg.Connect ? leg.WorldPath : Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: leg.WorldPath))), authorityTarget);
     }
 
     private sealed class AuthorityCompanion : IDisposable {
         private readonly Process m_process;
+
         private readonly StringBuilder m_stdout = new();
         private readonly StringBuilder m_stderr = new();
-        private readonly object m_gate = new();
+        private readonly Lock m_gate = new();
 
         private AuthorityCompanion(Process process) {
             m_process = process;
@@ -293,8 +377,8 @@ internal static class CanaryCommand {
             process.StandardInput.Close();
         }
 
-        public string Stdout { get { lock (m_gate) { return m_stdout.ToString(); } } }
         public string Stderr { get { lock (m_gate) { return m_stderr.ToString(); } } }
+        public string Stdout { get { lock (m_gate) { return m_stdout.ToString(); } } }
 
         public static AuthorityCompanion Start(string artifact, string world, string stateDirectory, int seconds, string federationKeyPath) {
             var startInfo = new ProcessStartInfo {
@@ -305,17 +389,18 @@ internal static class CanaryCommand {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
             };
+
             foreach (var argument in new[] { artifact, "--world", world, "--exit-after-seconds", seconds.ToString(provider: CultureInfo.InvariantCulture), "--state-dir", stateDirectory, "--headless", "true", "--federation-key-file", federationKeyPath }) {
                 startInfo.ArgumentList.Add(item: argument);
             }
-            return new AuthorityCompanion(process: Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException("failed to start companion authority"));
+            return new AuthorityCompanion(process: (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "failed to start companion authority")));
         }
-
         public bool WaitUntilListening(TimeSpan timeout) {
             var clock = Stopwatch.StartNew();
+
             while (clock.Elapsed < timeout) {
                 lock (m_gate) {
-                    if (m_stderr.ToString().Contains(value: "[world.listen: bound ", comparisonType: StringComparison.Ordinal)) {
+                    if (m_stderr.ToString().Contains(comparisonType: StringComparison.Ordinal, value: "[world.listen: bound ")) {
                         return true;
                     }
                 }
@@ -326,7 +411,6 @@ internal static class CanaryCommand {
             }
             return false;
         }
-
         public void Dispose() {
             if (!m_process.HasExited) {
                 try { m_process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
@@ -356,6 +440,7 @@ internal static class CanaryCommand {
 
         var expectedRefusals = leg.Commands.Count(predicate: static claim => (claim.Outcome == CanaryCommandOutcome.Refused));
         var byVerb = leg.Commands.GroupBy(keySelector: static claim => claim.Verb, comparer: StringComparer.Ordinal);
+
         foreach (var group in byVerb) {
             var responseEvents = process.OutputLines
                 .Where(predicate: line => line.Line.StartsWith(value: $"[{group.Key}:", comparisonType: StringComparison.Ordinal))
@@ -382,10 +467,10 @@ internal static class CanaryCommand {
         }
 
         var terminalResponses = process.OutputLines
-            .Where(predicate: static line => line.Line.StartsWith(value: "[wire.errors:", comparisonType: StringComparison.Ordinal))
+            .Where(predicate: static line => line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[wire.errors:"))
             .ToArray();
         var expectedTerminal = $"[wire.errors: {expectedRefusals} rejected]";
-        var terminalPassed = (terminalResponses.Length != 0) && (terminalResponses[^1].Stream == CliProcessOutputStream.Stdout) && string.Equals(a: terminalResponses[^1].Line, b: expectedTerminal, comparisonType: StringComparison.Ordinal);
+        var terminalPassed = ((terminalResponses.Length != 0) && (terminalResponses[^1].Stream == CliProcessOutputStream.Stdout) && string.Equals(a: terminalResponses[^1].Line, b: expectedTerminal, comparisonType: StringComparison.Ordinal));
 
         results.Add(item: new CanaryAssertionResult(
             Detail: $"runner-owned terminal observation is exact '{expectedTerminal}' after all authored commands",
@@ -394,7 +479,6 @@ internal static class CanaryCommand {
 
         return results;
     }
-
     private static void ReportLeg(string id, CanaryLegRun result) {
         Console.WriteLine(value: $"canary {id} {result.Leg.Name}: transcripts {result.RunDirectory}");
 
@@ -411,7 +495,6 @@ internal static class CanaryCommand {
             Console.WriteLine(value: $"  {(assertion.Passed ? "PASS" : "FAIL")}: {assertion.Detail}");
         }
     }
-
     private static void List(IReadOnlyList<CanaryManifest> manifests, string repositoryRoot) {
         foreach (var manifest in manifests) {
             var requirements = ((manifest.Requirements.Count == 0) ? "none" : string.Join(separator: ',', values: manifest.Requirements));
@@ -421,7 +504,6 @@ internal static class CanaryCommand {
             Console.WriteLine(value: $"  binding: {manifest.Binding}");
         }
     }
-
     private static bool TrySelect(CanarySelection selection, IReadOnlyList<CanaryManifest> manifests, out IReadOnlyList<CanaryManifest> selected, out string error) {
         error = string.Empty;
         selected = selection.Kind switch {
@@ -435,6 +517,7 @@ internal static class CanaryCommand {
         if (selection.Kind == CanarySelectionKind.Ids) {
             var known = manifests.Select(selector: static manifest => manifest.Id).ToHashSet(comparer: StringComparer.Ordinal);
             var unknown = selection.Ids.Where(predicate: id => !known.Contains(item: id)).ToArray();
+
             if (unknown.Length != 0) {
                 error = $"unknown canary id(s): {string.Join(separator: ", ", values: unknown)}; an unknown selection cannot report green.";
 
@@ -454,20 +537,17 @@ internal static class CanaryCommand {
 
         return true;
     }
-
     private static IReadOnlyList<CanaryManifest> FilterCapability(IReadOnlyList<CanaryManifest> manifests, string capability) => capability switch {
         "automatic" => manifests.Where(predicate: static manifest => manifest.IsAutomatic).ToArray(),
         "headless" => manifests.Where(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Headless)).ToArray(),
         "windowed" => manifests.Where(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Windowed)).ToArray(),
         _ => manifests.Where(predicate: manifest => manifest.Requirements.Contains(value: capability, comparer: StringComparer.Ordinal)).ToArray(),
     };
-
     private static IReadOnlyList<CanaryManifest> SelectIds(IReadOnlyList<CanaryManifest> manifests, IReadOnlyList<string> ids) {
         var byId = manifests.ToDictionary(keySelector: static manifest => manifest.Id, comparer: StringComparer.Ordinal);
 
         return ids.Where(predicate: byId.ContainsKey).Select(selector: id => byId[id]).ToArray();
     }
-
     private static bool TryParse(string[] args, out CanarySelection selection, out string error) {
         selection = new CanarySelection(Capability: null, Ids: [], Kind: CanarySelectionKind.Automatic);
         error = string.Empty;
@@ -488,7 +568,8 @@ internal static class CanaryCommand {
         }
         if ((args.Length == 2) && (args[0] == "--capability")) {
             var capability = args[1];
-            var valid = (capability is "automatic" or "headless" or "windowed" or "gpu" or "audio-output") || (capability.StartsWith(value: "input:", comparisonType: StringComparison.Ordinal) && (capability.Length > 6));
+            var valid = ((capability is "automatic" or "headless" or "windowed" or "gpu" or "audio-output") || (capability.StartsWith(comparisonType: StringComparison.Ordinal, value: "input:") && (capability.Length > 6)));
+
             if (!valid) {
                 error = $"unknown capability filter '{capability}'; use automatic, headless, windowed, gpu, audio-output, or input:<hardware-name>.";
 
@@ -499,13 +580,14 @@ internal static class CanaryCommand {
 
             return true;
         }
-        if (args.Any(predicate: static argument => argument.StartsWith(value: "-", comparisonType: StringComparison.Ordinal))) {
+        if (args.Any(predicate: static argument => argument.StartsWith(comparisonType: StringComparison.Ordinal, value: "-"))) {
             error = "ids, --all, --list, and --capability <class> are mutually exclusive selection forms.";
 
             return false;
         }
 
-        var duplicate = args.GroupBy(keySelector: static id => id, comparer: StringComparer.Ordinal).FirstOrDefault(predicate: static group => group.Count() > 1);
+        var duplicate = args.GroupBy(keySelector: static id => id, comparer: StringComparer.Ordinal).FirstOrDefault(predicate: static group => (group.Count() > 1));
+
         if (duplicate is not null) {
             error = $"duplicate canary id '{duplicate.Key}' in the selection; one proof must not be counted twice.";
 
@@ -516,11 +598,12 @@ internal static class CanaryCommand {
 
         return true;
     }
-
     private static string CreateRunDirectory(string id, string leg) {
         var temp = Path.GetTempPath();
+
         for (var attempt = 0; (attempt < 8); attempt++) {
             var path = Path.Combine(path1: temp, path2: $"{ScratchPrefix}{Guid.NewGuid():N}-{id}-{leg}");
+
             if (Directory.Exists(path: path)) {
                 continue;
             }
@@ -532,7 +615,6 @@ internal static class CanaryCommand {
 
         throw new IOException(message: "Could not create a fresh random canary run directory after 8 attempts.");
     }
-
     private static void SweepScratch() {
         var threshold = DateTime.UtcNow.AddHours(value: -6);
 
@@ -542,24 +624,21 @@ internal static class CanaryCommand {
                     if (Directory.GetCreationTimeUtc(path: directory) < threshold) {
                         Directory.Delete(path: directory, recursive: true);
                     }
-                } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                     // A best-effort age-bounded sweep never makes this run fail or touches a fresh sibling run.
                 }
             }
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             // Enumerating temp is best-effort for the same reason as deleting an old entry.
         }
     }
-
     private static TimeSpan RemainingBudget(Stopwatch clock) {
         var remaining = (SuiteBudget - clock.Elapsed);
 
         return ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromMilliseconds(value: 1));
     }
-
     private static IReadOnlyList<string> SplitLines(string text) =>
-        text.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries);
-
+        text.ReplaceLineEndings(replacementText: "\n").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
     private static void PrintCaptured(CliProcessResult result) {
         if (result.Stdout.Length != 0) {
             Console.Error.WriteLine(value: "--- build stdout ---");
@@ -570,9 +649,7 @@ internal static class CanaryCommand {
             Console.Error.Write(value: result.Stderr);
         }
     }
-
     private static string Verdict(bool value) => (value ? "PASS" : "FAIL");
-
     private static int Usage() {
         Console.Error.WriteLine(
             value:
@@ -602,9 +679,7 @@ internal static class CanaryCommand {
         Ids,
         List,
     }
-
     private sealed record CanarySelection(string? Capability, IReadOnlyList<string> Ids, CanarySelectionKind Kind);
-
     private sealed record CanaryLegRun(
         CanaryEvaluation Assertions,
         int ExitCode,
@@ -615,11 +690,10 @@ internal static class CanaryCommand {
         bool TimedOut,
         CanaryTranscript Transcript
     ) {
-        public bool Passed => (InfrastructureError is null) && !TimedOut && (ExitCode == 0) && Invariants.All(predicate: static result => result.Passed) && Assertions.Passed;
+        public bool Passed => ((InfrastructureError is null) && !TimedOut && (ExitCode == 0) && Invariants.All(predicate: static result => result.Passed) && Assertions.Passed);
 
         public static CanaryLegRun BudgetExpired(CanaryLeg leg, string runDirectory) =>
             InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: $"the {SuiteBudget.TotalSeconds:0}-second whole-suite budget was exhausted before this leg started");
-
         public static CanaryLegRun InfrastructureFailure(CanaryLeg leg, string runDirectory, string reason) => new(
             Assertions: new CanaryEvaluation(Results: []),
             ExitCode: -1,

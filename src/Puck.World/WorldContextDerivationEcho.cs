@@ -18,7 +18,6 @@ internal readonly record struct WorldContextFamilyEcho(
     /// read-back must keep visibly distinct from "didn't apply" (<see cref="Group"/> <see langword="null"/>).</summary>
     public bool Shadowed => ((Group is not null) && !Wins);
 }
-
 /// <summary>A seat's whole context derivation, surfaced by <see cref="WorldSeatBindings.DescribeContextDerivation"/> —
 /// the read-back rule's payload: every admitted family's state and match, the requested group, and the resolved
 /// active group with the derivation step that produced it.</summary>

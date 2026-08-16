@@ -24,11 +24,11 @@ namespace Puck.Cli.Format.Rewriters;
 // inline on its operand line.
 internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitIfStatement(IfStatementSyntax node) =>
-        LayoutCondition(original: node, visited: (IfStatementSyntax)base.VisitIfStatement(node: node)!);
+        LayoutCondition(original: node, visited: ((IfStatementSyntax)base.VisitIfStatement(node: node)!));
     public override SyntaxNode? VisitWhileStatement(WhileStatementSyntax node) =>
-        LayoutCondition(original: node, visited: (WhileStatementSyntax)base.VisitWhileStatement(node: node)!);
+        LayoutCondition(original: node, visited: ((WhileStatementSyntax)base.VisitWhileStatement(node: node)!));
     public override SyntaxNode? VisitReturnStatement(ReturnStatementSyntax node) {
-        var visited = (ReturnStatementSyntax)base.VisitReturnStatement(node: node)!;
+        var visited = ((ReturnStatementSyntax)base.VisitReturnStatement(node: node)!);
 
         if ((visited.Expression is not ParenthesizedExpressionSyntax paren)
             || (paren.Expression is not BinaryExpressionSyntax binary)
@@ -57,7 +57,7 @@ internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
 
         if ((condition is not BinaryExpressionSyntax binary)
             || !IsLogical(binary: binary)
-            || IsAnnotated(openParen: openParen, binary: binary, closeParen: closeParen)) {
+            || IsAnnotated(binary: binary, closeParen: closeParen, openParen: openParen)) {
             return visited;
         }
 
@@ -72,7 +72,6 @@ internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
             _ => visited,
         };
     }
-
     // True when a trivia slot the layout resets carries prose or a directive: the delimiting parentheses'
     // inner faces, or the outer trivia of any operand or operator in the chain. The rebuild reissues all
     // of them, so an annotated chain would lose the annotation outright — and the write guard only counts
@@ -91,7 +90,6 @@ internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
         return (operands.Any(predicate: static operand => RewriteShaping.IsAnnotated(node: operand))
             || operators.Any(predicate: static operatorToken => RewriteShaping.IsAnnotated(token: operatorToken)));
     }
-
     // Rebuilds a same-operator logical chain with each operand on its own indented line and the operator
     // hugging the end of the previous operand's line.
     private static ExpressionSyntax Layout(BinaryExpressionSyntax binary, string innerIndent) {
@@ -113,7 +111,6 @@ internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
 
         return result;
     }
-
     // Collects the operands and operators of a left-associative same-operator chain in source order (the
     // right operand is never the same operator unless re-parenthesized, in which case it is a
     // ParenthesizedExpression and stays a single operand).

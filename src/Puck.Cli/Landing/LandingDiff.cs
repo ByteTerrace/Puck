@@ -25,25 +25,25 @@ internal static class LandingDiff {
         foreach (var line in output.Split(separator: '\n')) {
             var text = line.TrimEnd(trimChar: '\r');
 
-            if (text.StartsWith(value: "+++ b/", comparisonType: StringComparison.Ordinal)) {
+            if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "+++ b/")) {
                 path = text[6..];
 
                 continue;
             }
 
             // A whole-file deletion writes "+++ /dev/null", so the path has to come from the '---' side instead.
-            if (text.StartsWith(value: "+++ /dev/null", comparisonType: StringComparison.Ordinal)) {
+            if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "+++ /dev/null")) {
                 continue;
             }
 
-            if (text.StartsWith(value: "--- a/", comparisonType: StringComparison.Ordinal)) {
+            if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "--- a/")) {
                 path = text[6..];
 
                 continue;
             }
 
             // '---' and '-' are both prefixed with '-', so the header check above must run first.
-            if ((path.Length == 0) || !text.StartsWith(value: "-", comparisonType: StringComparison.Ordinal) || text.StartsWith(value: "---", comparisonType: StringComparison.Ordinal)) {
+            if ((path.Length == 0) || !text.StartsWith(comparisonType: StringComparison.Ordinal, value: "-") || text.StartsWith(comparisonType: StringComparison.Ordinal, value: "---")) {
                 continue;
             }
 
@@ -57,7 +57,6 @@ internal static class LandingDiff {
 
         return deletions;
     }
-
     /// <summary>The multiset difference <paramref name="left"/> minus <paramref name="right"/>, per path — the
     /// deletions a landing performs that its own change set does not account for.</summary>
     /// <param name="left">The deletions the push would perform (relative to the landing tip).</param>
@@ -98,7 +97,6 @@ internal static class LandingDiff {
 
         return unaccounted;
     }
-
     /// <summary>The commits that touched <paramref name="path"/> between the author's base and the landing tip —
     /// exactly the landings the author never worked from, and therefore whose content an unaccounted deletion is
     /// dropping.</summary>

@@ -44,7 +44,6 @@ internal static partial class Diagnostics {
 
         return false;
     }
-
     /// <summary>Full-boots a ROM, runs until the PC first enters [triggerLo, triggerHi), then dumps the next
     /// <paramref name="count"/> instructions with PC + r0..r6 + the SIO/timer/IRQ registers the link probe reads —
     /// to see exactly why a cart's link-init loops, with no external oracle.</summary>
@@ -58,7 +57,7 @@ internal static partial class Diagnostics {
         machine.DirectBoot();
         machine.Cpu.Reset(); // full BIOS boot
 
-        var bus = (AgbBus)machine.Bus;
+        var bus = ((AgbBus)machine.Bus);
         var cpu = machine.Cpu;
 
         var i = 0L;
@@ -92,8 +91,7 @@ internal static partial class Diagnostics {
             var pc = cpu.GetRegister(index: 15);
             var cpsr = cpu.Cpsr;
 
-            Console.WriteLine(value: (((($"{k,5} pc={pc:X8} cpsr={cpsr:X8} r0={cpu.GetRegister(index: 0):X8} r1={cpu.GetRegister(index: 1):X8} "
-                + $"r2={cpu.GetRegister(index: 2):X8} r3={cpu.GetRegister(index: 3):X8} r4={cpu.GetRegister(index: 4):X8} ")
+            Console.WriteLine(value: (((((string)$"{k,5} pc={pc:X8} cpsr={cpsr:X8} r0={cpu.GetRegister(index: 0):X8} r1={cpu.GetRegister(index: 1):X8} r2={cpu.GetRegister(index: 2):X8} r3={cpu.GetRegister(index: 3):X8} r4={cpu.GetRegister(index: 4):X8} ")
                 + $"r6={cpu.GetRegister(index: 6):X8} | SIOCNT={bus.DebugReadIo(offset: 0x128):X4} SIOML0={bus.DebugReadIo(offset: 0x120):X4} ")
                 + $"IE={bus.DebugReadIo(offset: 0x200):X4} IF={bus.DebugReadIo(offset: 0x202):X4} IME={bus.DebugReadIo(offset: 0x208):X4} ")
                 + $"TM3={bus.DebugReadIo(offset: 0x10C):X4} KEY={bus.DebugReadIo(offset: 0x130):X4} DISPCNT={bus.DebugReadIo(offset: 0x000):X4}"));
@@ -127,7 +125,7 @@ internal static partial class Diagnostics {
                             if (dispcntWrites.Count < 200) {
                                 var pc = (machineProbeRef?.Cpu.GetRegister(index: 15) ?? 0u);
 
-                                dispcntWrites.Add(item: (stepCounter, pc, (ushort)value));
+                                dispcntWrites.Add(item: (stepCounter, pc, ((ushort)value)));
                             }
                         }
                     );
@@ -137,7 +135,7 @@ internal static partial class Diagnostics {
                         watchAddress: 0x04000128u,
                         onStore: value => {
                             if (sioWrites.Count < 64) {
-                                sioWrites.Add(item: (stepCounter, (ushort)value));
+                                sioWrites.Add(item: (stepCounter, ((ushort)value)));
                             }
                         }
                     );
@@ -176,12 +174,12 @@ internal static partial class Diagnostics {
         var bus = machine.Bus;
 
         uint Reg(uint a) => bus.Read16(
-            address: a,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: a
         );
         uint Reg32(uint a) => bus.Read32(
-            address: a,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: a
         );
 
         for (var r = 0; (r < 16); r += 4) {
@@ -240,44 +238,44 @@ internal static partial class Diagnostics {
         // Dump ROM around the key SIO-caller addresses to decode the "SIO failed" path.
         void DumpRom(string label, uint addr, int words = 32) {
             Console.WriteLine(value: $"  ROM @0x{addr:X8} [{label}]:");
-            for (uint i = 0; (i < (uint)words); ++i) {
+            for (uint i = 0; (i < ((uint)words)); ++i) {
                 Console.WriteLine(value: $"    [+{(i * 4),3}] 0x{(addr + (i * 4)):X8} = 0x{Reg32(a: (addr + (i * 4))):X8}");
             }
         }
 
         // ROM entry — first word is B 0x08000204; game init at 0x08000204 calls Thumb init at 0x080003A4.
         DumpRom(
-            label: "game init 0x08000204",
             addr: 0x08000204u,
+            label: "game init 0x08000204",
             words: 16
         );
         DumpRom(
-            label: "thumb init 0x080003A4",
             addr: 0x080003A4u,
+            label: "thumb init 0x080003A4",
             words: 64
         );
         // What DISPCNT is written to 0 in game init (around 0x08001078).
         DumpRom(
-            label: "DISPCNT-clear at 0x08001068",
             addr: 0x08001068u,
+            label: "DISPCNT-clear at 0x08001068",
             words: 16
         );
         // CMP R0,#0x8001 comparison block and the BNE target.
         DumpRom(
-            label: "sio-caller cmp+bne",
             addr: 0x082E42F0u,
+            label: "sio-caller cmp+bne",
             words: 32
         );
         // BNE target — "SIO failed / no link" path.
         DumpRom(
-            label: "sio-failed path 0x082E4350",
             addr: 0x082E4350u,
+            label: "sio-failed path 0x082E4350",
             words: 32
         );
         // Timeout-exit block inside outer SIO function (word-aligned to 0x082E6DE8).
         DumpRom(
-            label: "outer-sio timeout exit 0x082E6DE8",
             addr: 0x082E6DE8u,
+            label: "outer-sio timeout exit 0x082E6DE8",
             words: 32
         );
 

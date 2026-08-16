@@ -8,7 +8,6 @@ namespace Puck.HumbleGamingBrick;
 /// pass through as well. The face/system buttons map by position: South→A, East→B, Start→Start, Back→Select. The right
 /// stick and triggers have no console equivalent and are ignored.</summary>
 internal static class BrickPad {
-
     /// <summary>Maps a normalized pad image to the brick's joypad image.</summary>
     /// <param name="pad">The neutral controller image.</param>
     /// <returns>The console button image the brick holds.</returns>

@@ -20,27 +20,11 @@ public sealed record AzureBlobObjectStorageTarget : ObjectStorageTarget {
             uriString: value
         )
             ? new AzureBlobObjectStorageTarget(serviceUri: serviceUri)
-            : new AzureBlobObjectStorageTarget(connectionString: value));
+            : new AzureBlobObjectStorageTarget(connectionString: value)
+        );
     }
 
     public string? ConnectionString { get; }
-    public Uri? ServiceUri { get; }
-
-    /// <summary>
-    /// The platform edge namespace this target speaks through, or <see langword="null"/> for the raw account shape.
-    /// The platform fronts one storage account with an edge that rewrites <c>/{namespace}/{container}/{key}</c> to
-    /// container <c>{container}</c>, blob <c>{namespace}/{key}</c> — so through the edge the SDK addresses container
-    /// <c>{namespace}</c> and blob <c>{objectId}/{key}</c>, and containers are platform-managed (created at
-    /// onboarding, never by this client). <see langword="null"/> addresses container <c>{objectId}</c> and blob
-    /// <c>{key}</c> directly and creates containers on demand — the dev/emulator shape. A direct-to-account
-    /// connection for container LIST is wired — see <see cref="DirectEndpoint"/>, required by construction rather
-    /// than routing a list through this edge (the edge cannot serve one at all; see that property's remarks). A
-    /// direct-to-account connection for reads/writes more broadly is sanctioned but routes through the partitioner's
-    /// companion mapping table, which is not wired here yet; when it is, the projection it needs becomes a third
-    /// authored value of this property's type, not a new mechanism.
-    /// </summary>
-    public string? EdgeNamespace { get; init; }
-
     /// <summary>
     /// The direct-to-account connection <see cref="AzureBlobObjectBlobStoreBackend.ListAsync"/> uses when this
     /// target is edge-shaped (<see cref="EdgeNamespace"/> is non-null) — a service URI or a connection string,
@@ -62,6 +46,21 @@ public sealed record AzureBlobObjectStorageTarget : ObjectStorageTarget {
     /// object-relative keys.</para>
     /// </summary>
     public string? DirectEndpoint { get; init; }
+    /// <summary>
+    /// The platform edge namespace this target speaks through, or <see langword="null"/> for the raw account shape.
+    /// The platform fronts one storage account with an edge that rewrites <c>/{namespace}/{container}/{key}</c> to
+    /// container <c>{container}</c>, blob <c>{namespace}/{key}</c> — so through the edge the SDK addresses container
+    /// <c>{namespace}</c> and blob <c>{objectId}/{key}</c>, and containers are platform-managed (created at
+    /// onboarding, never by this client). <see langword="null"/> addresses container <c>{objectId}</c> and blob
+    /// <c>{key}</c> directly and creates containers on demand — the dev/emulator shape. A direct-to-account
+    /// connection for container LIST is wired — see <see cref="DirectEndpoint"/>, required by construction rather
+    /// than routing a list through this edge (the edge cannot serve one at all; see that property's remarks). A
+    /// direct-to-account connection for reads/writes more broadly is sanctioned but routes through the partitioner's
+    /// companion mapping table, which is not wired here yet; when it is, the projection it needs becomes a third
+    /// authored value of this property's type, not a new mechanism.
+    /// </summary>
+    public string? EdgeNamespace { get; init; }
+    public Uri? ServiceUri { get; }
 
     public AzureBlobObjectStorageTarget(Uri serviceUri) {
         ArgumentNullException.ThrowIfNull(serviceUri);

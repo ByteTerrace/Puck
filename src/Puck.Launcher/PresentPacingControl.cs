@@ -22,7 +22,11 @@ public sealed class PresentPacingControl {
         ArgumentOutOfRangeException.ThrowIfNegative(targetHertz);
 
         if (!double.IsFinite(d: targetHertz)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(initialTargetHertz), actualValue: initialTargetHertz, message: "The target present rate must be finite.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(initialTargetHertz),
+                actualValue: initialTargetHertz,
+                message: "The target present rate must be finite."
+            );
         }
 
         m_targetHertz = targetHertz;
@@ -40,14 +44,24 @@ public sealed class PresentPacingControl {
         ArgumentOutOfRangeException.ThrowIfNegative(targetHertz);
 
         if (!double.IsFinite(d: targetHertz)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(targetHertz), actualValue: targetHertz, message: "The target present rate must be finite.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(targetHertz),
+                actualValue: targetHertz,
+                message: "The target present rate must be finite."
+            );
         }
 
         if (Volatile.Read(location: ref m_targetHertz) == targetHertz) {
             return;
         }
 
-        Volatile.Write(location: ref m_targetHertz, value: targetHertz);
-        Volatile.Write(location: ref m_version, value: (Volatile.Read(location: ref m_version) + 1U));
+        Volatile.Write(
+            location: ref m_targetHertz,
+            value: targetHertz
+        );
+        Volatile.Write(
+            location: ref m_version,
+            value: (Volatile.Read(location: ref m_version) + 1U)
+        );
     }
 }

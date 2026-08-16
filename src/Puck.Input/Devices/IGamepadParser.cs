@@ -8,7 +8,6 @@ namespace Puck.Input.Devices;
 public interface IGamepadParser {
     /// <summary>The controller family this parser handles.</summary>
     GamepadType Type { get; }
-
     /// <summary>The optional input features this controller provides (gyro, analog triggers).</summary>
     GamepadInputCapabilities InputCapabilities { get; }
 
@@ -25,7 +24,6 @@ public interface IGamepadParser {
     /// <param name="cancellationToken">A token that cancels the initialization.</param>
     /// <returns>A task that completes when the device is ready to stream input reports.</returns>
     ValueTask InitializeAsync(int playerIndex, CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Parses a single raw input report into a normalized state.
     /// </summary>

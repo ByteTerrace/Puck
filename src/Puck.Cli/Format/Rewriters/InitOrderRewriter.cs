@@ -12,7 +12,7 @@ namespace Puck.Cli.Format.Rewriters;
 // is preserved across the sort.
 internal sealed class InitOrderRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitInitializerExpression(InitializerExpressionSyntax node) {
-        var visited = (InitializerExpressionSyntax)base.VisitInitializerExpression(node: node)!;
+        var visited = ((InitializerExpressionSyntax)base.VisitInitializerExpression(node: node)!);
 
         if (!visited.IsKind(kind: SyntaxKind.ObjectInitializerExpression)
             || (visited.Expressions.Count < 2)

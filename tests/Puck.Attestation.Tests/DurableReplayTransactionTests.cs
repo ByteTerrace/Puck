@@ -27,17 +27,16 @@ public sealed class DurableReplayTransactionTests {
         Assert.Equal(expected: requirement.Sequence, actual: database.ReadSequence(requirement: requirement));
         Assert.True(condition: database.UsesFullSynchronousWrites());
     }
-
     [Fact]
     public void FailureBeforeCommit_RollsBackBothTheEffectAndReplayMark() {
         using var database = new DurableReplayDatabase();
         var requirement = VerifySequencedClaim();
 
         _ = Assert.Throws<InjectedCommitFailureException>(testCode: () => database.TryCommit(
-            requirement: requirement,
-            effectKey: "wallet:user:rollback",
             delta: 11,
-            failBeforeCommit: true
+            effectKey: "wallet:user:rollback",
+            failBeforeCommit: true,
+            requirement: requirement
         ));
 
         Assert.Null(@object: database.ReadEffect(effectKey: "wallet:user:rollback"));
@@ -45,13 +44,12 @@ public sealed class DurableReplayTransactionTests {
         Assert.True(condition: database.TryCommit(requirement: requirement, effectKey: "wallet:user:rollback", delta: 11));
         Assert.Equal(expected: 11L, actual: database.ReadEffect(effectKey: "wallet:user:rollback"));
     }
-
     [Fact]
     public async Task ConcurrentReceivers_CommitOneEffectAndOneReplayAdvanceExactlyOnce() {
         using var database = new DurableReplayDatabase();
         var requirement = VerifySequencedClaim();
         using var rendezvous = new Barrier(participantCount: 4);
-        var tasks = Enumerable.Range(start: 0, count: 4)
+        var tasks = Enumerable.Range(count: 4, start: 0)
             .Select(selector: _ => Task.Run(function: () => {
                 rendezvous.SignalAndWait();
 
@@ -103,7 +101,7 @@ public sealed class DurableReplayTransactionTests {
             expectedAudience: null
         );
 
-        Assert.True(condition: result.TryGetReplayCommit(slot: "slot:wallet", requirement: out var requirement));
+        Assert.True(condition: result.TryGetReplayCommit(requirement: out var requirement, slot: "slot:wallet"));
 
         return Assert.IsType<ReplayCommitRequirement>(@object: requirement);
     }
@@ -150,7 +148,7 @@ internal sealed class DurableReplayDatabase : IDisposable {
     internal bool TryCommit(ReplayCommitRequirement requirement, string effectKey, long delta, bool failBeforeCommit = false) {
         using var connection = OpenConnection();
         using var transaction = connection.BeginTransaction(deferred: false);
-        var current = ReadSequence(connection: connection, transaction: transaction, requirement: requirement);
+        var current = ReadSequence(connection: connection, requirement: requirement, transaction: transaction);
 
         if ((current is not null) && (requirement.Sequence <= current.Value)) {
             return false;
@@ -192,7 +190,6 @@ internal sealed class DurableReplayDatabase : IDisposable {
 
         return true;
     }
-
     internal long? ReadEffect(string effectKey) {
         using var connection = OpenConnection();
         using var command = connection.CreateCommand();
@@ -202,22 +199,20 @@ internal sealed class DurableReplayDatabase : IDisposable {
 
         var value = command.ExecuteScalar();
 
-        return (value is null) ? null : Convert.ToInt64(value: value, provider: System.Globalization.CultureInfo.InvariantCulture);
+        return ((value is null) ? null : Convert.ToInt64(value: value, provider: System.Globalization.CultureInfo.InvariantCulture));
     }
-
     internal ulong? ReadSequence(ReplayCommitRequirement requirement) {
         using var connection = OpenConnection();
 
-        return ReadSequence(connection: connection, transaction: null, requirement: requirement);
+        return ReadSequence(connection: connection, requirement: requirement, transaction: null);
     }
-
     internal bool UsesFullSynchronousWrites() {
         using var connection = OpenConnection();
         using var command = connection.CreateCommand();
 
         command.CommandText = "PRAGMA synchronous;";
 
-        return Convert.ToInt32(value: command.ExecuteScalar(), provider: System.Globalization.CultureInfo.InvariantCulture) == 2;
+        return (Convert.ToInt32(value: command.ExecuteScalar(), provider: System.Globalization.CultureInfo.InvariantCulture) == 2);
     }
 
     public void Dispose() => Directory.Delete(path: m_directory, recursive: true);
@@ -234,7 +229,6 @@ internal sealed class DurableReplayDatabase : IDisposable {
 
         return connection;
     }
-
     private static ulong? ReadSequence(SqliteConnection connection, SqliteTransaction? transaction, ReplayCommitRequirement requirement) {
         using var command = connection.CreateCommand();
 
@@ -249,9 +243,8 @@ internal sealed class DurableReplayDatabase : IDisposable {
 
         var value = command.ExecuteScalar();
 
-        return (value is byte[] bytes) ? BinaryPrimitives.ReadUInt64BigEndian(source: bytes) : null;
+        return ((value is byte[] bytes) ? BinaryPrimitives.ReadUInt64BigEndian(source: bytes) : null);
     }
-
     private static byte[] EncodeSequence(ulong value) {
         var bytes = new byte[sizeof(ulong)];
 
@@ -260,5 +253,4 @@ internal sealed class DurableReplayDatabase : IDisposable {
         return bytes;
     }
 }
-
 internal sealed class InjectedCommitFailureException : Exception;

@@ -1,17 +1,4 @@
 {
-  "description": "The look\u2192entity assignment policy, the same WorldRowAssignment primitive Assignment uses for kits.",
-  "type": "object",
-  "properties": {
-    "sequence": {
-      "$ref": "./common.schema.json#/$defs/WorldSequence5"
-    },
-    "rows": {
-      "$ref": "./common.schema.json#/$defs/StringList"
-    }
-  },
-  "required": [
-    "sequence",
-    "rows"
-  ],
-  "additionalProperties": false
+  "$ref": "./common.schema.json#/$defs/WorldRowAssignment",
+  "description": "The look\u2192entity assignment policy, the same WorldRowAssignment primitive Assignment uses for kits."
 }

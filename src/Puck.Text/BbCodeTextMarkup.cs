@@ -15,73 +15,14 @@ namespace Puck.Text;
 /// </para>
 /// </summary>
 public static class BbCodeTextMarkup {
-    /// <summary>Compiles BBCode-style markup into the control-char stream <see cref="TextEnrichmentTags"/> parses.</summary>
-    /// <param name="markup">The BBCode-style source.</param>
-    /// <returns>The equivalent control-char stream; unrecognized brackets are preserved verbatim.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
-    public static string Compile(string markup) {
-        ArgumentNullException.ThrowIfNull(argument: markup);
-
-        var builder = new StringBuilder(capacity: markup.Length);
-        var index = 0;
-
-        while (index < markup.Length) {
-            var character = markup[index];
-
-            if (character != '[') {
-                _ = builder.Append(value: character);
-                index++;
-
-                continue;
-            }
-
-            var closeIndex = markup.IndexOf(value: ']', startIndex: (index + 1));
-
-            if (closeIndex < 0) {
-                // No closing bracket — the rest is literal text.
-                _ = builder.Append(value: markup[index..]);
-
-                break;
-            }
-
-            var inner = markup[(index + 1)..closeIndex];
-
-            if (TryCompileTag(inner: inner, compiled: out var compiled)) {
-                _ = builder.Append(value: compiled);
-            } else {
-                // Not a recognized tag — pass the bracketed span through unchanged.
-                _ = builder.Append(value: markup[index..(closeIndex + 1)]);
-            }
-
-            index = (closeIndex + 1);
-        }
-
-        return builder.ToString();
-    }
-
-    /// <summary>Compiles markup and enumerates its visible runes paired with the effect in force at each.</summary>
-    /// <param name="markup">The BBCode-style source.</param>
-    /// <returns>The enriched runes, ready for the enrichment-aware <see cref="TextLayout"/> overload.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
-    public static IEnumerable<TextEffectRune> EnrichRunes(string markup) =>
-        TextEnrichmentTags.EnumerateRichTextRunes(text: Compile(markup: markup));
-
-    /// <summary>Strips all markup, returning just the visible text.</summary>
-    /// <param name="markup">The BBCode-style source.</param>
-    /// <returns>The plain text with every tag removed.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
-    public static string StripToPlainText(string markup) {
-        ArgumentNullException.ThrowIfNull(markup);
-
-        var builder = new StringBuilder(capacity: markup.Length);
-
-        foreach (var rune in TextEnrichmentTags.EnumerateVisibleRunes(text: Compile(markup: markup))) {
-            _ = builder.Append(value: rune);
-        }
-
-        return builder.ToString();
-    }
-
+    // The parameter a bare [name=value] primary maps to, by effect kind.
+    private static string PrimaryParameterName(TextEffectKind kind) =>
+        kind switch {
+            TextEffectKind.Color => "color",
+            TextEffectKind.Weight => "amount",
+            TextEffectKind.Reveal => "stagger",
+            _ => "amplitude"
+        };
     private static bool TryCompileTag(string inner, out string compiled) {
         compiled = string.Empty;
 
@@ -110,7 +51,10 @@ public static class BbCodeTextMarkup {
             return true;
         }
 
-        var tokens = trimmed.Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var tokens = trimmed.Split(
+            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+            separator: ((char[]?)null)
+        );
 
         if (tokens.Length == 0) {
             return false;
@@ -142,31 +86,105 @@ public static class BbCodeTextMarkup {
         var parameters = new List<TextEnrichmentTagParameter>();
 
         if (!string.IsNullOrEmpty(value: primaryValue)) {
-            parameters.Add(item: new TextEnrichmentTagParameter(Name: PrimaryParameterName(kind: kind), Value: primaryValue));
+            parameters.Add(item: new TextEnrichmentTagParameter(
+                Name: PrimaryParameterName(kind: kind),
+                Value: primaryValue
+            ));
         }
 
         for (var index = 1; (index < tokens.Length); index++) {
             var token = tokens[index];
             var splitIndex = token.IndexOf(value: '=');
 
-            if ((splitIndex <= 0) || (splitIndex == (token.Length - 1))) {
+            if (
+                (splitIndex <= 0) ||
+                (splitIndex == (token.Length - 1))
+            ) {
                 continue;
             }
 
-            parameters.Add(item: new TextEnrichmentTagParameter(Name: token[..splitIndex], Value: token[(splitIndex + 1)..]));
+            parameters.Add(item: new TextEnrichmentTagParameter(
+                Name: token[..splitIndex],
+                Value: token[(splitIndex + 1)..]
+            ));
         }
 
-        compiled = TextEnrichmentTags.CreateStartTag(kind: kind, parameters: [.. parameters]);
+        compiled = TextEnrichmentTags.CreateStartTag(
+            kind: kind,
+            parameters: [.. parameters]
+        );
 
         return true;
     }
 
-    // The parameter a bare [name=value] primary maps to, by effect kind.
-    private static string PrimaryParameterName(TextEffectKind kind) =>
-        kind switch {
-            TextEffectKind.Color => "color",
-            TextEffectKind.Weight => "amount",
-            TextEffectKind.Reveal => "stagger",
-            _ => "amplitude"
-        };
+    /// <summary>Compiles BBCode-style markup into the control-char stream <see cref="TextEnrichmentTags"/> parses.</summary>
+    /// <param name="markup">The BBCode-style source.</param>
+    /// <returns>The equivalent control-char stream; unrecognized brackets are preserved verbatim.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
+    public static string Compile(string markup) {
+        ArgumentNullException.ThrowIfNull(argument: markup);
+
+        var builder = new StringBuilder(capacity: markup.Length);
+        var index = 0;
+
+        while (index < markup.Length) {
+            var character = markup[index];
+
+            if (character != '[') {
+                _ = builder.Append(value: character);
+                index++;
+
+                continue;
+            }
+
+            var closeIndex = markup.IndexOf(
+                startIndex: (index + 1),
+                value: ']'
+            );
+
+            if (closeIndex < 0) {
+                // No closing bracket — the rest is literal text.
+                _ = builder.Append(value: markup[index..]);
+
+                break;
+            }
+
+            var inner = markup[(index + 1)..closeIndex];
+
+            if (TryCompileTag(
+                compiled: out var compiled,
+                inner: inner
+            )) {
+                _ = builder.Append(value: compiled);
+            } else {
+                // Not a recognized tag — pass the bracketed span through unchanged.
+                _ = builder.Append(value: markup[index..(closeIndex + 1)]);
+            }
+
+            index = (closeIndex + 1);
+        }
+
+        return builder.ToString();
+    }
+    /// <summary>Compiles markup and enumerates its visible runes paired with the effect in force at each.</summary>
+    /// <param name="markup">The BBCode-style source.</param>
+    /// <returns>The enriched runes, ready for the enrichment-aware <see cref="TextLayout"/> overload.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<TextEffectRune> EnrichRunes(string markup) =>
+        TextEnrichmentTags.EnumerateRichTextRunes(text: Compile(markup: markup));
+    /// <summary>Strips all markup, returning just the visible text.</summary>
+    /// <param name="markup">The BBCode-style source.</param>
+    /// <returns>The plain text with every tag removed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
+    public static string StripToPlainText(string markup) {
+        ArgumentNullException.ThrowIfNull(markup);
+
+        var builder = new StringBuilder(capacity: markup.Length);
+
+        foreach (var rune in TextEnrichmentTags.EnumerateVisibleRunes(text: Compile(markup: markup))) {
+            _ = builder.Append(value: rune);
+        }
+
+        return builder.ToString();
+    }
 }

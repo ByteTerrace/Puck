@@ -50,7 +50,6 @@ public sealed record BindingActivatorDefinition(
     BindingActivatorMode Mode = BindingActivatorMode.Held,
     int? TimeoutTicks = null
 );
-
 /// <summary>The two ways a <see cref="BindingActivatorDefinition"/> sequence resolves. See the type's remarks for
 /// the exact semantics of each.</summary>
 public enum BindingActivatorMode {

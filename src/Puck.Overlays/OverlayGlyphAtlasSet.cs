@@ -17,20 +17,20 @@ namespace Puck.Overlays;
 /// </remarks>
 public sealed class OverlayGlyphAtlasSet {
     // The bake packs EVERY font's glyphs into this one image (the one-GPU-texture law); each atlas JSON is a view of
-    // it. KEEP IN SYNC with COMBINED_PNG_NAME in experimental/tools/font-atlas/bake.py (the combined atlas image name).
+    // it. KEEP IN SYNC with the committed fixed-UI image name under Puck.Text/Assets/Fonts.
     private const string CombinedImageName = "puck-fonts-mtsdf.png";
     // The mono voice's layout view (the overlay pack's source) and the prepacked overlay artifact written beside it.
     private const string MonoFontName = "jetbrains-mono-regular";
     private const string OverlayPackName = "overlay-glyphs.pack";
 
-    private readonly string m_fontsDirectory;
     private readonly Lazy<FontAtlasImageData?> m_combinedImage;
+    private readonly string m_fontsDirectory;
     private readonly Lazy<FontAtlas?> m_monoFont;
 
     /// <summary>Initializes a new instance of the <see cref="OverlayGlyphAtlasSet"/> class over a pre-baked
     /// font-atlas assets root.</summary>
     /// <param name="fontsDirectory">The directory holding the combined MTSDF PNG and each face's layout JSON — the
-    /// output of the font-atlas bake pipeline (<c>experimental/tools/font-atlas</c>).</param>
+    /// committed fixed-UI oracle atlas under <c>Puck.Text/Assets/Fonts</c>.</param>
     /// <param name="monoFallback">Invoked at most once, only when the pre-baked mono atlas is absent, to supply a
     /// caller-owned fallback atlas (e.g. a runtime GDI+ build); <see langword="null"/> (the default) means no
     /// fallback is available — a missing pre-baked atlas then leaves <see cref="MonoFont"/> <see langword="null"/>.</param>
@@ -45,8 +45,8 @@ public sealed class OverlayGlyphAtlasSet {
 
         m_fontsDirectory = fontsDirectory;
         m_combinedImage = new Lazy<FontAtlasImageData?>(
-            valueFactory: TryDecodeCombinedImage,
-            isThreadSafe: true
+            isThreadSafe: true,
+            valueFactory: TryDecodeCombinedImage
         );
         m_monoFont = new Lazy<FontAtlas?>(
             valueFactory: () => (TryLoadPrebaked(name: MonoFontName) ?? TryLoadFallback(fallback: monoFallback)),
@@ -57,11 +57,74 @@ public sealed class OverlayGlyphAtlasSet {
     /// <summary>Gets a value indicating whether the mono atlas resolved, from either the pre-baked file or the
     /// constructor-supplied fallback.</summary>
     public bool IsAvailable => (m_monoFont.Value is not null);
-
     /// <summary>Gets the console/terminal mono atlas: the committed uniform-grid MTSDF atlas, the
     /// constructor-supplied fallback when the pre-baked file is absent, or <see langword="null"/> when neither
     /// resolves.</summary>
     public FontAtlas? MonoFont => m_monoFont.Value;
+
+    private FontAtlasImageData? TryDecodeCombinedImage() {
+        var imagePath = Path.Combine(
+            path1: m_fontsDirectory,
+            path2: CombinedImageName
+        );
+
+        if (!File.Exists(path: imagePath)) {
+            return null;
+        }
+
+        try {
+            return new FontAtlasImageDataLoader().Load(
+                imageIdentifier: imagePath,
+                pngBytes: File.ReadAllBytes(path: imagePath)
+            );
+        } catch (Exception exception) when ((exception is IOException or InvalidDataException or NotSupportedException)) {
+            Console.Error.WriteLine(value: $"[Puck.Overlays] combined font image '{imagePath}' failed to decode ({exception.Message}).");
+
+            return null;
+        }
+    }
+    private FontAtlas? TryLoadFallback(Func<FontAtlas?>? fallback) {
+        if (fallback is null) {
+            Console.Error.WriteLine(value: $"[Puck.Overlays] pre-baked glyph atlas 'jetbrains-mono-regular' is missing under '{m_fontsDirectory}' and no fallback was supplied; overlay text degrades to blank until the fixed-UI atlas assets are restored.");
+
+            return null;
+        }
+
+        return fallback();
+    }
+    // Loads a committed atlas (a JSON view of the ONE combined PNG) from the configured assets root; null when the
+    // files are absent or unreadable. The combined PNG decodes ONCE (memoized) and every atlas shares the SAME
+    // FontAtlasImageData instance: every consumer (the overlay cell pack, a future decal bake) reads the pixels, and
+    // one image means one upload.
+    private FontAtlas? TryLoadPrebaked(string name) {
+        var jsonPath = Path.Combine(
+            path1: m_fontsDirectory,
+            path2: $"{name}.json"
+        );
+
+        if (
+            (!File.Exists(path: jsonPath)) ||
+            (m_combinedImage.Value is not { } imageData)
+        ) {
+            return null;
+        }
+
+        try {
+            return new FontAtlasLoader().Load(
+                atlasIdentifier: jsonPath,
+                imageData: imageData,
+                imageIdentifier: Path.Combine(
+                    path1: m_fontsDirectory,
+                    path2: CombinedImageName
+                ),
+                jsonContent: File.ReadAllBytes(path: jsonPath)
+            );
+        } catch (Exception exception) when ((exception is IOException or InvalidDataException or NotSupportedException)) {
+            Console.Error.WriteLine(value: $"[Puck.Overlays] pre-baked atlas '{name}' failed to load ({exception.Message}).");
+
+            return null;
+        }
+    }
 
     /// <summary>
     /// Loads the overlay glyph pack from the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>) when
@@ -97,8 +160,8 @@ public sealed class OverlayGlyphAtlasSet {
         try {
             using (var image = File.OpenRead(path: imagePath)) {
                 _ = SHA256.HashData(
-                    source: image,
-                    destination: pngHash
+                    destination: pngHash,
+                    source: image
                 );
             }
 
@@ -118,9 +181,9 @@ public sealed class OverlayGlyphAtlasSet {
         );
 
         if (OverlayGlyphSdfPack.TryReadPack(
+            jsonHash: jsonHash,
             path: packPath,
-            pngHash: pngHash,
-            jsonHash: jsonHash
+            pngHash: pngHash
         ) is { } cached) {
             return cached;
         }
@@ -128,76 +191,11 @@ public sealed class OverlayGlyphAtlasSet {
         var built = OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
 
         built?.WritePack(
+            jsonHash: jsonHash,
             path: packPath,
-            pngHash: pngHash,
-            jsonHash: jsonHash
+            pngHash: pngHash
         );
 
         return built;
-    }
-
-    private FontAtlas? TryLoadFallback(Func<FontAtlas?>? fallback) {
-        if (fallback is null) {
-            Console.Error.WriteLine(value: $"[Puck.Overlays] pre-baked glyph atlas 'jetbrains-mono-regular' is missing under '{m_fontsDirectory}' and no fallback was supplied; overlay text degrades to blank until the atlas is rebaked (see tools/font-atlas).");
-
-            return null;
-        }
-
-        return fallback();
-    }
-
-    // Loads a committed atlas (a JSON view of the ONE combined PNG) from the configured assets root; null when the
-    // files are absent or unreadable. The combined PNG decodes ONCE (memoized) and every atlas shares the SAME
-    // FontAtlasImageData instance: every consumer (the overlay cell pack, a future decal bake) reads the pixels, and
-    // one image means one upload.
-    private FontAtlas? TryLoadPrebaked(string name) {
-        var jsonPath = Path.Combine(
-            path1: m_fontsDirectory,
-            path2: $"{name}.json"
-        );
-
-        if (
-            (!File.Exists(path: jsonPath)) ||
-            (m_combinedImage.Value is not { } imageData)
-        ) {
-            return null;
-        }
-
-        try {
-            return new FontAtlasLoader().Load(
-                atlasIdentifier: jsonPath,
-                imageData: imageData,
-                imageIdentifier: Path.Combine(
-                    path1: m_fontsDirectory,
-                    path2: CombinedImageName
-                ),
-                jsonContent: File.ReadAllBytes(path: jsonPath)
-            );
-        } catch (Exception exception) when ((exception is IOException or InvalidDataException or NotSupportedException)) {
-            Console.Error.WriteLine(value: $"[Puck.Overlays] pre-baked atlas '{name}' failed to load ({exception.Message}).");
-
-            return null;
-        }
-    }
-    private FontAtlasImageData? TryDecodeCombinedImage() {
-        var imagePath = Path.Combine(
-            path1: m_fontsDirectory,
-            path2: CombinedImageName
-        );
-
-        if (!File.Exists(path: imagePath)) {
-            return null;
-        }
-
-        try {
-            return new FontAtlasImageDataLoader().Load(
-                imageIdentifier: imagePath,
-                pngBytes: File.ReadAllBytes(path: imagePath)
-            );
-        } catch (Exception exception) when ((exception is IOException or InvalidDataException or NotSupportedException)) {
-            Console.Error.WriteLine(value: $"[Puck.Overlays] combined font image '{imagePath}' failed to decode ({exception.Message}).");
-
-            return null;
-        }
     }
 }

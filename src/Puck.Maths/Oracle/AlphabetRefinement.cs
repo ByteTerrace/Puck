@@ -51,7 +51,6 @@ public interface IAlphabetRefinement<TPredicate> {
     /// <see cref="AlphabetRefinement.MaximumMintermCount"/> or the destination.</returns>
     int Minterms(ReadOnlySpan<TPredicate> predicates, Span<TPredicate> minterms);
 }
-
 /// <summary>The shared minterm refinement every predicate algebra runs, and the caps it runs under.</summary>
 /// <remarks>The refinement is one loop over the predicate set; a predicate algebra supplies only conjunction,
 /// complement and satisfiability. Two algebras that agree on those three agree on their partitions, which is what makes
@@ -103,11 +102,17 @@ public static class AlphabetRefinement {
             split.Clear();
 
             for (var block = 0; (block < blocks.Count); ++block) {
-                var inside = refinement.Conjoin(left: blocks[block], right: predicate);
+                var inside = refinement.Conjoin(
+                    left: blocks[block],
+                    right: predicate
+                );
 
                 if (refinement.IsSatisfiable(predicate: inside)) { split.Add(item: inside); }
 
-                var outside = refinement.Conjoin(left: blocks[block], right: rejected);
+                var outside = refinement.Conjoin(
+                    left: blocks[block],
+                    right: rejected
+                );
 
                 if (refinement.IsSatisfiable(predicate: outside)) { split.Add(item: outside); }
             }
@@ -125,7 +130,6 @@ public static class AlphabetRefinement {
         return blocks.Count;
     }
 }
-
 /// <summary>
 /// A finite token set as a predicate algebra: the alphabet is a listed set of tokens and a predicate is the subset
 /// mask over it. The trivial end of the axis, served day one and needing none of the refinement machinery to be
@@ -144,28 +148,40 @@ public readonly struct FiniteTokenAlphabet : IAlphabetRefinement<ulong> {
         MaskOf(count: TokenCount);
     /// <summary>Gets the number of listed tokens.</summary>
     public int TokenCount =>
-        ((m_tokens is null) ? 0 : m_tokens.Length);
+        ((m_tokens is null)
+            ? 0
+            : m_tokens.Length
+        );
 
-    /// <summary>Creates the predicate algebra of a listed token set.</summary>
-    /// <param name="tokens">The tokens, in any order; repeats are collapsed.</param>
-    /// <returns>The described algebra.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">More than sixty-four distinct tokens were listed.</exception>
-    public static FiniteTokenAlphabet Create(ReadOnlySpan<ulong> tokens) {
-        var sorted = tokens.ToArray();
+    private static ulong MaskOf(int count) =>
+        ((64 == count)
+            ? ulong.MaxValue
+            : ((1UL << count) - 1UL)
+        );
+    private bool TryIndexOf(ulong token, out int index) {
+        var tokens = m_tokens;
+        var low = 0;
+        var high = ((tokens is null)
+            ? 0
+            : tokens.Length
+        );
 
-        Array.Sort(array: sorted);
+        index = -1;
 
-        var distinct = 0;
+        while (low < high) {
+            var middle = ((low + high) >> 1);
+            var probe = tokens![middle];
 
-        for (var index = 0; (index < sorted.Length); ++index) {
-            if ((0 != distinct) && (sorted[(distinct - 1)] == sorted[index])) { continue; }
+            if (probe == token) {
+                index = middle;
 
-            sorted[distinct++] = sorted[index];
+                return true;
+            }
+
+            if (probe < token) { low = (middle + 1); } else { high = middle; }
         }
 
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: distinct, other: AlphabetRefinement.MaximumMintermCount, paramName: nameof(tokens));
-
-        return new(tokens: sorted.AsSpan(start: 0, length: distinct).ToArray());
+        return false;
     }
 
     /// <summary>Returns the predicate satisfied by exactly the listed tokens this one rejects.</summary>
@@ -184,7 +200,41 @@ public readonly struct FiniteTokenAlphabet : IAlphabetRefinement<ulong> {
     /// <param name="token">The token.</param>
     /// <returns><see langword="true"/> when the token is listed and its bit is set.</returns>
     public bool Contains(ulong predicate, ulong token) =>
-        (TryIndexOf(token: token, index: out var index) && (0UL != (predicate & (1UL << index))));
+        (TryIndexOf(
+            index: out var index,
+            token: token
+        ) && (0UL != (predicate & (1UL << index))));
+    /// <summary>Creates the predicate algebra of a listed token set.</summary>
+    /// <param name="tokens">The tokens, in any order; repeats are collapsed.</param>
+    /// <returns>The described algebra.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">More than sixty-four distinct tokens were listed.</exception>
+    public static FiniteTokenAlphabet Create(ReadOnlySpan<ulong> tokens) {
+        var sorted = tokens.ToArray();
+
+        Array.Sort(array: sorted);
+
+        var distinct = 0;
+
+        for (var index = 0; (index < sorted.Length); ++index) {
+            if (
+                (0 != distinct) &&
+                (sorted[(distinct - 1)] == sorted[index])
+            ) { continue; }
+
+            sorted[distinct++] = sorted[index];
+        }
+
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: distinct,
+            other: AlphabetRefinement.MaximumMintermCount,
+            paramName: nameof(tokens)
+        );
+
+        return new(tokens: sorted.AsSpan(
+            length: distinct,
+            start: 0
+        ).ToArray());
+    }
     /// <summary>Indicates whether any token satisfies a predicate.</summary>
     /// <param name="predicate">The subset mask.</param>
     /// <returns><see langword="true"/> when the mask is nonempty.</returns>
@@ -195,7 +245,11 @@ public readonly struct FiniteTokenAlphabet : IAlphabetRefinement<ulong> {
     /// <param name="minterms">Receives the partition's blocks.</param>
     /// <returns>The number of blocks written, or <c>-1</c> when the partition exceeds the cap or the destination.</returns>
     public int Minterms(ReadOnlySpan<ulong> predicates, Span<ulong> minterms) =>
-        AlphabetRefinement.Refine<ulong, FiniteTokenAlphabet>(refinement: this, predicates: predicates, minterms: minterms);
+        AlphabetRefinement.Refine<ulong, FiniteTokenAlphabet>(
+            minterms: minterms,
+            predicates: predicates,
+            refinement: this
+        );
     /// <summary>Returns the predicate satisfied by exactly a listed token set.</summary>
     /// <param name="tokens">The tokens the predicate accepts; each must be listed.</param>
     /// <returns>The subset mask.</returns>
@@ -204,8 +258,14 @@ public readonly struct FiniteTokenAlphabet : IAlphabetRefinement<ulong> {
         var mask = 0UL;
 
         for (var index = 0; (index < tokens.Length); ++index) {
-            if (!TryIndexOf(token: tokens[index], index: out var slot)) {
-                throw new ArgumentOutOfRangeException(paramName: nameof(tokens), message: "This alphabet does not list that token.");
+            if (!TryIndexOf(
+                token: tokens[index],
+                index: out var slot
+            )) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(tokens),
+                    message: "This alphabet does not list that token."
+                );
             }
 
             mask |= (1UL << slot);
@@ -219,33 +279,11 @@ public readonly struct FiniteTokenAlphabet : IAlphabetRefinement<ulong> {
     /// <exception cref="ArgumentOutOfRangeException">The index is outside <see cref="TokenCount"/>.</exception>
     public ulong Token(int index) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: TokenCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: index,
+            other: TokenCount
+        );
 
         return m_tokens[index];
-    }
-
-    private static ulong MaskOf(int count) =>
-        ((64 == count) ? ulong.MaxValue : ((1UL << count) - 1UL));
-    private bool TryIndexOf(ulong token, out int index) {
-        var tokens = m_tokens;
-        var low = 0;
-        var high = ((tokens is null) ? 0 : tokens.Length);
-
-        index = -1;
-
-        while (low < high) {
-            var middle = ((low + high) >> 1);
-            var probe = tokens![middle];
-
-            if (probe == token) {
-                index = middle;
-
-                return true;
-            }
-
-            if (probe < token) { low = (middle + 1); } else { high = middle; }
-        }
-
-        return false;
     }
 }

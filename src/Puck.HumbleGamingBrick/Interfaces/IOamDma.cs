@@ -11,7 +11,6 @@ public enum OamDmaWriteConflict {
     /// <summary>Store the value at the conflict target AND zero the OAM byte the DMA is currently writing.</summary>
     StoreAndPoisonOam,
 }
-
 /// <summary>
 /// The object-attribute-memory DMA unit (the DMA register at <c>0xFF46</c>). Writing the register starts a transfer
 /// that copies 160 bytes from a page of memory into OAM one byte per machine cycle; while it runs, OAM is unreadable to

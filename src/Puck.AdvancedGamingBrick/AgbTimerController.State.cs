@@ -15,20 +15,20 @@ public sealed partial class AgbTimerController : ISnapshotable {
         writer.WriteBlock<int>(values: m_reload);
         writer.WriteBlock<int>(values: m_frequency);
         WriteBooleans(
-            writer: writer,
-            values: m_enable
+            values: m_enable,
+            writer: writer
         );
         WriteBooleans(
-            writer: writer,
-            values: m_irqEnabled
+            values: m_irqEnabled,
+            writer: writer
         );
         WriteBooleans(
-            writer: writer,
-            values: m_cascade
+            values: m_cascade,
+            writer: writer
         );
         WriteBooleans(
-            writer: writer,
-            values: m_pending
+            values: m_pending,
+            writer: writer
         );
         writer.WriteBlock<int>(values: m_irqCountdown);
 
@@ -36,8 +36,8 @@ public sealed partial class AgbTimerController : ISnapshotable {
         writer.WriteBlock<int>(values: m_anchorValue);
 
         WriteBooleans(
-            writer: writer,
-            values: m_controlFlag
+            values: m_controlFlag,
+            writer: writer
         );
         writer.WriteBlock<int>(values: m_latchControl);
         writer.WriteBlock<int>(values: m_reloadFlags);
@@ -45,7 +45,6 @@ public sealed partial class AgbTimerController : ISnapshotable {
         writer.WriteBoolean(value: m_timerLatched);
         writer.WriteBoolean(value: m_scheduled);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

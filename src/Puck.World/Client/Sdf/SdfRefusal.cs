@@ -91,7 +91,7 @@ internal enum SdfRefusal {
 
     /// <summary>A decoded number that must be non-negative (a shape's radius/half-extent/round, or a material
     /// channel) is negative — the sign half of <see cref="SdfDocumentDecoder"/>'s mirror of
-    /// <see cref="Puck.SdfVm.SdfProgramBuilder"/>'s <c>RequireNonNegative</c> call sites (sphere/capsule/cylinder
+    /// <see cref="Puck.SignedDistance.SdfProgramBuilder"/>'s <c>RequireNonNegative</c> call sites (sphere/capsule/cylinder
     /// radii, cylinder half-height, torus radii, box half-extents and round, and all four material channels).</summary>
     [Refusal(door: "sdf.decode", condition: "a decoded number that must be non-negative (a shape's radius/half-extent/round, or a material channel) is negative", kind: RefusalKind.Verdict)]
     NumberNegative,
@@ -117,7 +117,7 @@ internal enum SdfRefusal {
     BlendNotTopLevelAllowed,
 
     /// <summary>A <c>push</c> would nest a field scope past this build's depth cap
-    /// (<see cref="Puck.SdfVm.SdfProgramBuilder.MaxFieldScopeDepth"/>).</summary>
+    /// (<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxFieldScopeDepth"/>).</summary>
     [Refusal(door: "sdf.decode", condition: "a 'push' would nest a field scope past this build's depth cap", kind: RefusalKind.Verdict)]
     PushTooDeep,
 

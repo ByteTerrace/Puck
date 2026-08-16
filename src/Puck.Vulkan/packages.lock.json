@@ -8,13 +8,21 @@
         "resolved": "10.0.11",
         "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
+      },
+      "ByteTerrace.Puck.Abstractions": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Assets": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "System.IO.Hashing": "[10.*, )"
+        }
       },
-      "puck.abstractions": {
-        "type": "Project"
-      },
-      "puck.shaders": {
+      "ByteTerrace.Puck.Shaders": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"

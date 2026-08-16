@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 namespace Puck.DirectX.Presentation;
 
 /// <summary>

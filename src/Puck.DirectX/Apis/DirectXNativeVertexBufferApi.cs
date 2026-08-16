@@ -29,8 +29,8 @@ public sealed unsafe class DirectXNativeVertexBufferApi : IDirectXVertexBufferAp
             );
         }
 
-        var device = (ID3D12Device*)request.DeviceHandle;
-        var sizeBytes = (uint)request.VertexData.Length;
+        var device = ((ID3D12Device*)request.DeviceHandle);
+        var sizeBytes = ((uint)request.VertexData.Length);
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
         };
@@ -53,32 +53,32 @@ public sealed unsafe class DirectXNativeVertexBufferApi : IDirectXVertexBufferAp
             InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
             pDesc: in bufferDesc,
             pHeapProperties: in heapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &resource,
             riidResource: in resourceIid
         );
 
-        var buffer = (ID3D12Resource*)resource;
+        var buffer = ((ID3D12Resource*)resource);
 
         try {
             void* mapped;
 
             buffer->Map(
                 Subresource: 0,
-                pReadRange: (D3D12_RANGE*)null,
+                pReadRange: ((D3D12_RANGE*)null),
                 ppData: &mapped
             );
             request.VertexData.Span.CopyTo(destination: new Span<byte>(
-                pointer: mapped,
-                length: (int)sizeBytes
+                length: ((int)sizeBytes),
+                pointer: mapped
             ));
             buffer->Unmap(
                 Subresource: 0,
-                pWrittenRange: (D3D12_RANGE*)null
+                pWrittenRange: ((D3D12_RANGE*)null)
             );
 
             return new DirectXVertexBufferCreateResult(
-                BufferHandle: (nint)resource,
+                BufferHandle: ((nint)resource),
                 GpuVirtualAddress: buffer->GetGPUVirtualAddress(),
                 SizeBytes: sizeBytes
             );

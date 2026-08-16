@@ -80,67 +80,12 @@ public static class AttestationSigner {
         // SignedAttestation).
         return SignedAttestation.FromSignedPortion(
             header: header,
-            payloadKind: payloadKind,
             payloadBytes: payloadBytes,
+            payloadKind: payloadKind,
             signature: signature,
             signedPortion: signedPortion
         );
     }
-
-    /// <summary>
-    /// Mints binding #1 or #2 of a chain: an attestation with purpose <see cref="AttestationPurposes.KeyBinding"/>
-    /// whose payload is <paramref name="targetId"/> paired with its actual key bytes
-    /// (<see cref="KeyBindingPayload"/>) — a key binding is not a separate artifact from an ordinary
-    /// attestation, only this purpose value distinguishes it.
-    /// </summary>
-    /// <param name="codec">The serialisation to sign under.</param>
-    /// <param name="domain">The chain's root fingerprint (shared by every key in the chain).</param>
-    /// <param name="signerKey">The vouching key (root, for binding #1; issuing, for binding #2).</param>
-    /// <param name="signerAlgorithm">The vouching key's REAL algorithm, driving the actual signature.</param>
-    /// <param name="targetId">The id of the key being vouched for.</param>
-    /// <param name="targetSubjectPublicKeyInfo">The vouched-for key's actual SPKI bytes.</param>
-    /// <param name="notBefore">The issuer-authored window start, Unix seconds.</param>
-    /// <param name="notAfter">The issuer-authored window end, Unix seconds.</param>
-    /// <returns>The signed key-binding attestation.</returns>
-    /// <exception cref="ArgumentException"><paramref name="signerAlgorithm"/> does not resolve to a signing algorithm, or <paramref name="signerKey"/> is on another curve.</exception>
-    /// <exception cref="CryptographicException">The signing operation fails or produces a signature outside the registered algorithm's fixed width.</exception>
-    /// <exception cref="NotSupportedException"><paramref name="signerAlgorithm"/> is not registered.</exception>
-    public static SignedAttestation SignKeyBinding(
-        IAttestationCodec codec,
-        string domain,
-        ECDsa signerKey,
-        string signerAlgorithm,
-        KeyId targetId,
-        ReadOnlyMemory<byte> targetSubjectPublicKeyInfo,
-        long notBefore,
-        long notAfter
-    ) {
-        var payload = new KeyBindingPayload(
-            TargetId: targetId,
-            PublicKeySubjectPublicKeyInfo: targetSubjectPublicKeyInfo
-        );
-        var payloadBytes = codec.EncodeKeyBindingPayload(payload: payload);
-        var header = new AttestationHeader(
-            Domain: domain,
-            Subject: null,
-            Algorithm: signerAlgorithm,
-            Purpose: AttestationPurposes.KeyBinding,
-            NotBefore: notBefore,
-            NotAfter: notAfter,
-            Audience: null,
-            Sequence: null
-        );
-
-        return Sign(
-            codec: codec,
-            header: header,
-            payloadKind: AttestationPayloadKind.KeyBinding,
-            payloadBytes: payloadBytes,
-            signingKey: signerKey,
-            signingAlgorithm: signerAlgorithm
-        );
-    }
-
     /// <summary>Mints a claim: an attestation signed by a subject key, carrying caller-defined opaque bytes.</summary>
     /// <param name="codec">The serialisation to sign under.</param>
     /// <param name="domain">The chain's root fingerprint.</param>
@@ -182,23 +127,76 @@ public static class AttestationSigner {
         }
 
         var header = new AttestationHeader(
-            Domain: domain,
-            Subject: subject,
             Algorithm: signerAlgorithm,
-            Purpose: purpose,
-            NotBefore: notBefore,
-            NotAfter: notAfter,
             Audience: audience,
-            Sequence: sequence
+            Domain: domain,
+            NotAfter: notAfter,
+            NotBefore: notBefore,
+            Purpose: purpose,
+            Sequence: sequence,
+            Subject: subject
         );
 
         return Sign(
             codec: codec,
             header: header,
-            payloadKind: AttestationPayloadKind.Opaque,
             payloadBytes: claimBytes,
-            signingKey: signerKey,
-            signingAlgorithm: signerAlgorithm
+            payloadKind: AttestationPayloadKind.Opaque,
+            signingAlgorithm: signerAlgorithm,
+            signingKey: signerKey
+        );
+    }
+    /// <summary>
+    /// Mints binding #1 or #2 of a chain: an attestation with purpose <see cref="AttestationPurposes.KeyBinding"/>
+    /// whose payload is <paramref name="targetId"/> paired with its actual key bytes
+    /// (<see cref="KeyBindingPayload"/>) — a key binding is not a separate artifact from an ordinary
+    /// attestation, only this purpose value distinguishes it.
+    /// </summary>
+    /// <param name="codec">The serialisation to sign under.</param>
+    /// <param name="domain">The chain's root fingerprint (shared by every key in the chain).</param>
+    /// <param name="signerKey">The vouching key (root, for binding #1; issuing, for binding #2).</param>
+    /// <param name="signerAlgorithm">The vouching key's REAL algorithm, driving the actual signature.</param>
+    /// <param name="targetId">The id of the key being vouched for.</param>
+    /// <param name="targetSubjectPublicKeyInfo">The vouched-for key's actual SPKI bytes.</param>
+    /// <param name="notBefore">The issuer-authored window start, Unix seconds.</param>
+    /// <param name="notAfter">The issuer-authored window end, Unix seconds.</param>
+    /// <returns>The signed key-binding attestation.</returns>
+    /// <exception cref="ArgumentException"><paramref name="signerAlgorithm"/> does not resolve to a signing algorithm, or <paramref name="signerKey"/> is on another curve.</exception>
+    /// <exception cref="CryptographicException">The signing operation fails or produces a signature outside the registered algorithm's fixed width.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="signerAlgorithm"/> is not registered.</exception>
+    public static SignedAttestation SignKeyBinding(
+        IAttestationCodec codec,
+        string domain,
+        ECDsa signerKey,
+        string signerAlgorithm,
+        KeyId targetId,
+        ReadOnlyMemory<byte> targetSubjectPublicKeyInfo,
+        long notBefore,
+        long notAfter
+    ) {
+        var payload = new KeyBindingPayload(
+            PublicKeySubjectPublicKeyInfo: targetSubjectPublicKeyInfo,
+            TargetId: targetId
+        );
+        var payloadBytes = codec.EncodeKeyBindingPayload(payload: payload);
+        var header = new AttestationHeader(
+            Algorithm: signerAlgorithm,
+            Audience: null,
+            Domain: domain,
+            NotAfter: notAfter,
+            NotBefore: notBefore,
+            Purpose: AttestationPurposes.KeyBinding,
+            Sequence: null,
+            Subject: null
+        );
+
+        return Sign(
+            codec: codec,
+            header: header,
+            payloadBytes: payloadBytes,
+            payloadKind: AttestationPayloadKind.KeyBinding,
+            signingAlgorithm: signerAlgorithm,
+            signingKey: signerKey
         );
     }
 }

@@ -13,9 +13,7 @@ internal static class DirectedRoundingClaims {
     // own bit pattern (so the committed edge battery still lands on the seams) while satisfying the family's
     // non-negative contract. The negative-operand refusals are a separate claim.
     private static long FoldNonNegative(long raw) => ((long)(((ulong)raw) >> 1));
-
     private static int FoldScale(long raw) => ((int)(((ulong)raw) % 65UL));
-
     // A strictly positive divisor, the only kind TryCeilingQuotient admits.
     private static long FoldPositive(long raw) {
         var folded = FoldNonNegative(raw: raw);
@@ -31,7 +29,7 @@ internal static class DirectedRoundingClaims {
         var value = FoldNonNegative(raw: left[0]);
         var fractionBitCount = FoldScale(raw: right[0]);
 
-        var subjectOk = FixedDirectedRounding.TryCeilingSquareRoot(value: value, fractionBitCount: fractionBitCount, result: out var result);
+        var subjectOk = FixedDirectedRounding.TryCeilingSquareRoot(fractionBitCount: fractionBitCount, result: out var result, value: value);
         var radicand = (((BigInteger)value) << fractionBitCount);
         var exact = Oracles.CeilingIntegerRoot(value: radicand);
         var expected = ((radicand < (BigInteger.One << 128)) && (exact <= long.MaxValue));
@@ -46,11 +44,11 @@ internal static class DirectedRoundingClaims {
                 : $"ceiling square root refused at ({value} @ {fractionBitCount}) but left {result} behind");
         }
 
-        if (((BigInteger)result * result) < radicand) {
+        if ((((BigInteger)result) * result) < radicand) {
             return $"ceiling square root {result} at ({value} @ {fractionBitCount}) is BELOW the exact root — it is not an upper bound at all";
         }
 
-        if ((result > 0L) && ((((BigInteger)result - BigInteger.One) * (result - 1L)) >= radicand)) {
+        if ((result > 0L) && (((((BigInteger)result) - BigInteger.One) * (result - 1L)) >= radicand)) {
             return $"ceiling square root {result} at ({value} @ {fractionBitCount}) is more than one unit above the exact root — it is not the LEAST upper bound";
         }
 
@@ -58,7 +56,6 @@ internal static class DirectedRoundingClaims {
             ? null
             : $"ceiling square root at ({value} @ {fractionBitCount}): subject={result} oracle={exact}");
     }
-
     /// <summary>The ceiling product is the least raw at or above the exact mixed-scale product.</summary>
     /// <param name="left">Lanes 0..1 = the two factors, folded non-negative.</param>
     /// <param name="right">Lanes 0..2 drive the two operand fraction bit counts and the output's.</param>
@@ -72,23 +69,23 @@ internal static class DirectedRoundingClaims {
 
         var subjectOk = FixedDirectedRounding.TryCeilingProduct(
             a: a,
-            fractionBitsA: fractionBitsA,
             b: b,
+            fractionBitsA: fractionBitsA,
             fractionBitsB: fractionBitsB,
             fractionBitsOut: fractionBitsOut,
             result: out var result
         );
-        var (numerator, denominator) = Scaled(value: (((BigInteger)a) * b), shift: (((long)fractionBitsOut - fractionBitsA) - fractionBitsB));
+
+        var (numerator, denominator) = Scaled(shift: ((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB), value: (((BigInteger)a) * b));
 
         return Verdict(
-            subjectOk: subjectOk,
-            result: result,
-            numerator: numerator,
             denominator: denominator,
-            operands: $"ceiling product ({a}@{fractionBitsA} x {b}@{fractionBitsB} -> {fractionBitsOut})"
+            numerator: numerator,
+            operands: $"ceiling product ({a}@{fractionBitsA} x {b}@{fractionBitsB} -> {fractionBitsOut})",
+            result: result,
+            subjectOk: subjectOk
         );
     }
-
     /// <summary>The ceiling quotient is the least raw at or above the exact mixed-scale quotient.</summary>
     /// <param name="left">Lane 0 = the dividend, folded non-negative; lane 1 = the divisor, folded strictly positive.</param>
     /// <param name="right">Lanes 0..2 drive the two operand fraction bit counts and the output's.</param>
@@ -101,27 +98,27 @@ internal static class DirectedRoundingClaims {
         var fractionBitsOut = FoldScale(raw: right[2]);
 
         var subjectOk = FixedDirectedRounding.TryCeilingQuotient(
-            numerator: numeratorRaw,
-            fractionBitsNumerator: fractionBitsNumerator,
             denominator: denominatorRaw,
             fractionBitsDenominator: fractionBitsDenominator,
+            fractionBitsNumerator: fractionBitsNumerator,
             fractionBitsOut: fractionBitsOut,
+            numerator: numeratorRaw,
             result: out var result
         );
+
         var (numerator, denominator) = Scaled(
-            value: numeratorRaw,
-            shift: (((long)fractionBitsOut + fractionBitsDenominator) - fractionBitsNumerator)
+            shift: ((((long)fractionBitsOut) + fractionBitsDenominator) - fractionBitsNumerator),
+            value: numeratorRaw
         );
 
         return Verdict(
-            subjectOk: subjectOk,
-            result: result,
-            numerator: numerator,
             denominator: (denominator * denominatorRaw),
-            operands: $"ceiling quotient ({numeratorRaw}@{fractionBitsNumerator} / {denominatorRaw}@{fractionBitsDenominator} -> {fractionBitsOut})"
+            numerator: numerator,
+            operands: $"ceiling quotient ({numeratorRaw}@{fractionBitsNumerator} / {denominatorRaw}@{fractionBitsDenominator} -> {fractionBitsOut})",
+            result: result,
+            subjectOk: subjectOk
         );
     }
-
     /// <summary>The ceiling product-sum is the least raw at or above the exact <c>a·b + addend</c>, and it answers
     /// exactly when both lifted terms stay inside the declared 127-bit per-term budget and the result fits the raw.</summary>
     /// <param name="left">Lanes 0..2 = the two factors and the addend, folded non-negative.</param>
@@ -138,22 +135,23 @@ internal static class DirectedRoundingClaims {
 
         var subjectOk = FixedDirectedRounding.TryCeilingProductSum(
             a: a,
-            fractionBitsA: fractionBitsA,
-            b: b,
-            fractionBitsB: fractionBitsB,
             addend: addend,
+            b: b,
+            fractionBitsA: fractionBitsA,
             fractionBitsAddend: fractionBitsAddend,
+            fractionBitsB: fractionBitsB,
             fractionBitsOut: fractionBitsOut,
             result: out var result
         );
 
-        var productScale = ((long)fractionBitsA + fractionBitsB);
+        var productScale = (((long)fractionBitsA) + fractionBitsB);
         var addendScale = ((long)fractionBitsAddend);
         var commonScale = Math.Max(val1: productScale, val2: addendScale);
         var productTerm = ((((BigInteger)a) * b) << ((int)(commonScale - productScale)));
         var addendTerm = (((BigInteger)addend) << ((int)(commonScale - addendScale)));
         var budget = (BigInteger.One << 127);
-        var (numerator, denominator) = Scaled(value: (productTerm + addendTerm), shift: (fractionBitsOut - commonScale));
+
+        var (numerator, denominator) = Scaled(shift: (fractionBitsOut - commonScale), value: (productTerm + addendTerm));
         var withinBudget = ((productTerm < budget) && (addendTerm < budget));
         var operands = $"ceiling product-sum ({a}@{fractionBitsA} x {b}@{fractionBitsB} + {addend}@{fractionBitsAddend} -> {fractionBitsOut})";
 
@@ -163,9 +161,8 @@ internal static class DirectedRoundingClaims {
                 : $"{operands}: answered {result} outside the declared 127-bit per-term budget");
         }
 
-        return Verdict(subjectOk: subjectOk, result: result, numerator: numerator, denominator: denominator, operands: operands);
+        return Verdict(denominator: denominator, numerator: numerator, operands: operands, result: result, subjectOk: subjectOk);
     }
-
     /// <summary>The ceiling vector magnitude is the least raw at or above the exact Euclidean norm, at two and three
     /// components alike, and never below the round-to-nearest sibling it is meant to bound.</summary>
     /// <param name="left">Lanes 0..2 = the three components, taken at full signed range.</param>
@@ -178,14 +175,14 @@ internal static class DirectedRoundingClaims {
         var y = left[1];
         var z = left[2];
 
-        var planarOk = FixedDirectedRounding.TryCeilingMagnitude(x: x, y: y, result: out var planar);
-        var spatialOk = FixedDirectedRounding.TryCeilingMagnitude(x: x, y: y, z: z, result: out var spatial);
+        var planarOk = FixedDirectedRounding.TryCeilingMagnitude(result: out var planar, x: x, y: y);
+        var spatialOk = FixedDirectedRounding.TryCeilingMagnitude(result: out var spatial, x: x, y: y, z: z);
 
         if (Bound(x: x, y: y, z: BigInteger.Zero, subjectOk: planarOk, result: planar, label: "planar") is { } planarDetail) {
             return planarDetail;
         }
 
-        if (Bound(x: x, y: y, z: z, subjectOk: spatialOk, result: spatial, label: "spatial") is { } spatialDetail) {
+        if (Bound(label: "spatial", result: spatial, subjectOk: spatialOk, x: x, y: y, z: z) is { } spatialDetail) {
             return spatialDetail;
         }
 
@@ -196,22 +193,21 @@ internal static class DirectedRoundingClaims {
 
         return null;
     }
-
     /// <summary>Every member of the family refuses a negative operand — and a non-positive divisor — with its output
     /// left at zero, rather than choosing silently between "up" meaning toward positive infinity and "up" meaning away
     /// from zero. The vector magnitudes are the one exception and are checked to ACCEPT negative components, because a
     /// magnitude is non-negative whatever the signs are.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? NegativeOperandsRefuse() {
-        if (FixedDirectedRounding.TryCeilingSquareRoot(value: -1L, fractionBitCount: 16, result: out var root) || (root != 0L)) {
+        if (FixedDirectedRounding.TryCeilingSquareRoot(fractionBitCount: 16, result: out var root, value: -1L) || (root != 0L)) {
             return $"TryCeilingSquareRoot accepted a negative radicand (or left {root} behind)";
         }
 
-        if (FixedDirectedRounding.TryCeilingSquareRoot(value: 1L, fractionBitCount: -1, result: out var negativeScale) || (negativeScale != 0L)) {
+        if (FixedDirectedRounding.TryCeilingSquareRoot(fractionBitCount: -1, result: out var negativeScale, value: 1L) || (negativeScale != 0L)) {
             return $"TryCeilingSquareRoot accepted a negative fraction bit count (or left {negativeScale} behind)";
         }
 
-        if (FixedDirectedRounding.TryCeilingProduct(a: -1L, fractionBitsA: 0, b: 1L, fractionBitsB: 0, fractionBitsOut: 0, result: out var product) || (product != 0L)) {
+        if (FixedDirectedRounding.TryCeilingProduct(a: -1L, b: 1L, fractionBitsA: 0, fractionBitsB: 0, fractionBitsOut: 0, result: out var product) || (product != 0L)) {
             return $"TryCeilingProduct accepted a negative factor (or left {product} behind)";
         }
 
@@ -219,29 +215,29 @@ internal static class DirectedRoundingClaims {
         // without the sign guard this answers 1, because -1 reads as 2^64 - 1 and a 64-bit right shift brings it home.
         // The witness above cannot see that — there the huge magnitude overflows the narrowing anyway, so the guard's
         // removal is masked.
-        if (FixedDirectedRounding.TryCeilingProduct(a: -1L, fractionBitsA: 64, b: 1L, fractionBitsB: 0, fractionBitsOut: 0, result: out var masked) || (masked != 0L)) {
+        if (FixedDirectedRounding.TryCeilingProduct(a: -1L, b: 1L, fractionBitsA: 64, fractionBitsB: 0, fractionBitsOut: 0, result: out var masked) || (masked != 0L)) {
             return $"TryCeilingProduct accepted a negative factor at a 64-bit down-scale (or left {masked} behind) — the sign guard is not load-bearing";
         }
 
-        if (FixedDirectedRounding.TryCeilingQuotient(numerator: 1L, fractionBitsNumerator: 0, denominator: 0L, fractionBitsDenominator: 0, fractionBitsOut: 0, result: out var byZero) || (byZero != 0L)) {
+        if (FixedDirectedRounding.TryCeilingQuotient(denominator: 0L, fractionBitsDenominator: 0, fractionBitsNumerator: 0, fractionBitsOut: 0, numerator: 1L, result: out var byZero) || (byZero != 0L)) {
             return $"TryCeilingQuotient accepted a zero divisor (or left {byZero} behind)";
         }
 
-        if (FixedDirectedRounding.TryCeilingQuotient(numerator: 1L, fractionBitsNumerator: 0, denominator: -4L, fractionBitsDenominator: 0, fractionBitsOut: 0, result: out var negativeDivisor) || (negativeDivisor != 0L)) {
+        if (FixedDirectedRounding.TryCeilingQuotient(denominator: -4L, fractionBitsDenominator: 0, fractionBitsNumerator: 0, fractionBitsOut: 0, numerator: 1L, result: out var negativeDivisor) || (negativeDivisor != 0L)) {
             return $"TryCeilingQuotient accepted a negative divisor (or left {negativeDivisor} behind)";
         }
 
-        if (FixedDirectedRounding.TryCeilingProductSum(a: 1L, fractionBitsA: 0, b: 1L, fractionBitsB: 0, addend: -1L, fractionBitsAddend: 0, fractionBitsOut: 0, result: out var sum) || (sum != 0L)) {
+        if (FixedDirectedRounding.TryCeilingProductSum(a: 1L, addend: -1L, b: 1L, fractionBitsA: 0, fractionBitsAddend: 0, fractionBitsB: 0, fractionBitsOut: 0, result: out var sum) || (sum != 0L)) {
             return $"TryCeilingProductSum accepted a negative addend (or left {sum} behind)";
         }
 
         // The exact ratio 1/3 at zero output fraction bits: the ceiling is one, where a round-to-nearest kernel would
         // answer zero. A directed kernel that quietly rounded to nearest would pass every proximity check and fail here.
-        if (!FixedDirectedRounding.TryCeilingQuotient(numerator: 1L, fractionBitsNumerator: 0, denominator: 3L, fractionBitsDenominator: 0, fractionBitsOut: 0, result: out var third) || (third != 1L)) {
+        if (!FixedDirectedRounding.TryCeilingQuotient(denominator: 3L, fractionBitsDenominator: 0, fractionBitsNumerator: 0, fractionBitsOut: 0, numerator: 1L, result: out var third) || (third != 1L)) {
             return $"TryCeilingQuotient answered {third} for 1/3 at zero fraction bits, expected the ceiling 1";
         }
 
-        if (!FixedDirectedRounding.TryCeilingMagnitude(x: -3L, y: -4L, result: out var magnitude) || (magnitude != 5L)) {
+        if (!FixedDirectedRounding.TryCeilingMagnitude(result: out var magnitude, x: -3L, y: -4L) || (magnitude != 5L)) {
             return $"TryCeilingMagnitude answered {magnitude} for (-3,-4), expected the exact 5 — negative components are legal here";
         }
 
@@ -254,11 +250,10 @@ internal static class DirectedRoundingClaims {
         ((shift >= 0L)
             ? ((value << ((int)shift)), BigInteger.One)
             : (value, (BigInteger.One << ((int)-shift))));
-
     // The shared verdict: refuse exactly when the exact ceiling leaves the raw, and otherwise be the least
     // representable value at or above the exact rational.
     private static string? Verdict(bool subjectOk, long result, BigInteger numerator, BigInteger denominator, string operands) {
-        var exact = Oracles.CeilingRational(numerator: numerator, denominator: denominator);
+        var exact = Oracles.CeilingRational(denominator: denominator, numerator: numerator);
         var expected = (exact <= long.MaxValue);
 
         if (subjectOk != expected) {
@@ -283,7 +278,6 @@ internal static class DirectedRoundingClaims {
             ? null
             : $"{operands}: subject={result} oracle={exact}");
     }
-
     private static string? Bound(long x, long y, BigInteger z, bool subjectOk, long result, string label) {
         var radicand = (((((BigInteger)x) * x) + (((BigInteger)y) * y)) + (z * z));
         var exact = Oracles.CeilingIntegerRoot(value: radicand);
@@ -299,11 +293,11 @@ internal static class DirectedRoundingClaims {
                 : $"{label} ceiling magnitude refused at ({x},{y},{z}) but left {result} behind");
         }
 
-        if (((BigInteger)result * result) < radicand) {
+        if ((((BigInteger)result) * result) < radicand) {
             return $"{label} ceiling magnitude {result} at ({x},{y},{z}) is BELOW the exact norm — it is not an upper bound at all";
         }
 
-        if ((result > 0L) && ((((BigInteger)result - BigInteger.One) * (result - 1L)) >= radicand)) {
+        if ((result > 0L) && (((((BigInteger)result) - BigInteger.One) * (result - 1L)) >= radicand)) {
             return $"{label} ceiling magnitude {result} at ({x},{y},{z}) is more than one unit above the exact norm — it is not the LEAST upper bound";
         }
 

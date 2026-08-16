@@ -50,8 +50,8 @@ internal static class BessExporter {
 
         Bess.WriteBlock(
             destination: file,
-            tag: "NAME",
-            payload: "Puck.HumbleGamingBrick 1.0"u8
+            payload: "Puck.HumbleGamingBrick 1.0"u8,
+            tag: "NAME"
         );
         Bess.WriteBlock(
             destination: file,
@@ -62,15 +62,15 @@ internal static class BessExporter {
             destination: file,
             tag: "CORE",
             payload: BuildCoreBlock(
-                capture: capture,
-                model: model,
-                ramOffset: ramOffset,
-                vramOffset: vramOffset,
-                mbcRamOffset: mbcRamOffset,
-                oamOffset: oamOffset,
-                hramOffset: hramOffset,
                 backgroundPaletteOffset: backgroundPaletteOffset,
-                objectPaletteOffset: objectPaletteOffset
+                capture: capture,
+                hramOffset: hramOffset,
+                mbcRamOffset: mbcRamOffset,
+                model: model,
+                oamOffset: oamOffset,
+                objectPaletteOffset: objectPaletteOffset,
+                ramOffset: ramOffset,
+                vramOffset: vramOffset
             )
         );
 
@@ -84,12 +84,12 @@ internal static class BessExporter {
 
         Bess.WriteBlock(
             destination: file,
-            tag: "END ",
-            payload: []
+            payload: [],
+            tag: "END "
         );
         Bess.WriteFooter(
             destination: file,
-            firstBlockOffset: (uint)firstBlockOffset
+            firstBlockOffset: ((uint)firstBlockOffset)
         );
 
         return (file.ToArray(), capture);
@@ -100,20 +100,20 @@ internal static class BessExporter {
 
         if (rom.Length >= 0x144) {
             rom.AsSpan(
-                start: 0x134,
-                length: 16
+                length: 16,
+                start: 0x134
             ).CopyTo(destination: block.AsSpan(
-                start: 0x00,
-                length: 16
+                length: 16,
+                start: 0x00
             ));
         }
         if (rom.Length >= 0x150) {
             rom.AsSpan(
-                start: 0x14E,
-                length: 2
+                length: 2,
+                start: 0x14E
             ).CopyTo(destination: block.AsSpan(
-                start: 0x10,
-                length: 2
+                length: 2,
+                start: 0x10
             ));
         }
 
@@ -131,8 +131,8 @@ internal static class BessExporter {
             value: 1
         ); // BESS minor
         Bess.ModelTag(model: model).CopyTo(destination: block.AsSpan(
-            start: 0x04,
-            length: 4
+            length: 4,
+            start: 0x04
         ));
         BinaryPrimitives.WriteUInt16LittleEndian(
             destination: block.AsSpan(start: 0x08),
@@ -158,15 +158,15 @@ internal static class BessExporter {
             destination: block.AsSpan(start: 0x12),
             value: capture.Sp
         );
-        block[0x14] = (byte)(capture.Ime
+        block[0x14] = ((byte)(capture.Ime
             ? 1
-            : 0);
+            : 0));
         block[0x15] = capture.Ie;
         block[0x16] = capture.ExecutionState;
         // 0x17 reserved, already zero.
         capture.RegisterPage.CopyTo(destination: block.AsSpan(
-            start: Bess.RegisterPageOffset,
-            length: Bess.RegisterPageLength
+            length: Bess.RegisterPageLength,
+            start: Bess.RegisterPageOffset
         ));
 
         WriteBufferEntry(
@@ -220,11 +220,11 @@ internal static class BessExporter {
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: block.AsSpan(start: absolute),
-            value: (uint)size
+            value: ((uint)size)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: block.AsSpan(start: (absolute + 4)),
-            value: (uint)fileOffset
+            value: ((uint)fileOffset)
         );
     }
     // A mapper-neutral, best-effort register-write reconstruction: the ROM/RAM bank numbers this cartridge's own
@@ -237,8 +237,8 @@ internal static class BessExporter {
         var entries = new List<byte>(capacity: 9);
 
         void Write(ushort address, byte value) {
-            entries.Add(item: (byte)address);
-            entries.Add(item: (byte)(address >> 8));
+            entries.Add(item: ((byte)address));
+            entries.Add(item: ((byte)(address >> 8)));
             entries.Add(item: value);
         }
 
@@ -259,27 +259,27 @@ internal static class BessExporter {
 
             Write(
                 address: 0x2000,
-                value: (byte)(romBank & 0xFF)
+                value: ((byte)(romBank & 0xFF))
             );
 
             if (romBank > 0xFF) {
                 Write(
                     address: 0x3000,
-                    value: (byte)((romBank >> 8) & 0x01)
+                    value: ((byte)((romBank >> 8) & 0x01))
                 ); // MBC5's 9th ROM-bank bit.
             }
         }
 
         if (
             cartridge.TryComputeRamWindow(
-            offset: out var ramOffset,
-            length: out var ramLength
+            length: out var ramLength,
+            offset: out var ramOffset
         ) &&
             (ramLength > 0)
         ) {
             Write(
                 address: 0x4000,
-                value: (byte)(ramOffset / 0x2000)
+                value: ((byte)(ramOffset / 0x2000))
             );
         }
 

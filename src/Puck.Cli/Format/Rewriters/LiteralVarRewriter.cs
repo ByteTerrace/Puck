@@ -14,7 +14,7 @@ namespace Puck.Cli.Format.Rewriters;
 // `var`, so the pass is idempotent.
 internal sealed class LiteralVarRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitLocalDeclarationStatement(LocalDeclarationStatementSyntax node) {
-        var visited = (LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(node: node)!;
+        var visited = ((LocalDeclarationStatementSyntax)base.VisitLocalDeclarationStatement(node: node)!);
 
         if (!visited.UsingKeyword.IsKind(kind: SyntaxKind.None)
             || visited.Modifiers.Any(predicate: static modifier => modifier.IsKind(kind: SyntaxKind.ConstKeyword))) {
@@ -38,8 +38,8 @@ internal sealed class LiteralVarRewriter : CSharpSyntaxRewriter {
 
         var literalText = literal.Token.Text;
 
-        if (literalText.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase)
-            || literalText.StartsWith(value: "0b", comparisonType: StringComparison.OrdinalIgnoreCase)
+        if (literalText.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "0x")
+            || literalText.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "0b")
             || HasTypeSuffix(text: literalText)
             || (SyntaxFactory.ParseExpression(text: (literalText + suffix)) is not LiteralExpressionSyntax suffixed)) {
             return visited;

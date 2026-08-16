@@ -27,7 +27,6 @@ public sealed partial class Arm7Tdmi {
             _ => false,             // 0xF: reserved, never executes
         };
     }
-
     // The barrel shifter. Returns the shifted value and updates carryOut. byRegister selects the
     // register-specified-amount semantics (different handling of zero and amounts >= 32).
     private static uint BarrelShift(Arm7Tdmi cpu, uint value, ShiftType type, int amount, bool byRegister, ref bool carryOut) {
@@ -81,12 +80,12 @@ public sealed partial class Arm7Tdmi {
                 ) {
                     carryOut = ((value & 0x80000000u) != 0u);
 
-                    return (uint)((int)value >> 31);
+                    return ((uint)(((int)value) >> 31));
                 }
 
                 carryOut = (((value >> (amount - 1)) & 1u) != 0u);
 
-                return (uint)((int)value >> amount);
+                return ((uint)(((int)value) >> amount));
 
             default: // RotateRight
                 if (amount == 0) {
@@ -129,8 +128,8 @@ public sealed partial class Arm7Tdmi {
             : cpu.m_cpsr & ~FlagV);
     }
     private static uint Add(Arm7Tdmi cpu, uint a, uint b, bool setFlags) {
-        var wide = ((ulong)a + b);
-        var result = (uint)wide;
+        var wide = (((ulong)a) + b);
+        var result = ((uint)wide);
 
         if (setFlags) {
             SetNZ(
@@ -138,8 +137,8 @@ public sealed partial class Arm7Tdmi {
                 result: result
             );
             SetCarry(
-                cpu: cpu,
-                carry: (wide > 0xFFFFFFFFul)
+                carry: (wide > 0xFFFFFFFFul),
+                cpu: cpu
             );
             SetOverflow(
                 cpu: cpu,
@@ -153,8 +152,8 @@ public sealed partial class Arm7Tdmi {
         var carryIn = (((cpu.m_cpsr & FlagC) != 0u)
             ? 1ul
             : 0ul);
-        var wide = (((ulong)a + b) + carryIn);
-        var result = (uint)wide;
+        var wide = ((((ulong)a) + b) + carryIn);
+        var result = ((uint)wide);
 
         if (setFlags) {
             SetNZ(
@@ -162,8 +161,8 @@ public sealed partial class Arm7Tdmi {
                 result: result
             );
             SetCarry(
-                cpu: cpu,
-                carry: (wide > 0xFFFFFFFFul)
+                carry: (wide > 0xFFFFFFFFul),
+                cpu: cpu
             );
             SetOverflow(
                 cpu: cpu,
@@ -182,8 +181,8 @@ public sealed partial class Arm7Tdmi {
                 result: result
             );
             SetCarry(
-                cpu: cpu,
-                carry: (a >= b)
+                carry: (a >= b),
+                cpu: cpu
             );
             SetOverflow(
                 cpu: cpu,
@@ -197,8 +196,8 @@ public sealed partial class Arm7Tdmi {
         var borrow = (((cpu.m_cpsr & FlagC) != 0u)
             ? 0ul
             : 1ul);
-        var wide = (((ulong)a - b) - borrow);
-        var result = (uint)wide;
+        var wide = ((((ulong)a) - b) - borrow);
+        var result = ((uint)wide);
 
         if (setFlags) {
             SetNZ(
@@ -206,8 +205,8 @@ public sealed partial class Arm7Tdmi {
                 result: result
             );
             SetCarry(
-                cpu: cpu,
-                carry: ((ulong)a >= ((ulong)b + borrow))
+                carry: (((ulong)a) >= (((ulong)b) + borrow)),
+                cpu: cpu
             );
             SetOverflow(
                 cpu: cpu,
@@ -217,7 +216,6 @@ public sealed partial class Arm7Tdmi {
 
         return result;
     }
-
     // ARM7TDMI early termination: the multiplier is consumed 8 bits per cycle, stopping once the remaining upper
     // bits are all zeros — or all ones for the SIGNED variants only, where they are just sign extension. Unsigned
     // long multiplies get no all-ones shortcut (per the hardware spec and reference multiply timing).

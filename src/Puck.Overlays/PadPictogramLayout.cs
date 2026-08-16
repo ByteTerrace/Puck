@@ -5,7 +5,6 @@ namespace Puck.Overlays;
 /// <param name="CenterGap">The extra half-gap between the two clusters, in the caller's units.</param>
 /// <param name="GlyphOffsetRatio">The glyph-badge nudge as a fraction of <paramref name="ButtonSize"/>.</param>
 public readonly record struct PadPictogramOptions(float ButtonSize, float CenterGap, float GlyphOffsetRatio);
-
 /// <summary>One resolved pictogram slot: the button center and its glyph-badge offset, both relative to the
 /// pictogram's midpoint, Y positive upward.</summary>
 /// <param name="X">The button-center X.</param>
@@ -13,7 +12,6 @@ public readonly record struct PadPictogramOptions(float ButtonSize, float Center
 /// <param name="GlyphX">The glyph-badge X offset from the button center.</param>
 /// <param name="GlyphYUp">The glyph-badge Y offset from the button center, positive up.</param>
 public readonly record struct PadPictogramSlot(float X, float YUp, float GlyphX, float GlyphYUp);
-
 /// <summary>Lays out a two-cluster gamepad pictogram — the d-pad and face-button diamonds of one controller —
 /// as pure geometry: each cluster is a compass diamond plus a diagonal and a center slot, the second cluster is
 /// the arithmetic mirror of the first, and every button's glyph badge nudges along that button's own compass
@@ -23,14 +21,13 @@ public readonly record struct PadPictogramSlot(float X, float YUp, float GlyphX,
 /// consumer mapping physical controls to slots accounts for that flip (or feeds the left cluster pre-flipped
 /// slot indices); the primitive stays pure.</remarks>
 public static class PadPictogramLayout {
-    /// <summary>The number of slots in one cluster.</summary>
-    public const int SlotsPerCluster = 6;
+    // The compass diamond's X midpoint — glyph badges nudge relative to it.
+    private const int DiamondCenterX = 3;
 
     /// <summary>The total slot count across both clusters.</summary>
     public const int SlotCount = (SlotsPerCluster * 2);
-
-    // The compass diamond's X midpoint — glyph badges nudge relative to it.
-    private const int DiamondCenterX = 3;
+    /// <summary>The number of slots in one cluster.</summary>
+    public const int SlotsPerCluster = 6;
 
     // The six cluster slots as geometry data, index-aligned across both spans:
     //   0 north (3, 1) · 1 west (2, 0) · 2 south (3, -1) · 3 east (4, 0) · 4 diagonal (4, 1) · 5 center (3, 0)

@@ -30,14 +30,13 @@ internal static class Domains {
     /// <returns>The mapped raw operand.</returns>
     public static long FrontierRaw(long index) {
         var (x, y) = DigitalNetSampler.SamplePlane(
-            index: unchecked((uint)index),
             directionNumbers: PlaneDirectionNumbers,
+            index: unchecked((uint)index),
             scramble: (0U, 0U)
         );
 
         return unchecked((long)((((ulong)x) << 32) | y));
     }
-
     /// <summary>Enumerates element-component pairs <c>(u, v)</c> for a domain: an edge battery, an edge-biased random
     /// batch, and the domain's frontier block.</summary>
     /// <param name="domain">The operand domain.</param>
@@ -67,10 +66,9 @@ internal static class Domains {
         var start = (index * block);
 
         for (var offset = 0; ((offset + 1) < block); offset += 2) {
-            yield return (domain.Fold(raw: FrontierRaw(index: (start + offset))), domain.Fold(raw: FrontierRaw(index: (start + offset + 1L))));
+            yield return (domain.Fold(raw: FrontierRaw(index: (start + offset))), domain.Fold(raw: FrontierRaw(index: ((start + offset) + 1L))));
         }
     }
-
     /// <summary>Enumerates operand quads <c>(u1, v1, u2, v2)</c> for a binary law: an edge battery (bounded on the
     /// default tier, exhaustive on deep), an edge-biased random batch, and the domain's frontier block.</summary>
     /// <param name="domain">The operand domain.</param>
@@ -99,7 +97,7 @@ internal static class Domains {
 
             foreach (var u1 in edges) {
                 foreach (var v1 in edges) {
-                    yield return (u1, v1, edges[rotation % count], edges[(rotation + (count / 2)) % count]);
+                    yield return (u1, v1, edges[(rotation % count)], edges[((rotation + (count / 2)) % count)]);
 
                     ++rotation;
                 }
@@ -119,13 +117,12 @@ internal static class Domains {
         for (var offset = 0; ((offset + 3) < block); offset += 4) {
             yield return (
                 domain.Fold(raw: FrontierRaw(index: (start + offset))),
-                domain.Fold(raw: FrontierRaw(index: (start + offset + 1L))),
-                domain.Fold(raw: FrontierRaw(index: (start + offset + 2L))),
-                domain.Fold(raw: FrontierRaw(index: (start + offset + 3L)))
+                domain.Fold(raw: FrontierRaw(index: ((start + offset) + 1L))),
+                domain.Fold(raw: FrontierRaw(index: ((start + offset) + 2L))),
+                domain.Fold(raw: FrontierRaw(index: ((start + offset) + 3L)))
             );
         }
     }
-
     /// <summary>Enumerates operand pairs of lane vectors for a multi-lane law: an edge battery that broadcasts each edge
     /// raw one lane at a time and then across every lane at once, an edge-biased random batch, and the domain's frontier
     /// block. Single-lane operands isolate one basis position's contribution; the fully broadcast ones drive every lane
@@ -150,7 +147,7 @@ internal static class Domains {
                 Array.Clear(array: right);
 
                 left[lane] = edges[edge];
-                right[((lane + edge) % width)] = edges[((edge + 1 + lane) % count)];
+                right[((lane + edge) % width)] = edges[(((edge + 1) + lane) % count)];
 
                 yield return (left, right);
             }
@@ -186,14 +183,13 @@ internal static class Domains {
 
         for (var offset = 0; ((offset + stride) <= block); offset += stride) {
             for (var lane = 0; (lane < width); ++lane) {
-                left[lane] = domain.Fold(raw: FrontierRaw(index: (start + offset + lane)));
-                right[lane] = domain.Fold(raw: FrontierRaw(index: ((start + offset + width) + lane)));
+                left[lane] = domain.Fold(raw: FrontierRaw(index: ((start + offset) + lane)));
+                right[lane] = domain.Fold(raw: FrontierRaw(index: (((start + offset) + width) + lane)));
             }
 
             yield return (left, right);
         }
     }
-
     /// <summary>Enumerates operand triples of lane vectors for a ternary law, with the same three streams
     /// <see cref="Vectors"/> uses.</summary>
     /// <param name="domain">The operand domain.</param>
@@ -217,7 +213,7 @@ internal static class Domains {
 
                 a[lane] = edges[edge];
                 b[((lane + 1) % width)] = edges[((edge + 1) % count)];
-                c[((lane + edge) % width)] = edges[((edge + 2 + lane) % count)];
+                c[((lane + edge) % width)] = edges[(((edge + 2) + lane) % count)];
 
                 yield return (a, b, c);
             }
@@ -252,9 +248,9 @@ internal static class Domains {
 
         for (var offset = 0; ((offset + stride) <= block); offset += stride) {
             for (var lane = 0; (lane < width); ++lane) {
-                a[lane] = domain.Fold(raw: FrontierRaw(index: (start + offset + lane)));
-                b[lane] = domain.Fold(raw: FrontierRaw(index: ((start + offset + width) + lane)));
-                c[lane] = domain.Fold(raw: FrontierRaw(index: ((start + offset + (2 * width)) + lane)));
+                a[lane] = domain.Fold(raw: FrontierRaw(index: ((start + offset) + lane)));
+                b[lane] = domain.Fold(raw: FrontierRaw(index: (((start + offset) + width) + lane)));
+                c[lane] = domain.Fold(raw: FrontierRaw(index: (((start + offset) + (2 * width)) + lane)));
             }
 
             yield return (a, b, c);
@@ -267,7 +263,6 @@ internal static class Domains {
             Tier.Deep => 4096,
             _ => 256,
         };
-
     private static uint[] BuildPlaneDirectionNumbers() {
         var destination = new uint[DigitalNetSampler.PlaneDirectionNumberCount];
 
@@ -276,7 +271,6 @@ internal static class Domains {
         return destination;
     }
 }
-
 /// <summary>
 /// An operand domain: a named region of the raw space with its own committed frontier counter and its own edge-biased
 /// sampler configuration. Distinct keys track independent progressive coverage. The default domain is the full signed
@@ -305,16 +299,14 @@ internal readonly record struct Domain(string Key, int Block, double EdgeFractio
     public Pcg32XshRr Rng(long index) {
         var hash = StableHash(text: Key);
 
-        return Pcg32XshRr.Create(state: MixSeed(hash: hash, index: index), stream: (hash & Pcg32XshRr.MaxStream));
+        return Pcg32XshRr.Create(state: MixSeed(hash: hash, index: index), stream: hash & Pcg32XshRr.MaxStream);
     }
-
     /// <summary>The seed this domain uses at a frontier position, for the enriched failure message. Equal by
     /// construction to the state the <see cref="Rng"/> generator starts from, so a reported seed reproduces the run.</summary>
     /// <param name="index">The frontier counter.</param>
     /// <returns>The generator seed.</returns>
     public ulong Seed(long index) =>
         MixSeed(hash: StableHash(text: Key), index: index);
-
     /// <summary>Draws the next domain-folded raw from an edge-biased mixture.</summary>
     /// <param name="rng">The generator, advanced in place.</param>
     /// <returns>A raw operand in the domain.</returns>
@@ -326,16 +318,15 @@ internal readonly record struct Domain(string Key, int Block, double EdgeFractio
             raw = Domains.EdgeRaws[rng.NextUInt32(minimum: 0U, maximum: ((uint)(Domains.EdgeRaws.Length - 1)))];
         } else if (pick < (EdgeFraction + NeighborhoodFraction)) {
             var edge = Domains.EdgeRaws[rng.NextUInt32(minimum: 0U, maximum: ((uint)(Domains.EdgeRaws.Length - 1)))];
-            var delta = (((long)rng.NextUInt32(minimum: 0U, maximum: 8U)) - 4L);
+            var delta = (((long)rng.NextUInt32(maximum: 8U, minimum: 0U)) - 4L);
 
-            raw = unchecked(edge + delta);
+            raw = unchecked((edge + delta));
         } else {
             raw = unchecked((long)((((ulong)rng.NextUInt32()) << 32) | rng.NextUInt32()));
         }
 
         return Fold(raw: raw);
     }
-
     /// <summary>Folds a raw onto the domain — the identity for the full-range domain, or a bounded sublattice value.</summary>
     /// <param name="raw">The candidate raw.</param>
     /// <returns>The domain-legal raw.</returns>
@@ -350,7 +341,6 @@ internal readonly record struct Domain(string Key, int Block, double EdgeFractio
         // keeps the draw's sign, and the shift places the value on the lattice.
         return ((raw % SublatticeSpan) << SublatticeShift);
     }
-
     /// <summary>Maps the shared edge set into the domain (folding onto the sublattice when configured).</summary>
     /// <param name="source">The shared edge set.</param>
     /// <returns>The domain-mapped edges.</returns>
@@ -372,15 +362,14 @@ internal readonly record struct Domain(string Key, int Block, double EdgeFractio
     // and the counter (the golden-ratio odd constant decorrelates adjacent counters). The one home of the mix, shared by
     // the generator and its reported seed.
     private static ulong MixSeed(ulong hash, long index) =>
-        unchecked(hash ^ ((ulong)index * 0x9E3779B97F4A7C15UL));
-
+        unchecked(hash ^ (((ulong)index) * 0x9E3779B97F4A7C15UL));
     private static ulong StableHash(string text) {
         // The house 64-bit FNV-1a over the key's code units; deterministic and machine-independent, used only to derive
         // seeds. Reuses Puck.Maths' accumulator rather than re-deriving the offset basis and prime here.
         var hash = Fnv1aHash.Create();
 
         foreach (var character in text) {
-            hash.Add(value: (uint)character);
+            hash.Add(value: ((uint)character));
         }
 
         return hash.Value;

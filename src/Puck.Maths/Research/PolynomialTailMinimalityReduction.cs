@@ -29,7 +29,6 @@ public readonly record struct PolynomialTailMinimalityReduction(
     QuadraticSurd InitialMinusOne,
     QuadraticSurd InitialZero
 );
-
 /// <summary>
 /// An exact reduction of one integer-tail equality question to a linear relation between 1-periods obtained from
 /// Gauss hypergeometric functions.
@@ -84,7 +83,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         if (!TryFactoredDegreeOneParameters(
             alpha: out var alpha,
             gammaConstant: out var gammaConstant,
-            tailIndex: tailIndex)) {
+            tailIndex: tailIndex
+        )) {
             return false;
         }
 
@@ -101,7 +101,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var parameterB = (alpha - QuadraticSurd.One);
         var parameterC = (parameterA + (gammaConstant / r));
         var argument = (other / dominant);
-        var eulerShift = EulerRegularizationShift(parameterB: parameterB, parameterC: parameterC);
+        var eulerShift = EulerRegularizationShift(
+            parameterB: parameterB,
+            parameterC: parameterC
+        );
         var baseAtTail = ((Parameters.Linear * tailIndex) + Parameters.Constant);
         var initialZero = QuadraticSurd.Rational(value: (baseAtTail - integerBoundary));
         var initialMinusOne = alpha;
@@ -134,23 +137,27 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         reduction = default;
         return false;
     }
-
     /// <summary>Rechecks the factorization and every hypergeometric parameter in a 1-period reduction.</summary>
     public bool VerifyOnePeriodEqualityReduction(PolynomialTailOnePeriodReduction reduction) {
-        if ((reduction.TailIndex <= BigInteger.Zero) ||
-            !reduction.Alpha.IsRational || !reduction.GammaConstant.IsRational ||
-            !reduction.HypergeometricA.IsRational || !reduction.HypergeometricB.IsRational ||
+        if (
+            (reduction.TailIndex <= BigInteger.Zero) ||
+            !reduction.Alpha.IsRational ||
+            !reduction.GammaConstant.IsRational ||
+            !reduction.HypergeometricA.IsRational ||
+            !reduction.HypergeometricB.IsRational ||
             !reduction.HypergeometricC.IsRational ||
             !BelongsToCharacteristicField(value: reduction.OtherCharacteristicRoot) ||
             !BelongsToCharacteristicField(value: reduction.HypergeometricArgument) ||
             !BelongsToCharacteristicField(value: reduction.HypergeometricRatioTarget) ||
-            (reduction.EulerShift < BigInteger.Zero) || !reduction.EulerShift.IsEven ||
+            (reduction.EulerShift < BigInteger.Zero) ||
+            !reduction.EulerShift.IsEven ||
             (reduction.BetaSlope != Parameters.Linear) ||
             (reduction.GammaSlope != Parameters.NumeratorQuadratic) ||
             (reduction.BetaConstant != ((Parameters.Linear * reduction.TailIndex) + Parameters.Constant)) ||
             (reduction.DominantCharacteristicRoot != Slope) ||
             (reduction.OtherCharacteristicRoot == reduction.DominantCharacteristicRoot) ||
-            (reduction.InitialMinusOne != reduction.Alpha)) {
+            (reduction.InitialMinusOne != reduction.Alpha)
+        ) {
             return false;
         }
 
@@ -158,9 +165,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var r = QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic);
         var dominant = reduction.DominantCharacteristicRoot;
         var other = reduction.OtherCharacteristicRoot;
-        var expectedInitialZero = QuadraticSurd.Rational(
-            value: (((Parameters.Linear * reduction.TailIndex) + Parameters.Constant) - reduction.IntegerBoundary)
-        );
+        var expectedInitialZero = QuadraticSurd.Rational(value: (((Parameters.Linear * reduction.TailIndex) + Parameters.Constant) - reduction.IntegerBoundary));
         var shift = (reduction.TailIndex - 1);
         var shiftedLinear = (((2 * Parameters.NumeratorQuadratic) * shift) + Parameters.NumeratorLinear);
         var shiftedConstant = (
@@ -184,13 +189,13 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         );
         var decomposedA =
             (QuadraticSurd.Rational(
-                denominator: (2 * Parameters.NumeratorQuadratic),
-                numerator: (numeratorRoot + Parameters.NumeratorQuadratic)
-            ) +
+            denominator: (2 * Parameters.NumeratorQuadratic),
+            numerator: (numeratorRoot + Parameters.NumeratorQuadratic)
+        ) +
             (QuadraticSurd.Rational(
-                denominator: (2 * Parameters.NumeratorQuadratic),
-                numerator: alignmentResidual
-            ) / (other - dominant)));
+            denominator: (2 * Parameters.NumeratorQuadratic),
+            numerator: alignmentResidual
+        ) / (other - dominant)));
         var expectedEulerShift = EulerRegularizationShift(
             parameterB: reduction.HypergeometricB,
             parameterC: reduction.HypergeometricC
@@ -209,7 +214,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         );
 
         return
-            ((reduction.InitialZero == expectedInitialZero) &&
+            (
+            (reduction.InitialZero == expectedInitialZero) &&
             ((dominant + other) == p) &&
             ((dominant * other) == -r) &&
             (reduction.HypergeometricArgument == (other / dominant)) &&
@@ -221,13 +227,14 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (reduction.HypergeometricC ==
                 (reduction.HypergeometricA + (reduction.GammaConstant / r))) &&
             (reduction.EulerShift == expectedEulerShift) &&
-            (shiftedB.Sign > 0) && (shiftedCMinusB.Sign > 0) &&
+            (shiftedB.Sign > 0) &&
+            (shiftedCMinusB.Sign > 0) &&
             (((r * (reduction.Alpha - QuadraticSurd.One)) + reduction.GammaConstant) ==
                 QuadraticSurd.Rational(value: shiftedLinear)) &&
             ((reduction.GammaConstant * (reduction.Alpha - QuadraticSurd.One)) ==
-                QuadraticSurd.Rational(value: shiftedConstant)));
+                QuadraticSurd.Rational(value: shiftedConstant))
+        );
     }
-
     /// <summary>
     /// Attempts to reduce <c>s_n=integerBoundary</c> to minimality of a degree-one recurrence with two distinct
     /// rational characteristic roots. Success requires both the characteristic discriminant
@@ -243,7 +250,8 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         if (!TryFactoredDegreeOneParameters(
             alpha: out var alpha,
             gammaConstant: out var gammaConstant,
-            tailIndex: tailIndex)) {
+            tailIndex: tailIndex
+        )) {
             return false;
         }
         if (!Slope.IsRational) { return false; }
@@ -269,26 +277,32 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         reduction = default;
         return false;
     }
-
     /// <summary>Rechecks every rational coefficient and shifted polynomial identity in a minimality reduction.</summary>
     public bool VerifyDegreeOneMinimalityReduction(PolynomialTailMinimalityReduction reduction) {
-        if ((reduction.TailIndex <= BigInteger.Zero) ||
-            !reduction.Alpha.IsRational || !reduction.GammaConstant.IsRational ||
-            !reduction.FirstCharacteristicRoot.IsRational || !reduction.SecondCharacteristicRoot.IsRational ||
-            !reduction.InitialMinusOne.IsRational || !reduction.InitialZero.IsRational ||
+        if (
+            (reduction.TailIndex <= BigInteger.Zero) ||
+            !reduction.Alpha.IsRational ||
+            !reduction.GammaConstant.IsRational ||
+            !reduction.FirstCharacteristicRoot.IsRational ||
+            !reduction.SecondCharacteristicRoot.IsRational ||
+            !reduction.InitialMinusOne.IsRational ||
+            !reduction.InitialZero.IsRational ||
             (reduction.BetaSlope != Parameters.Linear) ||
             (reduction.GammaSlope != Parameters.NumeratorQuadratic) ||
             (reduction.BetaConstant != ((Parameters.Linear * reduction.TailIndex) + Parameters.Constant)) ||
             (reduction.FirstCharacteristicRoot == reduction.SecondCharacteristicRoot) ||
-            (reduction.InitialMinusOne != reduction.Alpha)) {
+            (reduction.InitialMinusOne != reduction.Alpha)
+        ) {
             return false;
         }
 
         var firstRoot = reduction.FirstCharacteristicRoot;
         var secondRoot = reduction.SecondCharacteristicRoot;
 
-        if (((firstRoot + secondRoot) != QuadraticSurd.Rational(value: Parameters.Linear)) ||
-            ((firstRoot * secondRoot) != -QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic))) {
+        if (
+            ((firstRoot + secondRoot) != QuadraticSurd.Rational(value: Parameters.Linear)) ||
+            ((firstRoot * secondRoot) != -QuadraticSurd.Rational(value: Parameters.NumeratorQuadratic))
+        ) {
             return false;
         }
 
@@ -299,16 +313,16 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             (Parameters.NumeratorLinear * shift)) +
             Parameters.NumeratorConstant
         );
-        var expectedInitialZero = QuadraticSurd.Rational(
-            value: (((Parameters.Linear * reduction.TailIndex) + Parameters.Constant) - reduction.IntegerBoundary)
-        );
+        var expectedInitialZero = QuadraticSurd.Rational(value: (((Parameters.Linear * reduction.TailIndex) + Parameters.Constant) - reduction.IntegerBoundary));
 
         return
-            ((reduction.InitialZero == expectedInitialZero) &&
+            (
+            (reduction.InitialZero == expectedInitialZero) &&
             (((QuadraticSurd.Rational(value: reduction.GammaSlope) * (reduction.Alpha - QuadraticSurd.One)) +
                 reduction.GammaConstant) == QuadraticSurd.Rational(value: shiftedLinear)) &&
             ((reduction.GammaConstant * (reduction.Alpha - QuadraticSurd.One)) ==
-                QuadraticSurd.Rational(value: shiftedConstant)));
+                QuadraticSurd.Rational(value: shiftedConstant))
+        );
     }
 
     private bool TryFactoredDegreeOneParameters(
@@ -351,6 +365,9 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             )
         );
 
-        return (shift.IsEven ? shift : (shift + 1));
+        return (shift.IsEven
+            ? shift
+            : (shift + 1)
+        );
     }
 }

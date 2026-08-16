@@ -44,53 +44,47 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
     // <shader>"). `must match/mirror` is gated by a nearby structure word so a plain API fact ("must
     // match the framebuffer") stays out.
     private static readonly Regex SyncPattern = new(
-        pattern: @"keep[\s\w]{0,16}in sync|kept in sync|stay(?:s|ing)? in sync|in lockstep|do not (?:alphabetize|reorder|re-order|sort)|load-bearing|same order as|must (?:match|mirror)\b[^.\n]*\b(?:layout|order|struct|block|offset|enum|field|kernel|glsl|shader|push-constant)\b|mirror of the",
-        options: RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex DebtPattern = new(pattern: @"\b(?:TODO|FIXME|HACK|XXX|KLUDGE|REVISIT)\b|\bfor now\b", options: RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex BannerPattern = new(pattern: @"[-=*#_~]{4,}", options: RegexOptions.Compiled);
-
+        options: RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        pattern: @"keep[\s\w]{0,16}in sync|kept in sync|stay(?:s|ing)? in sync|in lockstep|do not (?:alphabetize|reorder|re-order|sort)|load-bearing|same order as|must (?:match|mirror)\b[^.\n]*\b(?:layout|order|struct|block|offset|enum|field|kernel|glsl|shader|push-constant)\b|mirror of the");
+    private static readonly Regex DebtPattern = new(options: RegexOptions.IgnoreCase | RegexOptions.Compiled, pattern: @"\b(?:TODO|FIXME|HACK|XXX|KLUDGE|REVISIT)\b|\bfor now\b");
+    private static readonly Regex BannerPattern = new(options: RegexOptions.Compiled, pattern: @"[-=*#_~]{4,}");
     // Past-tense narration of the code's own history. Deliberately narrow: it targets phrases that can
     // only be describing a PREVIOUS state of this code, never a present-tense behavioral fact, so
     // "the value was clamped" (what it does) stays out and "the value used to be clamped" (what it did)
     // comes in.
     private static readonly Regex HistoryPattern = new(
-        pattern: @"\bused to (?:be|live|lived|carry|carried|do|have|had|call|called|read|return|returned|apply|applied|enforce|enforced|hold|held|sit|sat|mean|meant|work|fire|fired|refuse|refused|report|reported|resolve|resolved|write|wrote|store|stored|track|gate|gated|allow|allowed|throw|threw|log|push|pull|set|clear|reset|land|landed|check|checked)\b|\bthe former\b|\bpreviously (?:did|was|were|had|lived|carried|returned|read|applied|held|split|named)\b|\bprior to (?:this|that)\b|\bthe original (?:landing|implementation|version|shape|code|pass|fix)\b|\bbefore (?:this|the) (?:fix|change|landing|correction|review)\b|\bthe first pass\b|\bround-(?:one|two)\b|\bearlier draft\b|\bsince (?:deleted|renamed|retired|removed)\b|\bsuperseded\b|\b20\d{2}-\d{2}-\d{2}\b",
-        options: RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
+        options: RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        pattern: @"\bused to (?:be|live|lived|carry|carried|do|have|had|call|called|read|return|returned|apply|applied|enforce|enforced|hold|held|sit|sat|mean|meant|work|fire|fired|refuse|refused|report|reported|resolve|resolved|write|wrote|store|stored|track|gate|gated|allow|allowed|throw|threw|log|push|pull|set|clear|reset|land|landed|check|checked)\b|\bthe former\b|\bpreviously (?:did|was|were|had|lived|carried|returned|read|applied|held|split|named)\b|\bprior to (?:this|that)\b|\bthe original (?:landing|implementation|version|shape|code|pass|fix)\b|\bbefore (?:this|the) (?:fix|change|landing|correction|review)\b|\bthe first pass\b|\bround-(?:one|two)\b|\bearlier draft\b|\bsince (?:deleted|renamed|retired|removed)\b|\bsuperseded\b|\b20\d{2}-\d{2}-\d{2}\b");
     // A citation to a process artifact — a plan phase, a review round, a numbered decision or finding.
     // Meaningless to a reader who was not in that conversation, and the artifact it names is routinely
     // retired while the comment stays.
     private static readonly Regex ProvenancePattern = new(
-        pattern: @"\bopen decision \d|\badversarial[-\s]review\b|\bperf plan\b|\bdesign round\b|\bunit \d+[a-z]?\b|\bsurvey #\d|\bfinding \d|\bphase \d+\.\d|\bthe plan's\b",
-        options: RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
+        options: RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        pattern: @"\bopen decision \d|\badversarial[-\s]review\b|\bperf plan\b|\bdesign round\b|\bunit \d+[a-z]?\b|\bsurvey #\d|\bfinding \d|\bphase \d+\.\d|\bthe plan's\b");
     // A C# code signal: a trailing terminator, a leading statement keyword, or an operator prose rarely
     // carries. The gate keeps an English sentence that happens to parse as a bare expression out of the
     // commented-out-code bucket.
     private static readonly Regex CodeSignalPattern = new(
-        pattern: @";\s*$|^\s*(?:return|if|for|foreach|while|var|using|throw|await|public|private|internal|protected)\b|=>|==|!=|&&|\|\|",
-        options: RegexOptions.Compiled);
-
+        options: RegexOptions.Compiled,
+        pattern: @";\s*$|^\s*(?:return|if|for|foreach|while|var|using|throw|await|public|private|internal|protected)\b|=>|==|!=|&&|\|\|");
     // Cross-artifact referents a stale comment would dangle: a shader file name, or an UPPER_SNAKE
     // define (>= one underscore, so single words like NOTE/RED and acronyms like RGBA never register).
     // `hlsli` precedes `hlsl` in the alternation because this tree's HLSL include extension is the one a
     // "KEEP IN SYNC with <x>.hlsli" comment cites; it must stay in step with ShaderExtensions.
-    private static readonly Regex ShaderFilePattern = new(pattern: @"\b[\w-]+\.(?:glsl|comp|frag|vert|hlsli|hlsl)\b", options: RegexOptions.Compiled);
-
+    private static readonly Regex ShaderFilePattern = new(options: RegexOptions.Compiled, pattern: @"\b[\w-]+\.(?:glsl|comp|frag|vert|hlsli|hlsl)\b");
     // A cited markdown document, with or without its directory. Resolved by FILE NAME against docs/, so
     // a retired plan still cited from code reports dangling.
-    private static readonly Regex DocumentFilePattern = new(pattern: @"\b(?:[\w./-]*/)?[\w.-]+\.md\b", options: RegexOptions.Compiled);
+    private static readonly Regex DocumentFilePattern = new(options: RegexOptions.Compiled, pattern: @"\b(?:[\w./-]*/)?[\w.-]+\.md\b");
 
     // The run length at which a comment stops being an annotation and becomes an essay. Not a limit the
     // scan enforces — the threshold that puts a block on the audit's work list.
     private const int EssayLineCount = 6;
-    private static readonly Regex SymbolPattern = new(pattern: @"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b", options: RegexOptions.Compiled);
 
+    private static readonly Regex SymbolPattern = new(options: RegexOptions.Compiled, pattern: @"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b");
     // The shader sources whose text and file names resolve a comment's cross-artifact referents. KEEP IN
     // STEP with ShaderFilePattern: an extension the pattern cites but this set omits would be reported
     // dangling on every citation.
     private static readonly string[] ShaderExtensions = [".glsl", ".comp", ".frag", ".vert", ".hlsl", ".hlsli"];
-
     // Build output and vendored trees, whose markdown would resolve a citation nobody can act on.
     private static readonly string[] DocumentSearchExclusions = [
         $"{Path.DirectorySeparatorChar}artifacts{Path.DirectorySeparatorChar}",
@@ -119,7 +113,7 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
             // emitted until the run it belongs to has ended.
             var blockSizes = MeasureBlocks(comments: comments);
 
-            for (var index = 0; index < comments.Count; index++) {
+            for (var index = 0; (index < comments.Count); index++) {
                 var (startLine, endLine, isSingle, text) = comments[index];
                 var body = StripMarkers(text: text);
                 var bucket = Classify(body: body);
@@ -130,12 +124,12 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
                 if (blockSize >= EssayLineCount) {
                     essayLines++;
 
-                    if ((index == 0) || (blockSizes[index - 1] != blockSize) || (comments[index - 1].EndLine + 1 != startLine)) {
+                    if ((index == 0) || (blockSizes[(index - 1)] != blockSize) || ((comments[(index - 1)].EndLine + 1) != startLine)) {
                         essayBlocks++;
                     }
                 }
 
-                var references = ResolveReferences(body: body, haystack: haystack, shaderFileNames: shaderFileNames, docNames: docNames, anyUnresolved: out var anyUnresolved, anySymbolUnresolved: out var anySymbolUnresolved);
+                var references = ResolveReferences(anySymbolUnresolved: out var anySymbolUnresolved, anyUnresolved: out var anyUnresolved, body: body, docNames: docNames, haystack: haystack, shaderFileNames: shaderFileNames);
 
                 if (anyUnresolved) {
                     unresolved++;
@@ -204,7 +198,6 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
 
         return comments;
     }
-
     // Per-comment run length: consecutive comments with no gap between them are one block, and every
     // member reports the WHOLE block's line count. A multi-line /* */ comment counts its own span.
     private static int[] MeasureBlocks(List<(int StartLine, int EndLine, bool IsSingle, string Text)> comments) {
@@ -216,16 +209,16 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
 
         var start = 0;
 
-        for (var index = 1; index <= comments.Count; index++) {
-            var breaks = ((index == comments.Count) || (comments[index].StartLine > (comments[index - 1].EndLine + 1)));
+        for (var index = 1; (index <= comments.Count); index++) {
+            var breaks = ((index == comments.Count) || (comments[index].StartLine > (comments[(index - 1)].EndLine + 1)));
 
             if (!breaks) {
                 continue;
             }
 
-            var lineCount = ((comments[index - 1].EndLine - comments[start].StartLine) + 1);
+            var lineCount = ((comments[(index - 1)].EndLine - comments[start].StartLine) + 1);
 
-            for (var member = start; member < index; member++) {
+            for (var member = start; (member < index); member++) {
                 sizes[member] = lineCount;
             }
 
@@ -234,7 +227,6 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
 
         return sizes;
     }
-
     // Every markdown file name in the repository, which is what a comment's cited document path resolves
     // against. Name-only, matching the shader probe: a comment citing a moved-but-live document is not
     // the failure being hunted — a citation to a document that exists NOWHERE is.
@@ -245,15 +237,14 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
             return names;
         }
 
-        foreach (var path in Directory.EnumerateFiles(path: repositoryRoot, searchPattern: "*.md", searchOption: SearchOption.AllDirectories)) {
-            if (!DocumentSearchExclusions.Any(predicate: excluded => path.Contains(value: excluded, comparisonType: StringComparison.OrdinalIgnoreCase))) {
+        foreach (var path in Directory.EnumerateFiles(path: repositoryRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*.md")) {
+            if (!DocumentSearchExclusions.Any(predicate: excluded => path.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: excluded))) {
                 names.Add(item: Path.GetFileName(path: path));
             }
         }
 
         return names;
     }
-
     private static string Classify(string body) {
         if (SyncPattern.IsMatch(input: body)) {
             return "sync-coupling";
@@ -281,7 +272,6 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
 
         return "unclassified";
     }
-
     // True when the body parses as a C# statement with no errors AND carries a real code signal — so
     // dead code registers but an English sentence that happens to parse as a bare expression statement
     // does not.
@@ -292,24 +282,22 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
 
         return !SyntaxFactory.ParseStatement(text: body).GetDiagnostics().Any(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
     }
-
     // The comment text without its // or /* */ delimiters, so the classifiers see only the prose/code.
     private static string StripMarkers(string text) {
         var trimmed = text;
 
-        if (trimmed.StartsWith(value: "//", comparisonType: StringComparison.Ordinal)) {
+        if (trimmed.StartsWith(comparisonType: StringComparison.Ordinal, value: "//")) {
             trimmed = trimmed[2..];
-        } else if (trimmed.StartsWith(value: "/*", comparisonType: StringComparison.Ordinal)) {
+        } else if (trimmed.StartsWith(comparisonType: StringComparison.Ordinal, value: "/*")) {
             trimmed = trimmed[2..];
 
-            if (trimmed.EndsWith(value: "*/", comparisonType: StringComparison.Ordinal)) {
+            if (trimmed.EndsWith(comparisonType: StringComparison.Ordinal, value: "*/")) {
                 trimmed = trimmed[..^2];
             }
         }
 
         return trimmed.Trim();
     }
-
     // One text blob of every scanned .cs file (COMMENTS REMOVED) plus every shader source, and the set
     // of shader file names — what a "does this referent still exist?" check resolves against (substring
     // existence, not exact symbol binding). Comments are excluded because the probe would otherwise
@@ -325,7 +313,7 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
         }
 
         if (Directory.Exists(path: shaderRoot)) {
-            foreach (var path in Directory.EnumerateFiles(path: shaderRoot, searchPattern: "*.*", searchOption: SearchOption.AllDirectories)) {
+            foreach (var path in Directory.EnumerateFiles(path: shaderRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*.*")) {
                 if (ShaderExtensions.Contains(value: Path.GetExtension(path: path).ToLowerInvariant(), comparer: StringComparer.Ordinal)) {
                     shaderFileNames.Add(item: Path.GetFileName(path: path));
                     builder.Append(value: File.ReadAllText(path: path)).Append(value: '\n');
@@ -335,7 +323,6 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
 
         return builder.ToString();
     }
-
     // The file's text with every comment span elided — code, string literals and #directives survive,
     // prose does not.
     private static void AppendWithoutComments(StringBuilder builder, ParsedFile parsed) {
@@ -364,7 +351,6 @@ internal sealed class CommentSmellAnalyzer : ISourceAnalyzer {
         or SyntaxKind.MultiLineCommentTrivia
         or SyntaxKind.SingleLineDocumentationCommentTrivia
         or SyntaxKind.MultiLineDocumentationCommentTrivia);
-
     // The cross-artifact referents named in the body, each tagged resolved/dangling, as the JSON array
     // body (no brackets); sets anyUnresolved when one dangles.
     private static string ResolveReferences(string body, string haystack, HashSet<string> shaderFileNames, HashSet<string> docNames, out bool anyUnresolved, out bool anySymbolUnresolved) {

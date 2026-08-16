@@ -85,9 +85,9 @@ public sealed class ShaderModuleLoader : IShaderModuleLoader {
                     throw new InvalidDataException(message: $"The {stage.ToString().ToLowerInvariant()} shader file is too small to be a valid DXBC/DXIL container (minimum {DxbcHeaderByteLength} bytes): {fullPath}");
                 }
 
-                var declaredByteLength = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: content.Span.Slice(start: DxbcTotalSizeByteOffset, length: sizeof(uint)));
+                var declaredByteLength = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(source: content.Span.Slice(length: sizeof(uint), start: DxbcTotalSizeByteOffset));
 
-                if (declaredByteLength != (uint)byteLength) {
+                if (declaredByteLength != ((uint)byteLength)) {
                     throw new InvalidDataException(message: $"The {stage.ToString().ToLowerInvariant()} DXBC/DXIL container declares {declaredByteLength} bytes but the file is {byteLength} bytes: {fullPath}");
                 }
 

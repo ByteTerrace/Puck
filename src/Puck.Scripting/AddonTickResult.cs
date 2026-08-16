@@ -8,19 +8,6 @@ namespace Puck.Scripting;
 /// <param name="FuelConsumed">The fuel consumed this tick (<c>budget - remaining</c>).</param>
 /// <param name="Fault">The fault detail when <see cref="Status"/> is <see cref="AddonTickStatus.Faulted"/>.</param>
 public readonly record struct AddonTickResult(AddonTickStatus Status, int CellCount, ulong FuelConsumed, AddonFault Fault) {
-    /// <summary>Creates a successful result.</summary>
-    /// <param name="cellCount">The number of structurally-decoded output cells.</param>
-    /// <param name="fuelConsumed">The fuel consumed this tick.</param>
-    /// <returns>An <see cref="AddonTickStatus.Ok"/> result.</returns>
-    public static AddonTickResult Ok(int cellCount, ulong fuelConsumed) {
-        return new AddonTickResult(
-            CellCount: cellCount,
-            Fault: AddonFault.None,
-            FuelConsumed: fuelConsumed,
-            Status: AddonTickStatus.Ok
-        );
-    }
-
     /// <summary>Creates a faulted result.</summary>
     /// <param name="fault">The sticky fault detail.</param>
     /// <param name="fuelConsumed">The fuel consumed before the fault, if any.</param>
@@ -31,6 +18,18 @@ public readonly record struct AddonTickResult(AddonTickStatus Status, int CellCo
             Fault: fault,
             FuelConsumed: fuelConsumed,
             Status: AddonTickStatus.Faulted
+        );
+    }
+    /// <summary>Creates a successful result.</summary>
+    /// <param name="cellCount">The number of structurally-decoded output cells.</param>
+    /// <param name="fuelConsumed">The fuel consumed this tick.</param>
+    /// <returns>An <see cref="AddonTickStatus.Ok"/> result.</returns>
+    public static AddonTickResult Ok(int cellCount, ulong fuelConsumed) {
+        return new AddonTickResult(
+            CellCount: cellCount,
+            Fault: AddonFault.None,
+            FuelConsumed: fuelConsumed,
+            Status: AddonTickStatus.Ok
         );
     }
 }

@@ -20,7 +20,6 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "sm83-stop-pending-interrupt";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -64,11 +63,11 @@ internal sealed class Sm83StopPendingInterruptStage : IPostStage {
 
         bus.WriteByte(
             address: MemoryMap.InterruptEnable,
-            value: (byte)InterruptKind.VBlank
+            value: ((byte)InterruptKind.VBlank)
         );
         bus.WriteByte(
             address: MemoryMap.InterruptFlag,
-            value: (byte)InterruptKind.VBlank
+            value: ((byte)InterruptKind.VBlank)
         );
 
         machine.Machine.StepInstruction();

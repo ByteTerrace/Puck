@@ -32,38 +32,62 @@ public readonly record struct FixedSplit(FixedQ4816 U, FixedQ4816 V)
       IMultiplicativeIdentity<FixedSplit, FixedSplit> {
     /// <summary>Gets the additive identity, zero.</summary>
     public static FixedSplit AdditiveIdentity => default;
+    /// <summary>Gets a value indicating whether this element is a unit — invertible, off the light cone.</summary>
+    public bool IsUnit => ((U.Value != V.Value) && (U.Value != -V.Value));
     /// <summary>Gets the multiplicative identity, one (the identity squeeze).</summary>
     public static FixedSplit MultiplicativeIdentity => new(
         U: FixedQ4816.One,
         V: FixedQ4816.Zero
     );
+    /// <summary>Gets the indefinite quadratic form <c>u² − v²</c> — the invariant a unit squeeze preserves.</summary>
+    /// <remarks>The mathematical form is positive inside the light cone (<c>|u| &gt; |v|</c>), zero on it, and
+    /// negative outside; it is not a magnitude and admits no real square root beyond the interior. The returned value
+    /// is the exact raw Q32 difference rounded once to Q16, wrapping rather than saturating — so it carries neither
+    /// the sign nor the vanishing of the form outside the carrier's window: a strictly-inside pair can read negative
+    /// once the Q32 difference wraps, and an element whose exact form is below half a raw unit (every <c>(u, 0)</c>
+    /// with <c>|u| ≤ 181</c>) reads zero while remaining invertible. The exact cone test is <see cref="IsUnit"/>,
+    /// never this member.</remarks>
+    public FixedQ4816 Norm {
+        get {
+            // Both raws below 2^31 keep each raw Q32 square below 2^62, so their difference stays inside a signed long
+            // — the same gate operator * and Transform use, and the window the generic twin's narrow norm tier takes.
+            const ulong NarrowLimit = (1UL << 31);
+            var combinedMagnitude = FusedArithmetic.RawMagnitude(value: U.Value) | FusedArithmetic.RawMagnitude(value: V.Value);
+
+            if (combinedMagnitude < NarrowLimit) {
+                return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((U.Value * U.Value) - (V.Value * V.Value)))));
+            }
+
+            return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)U.Value) * U.Value) - (((Int128)V.Value) * V.Value)))));
+        }
+    }
 
     /// <summary>Negates a split-complex number.</summary>
     /// <param name="value">The value to negate.</param>
     /// <returns>The componentwise negation.</returns>
     public static FixedSplit operator -(FixedSplit value) =>
         new(
-        U: -value.U,
-        V: -value.V
-    );
+            U: -value.U,
+            V: -value.V
+        );
     /// <summary>Adds two split-complex numbers.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns>The componentwise sum.</returns>
     public static FixedSplit operator +(FixedSplit left, FixedSplit right) =>
         new(
-        U: (left.U + right.U),
-        V: (left.V + right.V)
-    );
+            U: (left.U + right.U),
+            V: (left.V + right.V)
+        );
     /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/>.</summary>
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
     /// <returns>The componentwise difference.</returns>
     public static FixedSplit operator -(FixedSplit left, FixedSplit right) =>
         new(
-        U: (left.U - right.U),
-        V: (left.V - right.V)
-    );
+            U: (left.U - right.U),
+            V: (left.V - right.V)
+        );
     /// <summary>Multiplies two split-complex numbers (composes squeezes for unit operands).</summary>
     /// <param name="left">The multiplicand.</param>
     /// <param name="right">The multiplier.</param>
@@ -83,8 +107,8 @@ public readonly record struct FixedSplit(FixedQ4816 U, FixedQ4816 V)
         }
 
         return new(
-            U: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)left.U.Value * right.U.Value) + ((Int128)left.V.Value * right.V.Value))))),
-            V: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)left.U.Value * right.V.Value) + ((Int128)left.V.Value * right.U.Value)))))
+            U: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.U.Value) * right.U.Value) + (((Int128)left.V.Value) * right.V.Value))))),
+            V: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.U.Value) * right.V.Value) + (((Int128)left.V.Value) * right.U.Value)))))
         );
     }
     /// <summary>Divides <paramref name="left"/> by <paramref name="right"/>.</summary>
@@ -125,11 +149,26 @@ public readonly record struct FixedSplit(FixedQ4816 U, FixedQ4816 V)
         }
 
         return new(
-            U: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(numerator: realNumerator, denominator: denominator)),
-            V: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(numerator: splitNumerator, denominator: denominator))
+            U: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: realNumerator
+            )),
+            V: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: splitNumerator
+            ))
         );
     }
 
+    /// <summary>Returns the conjugate <c>u − v·j</c>. The product <c>s·Conjugate()</c> is <c>(Norm, 0)</c>, so the
+    /// conjugate is the inverse squeeze only for a squeeze of norm ONE; a norm-minus-one unit's conjugate is minus
+    /// its inverse, and a light-cone element's conjugate annihilates it to the zero element.</summary>
+    /// <returns>The split-complex number with the split component negated.</returns>
+    public FixedSplit Conjugate() =>
+        new(
+            U: U,
+            V: -V
+        );
     /// <summary>Creates the squeeze of hyperbolic angle <paramref name="rapidity"/> — the split exponential map
     /// <c>exp(j·φ) = cosh φ + j·sinh φ</c>, the scaling analog of <see cref="FixedComplex.FromAngle"/>.</summary>
     /// <param name="rapidity">The hyperbolic angle; rapidities add under multiplication, so squeezes compose by summing this parameter.</param>
@@ -154,41 +193,6 @@ public readonly record struct FixedSplit(FixedQ4816 U, FixedQ4816 V)
             V: sinh
         );
     }
-
-    /// <summary>Gets the indefinite quadratic form <c>u² − v²</c> — the invariant a unit squeeze preserves.</summary>
-    /// <remarks>The mathematical form is positive inside the light cone (<c>|u| &gt; |v|</c>), zero on it, and
-    /// negative outside; it is not a magnitude and admits no real square root beyond the interior. The returned value
-    /// is the exact raw Q32 difference rounded once to Q16, wrapping rather than saturating — so it carries neither
-    /// the sign nor the vanishing of the form outside the carrier's window: a strictly-inside pair can read negative
-    /// once the Q32 difference wraps, and an element whose exact form is below half a raw unit (every <c>(u, 0)</c>
-    /// with <c>|u| ≤ 181</c>) reads zero while remaining invertible. The exact cone test is <see cref="IsUnit"/>,
-    /// never this member.</remarks>
-    public FixedQ4816 Norm {
-        get {
-            // Both raws below 2^31 keep each raw Q32 square below 2^62, so their difference stays inside a signed long
-            // — the same gate operator * and Transform use, and the window the generic twin's narrow norm tier takes.
-            const ulong NarrowLimit = (1UL << 31);
-            var combinedMagnitude = FusedArithmetic.RawMagnitude(value: U.Value) | FusedArithmetic.RawMagnitude(value: V.Value);
-
-            if (combinedMagnitude < NarrowLimit) {
-                return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((U.Value * U.Value) - (V.Value * V.Value)))));
-            }
-
-            return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)U.Value * U.Value) - ((Int128)V.Value * V.Value)))));
-        }
-    }
-    /// <summary>Gets a value indicating whether this element is a unit — invertible, off the light cone.</summary>
-    public bool IsUnit => ((U.Value != V.Value) && (U.Value != -V.Value));
-
-    /// <summary>Returns the conjugate <c>u − v·j</c>. The product <c>s·Conjugate()</c> is <c>(Norm, 0)</c>, so the
-    /// conjugate is the inverse squeeze only for a squeeze of norm ONE; a norm-minus-one unit's conjugate is minus
-    /// its inverse, and a light-cone element's conjugate annihilates it to the zero element.</summary>
-    /// <returns>The split-complex number with the split component negated.</returns>
-    public FixedSplit Conjugate() =>
-        new(
-        U: U,
-        V: -V
-    );
     /// <summary>Applies this split-complex number to a 2D vector as a squeeze (hyperbolic rotation).</summary>
     /// <param name="vector">The vector to transform, read as <c>x + y·j</c>.</param>
     /// <returns>The transformed vector <c>(u·x + v·y, u·y + v·x)</c> — the split product, two products per component with one rounding.</returns>
@@ -207,8 +211,8 @@ public readonly record struct FixedSplit(FixedQ4816 U, FixedQ4816 V)
         }
 
         return new(
-            X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)U.Value * vector.X.Value) + ((Int128)V.Value * vector.Y.Value))))),
-            Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)U.Value * vector.Y.Value) + ((Int128)V.Value * vector.X.Value)))))
+            X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)U.Value) * vector.X.Value) + (((Int128)V.Value) * vector.Y.Value))))),
+            Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)U.Value) * vector.Y.Value) + (((Int128)V.Value) * vector.X.Value)))))
         );
     }
 

@@ -5,7 +5,7 @@
     "null"
   ],
   "items": {
-    "description": "One row of the references section \u2014 a world NAMING another world by document path, the primitive a wall-mounted portal placement (or any future consumer) resolves against. Authored data only: a row asserts nothing about the named document\u0027s existence or shape at boot \u2014 resolution is a consumer\u0027s job, not this section\u0027s (no boot-time file-existence check).",
+    "description": "One row of the references section \u2014 a world NAMING another world, the primitive a wall-mounted portal placement (or any future consumer) resolves against. Authored data only: a row asserts nothing about the named world\u0027s existence or shape at boot \u2014 resolution is a consumer\u0027s job, not this section\u0027s (no boot-time existence check). Names its target through exactly one of two mutually exclusive spellings \u2014 a local document path (Document), or a remote owner-named world (Owner\u002BWorld together, since worlds ARE users) \u2014 never both, never neither; ValidateReferences refuses any other shape. NeighbourKey folds whichever spelling was authored into the one opaque string every IWorldNeighbourResolver call site already passes around.",
     "type": [
       "object",
       "null"
@@ -16,13 +16,33 @@
         "type": "string"
       },
       "document": {
-        "description": "The referenced world\u0027s document path (e.g. \u0022dive.world.json\u0022), authored verbatim.",
-        "type": "string"
+        "description": "The referenced world\u0027s document path (e.g. \u0022dive.world.json\u0022), authored verbatim. Mutually exclusive with Owner/World.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "owner": {
+        "description": "The remote world\u0027s owning platform user id (an Entra oid) \u2014 worlds ARE users, so naming the owner names the world\u0027s account. Required together with World; refused alone.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "format": "uuid",
+        "default": null
+      },
+      "world": {
+        "description": "The remote world\u0027s own WorldSafeName-shaped id within its owner\u0027s account. Required together with Owner; refused alone.",
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
       }
     },
     "required": [
-      "name",
-      "document"
+      "name"
     ],
     "additionalProperties": false
   },

@@ -39,10 +39,9 @@ public sealed class BindingVocabularyCheckTests {
         // The entry labels by its (empty) sequence and the unknown command is refused as data, not as a crash.
         var error = Assert.Single(collection: errors);
 
-        Assert.Contains(expectedSubstring: "activator[]", actualString: error);
-        Assert.Contains(expectedSubstring: "names no registered command", actualString: error);
+        Assert.Contains(actualString: error, expectedSubstring: "activator[]");
+        Assert.Contains(actualString: error, expectedSubstring: "names no registered command");
     }
-
     [Fact]
     public void ANullPageEntryIsRefusedNotThrown() {
         var document = Document(entry: null!);
@@ -55,9 +54,8 @@ public sealed class BindingVocabularyCheckTests {
             errors: errors
         );
 
-        Assert.Contains(expectedSubstring: "entry 0 is null", actualString: Assert.Single(errors));
+        Assert.Contains(expectedSubstring: "entry 0 is null", actualString: Assert.Single(collection: errors));
     }
-
     [Fact]
     public void AValueLessActivatorDispatchesDigitalForKindValidation() {
         var document = Document(entry: new BindingPageEntryDefinition(
@@ -79,9 +77,8 @@ public sealed class BindingVocabularyCheckTests {
             errors: errors
         );
 
-        Assert.Contains(expectedSubstring: "sends digital", actualString: Assert.Single(errors));
+        Assert.Contains(expectedSubstring: "sends digital", actualString: Assert.Single(collection: errors));
     }
-
     [Fact]
     public void AnUnaddressableTextSourceIsRefusedEvenWhenItsKindIsKnown() {
         var document = Document(entry: new BindingPageEntryDefinition(Source: "keyboard.text", Command: "type"));
@@ -96,11 +93,11 @@ public sealed class BindingVocabularyCheckTests {
                 Bindability: CommandBindability.Bindable
             ),
             sourceKind: static _ => CommandValueKind.Digital,
-            sourceAddressable: static source => source != "keyboard.text",
+            sourceAddressable: static source => (source != "keyboard.text"),
             errors: errors
         );
 
-        Assert.Contains(expectedSubstring: "unaddressable control \"keyboard.text\"", actualString: Assert.Single(errors));
+        Assert.Contains(expectedSubstring: "unaddressable control \"keyboard.text\"", actualString: Assert.Single(collection: errors));
     }
 
     private static BindingProfileDocument Document(BindingPageEntryDefinition entry) {

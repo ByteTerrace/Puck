@@ -6,9 +6,10 @@ namespace Puck.Platform;
 /// simple; the lock-free triple buffer the plan calls for is a later optimization. All threading a camera introduces is
 /// confined here, so the pull seam stays single-threaded.
 /// </summary>
-internal sealed class LatestFrameBuffer {
-    private readonly object m_gate = new();
+public sealed class LatestFrameBuffer {
+    private readonly Lock m_gate = new();
     private byte[] m_frame = [];
+
     private bool m_hasFrame;
     private int m_height;
     private long m_timestamp;
@@ -25,7 +26,6 @@ internal sealed class LatestFrameBuffer {
             }
         }
     }
-
     /// <summary>A monotonically increasing counter bumped on every <see cref="Publish"/> — lets a puller detect whether a
     /// new frame has arrived (and skip re-processing an unchanged one) without copying the pixels out.</summary>
     public long Version {
@@ -54,7 +54,6 @@ internal sealed class LatestFrameBuffer {
             m_version++;
         }
     }
-
     /// <summary>Copies the most recent frame into <paramref name="destination"/> (called from the puller), growing it if
     /// needed. Returns <see langword="false"/> until the first frame has arrived.</summary>
     /// <param name="destination">The reused destination buffer; replaced with a larger array if the frame grew.</param>

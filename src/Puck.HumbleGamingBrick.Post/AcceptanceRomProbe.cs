@@ -32,8 +32,8 @@ internal static class AcceptanceRomProbe {
 
         for (var frame = 0; (frame < romCase.FrameCap); ++frame) {
             PostMachine.RunFrames(
-                instance: machine,
-                frames: 1
+                frames: 1,
+                instance: machine
             );
 
             if (EndsWith(

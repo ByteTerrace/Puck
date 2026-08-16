@@ -28,28 +28,44 @@
         "type": "number"
       },
       "distribution": {
-        "$ref": "./common.schema.json#/$defs/WorldDistribution"
+        "$ref": "./common.schema.json#/$defs/WorldDistribution",
+        "description": "The placement distribution, or null for a single copy. Static placements currently accept a lattice region with a none fill. Refused together with Attach.",
+        "default": null
       },
       "mirror": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementMirror"
+        "$ref": "./common.schema.json#/$defs/WorldPlacementMirror",
+        "description": "The authored local reflection plane, or null for no reflected copy. Refused together with Attach.",
+        "default": null
       },
       "emission": {
-        "$ref": "./common.schema.json#/$defs/WorldEmission"
+        "$ref": "./common.schema.json#/$defs/WorldEmission",
+        "description": "The placement\u0027s emission facet (a synth voice the stamp itself makes \u2014 see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row\u0027s source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row\u0027s static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.",
+        "default": null
       },
       "solid": {
-        "$ref": "./common.schema.json#/$defs/WorldSolid"
+        "$ref": "./common.schema.json#/$defs/WorldSolid",
+        "description": "The placement\u0027s solidity facet (see WorldSolid). Both contact providers compile the creation\u0027s emitted shapes; analytic collision uses per-primitive colliders, including exact half-spaces for planes. Omitted from the wire when null. Composes with Attach under the analytic provider only (WorldColliderSet.RefreshAttached recomputes an attached row\u0027s colliders every tick from the resolved live pose); still refused together under the field provider, which compiles every solid row\u0027s geometry once into one SDF program and never rebuilds it per tick.",
+        "default": null
       },
       "inhabit": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementInhabit"
+        "$ref": "./common.schema.json#/$defs/WorldPlacementInhabit",
+        "description": "The inhabit facet (null = decoration), binding the row to live population bodies. Omitted from the wire when null. Refused together with Attach \u2014 a row cannot both spawn its own driven bodies and ride another body\u0027s pose.",
+        "default": null
       },
       "faceSources": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementFaceList"
+        "$ref": "./common.schema.json#/$defs/WorldPlacementFaceList",
+        "description": "Per-instance overrides of the creation\u0027s declared faces (null = every face shows its declared default). Omitted from the wire when null. Orthogonal to Attach (a content selector, not a transform) \u2014 composes freely, like every other facet that now tracks the dynamic pose.",
+        "default": null
       },
       "region": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementRegion"
+        "$ref": "./common.schema.json#/$defs/WorldPlacementRegion",
+        "description": "The placement\u0027s region facet (see WorldPlacementRegion) \u2014 a named volume the world-events feed watches for body enter/exit, or null for none. Omitted from the wire when null. Composes with Attach: an attached row\u0027s sensing sphere centers on the resolved live pose (Server.WorldEventFeed.CollectRegions) instead of the row\u0027s static position \u2014 see WorldPlacementRegion\u0027s own remarks.",
+        "default": null
       },
       "attach": {
-        "$ref": "./common.schema.json#/$defs/WorldPlacementAttach"
+        "$ref": "./common.schema.json#/$defs/WorldPlacementAttach",
+        "description": "The placement\u0027s attach facet (see WorldPlacementAttach) \u2014 binds the row\u0027s resolved world pose to a live population body, or null for a static/authored transform (the default, unchanged behavior). Omitted from the wire when null.",
+        "default": null
       }
     },
     "required": [

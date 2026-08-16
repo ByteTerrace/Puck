@@ -54,8 +54,8 @@ public sealed class IndependentInteroperabilityTests {
         );
         var claimWire = IndependentAttestationImplementation.SignClaim(
             header: header,
-            payloadKind: IndependentAttestationImplementation.OpaquePayloadKind,
             payload: "independent signed payload"u8,
+            payloadKind: IndependentAttestationImplementation.OpaquePayloadKind,
             signingKey: subjectKey
         );
         var codec = new CborAttestationCodec();
@@ -68,32 +68,32 @@ public sealed class IndependentInteroperabilityTests {
         var trust = BuildProductionTrust(rootId: rootId, rootSpki: rootSpki, replayHorizon: TimeSpan.FromHours(hours: 1));
 
         var result = profile.VerifyChain(
-            codec: codec,
-            claim: claim,
             chain: chain,
-            trustList: trust,
-            now: Now,
+            claim: claim,
+            codec: codec,
+            expectedAudience: null,
             expectedPurpose: "interop.bearer",
-            expectedAudience: null
+            now: Now,
+            trustList: trust
         );
 
-        Assert.True(condition: result.TryGetReplayCommit(slot: "slot:wallet", requirement: out var requirement));
+        Assert.True(condition: result.TryGetReplayCommit(requirement: out var requirement, slot: "slot:wallet"));
         Assert.NotNull(@object: requirement);
         Assert.Equal(expected: rootId.Domain, actual: requirement.Domain);
         Assert.Equal(expected: "user:independent", actual: requirement.Subject);
         Assert.Equal(expected: 17UL, actual: requirement.Sequence);
         Assert.Equal(expected: "independent signed payload", actual: Encoding.UTF8.GetString(bytes: claim.PayloadBytes.Span));
     }
-
     [Fact]
     public void ProductionSignedChainAndDirectedClaim_AreAcceptedByIndependentVerifier() {
         var codec = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:production");
+
         var (rootToIssuing, issuingToSubject) = BuildChain(
             codec: codec,
             keys: keys,
-            notBefore: (Epoch - 60),
-            notAfter: (Epoch + 3_600)
+            notAfter: (Epoch + 3_600),
+            notBefore: (Epoch - 60)
         );
         var claim = SignTestClaim(
             codec: codec,
@@ -120,7 +120,6 @@ public sealed class IndependentInteroperabilityTests {
 
         Assert.Equal(expected: "production signed payload", actual: Encoding.UTF8.GetString(bytes: payload));
     }
-
     [Fact]
     public void IndependentSignedAndSealedClaim_VerifiesAndOpensInProduction() {
         using var rootKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
@@ -140,8 +139,8 @@ public sealed class IndependentInteroperabilityTests {
             subjectPublicKeyInfo: recipientSealingSpki,
             algorithm: IndependentAttestationImplementation.SealingAlgorithm
         );
-        var rootToIssuingWire = IndependentAttestationImplementation.SignKeyBinding(rootId.Domain, rootKey, issuingId, issuingSpki, Epoch - 60, Epoch + 3_600);
-        var issuingToSubjectWire = IndependentAttestationImplementation.SignKeyBinding(rootId.Domain, issuingKey, subjectId, subjectSigningSpki, Epoch - 60, Epoch + 3_600);
+        var rootToIssuingWire = IndependentAttestationImplementation.SignKeyBinding(rootId.Domain, rootKey, issuingId, issuingSpki, (Epoch - 60), (Epoch + 3_600));
+        var issuingToSubjectWire = IndependentAttestationImplementation.SignKeyBinding(rootId.Domain, issuingKey, subjectId, subjectSigningSpki, (Epoch - 60), (Epoch + 3_600));
         var header = new IndependentHeader(
             Domain: rootId.Domain,
             Subject: subjectId.Subject,
@@ -160,12 +159,12 @@ public sealed class IndependentInteroperabilityTests {
         );
         var claimWire = IndependentAttestationImplementation.SignClaim(
             header: header,
-            payloadKind: IndependentAttestationImplementation.SealedPayloadKind,
             payload: sealedPayloadBytes,
+            payloadKind: IndependentAttestationImplementation.SealedPayloadKind,
             signingKey: subjectSigningKey
         );
         var codec = new CborAttestationCodec();
-        var profile = AttestationProfile.Base.WithExtensions(AttestationExtensions.SealedAttestationV1);
+        var profile = AttestationProfile.Base.WithExtensions(extensions: AttestationExtensions.SealedAttestationV1);
         var claim = profile.DecodeAttestation(codec: codec, wire: claimWire);
         var result = profile.VerifyChain(
             codec: codec,
@@ -174,7 +173,7 @@ public sealed class IndependentInteroperabilityTests {
                 profile.DecodeAttestation(codec: codec, wire: rootToIssuingWire),
                 profile.DecodeAttestation(codec: codec, wire: issuingToSubjectWire),
             ],
-            trustList: BuildProductionTrust(rootId: rootId, rootSpki: rootSpki, replayHorizon: null),
+            trustList: BuildProductionTrust(replayHorizon: null, rootId: rootId, rootSpki: rootSpki),
             now: Now,
             expectedPurpose: "interop.sealed",
             expectedAudience: "world:vault"
@@ -190,12 +189,12 @@ public sealed class IndependentInteroperabilityTests {
 
         Assert.Equal(expected: "independently sealed and signed", actual: Encoding.UTF8.GetString(bytes: plaintext));
     }
-
     [Fact]
     public void ProductionSignedAndSealedClaim_VerifiesAndOpensIndependently() {
         var codec = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:sealed-production");
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notBefore: (Epoch - 60), notAfter: (Epoch + 3_600));
+
+        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notAfter: (Epoch + 3_600), notBefore: (Epoch - 60));
         var header = new AttestationHeader(
             Domain: keys.Domain,
             Subject: keys.Subject,
@@ -250,12 +249,11 @@ public sealed class IndependentInteroperabilityTests {
 
         Assert.Equal(expected: "production sealed and signed", actual: Encoding.UTF8.GetString(bytes: plaintext));
     }
-
     [Fact]
     public void IndependentSpkiImporter_TrailingBytesAreRefused() {
         using var recipientKey = ECDiffieHellman.Create(curve: ECCurve.NamedCurves.nistP256);
 
-        var tailedRecipientSpki = (byte[])[.. recipientKey.ExportSubjectPublicKeyInfo(), 0x00];
+        var tailedRecipientSpki = ((byte[])[.. recipientKey.ExportSubjectPublicKeyInfo(), 0x00]);
         var recipientId = IndependentAttestationImplementation.SubjectId(
             domain: new string(c: '0', count: 64),
             subject: "user:tailed-independent-key",
@@ -264,10 +262,10 @@ public sealed class IndependentInteroperabilityTests {
         );
 
         var exception = Assert.Throws<CryptographicException>(testCode: () => _ = IndependentAttestationImplementation.Seal(
-            recipientId: recipientId,
-            recipientSubjectPublicKeyInfo: tailedRecipientSpki,
             headerBytes: [],
-            plaintext: []
+            plaintext: [],
+            recipientId: recipientId,
+            recipientSubjectPublicKeyInfo: tailedRecipientSpki
         ));
 
         Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
@@ -277,10 +275,10 @@ public sealed class IndependentInteroperabilityTests {
         entries: [
             new TrustListEntry(
                 PinnedId: new KeyId {
-                    Domain = rootId.Domain,
-                    Subject = rootId.Subject,
                     Algorithm = rootId.Algorithm,
+                    Domain = rootId.Domain,
                     KeyHash = rootId.KeyHash,
+                    Subject = rootId.Subject,
                 },
                 PublicKeySubjectPublicKeyInfo: rootSpki,
                 Mode: AttestationTrustMode.Vouches,

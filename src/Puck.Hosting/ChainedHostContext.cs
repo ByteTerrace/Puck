@@ -19,27 +19,30 @@ public sealed class ChainedHostContext : IHostContext, IHeldCapabilityLeaseSourc
         m_primary = primary;
     }
 
-    /// <inheritdoc />
-    public bool TryResolveCapability<TCapability>(out TCapability capability) where TCapability : class {
-        return (
-            m_primary.TryResolveCapability(capability: out capability) ||
-            m_fallback.TryResolveCapability(capability: out capability)
-        );
+    bool IHeldCapabilityLeaseSource.TryResolveHeldLease(Type capabilityType, out HeldCapabilityLease lease) {
+        if (m_primary is IHeldCapabilityLeaseSource source) {
+            return source.TryResolveHeldLease(
+                capabilityType: capabilityType,
+                lease: out lease
+            );
+        }
+
+        lease = null!;
+
+        return false;
     }
+
     /// <inheritdoc />
     /// <remarks>A held capability is the host's own grant only — never the inherited fallback — so it does
     /// not propagate to a child unless this host explicitly re-grants it on the child's primary context.</remarks>
     public bool HoldsCapability<TCapability>(out TCapability capability) where TCapability : class {
         return m_primary.HoldsCapability(capability: out capability);
     }
-
-    bool IHeldCapabilityLeaseSource.TryResolveHeldLease(Type capabilityType, out HeldCapabilityLease lease) {
-        if (m_primary is IHeldCapabilityLeaseSource source) {
-            return source.TryResolveHeldLease(capabilityType: capabilityType, lease: out lease);
-        }
-
-        lease = null!;
-
-        return false;
+    /// <inheritdoc />
+    public bool TryResolveCapability<TCapability>(out TCapability capability) where TCapability : class {
+        return (
+            m_primary.TryResolveCapability(capability: out capability) ||
+            m_fallback.TryResolveCapability(capability: out capability)
+        );
     }
 }

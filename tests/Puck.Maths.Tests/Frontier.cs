@@ -12,9 +12,9 @@ namespace Puck.Maths.Tests;
 /// stepping the window past a failure.
 /// </summary>
 internal static class Frontier {
-    private static readonly object Gate = new();
+    private static readonly Lock Gate = new();
     private static readonly ConcurrentDictionary<string, byte> ConsumedKeys = new();
-    private static Model State = ArtifactJson.ReadOrDefault<Model>(path: TestPaths.Artifact(fileName: "frontier.json")) ?? new Model();
+    private static readonly Model State = (ArtifactJson.ReadOrDefault<Model>(path: TestPaths.Artifact(fileName: "frontier.json")) ?? new Model());
 
     /// <summary>Records that <paramref name="key"/> was consumed this run and returns its current block window.</summary>
     /// <param name="key">The domain key.</param>
@@ -27,7 +27,7 @@ internal static class Frontier {
             var entry = State.Domains.Find(match: candidate => (candidate.Key == key));
 
             if (entry is null) {
-                entry = new Entry { Key = key, Block = block, Index = 0L };
+                entry = new Entry { Block = block, Index = 0L, Key = key };
 
                 State.Domains.Add(item: entry);
             }
@@ -35,7 +35,6 @@ internal static class Frontier {
             return (entry.Index, entry.Block);
         }
     }
-
     /// <summary>Advances the block counter of every domain consumed this run by one and rewrites the artifact when any
     /// counter moved — but only on a GREEN run. Two runs own nothing here: one that consumed no domain, and one in
     /// which any law failed.</summary>
@@ -85,7 +84,6 @@ internal static class Frontier {
         /// <c>[k·B, (k+1)·B)</c> and leaves <c>k + 1</c> behind.</summary>
         public long Index { get; set; }
     }
-
     /// <summary>The persisted frontier document.</summary>
     internal sealed class Model {
         /// <summary>Gets the per-domain counters, ordered by key.</summary>

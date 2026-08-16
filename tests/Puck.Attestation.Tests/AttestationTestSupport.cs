@@ -24,7 +24,6 @@ internal sealed record DomainKeys(
     byte[] SubjectSealingSpki,
     KeyId SubjectSealingId
 );
-
 internal static class AttestationTestSupport {
     internal const long Epoch = 1_700_000_000L;
 
@@ -36,8 +35,8 @@ internal static class AttestationTestSupport {
         var rootKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
         var rootSpki = rootKey.ExportSubjectPublicKeyInfo();
         var rootId = KeyId.ForRoot(
-            subjectPublicKeyInfo: rootSpki,
-            algorithm: AttestationAlgorithms.EcdsaP256Sha256
+            algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            subjectPublicKeyInfo: rootSpki
         );
 
         var issuingKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
@@ -83,7 +82,6 @@ internal static class AttestationTestSupport {
             SubjectSealingId: subjectSealingId
         );
     }
-
     /// <summary>Mints binding #1 (root vouches issuing) and binding #2 (issuing vouches subject) — the depth-exactly-two chain.</summary>
     internal static (SignedAttestation RootToIssuing, SignedAttestation IssuingToSubject) BuildChain(IAttestationCodec codec, DomainKeys keys, long notBefore, long notAfter) {
         var rootToIssuing = AttestationSigner.SignKeyBinding(
@@ -110,7 +108,6 @@ internal static class AttestationTestSupport {
 
         return (rootToIssuing, issuingToSubject);
     }
-
     internal static TrustList BuildTrustList(DomainKeys keys, TimeSpan? defaultMaximumAge, IReadOnlySet<string>? reach = null) {
         var entry = new TrustListEntry(
             PinnedId: keys.RootId,
@@ -126,7 +123,6 @@ internal static class AttestationTestSupport {
             replayAcceptanceHorizon: defaultMaximumAge
         );
     }
-
     /// <summary>Builds a trust list that pins one subject's own signing key directly — the zero-hop shape, so a scenario exercises one signature rather than three.</summary>
     internal static TrustList BuildDirectTrustList(DomainKeys keys, IReadOnlySet<string> reach) =>
         new(
@@ -141,7 +137,6 @@ internal static class AttestationTestSupport {
         ],
         defaultMaximumAge: null
     );
-
     internal static SignedAttestation SignTestClaim(
         IAttestationCodec codec,
         DomainKeys keys,
@@ -185,8 +180,8 @@ internal static class AttestationTestSupport {
         );
         var signedPortion = codec.EncodeSignedPortion(
             header: header,
-            payloadKind: AttestationPayloadKind.Opaque,
-            payloadBytes: claimBytes
+            payloadBytes: claimBytes,
+            payloadKind: AttestationPayloadKind.Opaque
         );
         var signature = keys.SubjectSigningKey.SignData(
             data: signedPortion,
@@ -202,10 +197,8 @@ internal static class AttestationTestSupport {
             signedPortion: signedPortion
         );
     }
-
     internal static void AssertAccepted(AttestationVerifyResult result) =>
         Assert.True(condition: result.Verified, userMessage: $"unexpectedly refused: {result.RefusalReason}");
-
     internal static void AssertRefused(AttestationVerifyResult result, string reasonMustContain) {
         Assert.False(condition: result.Verified, userMessage: "unexpectedly ACCEPTED");
         Assert.NotNull(@object: result.RefusalReason);
@@ -215,14 +208,13 @@ internal static class AttestationTestSupport {
             comparisonType: StringComparison.OrdinalIgnoreCase
         );
     }
-
     /// <summary>
     /// Hand-builds a canonically encoded CBOR attestation with a chosen domain width and payload kind — the
     /// two fields whose wire values a signer could never produce but a decoder must still refuse. Nothing
     /// else about it is malformed, so at (32, 1) it decodes and only the field under test can refuse it.
     /// The signature is a placeholder; this never reaches a signature check.
     /// </summary>
-    internal static byte[] BuildHandWrittenAttestation(int domainWidth = 32, ulong payloadKind = (ulong)AttestationPayloadKind.Opaque) {
+    internal static byte[] BuildHandWrittenAttestation(int domainWidth = 32, ulong payloadKind = ((ulong)AttestationPayloadKind.Opaque)) {
         var signedPortionWriter = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
         signedPortionWriter.WriteStartArray(definiteLength: 11);
@@ -248,7 +240,6 @@ internal static class AttestationTestSupport {
 
         return writer.Encode();
     }
-
     /// <summary>Re-frames a valid 2-element CBOR attestation as an indefinite-length array carrying the same two items.</summary>
     internal static byte[] BuildIndefiniteLengthAttestation(byte[] wire) {
         var reader = new CborReader(
@@ -275,8 +266,8 @@ internal static class AttestationTestSupport {
 
     /// <summary>The P-256 group order, needed to build the (r, n-s) form of a signature.</summary>
     private static readonly BigInteger NistP256Order = BigInteger.Parse(
-        value: "0FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551",
-        style: System.Globalization.NumberStyles.HexNumber
+        style: System.Globalization.NumberStyles.HexNumber,
+        value: "0FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551"
     );
 
     /// <summary>Rewrites a P1363 <c>r‖s</c> signature as the equally valid <c>r‖(n-s)</c>.</summary>
@@ -290,8 +281,8 @@ internal static class AttestationTestSupport {
         var flipped = (NistP256Order - s);
         var result = signature.ToArray();
         var flippedBytes = flipped.ToByteArray(
-            isUnsigned: true,
-            isBigEndian: true
+            isBigEndian: true,
+            isUnsigned: true
         );
 
         var destinationStart = (signature.Length - flippedBytes.Length);
@@ -304,7 +295,6 @@ internal static class AttestationTestSupport {
 
         return result;
     }
-
     /// <summary>Re-encodes a P1363 <c>r‖s</c> signature as the DER <c>SEQUENCE { INTEGER r, INTEGER s }</c> form.</summary>
     internal static byte[] EncodeSignatureAsDer(ReadOnlySpan<byte> signature) {
         var half = (signature.Length / 2);
@@ -326,7 +316,6 @@ internal static class AttestationTestSupport {
         return writer.Encode();
     }
 }
-
 /// <summary>
 /// A receiver-side atomic replay commit store, mirroring what a real receiver does: compare/advance the
 /// epoch high-water mark in the same durable transaction as the claim's semantic effect. The rendezvous
@@ -334,7 +323,7 @@ internal static class AttestationTestSupport {
 /// serialise by luck and a broken store would pass anyway.
 /// </summary>
 internal sealed class ReplayTestStore(int participants = 1) {
-    private readonly Barrier? m_barrier = (participants > 1) ? new Barrier(participantCount: participants) : null;
+    private readonly Barrier? m_barrier = ((participants > 1) ? new Barrier(participantCount: participants) : null);
     private readonly Dictionary<(string Domain, string Subject, long EpochStartUnixSeconds), ulong> m_marks = [];
 
     public AttestationVerifyResult Commit(AttestationVerifyResult result) {
@@ -364,7 +353,6 @@ internal sealed class ReplayTestStore(int participants = 1) {
         }
     }
 }
-
 /// <summary>
 /// A deliberately broken replay store whose compare and advance happen under separate locks. Every caller
 /// reads before any caller advances, so the concurrency demonstration deterministically exposes the replay.

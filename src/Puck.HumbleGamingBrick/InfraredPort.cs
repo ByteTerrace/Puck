@@ -90,6 +90,7 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
         get => m_cartLightOut;
         set => m_cartLightOut = value;
     }
+
     /// <inheritdoc/>
     bool IInfraredPeer.EmittedLight =>
         (((m_register & LedOutBit) != 0) || m_cartLightOut);
@@ -103,10 +104,9 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>
         m_model = model;
-
     /// <inheritdoc/>
     public byte ReadRegister() {
-        var value = (byte)((m_register & ReadBackKeepMask) | ReadBackHighBits);
+        var value = ((byte)((m_register & ReadBackKeepMask) | ReadBackHighBits));
 
         // Bit 1 reads 0 (light detected) only while the data-read-enable bits 7-6 are both set AND a peer LED is lit.
         if (
@@ -121,7 +121,6 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// <inheritdoc/>
     public void WriteRegister(byte value) =>
         m_register = value;
-
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteByte(value: m_register);

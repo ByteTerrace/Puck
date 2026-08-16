@@ -186,8 +186,7 @@ public sealed class VulkanPhysicalDeviceSelector : IVulkanPhysicalDeviceSelector
             );
 
             throw new InvalidOperationException(message:
-                (((($"Vulkan device '{deviceName}' reports API version {FormatApiVersion(version: selectedApiVersion)}, below the required " +
-                $"{FormatApiVersion(version: RequiredApiVersion)} (SPIR-V 1.6) floor. Puck's shader kernels are compiled for Vulkan 1.3 ") +
+                (((((string)$"Vulkan device '{deviceName}' reports API version {FormatApiVersion(version: selectedApiVersion)}, below the required {FormatApiVersion(version: RequiredApiVersion)} (SPIR-V 1.6) floor. Puck's shader kernels are compiled for Vulkan 1.3 ") +
                 "and cannot load on this device. Puck supports exactly four GPUs — RTX 2070 (Turing), RTX 4070 (Ada), ") +
                 "Steam Machine (AMD RDNA3), and Steam Deck (AMD RDNA2 Van Gogh) — all of which expose Vulkan 1.3 on current ") +
                 "drivers; update your GPU driver or run on supported hardware."));

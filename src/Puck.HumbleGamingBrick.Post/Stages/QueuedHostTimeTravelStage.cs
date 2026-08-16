@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.GamingBricks;
 using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -18,7 +18,6 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-time-travel";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

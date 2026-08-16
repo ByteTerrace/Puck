@@ -2,11 +2,11 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 internal static class LinkStageProtocol {
     internal static LinkSideVerdict ReadVerdict(AgbMachineInstance console) {
-        var bus = (AgbBus)console.Machine.Bus;
+        var bus = ((AgbBus)console.Machine.Bus);
         var rounds = new (uint Low, uint High)[MicroRoms.LinkRounds];
 
         for (var round = 0; (round < rounds.Length); ++round) {
-            var recordAddress = (MicroRoms.LinkRecordAddress + ((uint)round * 8u));
+            var recordAddress = (MicroRoms.LinkRecordAddress + (((uint)round) * 8u));
 
             rounds[round] = (bus.DebugRead32(address: recordAddress), bus.DebugRead32(address: (recordAddress + 4u)));
         }
@@ -34,8 +34,8 @@ internal static class LinkStageProtocol {
         var childWord = MicroRoms.LinkChildSeedWord;
 
         for (var round = 0; (round < verdict.Rounds.Length); ++round) {
-            var parentWord = (ushort)(MicroRoms.LinkParentSendBase + round);
-            var expectedLow = (uint)(parentWord | (childWord << 16));
+            var parentWord = ((ushort)(MicroRoms.LinkParentSendBase + round));
+            var expectedLow = ((uint)(parentWord | (childWord << 16)));
 
             if (verdict.Rounds[round].Low != expectedLow) {
                 return $"the {side}'s round {round} SIOMULTI0/1 is 0x{verdict.Rounds[round].Low:X8}; expected 0x{expectedLow:X8}";
@@ -45,7 +45,7 @@ internal static class LinkStageProtocol {
                 return $"the {side}'s round {round} SIOMULTI2/3 is 0x{verdict.Rounds[round].High:X8}; expected 0xFFFFFFFF (absent players)";
             }
 
-            childWord = (ushort)(parentWord ^ MicroRoms.LinkChildTransformMask);
+            childWord = ((ushort)(parentWord ^ MicroRoms.LinkChildTransformMask));
         }
 
         return null;

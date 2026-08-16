@@ -13,7 +13,6 @@ internal sealed class StateRoundTripStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "state-round-trip";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

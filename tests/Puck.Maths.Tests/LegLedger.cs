@@ -8,7 +8,6 @@ namespace Puck.Maths.Tests;
 /// <param name="Statement">The statement's stable name: a law id.</param>
 /// <param name="Legs">The declared legs, in declaration order.</param>
 internal sealed record LegRow(string Surface, string Statement, IReadOnlyList<Leg> Legs);
-
 /// <summary>
 /// Module 5 — the leg ledger. Reads the leg declarations from the law cases in <see cref="LawRegistry"/>, checks what
 /// a machine honestly can about them, and renders the committed <c>leg-ledger.md</c>. Where legs share code, agreement
@@ -28,7 +27,6 @@ internal static class LegLedger {
         [.. LawRegistry.All
             .OrderBy(keySelector: static lawCase => lawCase.Id, comparer: StringComparer.Ordinal)
             .Select(selector: static lawCase => new LegRow(Surface: $"law: {lawCase.Tier}", Statement: lawCase.Id, Legs: lawCase.Legs))];
-
     /// <summary>Every declaration defect a machine can see, as human-readable lines. Empty means the declarations are
     /// well formed — which is NOT the same as true; see <see cref="LegLedgerTests"/>.</summary>
     /// <param name="rows">The rows to check.</param>
@@ -89,7 +87,6 @@ internal static class LegLedger {
 
         return violations;
     }
-
     /// <summary>Every relative canary whose named absolute sibling does not RESOLVE to a statement this ledger knows.
     /// Resolution is a floor, never sufficiency: that a sibling exists says nothing about whether it discriminates.</summary>
     /// <param name="rows">The rows to check.</param>
@@ -109,7 +106,6 @@ internal static class LegLedger {
 
         return violations;
     }
-
     /// <summary>The shapes a declaration must satisfy for the combinators a case ACTUALLY ran.</summary>
     /// <param name="lawCase">The case.</param>
     /// <param name="observed">The shape set <see cref="LawShapes.Observe"/> returned.</param>
@@ -141,8 +137,8 @@ internal static class LegLedger {
     // The reference token is everything before the first dash separator; the rest is prose for a reader. Both dash
     // spellings are accepted so a label reads naturally in either register.
     private static string ReferenceToken(string absolute) {
-        var separator = absolute.IndexOf(value: " — ", comparisonType: StringComparison.Ordinal);
-        var plain = absolute.IndexOf(value: " - ", comparisonType: StringComparison.Ordinal);
+        var separator = absolute.IndexOf(comparisonType: StringComparison.Ordinal, value: " — ");
+        var plain = absolute.IndexOf(comparisonType: StringComparison.Ordinal, value: " - ");
 
         if ((separator < 0) || ((plain >= 0) && (plain < separator))) {
             separator = plain;
@@ -150,7 +146,6 @@ internal static class LegLedger {
 
         return ((separator < 0) ? absolute : absolute[..separator]).Trim();
     }
-
     private static bool Resolves(string token) {
         if (LawRegistry.ById.ContainsKey(key: token)) {
             return true;
@@ -158,7 +153,7 @@ internal static class LegLedger {
 
         // The honest spelling for a canary with NO absolute sibling anywhere. It resolves so the gate stays a floor
         // rather than a wall, and the canary register prints it as owed work instead of hiding it.
-        if (token.StartsWith(value: "owed:", comparisonType: StringComparison.Ordinal)) {
+        if (token.StartsWith(comparisonType: StringComparison.Ordinal, value: "owed:")) {
             return (token.Length > "owed:".Length);
         }
 
@@ -211,7 +206,7 @@ internal static class LegLedger {
         foreach (var group in legs
             .GroupBy(keySelector: static leg => (leg.KindToken, leg.FlavorToken))
             .OrderBy(keySelector: static group => KindRank(kind: group.Key.KindToken, flavor: group.Key.FlavorToken))
-            .ThenBy(keySelector: static group => (group.Key.KindToken + ":" + group.Key.FlavorToken), comparer: StringComparer.Ordinal)) {
+            .ThenBy(keySelector: static group => ((group.Key.KindToken + ":") + group.Key.FlavorToken), comparer: StringComparer.Ordinal)) {
             var (kind, flavor) = group.Key;
             var statements = rows.Count(predicate: row => row.Legs.Any(predicate: leg => ((leg.KindToken == kind) && (leg.FlavorToken == flavor))));
 
@@ -220,7 +215,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: $"| **total** | | **{legs.Count}** | **{rows.Count}** |\n\n");
     }
-
     private static void AppendSurfaceCounts(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Counts by surface\n\n| surface | statements | agreement legs | structural legs | statements with no independent leg |\n| --- | --- | --- | --- | --- |\n");
 
@@ -232,7 +226,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: "\n");
     }
-
     private static void AppendRows(StringBuilder builder, string heading, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: $"## {heading}\n\n| statement | surface | leg kind | flavor | subject | against | shared | cites |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n");
 
@@ -244,7 +237,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: "\n");
     }
-
     private static void AppendOwedRegister(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Register: shared-substrate statements with no independent leg beside them\n\n");
         _ = builder.Append(value: "What the filter selects, exactly: every shared-substrate leg on a statement that declares no independent leg. It is\n");
@@ -265,7 +257,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: "\n");
     }
-
     private static void AppendOwedMarkers(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Register: legs that mark their own owed work\n\n");
         _ = builder.Append(value: $"Every leg whose citation opens `{OwedMarker}`, of any kind. The register above keys on the SHAPE of a declaration, so\n");
@@ -275,14 +266,13 @@ internal static class LegLedger {
         _ = builder.Append(value: "| statement | surface | leg kind | subject | the marked gap |\n| --- | --- | --- | --- | --- |\n");
 
         foreach (var row in rows) {
-            foreach (var leg in row.Legs.Where(predicate: static leg => leg.Citation.StartsWith(value: OwedMarker, comparisonType: StringComparison.Ordinal))) {
+            foreach (var leg in row.Legs.Where(predicate: static leg => leg.Citation.StartsWith(comparisonType: StringComparison.Ordinal, value: OwedMarker))) {
                 _ = builder.Append(value: $"| {Cell(text: row.Statement)} | {Cell(text: row.Surface)} | {leg.KindToken}{((leg.FlavorToken.Length > 0) ? (":" + leg.FlavorToken) : "")} | {Cell(text: leg.Subject)} | {Cell(text: leg.Citation[OwedMarker.Length..].Trim())} |\n");
             }
         }
 
         _ = builder.Append(value: "\n");
     }
-
     private static void AppendDocGapRegister(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Register: behaviour pinned as observed against its own XML doc\n\n");
         _ = builder.Append(value: $"Every leg spelled `Leg.PinnedAsObserved`, whose citation opens `{Leg.DocGapMarker}`. A law that pins what a kernel DOES\n");
@@ -301,7 +291,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: "\n");
     }
-
     private static void AppendTranscriptionRegister(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Register: transcriptions and the witnesses beside them\n\n");
         _ = builder.Append(value: "A transcription carries a rule the subject's own code already carries, so agreement proves FAITHFUL CARRIAGE and\n");
@@ -319,7 +308,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: "\n");
     }
-
     private static void AppendCanaryRegister(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Register: relative canaries and their absolute siblings\n\n");
         _ = builder.Append(value: "Keyed on the declared RELATIVE-CANARY leg, never on the id — so a measured absolute floor spelled `-canary` is\n");
@@ -336,7 +324,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: "\n");
     }
-
     private static void AppendStructuralRegister(StringBuilder builder, IReadOnlyList<LegRow> rows) {
         _ = builder.Append(value: "## Register: structural-only statements\n\n");
         _ = builder.Append(value: "Every leg self-standing — listed so no summary can read them as twins. Rows carrying a relative canary are\n");
@@ -349,7 +336,6 @@ internal static class LegLedger {
 
         _ = builder.Append(value: "\n");
     }
-
     // The declared print order for the kind summary, as the token pairs the row table uses. An unranked pair sorts last
     // rather than vanishing.
     private static int KindRank(string kind, string flavor) =>
@@ -367,8 +353,7 @@ internal static class LegLedger {
             ("structural", "") => 10,
             _ => 11,
         };
-
     // Markdown table cells: the pipe is the column separator and a newline would end the row, so both are neutralized.
     private static string Cell(string text) =>
-        (string.IsNullOrEmpty(value: text) ? "—" : text.Replace(oldValue: "|", newValue: "\\|").ReplaceLineEndings(replacementText: " "));
+        (string.IsNullOrEmpty(value: text) ? "—" : text.Replace(newValue: "\\|", oldValue: "|").ReplaceLineEndings(replacementText: " "));
 }

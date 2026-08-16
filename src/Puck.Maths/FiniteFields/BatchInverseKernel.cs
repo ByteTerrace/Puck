@@ -27,7 +27,6 @@ internal interface IBatchInvertible<TElement> {
     /// <returns>The product.</returns>
     TElement Multiply(TElement left, TElement right);
 }
-
 /// <summary>
 /// Provides the running-product batch inversion shared by every ring whose descriptor implements
 /// <see cref="IBatchInvertible{TElement}"/>.
@@ -62,17 +61,28 @@ internal static class BatchInverseKernel {
 
         if (0 == count) { return; }
 
-        var pooled = ((count > StackThreshold) ? ArrayPool<TElement>.Shared.Rent(minimumLength: count) : null);
+        var pooled = ((count > StackThreshold)
+            ? ArrayPool<TElement>.Shared.Rent(minimumLength: count)
+            : null
+        );
         // Sized to the batch, not the threshold: the assembly compiles without SkipLocalsInit, so the localloc zeroes
         // what it reserves — a fixed 512-element reservation would memset 4-8 KiB even for a one-element batch.
-        Span<TElement> stackScratch = stackalloc TElement[((pooled is null) ? count : 0)];
-        var prefix = ((pooled is null) ? stackScratch : pooled.AsSpan());
+        Span<TElement> stackScratch = stackalloc TElement[((pooled is null)
+            ? count
+            : 0)];
+        var prefix = ((pooled is null)
+            ? stackScratch
+            : pooled.AsSpan()
+        );
 
         try {
             var running = ring.One;
 
             for (var index = 0; (index < count); ++index) {
-                running = ring.Multiply(left: running, right: values[index]);
+                running = ring.Multiply(
+                    left: running,
+                    right: values[index]
+                );
                 prefix[index] = running;
             }
 
@@ -83,8 +93,14 @@ internal static class BatchInverseKernel {
             for (var index = (count - 1); (index >= 1); --index) {
                 var element = values[index];
 
-                values[index] = ring.Multiply(left: inverse, right: prefix[(index - 1)]);
-                inverse = ring.Multiply(left: element, right: inverse);
+                values[index] = ring.Multiply(
+                    left: inverse,
+                    right: prefix[(index - 1)]
+                );
+                inverse = ring.Multiply(
+                    left: element,
+                    right: inverse
+                );
             }
 
             values[0] = inverse;
@@ -92,7 +108,10 @@ internal static class BatchInverseKernel {
             if (pooled is not null) {
                 // Only the first count slots were written; clear exactly those before the array re-enters the shared
                 // pool, so the caller-derived partial products cannot be read back by an unrelated renter.
-                pooled.AsSpan(start: 0, length: count).Clear();
+                pooled.AsSpan(
+                    length: count,
+                    start: 0
+                ).Clear();
                 ArrayPool<TElement>.Shared.Return(array: pooled);
             }
         }

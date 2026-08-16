@@ -82,50 +82,50 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[0..],
-            value: (uint)m_seconds
+            value: ((uint)m_seconds)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[4..],
-            value: (uint)m_minutes
+            value: ((uint)m_minutes)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[8..],
-            value: (uint)m_hours
+            value: ((uint)m_hours)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[12..],
-            value: (uint)(m_dayCounter & 0xFF)
+            value: ((uint)(m_dayCounter & 0xFF))
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[16..],
             value: PackDayHigh(
+                dayCarry: m_dayCarry,
                 dayCounter: m_dayCounter,
-                halted: m_halted,
-                dayCarry: m_dayCarry
+                halted: m_halted
             )
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[20..],
-            value: (uint)m_latchedSeconds
+            value: ((uint)m_latchedSeconds)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[24..],
-            value: (uint)m_latchedMinutes
+            value: ((uint)m_latchedMinutes)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[28..],
-            value: (uint)m_latchedHours
+            value: ((uint)m_latchedHours)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[32..],
-            value: (uint)(m_latchedDayCounter & 0xFF)
+            value: ((uint)(m_latchedDayCounter & 0xFF))
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[36..],
             value: PackDayHigh(
+                dayCarry: m_latchedDayCarry,
                 dayCounter: m_latchedDayCounter,
-                halted: m_halted,
-                dayCarry: m_latchedDayCarry
+                halted: m_halted
             )
         );
         BinaryPrimitives.WriteInt64LittleEndian(
@@ -144,32 +144,32 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
         // The register encodings sanitize a foreign file exactly as the RTC register writes would; the trailing
         // timestamp is deliberately ignored (the deterministic clock resumes, never advancing from wall time), and
         // the sub-second prescaler restarts — the one sub-second of drift a real battery swap also loses.
-        m_seconds = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0x3F);
-        m_minutes = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0x3F);
-        m_hours = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[8..]) & 0x1F);
+        m_seconds = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0x3F));
+        m_minutes = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0x3F));
+        m_hours = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[8..]) & 0x1F));
 
-        var dayLow = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[12..]) & 0xFF);
+        var dayLow = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[12..]) & 0xFF));
         var dayHigh = BinaryPrimitives.ReadUInt32LittleEndian(source: source[16..]);
 
-        m_dayCounter = dayLow | (int)((dayHigh & 0x01) << 8);
+        m_dayCounter = dayLow | ((int)((dayHigh & 0x01) << 8));
         m_halted = ((dayHigh & 0x40) != 0);
-        m_dayCarry = (int)((dayHigh >> 7) & 0x01);
-        m_latchedSeconds = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[20..]) & 0x3F);
-        m_latchedMinutes = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[24..]) & 0x3F);
-        m_latchedHours = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[28..]) & 0x1F);
+        m_dayCarry = ((int)((dayHigh >> 7) & 0x01));
+        m_latchedSeconds = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[20..]) & 0x3F));
+        m_latchedMinutes = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[24..]) & 0x3F));
+        m_latchedHours = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[28..]) & 0x1F));
 
-        var latchedDayLow = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[32..]) & 0xFF);
+        var latchedDayLow = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[32..]) & 0xFF));
         var latchedDayHigh = BinaryPrimitives.ReadUInt32LittleEndian(source: source[36..]);
 
-        m_latchedDayCounter = latchedDayLow | (int)((latchedDayHigh & 0x01) << 8);
-        m_latchedDayCarry = (int)((latchedDayHigh >> 7) & 0x01);
+        m_latchedDayCounter = latchedDayLow | ((int)((latchedDayHigh & 0x01) << 8));
+        m_latchedDayCarry = ((int)((latchedDayHigh >> 7) & 0x01));
         m_dotAccumulator = 0;
     }
 
     private static uint PackDayHigh(int dayCounter, bool halted, int dayCarry) =>
-        (uint)(((dayCounter >> 8) & 0x01) | (halted
+        ((uint)(((dayCounter >> 8) & 0x01) | (halted
         ? 0x40
-        : 0x00) | ((dayCarry & 0x01) << 7));
+        : 0x00) | ((dayCarry & 0x01) << 7)));
 
     private bool RtcRegisterSelected =>
         (m_ramBankOrRtcRegister >= 0x08);
@@ -345,13 +345,13 @@ public sealed class Mbc3Cartridge : CartridgeBase, IClockedComponent {
     }
     private byte ReadRtcRegister() =>
         m_ramBankOrRtcRegister switch {
-            0x08 => (byte)m_latchedSeconds,
-            0x09 => (byte)m_latchedMinutes,
-            0x0A => (byte)m_latchedHours,
-            0x0B => (byte)m_latchedDayCounter,
-            0x0C => (byte)(((m_latchedDayCounter >> 8) & 0x01) | (m_halted
+            0x08 => ((byte)m_latchedSeconds),
+            0x09 => ((byte)m_latchedMinutes),
+            0x0A => ((byte)m_latchedHours),
+            0x0B => ((byte)m_latchedDayCounter),
+            0x0C => ((byte)(((m_latchedDayCounter >> 8) & 0x01) | (m_halted
         ? 0x40
-        : 0x00) | (m_latchedDayCarry << 7)),
+        : 0x00) | (m_latchedDayCarry << 7))),
             _ => 0xFF,
         };
     private void WriteRtcRegister(byte value) {

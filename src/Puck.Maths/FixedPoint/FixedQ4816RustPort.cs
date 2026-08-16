@@ -28,12 +28,413 @@ namespace Puck.Maths;
 /// against what is committed left the build, so drift is caught only by regenerating and reading the diff.
 /// </remarks>
 public static class FixedQ4816RustPort {
-    private const int VectorTargetCount = 2000;
+    private const ulong LcgIncrement = 1442695040888963407UL;
     // A fixed-constant LCG (PCG's own multiplier/increment), seeded by a literal — never re-seeded from
     // Random or the wall clock, so the sweep below is exactly reproducible.
     private const ulong LcgMultiplier = 6364136223846793005UL;
-    private const ulong LcgIncrement = 1442695040888963407UL;
     private const ulong LcgSeed = 0x9E3779B97F4A7C15UL;
+    private const int VectorTargetCount = 2000;
+
+    // --- Structured inputs + LCG sweep -----------------------------------------------------
+
+    private static ulong AdvanceState(ulong state) => unchecked(((state * LcgMultiplier) + LcgIncrement));
+    // Every named branch in FixedQ4816.Pow/PowMagnitude, explicitly: zero base at every exponent sign, the
+    // exact identity exponents (0, 1, -1) at both signs of base, the squaring ladder's whole-exponent range
+    // boundary (+-32/+-33), MinValue's own carve-out, and a fractional exponent on a negative base (must be
+    // Zero — the real power is not a real number there). Split out of EmitPowVectors to keep that method's
+    // size under the house metric ceiling.
+    private static void AppendPowNamedBranchVectors(List<(long X, long Y, long Expected)> rows) {
+        var one = FixedQ4816.One.Value;
+        var pairs = new List<(long X, long Y)>
+        {
+            (0L, 0L), (0L, one), (0L, -one), (0L, (2L * one)), (0L, (-2L * one)),
+            (one, 0L), (one, one), (one, -one), ((2L * one), one), ((2L * one), -one),
+            (-one, 0L), (-one, one), (-one, -one), (-one, (2L * one)), (-one, (3L * one)),
+            (-one, (32L * one)), (-one, (33L * one)), (-one, (-32L * one)), (-one, (-33L * one)),
+            (-(2L * one), (32L * one)), (-(2L * one), (33L * one)),
+            (long.MinValue, 0L), (long.MinValue, one), (long.MinValue, (2L * one)), (long.MinValue, -one),
+            (long.MinValue, (3L * one)), (long.MinValue, (-2L * one)),
+            (-one, (one / 2L)), // fractional exponent on a negative base -> Zero
+            ((2L * one), (one / 2L)), // fractional exponent on a positive base -> ordinary Exp2/Log2 path
+            (long.MaxValue, one), (long.MaxValue, -one), (long.MaxValue, (2L * one)),
+        };
+
+        foreach (var (x, y) in pairs) {
+            rows.Add(item: (x, y, FixedQ4816.Pow(
+                x: new FixedQ4816(Value: x),
+                y: new FixedQ4816(Value: y)
+            ).Value));
+        }
+    }
+    private static string EmitAtan2Vectors(ref ulong state) {
+        var entries = new List<(long Y, long X, long Expected)>();
+        var notable = NotableRawValues();
+
+        foreach (var y in notable) {
+            foreach (var x in notable) {
+                entries.Add(item: (y, x, FixedQ4816.Atan2(
+                    x: new FixedQ4816(Value: x),
+                    y: new FixedQ4816(Value: y)
+                ).Value));
+            }
+        }
+
+        // Exact table-boundary hits: yMagnitude/xMagnitude = j/(128*scale) lands the internal ratio z
+        // exactly on interval boundary j (z = j << 55) for every j, including j = 128 (clamped into the
+        // shared top interval, index 127) — see fixed_generated.rs's atan2 for the mapping this mirrors.
+        foreach (var scale in new long[] { 1L, 1_000L, 1_000_000L }) {
+            foreach (var j in new long[] { 0L, 1L, 2L, 63L, 64L, 65L, 126L, 127L, 128L }) {
+                var numerator = (j * scale);
+                var denominator = (128L * scale);
+
+                foreach (var ySign in new long[] { 1L, -1L }) {
+                    foreach (var xSign in new long[] { 1L, -1L }) {
+                        var y = (ySign * numerator);
+                        var x = (xSign * denominator);
+
+                        entries.Add(item: (y, x, FixedQ4816.Atan2(
+                            x: new FixedQ4816(Value: x),
+                            y: new FixedQ4816(Value: y)
+                        ).Value));
+                    }
+                }
+            }
+        }
+
+        var bound = (64L * FixedQ4816.One.Value);
+
+        while (entries.Count < VectorTargetCount) {
+            var y = (((entries.Count % 3) == 0)
+                ? NextFullRangeRaw(state: ref state)
+                : NextBoundedRaw(
+                    bound: bound,
+                    state: ref state
+                )
+            );
+            var x = (((entries.Count % 5) == 0)
+                ? NextFullRangeRaw(state: ref state)
+                : NextBoundedRaw(
+                    bound: bound,
+                    state: ref state
+                )
+            );
+
+            entries.Add(item: (y, x, FixedQ4816.Atan2(
+                x: new FixedQ4816(Value: x),
+                y: new FixedQ4816(Value: y)
+            ).Value));
+        }
+
+        return FormatBinaryVectors(
+            arrayName: "ATAN2_VECTORS",
+            functionName: "atan2",
+            paramA: "y",
+            paramB: "x",
+            rows: entries,
+            testName: "atan2_vectors"
+        );
+    }
+    private static string EmitExp2Vectors(ref ulong state) {
+        var rows = new List<(long Value, long Expected)>();
+        var notable = NotableRawValues();
+
+        foreach (var value in notable) {
+            rows.Add(item: (value, FixedQ4816.Exp2(value: new FixedQ4816(Value: value)).Value));
+        }
+
+        // Exact table-boundary hits: the low 16 bits directly select the interval, so f = 0 lands on
+        // index 0 with zero residual, f = 127*512 lands on index 127 with zero residual, and the
+        // neighbors either side exercise the adjacent interval.
+        foreach (var k in new long[] { -20L, -18L, -17L, -16L, -1L, 0L, 1L, 2L, 10L, 20L, 30L, 40L, 45L, 46L }) {
+            var baseValue = (k * FixedQ4816.One.Value);
+
+            foreach (var f in new long[] { 0L, 1L, 511L, 512L, 513L, 65023L, 65024L, 65025L, 65534L, 65535L }) {
+                var value = (baseValue + f);
+
+                rows.Add(item: (value, FixedQ4816.Exp2(value: new FixedQ4816(Value: value)).Value));
+            }
+        }
+
+        var bound = (60L * FixedQ4816.One.Value);
+
+        while (rows.Count < VectorTargetCount) {
+            var value = (((rows.Count % 3) == 0)
+                ? NextFullRangeRaw(state: ref state)
+                : NextBoundedRaw(
+                    bound: bound,
+                    state: ref state
+                )
+            );
+
+            rows.Add(item: (value, FixedQ4816.Exp2(value: new FixedQ4816(Value: value)).Value));
+        }
+
+        return FormatUnaryVectors(
+            arrayName: "EXP2_VECTORS",
+            functionName: "exp2",
+            rows: rows,
+            testName: "exp2_vectors"
+        );
+    }
+    private static string EmitLog2Vectors(ref ulong state) {
+        var rows = new List<(long Value, long Expected)>();
+        var notable = NotableRawValues();
+
+        foreach (var value in notable) {
+            rows.Add(item: (value, FixedQ4816.Log2(value: new FixedQ4816(Value: value)).Value));
+        }
+
+        rows.Add(item: (FixedQ4816.Epsilon.Value, FixedQ4816.Log2(value: FixedQ4816.Epsilon).Value));
+        rows.Add(item: (FixedQ4816.MaxValue.Value, FixedQ4816.Log2(value: FixedQ4816.MaxValue).Value));
+
+        // Exact table-boundary hits: for integerPart >= 7, raw = 2^integerPart + (index << (integerPart
+        // - 7)) lands the mantissa's table index exactly on `index` with zero residual — see
+        // fixed_generated.rs's log2_fraction_q61 for the mapping this mirrors.
+        foreach (var integerPart in new[] { 7, 10, 16, 20, 24, 30, 32, 40, 47, 48, 55, 60, 61 }) {
+            foreach (var index in new long[] { 0L, 1L, 2L, 63L, 64L, 125L, 126L, 127L }) {
+                var value = ((1L << integerPart) + (index << (integerPart - 7)));
+
+                rows.Add(item: (value, FixedQ4816.Log2(value: new FixedQ4816(Value: value)).Value));
+            }
+        }
+
+        while (rows.Count < VectorTargetCount) {
+            long value;
+
+            if ((rows.Count % 7) == 0) {
+                value = NextFullRangeRaw(state: ref state); // includes negatives/zero — keeps exercising the early return
+            } else {
+                value = (1L + Math.Abs(value: NextBoundedRaw(
+                    bound: (1L << 50),
+                    state: ref state
+                )));
+            }
+
+            rows.Add(item: (value, FixedQ4816.Log2(value: new FixedQ4816(Value: value)).Value));
+        }
+
+        return FormatUnaryVectors(
+            arrayName: "LOG2_VECTORS",
+            functionName: "log2",
+            rows: rows,
+            testName: "log2_vectors"
+        );
+    }
+    private static string EmitPowVectors(ref ulong state) {
+        var rows = new List<(long X, long Y, long Expected)>();
+        var notable = NotableRawValues();
+
+        foreach (var x in notable) {
+            foreach (var y in notable) {
+                rows.Add(item: (x, y, FixedQ4816.Pow(
+                    x: new FixedQ4816(Value: x),
+                    y: new FixedQ4816(Value: y)
+                ).Value));
+            }
+        }
+
+        AppendPowNamedBranchVectors(rows: rows);
+
+        var bound = (64L * FixedQ4816.One.Value);
+
+        while (rows.Count < VectorTargetCount) {
+            var x = (((rows.Count % 3) == 0)
+                ? NextFullRangeRaw(state: ref state)
+                : NextBoundedRaw(
+                    bound: bound,
+                    state: ref state
+                )
+            );
+            var y = (((rows.Count % 5) == 0)
+                ? NextFullRangeRaw(state: ref state)
+                : NextBoundedRaw(
+                    bound: bound,
+                    state: ref state
+                )
+            );
+
+            if (x == 0L) {
+                x = 1L; // 0^y is already covered exhaustively above; keep the sweep on the general path
+            }
+
+            rows.Add(item: (x, y, FixedQ4816.Pow(
+                x: new FixedQ4816(Value: x),
+                y: new FixedQ4816(Value: y)
+            ).Value));
+        }
+
+        return FormatBinaryVectors(
+            arrayName: "POW_VECTORS",
+            functionName: "pow",
+            paramA: "x",
+            paramB: "y",
+            rows: rows,
+            testName: "pow_vectors"
+        );
+    }
+    private static string EmitSinCosVectors(ref ulong state) {
+        var angles = new List<long>(collection: NotableRawValues());
+        var quarterTurnRaw = FixedQ4816.FromDouble(value: (Math.PI / 2.0)).Value;
+
+        // Turn-domain landmarks: exact multiples of a quarter turn are hard to hit from the angle
+        // domain (the reduction lives in raw*InvTwoPi space, not radians), so these are ordinary radian
+        // landmarks instead — some large enough to fold through many whole turns before landing.
+        foreach (var k in new long[] { -1_000_000L, -100L, -12L, -4L, -3L, -2L, -1L, 0L, 1L, 2L, 3L, 4L, 12L, 100L, 1_000_000L }) {
+            var landmark = (k * quarterTurnRaw);
+
+            angles.Add(item: landmark);
+            angles.Add(item: (landmark + 1L));
+            angles.Add(item: (landmark - 1L));
+        }
+
+        var bound = (200L * FixedQ4816.One.Value);
+
+        while (angles.Count < VectorTargetCount) {
+            angles.Add(item: (((angles.Count % 3) == 0)
+                ? NextFullRangeRaw(state: ref state)
+                : NextBoundedRaw(
+                    bound: bound,
+                    state: ref state
+                )));
+        }
+
+        var sinRows = angles.Select(selector: angle => (angle, FixedQ4816.Sin(angle: new FixedQ4816(Value: angle)).Value)).ToList();
+        var cosRows = angles.Select(selector: angle => (angle, FixedQ4816.Cos(angle: new FixedQ4816(Value: angle)).Value)).ToList();
+
+        var sb = new StringBuilder();
+
+        sb.Append(value: FormatUnaryVectors(
+            arrayName: "SIN_VECTORS",
+            functionName: "sin",
+            rows: sinRows,
+            testName: "sin_vectors"
+        ));
+        sb.Append(value: FormatUnaryVectors(
+            arrayName: "COS_VECTORS",
+            functionName: "cos",
+            rows: cosRows,
+            testName: "cos_vectors"
+        ));
+        return sb.ToString();
+    }
+    private static string FormatBinaryVectors(
+        string functionName,
+        string arrayName,
+        string testName,
+        IReadOnlyList<(long A, long B, long Expected)> rows,
+        string paramA,
+        string paramB
+    ) {
+        var sb = new StringBuilder();
+
+        sb.Append(value: "#[test]\n");
+        sb.Append(value: "fn ").Append(value: testName).Append(value: "() {\n");
+        sb.Append(value: "    for &(").Append(value: paramA).Append(value: ", ").Append(value: paramB).Append(value: ", expected) in ")
+            .Append(value: arrayName).Append(value: ".iter() {\n");
+        sb.Append(value: "        assert_eq!(").Append(value: functionName).Append(value: '(').Append(value: paramA).Append(value: ", ").Append(value: paramB)
+            .Append(value: "), expected, \"").Append(value: functionName).Append(value: '(').Append(value: '{').Append(value: paramA).Append(value: "}, {")
+            .Append(value: paramB).Append(value: "}) => {expected}\");\n");
+        sb.Append(value: "    }\n");
+        sb.Append(value: "}\n\n");
+        sb.Append(value: "const ").Append(value: arrayName).Append(value: ": &[(i64, i64, i64)] = &[\n");
+
+        foreach (var (a, b, expected) in rows) {
+            sb.Append(value: "    (").Append(value: a.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
+                .Append(value: b.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
+                .Append(value: expected.ToString(provider: CultureInfo.InvariantCulture)).Append(value: "),\n");
+        }
+
+        sb.Append(value: "];\n\n");
+        return sb.ToString();
+    }
+    // --- Rust source formatting -------------------------------------------------------------
+
+    private static string FormatI64Array(string name, IReadOnlyList<long> values, int perLine, string comment) {
+        var sb = new StringBuilder();
+
+        sb.Append(value: "// ").Append(value: comment).Append(value: '\n');
+        sb.Append(value: "const ").Append(value: name).Append(value: ": [i64; ").Append(value: values.Count).Append(value: "] = [\n");
+
+        for (var index = 0; (index < values.Count); index += perLine) {
+            var line = values.Skip(count: index).Take(count: perLine).Select(selector: static value => value.ToString(provider: CultureInfo.InvariantCulture));
+
+            sb.Append(value: "    ").Append(value: string.Join(
+                separator: ", ",
+                values: line
+            )).Append(value: ",\n");
+        }
+
+        sb.Append(value: "];\n\n");
+        return sb.ToString();
+    }
+    private static string FormatU64Array(string name, IReadOnlyList<ulong> values, int perLine, string comment) {
+        var sb = new StringBuilder();
+
+        sb.Append(value: "// ").Append(value: comment).Append(value: '\n');
+        sb.Append(value: "const ").Append(value: name).Append(value: ": [u64; ").Append(value: values.Count).Append(value: "] = [\n");
+
+        for (var index = 0; (index < values.Count); index += perLine) {
+            var line = values.Skip(count: index).Take(count: perLine).Select(selector: static value => value.ToString(provider: CultureInfo.InvariantCulture));
+
+            sb.Append(value: "    ").Append(value: string.Join(
+                separator: ", ",
+                values: line
+            )).Append(value: ",\n");
+        }
+
+        sb.Append(value: "];\n\n");
+        return sb.ToString();
+    }
+    private static string FormatUnaryVectors(string functionName, string arrayName, string testName, IReadOnlyList<(long Input, long Expected)> rows) {
+        var sb = new StringBuilder();
+
+        sb.Append(value: "#[test]\n");
+        sb.Append(value: "fn ").Append(value: testName).Append(value: "() {\n");
+        sb.Append(value: "    for &(input, expected) in ").Append(value: arrayName).Append(value: ".iter() {\n");
+        sb.Append(value: "        assert_eq!(").Append(value: functionName).Append(value: "(input), expected, \"")
+            .Append(value: functionName).Append(value: "({input}) => {expected}\");\n");
+        sb.Append(value: "    }\n");
+        sb.Append(value: "}\n\n");
+        sb.Append(value: "const ").Append(value: arrayName).Append(value: ": &[(i64, i64)] = &[\n");
+
+        foreach (var (input, expected) in rows) {
+            sb.Append(value: "    (").Append(value: input.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
+                .Append(value: expected.ToString(provider: CultureInfo.InvariantCulture)).Append(value: "),\n");
+        }
+
+        sb.Append(value: "];\n\n");
+        return sb.ToString();
+    }
+    private static long NextBoundedRaw(ref ulong state, long bound) {
+        state = AdvanceState(state: state);
+
+        var range = unchecked((ulong)((2L * bound) + 1L));
+        var offset = (state % range);
+
+        return unchecked((((long)offset) - bound));
+    }
+    private static long NextFullRangeRaw(ref ulong state) {
+        state = AdvanceState(state: state);
+        return unchecked((long)state);
+    }
+    // Raw values every function's structured coverage draws from: zero, the unit values, both carrier
+    // extremes (and their neighbors), and assorted powers of two / near-powers-of-two.
+    private static long[] NotableRawValues() {
+        var one = FixedQ4816.One.Value;
+
+        return [
+            0L, 1L, -1L, 2L, -2L,
+            one, -one,
+            long.MinValue, long.MaxValue, (long.MinValue + 1L), (long.MaxValue - 1L),
+            (32L * one), (-32L * one), (33L * one), (-33L * one),
+            (47L * one), (48L * one), (46L * one),
+            (-16L * one), (-17L * one), (-18L * one), (-19L * one),
+            (1L << 32), -(1L << 32),
+            (1L << 47), -(1L << 47),
+            (1L << 20), -(1L << 20),
+            ((1L << 62) - 1L), (-(1L << 62) + 1L),
+        ];
+    }
 
     /// <summary>Emits the complete text of <c>fixed_generated.rs</c>: the ported functions, tables, and
     /// polynomial coefficients, read from the live <see cref="FixedQ4816"/> type.</summary>
@@ -69,9 +470,9 @@ const HALF_ULP: u64 = 1u64 << (FRACTION_BITS - 1);
 
 """);
 
-        sb.Append(value: "// Atan2 constants (FixedQ4816.Atan2HalfPiQ61 / Atan2PiQ61).\n");
+        sb.Append(value: "// Atan2 constants (FixedQ4816.Atan2HalfPiQ61 / PiQ61).\n");
         sb.Append(value: "const ATAN2_HALF_PI_Q61: i64 = ").Append(value: FixedQ4816.Atan2HalfPiQ61).Append(value: ";\n");
-        sb.Append(value: "const ATAN2_PI_Q61: i64 = ").Append(value: FixedQ4816.Atan2PiQ61).Append(value: ";\n\n");
+        sb.Append(value: "const ATAN2_PI_Q61: i64 = ").Append(value: FixedQ4816.PiQ61).Append(value: ";\n\n");
 
         sb.Append(value: "// SinCos constants (FixedQ4816.SinCos*).\n");
         sb.Append(value: "const SIN_COS_INV_TWO_PI_Q64: i64 = ").Append(value: FixedQ4816.SinCosInvTwoPiQ64).Append(value: ";\n");
@@ -112,13 +513,48 @@ const HALF_ULP: u64 = 1u64 << (FRACTION_BITS - 1);
             values: [FixedQ4816.Exp2PolyC1Q62, FixedQ4816.Exp2PolyC2Q62, FixedQ4816.Exp2PolyC3Q62, FixedQ4816.Exp2PolyC4Q62]
         ));
 
-        sb.Append(value: FormatU64Array(comment: "Log2 interval inverse table, Q62 (FixedQ4816.Log2InverseTableQ62).", name: "LOG2_INVERSE_TABLE_Q62", perLine: 4, values: FixedQ4816.Log2InverseTableQ62.ToArray()));
-        sb.Append(value: FormatU64Array(comment: "Log2 interval table, Q61 (FixedQ4816.Log2TableQ61).", name: "LOG2_TABLE_Q61", perLine: 4, values: FixedQ4816.Log2TableQ61.ToArray()));
-        sb.Append(value: FormatU64Array(comment: "Exp2 interval table, Q62 (FixedQ4816.Exp2TableQ62).", name: "EXP2_TABLE_Q62", perLine: 4, values: FixedQ4816.Exp2TableQ62.ToArray()));
-        sb.Append(value: FormatI64Array(comment: "Atan2 interval table, Q61 (FixedQ4816.AtanTableQ61).", name: "ATAN_TABLE_Q61", perLine: 4, values: FixedQ4816.AtanTableQ61.ToArray()));
-        sb.Append(value: FormatI64Array(comment: "Atan2 first-derivative interval table, Q61 (FixedQ4816.AtanDerivative1TableQ61).", name: "ATAN_DERIVATIVE1_TABLE_Q61", perLine: 4, values: FixedQ4816.AtanDerivative1TableQ61.ToArray()));
-        sb.Append(value: FormatI64Array(comment: "Atan2 second-derivative interval table, Q61 (FixedQ4816.AtanDerivative2TableQ61).", name: "ATAN_DERIVATIVE2_TABLE_Q61", perLine: 4, values: FixedQ4816.AtanDerivative2TableQ61.ToArray()));
-        sb.Append(value: FormatI64Array(comment: "Atan2 third-derivative interval table, Q61 (FixedQ4816.AtanDerivative3TableQ61).", name: "ATAN_DERIVATIVE3_TABLE_Q61", perLine: 4, values: FixedQ4816.AtanDerivative3TableQ61.ToArray()));
+        sb.Append(value: FormatU64Array(
+            comment: "Log2 interval inverse table, Q62 (FixedQ4816.Log2InverseTableQ62).",
+            name: "LOG2_INVERSE_TABLE_Q62",
+            perLine: 4,
+            values: FixedQ4816.Log2InverseTableQ62.ToArray()
+        ));
+        sb.Append(value: FormatU64Array(
+            comment: "Log2 interval table, Q61 (FixedQ4816.Log2TableQ61).",
+            name: "LOG2_TABLE_Q61",
+            perLine: 4,
+            values: FixedQ4816.Log2TableQ61.ToArray()
+        ));
+        sb.Append(value: FormatU64Array(
+            comment: "Exp2 interval table, Q62 (FixedQ4816.Exp2TableQ62).",
+            name: "EXP2_TABLE_Q62",
+            perLine: 4,
+            values: FixedQ4816.Exp2TableQ62.ToArray()
+        ));
+        sb.Append(value: FormatI64Array(
+            comment: "Atan2 interval table, Q61 (FixedQ4816.AtanTableQ61).",
+            name: "ATAN_TABLE_Q61",
+            perLine: 4,
+            values: FixedQ4816.AtanTableQ61.ToArray()
+        ));
+        sb.Append(value: FormatI64Array(
+            comment: "Atan2 first-derivative interval table, Q61 (FixedQ4816.AtanDerivative1TableQ61).",
+            name: "ATAN_DERIVATIVE1_TABLE_Q61",
+            perLine: 4,
+            values: FixedQ4816.AtanDerivative1TableQ61.ToArray()
+        ));
+        sb.Append(value: FormatI64Array(
+            comment: "Atan2 second-derivative interval table, Q61 (FixedQ4816.AtanDerivative2TableQ61).",
+            name: "ATAN_DERIVATIVE2_TABLE_Q61",
+            perLine: 4,
+            values: FixedQ4816.AtanDerivative2TableQ61.ToArray()
+        ));
+        sb.Append(value: FormatI64Array(
+            comment: "Atan2 third-derivative interval table, Q61 (FixedQ4816.AtanDerivative3TableQ61).",
+            name: "ATAN_DERIVATIVE3_TABLE_Q61",
+            perLine: 4,
+            values: FixedQ4816.AtanDerivative3TableQ61.ToArray()
+        ));
 
         sb.Append(value: """
 // Signed (x*y) >> 62 via one 128-bit widened multiply and an arithmetic shift — equivalent to the host's
@@ -480,7 +916,6 @@ pub fn pow(x: i64, y: i64) -> i64 {
 
         return sb.ToString();
     }
-
     /// <summary>Emits the complete text of <c>fixed_vectors.rs</c>: known-answer vectors for the six ported
     /// functions, computed by calling the real <see cref="FixedQ4816"/> at generation time.</summary>
     public static string EmitVectors() {
@@ -516,328 +951,6 @@ use crate::fixed_generated::{atan2, cos, exp2, log2, pow, sin};
         sb.Append(value: EmitLog2Vectors(state: ref state));
         sb.Append(value: EmitPowVectors(state: ref state));
 
-        return sb.ToString();
-    }
-
-    // --- Structured inputs + LCG sweep -----------------------------------------------------
-
-    private static ulong AdvanceState(ulong state) => unchecked(((state * LcgMultiplier) + LcgIncrement));
-    private static long NextFullRangeRaw(ref ulong state) {
-        state = AdvanceState(state: state);
-        return unchecked((long)state);
-    }
-    private static long NextBoundedRaw(ref ulong state, long bound) {
-        state = AdvanceState(state: state);
-
-        var range = unchecked((ulong)((2L * bound) + 1L));
-        var offset = (state % range);
-
-        return unchecked(((long)offset - bound));
-    }
-
-    // Raw values every function's structured coverage draws from: zero, the unit values, both carrier
-    // extremes (and their neighbors), and assorted powers of two / near-powers-of-two.
-    private static long[] NotableRawValues() {
-        var one = FixedQ4816.One.Value;
-
-        return [
-            0L, 1L, -1L, 2L, -2L,
-            one, -one,
-            long.MinValue, long.MaxValue, (long.MinValue + 1L), (long.MaxValue - 1L),
-            (32L * one), (-32L * one), (33L * one), (-33L * one),
-            (47L * one), (48L * one), (46L * one),
-            (-16L * one), (-17L * one), (-18L * one), (-19L * one),
-            (1L << 32), -(1L << 32),
-            (1L << 47), -(1L << 47),
-            (1L << 20), -(1L << 20),
-            ((1L << 62) - 1L), (-(1L << 62) + 1L),
-        ];
-    }
-    private static string EmitAtan2Vectors(ref ulong state) {
-        var entries = new List<(long Y, long X, long Expected)>();
-        var notable = NotableRawValues();
-
-        foreach (var y in notable) {
-            foreach (var x in notable) {
-                entries.Add(item: (y, x, FixedQ4816.Atan2(x: new FixedQ4816(Value: x), y: new FixedQ4816(Value: y)).Value));
-            }
-        }
-
-        // Exact table-boundary hits: yMagnitude/xMagnitude = j/(128*scale) lands the internal ratio z
-        // exactly on interval boundary j (z = j << 55) for every j, including j = 128 (clamped into the
-        // shared top interval, index 127) — see fixed_generated.rs's atan2 for the mapping this mirrors.
-        foreach (var scale in new long[] { 1L, 1_000L, 1_000_000L }) {
-            foreach (var j in new long[] { 0L, 1L, 2L, 63L, 64L, 65L, 126L, 127L, 128L }) {
-                var numerator = (j * scale);
-                var denominator = (128L * scale);
-
-                foreach (var ySign in new long[] { 1L, -1L }) {
-                    foreach (var xSign in new long[] { 1L, -1L }) {
-                        var y = (ySign * numerator);
-                        var x = (xSign * denominator);
-
-                        entries.Add(item: (y, x, FixedQ4816.Atan2(x: new FixedQ4816(Value: x), y: new FixedQ4816(Value: y)).Value));
-                    }
-                }
-            }
-        }
-
-        var bound = (64L * FixedQ4816.One.Value);
-
-        while (entries.Count < VectorTargetCount) {
-            var y = (((entries.Count % 3) == 0) ? NextFullRangeRaw(state: ref state) : NextBoundedRaw(bound: bound, state: ref state));
-            var x = (((entries.Count % 5) == 0) ? NextFullRangeRaw(state: ref state) : NextBoundedRaw(bound: bound, state: ref state));
-
-            entries.Add(item: (y, x, FixedQ4816.Atan2(x: new FixedQ4816(Value: x), y: new FixedQ4816(Value: y)).Value));
-        }
-
-        return FormatBinaryVectors(
-            arrayName: "ATAN2_VECTORS",
-            functionName: "atan2",
-            paramA: "y",
-            paramB: "x",
-            rows: entries,
-            testName: "atan2_vectors"
-        );
-    }
-    private static string EmitSinCosVectors(ref ulong state) {
-        var angles = new List<long>(collection: NotableRawValues());
-        var quarterTurnRaw = FixedQ4816.FromDouble(value: (Math.PI / 2.0)).Value;
-
-        // Turn-domain landmarks: exact multiples of a quarter turn are hard to hit from the angle
-        // domain (the reduction lives in raw*InvTwoPi space, not radians), so these are ordinary radian
-        // landmarks instead — some large enough to fold through many whole turns before landing.
-        foreach (var k in new long[] { -1_000_000L, -100L, -12L, -4L, -3L, -2L, -1L, 0L, 1L, 2L, 3L, 4L, 12L, 100L, 1_000_000L }) {
-            var landmark = (k * quarterTurnRaw);
-
-            angles.Add(item: landmark);
-            angles.Add(item: (landmark + 1L));
-            angles.Add(item: (landmark - 1L));
-        }
-
-        var bound = (200L * FixedQ4816.One.Value);
-
-        while (angles.Count < VectorTargetCount) {
-            angles.Add(item: (((angles.Count % 3) == 0) ? NextFullRangeRaw(state: ref state) : NextBoundedRaw(bound: bound, state: ref state)));
-        }
-
-        var sinRows = angles.Select(selector: angle => (angle, FixedQ4816.Sin(angle: new FixedQ4816(Value: angle)).Value)).ToList();
-        var cosRows = angles.Select(selector: angle => (angle, FixedQ4816.Cos(angle: new FixedQ4816(Value: angle)).Value)).ToList();
-
-        var sb = new StringBuilder();
-
-        sb.Append(value: FormatUnaryVectors(arrayName: "SIN_VECTORS", functionName: "sin", rows: sinRows, testName: "sin_vectors"));
-        sb.Append(value: FormatUnaryVectors(arrayName: "COS_VECTORS", functionName: "cos", rows: cosRows, testName: "cos_vectors"));
-        return sb.ToString();
-    }
-    private static string EmitExp2Vectors(ref ulong state) {
-        var rows = new List<(long Value, long Expected)>();
-        var notable = NotableRawValues();
-
-        foreach (var value in notable) {
-            rows.Add(item: (value, FixedQ4816.Exp2(value: new FixedQ4816(Value: value)).Value));
-        }
-
-        // Exact table-boundary hits: the low 16 bits directly select the interval, so f = 0 lands on
-        // index 0 with zero residual, f = 127*512 lands on index 127 with zero residual, and the
-        // neighbors either side exercise the adjacent interval.
-        foreach (var k in new long[] { -20L, -18L, -17L, -16L, -1L, 0L, 1L, 2L, 10L, 20L, 30L, 40L, 45L, 46L }) {
-            var baseValue = (k * FixedQ4816.One.Value);
-
-            foreach (var f in new long[] { 0L, 1L, 511L, 512L, 513L, 65023L, 65024L, 65025L, 65534L, 65535L }) {
-                var value = (baseValue + f);
-
-                rows.Add(item: (value, FixedQ4816.Exp2(value: new FixedQ4816(Value: value)).Value));
-            }
-        }
-
-        var bound = (60L * FixedQ4816.One.Value);
-
-        while (rows.Count < VectorTargetCount) {
-            var value = (((rows.Count % 3) == 0) ? NextFullRangeRaw(state: ref state) : NextBoundedRaw(bound: bound, state: ref state));
-
-            rows.Add(item: (value, FixedQ4816.Exp2(value: new FixedQ4816(Value: value)).Value));
-        }
-
-        return FormatUnaryVectors(arrayName: "EXP2_VECTORS", functionName: "exp2", rows: rows, testName: "exp2_vectors");
-    }
-    private static string EmitLog2Vectors(ref ulong state) {
-        var rows = new List<(long Value, long Expected)>();
-        var notable = NotableRawValues();
-
-        foreach (var value in notable) {
-            rows.Add(item: (value, FixedQ4816.Log2(value: new FixedQ4816(Value: value)).Value));
-        }
-
-        rows.Add(item: (FixedQ4816.Epsilon.Value, FixedQ4816.Log2(value: FixedQ4816.Epsilon).Value));
-        rows.Add(item: (FixedQ4816.MaxValue.Value, FixedQ4816.Log2(value: FixedQ4816.MaxValue).Value));
-
-        // Exact table-boundary hits: for integerPart >= 7, raw = 2^integerPart + (index << (integerPart
-        // - 7)) lands the mantissa's table index exactly on `index` with zero residual — see
-        // fixed_generated.rs's log2_fraction_q61 for the mapping this mirrors.
-        foreach (var integerPart in new[] { 7, 10, 16, 20, 24, 30, 32, 40, 47, 48, 55, 60, 61 }) {
-            foreach (var index in new long[] { 0L, 1L, 2L, 63L, 64L, 125L, 126L, 127L }) {
-                var value = ((1L << integerPart) + (index << (integerPart - 7)));
-
-                rows.Add(item: (value, FixedQ4816.Log2(value: new FixedQ4816(Value: value)).Value));
-            }
-        }
-
-        while (rows.Count < VectorTargetCount) {
-            long value;
-
-            if ((rows.Count % 7) == 0) {
-                value = NextFullRangeRaw(state: ref state); // includes negatives/zero — keeps exercising the early return
-            } else {
-                value = (1L + Math.Abs(value: NextBoundedRaw(bound: (1L << 50), state: ref state)));
-            }
-
-            rows.Add(item: (value, FixedQ4816.Log2(value: new FixedQ4816(Value: value)).Value));
-        }
-
-        return FormatUnaryVectors(arrayName: "LOG2_VECTORS", functionName: "log2", rows: rows, testName: "log2_vectors");
-    }
-    private static string EmitPowVectors(ref ulong state) {
-        var rows = new List<(long X, long Y, long Expected)>();
-        var notable = NotableRawValues();
-
-        foreach (var x in notable) {
-            foreach (var y in notable) {
-                rows.Add(item: (x, y, FixedQ4816.Pow(x: new FixedQ4816(Value: x), y: new FixedQ4816(Value: y)).Value));
-            }
-        }
-
-        AppendPowNamedBranchVectors(rows: rows);
-
-        var bound = (64L * FixedQ4816.One.Value);
-
-        while (rows.Count < VectorTargetCount) {
-            var x = (((rows.Count % 3) == 0) ? NextFullRangeRaw(state: ref state) : NextBoundedRaw(bound: bound, state: ref state));
-            var y = (((rows.Count % 5) == 0) ? NextFullRangeRaw(state: ref state) : NextBoundedRaw(bound: bound, state: ref state));
-
-            if (x == 0L) {
-                x = 1L; // 0^y is already covered exhaustively above; keep the sweep on the general path
-            }
-
-            rows.Add(item: (x, y, FixedQ4816.Pow(x: new FixedQ4816(Value: x), y: new FixedQ4816(Value: y)).Value));
-        }
-
-        return FormatBinaryVectors(
-            arrayName: "POW_VECTORS",
-            functionName: "pow",
-            paramA: "x",
-            paramB: "y",
-            rows: rows,
-            testName: "pow_vectors"
-        );
-    }
-
-    // Every named branch in FixedQ4816.Pow/PowMagnitude, explicitly: zero base at every exponent sign, the
-    // exact identity exponents (0, 1, -1) at both signs of base, the squaring ladder's whole-exponent range
-    // boundary (+-32/+-33), MinValue's own carve-out, and a fractional exponent on a negative base (must be
-    // Zero — the real power is not a real number there). Split out of EmitPowVectors to keep that method's
-    // size under the house metric ceiling.
-    private static void AppendPowNamedBranchVectors(List<(long X, long Y, long Expected)> rows) {
-        var one = FixedQ4816.One.Value;
-        var pairs = new List<(long X, long Y)>
-        {
-            (0L, 0L), (0L, one), (0L, -one), (0L, (2L * one)), (0L, (-2L * one)),
-            (one, 0L), (one, one), (one, -one), ((2L * one), one), ((2L * one), -one),
-            (-one, 0L), (-one, one), (-one, -one), (-one, (2L * one)), (-one, (3L * one)),
-            (-one, (32L * one)), (-one, (33L * one)), (-one, (-32L * one)), (-one, (-33L * one)),
-            (-(2L * one), (32L * one)), (-(2L * one), (33L * one)),
-            (long.MinValue, 0L), (long.MinValue, one), (long.MinValue, (2L * one)), (long.MinValue, -one),
-            (long.MinValue, (3L * one)), (long.MinValue, (-2L * one)),
-            (-one, (one / 2L)), // fractional exponent on a negative base -> Zero
-            ((2L * one), (one / 2L)), // fractional exponent on a positive base -> ordinary Exp2/Log2 path
-            (long.MaxValue, one), (long.MaxValue, -one), (long.MaxValue, (2L * one)),
-        };
-
-        foreach (var (x, y) in pairs) {
-            rows.Add(item: (x, y, FixedQ4816.Pow(x: new FixedQ4816(Value: x), y: new FixedQ4816(Value: y)).Value));
-        }
-    }
-
-    // --- Rust source formatting -------------------------------------------------------------
-
-    private static string FormatI64Array(string name, IReadOnlyList<long> values, int perLine, string comment) {
-        var sb = new StringBuilder();
-
-        sb.Append(value: "// ").Append(value: comment).Append(value: '\n');
-        sb.Append(value: "const ").Append(value: name).Append(value: ": [i64; ").Append(value: values.Count).Append(value: "] = [\n");
-
-        for (var index = 0; (index < values.Count); index += perLine) {
-            var line = values.Skip(count: index).Take(count: perLine).Select(selector: static value => value.ToString(provider: CultureInfo.InvariantCulture));
-
-            sb.Append(value: "    ").Append(value: string.Join(separator: ", ", values: line)).Append(value: ",\n");
-        }
-
-        sb.Append(value: "];\n\n");
-        return sb.ToString();
-    }
-    private static string FormatU64Array(string name, IReadOnlyList<ulong> values, int perLine, string comment) {
-        var sb = new StringBuilder();
-
-        sb.Append(value: "// ").Append(value: comment).Append(value: '\n');
-        sb.Append(value: "const ").Append(value: name).Append(value: ": [u64; ").Append(value: values.Count).Append(value: "] = [\n");
-
-        for (var index = 0; (index < values.Count); index += perLine) {
-            var line = values.Skip(count: index).Take(count: perLine).Select(selector: static value => value.ToString(provider: CultureInfo.InvariantCulture));
-
-            sb.Append(value: "    ").Append(value: string.Join(separator: ", ", values: line)).Append(value: ",\n");
-        }
-
-        sb.Append(value: "];\n\n");
-        return sb.ToString();
-    }
-    private static string FormatUnaryVectors(string functionName, string arrayName, string testName, IReadOnlyList<(long Input, long Expected)> rows) {
-        var sb = new StringBuilder();
-
-        sb.Append(value: "#[test]\n");
-        sb.Append(value: "fn ").Append(value: testName).Append(value: "() {\n");
-        sb.Append(value: "    for &(input, expected) in ").Append(value: arrayName).Append(value: ".iter() {\n");
-        sb.Append(value: "        assert_eq!(").Append(value: functionName).Append(value: "(input), expected, \"")
-            .Append(value: functionName).Append(value: "({input}) => {expected}\");\n");
-        sb.Append(value: "    }\n");
-        sb.Append(value: "}\n\n");
-        sb.Append(value: "const ").Append(value: arrayName).Append(value: ": &[(i64, i64)] = &[\n");
-
-        foreach (var (input, expected) in rows) {
-            sb.Append(value: "    (").Append(value: input.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
-                .Append(value: expected.ToString(provider: CultureInfo.InvariantCulture)).Append(value: "),\n");
-        }
-
-        sb.Append(value: "];\n\n");
-        return sb.ToString();
-    }
-    private static string FormatBinaryVectors(
-        string functionName,
-        string arrayName,
-        string testName,
-        IReadOnlyList<(long A, long B, long Expected)> rows,
-        string paramA,
-        string paramB
-    ) {
-        var sb = new StringBuilder();
-
-        sb.Append(value: "#[test]\n");
-        sb.Append(value: "fn ").Append(value: testName).Append(value: "() {\n");
-        sb.Append(value: "    for &(").Append(value: paramA).Append(value: ", ").Append(value: paramB).Append(value: ", expected) in ")
-            .Append(value: arrayName).Append(value: ".iter() {\n");
-        sb.Append(value: "        assert_eq!(").Append(value: functionName).Append(value: '(').Append(value: paramA).Append(value: ", ").Append(value: paramB)
-            .Append(value: "), expected, \"").Append(value: functionName).Append(value: '(').Append(value: '{').Append(value: paramA).Append(value: "}, {")
-            .Append(value: paramB).Append(value: "}) => {expected}\");\n");
-        sb.Append(value: "    }\n");
-        sb.Append(value: "}\n\n");
-        sb.Append(value: "const ").Append(value: arrayName).Append(value: ": &[(i64, i64, i64)] = &[\n");
-
-        foreach (var (a, b, expected) in rows) {
-            sb.Append(value: "    (").Append(value: a.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
-                .Append(value: b.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ", ")
-                .Append(value: expected.ToString(provider: CultureInfo.InvariantCulture)).Append(value: "),\n");
-        }
-
-        sb.Append(value: "];\n\n");
         return sb.ToString();
     }
 }

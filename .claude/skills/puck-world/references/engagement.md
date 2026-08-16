@@ -5,7 +5,7 @@ cabinet, the classic UX) or another body (possession/co-drive). Machine
 engagement is the historical special case: screen target, capture on. Files:
 `src/Puck.World.Server/WorldEngagement.cs`, `WorldGrants.cs` (route storage),
 `WorldMachineHost.cs`,
-`src/Puck.World.Data/Protocol/WorldCommand.cs`, `WorldDefinition.cs`
+`src/Puck.World.Protocol/Protocol/WorldCommand.cs`, `WorldDefinition.cs`
 (`WorldScreenRoute`), `src/Puck.World/PlayerCommandModule.cs`,
 `WorldScreenBinder.cs`, `src/Puck.Abstractions/Machines/` (engine-neutral
 machine contracts).
@@ -334,10 +334,9 @@ Run the game; drive `player.engage <target> [player] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing.
-`docs/verification/engagement-dissolution/` was the committed battery for the
-envelope-command dissolution — QUARANTINED (2026-08-06): it needs a screen at
-index 0, and no shipped world declares one under the four-world charter.
-Validate live instead (see its stub's header). Remember actor ≠ target: every seat holds wide
+Engagement dissolution has no committed battery: exercising it needs a
+screen at index 0, and no shipped world declares one under the four-world
+charter. Validate live instead. Remember actor ≠ target: every seat holds wide
 grants by default, so self-targeting discriminates nothing — revoke first,
 then prove the denial, then re-grant and prove success. Remember body index
 vs. player index: `world.grant … control body:<n>`/`drive body:<n>` is

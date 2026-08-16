@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Puck.GamingBricks;
 using Puck.HumbleGamingBrick.Interfaces;
-using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -9,7 +9,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <param name="Passed">Whether every comparison held.</param>
 /// <param name="Detail">A one-line description of the first mismatches, empty when <paramref name="Passed"/>.</param>
 internal readonly record struct Sm83SstVectorResult(string Name, bool Passed, string Detail);
-
 /// <summary>
 /// Isolates the shared SM83 core on <see cref="Sm83SstBus"/> for the SingleStepTests/sm83 vector battery — the DMG/CGB
 /// analogue of the Advanced core's <c>FlatTestBus</c>-driven <c>Arm7Tdmi</c> smoke harness. The SM83 constructor needs
@@ -29,8 +28,10 @@ internal readonly record struct Sm83SstVectorResult(string Name, bool Passed, st
 /// </summary>
 internal sealed class Sm83SstHarness : IDisposable {
     private readonly Sm83SstBus m_bus = new();
+
     private readonly Sm83 m_cpu;
     private readonly MachineInstance m_instance;
+
     private readonly byte[] m_stateBuffer = new byte[Sm83StateCodec.ByteCount];
     private readonly StateWriter m_writer = new(capacity: Sm83StateCodec.ByteCount);
 
@@ -126,12 +127,12 @@ internal sealed class Sm83SstHarness : IDisposable {
     );
     private void ReadCpuTail(out bool ime, out bool eiPending) =>
         Sm83StateCodec.ReadTail(
-        cpu: m_cpu,
-        scratch: m_writer,
         buffer: m_stateBuffer,
+        cpu: m_cpu,
+        eiPending: out eiPending,
         halted: out _,
         ime: out ime,
-        eiPending: out eiPending
+        scratch: m_writer
     );
     private void CompareRegisters(Sm83SstState expected, List<string> mismatches) {
         if (m_cpu.A != expected.A) { mismatches.Add(item: $"A={m_cpu.A:X2} want {expected.A:X2}"); }

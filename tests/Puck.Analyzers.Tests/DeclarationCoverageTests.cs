@@ -15,7 +15,6 @@ public sealed class DeclarationCoverageTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Equal(expected: new[] { "VER001" }, actual: result.Ids);
     }
-
     /// <summary>A placement the attribute is legal on but nothing can record: refused outright rather than left standing unenforced.</summary>
     private static void AssertBrandWasRefusedAsUnrecordable(string source, string placement) {
         var result = Harness.Run(source: source, manifestJson: Manifest.Empty);
@@ -28,19 +27,15 @@ public sealed class DeclarationCoverageTests {
     [Fact]
     public void ShorthandSpellingOnAMethodIsSeen() =>
         AssertBrandWasSeen(source: Sources.BrandedMethod());
-
     [Fact]
     public void NamespaceQualifiedSpellingOnAMethodIsSeen() =>
         AssertBrandWasSeen(source: Sources.BrandedMethod(attribute: "[Puck.VerifiedCode(\"target\")]"));
-
     [Fact]
     public void AttributeSuffixedSpellingOnAMethodIsSeen() =>
         AssertBrandWasSeen(source: Sources.BrandedMethod(attribute: "[VerifiedCodeAttribute(\"target\")]"));
-
     [Fact]
     public void FullyQualifiedAndSuffixedSpellingOnAMethodIsSeen() =>
         AssertBrandWasSeen(source: Sources.BrandedMethod(attribute: "[Puck.VerifiedCodeAttribute(\"target\")]"));
-
     [Fact]
     public void AliasedSpellingOnAMethodIsSeen() {
         var source = """
@@ -59,15 +54,12 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandSharingAnAttributeListWithAnotherAttributeIsSeen() =>
         AssertBrandWasSeen(source: Sources.BrandedMethod(attribute: "[Obsolete(\"gone\"), VerifiedCode(\"target\")]"));
-
     [Fact]
     public void BrandInASecondAttributeListIsSeen() =>
         AssertBrandWasSeen(source: Sources.BrandedMethod(attribute: "[Obsolete(\"gone\")]\r\n    [VerifiedCode(\"target\")]"));
-
     [Fact]
     public void BrandOnAPropertyGetterIsSeen() {
         var source = """
@@ -84,7 +76,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAPropertySetterIsSeen() {
         var source = """
@@ -104,7 +95,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAConstructorIsSeen() {
         var source = """
@@ -120,7 +110,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAnOperatorIsSeen() {
         var source = """
@@ -137,7 +126,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAnImplicitConversionOperatorIsSeen() {
         var source = """
@@ -154,7 +142,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAnExplicitConversionOperatorIsSeen() {
         var source = """
@@ -171,7 +158,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnADestructorIsSeen() {
         var source = """
@@ -187,7 +173,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAClassIsSeen() {
         var source = """
@@ -201,7 +186,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAStructIsSeen() {
         var source = """
@@ -215,7 +199,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnARecordClassIsSeen() {
         var source = """
@@ -228,7 +211,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnARecordStructIsSeen() {
         var source = """
@@ -241,7 +223,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnARecordsPrimaryConstructorIsSeen() {
         var source = """
@@ -254,7 +235,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAClassPrimaryConstructorIsSeen() {
         var source = """
@@ -269,7 +249,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAGenericMethodIsSeen() {
         var source = """
@@ -286,7 +265,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAnExplicitInterfaceImplementationIsSeen() {
         var source = """
@@ -307,7 +285,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnAMethodOfANestedTypeIsSeen() {
         var source = """
@@ -326,11 +303,9 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandInAGeneratedFileIsSeen() =>
         AssertBrandWasSeen(source: Sources.BrandedMethod(), sourceName: "Subject.g.cs");
-
     [Fact]
     public void BrandInAFileCarryingTheAutoGeneratedHeaderIsSeen() {
         var source = """
@@ -348,7 +323,6 @@ public sealed class DeclarationCoverageTests {
 
         AssertBrandWasSeen(source: source);
     }
-
     [Fact]
     public void BrandOnALocalFunctionIsRefused() {
         var source = """
@@ -367,9 +341,8 @@ public sealed class DeclarationCoverageTests {
 
             """;
 
-        AssertBrandWasRefusedAsUnrecordable(source: source, placement: "a local function");
+        AssertBrandWasRefusedAsUnrecordable(placement: "a local function", source: source);
     }
-
     [Fact]
     public void BrandOnALambdaIsRefused() {
         var source = """
@@ -383,9 +356,8 @@ public sealed class DeclarationCoverageTests {
 
             """;
 
-        AssertBrandWasRefusedAsUnrecordable(source: source, placement: "a lambda");
+        AssertBrandWasRefusedAsUnrecordable(placement: "a lambda", source: source);
     }
-
     [Fact]
     public void BrandOnAParameterisedLambdaIsRefused() {
         var source = """
@@ -399,9 +371,8 @@ public sealed class DeclarationCoverageTests {
 
             """;
 
-        AssertBrandWasRefusedAsUnrecordable(source: source, placement: "a lambda");
+        AssertBrandWasRefusedAsUnrecordable(placement: "a lambda", source: source);
     }
-
     [Fact]
     public void BrandWithAnEmptyIdIsIgnoredRatherThanTracked() {
         var result = Harness.Run(source: Sources.BrandedMethod(attribute: "[VerifiedCode(\"\")]"), manifestJson: Manifest.Empty);

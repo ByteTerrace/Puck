@@ -12,23 +12,62 @@ namespace Puck.Text;
 /// <remarks>
 /// An atlas is produced by an <see cref="IFontAtlasGenerator"/> (typically via an
 /// <see cref="IFontAtlasSourceResolver"/>) and is treated as read-only thereafter. Glyphs are indexed by
-/// their Unicode scalar value and kerning pairs by their ordered code-point key, so both lookups are
-/// constant time. The type carries no GPU or windowing concepts; callers that draw the atlas derive their
-/// own pixel-space geometry from its em-space metrics and bounds.
+/// their Unicode scalar value and, when the source preserved it, by source-font glyph identifier. Kerning pairs
+/// use their ordered code-point key. All three lookups are constant time. The type carries no GPU or windowing
+/// concepts; callers that draw the atlas derive their own pixel-space geometry from its em-space metrics and bounds.
 /// </remarks>
 public sealed class FontAtlas {
     private static long ComposeKerningKey(int leftUnicode, int rightUnicode) {
-        return ((long)leftUnicode << 32) | (uint)rightUnicode;
+        return (((long)leftUnicode) << 32) | ((uint)rightUnicode);
     }
 
+    /// <summary>Returns the kerning advance adjustment, in em units, for the ordered pair of code points.</summary>
+    /// <param name="leftUnicode">The Unicode scalar value of the left (preceding) glyph.</param>
+    /// <param name="rightUnicode">The Unicode scalar value of the right (following) glyph.</param>
+    /// <returns>The advance adjustment in em units, or <c>0</c> when the atlas defines no kerning for the pair.</returns>
+    public float GetKerningAdjustment(int leftUnicode, int rightUnicode) {
+        return (m_kerningAdjustments.TryGetValue(
+            key: ComposeKerningKey(
+                leftUnicode: leftUnicode,
+                rightUnicode: rightUnicode
+            ),
+            value: out var adjustment
+        )
+            ? adjustment
+            : 0.0f
+        );
+    }
+    /// <summary>Attempts to retrieve the glyph for the given Unicode scalar value.</summary>
+    /// <param name="unicode">The Unicode scalar value to look up.</param>
+    /// <param name="glyph">When this method returns <see langword="true"/>, the matching glyph; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> if a glyph for <paramref name="unicode"/> exists in the atlas; otherwise <see langword="false"/>.</returns>
+    public bool TryGetGlyph(int unicode, [NotNullWhen(true)] out FontAtlasGlyph? glyph) {
+        return m_glyphs.TryGetValue(
+            key: unicode,
+            value: out glyph
+        );
+    }
+    /// <summary>Attempts to retrieve an atlas entry by source-font glyph identifier.</summary>
+    /// <param name="glyphId">The source font's glyph identifier.</param>
+    /// <param name="glyph">When this method returns <see langword="true"/>, an atlas entry for that glyph identifier.</param>
+    /// <returns><see langword="true"/> when the atlas preserves and contains <paramref name="glyphId"/>.</returns>
+    public bool TryGetGlyphById(int glyphId, [NotNullWhen(true)] out FontAtlasGlyph? glyph) {
+        return m_glyphsById.TryGetValue(
+            key: glyphId,
+            value: out glyph
+        );
+    }
+
+    private readonly FontAtlasGlyph[] m_allGlyphs;
     private readonly Dictionary<int, FontAtlasGlyph> m_glyphs;
+    private readonly Dictionary<int, FontAtlasGlyph> m_glyphsById;
     private readonly Dictionary<long, float> m_kerningAdjustments;
     private readonly FontKerningPair[] m_kerningPairs;
 
     /// <summary>Gets the width, in em units, of the signed-distance band encoded around glyph edges, or the generator's nominal range for mask atlases. See <see cref="MtsdfSampling.ComputeUnitRange(FontAtlas)"/>.</summary>
     public float DistanceRange { get; }
-    /// <summary>Gets the glyphs contained in the atlas, keyed internally by Unicode scalar value.</summary>
-    public IReadOnlyCollection<FontAtlasGlyph> Glyphs => m_glyphs.Values;
+    /// <summary>Gets every glyph contained in the atlas, including glyph-ID-only entries with no direct Unicode mapping.</summary>
+    public IReadOnlyCollection<FontAtlasGlyph> Glyphs => m_allGlyphs;
     /// <summary>Gets the height of the atlas image, in texels.</summary>
     public int Height { get; }
     /// <summary>Gets the in-memory atlas image, or <see langword="null"/> when only <see cref="ImagePath"/> is known.</summary>
@@ -54,7 +93,7 @@ public sealed class FontAtlas {
     /// <param name="width">The width of the atlas image, in texels. Must be greater than zero.</param>
     /// <param name="height">The height of the atlas image, in texels. Must be greater than zero.</param>
     /// <param name="metrics">The font-wide vertical metrics.</param>
-    /// <param name="glyphs">The glyphs to index. Each glyph's <see cref="FontAtlasGlyph.Unicode"/> must be unique.</param>
+    /// <param name="glyphs">The glyphs to index. Each non-negative <see cref="FontAtlasGlyph.Unicode"/> must be unique. More than one Unicode scalar may intentionally share a source glyph identifier.</param>
     /// <param name="kerningPairs">The kerning pairs to index.</param>
     /// <param name="imageData">The optional in-memory atlas image.</param>
     /// <exception cref="ArgumentException"><paramref name="imagePath"/> is <see langword="null"/>, empty, or whitespace, or <paramref name="glyphs"/> contains more than one glyph with the same <see cref="FontAtlasGlyph.Unicode"/>.</exception>
@@ -103,6 +142,7 @@ public sealed class FontAtlas {
         ArgumentNullException.ThrowIfNull(glyphs);
         ArgumentNullException.ThrowIfNull(kerningPairs);
 
+        m_allGlyphs = [.. glyphs];
         m_kerningPairs = [.. kerningPairs];
 
         Kind = kind;
@@ -113,42 +153,27 @@ public sealed class FontAtlas {
         Height = height;
         Metrics = metrics;
         ImageData = imageData;
-        m_glyphs = glyphs.ToDictionary(
+        m_glyphs = m_allGlyphs.Where(predicate: static glyph => (glyph.Unicode >= 0)).ToDictionary(
             elementSelector: glyph => glyph,
             keySelector: glyph => glyph.Unicode
         );
+        m_glyphsById = [];
+
+        foreach (var glyph in m_allGlyphs) {
+            if (glyph.GlyphId >= 0) {
+                _ = m_glyphsById.TryAdd(
+                    key: glyph.GlyphId,
+                    value: glyph
+                );
+            }
+        }
+
         m_kerningAdjustments = m_kerningPairs.ToDictionary(
             elementSelector: pair => pair.AdvanceAdjustment,
             keySelector: pair => ComposeKerningKey(
                 leftUnicode: pair.Unicode1,
                 rightUnicode: pair.Unicode2
             )
-        );
-    }
-
-    /// <summary>Returns the kerning advance adjustment, in em units, for the ordered pair of code points.</summary>
-    /// <param name="leftUnicode">The Unicode scalar value of the left (preceding) glyph.</param>
-    /// <param name="rightUnicode">The Unicode scalar value of the right (following) glyph.</param>
-    /// <returns>The advance adjustment in em units, or <c>0</c> when the atlas defines no kerning for the pair.</returns>
-    public float GetKerningAdjustment(int leftUnicode, int rightUnicode) {
-        return (m_kerningAdjustments.TryGetValue(
-            key: ComposeKerningKey(
-                leftUnicode: leftUnicode,
-                rightUnicode: rightUnicode
-            ),
-            value: out var adjustment
-        )
-            ? adjustment
-            : 0.0f);
-    }
-    /// <summary>Attempts to retrieve the glyph for the given Unicode scalar value.</summary>
-    /// <param name="unicode">The Unicode scalar value to look up.</param>
-    /// <param name="glyph">When this method returns <see langword="true"/>, the matching glyph; otherwise <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> if a glyph for <paramref name="unicode"/> exists in the atlas; otherwise <see langword="false"/>.</returns>
-    public bool TryGetGlyph(int unicode, [NotNullWhen(true)] out FontAtlasGlyph? glyph) {
-        return m_glyphs.TryGetValue(
-            key: unicode,
-            value: out glyph
         );
     }
 }

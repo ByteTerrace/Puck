@@ -24,8 +24,9 @@ internal static class FieldNoiseOracleClaims {
     private static readonly BigInteger SeedDomainZ = 0x8EBC6AF09C88C6E3UL;
     private static readonly BigInteger MixMultiplier1 = 0xBF58476D1CE4E5B9UL;
     private static readonly BigInteger MixMultiplier2 = 0x94D049BB133111EBUL;
-    private const long FractionMask = 0xFFFFL;
+
     private const int FadeFractionBitCount = 28;
+    private const long FractionMask = 0xFFFFL;
 
     /// <summary>The independent oracle for <see cref="FieldNoise.Sample(ulong, FixedVector3)"/>'s flat overload: the
     /// same hash-and-interpolate recipe, computed from scratch in <see cref="BigInteger"/>.</summary>
@@ -38,36 +39,36 @@ internal static class FieldNoiseOracleClaims {
         var x0 = (xRaw >> FixedQ4816.FractionBitCount);
         var y0 = (yRaw >> FixedQ4816.FractionBitCount);
         var z0 = (zRaw >> FixedQ4816.FractionBitCount);
-        var xFraction = new BigInteger(xRaw & FractionMask);
-        var yFraction = new BigInteger(yRaw & FractionMask);
-        var zFraction = new BigInteger(zRaw & FractionMask);
+        var xFraction = new BigInteger(value: xRaw & FractionMask);
+        var yFraction = new BigInteger(value: yRaw & FractionMask);
+        var zFraction = new BigInteger(value: zRaw & FractionMask);
 
-        var seedX = Mix(value: ((new BigInteger(seed) + SeedDomainX) & Mask64));
-        var seedY = Mix(value: ((new BigInteger(seed) + SeedDomainY) & Mask64));
-        var seedZ = Mix(value: ((new BigInteger(seed) + SeedDomainZ) & Mask64));
+        var seedX = Mix(value: (new BigInteger(value: seed) + SeedDomainX) & Mask64);
+        var seedY = Mix(value: (new BigInteger(value: seed) + SeedDomainY) & Mask64);
+        var seedZ = Mix(value: (new BigInteger(value: seed) + SeedDomainZ) & Mask64);
 
-        var xTerm0 = ((AsUnsigned64(value: x0) * CombineX) & Mask64);
-        var xTerm1 = ((xTerm0 + CombineX) & Mask64);
-        var yTerm0 = ((AsUnsigned64(value: y0) * CombineY) & Mask64);
-        var yTerm1 = ((yTerm0 + CombineY) & Mask64);
-        var zTerm0 = ((AsUnsigned64(value: z0) * CombineZ) & Mask64);
-        var zTerm1 = ((zTerm0 + CombineZ) & Mask64);
+        var xTerm0 = (AsUnsigned64(value: x0) * CombineX) & Mask64;
+        var xTerm1 = (xTerm0 + CombineX) & Mask64;
+        var yTerm0 = (AsUnsigned64(value: y0) * CombineY) & Mask64;
+        var yTerm1 = (yTerm0 + CombineY) & Mask64;
+        var zTerm0 = (AsUnsigned64(value: z0) * CombineZ) & Mask64;
+        var zTerm1 = (zTerm0 + CombineZ) & Mask64;
 
-        var xState0 = Mix(value: ((seedX + xTerm0) & Mask64));
-        var xState1 = Mix(value: ((seedX + xTerm1) & Mask64));
-        var xy00 = Mix(value: (((xState0 + seedY) + yTerm0) & Mask64));
-        var xy10 = Mix(value: (((xState1 + seedY) + yTerm0) & Mask64));
-        var xy01 = Mix(value: (((xState0 + seedY) + yTerm1) & Mask64));
-        var xy11 = Mix(value: (((xState1 + seedY) + yTerm1) & Mask64));
+        var xState0 = Mix(value: (seedX + xTerm0) & Mask64);
+        var xState1 = Mix(value: (seedX + xTerm1) & Mask64);
+        var xy00 = Mix(value: ((xState0 + seedY) + yTerm0) & Mask64);
+        var xy10 = Mix(value: ((xState1 + seedY) + yTerm0) & Mask64);
+        var xy01 = Mix(value: ((xState0 + seedY) + yTerm1) & Mask64);
+        var xy11 = Mix(value: ((xState1 + seedY) + yTerm1) & Mask64);
 
-        var c000 = CornerValue(hash: Mix(value: (((xy00 + seedZ) + zTerm0) & Mask64)));
-        var c100 = CornerValue(hash: Mix(value: (((xy10 + seedZ) + zTerm0) & Mask64)));
-        var c010 = CornerValue(hash: Mix(value: (((xy01 + seedZ) + zTerm0) & Mask64)));
-        var c110 = CornerValue(hash: Mix(value: (((xy11 + seedZ) + zTerm0) & Mask64)));
-        var c001 = CornerValue(hash: Mix(value: (((xy00 + seedZ) + zTerm1) & Mask64)));
-        var c101 = CornerValue(hash: Mix(value: (((xy10 + seedZ) + zTerm1) & Mask64)));
-        var c011 = CornerValue(hash: Mix(value: (((xy01 + seedZ) + zTerm1) & Mask64)));
-        var c111 = CornerValue(hash: Mix(value: (((xy11 + seedZ) + zTerm1) & Mask64)));
+        var c000 = CornerValue(hash: Mix(value: ((xy00 + seedZ) + zTerm0) & Mask64));
+        var c100 = CornerValue(hash: Mix(value: ((xy10 + seedZ) + zTerm0) & Mask64));
+        var c010 = CornerValue(hash: Mix(value: ((xy01 + seedZ) + zTerm0) & Mask64));
+        var c110 = CornerValue(hash: Mix(value: ((xy11 + seedZ) + zTerm0) & Mask64));
+        var c001 = CornerValue(hash: Mix(value: ((xy00 + seedZ) + zTerm1) & Mask64));
+        var c101 = CornerValue(hash: Mix(value: ((xy10 + seedZ) + zTerm1) & Mask64));
+        var c011 = CornerValue(hash: Mix(value: ((xy01 + seedZ) + zTerm1) & Mask64));
+        var c111 = CornerValue(hash: Mix(value: ((xy11 + seedZ) + zTerm1) & Mask64));
 
         var fadeX = FadeQ28(t: xFraction);
         var fadeY = FadeQ28(t: yFraction);
@@ -82,49 +83,43 @@ internal static class FieldNoiseOracleClaims {
 
         return ((long)Lerp(a: y0Value, b: y1Value, fadeQ28: fadeZ));
     }
-
     // The three-round avalanche finalizer, over ulong-width BigIntegers throughout (every value stays in [0, 2^64)).
     private static BigInteger Mix(BigInteger value) {
         value &= Mask64;
         value ^= (value >> 30);
-        value = ((value * MixMultiplier1) & Mask64);
+        value = (value * MixMultiplier1) & Mask64;
         value ^= (value >> 27);
-        value = ((value * MixMultiplier2) & Mask64);
+        value = (value * MixMultiplier2) & Mask64;
         value ^= (value >> 31);
 
-        return (value & Mask64);
+        return value & Mask64;
     }
-
     // A signed C# long reinterpreted as its unsigned 64-bit bit pattern -- the BigInteger equivalent of `(ulong)value`.
     private static BigInteger AsUnsigned64(long value) =>
-        ((value >= 0L) ? new BigInteger(value) : (new BigInteger(value) + (BigInteger.One << 64)));
-
+        ((value >= 0L) ? new BigInteger(value: value) : (new BigInteger(value: value) + (BigInteger.One << 64)));
     // The corner hash's signed value: sign-extend the top 32 bits, then an arithmetic shift right by 15 -- the same
     // (long)(int)(hash >> 32) >> 15 the subject reads, transcribed in BigInteger.
     private static BigInteger CornerValue(BigInteger hash) {
-        var top32 = ((hash >> 32) & 0xFFFFFFFFUL);
+        var top32 = (hash >> 32) & 0xFFFFFFFFUL;
         var signed = ((top32 >= 0x80000000UL) ? (top32 - (BigInteger.One << 32)) : top32);
 
-        return ArithmeticShiftRight(value: signed, shift: 15);
+        return ArithmeticShiftRight(shift: 15, value: signed);
     }
-
     // The quintic fade 6t^5 - 15t^4 + 10t^3 of a UQ0.16 fraction, at Q28 -- transcribed exactly, Horner-style, from
     // FieldNoise's own FadeQ28.
     private static BigInteger FadeQ28(BigInteger t) {
         var t28 = (t << 12);
         var inner = ((6 * t28) - (15L << FadeFractionBitCount));
 
-        inner = (ArithmeticShiftRight(value: (inner * t28), shift: FadeFractionBitCount) + (10L << FadeFractionBitCount));
+        inner = (ArithmeticShiftRight(shift: FadeFractionBitCount, value: (inner * t28)) + (10L << FadeFractionBitCount));
 
-        var t2 = ArithmeticShiftRight(value: (t28 * t28), shift: FadeFractionBitCount);
-        var t3 = ArithmeticShiftRight(value: (t2 * t28), shift: FadeFractionBitCount);
+        var t2 = ArithmeticShiftRight(shift: FadeFractionBitCount, value: (t28 * t28));
+        var t3 = ArithmeticShiftRight(shift: FadeFractionBitCount, value: (t2 * t28));
 
-        return ArithmeticShiftRight(value: (t3 * inner), shift: FadeFractionBitCount);
+        return ArithmeticShiftRight(shift: FadeFractionBitCount, value: (t3 * inner));
     }
-
     private static BigInteger Lerp(BigInteger a, BigInteger b, BigInteger fadeQ28) =>
-        (a + ArithmeticShiftRight(value: ((b - a) * fadeQ28), shift: FadeFractionBitCount));
-
+        (a + ArithmeticShiftRight(shift: FadeFractionBitCount, value: ((b - a) * fadeQ28)));
     // Arithmetic (floor) right shift of a possibly-negative BigInteger by a non-negative amount, matching C#'s `>>`
     // on a signed integral type -- which floors toward negative infinity rather than truncating toward zero, the one
     // place BigInteger's own division semantics would silently disagree with the subject's native shifts.
@@ -161,7 +156,7 @@ internal static class FieldNoiseOracleClaims {
 
         foreach (var (seed, x, y, z) in ladder) {
             var position = new FixedVector3(X: FixedQ4816.FromRawBits(value: x), Y: FixedQ4816.FromRawBits(value: y), Z: FixedQ4816.FromRawBits(value: z));
-            var subject = FieldNoise.Sample(seed: seed, position: position).Value;
+            var subject = FieldNoise.Sample(position: position, seed: seed).Value;
             var expected = SampleOracle(seed: seed, xRaw: x, yRaw: y, zRaw: z);
 
             if (subject != expected) {

@@ -12,8 +12,11 @@ internal static class WorldCommandArguments {
     /// <param name="context">The invoking context, whose <see cref="CommandContext.Text"/> carries the raw line.</param>
     /// <param name="args">The tokenized arguments, the fallback when no raw line exists (a bound or programmatic call).</param>
     /// <returns>The text after the verb, or <see cref="string.Empty"/> when the line carries none.</returns>
-    public static string Raw(CommandContext context, in WireArgs args) => RawAfter(context: context, args: in args, tokens: 1);
-
+    public static string Raw(CommandContext context, in WireArgs args) => RawAfter(
+        args: in args,
+        context: context,
+        tokens: 1
+    );
     /// <summary>Strips <paramref name="tokens"/> leading whitespace-separated tokens — the verb plus however many
     /// address tokens the verb spells before its tail (<c>world.row.set</c> strips verb + path,
     /// <c>world.state.cell.set</c> strips verb + row + key, <c>identity.deliver</c> strips five).</summary>
@@ -26,7 +29,10 @@ internal static class WorldCommandArguments {
             var span = text.AsSpan().TrimStart();
 
             for (var skip = 0; (skip < tokens); skip++) {
-                var separator = span.IndexOfAny(value0: ' ', value1: '\t');
+                var separator = span.IndexOfAny(
+                    value0: ' ',
+                    value1: '\t'
+                );
 
                 if (separator < 0) {
                     return string.Empty;

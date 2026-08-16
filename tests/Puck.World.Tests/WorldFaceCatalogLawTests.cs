@@ -4,7 +4,7 @@ using Xunit;
 
 using Puck.Forge.Authoring;
 using Puck.Maths;
-using Puck.SdfVm;
+using Puck.SignedDistance;
 
 namespace Puck.World.Tests;
 
@@ -26,7 +26,6 @@ public sealed class WorldFaceCatalogLawTests {
     // coincidentally right.
     private static Vector3 ShapeOffset { get; } = new(x: 0.75f, y: 0.25f, z: -0.5f);
     private static Vector3 ShapeScale { get; } = new(x: 3f, y: 2f, z: 0.15f);
-
     // A rotation about the face's own RIGHT axis — pitch, the axis a world-up-pinned frame cannot represent.
     private static Quaternion Pitched { get; } = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 6f));
 
@@ -51,13 +50,12 @@ public sealed class WorldFaceCatalogLawTests {
             Palette: null,
             Shapes: [shape],
             Frames: (animated ? [new FrameDocument(Name: "idle", Transforms: [new FrameTransformDocument(Id: 0, Position: ShapeOffset, Rotation: Quaternion.Identity, Scale: ShapeScale)])] : null),
-            Behavior: new CreationBehaviorDocument(Locomotion: null, Faces: [new CreationFaceDocument(Name: DoorFace, ShapeId: (faceNamesShape ? 0 : null), DefaultSource: null)])
+            Behavior: new CreationBehaviorDocument(Locomotion: null, Faces: [new CreationFaceDocument(DefaultSource: null, Name: DoorFace, ShapeId: (faceNamesShape ? 0 : null))])
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "door");
 
         return new WorldCreation(Id: "door", Document: canonical.Document, Hash: canonical.Hash);
     }
-
     private static WorldDefinition BuildDoorDocument(
         float yawDegrees = 0f,
         float scale = 1f,
@@ -69,7 +67,7 @@ public sealed class WorldFaceCatalogLawTests {
         WorldPlacementAttach? attach = null,
         WorldScreenSource? source = null
     ) {
-        var creation = BuildDoorCreation(faceShape: faceShape, faceNamesShape: faceNamesShape, animated: animated, pitched: pitched);
+        var creation = BuildDoorCreation(animated: animated, faceNamesShape: faceNamesShape, faceShape: faceShape, pitched: pitched);
         var portal = new WorldPlacementPortal(Destination: DestinationName, Travel: null, Arrival: WorldPortalArrival.Spawn, Counterpart: null);
         var placement = new WorldPlacement(
             Id: DoorPlacementId,
@@ -88,14 +86,12 @@ public sealed class WorldFaceCatalogLawTests {
             Destinations = [new WorldDestination(Name: WorldSafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
         };
     }
-
     private static WorldFaceRow DoorRow(WorldDefinition definition) {
         Assert.True(condition: WorldFaceCatalog.For(definition: definition).TryFind(placementId: DoorPlacementId, faceName: DoorFace, out var row));
 
         return row;
     }
-
-    private static bool Validates(WorldDefinition definition) => WorldDefinitionValidator.TryValidate(definition: definition, reason: out _, neighbours: null);
+    private static bool Validates(WorldDefinition definition) => WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out _);
 
     // ---- The frame ----
 
@@ -107,7 +103,6 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.NotEqual(expected: root, actual: row.Frame.Origin);
         Assert.Equal(expected: (root + FixedVector3.FromVector3(value: ShapeOffset)), actual: row.Frame.Origin);
     }
-
     [Fact]
     public void TheFrameIsSizedFromTheAuthoredScale_PlacementScaleIncluded() {
         var single = DoorRow(definition: BuildDoorDocument());
@@ -119,7 +114,6 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.Equal(expected: FixedQ4816.FromDouble(value: (ShapeScale.X * 2.0)), actual: doubled.Frame.HalfWidth);
         Assert.Equal(expected: FixedQ4816.FromDouble(value: (ShapeScale.Y * 2.0)), actual: doubled.Frame.HalfHeight);
     }
-
     [Fact]
     public void RotatingThePlacementMovesTheWholeFrame() {
         // THE sensitivity instrument: an instrument that cannot detect the rotation proves nothing about the ones
@@ -136,11 +130,10 @@ public sealed class WorldFaceCatalogLawTests {
 
         // A yaw of 30 degrees turns the frame's heading by 30 degrees, to within fixed-point rounding of the
         // conversion and the SinCos it feeds.
-        var turn = (double)(turned.PlanarYawRadians - level.PlanarYawRadians);
+        var turn = ((double)(turned.PlanarYawRadians - level.PlanarYawRadians));
 
         Assert.True(condition: (Math.Abs(value: (turn - (Math.PI / 6.0))) < 0.001), userMessage: $"the frame heading turned by {turn} radians, not pi/6");
     }
-
     [Fact]
     public void TheTriadIsOrthonormal_SoTheWalkedSlabAndTheDrawnScreenAreOnePlane() {
         // Client.WorldScreenStamper rebuilds the drawn slab's normal as Cross(Right, Up); the trigger uses the
@@ -152,13 +145,12 @@ public sealed class WorldFaceCatalogLawTests {
             var rendered = FixedVector3.Cross(left: frame.Right, right: frame.Up).Normalize();
             var tolerance = FixedQ4816.FromDouble(value: 0.002);
 
-            Assert.True(condition: (FixedQ4816.Abs(value: (rendered.X - frame.Normal.X)) <= tolerance), userMessage: $"pitched={pitched}: rendered normal x {(double)rendered.X} != frame normal x {(double)frame.Normal.X}");
-            Assert.True(condition: (FixedQ4816.Abs(value: (rendered.Y - frame.Normal.Y)) <= tolerance), userMessage: $"pitched={pitched}: rendered normal y {(double)rendered.Y} != frame normal y {(double)frame.Normal.Y}");
-            Assert.True(condition: (FixedQ4816.Abs(value: (rendered.Z - frame.Normal.Z)) <= tolerance), userMessage: $"pitched={pitched}: rendered normal z {(double)rendered.Z} != frame normal z {(double)frame.Normal.Z}");
+            Assert.True(condition: (FixedQ4816.Abs(value: (rendered.X - frame.Normal.X)) <= tolerance), userMessage: $"pitched={pitched}: rendered normal x {((double)rendered.X)} != frame normal x {((double)frame.Normal.X)}");
+            Assert.True(condition: (FixedQ4816.Abs(value: (rendered.Y - frame.Normal.Y)) <= tolerance), userMessage: $"pitched={pitched}: rendered normal y {((double)rendered.Y)} != frame normal y {((double)frame.Normal.Y)}");
+            Assert.True(condition: (FixedQ4816.Abs(value: (rendered.Z - frame.Normal.Z)) <= tolerance), userMessage: $"pitched={pitched}: rendered normal z {((double)rendered.Z)} != frame normal z {((double)frame.Normal.Z)}");
             Assert.True(condition: (FixedQ4816.Abs(value: FixedVector3.Dot(left: frame.Right, right: frame.Up)) <= tolerance), userMessage: $"pitched={pitched}: right and up are not perpendicular");
         }
     }
-
     [Fact]
     public void APitchedFaceIsNotYawOnly_AndALevelOneIs() {
         // The instrument the refusal below leans on: if this could not tell the two apart, the refusal would be
@@ -166,13 +158,11 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.True(condition: DoorRow(definition: BuildDoorDocument(yawDegrees: 25f, carriesPortal: false)).Frame.IsYawOnly);
         Assert.False(condition: DoorRow(definition: BuildDoorDocument(yawDegrees: 25f, carriesPortal: false, pitched: true)).Frame.IsYawOnly);
     }
-
     [Fact]
     public void APortalOnAPitchedFace_RefusesByName() {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: BuildDoorDocument(pitched: true), reason: out var reason, neighbours: null));
-        Assert.Contains(expectedSubstring: "pitch or roll", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "pitch or roll");
     }
-
     [Fact]
     public void APortalOnAPitchedFace_RefusesByName_YawOnlyControlValidates() {
         Laws.RefusalWithControl(
@@ -180,12 +170,10 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildDoorDocument(yawDegrees: 25f, pitched: true)),
             controlOutcome: static () => Validates(definition: BuildDoorDocument(yawDegrees: 25f)));
     }
-
     [Fact]
     public void APitchedFaceWithoutAPortalStillDraws() {
         Assert.True(condition: Validates(definition: BuildDoorDocument(pitched: true, carriesPortal: false)));
     }
-
     [Fact]
     public void TheFrameIsBitIdenticalAcrossTwoIndependentDerivations() {
         // Same document CONTENT, two distinct instances, so the per-revision cache cannot answer the second from the
@@ -195,14 +183,12 @@ public sealed class WorldFaceCatalogLawTests {
 
         Assert.Equal(expected: first.Frame, actual: second.Frame);
     }
-
     [Fact]
     public void TheDerivationIsReusedForOneDefinitionInstance() {
         var definition = BuildDoorDocument();
 
         Assert.Same(expected: WorldFaceCatalog.For(definition: definition), actual: WorldFaceCatalog.For(definition: definition));
     }
-
     // ---- The trigger policy ----
 
     [Fact]
@@ -211,7 +197,7 @@ public sealed class WorldFaceCatalogLawTests {
         var row = DoorRow(definition: definition);
         var floor = WorldFacePortalPolicy.CrossingFloor(definition: definition);
 
-        Assert.True(condition: WorldFacePortalPolicy.TryAperture(row: in row, crossingFloor: floor, aperture: out var aperture));
+        Assert.True(condition: WorldFacePortalPolicy.TryAperture(aperture: out var aperture, crossingFloor: floor, row: in row));
 
         var band = Assert.IsType<WorldFaceAperture.Box>(@object: aperture);
 
@@ -219,19 +205,17 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.True(condition: (band.Depth >= row.Frame.HalfDepth), userMessage: "the band is thinner than the door itself");
         Assert.True(condition: (floor > FixedQ4816.Zero), userMessage: "a stepping world must derive a positive crossing floor");
     }
-
     [Fact]
     public void TheSpeedCeilingRisesWithWhatTheDocumentDeclares() {
         var definition = BuildDoorDocument();
         var ceiling = WorldFacePortalPolicy.SpeedCeiling(definition: definition);
         // Clear of every other term the ceiling maximizes over (this fixture's terminal fall speed dominates its
         // walk speed), so the raise is what moves the answer rather than being masked by a larger sibling.
-        var faster = (definition with { Motion = (definition.Motion with { MoveSpeed = ((float)(double)ceiling * 4f) }) });
+        var faster = (definition with { Motion = (definition.Motion with { MoveSpeed = (((float)((double)ceiling)) * 4f) }) });
 
         Assert.True(condition: (WorldFacePortalPolicy.SpeedCeiling(definition: faster) > ceiling));
         Assert.True(condition: (WorldFacePortalPolicy.CrossingFloor(definition: faster) > WorldFacePortalPolicy.CrossingFloor(definition: definition)));
     }
-
     [Fact]
     public void ARestingWorldDerivesNoCrossingFloor() {
         // Rate zero is a legal, distinct rate: nothing advances, so no step of travel exists to floor a band with.
@@ -239,18 +223,16 @@ public sealed class WorldFaceCatalogLawTests {
 
         Assert.Equal(expected: FixedQ4816.Zero, actual: WorldFacePortalPolicy.CrossingFloor(definition: definition));
     }
-
     // ---- Refusals ----
 
     [Fact]
     public void APortalOnAnAttachedPlacement_RefusesByName() {
         var attached = BuildDoorDocument(attach: new WorldPlacementAttach(BodyIndex: 0, LocalOffset: Vector3.Zero));
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: attached, reason: out var reason, neighbours: null));
-        Assert.Contains(expectedSubstring: "ATTACHES", actualString: reason, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "portal", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: attached, neighbours: null, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "ATTACHES");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "portal");
     }
-
     [Fact]
     public void APortalOnAnAttachedPlacement_RefusesByName_ControlValidates() {
         Laws.RefusalWithControl(
@@ -258,21 +240,18 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildDoorDocument(attach: new WorldPlacementAttach(BodyIndex: 0, LocalOffset: Vector3.Zero))),
             controlOutcome: static () => Validates(definition: BuildDoorDocument()));
     }
-
     [Fact]
     public void AnAttachedPlacementWithoutAPortal_IsStillAllowed() {
         // The refusal is about the DOOR, not about attaching: a face may still ride a body and show a feed.
         Assert.True(condition: Validates(definition: BuildDoorDocument(carriesPortal: false, attach: new WorldPlacementAttach(BodyIndex: 0, LocalOffset: Vector3.Zero))));
     }
-
     [Fact]
     public void APortalOnAnAnimatedPlacement_RefusesByName() {
         var animated = BuildDoorDocument(animated: true);
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: animated, reason: out var reason, neighbours: null));
-        Assert.Contains(expectedSubstring: "ANIMATED", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: animated, neighbours: null, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "ANIMATED");
     }
-
     [Fact]
     public void APortalOnAnAnimatedPlacement_RefusesByName_ControlValidates() {
         Laws.RefusalWithControl(
@@ -280,15 +259,13 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildDoorDocument(animated: true)),
             controlOutcome: static () => Validates(definition: BuildDoorDocument()));
     }
-
     [Fact]
     public void APortalOnAShapelessFace_RefusesByName() {
         var shapeless = BuildDoorDocument(faceNamesShape: false);
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: shapeless, reason: out var reason, neighbours: null));
-        Assert.Contains(expectedSubstring: "aperture", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: shapeless, neighbours: null, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "aperture");
     }
-
     [Fact]
     public void APortalOnAShapelessFace_RefusesByName_ControlValidates() {
         Laws.RefusalWithControl(
@@ -296,19 +273,17 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceNamesShape: false)),
             controlOutcome: static () => Validates(definition: BuildDoorDocument()));
     }
-
-    [Theory]
     [InlineData(AvatarPrimitive.Sphere)]
     [InlineData(AvatarPrimitive.Cylinder)]
     [InlineData(AvatarPrimitive.Plane)]
+    [Theory]
     public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName(AvatarPrimitive faceShape) {
         var unmapped = BuildDoorDocument(faceShape: faceShape);
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: unmapped, reason: out var reason, neighbours: null));
-        Assert.Contains(expectedSubstring: "aperture", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: unmapped, neighbours: null, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "aperture");
         Assert.Contains(expectedSubstring: faceShape.ToString(), actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName_ControlValidates() {
         Laws.RefusalWithControl(
@@ -316,7 +291,6 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Sphere)),
             controlOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Box)));
     }
-
     [Fact]
     public void AFaceWithNoApertureStillDrawsWithoutAPortal() {
         // Geometry is never taken away by a refusal: the shape kinds that cannot be walked through still derive a
@@ -338,7 +312,7 @@ public sealed class WorldFaceCatalogLawTests {
                 Position: new Vector3(x: (index * 8f), y: 1.5f, z: -7f),
                 YawDegrees: 0f,
                 Scale: 1f,
-                FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.TestPattern(Width: 64, Height: 64))]
+                FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.TestPattern(Height: 64, Width: 64))]
             );
         }
 
@@ -352,9 +326,8 @@ public sealed class WorldFaceCatalogLawTests {
     [Fact]
     public void MoreLiveFacesThanReservedSlots_RefusesByName() {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: BuildBudgetDocument(liveFaces: 3, reservedSlots: 2), reason: out var reason, neighbours: null));
-        Assert.Contains(expectedSubstring: "derivedFaceScreens", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "derivedFaceScreens");
     }
-
     [Fact]
     public void MoreLiveFacesThanReservedSlots_RefusesByName_AtBudgetControlBoots() {
         Laws.RefusalWithControl(
@@ -362,7 +335,6 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildBudgetDocument(liveFaces: 3, reservedSlots: 2)),
             controlOutcome: static () => Validates(definition: BuildBudgetDocument(liveFaces: 2, reservedSlots: 2)));
     }
-
     [Fact]
     public void AFaceShowingNothingClaimsNoSlot() {
         // The reason play's dark cabinet stops competing with its doors: a source that renders nothing asks for no
@@ -379,7 +351,6 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.Equal(expected: -1, actual: catalog.Rows[0].ScreenIndex);
         Assert.False(condition: catalog.Rows[0].SlotStarved);
     }
-
     [Fact]
     public void SlotExhaustionDarkensTheNewestClaimant_ButNeverRemovesItsGeometry() {
         // The dynamic half of the budget: a band that cannot seat everything must darken, loudly and by name, and
@@ -391,7 +362,7 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.Equal(expected: -1, actual: starved.ScreenIndex);
         Assert.NotEqual(expected: default, actual: starved.Frame);
         Assert.Equal(expected: WorldFaceApertureKind.Box, actual: starved.Aperture);
-        Assert.Contains(collection: catalog.Notices, filter: notice => notice.Contains(value: starved.PlacementId, comparisonType: StringComparison.Ordinal) && notice.Contains(value: "DARKENED", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: catalog.Notices, filter: notice => (notice.Contains(value: starved.PlacementId, comparisonType: StringComparison.Ordinal) && notice.Contains(comparisonType: StringComparison.Ordinal, value: "DARKENED")));
         Assert.Equal(expected: WorldPlacementPolicy.DerivedFaceBase, actual: catalog.Rows[0].ScreenIndex);
         Assert.Equal(expected: (WorldPlacementPolicy.DerivedFaceBase + 1), actual: catalog.Rows[1].ScreenIndex);
     }

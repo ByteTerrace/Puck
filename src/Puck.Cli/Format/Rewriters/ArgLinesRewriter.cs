@@ -18,7 +18,7 @@ namespace Puck.Cli.Format.Rewriters;
 // layout edit. Indentation is taken structurally, so nested calls settle over successive runs.
 internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax node) {
-        var visited = (ArgumentListSyntax)base.VisitArgumentList(node: node)!;
+        var visited = ((ArgumentListSyntax)base.VisitArgumentList(node: node)!);
 
         if (visited.Arguments.Count < 1) {
             return visited;
@@ -71,14 +71,15 @@ internal sealed class ArgLinesRewriter : CSharpSyntaxRewriter {
         (RewriteShaping.HasCommentOrDirective(trivia: list.OpenParenToken.TrailingTrivia)
         || RewriteShaping.HasCommentOrDirective(trivia: list.CloseParenToken.LeadingTrivia)
         || RewriteShaping.IsAnnotated(list: list.Arguments));
-
     // The indent this call's wrapped body hangs from: the enclosing statement's indent plus one level per
-    // ENCLOSING multi-argument call (every such call is itself wrapped and pushes this one deeper), plus
-    // one level per enclosing ternary whose BRANCH holds this call — ternary-lines lays each branch out
-    // one level past its condition, so a call opening on a branch line hangs from that deeper line.
+    // ENCLOSING multi-argument call (every such call is itself wrapped and pushes this one deeper), one
+    // level per enclosing collection expression (its elements sit one level past the opening bracket),
+    // plus one level per enclosing ternary whose BRANCH holds this call — ternary-lines lays each branch
+    // out one level past its condition, so a call opening on a branch line hangs from that deeper line.
     private static int WrappedIndent(ArgumentListSyntax node) =>
         RewriteShaping.StructuralIndent(
             node: node,
             addsLevel: static (ancestor, child) => ((ancestor is ArgumentListSyntax { Arguments.Count: > 1 })
+                || (ancestor is CollectionExpressionSyntax)
                 || ((ancestor is ConditionalExpressionSyntax conditional) && ((conditional.WhenTrue == child) || (conditional.WhenFalse == child)))));
 }

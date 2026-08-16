@@ -45,7 +45,6 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "trade-continue";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -66,27 +65,27 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
         var expectedLeadB = TradeSaveFactory.ReadLeadSpecies(sram: TradeSaveFactory.CreateSram(trainer: TradeSaveFactory.SideB));
 
         var reference = RunScenario(
-            rom: rom,
-            churnAtStep: -1
+            churnAtStep: -1,
+            rom: rom
         );
 
         if (Judge(
-            result: reference,
             expectedLeadA: expectedLeadA,
-            expectedLeadB: expectedLeadB
+            expectedLeadB: expectedLeadB,
+            result: reference
         ) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
         }
 
         // Determinism: a second fresh run on the same budget schedule reproduces both final snapshots.
         var replay = RunScenario(
-            rom: rom,
-            churnAtStep: -1
+            churnAtStep: -1,
+            rom: rom
         );
 
         if (Difference(
-            expected: reference,
             actual: replay,
+            expected: reference,
             leg: "replay"
         ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
@@ -95,13 +94,13 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
         // Churn transparency: suspend/snapshot/restore/reconnect at a transfer-idle boundary mid-boot, continue the
         // identical budgets, and demand identical final snapshots from the credit-preserving resume.
         var churned = RunScenario(
-            rom: rom,
-            churnAtStep: ChurnStep
+            churnAtStep: ChurnStep,
+            rom: rom
         );
 
         if (Difference(
-            expected: reference,
             actual: churned,
+            expected: reference,
             leg: "churn"
         ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
@@ -166,14 +165,14 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
                         joypadB = machineB.GetRequiredService<IJoypad>();
                         session = new SerialLinkSession(
                             first: machineA,
-                            second: machineB,
-                            resumeToken: token
+                            resumeToken: token,
+                            second: machineB
                         );
                     }
 
                     joypadA.SetButtons(pressed: script.ButtonsAt(frame: frame));
                     joypadB.SetButtons(pressed: script.ButtonsAt(frame: frame));
-                    session.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                    session.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
                 }
 
                 return new ScenarioResult(
@@ -194,7 +193,6 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
             machineB.Dispose();
         }
     }
-
     // Crafted-save acceptance requires both machines to load CONTINUE onto the Cable Club floor, carry
     // the crafted lead species (distinct per side), and each exported SRAM's primary checksum + check bytes are
     // self-consistent.
@@ -226,7 +224,6 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
 
         return null;
     }
-
     // Compares a later run against the reference: both final snapshots must match. Snapshot equality also checks Identity
     // (free rigor: refuses a model/ROM mismatch).
     private static string? Difference(ScenarioResult expected, ScenarioResult actual, string leg) {
@@ -276,7 +273,7 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
                 break;
             }
 
-            _ = builder.Append(value: (char)character);
+            _ = builder.Append(value: ((char)character));
         }
 
         return builder.ToString().Trim();

@@ -16,11 +16,10 @@ public sealed class MarketSchemaLeakLawTests {
         var bytes = WorldDefinitionSerialization.Serialize(definition: MarketFixtures.BuildDocument());
         var json = Encoding.UTF8.GetString(bytes: bytes);
 
-        Assert.DoesNotContain(expectedSubstring: "effectiveFormats", actualString: json, comparisonType: StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(actualString: json, comparisonType: StringComparison.OrdinalIgnoreCase, expectedSubstring: "effectiveFormats");
         // The authored field itself must still be there — this is a leak fix, not a data-loss regression.
-        Assert.Contains(expectedSubstring: "\"formats\"", actualString: json, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: json, comparisonType: StringComparison.Ordinal, expectedSubstring: "\"formats\"");
     }
-
     [Fact]
     public void EffectiveFormats_StillComputesCorrectly_AuthoredAndUnauthored() {
         var authored = MarketFixtures.BuildDocument().Market!;

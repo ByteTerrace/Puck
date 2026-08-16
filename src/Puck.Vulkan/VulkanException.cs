@@ -15,7 +15,7 @@ public sealed class VulkanException : Exception {
             );
         }
 
-        return $"Vulkan operation '{operation}' failed with {result} ({(int)result}).";
+        return $"Vulkan operation '{operation}' failed with {result} ({((int)result)}).";
     }
 
     /// <summary>Gets the name of the Vulkan operation that failed (for example, <c>vkCreateInstance</c>).</summary>

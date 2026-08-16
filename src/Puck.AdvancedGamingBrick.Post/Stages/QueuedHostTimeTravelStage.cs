@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.GamingBricks;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -18,7 +18,6 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-time-travel";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -53,8 +52,8 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage {
     private static long ObserveState(AdvancedMachineHost host) {
         var light = host.EmittedLight;
 
-        return ((long)BitConverter.SingleToUInt32Bits(value: light.X) << 32)
-            ^ ((long)BitConverter.SingleToUInt32Bits(value: light.Y) << 16)
+        return (((long)BitConverter.SingleToUInt32Bits(value: light.X)) << 32)
+            ^ (((long)BitConverter.SingleToUInt32Bits(value: light.Y)) << 16)
             ^ BitConverter.SingleToUInt32Bits(value: light.Z);
     }
 }

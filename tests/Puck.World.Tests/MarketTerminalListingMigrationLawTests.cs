@@ -53,7 +53,6 @@ public sealed class MarketTerminalListingMigrationLawTests {
             TryDeleteFile(path: path);
         }
     }
-
     [Fact]
     public void MalformedActiveListingCarryingResolvedTick_StillRefusesOnLoad() {
         // Active + a resolvedTick present is the OTHER half of the invariant — a shape the migration never produces
@@ -99,16 +98,14 @@ public sealed class MarketTerminalListingMigrationLawTests {
 
         return (MarketFixtures.BuildDocument() with { Market = market });
     }
-
     private static string WriteTempWorldFile(WorldDefinition document, string suffix) {
         var bytes = WorldDefinitionSerialization.Serialize(definition: document);
-        var path = Path.Combine(Path.GetTempPath(), $"puck-world-tests-market-{suffix}-{Guid.NewGuid():N}.json");
+        var path = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-world-tests-market-{suffix}-{Guid.NewGuid():N}.json");
 
         File.WriteAllBytes(path: path, bytes: bytes);
 
         return path;
     }
-
     private static void TryDeleteFile(string path) {
         try {
             File.Delete(path: path);

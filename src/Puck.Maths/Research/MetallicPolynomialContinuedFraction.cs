@@ -26,14 +26,13 @@ public static class MetallicPolynomialContinuedFraction {
         }
 
         return PolynomialContinuedFractionTail.Analyze(
-            linear: metallicIndex,
             constant: -1,
-            numeratorQuadratic: 1,
+            linear: metallicIndex,
+            numeratorConstant: 0,
             numeratorLinear: 0,
-            numeratorConstant: 0
+            numeratorQuadratic: 1
         );
     }
-
     /// <summary>Returns <c>⌊sₙ⌋</c> for the positive metallic index <paramref name="metallicIndex"/> and tail index <paramref name="tailIndex"/>.</summary>
     /// <param name="metallicIndex">The positive integer <c>k</c> in the tail recurrence.</param>
     /// <param name="tailIndex">The positive integer <c>n</c> selecting the tail.</param>
@@ -44,7 +43,6 @@ public static class MetallicPolynomialContinuedFraction {
             metallicIndex: new BigInteger(value: metallicIndex),
             tailIndex: new BigInteger(value: tailIndex)
         ));
-
     /// <summary>Returns <c>⌊sₙ⌋</c> for arbitrary-width positive integer indices.</summary>
     /// <param name="metallicIndex">The positive integer <c>k</c> in the tail recurrence.</param>
     /// <param name="tailIndex">The positive integer <c>n</c> selecting the tail.</param>
@@ -82,6 +80,7 @@ public static class MetallicPolynomialContinuedFraction {
 
         return (((nextThreshold <= 0) || ((nextThreshold * nextThreshold) < radicand))
             ? (candidate + 1)
-            : candidate);
+            : candidate
+        );
     }
 }

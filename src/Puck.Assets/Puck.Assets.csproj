@@ -1,10 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>Content-addressed asset primitives for .NET: path-based byte sources, compact SHA-256 identities, a bounded least-recently-used cache, and a persistent full-digest object store with named refs.</Description>
+        <AssemblyName>Puck.Assets</AssemblyName>
+        <Description>Content-addressed asset primitives for .NET: path-based byte sources, compact SHA-256 identities, a bounded least-recently-used cache, a persistent full-digest object store with named refs, and a minimal PNG/APNG codec.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Assets</PackageId>
-        <PackageTags>assets;caching;content-addressing</PackageTags>
+        <PackageTags>assets;caching;content-addressing;png</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Leaf contracts and data</PuckLayer>
+        <RootNamespace>Puck.Assets</RootNamespace>
     </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="System.IO.Hashing" Version="[10.*, )" />
+    </ItemGroup>
 </Project>

@@ -1,10 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <AssemblyName>Puck.Input</AssemblyName>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
+        <RootNamespace>Puck.Input</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="System.IO.Hashing" Version="[10.*,)" />
+        <PackageReference Include="System.IO.Hashing" Version="[10.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />

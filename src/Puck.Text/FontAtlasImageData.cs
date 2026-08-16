@@ -13,10 +13,10 @@ namespace Puck.Text;
 /// identity and caching of the image.
 /// </remarks>
 public sealed class FontAtlasImageData {
-    /// <summary>Gets the image height in pixels.</summary>
-    public int Height { get; }
     /// <summary>Gets the content hash of <see cref="RgbaPixels"/>, supplied by the caller or computed from the buffer.</summary>
     public AssetContentHash ContentHash { get; }
+    /// <summary>Gets the image height in pixels.</summary>
+    public int Height { get; }
     /// <summary>Gets the tightly packed, row-major, top-down RGBA pixel buffer.</summary>
     public byte[] RgbaPixels { get; }
     /// <summary>Gets the image width in pixels.</summary>
@@ -47,9 +47,9 @@ public sealed class FontAtlasImageData {
             );
         }
 
-        var expectedLength = (((ulong)(uint)width * (uint)height) * 4u);
+        var expectedLength = ((((ulong)((uint)width)) * ((uint)height)) * 4u);
 
-        if ((ulong)rgbaPixels.LongLength != expectedLength) {
+        if (((ulong)rgbaPixels.LongLength) != expectedLength) {
             throw new ArgumentException(
                 message: $"Font atlas image pixels must contain exactly {expectedLength} bytes for a {width}x{height} RGBA image.",
                 paramName: nameof(rgbaPixels)

@@ -1,4 +1,4 @@
-using Puck.Snapshots;
+using Puck.GamingBricks;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -71,8 +71,8 @@ internal static class Sm83StateCodec {
         halted = (buffer[HaltedOffset] != 0);
         ime = (buffer[ImeOffset] != 0);
         eiPending = (BitConverter.ToInt32(
-            value: buffer,
-            startIndex: InterruptEnableCountdownOffset
+            startIndex: InterruptEnableCountdownOffset,
+            value: buffer
         ) != 0);
     }
 }

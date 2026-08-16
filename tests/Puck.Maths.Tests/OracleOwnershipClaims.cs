@@ -66,7 +66,7 @@ internal static class OracleOwnershipClaims {
 
         foreach (var scalar in new ulong[] { 0UL, 1UL, 2UL }) {
             if (!target.AreEqual(
-                left: functor.Map(value: Scale(algebra: source, value: sum, scalar: scalar)),
+                left: functor.Map(value: Scale(algebra: source, scalar: scalar, value: sum)),
                 right: Scale(algebra: target, value: functor.Map(value: sum), scalar: scalar)
             )) {
                 return $"the admitted map did not preserve scalar multiplication at {scalar}";
@@ -82,7 +82,6 @@ internal static class OracleOwnershipClaims {
 
         return null;
     }
-
     internal static string? PresentationOwnsAdmittedMemory() {
         int[] inputs = [0];
         int[] outputs = [0];
@@ -91,7 +90,7 @@ internal static class OracleOwnershipClaims {
         int[] replacement = [1, 0];
         BigInteger[] charges = [BigInteger.One];
         BigInteger[] generatorCharges = [BigInteger.One];
-        Generator[] generators = [new(symbol: 0, inputs: inputs, outputs: outputs, degree: 1)];
+        Generator[] generators = [new(degree: 1, inputs: inputs, outputs: outputs, symbol: 0)];
         RewriteRule<BigInteger>[] rules = [
             new(
                 kind: RuleKind.Reassociate,
@@ -99,7 +98,7 @@ internal static class OracleOwnershipClaims {
                 replacement: ReadOnlyMemory<int>.Empty,
                 charges: reassociationCharges
             ),
-            new(kind: RuleKind.Reduce, pattern: pattern, replacement: replacement, charges: charges),
+            new(charges: charges, kind: RuleKind.Reduce, pattern: pattern, replacement: replacement),
         ];
         var presentation = ChargedPresentation<BigInteger, IntegerMaterial>.Create(
             generators: generators,
@@ -178,8 +177,8 @@ internal static class OracleOwnershipClaims {
         // The boundary lists are not otherwise part of this monoid's public semantics, so inspect the admitted value
         // directly to keep their independent deep-copy obligation executable.
         var field = typeof(ChargedPresentation<BigInteger, IntegerMaterial>).GetField(
-            name: "m_generators",
-            bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic
+            bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic,
+            name: "m_generators"
         );
 
         if ((field?.GetValue(obj: presentation) is not Generator[] admitted)
@@ -190,7 +189,6 @@ internal static class OracleOwnershipClaims {
 
         return null;
     }
-
     internal static string? ForeignElementsAreRejectedUniformly() {
         var first = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
             presentation: Presentations.FreeMonoid<BigInteger, IntegerMaterial>(letterCount: 1, material: default, windowDegree: 2)
@@ -211,14 +209,14 @@ internal static class OracleOwnershipClaims {
             ("PresentedAlgebra.MultiplyInto", "left", () => _ = first.MultiplyInto(left: foreign, right: first.Identity, keys: keys, coefficients: coefficients)),
             ("PresentedAlgebra.MultiplyInto(right)", "right", () => _ = first.MultiplyInto(left: first.Identity, right: foreign, keys: keys, coefficients: coefficients)),
             ("PresentedAlgebra.Negate", "value", () => _ = first.Negate(value: foreign)),
-            ("PresentedAlgebra.Power at exponent zero", "value", () => _ = first.Power(value: foreign, exponent: 0UL)),
-            ("PresentedAlgebra.PowerSequential at exponent zero", "value", () => _ = first.PowerSequential(value: foreign, exponent: 0UL)),
+            ("PresentedAlgebra.Power at exponent zero", "value", () => _ = first.Power(exponent: 0UL, value: foreign)),
+            ("PresentedAlgebra.PowerSequential at exponent zero", "value", () => _ = first.PowerSequential(exponent: 0UL, value: foreign)),
             ("PresentedAlgebra.Subtract(left)", "left", () => _ = first.Subtract(left: foreign, right: first.Zero)),
             ("PresentedAlgebra.Subtract", "right", () => _ = first.Subtract(left: first.Zero, right: foreign)),
-            ("PresentedAlgebra.TruncatedSum at bound zero", "value", () => _ = first.TruncatedSum(value: foreign, bound: 0)),
-            ("PresentedAlgebra.TrySumOverAllLengths", "value", () => _ = first.TrySumOverAllLengths(value: foreign, total: out _, obstruction: out _)),
+            ("PresentedAlgebra.TruncatedSum at bound zero", "value", () => _ = first.TruncatedSum(bound: 0, value: foreign)),
+            ("PresentedAlgebra.TrySumOverAllLengths", "value", () => _ = first.TrySumOverAllLengths(obstruction: out _, total: out _, value: foreign)),
             ("PresentedAlgebra.Residual", "value", () => _ = first.Residual(symbol: 0, value: foreign, twist: ResidualTwist.Counit)),
-            ("PresentedAlgebra.TryCompileClosure", "seed", () => _ = first.TryCompileClosure(seed: foreign, twist: ResidualTwist.Counit, shiftSymbol: -1, stateLimit: 2, closure: out _, obstruction: out _)),
+            ("PresentedAlgebra.TryCompileClosure", "seed", () => _ = first.TryCompileClosure(closure: out _, obstruction: out _, seed: foreign, shiftSymbol: -1, stateLimit: 2, twist: ResidualTwist.Counit)),
             ("PresentedAlgebra.Pair(covector)", "covector", () => _ = first.Pair(covector: foreign, value: first.Identity)),
             ("PresentedAlgebra.Pair", "value", () => _ = first.Pair(covector: first.Identity, value: foreign)),
             ("PresentedAlgebra.Behavior", "initial", () => _ = first.Behavior(initial: foreign, value: first.Identity, readout: first.Identity)),
@@ -236,55 +234,55 @@ internal static class OracleOwnershipClaims {
         );
         var fieldForeign = fieldSecond.Generator(symbol: 0);
 
-        checks.Add(("PresentedAlgebra.TrySolve(divisor)", "divisor", () => _ = fieldFirst.TrySolve(divisor: fieldForeign, target: fieldFirst.Identity, quotient: out _, obstruction: out _)));
-        checks.Add(("PresentedAlgebra.TrySolve(target)", "target", () => _ = fieldFirst.TrySolve(divisor: fieldFirst.Identity, target: fieldForeign, quotient: out _, obstruction: out _)));
-        checks.Add(("PresentedAlgebra.TryResolvent", "value", () => _ = fieldFirst.TryResolvent(value: fieldForeign, resolvent: out _, obstruction: out _)));
-        checks.Add(("GraphZeta.TryCreate", "value", () => _ = GraphZeta<ulong, PrimeFieldMaterial>.TryCreate(algebra: fieldFirst, value: fieldForeign, order: 1, degreeBound: 1, zeta: out _, obstruction: out _)));
+        checks.Add(item: ("PresentedAlgebra.TrySolve(divisor)", "divisor", () => _ = fieldFirst.TrySolve(divisor: fieldForeign, target: fieldFirst.Identity, quotient: out _, obstruction: out _)));
+        checks.Add(item: ("PresentedAlgebra.TrySolve(target)", "target", () => _ = fieldFirst.TrySolve(divisor: fieldFirst.Identity, target: fieldForeign, quotient: out _, obstruction: out _)));
+        checks.Add(item: ("PresentedAlgebra.TryResolvent", "value", () => _ = fieldFirst.TryResolvent(obstruction: out _, resolvent: out _, value: fieldForeign)));
+        checks.Add(item: ("GraphZeta.TryCreate", "value", () => _ = GraphZeta<ulong, PrimeFieldMaterial>.TryCreate(algebra: fieldFirst, degreeBound: 1, obstruction: out _, order: 1, value: fieldForeign, zeta: out _)));
 
         var transferFirst = ConvergentTransfer<BigInteger, IntegerMaterial>.Create(material: default);
         var transferSecond = ConvergentTransfer<BigInteger, IntegerMaterial>.Create(material: default);
         var transferForeign = transferSecond.Digit(partialQuotient: 7);
 
-        checks.Add(("ConvergentTransfer.Entry", "value", () => _ = transferFirst.Entry(value: transferForeign, row: 0, column: 0)));
+        checks.Add(item: ("ConvergentTransfer.Entry", "value", () => _ = transferFirst.Entry(column: 0, row: 0, value: transferForeign)));
 
-        var patternFirst = TokenPattern<bool, BooleanMaterial>.Create(letterCount: 1, window: 2, material: default);
-        var patternSecond = TokenPattern<bool, BooleanMaterial>.Create(letterCount: 1, window: 2, material: default);
+        var patternFirst = TokenPattern<bool, BooleanMaterial>.Create(letterCount: 1, material: default, window: 2);
+        var patternSecond = TokenPattern<bool, BooleanMaterial>.Create(letterCount: 1, material: default, window: 2);
         var patternForeign = patternSecond.Predicate(letters: 1UL);
 
-        checks.Add(("TokenPattern.Concatenate", "left", () => _ = patternFirst.Concatenate(left: patternForeign, right: patternFirst.EmptyWord)));
-        checks.Add(("TokenPattern.Concatenate(right)", "right", () => _ = patternFirst.Concatenate(left: patternFirst.EmptyWord, right: patternForeign)));
-        checks.Add(("TokenPattern.Derivative", "value", () => _ = patternFirst.Derivative(letter: 0, value: patternForeign)));
-        checks.Add(("TokenPattern.Intersect(left)", "left", () => _ = patternFirst.Intersect(left: patternForeign, right: patternFirst.EmptyWord)));
-        checks.Add(("TokenPattern.Intersect(right)", "right", () => _ = patternFirst.Intersect(left: patternFirst.EmptyWord, right: patternForeign)));
-        checks.Add(("TokenPattern.Scale", "value", () => _ = patternFirst.Scale(value: patternForeign, weight: true)));
-        checks.Add(("TokenPattern.TryIterate", "value", () => _ = patternFirst.TryIterate(value: patternForeign, iterated: out _, obstruction: out _)));
-        checks.Add(("TokenPattern.TryWeigh", "value", () => _ = patternFirst.TryWeigh(value: patternForeign, letters: [0], weight: out _)));
-        checks.Add(("TokenPattern.Union", "left", () => _ = patternFirst.Union(left: patternForeign, right: patternFirst.EmptyWord)));
-        checks.Add(("TokenPattern.Union(right)", "right", () => _ = patternFirst.Union(left: patternFirst.EmptyWord, right: patternForeign)));
-        checks.Add(("PatternComplement.Complement", "value", () => _ = patternFirst.Complement(value: patternForeign)));
-        checks.Add(("PatternMatcher.TryCompile", "value", () => _ = PatternMatcher<bool, BooleanMaterial>.TryCompile(pattern: patternFirst, value: patternForeign, stateLimit: 2, matcher: out _, obstruction: out _)));
+        checks.Add(item: ("TokenPattern.Concatenate", "left", () => _ = patternFirst.Concatenate(left: patternForeign, right: patternFirst.EmptyWord)));
+        checks.Add(item: ("TokenPattern.Concatenate(right)", "right", () => _ = patternFirst.Concatenate(left: patternFirst.EmptyWord, right: patternForeign)));
+        checks.Add(item: ("TokenPattern.Derivative", "value", () => _ = patternFirst.Derivative(letter: 0, value: patternForeign)));
+        checks.Add(item: ("TokenPattern.Intersect(left)", "left", () => _ = patternFirst.Intersect(left: patternForeign, right: patternFirst.EmptyWord)));
+        checks.Add(item: ("TokenPattern.Intersect(right)", "right", () => _ = patternFirst.Intersect(left: patternFirst.EmptyWord, right: patternForeign)));
+        checks.Add(item: ("TokenPattern.Scale", "value", () => _ = patternFirst.Scale(value: patternForeign, weight: true)));
+        checks.Add(item: ("TokenPattern.TryIterate", "value", () => _ = patternFirst.TryIterate(iterated: out _, obstruction: out _, value: patternForeign)));
+        checks.Add(item: ("TokenPattern.TryWeigh", "value", () => _ = patternFirst.TryWeigh(letters: [0], value: patternForeign, weight: out _)));
+        checks.Add(item: ("TokenPattern.Union", "left", () => _ = patternFirst.Union(left: patternForeign, right: patternFirst.EmptyWord)));
+        checks.Add(item: ("TokenPattern.Union(right)", "right", () => _ = patternFirst.Union(left: patternFirst.EmptyWord, right: patternForeign)));
+        checks.Add(item: ("PatternComplement.Complement", "value", () => _ = patternFirst.Complement(value: patternForeign)));
+        checks.Add(item: ("PatternMatcher.TryCompile", "value", () => _ = PatternMatcher<bool, BooleanMaterial>.TryCompile(matcher: out _, obstruction: out _, pattern: patternFirst, stateLimit: 2, value: patternForeign)));
 
         var cliffordFirst = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
-            presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: 1, negativeCount: 0, degenerateCount: 0, material: default)
+            presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: 0, material: default, negativeCount: 0, positiveCount: 1)
         );
         var cliffordSecond = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
-            presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: 1, negativeCount: 0, degenerateCount: 0, material: default)
+            presentation: Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: 0, material: default, negativeCount: 0, positiveCount: 1)
         );
         var bladeForeign = cliffordSecond.Generator(symbol: 0);
         var complement = GradedComplement<BigInteger, IntegerMaterial>.Create(algebra: cliffordFirst);
 
-        checks.Add(("GradedComplement.LeftComplement", "value", () => _ = complement.LeftComplement(value: bladeForeign)));
-        checks.Add(("GradedComplement.OuterProduct(left)", "left", () => _ = complement.OuterProduct(left: bladeForeign, right: cliffordFirst.Identity)));
-        checks.Add(("GradedComplement.OuterProduct(right)", "right", () => _ = complement.OuterProduct(left: cliffordFirst.Identity, right: bladeForeign)));
-        checks.Add(("GradedComplement.RegressiveProduct", "left", () => _ = complement.RegressiveProduct(left: bladeForeign, right: cliffordFirst.Identity)));
-        checks.Add(("GradedComplement.RegressiveProduct(right)", "right", () => _ = complement.RegressiveProduct(left: cliffordFirst.Identity, right: bladeForeign)));
-        checks.Add(("GradedComplement.RightComplement", "value", () => _ = complement.RightComplement(value: bladeForeign)));
+        checks.Add(item: ("GradedComplement.LeftComplement", "value", () => _ = complement.LeftComplement(value: bladeForeign)));
+        checks.Add(item: ("GradedComplement.OuterProduct(left)", "left", () => _ = complement.OuterProduct(left: bladeForeign, right: cliffordFirst.Identity)));
+        checks.Add(item: ("GradedComplement.OuterProduct(right)", "right", () => _ = complement.OuterProduct(left: cliffordFirst.Identity, right: bladeForeign)));
+        checks.Add(item: ("GradedComplement.RegressiveProduct", "left", () => _ = complement.RegressiveProduct(left: bladeForeign, right: cliffordFirst.Identity)));
+        checks.Add(item: ("GradedComplement.RegressiveProduct(right)", "right", () => _ = complement.RegressiveProduct(left: cliffordFirst.Identity, right: bladeForeign)));
+        checks.Add(item: ("GradedComplement.RightComplement", "value", () => _ = complement.RightComplement(value: bladeForeign)));
 
         if (!PresentedGroup<BigInteger, IntegerMaterial>.TryCertify(algebra: cliffordFirst, group: out var group, obstruction: out var groupObstruction)) {
             return $"the ownership matrix's group fixture did not certify: {groupObstruction.Outcome}";
         }
 
-        checks.Add(("PresentedGroup.TryInvert", "value", () => _ = group!.TryInvert(value: bladeForeign, inverse: out _, obstruction: out _)));
+        checks.Add(item: ("PresentedGroup.TryInvert", "value", () => _ = group!.TryInvert(inverse: out _, obstruction: out _, value: bladeForeign)));
 
         var functorTarget = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: first.Presentation);
 
@@ -298,11 +296,11 @@ internal static class OracleOwnershipClaims {
             return "the ownership matrix's functor fixture did not admit";
         }
 
-        checks.Add(("PresentedFunctor.Map", "value", () => _ = functor!.Map(value: foreign)));
-        checks.Add(("PresentedFunctor.TryCreate(images)", "images", () => _ = PresentedFunctor<BigInteger, IntegerMaterial>.TryCreate(source: first, target: functorTarget, images: [foreign], functor: out _, obstruction: out _)));
-        checks.Add(("PresentedMachine.Create(initial)", "initial", () => _ = PresentedMachine<BigInteger, IntegerMaterial>.Create(algebra: first, initial: foreign, steps: [first.Identity], readout: first.Identity)));
-        checks.Add(("PresentedMachine.Create(steps)", "steps", () => _ = PresentedMachine<BigInteger, IntegerMaterial>.Create(algebra: first, initial: first.Identity, steps: [foreign], readout: first.Identity)));
-        checks.Add(("PresentedMachine.Create(readout)", "readout", () => _ = PresentedMachine<BigInteger, IntegerMaterial>.Create(algebra: first, initial: first.Identity, steps: [first.Identity], readout: foreign)));
+        checks.Add(item: ("PresentedFunctor.Map", "value", () => _ = functor!.Map(value: foreign)));
+        checks.Add(item: ("PresentedFunctor.TryCreate(images)", "images", () => _ = PresentedFunctor<BigInteger, IntegerMaterial>.TryCreate(functor: out _, images: [foreign], obstruction: out _, source: first, target: functorTarget)));
+        checks.Add(item: ("PresentedMachine.Create(initial)", "initial", () => _ = PresentedMachine<BigInteger, IntegerMaterial>.Create(algebra: first, initial: foreign, steps: [first.Identity], readout: first.Identity)));
+        checks.Add(item: ("PresentedMachine.Create(steps)", "steps", () => _ = PresentedMachine<BigInteger, IntegerMaterial>.Create(algebra: first, initial: first.Identity, steps: [foreign], readout: first.Identity)));
+        checks.Add(item: ("PresentedMachine.Create(readout)", "readout", () => _ = PresentedMachine<BigInteger, IntegerMaterial>.Create(algebra: first, initial: first.Identity, steps: [first.Identity], readout: foreign)));
 
         int[] dimensions = [0];
         var calculusFirst = ExteriorCalculus<BigInteger, IntegerMaterial>.Create(dimensions: dimensions, incidences: [], material: default);
@@ -310,27 +308,27 @@ internal static class OracleOwnershipClaims {
         var chainForeign = calculusSecond.Chain(values: [BigInteger.One]);
         var cochainForeign = calculusSecond.Cochain(values: [BigInteger.One]);
 
-        checks.Add(("ExteriorCalculus.Boundary", "chain", () => _ = calculusFirst.Boundary(chain: chainForeign)));
-        checks.Add(("ExteriorCalculus.Coboundary", "cochain", () => _ = calculusFirst.Coboundary(cochain: cochainForeign)));
-        checks.Add(("ExteriorCalculus.Pair", "cochain", () => _ = calculusFirst.Pair(cochain: cochainForeign, chain: calculusFirst.Chain(values: [BigInteger.One]))));
-        checks.Add(("ExteriorCalculus.Pair(chain)", "chain", () => _ = calculusFirst.Pair(cochain: calculusFirst.Cochain(values: [BigInteger.One]), chain: chainForeign)));
+        checks.Add(item: ("ExteriorCalculus.Boundary", "chain", () => _ = calculusFirst.Boundary(chain: chainForeign)));
+        checks.Add(item: ("ExteriorCalculus.Coboundary", "cochain", () => _ = calculusFirst.Coboundary(cochain: cochainForeign)));
+        checks.Add(item: ("ExteriorCalculus.Pair", "cochain", () => _ = calculusFirst.Pair(cochain: cochainForeign, chain: calculusFirst.Chain(values: [BigInteger.One]))));
+        checks.Add(item: ("ExteriorCalculus.Pair(chain)", "chain", () => _ = calculusFirst.Pair(cochain: calculusFirst.Cochain(values: [BigInteger.One]), chain: chainForeign)));
 
         foreach (var check in checks) {
             var actual = RefusedParameter(action: check.Invoke);
 
             if (actual != check.Parameter) {
-                return $"{check.Name} did not reject its foreign element by naming '{check.Parameter}' (observed '{actual ?? "no refusal"}')";
+                return $"{check.Name} did not reject its foreign element by naming '{check.Parameter}' (observed '{(actual ?? "no refusal")}')";
             }
         }
 
         var tropicalTransfer = ConvergentTransfer<FixedQ4816, TropicalMaterial>.Create(material: default);
 
         if (!first.AreEqual(left: first.Add(left: default, right: default), right: first.Zero)
-            || (BigInteger.Zero != transferFirst.Entry(value: default, row: 0, column: 0))
-            || (tropicalTransfer.Algebra.Presentation.Material.Zero != tropicalTransfer.Entry(value: default, row: 0, column: 0))
+            || (BigInteger.Zero != transferFirst.Entry(column: 0, row: 0, value: default))
+            || (tropicalTransfer.Algebra.Presentation.Material.Zero != tropicalTransfer.Entry(column: 0, row: 0, value: default))
             || (0 != patternFirst.Intersect(left: default, right: default).SupportCount)
             || !patternFirst.Algebra.AreEqual(left: patternFirst.Complement(value: default), right: patternFirst.Complement(value: patternFirst.Algebra.Zero))
-            || group!.TryInvert(value: default, inverse: out _, obstruction: out _)
+            || group!.TryInvert(inverse: out _, obstruction: out _, value: default)
             || !functorTarget.AreEqual(left: functor!.Map(value: default), right: functorTarget.Zero)) {
             return "the default element was not preserved as the universal zero";
         }
@@ -386,25 +384,24 @@ internal static class OracleOwnershipClaims {
         ];
         var actual = typeof(PresentedAlgebra<,>).Assembly
             .GetTypes()
-            .Where(predicate: static type => type.IsPublic && (type.Namespace == typeof(PresentedAlgebra<,>).Namespace))
-            .SelectMany(selector: static type => type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            .Where(predicate: static type => (type.IsPublic && (type.Namespace == typeof(PresentedAlgebra<,>).Namespace)))
+            .SelectMany(selector: static type => type.GetMethods(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
                 .Cast<MethodBase>()
-                .Concat(second: type.GetConstructors(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
+                .Concat(second: type.GetConstructors(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
                 .Select(selector: method => (
                     Method: method,
-                    Parameters: method.GetParameters().Where(predicate: static parameter => !parameter.IsOut && ContainsElement(type: parameter.ParameterType)).ToArray()
+                    Parameters: method.GetParameters().Where(predicate: static parameter => (!parameter.IsOut && ContainsElement(type: parameter.ParameterType))).ToArray()
                 ))
-                .Where(predicate: static entry => 0 != entry.Parameters.Length)
+                .Where(predicate: static entry => (0 != entry.Parameters.Length))
                 .Select(selector: entry => $"{type.Name}.{entry.Method.Name}:{string.Join(separator: ',', values: entry.Parameters.Select(selector: static parameter => parameter.Name))}"))
             .Distinct()
             .Order()
             .ToArray();
 
-        return actual.SequenceEqual(second: expected.Order().ToArray())
+        return (actual.SequenceEqual(second: expected.Order().ToArray())
             ? null
-            : $"the public Element-consumer inventory changed: expected [{string.Join(separator: "; ", values: expected.Order())}], actual [{string.Join(separator: "; ", values: actual)}]";
+            : $"the public Element-consumer inventory changed: expected [{string.Join(separator: "; ", values: expected.Order())}], actual [{string.Join(separator: "; ", values: actual)}]");
     }
-
     private static string? TensorPairingOwnership() {
         var material = PrimeFieldMaterial.Create(modulus: 5);
         var left = PresentedAlgebra<ulong, PrimeFieldMaterial>.Create(
@@ -464,7 +461,6 @@ internal static class OracleOwnershipClaims {
 
         return null;
     }
-
     private static bool ContainsElement(Type type) {
         if (type.IsByRef || type.IsArray || type.IsPointer) {
             return ContainsElement(type: type.GetElementType()!);
@@ -474,9 +470,8 @@ internal static class OracleOwnershipClaims {
             return true;
         }
 
-        return type.IsGenericType && type.GetGenericArguments().Any(predicate: ContainsElement);
+        return (type.IsGenericType && type.GetGenericArguments().Any(predicate: ContainsElement));
     }
-
     private static string? RefusedParameter(Action action) {
         try {
             action();
@@ -486,7 +481,6 @@ internal static class OracleOwnershipClaims {
             return exception.ParamName;
         }
     }
-
     private static PresentedAlgebra<ulong, PrimeFieldMaterial>.Element Scale(
         PresentedAlgebra<ulong, PrimeFieldMaterial> algebra,
         in PresentedAlgebra<ulong, PrimeFieldMaterial>.Element value,

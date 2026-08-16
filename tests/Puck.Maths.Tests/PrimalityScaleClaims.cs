@@ -35,14 +35,12 @@ internal static class PrimalityScaleClaims {
         (341_550_071_728_321UL, 8),
         (3_825_123_056_546_413_051UL, 11),
     ];
-
     /// <summary>The complete population of base-two strong pseudoprimes below <c>10^5</c> — OEIS A001262 — transcribed
     /// from the literature and derived nowhere in this repository.</summary>
     private static readonly ulong[] BaseTwoPseudoprimes = [
         2_047UL, 3_277UL, 4_033UL, 4_681UL, 8_321UL, 15_841UL, 29_341UL, 42_799UL,
         49_141UL, 52_633UL, 65_281UL, 74_665UL, 80_581UL, 85_489UL, 88_357UL, 90_751UL,
     ];
-
     /// <summary>The complete population of strong Lucas pseudoprimes below <c>10^5</c> for the Selfridge Method A
     /// parameters — OEIS A217255, Baillie and Wagstaff (1980) — which is exactly the parameter choice
     /// <see cref="PrimeField64.IsStrongLucasProbablePrime(ulong)"/> runs.</summary>
@@ -50,7 +48,6 @@ internal static class PrimalityScaleClaims {
         5_459UL, 5_777UL, 10_877UL, 16_109UL, 18_971UL, 22_499UL, 24_569UL,
         25_199UL, 40_309UL, 58_519UL, 75_077UL, 97_439UL,
     ];
-
     /// <summary>The published Carmichael numbers: absolute pseudoprimes, passing a Fermat test to every coprime
     /// base.</summary>
     private static readonly ulong[] CarmichaelNumbers = [561UL, 1_105UL, 1_729UL, 2_465UL, 2_821UL, 6_601UL, 8_911UL,];
@@ -113,14 +110,13 @@ internal static class PrimalityScaleClaims {
                 modulus: new BigInteger(value: modulus)
             ));
 
-            if (field.Pow(value: value, exponent: exponent) != expected) {
-                return $"Pow({value}, {exponent}) mod {modulus} = {field.Pow(value: value, exponent: exponent)} where BigInteger.ModPow says {expected}";
+            if (field.Pow(exponent: exponent, value: value) != expected) {
+                return $"Pow({value}, {exponent}) mod {modulus} = {field.Pow(exponent: exponent, value: value)} where BigInteger.ModPow says {expected}";
             }
         }
 
         return MontgomeryPrimalitySurface(state: ref state);
     }
-
     /// <summary>
     /// The <c>baillie-psw</c> section: the composition against the EXACT decision at every one of the 4,294,967,296
     /// values a <see cref="uint"/> holds, then 160,000 sampled and 60,000 contiguous values up to
@@ -148,7 +144,7 @@ internal static class PrimalityScaleClaims {
             var span = ((64 == shift) ? ulong.MaxValue : ((1UL << shift) - 1UL));
 
             for (var trial = 0; (trial < 20_000); ++trial) {
-                var candidate = ((NextRandom(state: ref state) % span) | 1UL);
+                var candidate = (NextRandom(state: ref state) % span) | 1UL;
 
                 failure = BaillieAgreesWithExactDecision(candidate: candidate);
 
@@ -173,7 +169,6 @@ internal static class PrimalityScaleClaims {
 
         return BailliePopulationSurface();
     }
-
     /// <summary>
     /// The <c>jacobi-symbol</c> section: the CROSS-CARRIER agreement — one answer from
     /// <see cref="UnsignedNumberFunctions.JacobiSymbol{T}(T, T)"/> at <see cref="uint"/>, <see cref="ulong"/> and
@@ -190,7 +185,7 @@ internal static class PrimalityScaleClaims {
 
             for (var numerator = 0U; (400U >= numerator); ++numerator) {
                 var wideNumerator = ((BigInteger)numerator);
-                var expected = Oracles.JacobiSymbolReciprocity(numerator: wideNumerator, denominator: wideModulus);
+                var expected = Oracles.JacobiSymbolReciprocity(denominator: wideModulus, numerator: wideNumerator);
                 // The DEFINITION, standing outside the descent both shipped spellings walk: the product of the Legendre
                 // symbols of the modulus's prime powers, each by Euler's criterion. Without it the composite-modulus
                 // regime would have no reference but the library's own sibling.
@@ -205,7 +200,7 @@ internal static class PrimalityScaleClaims {
                 var narrow = numerator.JacobiSymbol(modulus: modulus);
                 var wide = ((ulong)numerator).JacobiSymbol(modulus: ((ulong)modulus));
                 var widest = ((UInt128)numerator).JacobiSymbol(modulus: ((UInt128)modulus));
-                var arbitrary = NumberTheoryFunctions.JacobiSymbol(numerator: wideNumerator, denominator: wideModulus);
+                var arbitrary = NumberTheoryFunctions.JacobiSymbol(denominator: wideModulus, numerator: wideNumerator);
 
                 if ((narrow != expected) || (wide != expected) || (widest != expected) || (arbitrary != expected)) {
                     return $"({numerator}/{modulus}) is {expected} and the carriers report uint={narrow} ulong={wide} uint128={widest} bigint={arbitrary}";
@@ -225,7 +220,6 @@ internal static class PrimalityScaleClaims {
 
         return JacobiWideSurface();
     }
-
     /// <summary>
     /// The full-width FACTORIZATION sweep — the coverage
     /// <c>core.big-integer-prime-factors-vs-word-kernel</c> cites its word-sized reference on. Both shipped word
@@ -242,14 +236,14 @@ internal static class PrimalityScaleClaims {
         // so the per-factor primality statement here carries no probable-prime reasoning at all.
         for (var trial = 0; (trial < 200_000); ++trial) {
             var value = ((uint)NextRandom(state: ref state));
-            var failure = NarrowFactorizationHolds(value: value, destination: destination, trialPrimes: trialPrimes);
+            var failure = NarrowFactorizationHolds(destination: destination, trialPrimes: trialPrimes, value: value);
 
             if (failure is not null) { return failure; }
         }
 
         // A contiguous run, where a defect confined to one residue class cannot hide the way it can in a random stream.
         for (var offset = 0U; (200_000U > offset); ++offset) {
-            var failure = NarrowFactorizationHolds(value: ((uint.MaxValue - 200_000U) + offset), destination: destination, trialPrimes: trialPrimes);
+            var failure = NarrowFactorizationHolds(destination: destination, trialPrimes: trialPrimes, value: ((uint.MaxValue - 200_000U) + offset));
 
             if (failure is not null) { return failure; }
         }
@@ -279,7 +273,7 @@ internal static class PrimalityScaleClaims {
 
             foreach (var exponent in exponents) {
                 var expected = ((ulong)BigInteger.ModPow(value: wideResidue, exponent: new BigInteger(value: exponent), modulus: wideModulus));
-                var actual = field.Pow(value: residue, exponent: exponent);
+                var actual = field.Pow(exponent: exponent, value: residue);
 
                 if (actual != expected) {
                     return $"Pow({residue}, {exponent}) mod {modulus} = {actual} where BigInteger.ModPow says {expected}";
@@ -299,7 +293,7 @@ internal static class PrimalityScaleClaims {
 
             // The quadratic character by RECIPROCITY, which never exponentiates, against Euler's criterion, which is
             // nothing but exponentiation. Two derivations, no shared step.
-            var character = Oracles.JacobiSymbolReciprocity(numerator: wideResidue, denominator: wideModulus);
+            var character = Oracles.JacobiSymbolReciprocity(denominator: wideModulus, numerator: wideResidue);
 
             if (field.LegendreCharacter(value: residue) != character) {
                 return $"LegendreCharacter({residue}) mod {modulus} = {field.LegendreCharacter(value: residue)} where the reciprocity descent says {character}";
@@ -347,7 +341,6 @@ internal static class PrimalityScaleClaims {
 
         return null;
     }
-
     private static string? MontgomeryPrimalitySurface(ref ulong state) {
         // Every value below a million against the dense sieve: the verdicts are mathematical truth, not another test's
         // opinion.
@@ -375,7 +368,7 @@ internal static class PrimalityScaleClaims {
             return $"the 9e11 window reaches {(windowStart + windowLength)}, at or above {(omitted * omitted)}, so the trial-prime list no longer sieves it exactly";
         }
 
-        var window = SieveWindow(start: windowStart, length: windowLength, trialPrimes: windowPrimes);
+        var window = SieveWindow(length: windowLength, start: windowStart, trialPrimes: windowPrimes);
 
         for (var offset = 0; (offset < windowLength); ++offset) {
             var candidate = (windowStart + ((ulong)offset));
@@ -393,7 +386,7 @@ internal static class PrimalityScaleClaims {
             var span = ((64 == shift) ? ulong.MaxValue : ((1UL << shift) - 1UL));
 
             for (var trial = 0; (trial < 400); ++trial) {
-                var candidate = ((NextRandom(state: ref state) % span) | 1UL);
+                var candidate = (NextRandom(state: ref state) % span) | 1UL;
 
                 if (PrimeField64.IsPrime(value: candidate) != Oracles.ExactPrimality(value: candidate)) {
                     return $"IsPrime({candidate}) = {PrimeField64.IsPrime(value: candidate)} where the exact decision says {Oracles.ExactPrimality(value: candidate)}";
@@ -454,7 +447,6 @@ internal static class PrimalityScaleClaims {
             ? null
             : $"IsPrime named {top} the carrier's top prime and the exact decision rejects it");
     }
-
     // ---- baillie-psw ----
 
     private static string? BaillieExhaustiveThirtyTwoBit() {
@@ -473,7 +465,7 @@ internal static class PrimalityScaleClaims {
         Array.Fill(array: lucasFailures, value: -1L);
         Parallel.For(fromInclusive: 0, toExclusive: blockCount, body: block => {
             var start = ((ulong)(((uint)block) * blockLength));
-            var flags = SieveWindow(start: start, length: ((int)blockLength), trialPrimes: trialPrimes);
+            var flags = SieveWindow(length: ((int)blockLength), start: start, trialPrimes: trialPrimes);
 
             for (var offset = 0; (offset < ((int)blockLength)); ++offset) {
                 var value = (start + ((ulong)offset));
@@ -501,7 +493,6 @@ internal static class PrimalityScaleClaims {
 
         return null;
     }
-
     private static string? BaillieHalvesSurface(ref ulong state) {
         // The Lucas half against companion-matrix powers in BigInteger — no doubling ladder, no halving, no Montgomery
         // form, and a Selfridge search whose symbol comes from the suite's own reciprocity descent rather than from any
@@ -513,7 +504,7 @@ internal static class PrimalityScaleClaims {
         }
 
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var value = (NextRandom(state: ref state) | 1UL);
+            var value = NextRandom(state: ref state) | 1UL;
 
             if (PrimeField64.IsStrongLucasProbablePrime(value: value) != Oracles.StrongLucasSelfridge(value: value)) {
                 return $"IsStrongLucasProbablePrime({value}) = {PrimeField64.IsStrongLucasProbablePrime(value: value)} where the companion-matrix oracle says {Oracles.StrongLucasSelfridge(value: value)}";
@@ -533,7 +524,7 @@ internal static class PrimalityScaleClaims {
         }
 
         for (var trial = 0; (trial < 2_000); ++trial) {
-            var value = (NextRandom(state: ref state) | 1UL);
+            var value = NextRandom(state: ref state) | 1UL;
             var witness = NextRandom(state: ref state);
 
             if (PrimeField64.IsStrongProbablePrime(value: value, witness: witness) != Oracles.ModularStrongProbablePrime(value: value, witness: witness)) {
@@ -556,7 +547,6 @@ internal static class PrimalityScaleClaims {
 
         return null;
     }
-
     private static string? BailliePopulationSurface() {
         // Squares are the adversarial shape for the Selfridge search: no D has symbol -1 on one, so the search cannot
         // exit that way. It still exits, on the vanishing symbol.
@@ -687,7 +677,6 @@ internal static class PrimalityScaleClaims {
 
         return null;
     }
-
     private static string? BaillieAgreesWithExactDecision(ulong candidate) {
         var expected = Oracles.ExactPrimality(value: candidate);
 
@@ -699,7 +688,6 @@ internal static class PrimalityScaleClaims {
             ? $"IsStrongLucasProbablePrime rejected the prime {candidate}"
             : null);
     }
-
     // ---- jacobi symbol ----
 
     private static string? JacobiWideSurface() {
@@ -729,8 +717,8 @@ internal static class PrimalityScaleClaims {
         for (var trial = 0; (trial < 20_000); ++trial) {
             var left = (NextRandom(state: ref state) >>> 33);
             var right = (NextRandom(state: ref state) >>> 33);
-            var oddLeft = ((NextRandom(state: ref state) >>> 33) | 1UL);
-            var oddRight = ((NextRandom(state: ref state) >>> 33) | 1UL);
+            var oddLeft = (NextRandom(state: ref state) >>> 33) | 1UL;
+            var oddRight = (NextRandom(state: ref state) >>> 33) | 1UL;
             var leftSymbol = left.JacobiSymbol(modulus: oddLeft);
 
             if ((left * right).JacobiSymbol(modulus: oddLeft) != (leftSymbol * right.JacobiSymbol(modulus: oddLeft))) {
@@ -777,22 +765,22 @@ internal static class PrimalityScaleClaims {
         // live, plus the arbitrary-width sibling on the same operands.
         for (var trial = 0; (trial < 20_000); ++trial) {
             var wideValue = NextRandom(state: ref state);
-            var wideModulus = (NextRandom(state: ref state) | 1UL);
-            var hugeValue = ((((UInt128)NextRandom(state: ref state)) << 64) | wideValue);
-            var hugeModulus = ((((UInt128)NextRandom(state: ref state)) << 64) | wideModulus);
+            var wideModulus = NextRandom(state: ref state) | 1UL;
+            var hugeValue = (((UInt128)NextRandom(state: ref state)) << 64) | wideValue;
+            var hugeModulus = (((UInt128)NextRandom(state: ref state)) << 64) | wideModulus;
             var narrowValue = ((uint)wideValue);
-            var narrowModulus = (((uint)wideModulus) | 1U);
+            var narrowModulus = ((uint)wideModulus) | 1U;
 
-            if (narrowValue.JacobiSymbol(modulus: narrowModulus) != Oracles.JacobiSymbolReciprocity(numerator: narrowValue, denominator: narrowModulus)) {
+            if (narrowValue.JacobiSymbol(modulus: narrowModulus) != Oracles.JacobiSymbolReciprocity(denominator: narrowModulus, numerator: narrowValue)) {
                 return $"the uint symbol ({narrowValue}/{narrowModulus}) disagrees with the reciprocity descent";
             }
-            if (wideValue.JacobiSymbol(modulus: wideModulus) != Oracles.JacobiSymbolReciprocity(numerator: wideValue, denominator: wideModulus)) {
+            if (wideValue.JacobiSymbol(modulus: wideModulus) != Oracles.JacobiSymbolReciprocity(denominator: wideModulus, numerator: wideValue)) {
                 return $"the ulong symbol ({wideValue}/{wideModulus}) disagrees with the reciprocity descent";
             }
-            if (hugeValue.JacobiSymbol(modulus: hugeModulus) != Oracles.JacobiSymbolReciprocity(numerator: ((BigInteger)hugeValue), denominator: ((BigInteger)hugeModulus))) {
+            if (hugeValue.JacobiSymbol(modulus: hugeModulus) != Oracles.JacobiSymbolReciprocity(denominator: ((BigInteger)hugeModulus), numerator: ((BigInteger)hugeValue))) {
                 return $"the UInt128 symbol ({hugeValue}/{hugeModulus}) disagrees with the reciprocity descent";
             }
-            if (NumberTheoryFunctions.JacobiSymbol(numerator: ((BigInteger)hugeValue), denominator: ((BigInteger)hugeModulus)) != Oracles.JacobiSymbolReciprocity(numerator: ((BigInteger)hugeValue), denominator: ((BigInteger)hugeModulus))) {
+            if (NumberTheoryFunctions.JacobiSymbol(denominator: ((BigInteger)hugeModulus), numerator: ((BigInteger)hugeValue)) != Oracles.JacobiSymbolReciprocity(denominator: ((BigInteger)hugeModulus), numerator: ((BigInteger)hugeValue))) {
                 return $"the BigInteger symbol ({hugeValue}/{hugeModulus}) disagrees with the reciprocity descent";
             }
         }
@@ -800,7 +788,7 @@ internal static class PrimalityScaleClaims {
         // The composite-modulus regime at width: odd COMPOSITE moduli below 2^32, where the definition can still be
         // reached by factoring, judged by the definition rather than by another descent.
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var modulus = ((((uint)NextRandom(state: ref state)) | 1U) | (1U << 20));
+            var modulus = (((uint)NextRandom(state: ref state)) | 1U) | (1U << 20);
             var numerator = ((uint)NextRandom(state: ref state));
             var expected = JacobiSymbolByFactorAndEuler(numerator: numerator, oddModulus: modulus);
             var actual = numerator.JacobiSymbol(modulus: modulus);
@@ -812,7 +800,6 @@ internal static class PrimalityScaleClaims {
 
         return JacobiRefusalSurface();
     }
-
     private static string? JacobiRefusalSurface() {
         (string Label, Action Operation)[] refusals = [
             ("uint zero modulus", () => _ = 5U.JacobiSymbol(modulus: 0U)),
@@ -837,7 +824,6 @@ internal static class PrimalityScaleClaims {
 
         return null;
     }
-
     // ---- factorization ----
 
     private static string? NarrowFactorizationHolds(uint value, Span<uint> destination, ReadOnlySpan<ulong> trialPrimes) {
@@ -860,7 +846,7 @@ internal static class PrimalityScaleClaims {
             if (factor < previous) {
                 return $"the factors of {value} are not ascending at index {index}";
             }
-            if (!IsPrimeByTrialDivision(value: factor, trialPrimes: trialPrimes)) {
+            if (!IsPrimeByTrialDivision(trialPrimes: trialPrimes, value: factor)) {
                 return $"{factor} is reported as a prime factor of {value} and is not prime";
             }
 
@@ -870,7 +856,6 @@ internal static class PrimalityScaleClaims {
 
         return ((product == value) ? null : $"the factors of {value} reassemble to {product}");
     }
-
     private static string? WideFactorizationSurface(ref ulong state) {
         // The ulong carrier at full width: the reference core.big-integer-prime-factors-vs-word-kernel leans on, swept
         // where that law's own shared range stops at 2047. Per-factor primality is the exact decision, outside
@@ -916,8 +901,8 @@ internal static class PrimalityScaleClaims {
             (2UL, [2UL,]),
             // 2^63 and 10^19 = 2^19 · 5^19: the repeat counts are written as counts rather than as pasted runs, so a
             // miscounted literal cannot make either row pass for the wrong reason.
-            (1UL << 63, [.. Enumerable.Repeat(element: 2UL, count: 63),]),
-            (10_000_000_000_000_000_000UL, [.. Enumerable.Repeat(element: 2UL, count: 19), .. Enumerable.Repeat(element: 5UL, count: 19),]),
+            ((1UL << 63), [.. Enumerable.Repeat(count: 63, element: 2UL),]),
+            (10_000_000_000_000_000_000UL, [.. Enumerable.Repeat(count: 19, element: 2UL), .. Enumerable.Repeat(count: 19, element: 5UL),]),
             (2_305_843_009_213_693_951UL, [2_305_843_009_213_693_951UL,]),
             (ulong.MaxValue, [3UL, 5UL, 17UL, 257UL, 641UL, 65_537UL, 6_700_417UL,]),
             (18_446_744_073_709_551_614UL, [2UL, 7UL, 7UL, 73UL, 127UL, 337UL, 92_737UL, 649_657UL,]),
@@ -933,7 +918,6 @@ internal static class PrimalityScaleClaims {
 
         return null;
     }
-
     private static string? WideFactorizationHolds(ulong value) {
         var factors = value.EnumeratePrimeFactors().ToArray();
 
@@ -960,7 +944,6 @@ internal static class PrimalityScaleClaims {
 
         return ((product == value) ? null : $"the factors of {value} reassemble to {product}");
     }
-
     // ---- shared-nothing helpers ----
 
     /// <summary>The Jacobi symbol by its DEFINITION: factor the odd modulus and multiply the Legendre symbols of its
@@ -989,7 +972,6 @@ internal static class PrimalityScaleClaims {
 
         return symbol;
     }
-
     private static int LegendreByEuler(BigInteger numerator, ulong prime) {
         var widePrime = new BigInteger(value: prime);
         var residue = (((numerator % widePrime) + widePrime) % widePrime);
@@ -998,7 +980,6 @@ internal static class PrimalityScaleClaims {
 
         return (BigInteger.ModPow(value: residue, exponent: ((widePrime - BigInteger.One) / 2), modulus: widePrime).IsOne ? 1 : -1);
     }
-
     private static bool IsPrimeByTrialDivision(uint value, ReadOnlySpan<ulong> trialPrimes) {
         if (2U > value) { return false; }
 
@@ -1009,7 +990,6 @@ internal static class PrimalityScaleClaims {
 
         return true;
     }
-
     /// <summary>The primes below <paramref name="exclusiveMaximum"/>, from the sieve of Eratosthenes.</summary>
     /// <param name="exclusiveMaximum">The exclusive ceiling.</param>
     /// <returns>The ascending prime list.</returns>
@@ -1023,7 +1003,6 @@ internal static class PrimalityScaleClaims {
 
         return primes.ToArray();
     }
-
     /// <summary>The primality flags for a contiguous window, by a SEGMENTED sieve of Eratosthenes: multiples crossed
     /// out and survivors read off.</summary>
     /// <param name="start">The window's first value.</param>
@@ -1046,7 +1025,7 @@ internal static class PrimalityScaleClaims {
 
             if (square >= end) { break; }
 
-            var first = ((start <= square) ? square : (((start + prime) - 1UL) / prime * prime));
+            var first = ((start <= square) ? square : ((((start + prime) - 1UL) / prime) * prime));
 
             for (var multiple = first; (multiple < end); multiple += prime) {
                 flags[((int)(multiple - start))] = false;
@@ -1055,7 +1034,6 @@ internal static class PrimalityScaleClaims {
 
         return flags;
     }
-
     /// <summary>SplitMix64, written here from its published constants so no sweep borrows a Puck.Maths generator to
     /// produce the operands it then judges.</summary>
     /// <param name="state">The generator state, advanced in place.</param>
@@ -1069,10 +1047,9 @@ internal static class PrimalityScaleClaims {
             mixed = ((mixed ^ (mixed >>> 30)) * 0xBF58476D1CE4E5B9UL);
             mixed = ((mixed ^ (mixed >>> 27)) * 0x94D049BB133111EBUL);
 
-            return (mixed ^ (mixed >>> 31));
+            return mixed ^ (mixed >>> 31);
         }
     }
-
     /// <summary>The least prime at or above <paramref name="value"/>, decided by
     /// <see cref="Oracles.ExactPrimality(ulong)"/>.</summary>
     /// <param name="value">The lower bound.</param>
@@ -1090,7 +1067,6 @@ internal static class PrimalityScaleClaims {
 
         throw new InvalidOperationException(message: $"PRIME SEARCH BUDGET EXHAUSTED looking at or above {value}");
     }
-
     /// <summary>The greatest prime strictly below <paramref name="value"/>, decided by
     /// <see cref="Oracles.ExactPrimality(ulong)"/>.</summary>
     /// <param name="value">The exclusive upper bound.</param>

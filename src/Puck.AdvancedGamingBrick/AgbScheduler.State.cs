@@ -17,7 +17,6 @@ public sealed partial class AgbScheduler : ISnapshotable {
 
         m_root = null;
     }
-
     /// <inheritdoc/>
     // The scheduler owns only the master clock; the event QUEUE is rebuilt by the peripherals that own each event
     // (PPU, serial) re-scheduling in their own LoadState — a delegate is never serialized. The machine restores the
@@ -27,7 +26,6 @@ public sealed partial class AgbScheduler : ISnapshotable {
 
         writer.WriteInt64(value: Now);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

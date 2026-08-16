@@ -1,4 +1,4 @@
-using Puck.Snapshots;
+using Puck.GamingBricks;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -33,7 +33,6 @@ internal sealed class SnapshotRoundTripStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "snapshot-round-trip";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -46,8 +45,8 @@ internal sealed class SnapshotRoundTripStage : IPostStage {
         );
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: WarmFrames
+            frames: WarmFrames,
+            instance: machine
         );
 
         var midpoint = machine.Machine.Snapshot();
@@ -61,8 +60,8 @@ internal sealed class SnapshotRoundTripStage : IPostStage {
         }
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: TailFrames
+            frames: TailFrames,
+            instance: machine
         );
 
         var afterFirstRun = machine.Machine.Snapshot();
@@ -70,8 +69,8 @@ internal sealed class SnapshotRoundTripStage : IPostStage {
         machine.Machine.Restore(snapshot: midpoint);
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: TailFrames
+            frames: TailFrames,
+            instance: machine
         );
 
         var afterSecondRun = machine.Machine.Snapshot();

@@ -28,24 +28,25 @@ public readonly record struct FrameContext(
     uint TargetWidth,
     uint TargetHeight
 ) {
+    /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
+    public double DeltaSeconds =>
+        EngineTicks.ToSeconds(ticks: DeltaTicks);
+    /// <summary>Gets the fixed-step simulation clock in seconds (<see cref="ElapsedTicks"/> as seconds).</summary>
+    public double ElapsedSeconds =>
+        EngineTicks.ToSeconds(ticks: ElapsedTicks);
+    /// <summary>Gets the clamped wall interval for this presented host frame. Presentation-only; never simulation time.</summary>
+    public double FrameDeltaSeconds =>
+        EngineTicks.ToSeconds(ticks: FrameDeltaTicks);
     /// <summary>Gets how far this frame sits between the last and next fixed update, in <c>[0, 1)</c>, for interpolating render state.</summary>
     public double InterpolationAlpha =>
         ((StepTicks == 0UL)
             ? 0.0
-            : ((double)AccumulatorTicks / StepTicks));
-    /// <summary>Gets the continuous render-time clock in engine ticks (the fixed-step <see cref="ElapsedTicks"/> plus the unconsumed <see cref="AccumulatorTicks"/>).</summary>
-    public ulong RenderTicks =>
-        (ElapsedTicks + AccumulatorTicks);
-    /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
-    public double DeltaSeconds =>
-        EngineTicks.ToSeconds(ticks: DeltaTicks);
-    /// <summary>Gets the clamped wall interval for this presented host frame. Presentation-only; never simulation time.</summary>
-    public double FrameDeltaSeconds =>
-        EngineTicks.ToSeconds(ticks: FrameDeltaTicks);
-    /// <summary>Gets the fixed-step simulation clock in seconds (<see cref="ElapsedTicks"/> as seconds).</summary>
-    public double ElapsedSeconds =>
-        EngineTicks.ToSeconds(ticks: ElapsedTicks);
+            : (((double)AccumulatorTicks) / StepTicks)
+        );
     /// <summary>Gets the continuous render-time clock in seconds (<see cref="RenderTicks"/> as seconds).</summary>
     public double RenderSeconds =>
         EngineTicks.ToSeconds(ticks: RenderTicks);
+    /// <summary>Gets the continuous render-time clock in engine ticks (the fixed-step <see cref="ElapsedTicks"/> plus the unconsumed <see cref="AccumulatorTicks"/>).</summary>
+    public ulong RenderTicks =>
+        (ElapsedTicks + AccumulatorTicks);
 }

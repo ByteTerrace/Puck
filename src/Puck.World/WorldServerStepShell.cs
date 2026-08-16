@@ -8,8 +8,7 @@ namespace Puck.World;
 /// it with the client/screens/editor post-step work, and the headless simulation calls it alone. Steps the
 /// authoritative <see cref="WorldServer"/>, then closes the tick's replay-tape input group and publishes the
 /// completed tick to the console wait gate — the same two calls <see cref="WorldSimulation"/> used to make itself,
-/// now made ONCE so the two boot shapes can never let them drift (see <c>docs/verification/headless-boot</c>'s
-/// cross-shape determinism control).
+/// now made ONCE so the two boot shapes can never let them drift.
 /// </summary>
 internal static class WorldServerStepShell {
     /// <summary>Steps the server for one fixed tick and closes out the tick's tape/wait-gate bookkeeping.</summary>

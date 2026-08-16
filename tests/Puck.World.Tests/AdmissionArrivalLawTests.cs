@@ -22,7 +22,6 @@ public sealed class AdmissionArrivalLawTests {
             deniedOutcome: static () => ReserveArrival(admission: [Arrivals(domain: "machine-z/elsewhere")]),
             controlOutcome: static () => ReserveArrival(admission: [Arrivals(domain: SourceAuthority)]));
     }
-
     /// <summary>An authored entry that confers no Drive over the assigned body is refused at reserve rather than
     /// landing a body nothing may move. The control is the same entry carrying the Drive template.</summary>
     [Fact]
@@ -32,7 +31,6 @@ public sealed class AdmissionArrivalLawTests {
             deniedOutcome: static () => ReserveArrival(admission: [Arrivals(domain: SourceAuthority, drive: false)]),
             controlOutcome: static () => ReserveArrival(admission: [Arrivals(domain: SourceAuthority)]));
     }
-
     /// <summary>A committed arrival holds exactly the authored templates, resolved onto the body it was assigned —
     /// no blanket <c>Control</c>/<c>all</c> beyond what the document names.</summary>
     [Fact]
@@ -49,7 +47,6 @@ public sealed class AdmissionArrivalLawTests {
             actual: rows.Select(selector: row => (row.Capability, row.Subject)).OrderBy(keySelector: row => row.Capability).ToArray());
         Assert.DoesNotContain(collection: rows, filter: row => (row.Subject.Kind == GrantSubjectKind.All));
     }
-
     /// <summary>The admitted body's identity columns name the authority the door decided against, never the profile
     /// the arriving payload asserts — an unverified string must not reach a column that elsewhere means
     /// door-verified.</summary>
@@ -60,14 +57,14 @@ public sealed class AdmissionArrivalLawTests {
         using var fixture = Fixtures.FreshServer(definition: document);
         var carried = WorldIdentity.Pinned(name: "forged-subject", moveSpeed: Puck.Maths.FixedQ4816.One, turnSpeed: Puck.Maths.FixedQ4816.One, defaults: document.PlayerDefaults);
         var slot = Land(fixture: fixture, transferId: 42, identity: carried);
+
         var (domain, subject) = fixture.Server.Population.PeerIdentity(bodyIndex: slot);
 
         Assert.Equal(expected: "forged-subject", actual: carried.Name);
 
-        Assert.Equal(expected: SourceAuthority, actual: domain);
-        Assert.Equal(expected: string.Empty, actual: subject);
+        Assert.Equal(actual: domain, expected: SourceAuthority);
+        Assert.Equal(actual: subject, expected: string.Empty);
     }
-
     /// <summary>An entry naming the exact authority decides it, whichever side of the wildcard row it is authored
     /// on — otherwise a permissive catch-all would silently outrank a narrower authored intent.</summary>
     [Fact]
@@ -77,10 +74,9 @@ public sealed class AdmissionArrivalLawTests {
 
         foreach (var entries in new[] { new[] { wildcard, narrow }, new[] { narrow, wildcard } }) {
             Assert.Null(@object: WorldAdmissionDoor.TryAdmitArrival(entries: entries, sourceAuthority: SourceAuthority, verdict: out var verdict));
-            Assert.Equal(expected: (ushort)7, actual: verdict!.Templates.Single(predicate: template => (template.Capability == WorldCapability.Drive)).Budget);
+            Assert.Equal(expected: ((ushort)7), actual: verdict!.Templates.Single(predicate: template => (template.Capability == WorldCapability.Drive)).Budget);
         }
     }
-
     /// <summary>A attestation claim can never verify against a keyless arrival row: a document authoring arrivals alone
     /// still admits no connecting peer.</summary>
     [Fact]
@@ -91,11 +87,10 @@ public sealed class AdmissionArrivalLawTests {
     private static bool ReserveArrival(IReadOnlyList<WorldAdmissionEntry> admission) {
         using var fixture = Fixtures.FreshServer(definition: Document(admission: admission));
 
-        return fixture.Server.ReserveTransfer(request: Request(transferId: 17, identity: null)).Accepted;
+        return fixture.Server.ReserveTransfer(request: Request(identity: null, transferId: 17)).Accepted;
     }
-
     private static int Land(WorldFixture fixture, ulong transferId, WorldIdentity? identity = null) {
-        var reservation = fixture.Server.ReserveTransfer(request: Request(transferId: transferId, identity: identity));
+        var reservation = fixture.Server.ReserveTransfer(request: Request(identity: identity, transferId: transferId));
 
         Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
         Assert.True(
@@ -108,7 +103,6 @@ public sealed class AdmissionArrivalLawTests {
 
         return reservation.BodyIndices.Single();
     }
-
     private static WorldTransferReservationRequest Request(ulong transferId, WorldIdentity? identity) => new(
         TransferId: transferId,
         SourceAuthority: SourceAuthority,
@@ -127,7 +121,6 @@ public sealed class AdmissionArrivalLawTests {
             BodyColor: default,
             CatalogRig: 0,
             Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Index: 4, Generation: 7), Epoch: 0))]);
-
     private static WorldAdmissionEntry Arrivals(string domain, bool drive = true, bool control = true, ushort budget = 64) {
         var grants = new List<WorldAdmissionGrant> { new(Capability: WorldCapability.Observe, Budget: budget) };
 
@@ -147,7 +140,6 @@ public sealed class AdmissionArrivalLawTests {
             PublicKey: string.Empty,
             Grants: grants);
     }
-
     private static WorldDefinition Document(IReadOnlyList<WorldAdmissionEntry> admission) {
         var document = Fixtures.BuildDocument();
 

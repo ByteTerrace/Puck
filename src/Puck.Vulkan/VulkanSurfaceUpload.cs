@@ -26,6 +26,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
     private readonly IVulkanStorageBufferFactory m_storageBufferFactory;
+
     private VulkanCommandResources? m_commandResources;
     private VulkanLogicalDevice? m_device;
     private bool m_disposed;
@@ -90,7 +91,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
 
         ArgumentOutOfRangeException.ThrowIfZero(value: width);
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
-        var requiredByteLength = Surface.RequiredByteLength(width: width, height: height);
+        var requiredByteLength = Surface.RequiredByteLength(height: height, width: width);
 
         if (pixels.Length != requiredByteLength) {
             throw new ArgumentException(
@@ -278,7 +279,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         m_height = height;
         m_stagingBuffer = m_storageBufferFactory.Create(
             logicalDevice: device,
-            sizeBytes: checked((ulong)Surface.RequiredByteLength(width: width, height: height)),
+            sizeBytes: checked((ulong)Surface.RequiredByteLength(height: height, width: width)),
             vulkanInstance: instance
         );
         m_width = width;

@@ -10,10 +10,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 internal sealed class PostMachine : IDisposable {
     /// <summary>The number of master clock cycles in one video frame.</summary>
     public const int CyclesPerFrame = AdvancedGamingBrickMachine.CyclesPerFrame;
-
     /// <summary>The AGB system clock in Hz (16.777216&#160;MHz).</summary>
     public const double SystemClockHz = 16_777_216.0;
-
     /// <summary>The hardware refresh rate in frames per second (~59.73&#160;Hz).</summary>
     public const double HardwareFps = (SystemClockHz / CyclesPerFrame);
 
@@ -47,14 +45,12 @@ internal sealed class PostMachine : IDisposable {
 
         return new PostMachine(instance: instance);
     }
-
     /// <summary>Forks this machine: builds an independent sibling from the same configuration and loads this machine's
     /// current state into it, so the two run in lock-step from a common point until they are driven differently. Only a
     /// root machine is forked (a fork is never re-forked in the batteries).</summary>
     /// <returns>The forked machine's owner handle wrapper. The caller owns it and must dispose it.</returns>
     public PostMachine Fork() =>
         new(fork: (m_instance ?? throw new InvalidOperationException(message: "Only a root PostMachine can be forked.")).Fork());
-
     /// <summary>Advances the machine by a whole number of frames.</summary>
     /// <param name="frames">The number of frames to run.</param>
     public void RunFrames(int frames) {
@@ -62,7 +58,6 @@ internal sealed class PostMachine : IDisposable {
             _ = Machine.RunFrame();
         }
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         m_instance?.Dispose();

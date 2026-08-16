@@ -8,7 +8,8 @@ public abstract record ObjectStorageTarget {
 
         return ((target as TTarget)
             ?? throw new ArgumentException(
-                message: $"The storage target must be {description}.",
-                paramName: nameof(target)));
+            message: $"The storage target must be {description}.",
+            paramName: nameof(target)
+        ));
     }
 }

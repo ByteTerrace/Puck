@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Puck.Abstractions.Pacing;
+using Puck.Hosting;
 namespace Puck.Launcher;
 
 /// <summary>
@@ -16,8 +16,9 @@ namespace Puck.Launcher;
 public sealed class GenlockPhaseAligner {
     private readonly ExternalPresentClock m_clock;
     private readonly bool m_enabled;
-    private readonly ILogger m_logger;
     private readonly bool m_logPhase;
+    private readonly ILogger m_logger;
+
     private bool m_announced;
     private double m_errorAccumulator;
     private double m_integral;
@@ -41,6 +42,79 @@ public sealed class GenlockPhaseAligner {
         m_logPhase = logPhase;
     }
 
+    // Throttled opt-in telemetry: the mean absolute phase error — the convergence proof (unlocked it wanders the whole
+    // producer cycle; locked it settles small and holds).
+    private void LogPhase(long frequency, double phaseError) {
+        m_errorAccumulator += Math.Abs(value: phaseError);
+
+        if (
+            m_logPhase &&
+            (0 == (++m_sampleCounter % 240)) &&
+            m_logger.IsEnabled(logLevel: LogLevel.Information)
+        ) {
+            m_logger.LogInformation(
+                "Genlock phase: mean |error| {Error:0.00} ms over 240 frames (producer ~{Hertz:0.#} Hz).",
+                (((m_errorAccumulator / 240.0) * 1000.0) / frequency),
+                (((double)frequency) / m_period)
+            );
+
+            m_errorAccumulator = 0.0;
+        }
+    }
+    // Trains the producer-period estimate (EMA over cadence-plausible deltas) and announces the lock once. The delta is
+    // divided by the VERSION advance, so a forwarding cadence that skips frames (two arrivals inside one render frame)
+    // still measures the true per-frame period rather than a multiple of it. A version REGRESSION means the elected
+    // source changed (each producer counts its own frames) — and different sources run at different rates, so the
+    // period estimate is discarded and re-trained from the new rhythm rather than blended across producers.
+    private void ObserveArrival(long arrival, long frequency, long version) {
+        if (arrival == m_lastArrival) {
+            return;
+        }
+
+        if (
+            (0L != m_lastArrival) &&
+            (version <= m_lastVersion)
+        ) {
+            m_integral = 0.0;
+            m_lastArrival = arrival;
+            m_lastVersion = version;
+            m_period = 0L;
+
+            return;
+        }
+
+        if (0L != m_lastArrival) {
+            var delta = ((arrival - m_lastArrival) / (version - m_lastVersion));
+
+            // Sanity: only cadence-plausible per-frame deltas (2 ms .. 1 s) train the estimate.
+            if (
+                (delta > (frequency / 500L)) &&
+                (delta < frequency)
+            ) {
+                m_period = ((0L == m_period)
+                    ? delta
+                    : (m_period + ((delta - m_period) / 8L))
+                );
+            }
+        }
+
+        m_lastArrival = arrival;
+        m_lastVersion = version;
+
+        if (
+            !m_announced &&
+            (m_period > 0L) &&
+            m_logger.IsEnabled(logLevel: LogLevel.Information)
+        ) {
+            m_announced = true;
+
+            m_logger.LogInformation(
+                "Genlock live: phase-aligning the render deadline to external arrivals (~{Hertz:0.#} Hz).",
+                (((double)frequency) / m_period)
+            );
+        }
+    }
+
     /// <summary>Applies the phase-align bias to the pacer's upcoming deadline; a no-op when disabled, when no producer
     /// has published, or when the latest arrival is stale.</summary>
     /// <param name="deadline">The upcoming render deadline (after the period accumulation), in <see cref="Stopwatch"/> ticks.</param>
@@ -48,11 +122,21 @@ public sealed class GenlockPhaseAligner {
     /// <param name="frequency">The <see cref="Stopwatch"/> frequency.</param>
     /// <returns>The (possibly nudged) deadline.</returns>
     public long Apply(long deadline, long renderPeriod, long frequency) {
-        if (!m_enabled || !m_clock.TryRead(arrivalTimestamp: out var arrival, frameVersion: out var version)) {
+        if (
+            !m_enabled ||
+            !m_clock.TryRead(
+            arrivalTimestamp: out var arrival,
+            frameVersion: out var version
+        )
+        ) {
             return deadline;
         }
 
-        ObserveArrival(arrival: arrival, frequency: frequency, version: version);
+        ObserveArrival(
+            arrival: arrival,
+            frequency: frequency,
+            version: version
+        );
 
         // Staleness is measured against the deadline being paced (≈ now in production; simulation-friendly): a feed
         // whose latest arrival is older than a few of its own periods has stopped.
@@ -71,9 +155,12 @@ public sealed class GenlockPhaseAligner {
         // guard offset after it (enough that a publish just before a deadline is reliably visible to the frame that
         // fires at it). This keeps the FULL render rate — frames between arrivals stay where the grid puts them — and
         // the sustained slew needed to track the camera↔render beat shrinks with render rate (tiny at 120-240 Hz).
-        var desiredPhase = Math.Min(val1: (frequency / 500L), val2: (renderPeriod / 4L)); // 2 ms, capped for very fast cadences
+        var desiredPhase = Math.Min(
+            val1: (frequency / 500L),
+            val2: (renderPeriod / 4L)
+        ); // 2 ms, capped for very fast cadences
         var phase = ((((deadline - arrival) % renderPeriod) + renderPeriod) % renderPeriod);
-        var phaseError = (double)(phase - desiredPhase);
+        var phaseError = ((double)(phase - desiredPhase));
 
         if (phaseError > (renderPeriod / 2L)) {
             phaseError -= renderPeriod;
@@ -81,78 +168,23 @@ public sealed class GenlockPhaseAligner {
 
         var maxNudge = (renderPeriod / 16.0);
 
-        m_integral = Math.Clamp(value: (m_integral + (phaseError / 64.0)), max: maxNudge, min: -maxNudge);
+        m_integral = Math.Clamp(
+            max: maxNudge,
+            min: -maxNudge,
+            value: (m_integral + (phaseError / 64.0))
+        );
 
-        var nudge = Math.Clamp(value: ((phaseError / 16.0) + m_integral), max: maxNudge, min: -maxNudge);
+        var nudge = Math.Clamp(
+            max: maxNudge,
+            min: -maxNudge,
+            value: ((phaseError / 16.0) + m_integral)
+        );
 
-        LogPhase(frequency: frequency, phaseError: phaseError);
+        LogPhase(
+            frequency: frequency,
+            phaseError: phaseError
+        );
 
-        return (deadline - (long)nudge);
-    }
-
-    // Trains the producer-period estimate (EMA over cadence-plausible deltas) and announces the lock once. The delta is
-    // divided by the VERSION advance, so a forwarding cadence that skips frames (two arrivals inside one render frame)
-    // still measures the true per-frame period rather than a multiple of it. A version REGRESSION means the elected
-    // source changed (each producer counts its own frames) — and different sources run at different rates, so the
-    // period estimate is discarded and re-trained from the new rhythm rather than blended across producers.
-    private void ObserveArrival(long arrival, long frequency, long version) {
-        if (arrival == m_lastArrival) {
-            return;
-        }
-
-        if ((0L != m_lastArrival) && (version <= m_lastVersion)) {
-            m_integral = 0.0;
-            m_lastArrival = arrival;
-            m_lastVersion = version;
-            m_period = 0L;
-
-            return;
-        }
-
-        if (0L != m_lastArrival) {
-            var delta = ((arrival - m_lastArrival) / (version - m_lastVersion));
-
-            // Sanity: only cadence-plausible per-frame deltas (2 ms .. 1 s) train the estimate.
-            if ((delta > (frequency / 500L)) && (delta < frequency)) {
-                m_period = ((0L == m_period)
-                    ? delta
-                    : (m_period + ((delta - m_period) / 8L)));
-            }
-        }
-
-        m_lastArrival = arrival;
-        m_lastVersion = version;
-
-        if (
-            !m_announced &&
-            (m_period > 0L) &&
-            m_logger.IsEnabled(logLevel: LogLevel.Information)
-        ) {
-            m_announced = true;
-
-            m_logger.LogInformation(
-                "Genlock live: phase-aligning the render deadline to external arrivals (~{Hertz:0.#} Hz).",
-                ((double)frequency / m_period)
-            );
-        }
-    }
-    // Throttled opt-in telemetry: the mean absolute phase error — the convergence proof (unlocked it wanders the whole
-    // producer cycle; locked it settles small and holds).
-    private void LogPhase(long frequency, double phaseError) {
-        m_errorAccumulator += Math.Abs(value: phaseError);
-
-        if (
-            m_logPhase &&
-            (0 == (++m_sampleCounter % 240)) &&
-            m_logger.IsEnabled(logLevel: LogLevel.Information)
-        ) {
-            m_logger.LogInformation(
-                "Genlock phase: mean |error| {Error:0.00} ms over 240 frames (producer ~{Hertz:0.#} Hz).",
-                (((m_errorAccumulator / 240.0) * 1000.0) / frequency),
-                ((double)frequency / m_period)
-            );
-
-            m_errorAccumulator = 0.0;
-        }
+        return (deadline - ((long)nudge));
     }
 }

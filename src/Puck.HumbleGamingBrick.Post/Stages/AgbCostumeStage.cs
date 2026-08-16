@@ -16,7 +16,6 @@ internal sealed class AgbCostumeStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "agb-costume";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -39,16 +38,16 @@ internal sealed class AgbCostumeStage : IPostStage {
         );
 
         PostMachine.RunFrames(
-            instance: first,
-            frames: Frames
+            frames: Frames,
+            instance: first
         );
         PostMachine.RunFrames(
-            instance: second,
-            frames: Frames
+            frames: Frames,
+            instance: second
         );
         PostMachine.RunFrames(
-            instance: cgb,
-            frames: Frames
+            frames: Frames,
+            instance: cgb
         );
 
         if (!first.Machine.Snapshot().ContentEquals(other: second.Machine.Snapshot())) {

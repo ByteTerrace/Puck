@@ -24,6 +24,7 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     private const int RomBankSize = 0x4000;
 
     private readonly byte[] m_eeprom;
+
     private int m_argumentBitsLeft;
     private bool m_chipSelect;
     private bool m_clockLine;
@@ -112,10 +113,10 @@ public sealed class Mbc7Cartridge : CartridgeBase {
         }
 
         return ((address >> 4) & 0x0F) switch {
-            0x02 => (byte)m_xLatch,
-            0x03 => (byte)(m_xLatch >> 8),
-            0x04 => (byte)m_yLatch,
-            0x05 => (byte)(m_yLatch >> 8),
+            0x02 => ((byte)m_xLatch),
+            0x03 => ((byte)(m_xLatch >> 8)),
+            0x04 => ((byte)m_yLatch),
+            0x05 => ((byte)(m_yLatch >> 8)),
             0x06 => 0x00, // the unpopulated Z axis reads low
             0x08 => ReadEepromPins(),
             _ => 0xFF,
@@ -219,7 +220,7 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     }
 
     private byte ReadEepromPins() =>
-        (byte)((m_dataOut
+        ((byte)((m_dataOut
         ? 0x01
         : 0x00) | (m_dataIn
         ? 0x02
@@ -227,7 +228,7 @@ public sealed class Mbc7Cartridge : CartridgeBase {
         ? 0x40
         : 0x00) | (m_chipSelect
         ? 0x80
-        : 0x00));
+        : 0x00)));
     private void WriteEepromPins(byte value) {
         m_chipSelect = ((value & 0x80) != 0);
         m_dataIn = ((value & 0x02) != 0);
@@ -282,7 +283,7 @@ public sealed class Mbc7Cartridge : CartridgeBase {
                 if (m_writeEnabled) {
                     Array.Fill(
                         array: m_eeprom,
-                        value: (byte)0xFF
+                        value: ((byte)0xFF)
                     );
                     m_readShift = 0x00FF;
                 }
@@ -298,8 +299,8 @@ public sealed class Mbc7Cartridge : CartridgeBase {
             case <= 0x7: // WRITE: clear the addressed word, then collect 16 data bits to OR into it
                 if (m_writeEnabled) {
                     WriteEepromWord(
-                        word: m_commandShift & 0x7F,
-                        value: 0x0000
+                        value: 0x0000,
+                        word: m_commandShift & 0x7F
                     );
                 }
 
@@ -314,8 +315,8 @@ public sealed class Mbc7Cartridge : CartridgeBase {
             default: // ERASE: drive the addressed word to all ones
                 if (m_writeEnabled) {
                     WriteEepromWord(
-                        word: m_commandShift & 0x7F,
-                        value: 0xFFFF
+                        value: 0xFFFF,
+                        word: m_commandShift & 0x7F
                     );
                     m_readShift = 0x3FFF;
                 }
@@ -365,7 +366,7 @@ public sealed class Mbc7Cartridge : CartridgeBase {
     private int ReadEepromWord(int word) =>
         m_eeprom[(word * 2)] | (m_eeprom[((word * 2) + 1)] << 8);
     private void WriteEepromWord(int word, int value) {
-        m_eeprom[(word * 2)] = (byte)value;
-        m_eeprom[((word * 2) + 1)] = (byte)(value >> 8);
+        m_eeprom[(word * 2)] = ((byte)value);
+        m_eeprom[((word * 2) + 1)] = ((byte)(value >> 8));
     }
 }

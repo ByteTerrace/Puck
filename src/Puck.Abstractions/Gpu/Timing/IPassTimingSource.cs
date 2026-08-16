@@ -12,6 +12,7 @@ public interface IPassTimingSource {
     ReadOnlySpan<string> PassLabels { get; }
     /// <summary>The pass count a read reports — the width a caller sizes its span to.</summary>
     int PassCount { get; }
+
     /// <summary>Reads the previous readable frame's per-pass GPU milliseconds (pipelined, non-stalling — frame N-2 by
     /// contract). <see langword="false"/> when timing is disarmed, unsupported, or no timestamps landed.</summary>
     /// <param name="passMilliseconds">Receives each pass's milliseconds, in <see cref="PassLabels"/> order; size it to

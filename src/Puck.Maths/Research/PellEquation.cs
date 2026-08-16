@@ -8,18 +8,16 @@ namespace Puck.Maths;
 /// <param name="X">The positive integer <c>X</c> in <c>X^2-DY^2=1</c>.</param>
 /// <param name="Y">The positive integer <c>Y</c> in <c>X^2-DY^2=1</c>.</param>
 public readonly record struct PellUnit(BigInteger Radicand, BigInteger X, BigInteger Y) {
-    /// <summary>Multiplies <c>x+y*sqrt(D)</c> by this unit.</summary>
-    public (BigInteger X, BigInteger Y) Multiply(BigInteger x, BigInteger y) => (
-        ((X * x) + ((Radicand * Y) * y)),
-        ((Y * x) + (X * y))
-    );
-
     /// <summary>Multiplies <c>x+y*sqrt(D)</c> by the inverse unit <c>X-Y*sqrt(D)</c>.</summary>
     public (BigInteger X, BigInteger Y) Divide(BigInteger x, BigInteger y) => (
         ((X * x) - ((Radicand * Y) * y)),
         ((-Y * x) + (X * y))
     );
-
+    /// <summary>Multiplies <c>x+y*sqrt(D)</c> by this unit.</summary>
+    public (BigInteger X, BigInteger Y) Multiply(BigInteger x, BigInteger y) => (
+        ((X * x) + ((Radicand * Y) * y)),
+        ((Y * x) + (X * y))
+    );
     /// <summary>Returns this unit raised to a non-negative integer power.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="exponent"/> is negative.</exception>
     public PellUnit Power(int exponent) {
@@ -48,22 +46,41 @@ public readonly record struct PellUnit(BigInteger Radicand, BigInteger X, BigInt
             );
         }
 
-        return new PellUnit(Radicand: Radicand, X: resultX, Y: resultY);
+        return new PellUnit(
+            Radicand: Radicand,
+            X: resultX,
+            Y: resultY
+        );
     }
 }
-
 /// <summary>A bounded representative of an orbit of the generalized Pell equation <c>X^2-DY^2=N</c>.</summary>
 /// <param name="X">The rational coefficient.</param>
 /// <param name="Y">The square-root coefficient.</param>
 public readonly record struct GeneralizedPellRepresentative(BigInteger X, BigInteger Y);
-
 /// <summary>One residue pair in a norm-one unit orbit modulo a positive integer.</summary>
 /// <param name="X">The canonical residue of the rational coefficient.</param>
 /// <param name="Y">The canonical residue of the square-root coefficient.</param>
 public readonly record struct PellResidue(BigInteger X, BigInteger Y);
-
 /// <summary>Exact continued-fraction and finite-orbit operations for Pell equations.</summary>
 public static class PellEquation {
+    private static void ValidateRadicand(BigInteger radicand) {
+        if (radicand <= BigInteger.Zero) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(radicand),
+                message: "the Pell radicand must be positive"
+            );
+        }
+
+        var root = BigIntegerFunctions.SquareRoot(value: radicand);
+
+        if ((root * root) == radicand) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(radicand),
+                message: "the Pell radicand must not be a perfect square"
+            );
+        }
+    }
+
     /// <summary>Returns the fundamental positive solution of <c>X^2-DY^2=1</c> — the fundamental norm-one unit.</summary>
     /// <remarks>
     /// <para>
@@ -89,7 +106,13 @@ public static class PellEquation {
         // X is even here: X^2 = 4D*Y^2 +- 4 is divisible by four.
         var x = (solution.X / 2);
 
-        if (0 < solution.NormSign) { return new PellUnit(Radicand: radicand, X: x, Y: solution.Y); }
+        if (0 < solution.NormSign) {
+            return new PellUnit(
+                Radicand: radicand,
+                X: x,
+                Y: solution.Y
+            );
+        }
 
         return new PellUnit(
             Radicand: radicand,
@@ -97,7 +120,6 @@ public static class PellEquation {
             Y: ((2 * x) * solution.Y)
         );
     }
-
     /// <summary>
     /// Returns a finite, possibly redundant set of bounded representatives whose norm-one unit orbits contain every
     /// integer solution of <c>X^2-DY^2=N</c>.
@@ -128,7 +150,10 @@ public static class PellEquation {
         var unit = FundamentalUnit(radicand: radicand);
 
         if (norm.IsZero) {
-            return [new GeneralizedPellRepresentative(X: BigInteger.Zero, Y: BigInteger.Zero)];
+            return [new GeneralizedPellRepresentative(
+                    X: BigInteger.Zero,
+                    Y: BigInteger.Zero
+                )];
         }
 
         var strictSquareCeiling = (((2 * BigInteger.Abs(value: norm)) * unit.X) - 1);
@@ -145,15 +170,20 @@ public static class PellEquation {
 
             if ((x * x) != xSquare) { continue; }
 
-            representatives.Add(item: new GeneralizedPellRepresentative(X: x, Y: y));
+            representatives.Add(item: new GeneralizedPellRepresentative(
+                X: x,
+                Y: y
+            ));
             if (!x.IsZero) {
-                representatives.Add(item: new GeneralizedPellRepresentative(X: -x, Y: y));
+                representatives.Add(item: new GeneralizedPellRepresentative(
+                    X: -x,
+                    Y: y
+                ));
             }
         }
 
         return representatives;
     }
-
     /// <summary>
     /// Returns the complete residue cycle of <c>x+y*sqrt(D)</c> under multiplication by a norm-one unit modulo
     /// <paramref name="modulus"/>.
@@ -175,7 +205,10 @@ public static class PellEquation {
             );
         }
 
-        var start = new PellResidue(X: x.FloorModulo(modulus: modulus), Y: y.FloorModulo(modulus: modulus));
+        var start = new PellResidue(
+            X: x.FloorModulo(modulus: modulus),
+            Y: y.FloorModulo(modulus: modulus)
+        );
         var current = start;
         var cycle = new List<PellResidue>();
 
@@ -191,23 +224,5 @@ public static class PellEquation {
         } while (current != start);
 
         return cycle;
-    }
-
-    private static void ValidateRadicand(BigInteger radicand) {
-        if (radicand <= BigInteger.Zero) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(radicand),
-                message: "the Pell radicand must be positive"
-            );
-        }
-
-        var root = BigIntegerFunctions.SquareRoot(value: radicand);
-
-        if ((root * root) == radicand) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(radicand),
-                message: "the Pell radicand must not be a perfect square"
-            );
-        }
     }
 }

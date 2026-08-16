@@ -20,9 +20,8 @@ public sealed class ObserverDisclosureLawTests {
 
         Assert.Null(population.Disclosure);
         Assert.Equal(expected: WorldObserverDisclosureMode.All, actual: population.ObserverDisclosure.Mode);
-        Assert.True(new WorldSinkDisclosure(Policy: population.ObserverDisclosure, ObserverBodyIndex: -1).IsFull);
+        Assert.True(condition: new WorldSinkDisclosure(Policy: population.ObserverDisclosure, ObserverBodyIndex: -1).IsFull);
     }
-
     [Fact]
     public void RadiusPolicy_FiltersOneSink_WhileTheControlSinkSeesAll() {
         var hub = new WorldOutputHub();
@@ -53,7 +52,6 @@ public sealed class ObserverDisclosureLawTests {
         Assert.Equal(expected: 12UL, actual: redacted.LastTick);
         Assert.Equal(expected: "boot", actual: redacted.LastAuthority);
     }
-
     [Fact]
     public void SelfOnlyPolicy_DisclosesNothingToAnUnembodiedObserver() {
         var hub = new WorldOutputHub();
@@ -73,10 +71,9 @@ public sealed class ObserverDisclosureLawTests {
 
         hub.DeliverSnapshot(snapshot: in snapshot);
 
-        Assert.Empty(unembodied.LastIndices);
+        Assert.Empty(collection: unembodied.LastIndices);
         Assert.Equal(expected: [1], actual: embodied.LastIndices);
     }
-
     [Fact]
     public void ValidatorRefusesAMisauthoredPolicyByName() {
         var document = Fixtures.BuildDocument();
@@ -110,7 +107,9 @@ public sealed class ObserverDisclosureLawTests {
 
     private sealed class RecordingSink : IClientSink {
         public int[] LastIndices { get; private set; } = [];
+
         public ulong LastTick { get; private set; }
+
         public string LastAuthority { get; private set; } = string.Empty;
 
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
@@ -125,7 +124,6 @@ public sealed class ObserverDisclosureLawTests {
             LastTick = snapshot.Tick;
             LastAuthority = snapshot.Authority;
         }
-
         public void DeliverDefinition(WorldDefinition definition) { }
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }

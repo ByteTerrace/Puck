@@ -11,8 +11,8 @@ namespace Puck.Maths.Research;
 /// addition of outputs as symmetric difference (bitwise XOR).
 /// </remarks>
 public sealed class AutomaticSelectionAutomaton {
-    private readonly int[] Transitions;
-    private readonly BigInteger[] StateSelections;
+    private readonly BigInteger[] m_stateSelections;
+    private readonly int[] m_transitions;
 
     /// <summary>Creates an immutable dense DFAO from a state-major transition table.</summary>
     /// <param name="alphabetSize">The number of digits, starting at zero.</param>
@@ -29,7 +29,10 @@ public sealed class AutomaticSelectionAutomaton {
     ) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(alphabetSize);
         if (stateSelections.IsEmpty) {
-            throw new ArgumentException(message: "At least one state is required.", paramName: nameof(stateSelections));
+            throw new ArgumentException(
+                message: "At least one state is required.",
+                paramName: nameof(stateSelections)
+            );
         }
         if (transitions.Length != checked((alphabetSize * stateSelections.Length))) {
             throw new ArgumentException(
@@ -37,25 +40,31 @@ public sealed class AutomaticSelectionAutomaton {
                 paramName: nameof(transitions)
             );
         }
-        if ((uint)startState >= (uint)stateSelections.Length) {
+        if (((uint)startState) >= ((uint)stateSelections.Length)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(startState));
         }
 
         for (var index = 0; (index < transitions.Length); ++index) {
-            if ((uint)transitions[index] >= (uint)stateSelections.Length) {
-                throw new ArgumentException(message: $"Transition {index} targets an invalid state.", paramName: nameof(transitions));
+            if (((uint)transitions[index]) >= ((uint)stateSelections.Length)) {
+                throw new ArgumentException(
+                    message: $"Transition {index} targets an invalid state.",
+                    paramName: nameof(transitions)
+                );
             }
         }
         for (var state = 0; (state < stateSelections.Length); ++state) {
             if (stateSelections[state].Sign < 0) {
-                throw new ArgumentException(message: $"State {state} emits a negative selection mask.", paramName: nameof(stateSelections));
+                throw new ArgumentException(
+                    message: $"State {state} emits a negative selection mask.",
+                    paramName: nameof(stateSelections)
+                );
             }
         }
 
         AlphabetSize = alphabetSize;
         StartState = startState;
-        Transitions = transitions.ToArray();
-        StateSelections = stateSelections.ToArray();
+        m_transitions = transitions.ToArray();
+        m_stateSelections = stateSelections.ToArray();
     }
 
     /// <summary>Gets the dense alphabet size.</summary>
@@ -63,7 +72,14 @@ public sealed class AutomaticSelectionAutomaton {
     /// <summary>Gets the initial state.</summary>
     public int StartState { get; }
     /// <summary>Gets the number of states.</summary>
-    public int StateCount => StateSelections.Length;
+    public int StateCount => m_stateSelections.Length;
+
+    internal BigInteger SelectionAtStateUnchecked(int state) => m_stateSelections[state];
+    internal int TransitionUnchecked(int state, int digit) => m_transitions[checked(((state * AlphabetSize) + digit))];
+
+    private void ValidateState(int state) {
+        if (((uint)state) >= ((uint)StateCount)) { throw new ArgumentOutOfRangeException(paramName: nameof(state)); }
+    }
 
     /// <summary>
     /// Creates the binary automatic toggle sequence whose term at index <c>n</c> selects bit
@@ -92,7 +108,6 @@ public sealed class AutomaticSelectionAutomaton {
             stateSelections: selections
         );
     }
-
     /// <summary>
     /// Creates the digit-sum selector whose state and one-hot output are the sum of the input digits modulo
     /// <paramref name="residueCount"/>.
@@ -114,35 +129,42 @@ public sealed class AutomaticSelectionAutomaton {
             selections[state] = (BigInteger.One << state);
         }
 
-        return new AutomaticSelectionAutomaton(alphabetSize, transitions, selections);
+        return new AutomaticSelectionAutomaton(
+            alphabetSize,
+            transitions,
+            selections
+        );
     }
+    /// <summary>Runs the automaton over a caller-supplied most-significant-digit-first word.</summary>
+    public BigInteger Output(ReadOnlySpan<int> digits) {
+        if (digits.IsEmpty) {
+            throw new ArgumentException(
+                message: "The digit word cannot be empty.",
+                paramName: nameof(digits)
+            );
+        }
+        var state = StartState;
 
-    /// <summary>Returns the target of one transition.</summary>
-    public int Transition(int state, int digit) {
-        ValidateState(state: state);
-        if ((uint)digit >= (uint)AlphabetSize) { throw new ArgumentOutOfRangeException(paramName: nameof(digit)); }
-        return TransitionUnchecked(digit: digit, state: state);
+        foreach (var digit in digits) {
+            state = Transition(
+                digit: digit,
+                state: state
+            );
+        }
+        return m_stateSelections[state];
     }
-
     /// <summary>Returns the selection mask emitted by one state.</summary>
     public BigInteger SelectionAtState(int state) {
         ValidateState(state: state);
-        return StateSelections[state];
+        return m_stateSelections[state];
     }
-
-    /// <summary>Runs the automaton over a caller-supplied most-significant-digit-first word.</summary>
-    public BigInteger Output(ReadOnlySpan<int> digits) {
-        if (digits.IsEmpty) { throw new ArgumentException(message: "The digit word cannot be empty.", paramName: nameof(digits)); }
-        var state = StartState;
-
-        foreach (var digit in digits) { state = Transition(digit: digit, state: state); }
-        return StateSelections[state];
-    }
-
-    internal int TransitionUnchecked(int state, int digit) => Transitions[checked(((state * AlphabetSize) + digit))];
-    internal BigInteger SelectionAtStateUnchecked(int state) => StateSelections[state];
-
-    private void ValidateState(int state) {
-        if ((uint)state >= (uint)StateCount) { throw new ArgumentOutOfRangeException(paramName: nameof(state)); }
+    /// <summary>Returns the target of one transition.</summary>
+    public int Transition(int state, int digit) {
+        ValidateState(state: state);
+        if (((uint)digit) >= ((uint)AlphabetSize)) { throw new ArgumentOutOfRangeException(paramName: nameof(digit)); }
+        return TransitionUnchecked(
+            digit: digit,
+            state: state
+        );
     }
 }

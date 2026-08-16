@@ -33,7 +33,6 @@ public sealed class ReflectionSystem {
     // The rank cap: a bond matrix is the rank squared and every mirror is a generator of whatever presentation consumes
     // it, so this is well under the presentation surface's own generator caps.
     private const int MaximumMirrorCount = 32;
-
     // The enumeration cap. One element is one permutation of the point set, so a search limit is a memory bound as much
     // as a work bound; this keeps the widest one under sixteen million entries and the flat index inside an Int32.
     private const long MaximumSearchLimit = (1L << 16);
@@ -66,62 +65,6 @@ public sealed class ReflectionSystem {
     /// <remarks>Both facts are measured rather than assumed; nothing here reads a coordinate.</remarks>
     public static ReadOnlySpan<int> SimpleMirrors => [0, 1, 2, 3, 4, 5, 6, 7];
 
-    /// <summary>Builds the reflection system of a list of mirror nodes.</summary>
-    /// <param name="mirrors">The mirror nodes, each a distinct reflection of the lattice.</param>
-    /// <returns>The described system.</returns>
-    /// <exception cref="ArgumentException">Two mirrors name the same reflection, which they do when they are equal or
-    /// antipodal, so the pair would carry a bond of one and present no relation.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">There are no mirrors or more than thirty-two, or a mirror is
-    /// outside the lattice's node range.</exception>
-    public static ReflectionSystem Create(ReadOnlySpan<int> mirrors) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: mirrors.Length, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: mirrors.Length, other: MaximumMirrorCount);
-
-        var count = mirrors.Length;
-        var chosen = mirrors.ToArray();
-
-        for (var index = 0; (index < count); ++index) {
-            if ((chosen[index] < 0) || (chosen[index] >= SymmetryLattice.NodeCount)) {
-                throw new ArgumentOutOfRangeException(paramName: nameof(mirrors), actualValue: chosen[index], message: $"A mirror names a lattice node, so it lies in [0, {SymmetryLattice.NodeCount}).");
-            }
-        }
-
-        var bonds = new int[(count * count)];
-
-        for (var first = 0; (first < count); ++first) {
-            for (var second = 0; (second < count); ++second) {
-                var bond = CompositeOrder(first: chosen[first], second: chosen[second]);
-
-                if ((first != second) && (1 == bond)) {
-                    throw new ArgumentException(message: "Two mirrors name the same reflection, so they present no relation and cannot both be generators.", paramName: nameof(mirrors));
-                }
-
-                bonds[((first * count) + second)] = bond;
-            }
-        }
-
-        Span<bool> seen = stackalloc bool[SymmetryLattice.NodeCount];
-        Span<int> frontier = stackalloc int[SymmetryLattice.NodeCount];
-
-        _ = CloseUnderMirrors(mirrors: chosen, seeds: chosen, seen: seen, frontier: frontier);
-
-        var points = new List<int>();
-
-        for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
-            if (seen[node]) { points.Add(item: node); }
-        }
-
-        var pointImage = new int[(points.Count * count)];
-
-        for (var point = 0; (point < points.Count); ++point) {
-            for (var index = 0; (index < count); ++index) {
-                pointImage[((point * count) + index)] = points.BinarySearch(item: SymmetryLattice.Reflect(node: points[point], mirror: chosen[index]));
-            }
-        }
-
-        return new(mirrors: chosen, points: [.. points], pointImage: pointImage, bonds: bonds);
-    }
-
     // The one lattice closure: a seed set closed under the mirrors' reflections, marking `seen` and returning how many
     // nodes were reached. Create closes the mirror set to find the points a system acts on; TryEnumerateOrbit closes a
     // single node. Same walk, one home, and the lattice's own node count bounds it either way.
@@ -139,7 +82,10 @@ public sealed class ReflectionSystem {
 
         for (var cursor = 0; (cursor < reached); ++cursor) {
             for (var index = 0; (index < mirrors.Length); ++index) {
-                var image = SymmetryLattice.Reflect(node: frontier[cursor], mirror: mirrors[index]);
+                var image = SymmetryLattice.Reflect(
+                    node: frontier[cursor],
+                    mirror: mirrors[index]
+                );
 
                 if (seen[image]) { continue; }
 
@@ -149,6 +95,60 @@ public sealed class ReflectionSystem {
         }
 
         return reached;
+    }
+    // The order of the composite of two mirrors' reflections, as the least common multiple of its cycle lengths over
+    // every node. It is a whole-lattice statement rather than a sub-system one, so a bond never depends on which points
+    // the caller happens to have asked about.
+    private static int CompositeOrder(int first, int second) {
+        var order = 1;
+
+        for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
+            var cursor = node;
+            var length = 0;
+
+            do {
+                cursor = SymmetryLattice.Reflect(
+                    node: SymmetryLattice.Reflect(
+                        mirror: first,
+                        node: cursor
+                    ),
+                    mirror: second
+                );
+                ++length;
+            } while (cursor != node);
+
+            order = ((order / order.GreatestCommonDivisor(other: length)) * length);
+        }
+
+        return order;
+    }
+    // Membership in the lexicographically ordered index, and the slot a fresh row belongs at. Binary search over a
+    // sorted index, never a hash of a rendered row, so the enumeration order is the same everywhere.
+    private static bool TryFindRow(List<int> table, List<int> order, ReadOnlySpan<int> row, int pointCount, out int slot) {
+        var rows = CollectionsMarshal.AsSpan(list: table);
+        var low = 0;
+        var high = order.Count;
+
+        while (low < high) {
+            var middle = ((low + high) >> 1);
+            var candidate = rows.Slice(
+                start: (order[middle] * pointCount),
+                length: pointCount
+            );
+            var comparison = candidate.SequenceCompareTo(other: row);
+
+            if (0 == comparison) {
+                slot = middle;
+
+                return true;
+            }
+
+            if (comparison < 0) { low = (middle + 1); } else { high = middle; }
+        }
+
+        slot = low;
+
+        return false;
     }
 
     /// <summary>Applies a word of mirrors to a lattice node.</summary>
@@ -165,16 +165,115 @@ public sealed class ReflectionSystem {
         for (var index = 0; (index < word.Length); ++index) {
             var letter = word[index];
 
-            if ((letter < 0) || (letter >= m_mirrors.Length)) {
-                throw new ArgumentOutOfRangeException(paramName: nameof(word), actualValue: letter, message: $"A letter names a mirror of this system, so it lies in [0, {m_mirrors.Length}).");
+            if (
+                (letter < 0) ||
+                (letter >= m_mirrors.Length)
+            ) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(word),
+                    actualValue: letter,
+                    message: $"A letter names a mirror of this system, so it lies in [0, {m_mirrors.Length})."
+                );
             }
 
-            image = SymmetryLattice.Reflect(node: image, mirror: m_mirrors[letter]);
+            image = SymmetryLattice.Reflect(
+                node: image,
+                mirror: m_mirrors[letter]
+            );
         }
 
         return image;
     }
+    /// <summary>Builds the reflection system of a list of mirror nodes.</summary>
+    /// <param name="mirrors">The mirror nodes, each a distinct reflection of the lattice.</param>
+    /// <returns>The described system.</returns>
+    /// <exception cref="ArgumentException">Two mirrors name the same reflection, which they do when they are equal or
+    /// antipodal, so the pair would carry a bond of one and present no relation.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">There are no mirrors or more than thirty-two, or a mirror is
+    /// outside the lattice's node range.</exception>
+    public static ReflectionSystem Create(ReadOnlySpan<int> mirrors) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: mirrors.Length,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: mirrors.Length,
+            other: MaximumMirrorCount
+        );
 
+        var count = mirrors.Length;
+        var chosen = mirrors.ToArray();
+
+        for (var index = 0; (index < count); ++index) {
+            if (
+                (chosen[index] < 0) ||
+                (chosen[index] >= SymmetryLattice.NodeCount)
+            ) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(mirrors),
+                    actualValue: chosen[index],
+                    message: $"A mirror names a lattice node, so it lies in [0, {SymmetryLattice.NodeCount})."
+                );
+            }
+        }
+
+        var bonds = new int[(count * count)];
+
+        for (var first = 0; (first < count); ++first) {
+            for (var second = 0; (second < count); ++second) {
+                var bond = CompositeOrder(
+                    first: chosen[first],
+                    second: chosen[second]
+                );
+
+                if (
+                    (first != second) &&
+                    (1 == bond)
+                ) {
+                    throw new ArgumentException(
+                        message: "Two mirrors name the same reflection, so they present no relation and cannot both be generators.",
+                        paramName: nameof(mirrors)
+                    );
+                }
+
+                bonds[((first * count) + second)] = bond;
+            }
+        }
+
+        Span<bool> seen = stackalloc bool[SymmetryLattice.NodeCount];
+        Span<int> frontier = stackalloc int[SymmetryLattice.NodeCount];
+
+        _ = CloseUnderMirrors(
+            frontier: frontier,
+            mirrors: chosen,
+            seeds: chosen,
+            seen: seen
+        );
+
+        var points = new List<int>();
+
+        for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
+            if (seen[node]) { points.Add(item: node); }
+        }
+
+        var pointImage = new int[(points.Count * count)];
+
+        for (var point = 0; (point < points.Count); ++point) {
+            for (var index = 0; (index < count); ++index) {
+                pointImage[((point * count) + index)] = points.BinarySearch(item: SymmetryLattice.Reflect(
+                    node: points[point],
+                    mirror: chosen[index]
+                ));
+            }
+        }
+
+        return new(
+            bonds: bonds,
+            mirrors: chosen,
+            pointImage: pointImage,
+            points: [.. points]
+        );
+    }
     /// <summary>Enumerates the group the mirrors generate, as permutations of <see cref="Points"/>, bounded.</summary>
     /// <param name="searchLimit">The largest number of elements to admit; the enumeration stops there and refuses.</param>
     /// <param name="permutations">On success, the elements as a row-major table of <see cref="Points"/> images, one row
@@ -191,7 +290,10 @@ public sealed class ReflectionSystem {
     /// </remarks>
     public bool TryEnumerateGroup(long searchLimit, out ReadOnlyMemory<int> permutations, out GroupObstruction obstruction) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: searchLimit);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: searchLimit, other: MaximumSearchLimit);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: searchLimit,
+            other: MaximumSearchLimit
+        );
 
         var mirrorCount = m_mirrors.Length;
         var pointCount = m_points.Length;
@@ -214,31 +316,49 @@ public sealed class ReflectionSystem {
                     image[point] = m_pointImage[((table[(start + point)] * mirrorCount) + mirror)];
                 }
 
-                if (TryFindRow(table: table, order: order, row: image, pointCount: pointCount, slot: out var slot)) { continue; }
+                if (TryFindRow(
+                    order: order,
+                    pointCount: pointCount,
+                    row: image,
+                    slot: out var slot,
+                    table: table
+                )) { continue; }
 
                 if (count >= searchLimit) {
-                    obstruction = new(Outcome: ClosureOutcome.SearchLimitReached, BlockedSymbol: mirror, BlockedKey: -1L, PointsReached: count);
+                    obstruction = new(
+                        BlockedKey: -1L,
+                        BlockedSymbol: mirror,
+                        Outcome: ClosureOutcome.SearchLimitReached,
+                        PointsReached: count
+                    );
 
                     return false;
                 }
 
-                order.Insert(index: slot, item: ((int)count));
+                order.Insert(
+                    index: slot,
+                    item: ((int)count)
+                );
                 table.AddRange(collection: image);
                 ++count;
             }
         }
 
-        var emitted = new int[((int)count * pointCount)];
+        var emitted = new int[(((int)count) * pointCount)];
 
         for (var index = 0; (index < order.Count); ++index) {
-            table.CopyTo(index: (order[index] * pointCount), array: emitted, arrayIndex: (index * pointCount), count: pointCount);
+            table.CopyTo(
+                index: (order[index] * pointCount),
+                array: emitted,
+                arrayIndex: (index * pointCount),
+                count: pointCount
+            );
         }
 
         permutations = emitted;
 
         return true;
     }
-
     /// <summary>Enumerates one node's orbit under the mirrors, into a caller buffer that bounds what is written.</summary>
     /// <param name="seed">The node to close, in <c>[0, <see cref="SymmetryLattice.NodeCount"/>)</c>.</param>
     /// <param name="orbit">Receives the orbit, ascending by node index.</param>
@@ -250,20 +370,37 @@ public sealed class ReflectionSystem {
     /// the lattice, which is 240 nodes, so the walk is bounded before the buffer is consulted. What a short buffer
     /// shrinks is the ANSWER, and the refusal still reports the size the caller would need.</remarks>
     public bool TryEnumerateOrbit(int seed, Span<int> orbit, out int count, out GroupObstruction obstruction) {
-        if ((seed < 0) || (seed >= SymmetryLattice.NodeCount)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(seed), actualValue: seed, message: $"A seed names a lattice node, so it lies in [0, {SymmetryLattice.NodeCount}).");
+        if (
+            (seed < 0) ||
+            (seed >= SymmetryLattice.NodeCount)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(seed),
+                actualValue: seed,
+                message: $"A seed names a lattice node, so it lies in [0, {SymmetryLattice.NodeCount})."
+            );
         }
 
         Span<bool> seen = stackalloc bool[SymmetryLattice.NodeCount];
         Span<int> frontier = stackalloc int[SymmetryLattice.NodeCount];
 
-        var reached = CloseUnderMirrors(mirrors: m_mirrors, seeds: [seed], seen: seen, frontier: frontier);
+        var reached = CloseUnderMirrors(
+            frontier: frontier,
+            mirrors: m_mirrors,
+            seeds: [seed],
+            seen: seen
+        );
 
         count = reached;
         obstruction = default;
 
         if (reached > orbit.Length) {
-            obstruction = new(Outcome: ClosureOutcome.SearchLimitReached, BlockedSymbol: -1, BlockedKey: seed, PointsReached: reached);
+            obstruction = new(
+                BlockedKey: seed,
+                BlockedSymbol: -1,
+                Outcome: ClosureOutcome.SearchLimitReached,
+                PointsReached: reached
+            );
 
             return false;
         }
@@ -275,52 +412,5 @@ public sealed class ReflectionSystem {
         }
 
         return true;
-    }
-
-    // The order of the composite of two mirrors' reflections, as the least common multiple of its cycle lengths over
-    // every node. It is a whole-lattice statement rather than a sub-system one, so a bond never depends on which points
-    // the caller happens to have asked about.
-    private static int CompositeOrder(int first, int second) {
-        var order = 1;
-
-        for (var node = 0; (node < SymmetryLattice.NodeCount); ++node) {
-            var cursor = node;
-            var length = 0;
-
-            do {
-                cursor = SymmetryLattice.Reflect(node: SymmetryLattice.Reflect(node: cursor, mirror: first), mirror: second);
-                ++length;
-            } while (cursor != node);
-
-            order = ((order / order.GreatestCommonDivisor(other: length)) * length);
-        }
-
-        return order;
-    }
-
-    // Membership in the lexicographically ordered index, and the slot a fresh row belongs at. Binary search over a
-    // sorted index, never a hash of a rendered row, so the enumeration order is the same everywhere.
-    private static bool TryFindRow(List<int> table, List<int> order, ReadOnlySpan<int> row, int pointCount, out int slot) {
-        var rows = CollectionsMarshal.AsSpan(list: table);
-        var low = 0;
-        var high = order.Count;
-
-        while (low < high) {
-            var middle = ((low + high) >> 1);
-            var candidate = rows.Slice(start: (order[middle] * pointCount), length: pointCount);
-            var comparison = candidate.SequenceCompareTo(other: row);
-
-            if (0 == comparison) {
-                slot = middle;
-
-                return true;
-            }
-
-            if (comparison < 0) { low = (middle + 1); } else { high = middle; }
-        }
-
-        slot = low;
-
-        return false;
     }
 }

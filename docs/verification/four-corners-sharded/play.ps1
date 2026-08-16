@@ -49,15 +49,33 @@ $ports = [ordered]@{
 }
 $peerBudget = (1 + (5 * $NpcCount))
 
+# Sets a nested member on a parsed world document, creating missing intermediate objects — the quilt documents are
+# deltas over quilt-base.world.json, so an overridden member is usually absent from the file and inherited at load.
+function Set-WorldMember($object, [string[]] $path, $value) {
+    for ($i = 0; $i -lt ($path.Length - 1); $i++) {
+        $name = $path[$i]
+        if ((-not $object.PSObject.Properties[$name]) -or ($null -eq $object.$name)) {
+            $object | Add-Member -NotePropertyName $name -NotePropertyValue ([pscustomobject]@{}) -Force
+        }
+        $object = $object.$name
+    }
+    $leaf = $path[-1]
+    if ($object.PSObject.Properties[$leaf]) { $object.$leaf = $value }
+    else { $object | Add-Member -NotePropertyName $leaf -NotePropertyValue $value }
+}
+
+# The quilt documents are deltas over this template; a copy beside them keeps their relative `basis` resolvable.
+Copy-Item -LiteralPath (Join-Path $repoRoot 'src\Puck.World\Assets\worlds\quilt-base.world.json') -Destination (Join-Path $worldDir 'quilt-base.world.json') -Force
+
 foreach ($id in $ports.Keys) {
     $source = Join-Path $repoRoot "src\Puck.World\Assets\worlds\quilt-$id.world.json"
     $target = Join-Path $worldDir "quilt-$id.world.json"
     $document = Get-Content -Raw -LiteralPath $source | ConvertFrom-Json
-    $document.host.listen = "127.0.0.1:$($ports[$id])"
-    $document.host.authority = "127.0.0.1:$($ports[$id])"
+    Set-WorldMember $document @('host', 'listen') "127.0.0.1:$($ports[$id])"
+    Set-WorldMember $document @('host', 'authority') "127.0.0.1:$($ports[$id])"
     # Every NPC may legally collect on one authority, with one additional peer slot for the walking player.
-    $document.population.capacity = (4 + $peerBudget)
-    $document.population.networkPlayers = $peerBudget
+    Set-WorldMember $document @('population', 'capacity') (4 + $peerBudget)
+    Set-WorldMember $document @('population', 'networkPlayers') $peerBudget
     [System.IO.File]::WriteAllText($target, ($document | ConvertTo-Json -Depth 100), $utf8NoBom)
 }
 

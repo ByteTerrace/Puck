@@ -305,12 +305,12 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                AcquireNextImageKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAcquireNextImageKHR"u8),
-                QueuePresentKhr = (delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkQueuePresentKHR"u8),
-                QueueSubmit = (delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkQueueSubmit"u8),
+                AcquireNextImageKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAcquireNextImageKHR"u8)),
+                QueuePresentKhr = ((delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkQueuePresentKHR"u8)),
+                QueueSubmit = ((delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkQueueSubmit"u8)),
                 // Optional: present (VK_KHR_present_wait). Resolves to null when the extension was not enabled, which the
                 // present-timing path treats as "unsupported" and falls back to open-loop pacing.
-                WaitForPresentKhr = (delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkWaitForPresentKHR"u8),
+                WaitForPresentKhr = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, ulong, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkWaitForPresentKHR"u8)),
             }
         );
     }

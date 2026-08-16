@@ -5,7 +5,7 @@ namespace Puck.Text;
 /// or <see cref="FontAtlasKind.SoftMask"/> image, e.g. the GDI+/System.Drawing glyph raster the diegetic terminal
 /// already produces) into a single-channel signed distance field atlas (<see cref="FontAtlasKind.Sdf"/>) an SDF
 /// renderer can march. This is the runtime, no-toolchain fallback source; the higher-fidelity marchable source is a
-/// pre-baked MTSDF atlas (the font-atlas bake pipeline, <c>experimental/tools/font-atlas</c>) whose true single-channel distance
+/// imported MTSDF oracle atlas whose true single-channel distance
 /// lives in alpha (loaded, not generated here). Both encode the same convention so a decoder is source-agnostic.
 /// </summary>
 /// <remarks>
@@ -35,6 +35,196 @@ public static class SdfCoverageAtlas {
     /// around each glyph edge. Chosen wide (8) rather than the common default (2) so engraved lettering has depth
     /// and outline headroom; keep glyph-cell padding at least this wide.</summary>
     public const float DefaultDistanceRange = 8.0f;
+
+    // Per-pixel coverage in [0, 1]. A raster with any non-opaque alpha uses alpha throughout; an entirely opaque
+    // raster uses its brightest color channel, which preserves white-on-black coverage images decoded from RGB or
+    // grayscale PNGs.
+    private static float Coverage(byte[] rgba, int pixelIndex, bool usesAlphaCoverage) {
+        var offset = (pixelIndex * 4);
+
+        if (usesAlphaCoverage) {
+            return (rgba[(offset + 3)] / 255.0f);
+        }
+
+        return MathF.Max(
+            x: (rgba[offset] / 255.0f),
+            y: MathF.Max(
+                x: (rgba[(offset + 1)] / 255.0f),
+                y: (rgba[(offset + 2)] / 255.0f)
+            )
+        );
+    }
+    private static FontAtlasImageData EncodeSignedDistance(FontAtlasImageData imageData, float distanceRange) {
+        var pixelCount = checked((imageData.Width * imageData.Height));
+        var inside = new bool[pixelCount];
+        var outside = new bool[pixelCount];
+        var usesAlphaCoverage = UsesAlphaCoverage(rgba: imageData.RgbaPixels);
+
+        for (var index = 0; (index < pixelCount); index++) {
+            inside[index] = (Coverage(
+                rgba: imageData.RgbaPixels,
+                pixelIndex: index,
+                usesAlphaCoverage: usesAlphaCoverage
+            ) >= 0.5f);
+            outside[index] = !inside[index];
+        }
+
+        // Distance to the nearest OUTSIDE pixel (positive inside the glyph) and to the nearest INSIDE pixel (positive
+        // outside): the classic two-transform signed field. The transforms return SQUARED distance, so sqrt once.
+        var toOutside = SquaredDistanceTransform2D(
+            features: outside,
+            width: imageData.Width,
+            height: imageData.Height
+        );
+        var toInside = SquaredDistanceTransform2D(
+            features: inside,
+            width: imageData.Width,
+            height: imageData.Height
+        );
+        var rgba = new byte[checked((pixelCount * 4))];
+
+        for (var index = 0; (index < pixelCount); index++) {
+            var signedDistance = (inside[index]
+                ? MathF.Sqrt(x: toOutside[index])
+                : -MathF.Sqrt(x: toInside[index])
+            );
+            var encoded = Math.Clamp(
+                max: 1.0f,
+                min: 0.0f,
+                value: (0.5f + (signedDistance / distanceRange))
+            );
+            var value = ((byte)Math.Clamp(
+                max: 255,
+                min: 0,
+                value: ((int)MathF.Round(x: (encoded * 255.0f)))
+            ));
+            var offset = (index * 4);
+
+            // Replicate into every channel: alpha carries the true single-channel distance a decoder marches, and RGB
+            // mirror it so a coverage-style debug view still reads.
+            rgba[offset] = value;
+            rgba[(offset + 1)] = value;
+            rgba[(offset + 2)] = value;
+            rgba[(offset + 3)] = value;
+        }
+
+        return new FontAtlasImageData(
+            height: imageData.Height,
+            rgbaPixels: rgba,
+            width: imageData.Width
+        );
+    }
+    // The exact 1D squared Euclidean distance transform: the lower envelope of the parabolas rooted at each sample.
+    // Runs in O(n); called once per row then once per column, which composes into the exact 2D squared-distance
+    // transform. `f` is the input cost per sample (0 at a feature, a sentinel beyond any in-image distance
+    // elsewhere); `d` receives the squared distance to the nearest feature.
+    private static void SquaredDistanceTransform1D(float[] f, int length, float[] d, int[] v, float[] z) {
+        var k = 0;
+
+        v[0] = 0;
+        z[0] = float.NegativeInfinity;
+        z[1] = float.PositiveInfinity;
+
+        for (var q = 1; (q < length); q++) {
+            var s = (((f[q] + (q * q)) - (f[v[k]] + (v[k] * v[k]))) / ((float)((2 * q) - (2 * v[k]))));
+
+            while (s <= z[k]) {
+                k--;
+                s = (((f[q] + (q * q)) - (f[v[k]] + (v[k] * v[k]))) / ((float)((2 * q) - (2 * v[k]))));
+            }
+
+            k++;
+            v[k] = q;
+            z[k] = s;
+            z[(k + 1)] = float.PositiveInfinity;
+        }
+
+        k = 0;
+
+        for (var q = 0; (q < length); q++) {
+            while (z[(k + 1)] < q) {
+                k++;
+            }
+
+            var delta = (q - v[k]);
+
+            d[q] = ((delta * delta) + f[v[k]]);
+        }
+    }
+    // The exact squared Euclidean distance transform over the whole image for the given feature predicate (inside- or
+    // outside-of-glyph), returned as a flat row-major squared-distance grid.
+    private static float[] SquaredDistanceTransform2D(bool[] features, int width, int height) {
+        var distances = new float[features.Length];
+        var noFeatureCost = (((((float)width) * width) + (((float)height) * height)) + 1.0f);
+
+        for (var index = 0; (index < features.Length); index++) {
+            // The finite sentinel is larger than every possible in-image squared distance. It therefore cannot beat a
+            // real feature, while avoiding the inf - inf envelope arithmetic that has no defined ordering.
+            distances[index] = (features[index]
+                ? 0.0f
+                : noFeatureCost
+            );
+        }
+
+        var span = Math.Max(
+            val1: width,
+            val2: height
+        );
+        var column = new float[span];
+        var result = new float[span];
+        var v = new int[span];
+        var z = new float[(span + 1)];
+
+        // Columns first, then rows: either order gives the exact separable transform.
+        for (var x = 0; (x < width); x++) {
+            for (var y = 0; (y < height); y++) {
+                column[y] = distances[((y * width) + x)];
+            }
+
+            SquaredDistanceTransform1D(
+                d: result,
+                f: column,
+                length: height,
+                v: v,
+                z: z
+            );
+
+            for (var y = 0; (y < height); y++) {
+                distances[((y * width) + x)] = result[y];
+            }
+        }
+
+        for (var y = 0; (y < height); y++) {
+            var rowBase = (y * width);
+
+            for (var x = 0; (x < width); x++) {
+                column[x] = distances[(rowBase + x)];
+            }
+
+            SquaredDistanceTransform1D(
+                d: result,
+                f: column,
+                length: width,
+                v: v,
+                z: z
+            );
+
+            for (var x = 0; (x < width); x++) {
+                distances[(rowBase + x)] = result[x];
+            }
+        }
+
+        return distances;
+    }
+    private static bool UsesAlphaCoverage(byte[] rgba) {
+        for (var offset = 3; (offset < rgba.Length); offset += 4) {
+            if (rgba[offset] != byte.MaxValue) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>Generates a single-channel SDF atlas from a raster coverage atlas.</summary>
     /// <param name="coverage">The source coverage atlas. Must carry in-memory <see cref="FontAtlas.ImageData"/>; a
@@ -73,7 +263,10 @@ public static class SdfCoverageAtlas {
             distanceRange: distanceRange,
             glyphs: coverage.Glyphs,
             height: coverage.Height,
-            imageData: EncodeSignedDistance(imageData: imageData, distanceRange: distanceRange),
+            imageData: EncodeSignedDistance(
+                distanceRange: distanceRange,
+                imageData: imageData
+            ),
             imagePath: $"{coverage.ImagePath}#sdf",
             kerningPairs: coverage.KerningPairs,
             kind: FontAtlasKind.Sdf,
@@ -81,164 +274,5 @@ public static class SdfCoverageAtlas {
             size: coverage.Size,
             width: coverage.Width
         );
-    }
-
-    // Per-pixel coverage in [0, 1]. A raster with any non-opaque alpha uses alpha throughout; an entirely opaque
-    // raster uses its brightest color channel, which preserves white-on-black coverage images decoded from RGB or
-    // grayscale PNGs.
-    private static float Coverage(byte[] rgba, int pixelIndex, bool usesAlphaCoverage) {
-        var offset = (pixelIndex * 4);
-
-        if (usesAlphaCoverage) {
-            return (rgba[(offset + 3)] / 255.0f);
-        }
-
-        return MathF.Max(
-            x: (rgba[offset] / 255.0f),
-            y: MathF.Max(
-                x: (rgba[(offset + 1)] / 255.0f),
-                y: (rgba[(offset + 2)] / 255.0f)
-            )
-        );
-    }
-    private static bool UsesAlphaCoverage(byte[] rgba) {
-        for (var offset = 3; (offset < rgba.Length); offset += 4) {
-            if (rgba[offset] != byte.MaxValue) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    // The exact 1D squared Euclidean distance transform: the lower envelope of the parabolas rooted at each sample.
-    // Runs in O(n); called once per row then once per column, which composes into the exact 2D squared-distance
-    // transform. `f` is the input cost per sample (0 at a feature, a sentinel beyond any in-image distance
-    // elsewhere); `d` receives the squared distance to the nearest feature.
-    private static void SquaredDistanceTransform1D(float[] f, int length, float[] d, int[] v, float[] z) {
-        var k = 0;
-
-        v[0] = 0;
-        z[0] = float.NegativeInfinity;
-        z[1] = float.PositiveInfinity;
-
-        for (var q = 1; (q < length); q++) {
-            var s = (((f[q] + (q * q)) - (f[v[k]] + (v[k] * v[k]))) / (float)((2 * q) - (2 * v[k])));
-
-            while (s <= z[k]) {
-                k--;
-                s = (((f[q] + (q * q)) - (f[v[k]] + (v[k] * v[k]))) / (float)((2 * q) - (2 * v[k])));
-            }
-
-            k++;
-            v[k] = q;
-            z[k] = s;
-            z[(k + 1)] = float.PositiveInfinity;
-        }
-
-        k = 0;
-
-        for (var q = 0; (q < length); q++) {
-            while (z[(k + 1)] < q) {
-                k++;
-            }
-
-            var delta = (q - v[k]);
-
-            d[q] = ((delta * delta) + f[v[k]]);
-        }
-    }
-    // The exact squared Euclidean distance transform over the whole image for the given feature predicate (inside- or
-    // outside-of-glyph), returned as a flat row-major squared-distance grid.
-    private static float[] SquaredDistanceTransform2D(bool[] features, int width, int height) {
-        var distances = new float[features.Length];
-        var noFeatureCost = (((float)width * width) + ((float)height * height) + 1.0f);
-
-        for (var index = 0; (index < features.Length); index++) {
-            // The finite sentinel is larger than every possible in-image squared distance. It therefore cannot beat a
-            // real feature, while avoiding the inf - inf envelope arithmetic that has no defined ordering.
-            distances[index] = (features[index] ? 0.0f : noFeatureCost);
-        }
-
-        var span = Math.Max(val1: width, val2: height);
-        var column = new float[span];
-        var result = new float[span];
-        var v = new int[span];
-        var z = new float[(span + 1)];
-
-        // Columns first, then rows: either order gives the exact separable transform.
-        for (var x = 0; (x < width); x++) {
-            for (var y = 0; (y < height); y++) {
-                column[y] = distances[((y * width) + x)];
-            }
-
-            SquaredDistanceTransform1D(f: column, length: height, d: result, v: v, z: z);
-
-            for (var y = 0; (y < height); y++) {
-                distances[((y * width) + x)] = result[y];
-            }
-        }
-
-        for (var y = 0; (y < height); y++) {
-            var rowBase = (y * width);
-
-            for (var x = 0; (x < width); x++) {
-                column[x] = distances[(rowBase + x)];
-            }
-
-            SquaredDistanceTransform1D(f: column, length: width, d: result, v: v, z: z);
-
-            for (var x = 0; (x < width); x++) {
-                distances[(rowBase + x)] = result[x];
-            }
-        }
-
-        return distances;
-    }
-    private static FontAtlasImageData EncodeSignedDistance(FontAtlasImageData imageData, float distanceRange) {
-        var pixelCount = checked((imageData.Width * imageData.Height));
-        var inside = new bool[pixelCount];
-        var outside = new bool[pixelCount];
-        var usesAlphaCoverage = UsesAlphaCoverage(rgba: imageData.RgbaPixels);
-
-        for (var index = 0; (index < pixelCount); index++) {
-            inside[index] = (Coverage(
-                rgba: imageData.RgbaPixels,
-                pixelIndex: index,
-                usesAlphaCoverage: usesAlphaCoverage
-            ) >= 0.5f);
-            outside[index] = !inside[index];
-        }
-
-        // Distance to the nearest OUTSIDE pixel (positive inside the glyph) and to the nearest INSIDE pixel (positive
-        // outside): the classic two-transform signed field. The transforms return SQUARED distance, so sqrt once.
-        var toOutside = SquaredDistanceTransform2D(features: outside, width: imageData.Width, height: imageData.Height);
-        var toInside = SquaredDistanceTransform2D(features: inside, width: imageData.Width, height: imageData.Height);
-        var rgba = new byte[checked((pixelCount * 4))];
-
-        for (var index = 0; (index < pixelCount); index++) {
-            var signedDistance = (inside[index]
-                ? MathF.Sqrt(x: toOutside[index])
-                : -MathF.Sqrt(x: toInside[index]));
-            var encoded = Math.Clamp(
-                max: 1.0f,
-                min: 0.0f,
-                value: (0.5f + (signedDistance / distanceRange))
-            );
-            var value = (byte)Math.Clamp(
-                max: 255,
-                min: 0,
-                value: (int)MathF.Round(x: (encoded * 255.0f))
-            );
-            var offset = (index * 4);
-
-            // Replicate into every channel: alpha carries the true single-channel distance a decoder marches, and RGB
-            // mirror it so a coverage-style debug view still reads.
-            rgba[offset] = value;
-            rgba[(offset + 1)] = value;
-            rgba[(offset + 2)] = value;
-            rgba[(offset + 3)] = value;
-        }
-
-        return new FontAtlasImageData(height: imageData.Height, rgbaPixels: rgba, width: imageData.Width);
     }
 }

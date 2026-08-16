@@ -20,6 +20,33 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
       IMultiplicativeIdentity<FixedComplex, FixedComplex> {
     /// <summary>Gets the additive identity, zero.</summary>
     public static FixedComplex AdditiveIdentity => default;
+    /// <summary>Gets the angle from the positive real axis, in <c>(−π, π]</c> fixed-point radians — for a unit
+    /// complex number, the logarithm (the inverse of <see cref="FromAngle"/>; the planar analog of
+    /// <see cref="FixedQuaternion.Log"/>).</summary>
+    public FixedQ4816 Argument => FixedQ4816.Atan2(
+        y: Imaginary,
+        x: Real
+    );
+    /// <summary>Gets the exact raw Q32 magnitude rounded to Q16, saturating only when the mathematical magnitude is
+    /// larger than <see cref="FixedQ4816.MaxValue"/>.</summary>
+    public FixedQ4816 Magnitude {
+        get {
+            return (TryMagnitude(magnitude: out var magnitude)
+                ? magnitude
+                : FixedQ4816.MaxValue
+            );
+        }
+    }
+    /// <summary>Gets the exact sum of two raw Q32 squares rounded once to Q16, saturating when the mathematical result
+    /// exceeds <see cref="FixedQ4816.MaxValue"/>.</summary>
+    public FixedQ4816 MagnitudeSquared {
+        get {
+            return (TryMagnitudeSquared(squaredMagnitude: out var squaredMagnitude)
+                ? squaredMagnitude
+                : FixedQ4816.MaxValue
+            );
+        }
+    }
     /// <summary>Gets the multiplicative identity, one (the identity rotation).</summary>
     public static FixedComplex MultiplicativeIdentity => new(
         Real: FixedQ4816.One,
@@ -31,27 +58,27 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
     /// <returns>The componentwise negation.</returns>
     public static FixedComplex operator -(FixedComplex value) =>
         new(
-        Real: -value.Real,
-        Imaginary: -value.Imaginary
-    );
+            Real: -value.Real,
+            Imaginary: -value.Imaginary
+        );
     /// <summary>Adds two complex numbers.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns>The componentwise sum.</returns>
     public static FixedComplex operator +(FixedComplex left, FixedComplex right) =>
         new(
-        Real: (left.Real + right.Real),
-        Imaginary: (left.Imaginary + right.Imaginary)
-    );
+            Real: (left.Real + right.Real),
+            Imaginary: (left.Imaginary + right.Imaginary)
+        );
     /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/>.</summary>
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
     /// <returns>The componentwise difference.</returns>
     public static FixedComplex operator -(FixedComplex left, FixedComplex right) =>
         new(
-        Real: (left.Real - right.Real),
-        Imaginary: (left.Imaginary - right.Imaginary)
-    );
+            Real: (left.Real - right.Real),
+            Imaginary: (left.Imaginary - right.Imaginary)
+        );
     /// <summary>Multiplies two complex numbers (composes rotations for unit operands).</summary>
     /// <param name="left">The multiplicand.</param>
     /// <param name="right">The multiplier.</param>
@@ -71,8 +98,8 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
         }
 
         return new(
-            Real: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)left.Real.Value * right.Real.Value) - ((Int128)left.Imaginary.Value * right.Imaginary.Value))))),
-            Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)left.Real.Value * right.Imaginary.Value) + ((Int128)left.Imaginary.Value * right.Real.Value)))))
+            Real: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.Real.Value) * right.Real.Value) - (((Int128)left.Imaginary.Value) * right.Imaginary.Value))))),
+            Imaginary: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)left.Real.Value) * right.Imaginary.Value) + (((Int128)left.Imaginary.Value) * right.Real.Value)))))
         );
     }
     /// <summary>Divides <paramref name="left"/> by <paramref name="right"/>.</summary>
@@ -83,10 +110,12 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
     public static FixedComplex operator /(FixedComplex left, FixedComplex right) {
         const ulong NarrowLimit = (1UL << 31);
 
-        if ((FusedArithmetic.RawMagnitude(value: left.Real.Value) < NarrowLimit) &&
+        if (
+            (FusedArithmetic.RawMagnitude(value: left.Real.Value) < NarrowLimit) &&
             (FusedArithmetic.RawMagnitude(value: left.Imaginary.Value) < NarrowLimit) &&
             (FusedArithmetic.RawMagnitude(value: right.Real.Value) < NarrowLimit) &&
-            (FusedArithmetic.RawMagnitude(value: right.Imaginary.Value) < NarrowLimit)) {
+            (FusedArithmetic.RawMagnitude(value: right.Imaginary.Value) < NarrowLimit)
+        ) {
             // Exact-equivalent fast path: every product sum fits Int64 in this range, so the scalar divider produces
             // the same result as the full-width sign/magnitude path without its UInt128 restoring division.
             var narrowDenominator = FixedQ4816.FromRawBits(value: unchecked(((right.Real.Value * right.Real.Value) + (right.Imaginary.Value * right.Imaginary.Value))));
@@ -120,11 +149,36 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
         );
 
         return new(
-            Real: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(numerator: realNumerator, denominator: denominator)),
-            Imaginary: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(numerator: imaginaryNumerator, denominator: denominator))
+            Real: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: realNumerator
+            )),
+            Imaginary: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+                denominator: denominator,
+                numerator: imaginaryNumerator
+            ))
         );
     }
 
+    private static FixedComplex NormalizeScaled(long real, long imaginary) {
+        (real, imaginary) = FixedVectorMath.Normalize(
+            x: real,
+            y: imaginary
+        );
+
+        return new(
+            Real: FixedQ4816.FromRawBits(value: real),
+            Imaginary: FixedQ4816.FromRawBits(value: imaginary)
+        );
+    }
+
+    /// <summary>Returns the conjugate — the inverse rotation for a unit complex number.</summary>
+    /// <returns>The complex number with the imaginary component negated.</returns>
+    public FixedComplex Conjugate() =>
+        new(
+            Real: Real,
+            Imaginary: -Imaginary
+        );
     /// <summary>Creates the unit rotation of <paramref name="angle"/> (fixed-point radians): the 2D exponential
     /// map, <c>exp(i·θ)</c> (the planar analog of <see cref="FixedQuaternion.Exp"/>, with no half-angle — 2D
     /// rotations compose one-sided).</summary>
@@ -134,11 +188,10 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
         var (sin, cos) = FixedQ4816.SinCos(angle: angle);
 
         return new(
-            Real: cos,
-            Imaginary: sin
+            Imaginary: sin,
+            Real: cos
         );
     }
-
     /// <summary>Creates the rotation taking the direction of <paramref name="from"/> to the direction of
     /// <paramref name="to"/> — the normalized geometric product <c>(from·to, from∧to)</c>.</summary>
     /// <param name="from">The start direction; any non-zero magnitude.</param>
@@ -165,9 +218,15 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
                 return MultiplicativeIdentity;
             }
 
-            var (real, imaginary) = FixedVectorMath.Normalize(x: dot, y: wedge);
+            var (real, imaginary) = FixedVectorMath.Normalize(
+                x: dot,
+                y: wedge
+            );
 
-            return new(Real: FixedQ4816.FromRawBits(value: real), Imaginary: FixedQ4816.FromRawBits(value: imaginary));
+            return new(
+                Real: FixedQ4816.FromRawBits(value: real),
+                Imaginary: FixedQ4816.FromRawBits(value: imaginary)
+            );
         }
 
         var dotSum = FusedArithmetic.AddProducts(
@@ -183,7 +242,10 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
             secondRight: to.X.Value,
             subtractSecond: true
         );
-        var magnitude = UInt128.Max(x: dotSum.Magnitude, y: wedgeSum.Magnitude);
+        var magnitude = UInt128.Max(
+            x: dotSum.Magnitude,
+            y: wedgeSum.Magnitude
+        );
 
         if (magnitude == UInt128.Zero) {
             return MultiplicativeIdentity;
@@ -194,53 +256,16 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
         var shift = (46 - FusedArithmetic.BitLength(value: magnitude));
 
         return NormalizeScaled(
-            real: FusedArithmetic.ScaleProductSum(value: dotSum, shift: shift),
-            imaginary: FusedArithmetic.ScaleProductSum(value: wedgeSum, shift: shift)
+            real: FusedArithmetic.ScaleProductSum(
+                shift: shift,
+                value: dotSum
+            ),
+            imaginary: FusedArithmetic.ScaleProductSum(
+                shift: shift,
+                value: wedgeSum
+            )
         );
     }
-
-    /// <summary>Gets the angle from the positive real axis, in <c>(−π, π]</c> fixed-point radians — for a unit
-    /// complex number, the logarithm (the inverse of <see cref="FromAngle"/>; the planar analog of
-    /// <see cref="FixedQuaternion.Log"/>).</summary>
-    public FixedQ4816 Argument => FixedQ4816.Atan2(
-        y: Imaginary,
-        x: Real
-    );
-    /// <summary>Gets the exact raw Q32 magnitude rounded to Q16, saturating only when the mathematical magnitude is
-    /// larger than <see cref="FixedQ4816.MaxValue"/>.</summary>
-    public FixedQ4816 Magnitude {
-        get {
-            return (TryMagnitude(magnitude: out var magnitude)
-                ? magnitude
-                : FixedQ4816.MaxValue);
-        }
-    }
-    /// <summary>Gets the exact sum of two raw Q32 squares rounded once to Q16, saturating when the mathematical result
-    /// exceeds <see cref="FixedQ4816.MaxValue"/>.</summary>
-    public FixedQ4816 MagnitudeSquared {
-        get {
-            return (TryMagnitudeSquared(squaredMagnitude: out var squaredMagnitude)
-                ? squaredMagnitude
-                : FixedQ4816.MaxValue);
-        }
-    }
-
-    /// <summary>Tries to get the full-width magnitude. Returns <see langword="false"/> only when the nonnegative
-    /// mathematical result is larger than <see cref="FixedQ4816.MaxValue"/>.</summary>
-    public bool TryMagnitude(out FixedQ4816 magnitude) =>
-        FixedVectorMath.TryMagnitude(x: Real.Value, y: Imaginary.Value, result: out magnitude);
-
-    /// <summary>Tries to get the full-width squared magnitude after one ties-to-even Q16 rounding.</summary>
-    public bool TryMagnitudeSquared(out FixedQ4816 squaredMagnitude) =>
-        FixedVectorMath.TrySquaredMagnitude(x: Real.Value, y: Imaginary.Value, result: out squaredMagnitude);
-
-    /// <summary>Returns the conjugate — the inverse rotation for a unit complex number.</summary>
-    /// <returns>The complex number with the imaginary component negated.</returns>
-    public FixedComplex Conjugate() =>
-        new(
-        Real: Real,
-        Imaginary: -Imaginary
-    );
     /// <summary>Returns the unit complex number along the same direction; zero normalizes to <see cref="MultiplicativeIdentity"/>.</summary>
     /// <returns>The normalized complex number.</returns>
     public FixedComplex Normalize() {
@@ -250,16 +275,10 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
             return MultiplicativeIdentity;
         }
 
-        var (real, imaginary) = FixedVectorMath.Normalize(x: Real.Value, y: Imaginary.Value);
-
-        return new(
-            Real: FixedQ4816.FromRawBits(value: real),
-            Imaginary: FixedQ4816.FromRawBits(value: imaginary)
+        var (real, imaginary) = FixedVectorMath.Normalize(
+            x: Real.Value,
+            y: Imaginary.Value
         );
-    }
-
-    private static FixedComplex NormalizeScaled(long real, long imaginary) {
-        (real, imaginary) = FixedVectorMath.Normalize(x: real, y: imaginary);
 
         return new(
             Real: FixedQ4816.FromRawBits(value: real),
@@ -273,8 +292,10 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
         const ulong RotationLimit = (1UL << 17);
         const ulong VectorLimit = (1UL << 45);
 
-        if (((FusedArithmetic.RawMagnitude(value: Real.Value) | FusedArithmetic.RawMagnitude(value: Imaginary.Value)) < RotationLimit) &&
-            ((FusedArithmetic.RawMagnitude(value: vector.X.Value) | FusedArithmetic.RawMagnitude(value: vector.Y.Value)) < VectorLimit)) {
+        if (
+            ((FusedArithmetic.RawMagnitude(value: Real.Value) | FusedArithmetic.RawMagnitude(value: Imaginary.Value)) < RotationLimit) &&
+            ((FusedArithmetic.RawMagnitude(value: vector.X.Value) | FusedArithmetic.RawMagnitude(value: vector.Y.Value)) < VectorLimit)
+        ) {
             return new(
                 X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((Real.Value * vector.X.Value) - (Imaginary.Value * vector.Y.Value))))),
                 Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((Real.Value * vector.Y.Value) + (Imaginary.Value * vector.X.Value)))))
@@ -282,15 +303,30 @@ public readonly record struct FixedComplex(FixedQ4816 Real, FixedQ4816 Imaginary
         }
 
         return new(
-            X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)Real.Value * vector.X.Value) - ((Int128)Imaginary.Value * vector.Y.Value))))),
-            Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)Real.Value * vector.Y.Value) + ((Int128)Imaginary.Value * vector.X.Value)))))
+            X: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)Real.Value) * vector.X.Value) - (((Int128)Imaginary.Value) * vector.Y.Value))))),
+            Y: FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)Real.Value) * vector.Y.Value) + (((Int128)Imaginary.Value) * vector.X.Value)))))
         );
     }
     /// <summary>Converts to a double-precision <see cref="Complex"/> for presentation.</summary>
     /// <returns>The nearest double-precision complex number.</returns>
     public Complex ToComplex() =>
         new(
-        real: ((double)Real),
-        imaginary: ((double)Imaginary)
-    );
+            real: ((double)Real),
+            imaginary: ((double)Imaginary)
+        );
+    /// <summary>Tries to get the full-width magnitude. Returns <see langword="false"/> only when the nonnegative
+    /// mathematical result is larger than <see cref="FixedQ4816.MaxValue"/>.</summary>
+    public bool TryMagnitude(out FixedQ4816 magnitude) =>
+        FixedVectorMath.TryMagnitude(
+            x: Real.Value,
+            y: Imaginary.Value,
+            result: out magnitude
+        );
+    /// <summary>Tries to get the full-width squared magnitude after one ties-to-even Q16 rounding.</summary>
+    public bool TryMagnitudeSquared(out FixedQ4816 squaredMagnitude) =>
+        FixedVectorMath.TrySquaredMagnitude(
+            x: Real.Value,
+            y: Imaginary.Value,
+            result: out squaredMagnitude
+        );
 }

@@ -13,7 +13,6 @@ internal sealed class AllocationStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "zero-alloc";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -26,15 +25,15 @@ internal sealed class AllocationStage : IPostStage {
         );
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: WarmFrames
+            frames: WarmFrames,
+            instance: machine
         );
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: MeasureFrames
+            frames: MeasureFrames,
+            instance: machine
         );
 
         var delta = (GC.GetAllocatedBytesForCurrentThread() - before);

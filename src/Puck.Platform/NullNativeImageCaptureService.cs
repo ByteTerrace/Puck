@@ -21,7 +21,6 @@ public sealed class NullNativeImageCaptureService : INativeImageCaptureService {
         feed = null;
         return false;
     }
-
     /// <inheritdoc/>
     public bool TryCreateMonitorCapture(int monitorIndex, int width, int height, double refreshRateHz, [NotNullWhen(true)] out INativeImageCaptureFeed? feed, long? adapterLuid = null) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: width);

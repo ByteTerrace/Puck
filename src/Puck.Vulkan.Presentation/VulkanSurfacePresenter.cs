@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 namespace Puck.Vulkan.Presentation;
@@ -8,20 +9,40 @@ namespace Puck.Vulkan.Presentation;
 /// fullscreen surface blit), so the host loop drives Vulkan presentation through the backend-neutral seam
 /// without referencing either concrete type.
 /// </summary>
-public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFeedback, IDeviceLostRecoverable, IPresentationSkipFeedback {
+public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceReadback, IPresentTimingFeedback, IDeviceLostRecoverable, IPresentationSkipFeedback {
     private readonly SurfaceCompositor m_compositor;
     private readonly VulkanRenderer m_renderer;
+    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
+
+    private IGpuSurfaceImport? m_captureImport;
+    private IGpuSurfaceReadback? m_captureReadback;
 
     /// <summary>Initializes a new instance of the <see cref="VulkanSurfacePresenter"/> class.</summary>
     /// <param name="renderer">The window and swapchain owner.</param>
     /// <param name="compositor">The fullscreen surface-blit compositor.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="renderer"/> or <paramref name="compositor"/> is <see langword="null"/>.</exception>
-    public VulkanSurfacePresenter(VulkanRenderer renderer, SurfaceCompositor compositor) {
+    /// <param name="surfaceTransferFactory">Creates the lazily armed capture readback and shared-surface importer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/>, <paramref name="compositor"/>, or
+    /// <paramref name="surfaceTransferFactory"/> is <see langword="null"/>.</exception>
+    public VulkanSurfacePresenter(VulkanRenderer renderer, SurfaceCompositor compositor, IGpuSurfaceTransferFactory surfaceTransferFactory) {
         ArgumentNullException.ThrowIfNull(compositor);
         ArgumentNullException.ThrowIfNull(renderer);
+        ArgumentNullException.ThrowIfNull(surfaceTransferFactory);
 
         m_compositor = compositor;
         m_renderer = renderer;
+        m_surfaceTransferFactory = surfaceTransferFactory;
+    }
+
+    private static GpuPixelFormat ToGpuFormat(SurfaceFormat format) => format switch {
+        SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
+        SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
+        _ => throw new InvalidOperationException(message: "The surface format has no Vulkan readback mapping."),
+    };
+    private void ReleaseCaptureResources() {
+        m_captureReadback?.Dispose();
+        m_captureReadback = null;
+        m_captureImport?.Dispose();
+        m_captureImport = null;
     }
 
     /// <inheritdoc/>
@@ -43,6 +64,7 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
     /// is torn down once, by the renderer's own container-owned disposal at host shutdown (mirroring the Direct3D 12
     /// presenter, whose Deactivate has always left its device-context singleton alive).</remarks>
     public void Deactivate() {
+        ReleaseCaptureResources();
         m_compositor.Dispose();
         m_renderer.ReleasePresentation();
     }
@@ -64,11 +86,52 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
         m_compositor.Blit(surface: surface);
     }
     /// <inheritdoc/>
+    public Surface ReadSurface(Surface surface) {
+        if (
+            surface.IsEmpty ||
+            surface.IsCpuPixels
+        ) {
+            return surface;
+        }
+
+        var format = ToGpuFormat(format: surface.Format);
+        var imageHandle = surface.ImageHandle;
+
+        if (surface.IsSharedHandle) {
+            m_captureImport ??= m_surfaceTransferFactory.CreateImport(deviceContext: m_renderer);
+            imageHandle = m_captureImport.Import(
+                deviceContext: m_renderer,
+                format: format,
+                height: surface.Height,
+                sharedHandle: surface.SharedHandle,
+                width: surface.Width
+            ).ImageHandle;
+        }
+
+        m_captureReadback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_renderer);
+        var pixels = m_captureReadback.Read(
+            bytesPerPixel: 4,
+            deviceContext: m_renderer,
+            format: format,
+            height: surface.Height,
+            sourceImageHandle: imageHandle,
+            width: surface.Width
+        );
+
+        return Surface.CpuPixels(
+            format: surface.Format,
+            height: surface.Height,
+            pixels: pixels,
+            width: surface.Width
+        );
+    }
+    /// <inheritdoc/>
     public void RecoverFromDeviceLoss(NativeSurfaceBinding binding, uint width, uint height) {
         // Release the compositor's device-level blit resources on the OLD device BEFORE it is destroyed — they are not
         // swapchain resources, so RecreateDevice would otherwise leave them dangling on the device it destroys (a
         // validation error + crash). The compositor stays subscribed and rebuilds them on the new device at the next
         // BeginFrame's PresentationResourcesRecreated.
+        ReleaseCaptureResources();
         m_compositor.ReleaseForDeviceLoss();
 
         // Recreate the lost device IN PLACE on the renderer (keeping object identity so the device-context capability and
@@ -79,6 +142,7 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
             width: width
         );
     }
+
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming =>
         (m_renderer.TryGetPresentTiming(presentCount: out var presentCount, presentTimestampTicks: out var presentTimestampTicks)
@@ -86,6 +150,7 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentTimingFe
             : PresentTimingSample.Unavailable);
     /// <inheritdoc/>
     public ulong SkippedPresentCount => m_renderer.SkippedPresentCount;
+
     /// <inheritdoc/>
     public void Dispose() {
         Deactivate();

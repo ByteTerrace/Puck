@@ -13,17 +13,18 @@ public sealed class NativeWindowOptions {
     public NativeDisplayKind DisplayKind { get; set; } = NativeDisplayKind.Auto;
     /// <summary>The initial window height, in pixels. Defaults to 600.</summary>
     public uint Height { get; set; } = 600;
-    /// <summary>Whether to hide the mouse cursor while it is over the window. Best-effort: only the Win32 backend
-    /// honors it today. Defaults to <see langword="false"/>.</summary>
-    public bool HideMouseCursor { get; set; }
     /// <summary>Whether a real platform window or a headless stand-in is created. Defaults to
     /// <see cref="NativeWindowMode.Headless"/>.</summary>
     public NativeWindowMode Mode { get; set; } = NativeWindowMode.Headless;
-    /// <summary>Whether the window enters borderless fullscreen when first shown. Best-effort: only the Win32 backend
-    /// honors it today (Alt+Enter toggles it thereafter). Defaults to <see langword="false"/>.</summary>
-    public bool StartFullscreen { get; set; }
     /// <summary>The window title. Must be non-blank. Defaults to <c>"Puck"</c>.</summary>
     public string Title { get; set; } = "Puck";
     /// <summary>The initial window width, in pixels. Defaults to 800.</summary>
     public uint Width { get; set; } = 800;
+
+    /// <summary>Whether to hide the mouse cursor while it is over the window. Best-effort: only the Win32 backend
+    /// honors it today. Defaults to <see langword="false"/>.</summary>
+    public bool HideMouseCursor { get; set; }
+    /// <summary>Whether the window enters borderless fullscreen when first shown. Best-effort: only the Win32 backend
+    /// honors it today (Alt+Enter toggles it thereafter). Defaults to <see langword="false"/>.</summary>
+    public bool StartFullscreen { get; set; }
 }

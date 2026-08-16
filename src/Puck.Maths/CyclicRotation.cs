@@ -17,18 +17,17 @@ namespace Puck.Maths;
 /// carry the full eight-dimensional rotation.
 /// </remarks>
 public static class CyclicRotation {
+    // round(2π · 2^16): the full turn in Q48.16 radians, the domain of the baked table.
+    private const long TurnRawQ16 = 411775L;
+
     /// <summary>The number of ticks after which every plane simultaneously returns to the identity rotation.</summary>
     public const int Period = 30;
     /// <summary>The number of independent rotation planes.</summary>
     public const int PlaneCount = 4;
 
-    // round(2π · 2^16): the full turn in Q48.16 radians, the domain of the baked table.
-    private const long TurnRawQ16 = 411775L;
-
     // The number of 12° steps each plane advances per tick — the E₈ exponents that are at most fifteen. A field, not a
     // collection-expression property, so reading it never re-materializes the array (the hot path allocates nothing).
     private static readonly int[] PlaneSpeeds = [1, 7, 11, 13];
-
     // The thirty 30th roots of unity as unit rotations, baked once. Index k is the rotation of k steps (12k°).
     private static readonly FixedComplex[] Rotors = BuildRotors();
 
@@ -44,6 +43,25 @@ public static class CyclicRotation {
         return rotors;
     }
 
+    /// <summary>Returns the unit rotation a plane has reached at a tick.</summary>
+    /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
+    /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
+    /// <returns>The baked unit <see cref="FixedComplex"/> for the plane's current step; the identity at every multiple of <see cref="Period"/>.</returns>
+    public static FixedComplex At(int plane, long tick) =>
+        Rotors[Step(
+            plane: plane,
+            tick: tick
+        )];
+    /// <summary>Rotates a vector by a plane's rotation at a tick.</summary>
+    /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
+    /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
+    /// <param name="vector">The vector to rotate.</param>
+    /// <returns>The vector turned by the plane's current rotation; unchanged (bit-identical) at every multiple of <see cref="Period"/>.</returns>
+    public static FixedVector2 Rotate(int plane, long tick, FixedVector2 vector) =>
+        At(
+            plane: plane,
+            tick: tick
+        ).Rotate(vector: vector);
     /// <summary>Returns how many 12° steps a plane has advanced at a tick.</summary>
     /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
     /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
@@ -53,17 +71,4 @@ public static class CyclicRotation {
 
         return ((PlaneSpeeds[plane] * phase) % Period);
     }
-    /// <summary>Returns the unit rotation a plane has reached at a tick.</summary>
-    /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
-    /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
-    /// <returns>The baked unit <see cref="FixedComplex"/> for the plane's current step; the identity at every multiple of <see cref="Period"/>.</returns>
-    public static FixedComplex At(int plane, long tick) =>
-        Rotors[Step(plane: plane, tick: tick)];
-    /// <summary>Rotates a vector by a plane's rotation at a tick.</summary>
-    /// <param name="plane">The rotation plane, in <c>[0, <see cref="PlaneCount"/>)</c>.</param>
-    /// <param name="tick">The tick; any value, positive or negative, reduces modulo <see cref="Period"/>.</param>
-    /// <param name="vector">The vector to rotate.</param>
-    /// <returns>The vector turned by the plane's current rotation; unchanged (bit-identical) at every multiple of <see cref="Period"/>.</returns>
-    public static FixedVector2 Rotate(int plane, long tick, FixedVector2 vector) =>
-        At(plane: plane, tick: tick).Rotate(vector: vector);
 }

@@ -12,7 +12,6 @@ internal sealed class SmokeStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "smoke";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

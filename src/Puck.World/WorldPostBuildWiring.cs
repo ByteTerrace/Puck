@@ -85,7 +85,10 @@ internal static class WorldPostBuildWiring {
         var instances = services.GetRequiredService<WorldInstanceHost>();
 
         services.GetRequiredService<WorldSeatAuthorityRouter>().RouteChanged += slot =>
-            seatBindings.SyncSeat(slot: slot, definition: instances.ResolveRoutedDefinition(slot: slot));
+            seatBindings.SyncSeat(
+            slot: slot,
+            definition: instances.ResolveRoutedDefinition(slot: slot)
+        );
 
         // The genuine boot-document re-validation (see this method's remarks): the FIRST validation, at
         // WorldDefinitionLoader.TryResolve, ran before WorldAffordances.Installed — its command half was a no-op in
@@ -102,11 +105,20 @@ internal static class WorldPostBuildWiring {
         // WorldDefinitionSource.SourcePath's own remarks). WorldCompositeNeighbourResolver.Compose returns null only
         // when NEITHER transport is present, in which case an authored adjacency refuses by
         // name rather than passing unproven — unreachable, not this method's own choice.
-        var fileNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory ? directory : AppContext.BaseDirectory);
+        var fileNeighbours = new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: worldSource.SourcePath) is { Length: > 0 } directory)
+            ? directory
+            : AppContext.BaseDirectory));
         var storageNeighbours = services.GetRequiredService<WorldStorageSyncHandle>().Neighbours;
-        var neighbours = WorldCompositeNeighbourResolver.Compose(fileNeighbours, storageNeighbours);
+        var neighbours = WorldCompositeNeighbourResolver.Compose(
+            fileNeighbours,
+            storageNeighbours
+        );
 
-        if (!WorldDefinitionValidator.TryValidate(definition: worldSource.Definition, reason: out var vocabularyReason, neighbours: neighbours)) {
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: worldSource.Definition,
+            reason: out var vocabularyReason,
+            neighbours: neighbours
+        )) {
             Console.Error.WriteLine(value: $"[world] definition refused once its command vocabulary composed: {vocabularyReason}");
 
             return false;
@@ -118,7 +130,9 @@ internal static class WorldPostBuildWiring {
 
         server.Neighbours = neighbours;
         server.RebuildNeighbours = candidatePath => WorldCompositeNeighbourResolver.Compose(
-            new WorldFileNeighbourResolver(baseDirectory: () => Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory ? directory : AppContext.BaseDirectory),
+            new WorldFileNeighbourResolver(baseDirectory: () => ((Path.GetDirectoryName(path: candidatePath) is { Length: > 0 } directory)
+            ? directory
+            : AppContext.BaseDirectory)),
             storageNeighbours
         );
 
@@ -164,15 +178,25 @@ internal static class WorldPostBuildWiring {
             // every gate — authority, dirty-guard, validation, capacity, solids — has already passed), never eagerly
             // at submit time, when the rebuild might still be refused. world.reset never reaches here with a
             // RebuildOrigin (it targets the base without moving it), so SourcePath is correctly left untouched.
-            if (!echo.Rejected && (echo.Kind == WorldEditEchoKind.Rebuild) && (echo.RebuildOrigin is { } origin)) {
+            if (
+                !echo.Rejected &&
+                (echo.Kind == WorldEditEchoKind.Rebuild) &&
+                (echo.RebuildOrigin is { } origin)
+            ) {
                 definitionSource.SourcePath = origin;
             }
 
             // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.
-            toasts?.Publish(message: echo.Message, isError: echo.Rejected);
+            toasts?.Publish(
+                message: echo.Message,
+                isError: echo.Rejected
+            );
             // The chip wraps but is still bounded; the panel row is the FULL text (up to its 120-column width), so a
             // capacity reason too long for the toast stays readable where the operator is already looking.
-            consoleSessions.RecordAdministrativeEcho(message: echo.Message, refused: echo.Rejected);
+            consoleSessions.RecordAdministrativeEcho(
+                message: echo.Message,
+                refused: echo.Rejected
+            );
 
             // A world edit is Simulation-routed: the SUBMIT succeeded (the line entered the tick queue) and the
             // server refuses it a tick later, so the registry's own dispatch accounting cannot see it. This tap is
@@ -185,7 +209,10 @@ internal static class WorldPostBuildWiring {
 
             // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
             // Presentation-only: nothing else reads the HUD act-class tag headless.
-            if (!echo.Rejected && (echo.Kind != WorldEditEchoKind.GrantTable)) {
+            if (
+                !echo.Rejected &&
+                (echo.Kind != WorldEditEchoKind.GrantTable)
+            ) {
                 overlayFeed?.NoteMutationApplied(documentOnly: (echo.Kind == WorldEditEchoKind.DocumentDefaults));
             }
 
@@ -193,7 +220,10 @@ internal static class WorldPostBuildWiring {
             // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the
             // deadline. CORE in every boot shape now (see the resolution above) — a headless drag preview is client-
             // local state with nothing to render, but the correlation still keeps it honest.
-            if (echo.Rejected && (echo.Mutation is { } rejectedMutation)) {
+            if (
+                echo.Rejected &&
+                (echo.Mutation is { } rejectedMutation)
+            ) {
                 editorDrag.NoteRejected(mutation: rejectedMutation);
                 // A rejected sculpt commit clears its bench's pending flag WITHOUT flipping clean — the work stays
                 // counted as uncommitted (the accept, in WorldWorkbench.Tick, is the only clean edge).
@@ -206,10 +236,15 @@ internal static class WorldPostBuildWiring {
             // CORE, so this runs unconditionally; a headless boot's cues simply accumulate in a queue no device pump
             // ever drains (WorldAudioRenderService is presentation-only).
             if (echo.Denied) {
-                audioDirector.SubmitCue(eventToken: WorldAudioCue.GrantDenied, site: null);
+                audioDirector.SubmitCue(
+                    eventToken: WorldAudioCue.GrantDenied,
+                    site: null
+                );
             } else if (echo.Kind != WorldEditEchoKind.GrantTable) {
                 audioDirector.SubmitCue(
-                    eventToken: (echo.Rejected ? WorldAudioCue.MutationRejected : WorldAudioCue.MutationApplied),
+                    eventToken: (echo.Rejected
+                    ? WorldAudioCue.MutationRejected
+                    : WorldAudioCue.MutationApplied),
                     site: WorldAudioDirector.MutationSite(mutation: echo.Mutation)
                 );
             }
@@ -234,12 +269,32 @@ internal static class WorldPostBuildWiring {
             var target = definitionSource.SourcePath;
 
             try {
-                var snapshot = WorldSessionCapture.Capture(definition: worldServer.Definition, render: renderSettings, population: worldServer.Population, binder: screenBinder, audio: audioDirector, pacing: pacing, tick: tick);
-                var bytes = WorldDefinitionSerialization.Save(definition: snapshot, path: target);
+                var snapshot = WorldSessionCapture.Capture(
+                    definition: worldServer.Definition,
+                    render: renderSettings,
+                    population: worldServer.Population,
+                    binder: screenBinder,
+                    audio: audioDirector,
+                    pacing: pacing,
+                    tick: tick
+                );
+                var bytes = WorldDefinitionSerialization.SavePreservingBasis(
+                    basisPath: out var basisPath,
+                    definition: snapshot,
+                    note: out var note,
+                    path: target
+                );
 
                 worldServer.Compact();
 
-                Console.Error.WriteLine(value: $"[world.rule: save effect -> {target} ({bytes} bytes)]");
+                var derivation = ((basisPath is { })
+                    ? $", basis: {basisPath}"
+                    : ((note.Length > 0)
+                        ? $", {note}"
+                        : ""
+                ));
+
+                Console.Error.WriteLine(value: $"[world.rule: save effect -> {target} ({bytes} bytes{derivation})]");
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)) {
                 Console.Error.WriteLine(value: $"[world.rule: save effect refused — could not write {target} ({exception.Message.ReplaceLineEndings(replacementText: " ")})]");
             }
@@ -263,7 +318,12 @@ internal static class WorldPostBuildWiring {
                 }
             }
 
-            audioDirector.SubmitCue(eventToken: (faulted ? WorldAudioCue.ScreenFault : WorldAudioCue.ScreenBoot), site: site);
+            audioDirector.SubmitCue(
+                eventToken: (faulted
+                ? WorldAudioCue.ScreenFault
+                : WorldAudioCue.ScreenBoot),
+                site: site
+            );
         };
 
         // THE CAPTURE-REQUEST DRAIN: world.screenshot arms a readback of the NEXT composed frame, so a run that ends

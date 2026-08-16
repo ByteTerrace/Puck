@@ -23,7 +23,6 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
     /// <summary>How long the committing role waits for the drain to be open before giving up — generous, because it
     /// only bounds a hang, never a verdict.</summary>
     private static readonly TimeSpan DrainOpenBudget = TimeSpan.FromSeconds(value: 20);
-
     /// <summary>How long the drain is held open. Long enough that a commit which does not serialize against it
     /// finishes inside the window every time (a commit is microseconds of in-memory work), and short enough that a
     /// commit which does serialize simply waits this long on the authority gate and then proceeds.</summary>
@@ -57,7 +56,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
             try {
                 Assert.True(condition: drainOpen.Wait(timeout: DrainOpenBudget), userMessage: "the ordered-domain drain never opened");
 
-                accepted = fixture.Server.CommitTransfer(sourceAuthority: SourceAuthority, transferId: TransferId, members: [member], reason: out commitReason);
+                accepted = fixture.Server.CommitTransfer(members: [member], reason: out commitReason, sourceAuthority: SourceAuthority, transferId: TransferId);
                 // Read the traveler the instant the destination called it committed, exactly as a routed read-back
                 // does: through the same authority gate, asking the same grant table WorldServer.AnswerSubmittedQuery
                 // asks before it will answer at all.
@@ -106,7 +105,6 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         Assert.True(condition: observeVerdict.IsAllowed, userMessage: $"{principal.Describe()} could not observe body:{bodyIndex} at the instant its commit was accepted ({observeVerdict.DescribeDenial()})");
         Assert.True(condition: driveVerdict.IsAllowed, userMessage: $"{principal.Describe()} could not drive body:{bodyIndex} at the instant its commit was accepted ({driveVerdict.DescribeDenial()})");
     }
-
     /// <summary>The control leg: the same commit with nothing holding the ordered drain open. Without it the
     /// contended law cannot separate "admission mints grants at all" from "admission mints them atomically" — both
     /// failures read identically at its assertions.</summary>
@@ -120,13 +118,12 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
         var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
-        Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: SourceAuthority, transferId: TransferId, members: [member], reason: out var reason), userMessage: reason);
-        Assert.True(condition: fixture.Server.TryTransferredPrincipal(sourceAuthority: SourceAuthority, transferId: TransferId, ordinal: 0, principal: out var principal));
+        Assert.True(condition: fixture.Server.CommitTransfer(members: [member], reason: out var reason, sourceAuthority: SourceAuthority, transferId: TransferId), userMessage: reason);
+        Assert.True(condition: fixture.Server.TryTransferredPrincipal(ordinal: 0, principal: out var principal, sourceAuthority: SourceAuthority, transferId: TransferId));
         Assert.True(condition: fixture.Server.Population.IsActive(index: bodyIndex));
         Assert.True(condition: fixture.Server.Grants.Allows(principal: principal, capability: WorldCapability.Observe, subject: GrantSubject.Body(index: bodyIndex)).IsAllowed);
         Assert.True(condition: fixture.Server.Grants.Allows(principal: principal, capability: WorldCapability.Drive, subject: GrantSubject.Body(index: bodyIndex)).IsAllowed);
     }
-
     /// <summary>The refusal control: a principal the arrival never minted anything for is still refused over the
     /// same body, by the same table. A law whose "allowed" assertions could pass for a principal holding nothing
     /// would be measuring the assertion, not the grant.</summary>
@@ -140,8 +137,8 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
         var member = new WorldTransferCommitMember(Profile: null, HasMappedArrival: false, BodyMotionProgramName: "grounded", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
-        Assert.True(condition: fixture.Server.CommitTransfer(sourceAuthority: SourceAuthority, transferId: TransferId, members: [member], reason: out var reason), userMessage: reason);
-        Assert.True(condition: fixture.Server.TryTransferredPrincipal(sourceAuthority: SourceAuthority, transferId: TransferId, ordinal: 0, principal: out var principal));
+        Assert.True(condition: fixture.Server.CommitTransfer(members: [member], reason: out var reason, sourceAuthority: SourceAuthority, transferId: TransferId), userMessage: reason);
+        Assert.True(condition: fixture.Server.TryTransferredPrincipal(ordinal: 0, principal: out var principal, sourceAuthority: SourceAuthority, transferId: TransferId));
 
         var stranger = WorldPrincipal.Peer(index: (principal.Index + 1), generation: principal.Generation);
 
@@ -167,7 +164,6 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
                 BodyColor: default,
                 CatalogRig: 4,
                 Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Index: WorldPopulation.LocalSeatCount, Generation: 7), Epoch: 0))]);
-
     private static WorldDefinition TransferPopulationDocument() {
         var document = Fixtures.BuildDocument();
 

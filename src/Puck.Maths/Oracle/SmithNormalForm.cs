@@ -14,7 +14,6 @@ namespace Puck.Maths;
 /// ceiling makes the attempt finite in memory; the guarantee shrinks — some matrices are refused — and no unproved
 /// answer is ever returned in exchange.</remarks>
 public readonly record struct SmithObstruction(int Stage, int MagnitudeBits, long StepsTaken);
-
 /// <summary>
 /// The elementary-divisor reduction of an integer matrix: unimodular <c>U</c> and <c>V</c> and a diagonal <c>D</c>
 /// whose entries divide one another in order, with <c>U·A·V = D</c>. It is the DECLARED SECOND KERNEL of the presented
@@ -96,18 +95,17 @@ public sealed class SmithNormalForm {
         m_rowCount = reduction.RowCount;
     }
 
+    /// <summary>Gets the number of columns of the reduced matrix.</summary>
+    public int ColumnCount => m_columnCount;
+    /// <summary>Gets the elementary divisors — the nonzero diagonal of <c>D</c>, every one positive and each dividing
+    /// the next.</summary>
+    public ReadOnlySpan<BigInteger> Divisors => m_divisors;
     /// <summary>Gets the largest number of rows or columns a matrix may carry, which is 128.</summary>
     /// <remarks>It is the presented algebra's own basis cap read through this type's inputs: a boundary operator here
     /// is indexed by cells of one degree of a complex whose face order fits <c>IncidenceAlgebra</c>, and the four
     /// transforms a reduction accumulates are the order squared in arbitrary-precision integers, so the cap bounds
     /// memory quadratically in exactly the quantity the magnitude ceiling bounds linearly.</remarks>
     public static int MaximumOrder => 128;
-
-    /// <summary>Gets the number of columns of the reduced matrix.</summary>
-    public int ColumnCount => m_columnCount;
-    /// <summary>Gets the elementary divisors — the nonzero diagonal of <c>D</c>, every one positive and each dividing
-    /// the next.</summary>
-    public ReadOnlySpan<BigInteger> Divisors => m_divisors;
     /// <summary>Gets the largest bit length any entry of the working matrix or of the four transforms reached during
     /// the reduction.</summary>
     /// <remarks>It is the number the ceiling bounds, reported so a caller can see how much headroom a reduction
@@ -118,6 +116,88 @@ public sealed class SmithNormalForm {
     /// <summary>Gets the number of rows of the reduced matrix.</summary>
     public int RowCount => m_rowCount;
 
+    private static bool IsIdentityProduct(BigInteger[] left, BigInteger[] right, int order) {
+        for (var row = 0; (row < order); ++row) {
+            for (var column = 0; (column < order); ++column) {
+                var total = BigInteger.Zero;
+
+                for (var index = 0; (index < order); ++index) {
+                    total += (left[((row * order) + index)] * right[((index * order) + column)]);
+                }
+
+                if (total != ((row == column)
+                    ? BigInteger.One
+                    : BigInteger.Zero)) { return false; }
+            }
+        }
+
+        return true;
+    }
+    private static BigInteger Read(BigInteger[] matrix, int order, int row, int column) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: row);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: row,
+            other: order
+        );
+        ArgumentOutOfRangeException.ThrowIfNegative(value: column);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: column,
+            other: order
+        );
+
+        return matrix[((row * order) + column)];
+    }
+
+    /// <summary>Reads one entry of the left transform <c>U</c>, which is square of order <see cref="RowCount"/>.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="column">The column.</param>
+    /// <returns>The entry.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
+    public BigInteger Left(int row, int column) =>
+        Read(
+            column: column,
+            matrix: m_left,
+            order: m_rowCount,
+            row: row
+        );
+    /// <summary>Reads one entry of the inverse of the left transform.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="column">The column.</param>
+    /// <returns>The entry.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
+    /// <remarks>It is accumulated beside <see cref="Left"/> rather than solved for afterwards, which is what makes
+    /// unimodularity a checked identity — <c>U·U⁻¹ = I</c> over the integers — instead of a determinant to trust.</remarks>
+    public BigInteger LeftInverse(int row, int column) =>
+        Read(
+            column: column,
+            matrix: m_leftInverse,
+            order: m_rowCount,
+            row: row
+        );
+    /// <summary>Reads one entry of the right transform <c>V</c>, which is square of order <see cref="ColumnCount"/>.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="column">The column.</param>
+    /// <returns>The entry.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
+    public BigInteger Right(int row, int column) =>
+        Read(
+            column: column,
+            matrix: m_right,
+            order: m_columnCount,
+            row: row
+        );
+    /// <summary>Reads one entry of the inverse of the right transform.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="column">The column.</param>
+    /// <returns>The entry.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
+    public BigInteger RightInverse(int row, int column) =>
+        Read(
+            column: column,
+            matrix: m_rightInverse,
+            order: m_columnCount,
+            row: row
+        );
     /// <summary>Attempts the elementary-divisor reduction of an integer matrix.</summary>
     /// <param name="entries">The matrix, row-major, <paramref name="rowCount"/> times <paramref name="columnCount"/>
     /// entries.</param>
@@ -136,18 +216,44 @@ public sealed class SmithNormalForm {
     /// <exception cref="InvalidOperationException">The reduction finished but its own certificate did not verify. That
     /// is a defect in this type rather than a fact about the matrix, so it is raised rather than reported.</exception>
     public static bool TryReduce(ReadOnlySpan<BigInteger> entries, int rowCount, int columnCount, int magnitudeBits, out SmithNormalForm form, out SmithObstruction obstruction) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: rowCount, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: rowCount, other: MaximumOrder);
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: columnCount, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: columnCount, other: MaximumOrder);
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: magnitudeBits, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: magnitudeBits, other: MaximumMagnitudeBits);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: rowCount,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: rowCount,
+            other: MaximumOrder
+        );
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: columnCount,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: columnCount,
+            other: MaximumOrder
+        );
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: magnitudeBits,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: magnitudeBits,
+            other: MaximumMagnitudeBits
+        );
 
         if (entries.Length != (rowCount * columnCount)) {
-            throw new ArgumentException(message: "A matrix carries exactly one entry per row and column.", paramName: nameof(entries));
+            throw new ArgumentException(
+                message: "A matrix carries exactly one entry per row and column.",
+                paramName: nameof(entries)
+            );
         }
 
-        var reduction = new Reduction(entries: entries, rowCount: rowCount, columnCount: columnCount, magnitudeBits: magnitudeBits);
+        var reduction = new Reduction(
+            columnCount: columnCount,
+            entries: entries,
+            magnitudeBits: magnitudeBits,
+            rowCount: rowCount
+        );
 
         form = null!;
 
@@ -161,41 +267,6 @@ public sealed class SmithNormalForm {
 
         return true;
     }
-
-    /// <summary>Reads one entry of the left transform <c>U</c>, which is square of order <see cref="RowCount"/>.</summary>
-    /// <param name="row">The row.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The entry.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
-    public BigInteger Left(int row, int column) =>
-        Read(matrix: m_left, order: m_rowCount, row: row, column: column);
-
-    /// <summary>Reads one entry of the inverse of the left transform.</summary>
-    /// <param name="row">The row.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The entry.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
-    /// <remarks>It is accumulated beside <see cref="Left"/> rather than solved for afterwards, which is what makes
-    /// unimodularity a checked identity — <c>U·U⁻¹ = I</c> over the integers — instead of a determinant to trust.</remarks>
-    public BigInteger LeftInverse(int row, int column) =>
-        Read(matrix: m_leftInverse, order: m_rowCount, row: row, column: column);
-
-    /// <summary>Reads one entry of the right transform <c>V</c>, which is square of order <see cref="ColumnCount"/>.</summary>
-    /// <param name="row">The row.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The entry.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
-    public BigInteger Right(int row, int column) =>
-        Read(matrix: m_right, order: m_columnCount, row: row, column: column);
-
-    /// <summary>Reads one entry of the inverse of the right transform.</summary>
-    /// <param name="row">The row.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The entry.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A coordinate leaves the transform.</exception>
-    public BigInteger RightInverse(int row, int column) =>
-        Read(matrix: m_rightInverse, order: m_columnCount, row: row, column: column);
-
     /// <summary>Re-checks the whole certificate: the divisibility chain, both transforms' two-sided inverses, and the
     /// identity <c>U·A·V = D</c>.</summary>
     /// <returns><see langword="true"/> when every statement held; otherwise <see langword="false"/>.</returns>
@@ -205,16 +276,38 @@ public sealed class SmithNormalForm {
         for (var index = 0; (index < m_divisors.Length); ++index) {
             if (m_divisors[index] <= BigInteger.Zero) { return false; }
 
-            if ((0 != index) && !BigInteger.Zero.Equals(other: BigInteger.Remainder(dividend: m_divisors[index], divisor: m_divisors[(index - 1)]))) { return false; }
+            if (
+                (0 != index) &&
+                !BigInteger.Zero.Equals(other: BigInteger.Remainder(
+                dividend: m_divisors[index],
+                divisor: m_divisors[(index - 1)]
+            ))
+            ) { return false; }
         }
 
-        if (!IsIdentityProduct(left: m_left, right: m_leftInverse, order: m_rowCount)) { return false; }
+        if (!IsIdentityProduct(
+            left: m_left,
+            order: m_rowCount,
+            right: m_leftInverse
+        )) { return false; }
 
-        if (!IsIdentityProduct(left: m_leftInverse, right: m_left, order: m_rowCount)) { return false; }
+        if (!IsIdentityProduct(
+            left: m_leftInverse,
+            order: m_rowCount,
+            right: m_left
+        )) { return false; }
 
-        if (!IsIdentityProduct(left: m_right, right: m_rightInverse, order: m_columnCount)) { return false; }
+        if (!IsIdentityProduct(
+            left: m_right,
+            order: m_columnCount,
+            right: m_rightInverse
+        )) { return false; }
 
-        if (!IsIdentityProduct(left: m_rightInverse, right: m_right, order: m_columnCount)) { return false; }
+        if (!IsIdentityProduct(
+            left: m_rightInverse,
+            order: m_columnCount,
+            right: m_right
+        )) { return false; }
 
         // U·A, then that by V, against the diagonal the divisors name. Nothing is cached: the identity is recomputed
         // from the three matrices every time it is asked for.
@@ -240,7 +333,10 @@ public sealed class SmithNormalForm {
                     total += (staged[((row * m_columnCount) + index)] * m_right[((index * m_columnCount) + column)]);
                 }
 
-                var expected = (((row == column) && (row < m_divisors.Length)) ? m_divisors[row] : BigInteger.Zero);
+                var expected = (((row == column) && (row < m_divisors.Length))
+                    ? m_divisors[row]
+                    : BigInteger.Zero
+                );
 
                 if (total != expected) { return false; }
             }
@@ -249,35 +345,12 @@ public sealed class SmithNormalForm {
         return true;
     }
 
-    private static bool IsIdentityProduct(BigInteger[] left, BigInteger[] right, int order) {
-        for (var row = 0; (row < order); ++row) {
-            for (var column = 0; (column < order); ++column) {
-                var total = BigInteger.Zero;
-
-                for (var index = 0; (index < order); ++index) {
-                    total += (left[((row * order) + index)] * right[((index * order) + column)]);
-                }
-
-                if (total != ((row == column) ? BigInteger.One : BigInteger.Zero)) { return false; }
-            }
-        }
-
-        return true;
-    }
-    private static BigInteger Read(BigInteger[] matrix, int order, int row, int column) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: row);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: row, other: order);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: column);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: column, other: order);
-
-        return matrix[((row * order) + column)];
-    }
-
     // The reduction itself. It owns the five arrays and every write to them goes through one magnitude observation, so
     // the ceiling covers the transforms as well as the working matrix and there is one place a peak is recorded.
     private sealed class Reduction {
         private readonly int m_magnitudeBits;
         private readonly BigInteger[] m_matrix;
+
         private int m_blockedBits;
         private bool m_refused;
         private int m_stage;
@@ -305,10 +378,16 @@ public sealed class SmithNormalForm {
         internal long StepsTaken { get; private set; }
 
         internal BigInteger[] Divisors() {
-            var order = Math.Min(val1: RowCount, val2: ColumnCount);
+            var order = Math.Min(
+                val1: RowCount,
+                val2: ColumnCount
+            );
             var count = 0;
 
-            while ((count < order) && !m_matrix[((count * ColumnCount) + count)].IsZero) { ++count; }
+            while (
+                (count < order) &&
+                !m_matrix[((count * ColumnCount) + count)].IsZero
+            ) { ++count; }
 
             var divisors = new BigInteger[count];
 
@@ -317,7 +396,10 @@ public sealed class SmithNormalForm {
             return divisors;
         }
         internal bool TryRun(out SmithObstruction obstruction) {
-            var order = Math.Min(val1: RowCount, val2: ColumnCount);
+            var order = Math.Min(
+                val1: RowCount,
+                val2: ColumnCount
+            );
 
             obstruction = default;
 
@@ -328,11 +410,23 @@ public sealed class SmithNormalForm {
             // The stage counter is advanced only by a stage that FINISHED, so a refusal reports the diagonal position
             // it was working on rather than the next one. A `for` whose increment runs before the guard reported one
             // too many.
-            while ((m_stage < order) && !m_refused) {
-                if (!TryChoosePivot(pivotRow: out var pivotRow, pivotColumn: out var pivotColumn)) { break; }
+            while (
+                (m_stage < order) &&
+                !m_refused
+            ) {
+                if (!TryChoosePivot(
+                    pivotColumn: out var pivotColumn,
+                    pivotRow: out var pivotRow
+                )) { break; }
 
-                SwapRows(first: m_stage, second: pivotRow);
-                SwapColumns(first: m_stage, second: pivotColumn);
+                SwapRows(
+                    first: m_stage,
+                    second: pivotRow
+                );
+                SwapColumns(
+                    first: m_stage,
+                    second: pivotColumn
+                );
                 FixPivot();
 
                 if (m_refused) { break; }
@@ -341,20 +435,16 @@ public sealed class SmithNormalForm {
             }
 
             if (m_refused) {
-                obstruction = new(Stage: m_stage, MagnitudeBits: m_blockedBits, StepsTaken: StepsTaken);
+                obstruction = new(
+                    Stage: m_stage,
+                    MagnitudeBits: m_blockedBits,
+                    StepsTaken: StepsTaken
+                );
 
                 return false;
             }
 
             return true;
-        }
-
-        private static BigInteger[] Identity(int order) {
-            var matrix = new BigInteger[(order * order)];
-
-            for (var index = 0; (index < order); ++index) { matrix[((index * order) + index)] = BigInteger.One; }
-
-            return matrix;
         }
 
         // Column j += factor * column k, in the working matrix and in the right transform, with the inverse taking the
@@ -363,40 +453,123 @@ public sealed class SmithNormalForm {
             if (factor.IsZero) { return; }
 
             for (var row = 0; (row < RowCount); ++row) {
-                Write(matrix: m_matrix, index: ((row * ColumnCount) + target), value: (m_matrix[((row * ColumnCount) + target)] + (factor * m_matrix[((row * ColumnCount) + source)])));
+                Write(
+                    matrix: m_matrix,
+                    index: ((row * ColumnCount) + target),
+                    value: (m_matrix[((row * ColumnCount) + target)] + (factor * m_matrix[((row * ColumnCount) + source)]))
+                );
             }
 
             for (var row = 0; (row < ColumnCount); ++row) {
-                Write(matrix: Right, index: ((row * ColumnCount) + target), value: (Right[((row * ColumnCount) + target)] + (factor * Right[((row * ColumnCount) + source)])));
+                Write(
+                    matrix: Right,
+                    index: ((row * ColumnCount) + target),
+                    value: (Right[((row * ColumnCount) + target)] + (factor * Right[((row * ColumnCount) + source)]))
+                );
             }
 
             for (var column = 0; (column < ColumnCount); ++column) {
-                Write(matrix: RightInverse, index: ((source * ColumnCount) + column), value: (RightInverse[((source * ColumnCount) + column)] - (factor * RightInverse[((target * ColumnCount) + column)])));
+                Write(
+                    matrix: RightInverse,
+                    index: ((source * ColumnCount) + column),
+                    value: (RightInverse[((source * ColumnCount) + column)] - (factor * RightInverse[((target * ColumnCount) + column)]))
+                );
             }
 
             ++StepsTaken;
         }
-
         // Row i += factor * row k, in the working matrix and in the left transform, with the inverse taking the
         // matching column operation from the other side.
         private void AddRow(int target, int source, BigInteger factor) {
             if (factor.IsZero) { return; }
 
             for (var column = 0; (column < ColumnCount); ++column) {
-                Write(matrix: m_matrix, index: ((target * ColumnCount) + column), value: (m_matrix[((target * ColumnCount) + column)] + (factor * m_matrix[((source * ColumnCount) + column)])));
+                Write(
+                    matrix: m_matrix,
+                    index: ((target * ColumnCount) + column),
+                    value: (m_matrix[((target * ColumnCount) + column)] + (factor * m_matrix[((source * ColumnCount) + column)]))
+                );
             }
 
             for (var column = 0; (column < RowCount); ++column) {
-                Write(matrix: Left, index: ((target * RowCount) + column), value: (Left[((target * RowCount) + column)] + (factor * Left[((source * RowCount) + column)])));
+                Write(
+                    matrix: Left,
+                    index: ((target * RowCount) + column),
+                    value: (Left[((target * RowCount) + column)] + (factor * Left[((source * RowCount) + column)]))
+                );
             }
 
             for (var row = 0; (row < RowCount); ++row) {
-                Write(matrix: LeftInverse, index: ((row * RowCount) + source), value: (LeftInverse[((row * RowCount) + source)] - (factor * LeftInverse[((row * RowCount) + target)])));
+                Write(
+                    matrix: LeftInverse,
+                    index: ((row * RowCount) + source),
+                    value: (LeftInverse[((row * RowCount) + source)] - (factor * LeftInverse[((row * RowCount) + target)]))
+                );
             }
 
             ++StepsTaken;
         }
+        // Clears the pivot's column below the diagonal. A nonzero remainder is smaller than the pivot, so swapping it
+        // up strictly decreases the pivot's absolute value — which is why the surrounding loop terminates.
+        private bool ClearColumn() {
+            var clean = true;
 
+            for (var row = (m_stage + 1); ((row < RowCount) && !m_refused); ++row) {
+                var entry = m_matrix[((row * ColumnCount) + m_stage)];
+
+                if (entry.IsZero) { continue; }
+
+                AddRow(
+                    target: row,
+                    source: m_stage,
+                    factor: -BigInteger.Divide(
+                        dividend: entry,
+                        divisor: m_matrix[((m_stage * ColumnCount) + m_stage)]
+                    )
+                );
+
+                if (!m_matrix[((row * ColumnCount) + m_stage)].IsZero) {
+                    SwapRows(
+                        first: m_stage,
+                        second: row
+                    );
+
+                    clean = false;
+                }
+            }
+
+            return clean;
+        }
+        // The mirror image, clearing the pivot's row to the right of the diagonal.
+        private bool ClearRow() {
+            var clean = true;
+
+            for (var column = (m_stage + 1); ((column < ColumnCount) && !m_refused); ++column) {
+                var entry = m_matrix[((m_stage * ColumnCount) + column)];
+
+                if (entry.IsZero) { continue; }
+
+                AddColumn(
+                    target: column,
+                    source: m_stage,
+                    factor: -BigInteger.Divide(
+                        dividend: entry,
+                        divisor: m_matrix[((m_stage * ColumnCount) + m_stage)]
+                    )
+                );
+
+                if (!m_matrix[((m_stage * ColumnCount) + column)].IsZero) {
+                    SwapColumns(
+                        first: m_stage,
+                        second: column
+                    );
+
+                    clean = false;
+                }
+            }
+
+            return clean;
+        }
         // The whole stage: drive the pivot down to the greatest common divisor of its row, its column and — through the
         // divisibility repair — the entire remaining submatrix, then leave it positive.
         private void FixPivot() {
@@ -417,65 +590,40 @@ public sealed class SmithNormalForm {
                 return;
             }
         }
+        private static BigInteger[] Identity(int order) {
+            var matrix = new BigInteger[(order * order)];
 
-        // Clears the pivot's column below the diagonal. A nonzero remainder is smaller than the pivot, so swapping it
-        // up strictly decreases the pivot's absolute value — which is why the surrounding loop terminates.
-        private bool ClearColumn() {
-            var clean = true;
+            for (var index = 0; (index < order); ++index) { matrix[((index * order) + index)] = BigInteger.One; }
 
-            for (var row = (m_stage + 1); ((row < RowCount) && !m_refused); ++row) {
-                var entry = m_matrix[((row * ColumnCount) + m_stage)];
-
-                if (entry.IsZero) { continue; }
-
-                AddRow(target: row, source: m_stage, factor: -BigInteger.Divide(dividend: entry, divisor: m_matrix[((m_stage * ColumnCount) + m_stage)]));
-
-                if (!m_matrix[((row * ColumnCount) + m_stage)].IsZero) {
-                    SwapRows(first: m_stage, second: row);
-
-                    clean = false;
-                }
-            }
-
-            return clean;
-        }
-
-        // The mirror image, clearing the pivot's row to the right of the diagonal.
-        private bool ClearRow() {
-            var clean = true;
-
-            for (var column = (m_stage + 1); ((column < ColumnCount) && !m_refused); ++column) {
-                var entry = m_matrix[((m_stage * ColumnCount) + column)];
-
-                if (entry.IsZero) { continue; }
-
-                AddColumn(target: column, source: m_stage, factor: -BigInteger.Divide(dividend: entry, divisor: m_matrix[((m_stage * ColumnCount) + m_stage)]));
-
-                if (!m_matrix[((m_stage * ColumnCount) + column)].IsZero) {
-                    SwapColumns(first: m_stage, second: column);
-
-                    clean = false;
-                }
-            }
-
-            return clean;
+            return matrix;
         }
         private void NegateRow(int row) {
             for (var column = 0; (column < ColumnCount); ++column) {
-                Write(matrix: m_matrix, index: ((row * ColumnCount) + column), value: -m_matrix[((row * ColumnCount) + column)]);
+                Write(
+                    matrix: m_matrix,
+                    index: ((row * ColumnCount) + column),
+                    value: -m_matrix[((row * ColumnCount) + column)]
+                );
             }
 
             for (var column = 0; (column < RowCount); ++column) {
-                Write(matrix: Left, index: ((row * RowCount) + column), value: -Left[((row * RowCount) + column)]);
+                Write(
+                    matrix: Left,
+                    index: ((row * RowCount) + column),
+                    value: -Left[((row * RowCount) + column)]
+                );
             }
 
             for (var index = 0; (index < RowCount); ++index) {
-                Write(matrix: LeftInverse, index: ((index * RowCount) + row), value: -LeftInverse[((index * RowCount) + row)]);
+                Write(
+                    matrix: LeftInverse,
+                    index: ((index * RowCount) + row),
+                    value: -LeftInverse[((index * RowCount) + row)]
+                );
             }
 
             ++StepsTaken;
         }
-
         // A clearing pass writes a whole line before the caller can see the refusal, so later writes of the same pass
         // are still observed. The FIRST breach is the one that stopped the reduction, so it is the one recorded; a
         // plain assignment let a smaller later breach overwrite it and understate the magnitude.
@@ -484,12 +632,14 @@ public sealed class SmithNormalForm {
 
             if (bits > PeakMagnitudeBits) { PeakMagnitudeBits = bits; }
 
-            if ((bits > m_magnitudeBits) && !m_refused) {
+            if (
+                (bits > m_magnitudeBits) &&
+                !m_refused
+            ) {
                 m_blockedBits = bits;
                 m_refused = true;
             }
         }
-
         // The step that makes the diagonal a chain: an entry the pivot does not divide is folded into the pivot row, so
         // the next clearing pass drives the pivot down to a proper divisor of itself.
         private bool RepairDivisibility() {
@@ -497,9 +647,16 @@ public sealed class SmithNormalForm {
 
             for (var row = (m_stage + 1); (row < RowCount); ++row) {
                 for (var column = (m_stage + 1); (column < ColumnCount); ++column) {
-                    if (BigInteger.Remainder(dividend: m_matrix[((row * ColumnCount) + column)], divisor: pivot).IsZero) { continue; }
+                    if (BigInteger.Remainder(
+                        dividend: m_matrix[((row * ColumnCount) + column)],
+                        divisor: pivot
+                    ).IsZero) { continue; }
 
-                    AddRow(target: m_stage, source: row, factor: BigInteger.One);
+                    AddRow(
+                        target: m_stage,
+                        source: row,
+                        factor: BigInteger.One
+                    );
 
                     return true;
                 }
@@ -541,7 +698,6 @@ public sealed class SmithNormalForm {
 
             ++StepsTaken;
         }
-
         // The pivot rule: the nonzero entry of smallest absolute value in the remaining submatrix, ties broken by the
         // smallest row and then the smallest column. Row-major iteration IS that tie-break.
         private bool TryChoosePivot(out int pivotRow, out int pivotColumn) {
@@ -558,7 +714,10 @@ public sealed class SmithNormalForm {
 
                     var magnitude = BigInteger.Abs(value: entry);
 
-                    if ((pivotRow >= 0) && (magnitude >= best)) { continue; }
+                    if (
+                        (pivotRow >= 0) &&
+                        (magnitude >= best)
+                    ) { continue; }
 
                     best = magnitude;
                     pivotColumn = column;

@@ -11,7 +11,6 @@ internal sealed class AccuracySuiteStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "accuracy-suite";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.B;
@@ -30,8 +29,8 @@ internal sealed class AccuracySuiteStage : IPostStage {
         Diagnostics.BiosImage = context.BiosImage;
 
         var failed = Diagnostics.RunAccuracySuite(
-            romPath: romPath,
-            name: "accuracy suite"
+            name: "accuracy suite",
+            romPath: romPath
         );
         var passed = (Diagnostics.AccuracySuiteCount - failed);
 

@@ -20,7 +20,6 @@ namespace Puck.World.Server;
 /// <param name="TablePrincipal">The principal of the <see cref="WorldHandleTable"/> that minted this handle.</param>
 /// <param name="TableCapability">The capability of the <see cref="WorldHandleTable"/> that minted this handle.</param>
 public readonly record struct WorldHandle(int Index, int Generation, WorldPrincipal TablePrincipal, WorldCapability TableCapability);
-
 /// <summary>
 /// A per-(principal, capability) handle table — the host-side, pure projection of <see cref="WorldGrants"/> for one
 /// principal outside the trust boundary. A handle resolves a designation — the <see cref="GrantSubject"/> a slot
@@ -72,15 +71,16 @@ public readonly record struct WorldHandle(int Index, int Generation, WorldPrinci
 public sealed class WorldHandleTable {
     private readonly record struct Slot(GrantSubject Subject, int Generation);
 
+    private readonly WorldCapability m_capability;
     private readonly WorldGrants m_grants;
     private readonly WorldPrincipal m_principal;
-    private readonly WorldCapability m_capability;
-    private Slot[] m_slots = [];
-    private int m_nextGeneration;
+
     // -1 so the very first EnsureFresh() always rebuilds, even against a fresh WorldGrants whose own Revision starts
     // at 0 — an untouched table must never answer as though it already reflects a grant that has not been projected
     // yet.
     private int m_builtAtRevision = -1;
+    private int m_nextGeneration;
+    private Slot[] m_slots = [];
 
     /// <summary>Builds a handle table over <paramref name="principal"/>'s <paramref name="capability"/> subjects,
     /// projected from <paramref name="grants"/>. The projection is computed lazily, on first use.</summary>
@@ -106,6 +106,43 @@ public sealed class WorldHandleTable {
         m_capability = capability;
     }
 
+    private void EnsureFresh() {
+        if (m_builtAtRevision == m_grants.Revision) {
+            return;
+        }
+
+        var projected = m_grants.ProjectSubjects(
+            capability: m_capability,
+            principal: m_principal
+        );
+        var next = new Slot[projected.Length];
+
+        for (var index = 0; (index < projected.Length); index++) {
+            var subject = projected[index];
+            // Keep the OUTGOING slot's generation when this index still names the IDENTICAL subject it named before —
+            // the common case, since WorldGrants.Revision is process-global (bumped by every principal's grant/revoke
+            // and by SetControlRoute/ClearControlRoute) while a rebuild it triggers here often reprojects to the exact
+            // same array for THIS principal/capability. Minting fresh regardless would invalidate every live handle of
+            // every principal on any unrelated write — "revocation is a cleared slot, O(1), immediate" would otherwise
+            // become "every write clears every slot of every principal". Only an index whose designation actually
+            // changed (a new subject arrived, or an earlier removal/insertion shifted what this index means) mints a
+            // fresh generation — a stale WorldHandle from before that change can then never coincidentally match
+            // whatever now sits at the same index, exactly the property TryResolve depends on.
+            var generation = (((((uint)index) < ((uint)m_slots.Length)) && (m_slots[index].Subject == subject))
+                ? m_slots[index].Generation
+                : m_nextGeneration++
+            );
+
+            next[index] = new Slot(
+                Generation: generation,
+                Subject: subject
+            );
+        }
+
+        m_slots = next;
+        m_builtAtRevision = m_grants.Revision;
+    }
+
     /// <summary>Mints a handle for slot <paramref name="index"/> as the table stands right now (rebuilding first if
     /// the grants changed). Call this fresh every time the caller wants "whatever this slot designates today" rather
     /// than caching the result across a rebuild — index 0 is the lowest subject the principal holds this capability
@@ -125,17 +162,21 @@ public sealed class WorldHandleTable {
     public bool TryMint(int index, out WorldHandle handle) {
         EnsureFresh();
 
-        if ((uint)index >= (uint)m_slots.Length) {
+        if (((uint)index) >= ((uint)m_slots.Length)) {
             handle = default;
 
             return false;
         }
 
-        handle = new WorldHandle(Index: index, Generation: m_slots[index].Generation, TablePrincipal: m_principal, TableCapability: m_capability);
+        handle = new WorldHandle(
+            Index: index,
+            Generation: m_slots[index].Generation,
+            TablePrincipal: m_principal,
+            TableCapability: m_capability
+        );
 
         return true;
     }
-
     /// <summary>Mints a handle over the slot that currently designates <paramref name="subject"/>, as the table
     /// stands right now (rebuilding first if the grants changed) — the mint-by-requested-subject shape: the caller
     /// names what it wants materialized and the table finds its own position, so no caller ever re-derives the
@@ -148,7 +189,12 @@ public sealed class WorldHandleTable {
 
         for (var index = 0; (index < m_slots.Length); ++index) {
             if (m_slots[index].Subject == subject) {
-                handle = new WorldHandle(Index: index, Generation: m_slots[index].Generation, TablePrincipal: m_principal, TableCapability: m_capability);
+                handle = new WorldHandle(
+                    Index: index,
+                    Generation: m_slots[index].Generation,
+                    TablePrincipal: m_principal,
+                    TableCapability: m_capability
+                );
 
                 return true;
             }
@@ -158,7 +204,6 @@ public sealed class WorldHandleTable {
 
         return false;
     }
-
     /// <summary>Resolves <paramref name="handle"/> to the <see cref="GrantSubject"/> it designated at mint time.
     /// Fails — the caller's own attribution decides how loudly — when <paramref name="handle"/> was not minted by
     /// this table (its stamped <see cref="WorldHandle.TablePrincipal"/>/<see cref="WorldHandle.TableCapability"/> do
@@ -171,7 +216,10 @@ public sealed class WorldHandleTable {
     /// <param name="subject">The designated subject, when resolution succeeds.</param>
     /// <returns><see langword="true"/> when the handle still designates a live slot of this table.</returns>
     public bool TryResolve(WorldHandle handle, out GrantSubject subject) {
-        if ((handle.TablePrincipal != m_principal) || (handle.TableCapability != m_capability)) {
+        if (
+            (handle.TablePrincipal != m_principal) ||
+            (handle.TableCapability != m_capability)
+        ) {
             subject = default;
 
             return false;
@@ -179,7 +227,10 @@ public sealed class WorldHandleTable {
 
         EnsureFresh();
 
-        if (((uint)handle.Index >= (uint)m_slots.Length) || (m_slots[handle.Index].Generation != handle.Generation)) {
+        if (
+            (((uint)handle.Index) >= ((uint)m_slots.Length)) ||
+            (m_slots[handle.Index].Generation != handle.Generation)
+        ) {
             subject = default;
 
             return false;
@@ -188,35 +239,5 @@ public sealed class WorldHandleTable {
         subject = m_slots[handle.Index].Subject;
 
         return true;
-    }
-
-    private void EnsureFresh() {
-        if (m_builtAtRevision == m_grants.Revision) {
-            return;
-        }
-
-        var projected = m_grants.ProjectSubjects(principal: m_principal, capability: m_capability);
-        var next = new Slot[projected.Length];
-
-        for (var index = 0; (index < projected.Length); index++) {
-            var subject = projected[index];
-            // Keep the OUTGOING slot's generation when this index still names the IDENTICAL subject it named before —
-            // the common case, since WorldGrants.Revision is process-global (bumped by every principal's grant/revoke
-            // and by SetControlRoute/ClearControlRoute) while a rebuild it triggers here often reprojects to the exact
-            // same array for THIS principal/capability. Minting fresh regardless would invalidate every live handle of
-            // every principal on any unrelated write — "revocation is a cleared slot, O(1), immediate" would otherwise
-            // become "every write clears every slot of every principal". Only an index whose designation actually
-            // changed (a new subject arrived, or an earlier removal/insertion shifted what this index means) mints a
-            // fresh generation — a stale WorldHandle from before that change can then never coincidentally match
-            // whatever now sits at the same index, exactly the property TryResolve depends on.
-            var generation = (((uint)index < (uint)m_slots.Length) && (m_slots[index].Subject == subject))
-                ? m_slots[index].Generation
-                : m_nextGeneration++;
-
-            next[index] = new Slot(Subject: subject, Generation: generation);
-        }
-
-        m_slots = next;
-        m_builtAtRevision = m_grants.Revision;
     }
 }

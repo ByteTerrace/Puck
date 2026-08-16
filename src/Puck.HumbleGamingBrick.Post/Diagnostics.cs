@@ -1,8 +1,8 @@
+using Puck.Assets;
+using Puck.GamingBricks;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
 using Puck.Maths;
-using Puck.Recording.Capture;
-using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -15,7 +15,6 @@ internal static class Diagnostics {
     /// <summary>The frame budget a render runs when none is given — ten seconds of emulated time, enough for a
     /// commercial ROM to clear its logo screens and start drawing.</summary>
     private const int DefaultRenderFrames = 600;
-
     /// <summary>The frame budget a snapshot dump runs when <c>--frames</c> is absent.</summary>
     private const int DefaultDumpSnapshotFrames = 300;
 
@@ -123,10 +122,10 @@ internal static class Diagnostics {
                     : ModelFromHeader(rom: File.ReadAllBytes(path: romPath)));
 
                 HaltShare(
-                    romPath: romPath,
-                    warmFrames: warmFrames,
                     measureFrames: measureFrames,
-                    model: model
+                    model: model,
+                    romPath: romPath,
+                    warmFrames: warmFrames
                 );
 
                 return true;
@@ -269,8 +268,8 @@ internal static class Diagnostics {
             name: "--frames"
         );
         var frames = (((framesArg is not null) && int.TryParse(
-            s: framesArg,
-            result: out var parsedFrames
+            result: out var parsedFrames,
+            s: framesArg
         ))
             ? parsedFrames
             : 600);
@@ -279,18 +278,18 @@ internal static class Diagnostics {
             name: "--perturb-at"
         );
         var perturbAtFrame = (((perturbArg is not null) && int.TryParse(
-            s: perturbArg,
-            result: out var parsedPerturb
+            result: out var parsedPerturb,
+            s: perturbArg
         ))
             ? parsedPerturb
             : (int?)null);
 
         exitCode = HashDivergenceProbe.Run(
-            romAPath: romAPath,
-            romBPath: romBPath,
-            frames: frames,
             fine: fine,
-            perturbAtFrame: perturbAtFrame
+            frames: frames,
+            perturbAtFrame: perturbAtFrame,
+            romAPath: romAPath,
+            romBPath: romBPath
         );
 
         return true;
@@ -298,8 +297,8 @@ internal static class Diagnostics {
     // The positional token `offset` positions after `index`, or null when it is absent or is itself a flag (starts "--").
     private static string? PositionalAfter(string[] args, int index, int offset) =>
         ((((index + offset) < args.Length) && !args[(index + offset)].StartsWith(
-        value: "--",
-        comparisonType: StringComparison.Ordinal
+        comparisonType: StringComparison.Ordinal,
+        value: "--"
     ))
         ? args[(index + offset)]
         : null);
@@ -356,11 +355,11 @@ internal static class Diagnostics {
         var clock = machine.GetRequiredService<MasterClock>();
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: warmFrames
+            frames: warmFrames,
+            instance: machine
         );
 
-        var targetCycles = ((ulong)measureFrames * (ulong)PostMachine.TCyclesPerFrame);
+        var targetCycles = (((ulong)measureFrames) * ((ulong)PostMachine.TCyclesPerFrame));
         var startCycles = clock.CycleCount;
         var haltedCycles = 0UL;
 
@@ -393,7 +392,7 @@ internal static class Diagnostics {
         var cpu = machine.GetRequiredService<ICpu>();
         var interrupts = machine.GetRequiredService<IInterruptController>();
         var ppu = machine.GetRequiredService<IPpu>();
-        var targetCycles = ((ulong)frames * (ulong)PostMachine.TCyclesPerFrame);
+        var targetCycles = (((ulong)frames) * ((ulong)PostMachine.TCyclesPerFrame));
 
         using var writer = new StreamWriter(path: outputPath);
 
@@ -402,7 +401,7 @@ internal static class Diagnostics {
             var pc = cpu.ProgramCounter;
             var ly = ppu.ReadRegister(address: MemoryMap.LcdY);
             var stat = ppu.ReadRegister(address: MemoryMap.LcdStatus);
-            var requested = (byte)interrupts.Requested;
+            var requested = ((byte)interrupts.Requested);
             var halted = cpu.IsHalted;
 
             machine.Machine.StepInstruction();
@@ -432,8 +431,8 @@ internal static class Diagnostics {
 
         for (var frame = 0; (frame < frames); ++frame) {
             PostMachine.RunFrames(
-                instance: machine,
-                frames: 1
+                frames: 1,
+                instance: machine
             );
 
             if (
@@ -456,9 +455,9 @@ internal static class Diagnostics {
             var offset = (index * 4);
             var pixel = pixels[index];
 
-            rgba[offset] = (byte)(pixel >> 16);
-            rgba[(offset + 1)] = (byte)(pixel >> 8);
-            rgba[(offset + 2)] = (byte)pixel;
+            rgba[offset] = ((byte)(pixel >> 16));
+            rgba[(offset + 1)] = ((byte)(pixel >> 8));
+            rgba[(offset + 2)] = ((byte)pixel);
             rgba[(offset + 3)] = 0xFF;
         }
 
@@ -509,8 +508,8 @@ internal static class Diagnostics {
             name: "--frames"
         );
         var frames = (((framesArg is not null) && int.TryParse(
-            s: framesArg,
-            result: out var parsedFrames
+            result: out var parsedFrames,
+            s: framesArg
         ))
             ? parsedFrames
             : DefaultDumpSnapshotFrames);
@@ -534,8 +533,8 @@ internal static class Diagnostics {
         );
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: frames
+            frames: frames,
+            instance: machine
         );
 
         var snapshot = machine.Machine.Snapshot();

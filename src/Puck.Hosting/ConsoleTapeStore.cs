@@ -8,7 +8,6 @@ public readonly record struct ConsoleTapeLine(
     string Text,
     bool Refused
 );
-
 /// <summary>The published console-tape snapshot a renderer draws.</summary>
 /// <param name="Visible">Whether the console panel is shown (hidden = a renderer draws nothing).</param>
 /// <param name="Lines">The output history, oldest first; a renderer shows the trailing lines that fit.</param>
@@ -21,7 +20,6 @@ public readonly record struct ConsoleTapeFrame(
     string Input,
     bool Selected
 );
-
 /// <summary>The read seam a console renderer consumes (the unified overlay's console-panel writer); the terminal's
 /// <see cref="ConsoleTape"/> is the writer.</summary>
 public interface IConsoleTapeSource {
@@ -30,7 +28,6 @@ public interface IConsoleTapeSource {
     /// <returns><see langword="true"/> when a frame has been published.</returns>
     bool TrySnapshot(out ConsoleTapeFrame frame);
 }
-
 /// <summary>
 /// The console-tape state store: the <see cref="ConsoleTape"/> publishes an immutable frame on every console edit,
 /// the render thread snapshots it. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/> (a
@@ -43,7 +40,6 @@ public sealed class ConsoleTapeStore : IConsoleTapeSource {
     /// <summary>Publishes a frame (the writer side).</summary>
     /// <param name="frame">The frame to publish.</param>
     public void Publish(in ConsoleTapeFrame frame) => m_buffer.Publish(frame: frame);
-
     /// <inheritdoc/>
     public bool TrySnapshot(out ConsoleTapeFrame frame) => m_buffer.TrySnapshot(frame: out frame);
 }

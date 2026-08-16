@@ -10,11 +10,12 @@ namespace Puck.Maths.Tests;
 /// </summary>
 internal static class CoreSurfaceClaims {
     public static string? BinaryIntegerSurface() {
-        for (uint x = 0; x < 32; ++x) {
-            for (uint y = 0; y < 32; ++y) {
+        for (uint x = 0; (x < 32); ++x) {
+            for (uint y = 0; (y < 32); ++y) {
                 var paired = x.BitwisePair<uint, ulong>(other: y);
                 var unpaired = paired.BitwiseUnpair<ulong, uint>();
-                Assert.Equal(expected: (x, y), actual: unpaired);
+
+                Assert.Equal(actual: unpaired, expected: (x, y));
             }
         }
 
@@ -36,12 +37,14 @@ internal static class CoreSurfaceClaims {
 
         foreach (var value in new uint[] { 1U, 2U, 3U, 5U, 7U, 11U, 0x0010_0001U }) {
             var next = value.PermuteBitsLexicographically();
-            Assert.True(condition: next > value);
-            Assert.Equal(expected: uint.PopCount(value), actual: uint.PopCount(next));
+
+            Assert.True(condition: (next > value));
+            Assert.Equal(expected: uint.PopCount(value: value), actual: uint.PopCount(value: next));
         }
-        for (var raw = 0; raw <= byte.MaxValue; ++raw) {
-            var value = (byte)raw;
-            var expected = NextBytePermutation(value);
+        for (var raw = 0; (raw <= byte.MaxValue); ++raw) {
+            var value = ((byte)raw);
+            var expected = NextBytePermutation(value: value);
+
             Assert.Equal(expected: expected, actual: value.PermuteBitsLexicographically());
             Assert.Equal(
                 expected: expected,
@@ -64,23 +67,28 @@ internal static class CoreSurfaceClaims {
         Assert.Equal(expected: new BigInteger(value: -257), actual: new BigInteger(value: -129).PermuteBitsLexicographically());
 
         var ascending = new BigInteger(value: 11);
-        for (var step = 0; step < 16; ++step) {
+
+        for (var step = 0; (step < 16); ++step) {
             var next = ascending.PermuteBitsLexicographically();
-            Assert.True(condition: next > ascending);
+
+            Assert.True(condition: (next > ascending));
             Assert.Equal(expected: 3, actual: MinorityBitCount(value: next));
             ascending = next;
         }
         var descending = new BigInteger(value: -11);
-        for (var step = 0; step < 16; ++step) {
+
+        for (var step = 0; (step < 16); ++step) {
             var next = descending.PermuteBitsLexicographically();
-            Assert.True(condition: next < descending);
+
+            Assert.True(condition: (next < descending));
             Assert.Equal(expected: 2, actual: MinorityBitCount(value: next));
             descending = next;
         }
 
         var maximumInt128 = ((BigInteger.One << 127) - BigInteger.One);
+
         Assert.Equal(
-            expected: ((BigInteger.One << 127) + (BigInteger.One << 126) - BigInteger.One),
+            expected: (((BigInteger.One << 127) + (BigInteger.One << 126)) - BigInteger.One),
             actual: maximumInt128.PermuteBitsLexicographically()
         );
         Assert.Equal(
@@ -93,7 +101,7 @@ internal static class CoreSurfaceClaims {
         );
 
         Assert.Equal(expected: 1U, actual: 0b1011U.PopulationParity());
-        for (uint value = 0; value < 1024; ++value) {
+        for (uint value = 0; (value < 1024); ++value) {
             Assert.Equal(expected: value, actual: value.ReflectedBinaryEncode().ReflectedBinaryDecode());
         }
         Assert.Equal(expected: 0x8000_0000U, actual: 1U.ReverseBits());
@@ -106,12 +114,13 @@ internal static class CoreSurfaceClaims {
 
     private static int MinorityBitCount(BigInteger value) =>
         int.CreateChecked(value: BigInteger.PopCount(value: ((value.Sign < 0) ? ~value : value)));
-
     private static byte NextBytePermutation(byte value) {
-        var populationCount = uint.PopCount(value);
-        for (var offset = 1; offset <= (byte.MaxValue + 1); ++offset) {
+        var populationCount = uint.PopCount(value: value);
+
+        for (var offset = 1; (offset <= (byte.MaxValue + 1)); ++offset) {
             var candidate = unchecked((byte)(value + offset));
-            if (uint.PopCount(candidate) == populationCount) {
+
+            if (uint.PopCount(value: candidate) == populationCount) {
                 return candidate;
             }
         }
@@ -121,41 +130,42 @@ internal static class CoreSurfaceClaims {
 
     public static string? DiscreteMeasureSurface() {
         var source = DiscreteMeasure.Rational(
-            numerator: 4,
             denominator: 3,
-            offsetNumerator: 1,
-            offsetDenominator: 3
+            numerator: 4,
+            offsetDenominator: 3,
+            offsetNumerator: 1
         );
 
         Assert.Equal(expected: DiscreteMeasure.Zero, actual: default);
-        Assert.Equal(expected: QuadraticSurd.Rational(4, 3), actual: source.Rate);
-        Assert.Equal(expected: QuadraticSurd.Rational(1, 3), actual: source.Offset);
+        Assert.Equal(expected: QuadraticSurd.Rational(denominator: 3, numerator: 4), actual: source.Rate);
+        Assert.Equal(expected: QuadraticSurd.Rational(denominator: 3, numerator: 1), actual: source.Offset);
         Assert.True(condition: source.IsPeriodic);
-        Assert.Equal(expected: new BigInteger(3), actual: source.Period);
+        Assert.Equal(expected: new BigInteger(value: 3), actual: source.Period);
         Assert.Equal(expected: BigInteger.One, actual: source.MinimumAmount);
-        Assert.Equal(expected: new BigInteger(2), actual: source.MaximumAmount);
+        Assert.Equal(expected: new BigInteger(value: 2), actual: source.MaximumAmount);
         Assert.Equal(expected: BigInteger.Zero, actual: source.Cumulative(index: 0));
-        Assert.Equal(expected: new BigInteger(2), actual: source.AmountAt(index: 1));
-        Assert.Equal(expected: new BigInteger(4), actual: source.AmountOver(start: 0, length: 3));
-        Assert.Equal(expected: new BigInteger(4), actual: source.AmountBetween(start: 0, end: 3));
-        Assert.Equal(expected: (new BigInteger(1), new BigInteger(4)), actual: source.Map(start: 1, length: 3));
-        Assert.Equal(expected: (new BigInteger(1), new BigInteger(4)), actual: source.MapBetween(start: 1, end: 4));
-        Assert.Equal(expected: new BigInteger(2), actual: source.LowerBound(amount: 3));
+        Assert.Equal(expected: new BigInteger(value: 2), actual: source.AmountAt(index: 1));
+        Assert.Equal(expected: new BigInteger(value: 4), actual: source.AmountOver(length: 3, start: 0));
+        Assert.Equal(expected: new BigInteger(value: 4), actual: source.AmountBetween(end: 3, start: 0));
+        Assert.Equal(expected: (new BigInteger(value: 1), new BigInteger(value: 4)), actual: source.Map(length: 3, start: 1));
+        Assert.Equal(expected: (new BigInteger(value: 1), new BigInteger(value: 4)), actual: source.MapBetween(end: 4, start: 1));
+        Assert.Equal(expected: new BigInteger(value: 2), actual: source.LowerBound(amount: 3));
         Assert.Equal(expected: BigInteger.One, actual: source.IndexContaining(outputIndex: 2));
-        Assert.Equal(expected: new BigInteger(1), actual: source.NextNonemptyIndex(start: 1));
+        Assert.Equal(expected: new BigInteger(value: 1), actual: source.NextNonemptyIndex(start: 1));
 
         var translated = source.Translate(distance: 7);
-        for (var index = -8; index <= 8; ++index) {
+
+        for (var index = -8; (index <= 8); ++index) {
             Assert.Equal(
-                expected: source.AmountAt(index: index + 7),
+                expected: source.AmountAt(index: (index + 7)),
                 actual: translated.AmountAt(index: index)
             );
         }
 
         Assert.True(condition: source.TryCompileInt64(compiled: out var compiled));
         Assert.True(condition: source.TryCompileInt64(compiled: out var detailed, failure: out var failure));
-        Assert.Equal(expected: DiscreteMeasureCompilationFailure.None, actual: failure);
-        Assert.Equal(expected: compiled, actual: detailed);
+        Assert.Equal(actual: failure, expected: DiscreteMeasureCompilationFailure.None);
+        Assert.Equal(actual: detailed, expected: compiled);
         Assert.Equal(expected: compiled, actual: source.CompileInt64());
         Assert.True(condition: compiled.IsValid);
         Assert.True(condition: compiled.IsPeriodic);
@@ -168,43 +178,45 @@ internal static class CoreSurfaceClaims {
         Assert.Equal(expected: 3L, actual: compiled.Period);
         Assert.Equal(expected: 1L, actual: compiled.Cumulative(index: 1));
         Assert.Equal(expected: 2L, actual: compiled.AmountAt(index: 1));
-        Assert.Equal(expected: 4L, actual: compiled.AmountOver(start: 0, length: 3));
-        Assert.Equal(expected: 4L, actual: compiled.AmountBetween(start: 0, end: 3));
-        Assert.Equal(expected: (1L, 4L), actual: compiled.Map(start: 1, length: 3));
+        Assert.Equal(expected: 4L, actual: compiled.AmountOver(length: 3, start: 0));
+        Assert.Equal(expected: 4L, actual: compiled.AmountBetween(end: 3, start: 0));
+        Assert.Equal(expected: (1L, 4L), actual: compiled.Map(length: 3, start: 1));
         Assert.Equal(expected: 2L, actual: compiled.LowerBound(amount: 3));
         Assert.Equal(expected: 1L, actual: compiled.IndexContaining(outputIndex: 2));
 
-        Assert.True(condition: compiled.TryCumulative(index: 1, cumulative: out var cumulative));
-        Assert.Equal(expected: 1L, actual: cumulative);
-        Assert.True(condition: compiled.TryAmountAt(index: 1, amount: out var at));
-        Assert.Equal(expected: 2L, actual: at);
-        Assert.True(condition: compiled.TryAmountOver(start: 0, length: 3, amount: out var over));
-        Assert.Equal(expected: 4L, actual: over);
-        Assert.True(condition: compiled.TryAmountBetween(start: 0, end: 3, amount: out var between));
-        Assert.Equal(expected: 4L, actual: between);
-        Assert.True(condition: compiled.TryMap(start: 1, length: 3, mappedStart: out var mappedStart, mappedLength: out var mappedLength));
-        Assert.Equal(expected: (1L, 4L), actual: (mappedStart, mappedLength));
+        Assert.True(condition: compiled.TryCumulative(cumulative: out var cumulative, index: 1));
+        Assert.Equal(actual: cumulative, expected: 1L);
+        Assert.True(condition: compiled.TryAmountAt(amount: out var at, index: 1));
+        Assert.Equal(actual: at, expected: 2L);
+        Assert.True(condition: compiled.TryAmountOver(amount: out var over, length: 3, start: 0));
+        Assert.Equal(actual: over, expected: 4L);
+        Assert.True(condition: compiled.TryAmountBetween(amount: out var between, end: 3, start: 0));
+        Assert.Equal(actual: between, expected: 4L);
+        Assert.True(condition: compiled.TryMap(length: 3, mappedLength: out var mappedLength, mappedStart: out var mappedStart, start: 1));
+        Assert.Equal(actual: (mappedStart, mappedLength), expected: (1L, 4L));
         Assert.True(condition: compiled.TryLowerBound(amount: 3, index: out var lowerBound));
-        Assert.Equal(expected: 2L, actual: lowerBound);
-        Assert.True(condition: compiled.TryIndexContaining(outputIndex: 2, inputIndex: out var containing));
-        Assert.Equal(expected: 1L, actual: containing);
+        Assert.Equal(actual: lowerBound, expected: 2L);
+        Assert.True(condition: compiled.TryIndexContaining(inputIndex: out var containing, outputIndex: 2));
+        Assert.Equal(actual: containing, expected: 1L);
 
         // Every coefficient that will not narrow to signed 64-bit storage, and every radicand outside the two-limb
         // kernel, is a coefficient failure — the outcome the enum defines for exactly that condition.
         var oversizedRational = DiscreteMeasure.Rational(
-            numerator: (BigInteger)long.MaxValue + 1,
+            numerator: (((BigInteger)long.MaxValue) + 1),
             denominator: BigInteger.One
         );
+
         Assert.False(condition: oversizedRational.TryCompileInt64(compiled: out _, failure: out var rationalFailure));
-        Assert.Equal(expected: DiscreteMeasureCompilationFailure.CoefficientOutOfRange, actual: rationalFailure);
+        Assert.Equal(actual: rationalFailure, expected: DiscreteMeasureCompilationFailure.CoefficientOutOfRange);
         _ = Assert.Throws<OverflowException>(testCode: () => oversizedRational.CompileInt64());
 
         var oversizedRadicand = DiscreteMeasure.Create(
             rate: QuadraticSurd.One,
-            offset: QuadraticSurd.Create(0, 1, (BigInteger.One << 64) + 1, 1)
+            offset: QuadraticSurd.Create(0, 1, ((BigInteger.One << 64) + 1), 1)
         );
+
         Assert.False(condition: oversizedRadicand.TryCompileInt64(compiled: out _, failure: out var radicandFailure));
-        Assert.Equal(expected: DiscreteMeasureCompilationFailure.CoefficientOutOfRange, actual: radicandFailure);
+        Assert.Equal(actual: radicandFailure, expected: DiscreteMeasureCompilationFailure.CoefficientOutOfRange);
         _ = Assert.Throws<OverflowException>(testCode: () => oversizedRadicand.CompileInt64());
 
         // (-2^63 + 2^63·√2)/(2^63 - 1) lies in [0, 1) with both rational parts inside signed 64-bit storage, so its
@@ -216,101 +228,108 @@ internal static class CoreSurfaceClaims {
             radicand: 2,
             denominator: long.MaxValue
         );
-        foreach (var rate in new[] { QuadraticSurd.One, QuadraticSurd.Create(0, 1, 2, 1) }) {
-            var wideSurdMeasure = DiscreteMeasure.Create(rate: rate, offset: wideOffsetSurd);
+
+        foreach (var rate in new[] { QuadraticSurd.One, QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1) }) {
+            var wideSurdMeasure = DiscreteMeasure.Create(offset: wideOffsetSurd, rate: rate);
+
             Assert.False(condition: wideSurdMeasure.TryCompileInt64(compiled: out _, failure: out var surdFailure));
-            Assert.Equal(expected: DiscreteMeasureCompilationFailure.CoefficientOutOfRange, actual: surdFailure);
+            Assert.Equal(actual: surdFailure, expected: DiscreteMeasureCompilationFailure.CoefficientOutOfRange);
             _ = Assert.Throws<OverflowException>(testCode: () => wideSurdMeasure.CompileInt64());
         }
 
         // The irrational outcome is reserved for coefficients that do narrow and then leave the bounded floor
         // kernel's magnitude envelope: long.MaxValue·√5 per unit interval squares past the Int128 root budget.
         var oversizedIrrationalRate = DiscreteMeasure.Create(
-            rate: QuadraticSurd.Create(0, long.MaxValue, 5, 1),
+            rate: QuadraticSurd.Create(denominator: 1, radicand: 5, rationalNumerator: 0, surdNumerator: long.MaxValue),
             offset: QuadraticSurd.Zero
         );
+
         Assert.False(condition: oversizedIrrationalRate.TryCompileInt64(compiled: out _, failure: out var rateFailure));
-        Assert.Equal(expected: DiscreteMeasureCompilationFailure.IrrationalRate, actual: rateFailure);
+        Assert.Equal(actual: rateFailure, expected: DiscreteMeasureCompilationFailure.IrrationalRate);
         _ = Assert.Throws<OverflowException>(testCode: () => oversizedIrrationalRate.CompileInt64());
 
         return null;
     }
-
     public static string? CompiledRadicalTransport() {
         var spellings = new[] {
             (
-                Rate: QuadraticSurd.Create(0, 1, 8, 1),
-                Offset: QuadraticSurd.Create(0, 1, 2, 1)
+                Rate: QuadraticSurd.Create(denominator: 1, radicand: 8, rationalNumerator: 0, surdNumerator: 1),
+                Offset: QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1)
             ),
             (
-                Rate: QuadraticSurd.Create(0, 1, 12, 1),
-                Offset: QuadraticSurd.Create(7, -1, 3, 2)
+                Rate: QuadraticSurd.Create(denominator: 1, radicand: 12, rationalNumerator: 0, surdNumerator: 1),
+                Offset: QuadraticSurd.Create(denominator: 2, radicand: 3, rationalNumerator: 7, surdNumerator: -1)
             ),
             (
-                Rate: QuadraticSurd.Create(0, 2, 3, 1),
-                Offset: QuadraticSurd.Create(0, -1, 12, 1)
+                Rate: QuadraticSurd.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 2),
+                Offset: QuadraticSurd.Create(denominator: 1, radicand: 12, rationalNumerator: 0, surdNumerator: -1)
             ),
             (
-                Rate: QuadraticSurd.Create(0, 1, 3, 1),
-                Offset: QuadraticSurd.Create(29, -1, 12, 4)
+                Rate: QuadraticSurd.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 1),
+                Offset: QuadraticSurd.Create(denominator: 4, radicand: 12, rationalNumerator: 29, surdNumerator: -1)
             ),
         };
 
         foreach (var (rate, offset) in spellings) {
-            var exact = DiscreteMeasure.Create(rate: rate, offset: offset);
+            var exact = DiscreteMeasure.Create(offset: offset, rate: rate);
+
             Assert.True(condition: exact.TryCompileInt64(compiled: out var compiled, failure: out var failure));
-            Assert.Equal(expected: DiscreteMeasureCompilationFailure.None, actual: failure);
+            Assert.Equal(actual: failure, expected: DiscreteMeasureCompilationFailure.None);
             Assert.True(condition: compiled.IsQuadratic);
 
             foreach (var index in new long[] { -1_000_000L, -37L, -2L, -1L, 0L, 1L, 2L, 37L, 1_000_000L }) {
-                Assert.Equal(expected: (long)exact.Cumulative(index), actual: compiled.Cumulative(index));
-                Assert.Equal(expected: (long)exact.AmountAt(index), actual: compiled.AmountAt(index));
+                Assert.Equal(expected: ((long)exact.Cumulative(index: index)), actual: compiled.Cumulative(index: index));
+                Assert.Equal(expected: ((long)exact.AmountAt(index: index)), actual: compiled.AmountAt(index: index));
             }
 
             foreach (var endpoint in new[] { long.MinValue, long.MaxValue }) {
-                var expected = exact.Cumulative(endpoint);
-                var fits = (expected >= long.MinValue) && (expected <= long.MaxValue);
-                Assert.Equal(expected: fits, actual: compiled.TryCumulative(index: endpoint, cumulative: out var bounded));
-                if (fits) { Assert.Equal(expected: (long)expected, actual: bounded); }
+                var expected = exact.Cumulative(index: endpoint);
+                var fits = ((expected >= long.MinValue) && (expected <= long.MaxValue));
+
+                Assert.Equal(expected: fits, actual: compiled.TryCumulative(cumulative: out var bounded, index: endpoint));
+                if (fits) { Assert.Equal(actual: bounded, expected: ((long)expected)); }
             }
         }
 
         return null;
     }
-
     public static string? NumberTheorySurface() {
         var callbackPrimes = new List<ulong>();
-        NumberTheoryFunctions.SegmentedPrimeSieve(low: 0, high: 512, onPrime: callbackPrimes.Add);
-        var expected = Enumerable.Range(start: 0, count: 513)
-            .Where(IsPrimeByTrialDivision)
-            .Select(value => (ulong)value)
+
+        NumberTheoryFunctions.SegmentedPrimeSieve(high: 512, low: 0, onPrime: callbackPrimes.Add);
+        var expected = Enumerable.Range(count: 513, start: 0)
+            .Where(predicate: IsPrimeByTrialDivision)
+            .Select(selector: value => ((ulong)value))
             .ToArray();
-        Assert.Equal(expected: expected, actual: callbackPrimes);
-        Assert.Equal(expected: expected, actual: NumberTheoryFunctions.EnumeratePrimes(low: 0, high: 512));
+
+        Assert.Equal(actual: callbackPrimes, expected: expected);
+        Assert.Equal(expected: expected, actual: NumberTheoryFunctions.EnumeratePrimes(high: 512, low: 0));
 
         var ceilingPrime = new List<ulong>();
+
         NumberTheoryFunctions.SegmentedPrimeSieve(
-            low: 4_294_967_291UL,
             high: uint.MaxValue,
+            low: 4_294_967_291UL,
             onPrime: ceilingPrime.Add
         );
-        Assert.Equal(expected: [4_294_967_291UL], actual: ceilingPrime);
+        Assert.Equal(actual: ceilingPrime, expected: [4_294_967_291UL]);
         _ = Assert.Throws<ArgumentOutOfRangeException>(
             testCode: () => NumberTheoryFunctions.SegmentedPrimeSieve(
-                low: ulong.MaxValue,
                 high: ulong.MaxValue,
+                low: ulong.MaxValue,
                 onPrime: static _ => { }
             )
         );
 
-        Assert.Equal(expected: -1, actual: NumberTheoryFunctions.JacobiSymbol(numerator: 1001, denominator: 9907));
+        Assert.Equal(expected: -1, actual: NumberTheoryFunctions.JacobiSymbol(denominator: 9907, numerator: 1001));
 
         BigInteger[] nonUnit = [0, 2];
+
         _ = Assert.Throws<ArgumentException>(
             testCode: () => NumberTheoryFunctions.HenselLiftRoot(
+                baseModulus: 4,
                 coefficients: nonUnit,
                 root: 0,
-                baseModulus: 4,
                 targetPower: 2
             )
         );
@@ -319,92 +338,96 @@ internal static class CoreSurfaceClaims {
         // unit there, so the lift is unique. Every correction step is nonzero, and the checks below share no code
         // with the lifting loop: residue, range, and a direct Horner evaluation modulo 9^4.
         BigInteger[] unit = [-7, 0, 1];
-        var baseModulus = new BigInteger(9);
-        var targetModulus = BigInteger.Pow(baseModulus, 4);
+        var baseModulus = new BigInteger(value: 9);
+        var targetModulus = BigInteger.Pow(exponent: 4, value: baseModulus);
         var lifted = NumberTheoryFunctions.HenselLiftRoot(
+            baseModulus: baseModulus,
             coefficients: unit,
             root: 4,
-            baseModulus: baseModulus,
             targetPower: 4
         );
-        Assert.Equal(expected: new BigInteger(4), actual: lifted % baseModulus);
-        Assert.InRange(actual: lifted, low: BigInteger.Zero, high: targetModulus - BigInteger.One);
-        Assert.Equal(expected: BigInteger.Zero, actual: EvaluatePolynomial(unit, lifted) % targetModulus);
+
+        Assert.Equal(expected: new BigInteger(value: 4), actual: (lifted % baseModulus));
+        Assert.InRange(actual: lifted, low: BigInteger.Zero, high: (targetModulus - BigInteger.One));
+        Assert.Equal(expected: BigInteger.Zero, actual: (EvaluatePolynomial(coefficients: unit, point: lifted) % targetModulus));
 
         return null;
     }
-
     public static string? QuadraticSurdSurface() {
         var zero = QuadraticSurd.Zero;
         var one = QuadraticSurd.One;
-        var sqrt2 = QuadraticSurd.Create(0, 1, 2, 1);
-        var sqrt8 = QuadraticSurd.Create(0, 1, 8, 1);
-        var twoSqrt2 = QuadraticSurd.Create(0, 2, 2, 1);
-        var rational = QuadraticSurd.Rational(numerator: 6, denominator: 4);
+        var sqrt2 = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1);
+        var sqrt8 = QuadraticSurd.Create(denominator: 1, radicand: 8, rationalNumerator: 0, surdNumerator: 1);
+        var twoSqrt2 = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 2);
+        var rational = QuadraticSurd.Rational(denominator: 4, numerator: 6);
 
         Assert.True(condition: zero.IsRational);
         Assert.Equal(expected: BigInteger.Zero, actual: zero.RationalNumerator);
         Assert.Equal(expected: BigInteger.Zero, actual: zero.SurdNumerator);
         Assert.Equal(expected: BigInteger.Zero, actual: zero.Radicand);
         Assert.Equal(expected: BigInteger.One, actual: zero.Denominator);
-        Assert.Equal(expected: QuadraticSurd.Rational(1), actual: one);
-        Assert.Equal(expected: QuadraticSurd.Rational(3, 2), actual: rational);
-        Assert.Equal(expected: twoSqrt2, actual: sqrt8);
+        Assert.Equal(expected: QuadraticSurd.Rational(value: 1), actual: one);
+        Assert.Equal(expected: QuadraticSurd.Rational(denominator: 2, numerator: 3), actual: rational);
+        Assert.Equal(actual: sqrt8, expected: twoSqrt2);
         Assert.Equal(expected: 1, actual: sqrt2.Sign);
         Assert.Equal(expected: BigInteger.One, actual: sqrt2.Floor());
-        Assert.Equal(expected: new BigInteger(2), actual: sqrt2.Ceiling());
+        Assert.Equal(expected: new BigInteger(value: 2), actual: sqrt2.Ceiling());
         Assert.Equal(expected: sqrt2, actual: (-sqrt2).Abs());
-        Assert.True(condition: sqrt2.CompareTo(other: rational) < 0);
-        Assert.True(condition: sqrt2 < rational);
-        Assert.True(condition: sqrt2 <= sqrt8);
-        Assert.True(condition: sqrt8 > sqrt2);
-        Assert.True(condition: sqrt8 >= twoSqrt2);
-        Assert.Equal(expected: QuadraticSurd.Rational(2), actual: sqrt2 * sqrt2);
-        Assert.Equal(expected: sqrt2, actual: (sqrt2 + one) - one);
-        Assert.Equal(expected: one, actual: sqrt2 / sqrt2);
-        Assert.Equal(expected: -sqrt2, actual: -sqrt2);
+        Assert.True(condition: (sqrt2.CompareTo(other: rational) < 0));
+        Assert.True(condition: (sqrt2 < rational));
+        Assert.True(condition: (sqrt2 <= sqrt8));
+        Assert.True(condition: (sqrt8 > sqrt2));
+        Assert.True(condition: (sqrt8 >= twoSqrt2));
+        Assert.Equal(expected: QuadraticSurd.Rational(value: 2), actual: (sqrt2 * sqrt2));
+        Assert.Equal(actual: ((sqrt2 + one) - one), expected: sqrt2);
+        Assert.Equal(actual: (sqrt2 / sqrt2), expected: one);
+        Assert.Equal(actual: -sqrt2, expected: -sqrt2);
 
-        var scale = BigInteger.Pow(10, 400);
-        var nearOne = QuadraticSurd.Rational(scale + 1, scale).ToDouble();
-        Assert.True(condition: double.IsFinite(nearOne));
-        Assert.Equal(expected: 1.0, actual: nearOne);
-        Assert.Equal(expected: -1.0, actual: QuadraticSurd.Rational(-(scale + 1), scale).ToDouble());
-        Assert.Equal(expected: double.PositiveInfinity, actual: QuadraticSurd.Rational(scale, 1).ToDouble());
-        Assert.Equal(expected: 0.0, actual: QuadraticSurd.Rational(1, scale).ToDouble());
+        var scale = BigInteger.Pow(exponent: 400, value: 10);
+        var nearOne = QuadraticSurd.Rational(denominator: scale, numerator: (scale + 1)).ToDouble();
+
+        Assert.True(condition: double.IsFinite(d: nearOne));
+        Assert.Equal(actual: nearOne, expected: 1.0);
+        Assert.Equal(expected: -1.0, actual: QuadraticSurd.Rational(denominator: scale, numerator: -(scale + 1)).ToDouble());
+        Assert.Equal(expected: double.PositiveInfinity, actual: QuadraticSurd.Rational(denominator: 1, numerator: scale).ToDouble());
+        Assert.Equal(expected: 0.0, actual: QuadraticSurd.Rational(denominator: scale, numerator: 1).ToDouble());
 
         var pellLike = QuadraticSurd.Create(
-            rationalNumerator: -(2 * scale * scale),
-            surdNumerator: 2 * scale,
-            radicand: (scale * scale) + 1,
-            denominator: 1
+            denominator: 1,
+            radicand: ((scale * scale) + 1),
+            rationalNumerator: -((2 * scale) * scale),
+            surdNumerator: (2 * scale)
         ).ToDouble();
-        Assert.True(condition: double.IsFinite(pellLike));
-        Assert.InRange(actual: pellLike, low: 0.999999999999999, high: 1.000000000000001);
+
+        Assert.True(condition: double.IsFinite(d: pellLike));
+        Assert.InRange(actual: pellLike, high: 1.000000000000001, low: 0.999999999999999);
 
         return null;
     }
-
     public static string? PrimeExtensionsSurface() {
-        for (uint value = 0; value <= 2048; ++value) {
-            Assert.Equal(expected: IsPrimeByTrialDivision((int)value), actual: value.IsPrime());
+        for (uint value = 0; (value <= 2048); ++value) {
+            Assert.Equal(expected: IsPrimeByTrialDivision(value: ((int)value)), actual: value.IsPrime());
         }
 
         uint[] firstPrimes = [2U, 3U, 5U, 7U, 11U, 13U, 17U, 19U, 23U, 29U, 31U];
-        for (uint index = 0; index < firstPrimes.Length; ++index) {
+
+        for (uint index = 0; (index < firstPrimes.Length); ++index) {
             Assert.Equal(expected: firstPrimes[index], actual: index.NthPrime());
-            Assert.Equal(expected: index + 1U, actual: firstPrimes[index].PrimeCountingFunction());
+            Assert.Equal(expected: (index + 1U), actual: firstPrimes[index].PrimeCountingFunction());
         }
 
         Span<uint> factors = stackalloc uint[32];
         var count = 360U.Factorize(destination: factors);
+
         Assert.Equal(expected: [2U, 2U, 2U, 3U, 3U, 5U], actual: factors[..count].ToArray());
         uint[] undersized = [101U, 102U, 103U, 104U, 105U];
         var beforeRefusal = undersized.ToArray();
         var refusal = Assert.Throws<ArgumentException>(
             testCode: () => 360U.Factorize(destination: undersized)
         );
+
         Assert.Equal(expected: "destination", actual: refusal.ParamName);
-        Assert.Equal(expected: beforeRefusal, actual: undersized);
+        Assert.Equal(actual: undersized, expected: beforeRefusal);
         // A prime reports ITSELF; only a value below two reports nothing.
         Assert.Equal(expected: 1, actual: 359U.Factorize(destination: factors));
         Assert.Equal(expected: 359U, actual: factors[0]);
@@ -412,11 +435,11 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     public static string? UnsignedIntegerSurface() {
-        for (uint x = 0; x < 32; ++x) {
-            for (uint y = 0; y < 32; ++y) {
+        for (uint x = 0; (x < 32); ++x) {
+            for (uint y = 0; (y < 32); ++y) {
                 var paired = x.ElegantPair<uint, ulong>(other: y);
+
                 Assert.Equal(expected: (x, y), actual: paired.ElegantUnpair<ulong, uint>());
             }
         }
@@ -430,35 +453,41 @@ internal static class CoreSurfaceClaims {
         Assert.Empty(collection: 1U.EnumeratePrimeFactors());
 
         var inverse = 3U.ModularInverse();
-        Assert.Equal(expected: 1U, actual: unchecked(3U * inverse));
+
+        Assert.Equal(actual: unchecked((3U * inverse)), expected: 1U);
         Assert.Equal(expected: 0U, actual: 0U.NextPowerOfTwo());
         Assert.Equal(expected: 32U, actual: 17U.NextPowerOfTwo());
         Assert.Equal(expected: 16U, actual: 15U.NextSquare());
         Assert.Equal(expected: 25U, actual: 16U.NextSquare());
 
-        for (uint value = 0; value <= 10_000; ++value) {
+        for (uint value = 0; (value <= 10_000); ++value) {
             var root = value.SquareRoot();
-            Assert.True(condition: ((ulong)root * root) <= value);
-            Assert.True(condition: ((ulong)(root + 1U) * (root + 1U)) > value);
+
+            Assert.True(condition: ((((ulong)root) * root) <= value));
+            Assert.True(condition: ((((ulong)(root + 1U)) * (root + 1U)) > value));
         }
 
         return null;
     }
-
     public static string? Fnv1aSurface() {
         var bytes = Fnv1aHash.Create();
-        foreach (var value in "hello"u8) { bytes.Add(value); }
+
+        foreach (var value in "hello"u8) { bytes.Add(value: value); }
         Assert.Equal(expected: 0xA430D84680AABD0BUL, actual: bytes.Value);
 
         var packed32 = Fnv1aHash.Create();
+
         packed32.Add(value: 0x04030201U);
         var individual32 = Fnv1aHash.Create();
-        foreach (var value in new byte[] { 1, 2, 3, 4 }) { individual32.Add(value); }
+
+        foreach (var value in new byte[] { 1, 2, 3, 4 }) { individual32.Add(value: value); }
         Assert.Equal(expected: individual32.Value, actual: packed32.Value);
 
         var packed64 = Fnv1aHash.Create();
+
         packed64.Add(value: ulong.MaxValue);
         var signed64 = Fnv1aHash.Create();
+
         signed64.Add(value: -1L);
         Assert.Equal(expected: packed64.Value, actual: signed64.Value);
 
@@ -477,33 +506,35 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     public static string? MonotonicPartitionerSurface() {
-        Assert.Equal(expected: 1024, actual: MonotonicPartitioner.MaxBucketCount);
-        Assert.Equal(expected: 65536, actual: MonotonicPartitioner.MaxValueCount);
+        Assert.Equal(actual: MonotonicPartitioner.MaxBucketCount, expected: 1024);
+        Assert.Equal(actual: MonotonicPartitioner.MaxValueCount, expected: 65536);
 
-        for (var value = 0; value < 4096; ++value) {
+        for (var value = 0; (value < 4096); ++value) {
             var prior = 0;
-            for (var bucketCount = 1; bucketCount <= 64; ++bucketCount) {
-                var safe = MonotonicPartitioner.GetBucketId(value: (ushort)value, bucketCount: bucketCount);
-                var dangerous = MonotonicPartitioner.GetBucketIdDangerous(value: (ushort)value, bucketCount: bucketCount);
-                Assert.Equal(expected: safe, actual: dangerous);
-                Assert.InRange(actual: safe, low: 0, high: bucketCount - 1);
-                if (bucketCount > 1 && safe != prior) {
-                    Assert.Equal(expected: bucketCount - 1, actual: safe);
+
+            for (var bucketCount = 1; (bucketCount <= 64); ++bucketCount) {
+                var safe = MonotonicPartitioner.GetBucketId(bucketCount: bucketCount, value: ((ushort)value));
+                var dangerous = MonotonicPartitioner.GetBucketIdDangerous(bucketCount: bucketCount, value: ((ushort)value));
+
+                Assert.Equal(actual: dangerous, expected: safe);
+                Assert.InRange(actual: safe, high: (bucketCount - 1), low: 0);
+                if ((bucketCount > 1) && (safe != prior)) {
+                    Assert.Equal(actual: safe, expected: (bucketCount - 1));
                 }
                 prior = safe;
             }
         }
 
-        var metrics = MonotonicPartitioner.GetMetrics(value: (ushort)12345, bucketCount: 17);
+        var metrics = MonotonicPartitioner.GetMetrics(bucketCount: 17, value: ((ushort)12345));
+
         Assert.Equal(expected: 17, actual: metrics.BucketCount);
-        Assert.Equal(expected: (ushort)12345, actual: metrics.Value);
+        Assert.Equal(expected: ((ushort)12345), actual: metrics.Value);
         Assert.InRange(actual: metrics.Rank, low: 0, high: ushort.MaxValue);
-        Assert.InRange(actual: metrics.JumpCount, low: 0, high: MonotonicPartitioner.MaxBucketCount - 1);
-        Assert.True(condition: metrics.MigrationDistance >= 0);
+        Assert.InRange(actual: metrics.JumpCount, low: 0, high: (MonotonicPartitioner.MaxBucketCount - 1));
+        Assert.True(condition: (metrics.MigrationDistance >= 0));
         Assert.Equal(
-            expected: metrics.MigrationDistance == 0 ? 0.0f : 1.0f / metrics.MigrationDistance,
+            expected: ((metrics.MigrationDistance == 0) ? 0.0f : (1.0f / metrics.MigrationDistance)),
             actual: metrics.Velocity
         );
 
@@ -514,28 +545,30 @@ internal static class CoreSurfaceClaims {
             Rank: 7,
             Value: 11
         );
+
         Assert.Equal(expected: 8, actual: constructed.BucketCount);
         Assert.Equal(expected: 3, actual: constructed.JumpCount);
         Assert.Equal(expected: 2, actual: constructed.MigrationDistance);
         Assert.Equal(expected: 7, actual: constructed.Rank);
-        Assert.Equal(expected: (ushort)11, actual: constructed.Value);
+        Assert.Equal(expected: ((ushort)11), actual: constructed.Value);
         Assert.Equal(expected: 0.5f, actual: constructed.Velocity);
 
-        var guid = new Guid("00112233-4455-6677-8899-aabbccddeeff");
+        var guid = new Guid(g: "00112233-4455-6677-8899-aabbccddeeff");
+
         Assert.Equal(
-            expected: MonotonicPartitioner.GetBucketIdDangerous(value: guid, bucketCount: 257),
-            actual: MonotonicPartitioner.GetBucketId(value: guid, bucketCount: 257)
+            expected: MonotonicPartitioner.GetBucketIdDangerous(bucketCount: 257, value: guid),
+            actual: MonotonicPartitioner.GetBucketId(bucketCount: 257, value: guid)
         );
-        var guidMetrics = MonotonicPartitioner.GetMetrics(value: guid, bucketCount: 257);
+        var guidMetrics = MonotonicPartitioner.GetMetrics(bucketCount: 257, value: guid);
+
         Assert.Equal(expected: 257, actual: guidMetrics.BucketCount);
 
         return null;
     }
-
     public static string? BigIntegerSquareRootSurface() {
         // The shared range: every ulong is a BigInteger, so the arbitrary-width Newton descent and the hardware-seeded
         // fixed-width kernel must agree everywhere both are defined. They share no line of code and no idea.
-        for (ulong value = 0; value <= 4096; ++value) {
+        for (ulong value = 0; (value <= 4096); ++value) {
             Assert.Equal(
                 expected: new BigInteger(value: value.SquareRoot()),
                 actual: BigIntegerFunctions.SquareRoot(value: new BigInteger(value: value))
@@ -546,7 +579,7 @@ internal static class CoreSurfaceClaims {
             4294967294UL, 4294967295UL, 4294967296UL, 4294967297UL,
             9223372036854775807UL, 9223372036854775808UL,
             18446744065119617024UL, 18446744065119617025UL, 18446744065119617026UL,
-            ulong.MaxValue - 1UL, ulong.MaxValue,
+            (ulong.MaxValue - 1UL), ulong.MaxValue,
         }) {
             Assert.Equal(
                 expected: new BigInteger(value: value.SquareRoot()),
@@ -559,6 +592,7 @@ internal static class CoreSurfaceClaims {
         // (2^100 + 1)^2 = 2^200 + 2^101 + 1 > 2^200 + 1, so one above still roots to 2^100.
         var twoPow100 = (BigInteger.One << 100);
         var twoPow200 = (BigInteger.One << 200);
+
         Assert.Equal(expected: twoPow100, actual: BigIntegerFunctions.SquareRoot(value: twoPow200));
         Assert.Equal(expected: (twoPow100 - BigInteger.One), actual: BigIntegerFunctions.SquareRoot(value: (twoPow200 - BigInteger.One)));
         Assert.Equal(expected: twoPow100, actual: BigIntegerFunctions.SquareRoot(value: (twoPow200 + BigInteger.One)));
@@ -566,6 +600,7 @@ internal static class CoreSurfaceClaims {
         // 10^100 = (10^50)^2 exactly, and the same two neighbours by the same derivation.
         var tenPow50 = BigInteger.Pow(value: new BigInteger(value: 10), exponent: 50);
         var tenPow100 = BigInteger.Pow(value: new BigInteger(value: 10), exponent: 100);
+
         Assert.Equal(expected: tenPow50, actual: BigIntegerFunctions.SquareRoot(value: tenPow100));
         Assert.Equal(expected: (tenPow50 - BigInteger.One), actual: BigIntegerFunctions.SquareRoot(value: (tenPow100 - BigInteger.One)));
         Assert.Equal(expected: tenPow50, actual: BigIntegerFunctions.SquareRoot(value: (tenPow100 + BigInteger.One)));
@@ -602,7 +637,6 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     public static string? BigIntegerModularInverseSurface() {
         // Hand-derived rows, each verified by multiplying back: 3*5 = 15 = 2*7 + 1; 3*4 = 12 = 11 + 1;
         // 10*12 = 120 = 7*17 + 1; 2*3 = 6 = 5 + 1. The negative row reduces first: -1 = 6 (mod 7) and 6*6 = 36 = 5*7 + 1.
@@ -616,8 +650,9 @@ internal static class CoreSurfaceClaims {
             (1, 1, 0),
             (5, 1, 0),
         ];
+
         foreach (var (value, modulus, inverse) in rows) {
-            Assert.Equal(expected: inverse, actual: BigIntegerFunctions.ModularInverse(value: value, modulus: modulus));
+            Assert.Equal(expected: inverse, actual: BigIntegerFunctions.ModularInverse(modulus: modulus, value: value));
         }
 
         // 2 * (2^63 + 1) = 2^64 + 2 = (2^64 + 1) + 1, so the inverse of two modulo the odd 2^64 + 1 is 2^63 + 1.
@@ -629,7 +664,8 @@ internal static class CoreSurfaceClaims {
         // The shared range: modulo 2^64 an odd value is invertible, and that is the ONLY modulus the fixed-width
         // Newton-Hensel kernel knows. Extended Euclid and a ladder of squarings share nothing but the answer.
         var twoPow64 = (BigInteger.One << 64);
-        for (var value = 1UL; value < 4096UL; value += 2UL) {
+
+        for (var value = 1UL; (value < 4096UL); value += 2UL) {
             Assert.Equal(
                 expected: new BigInteger(value: value.ModularInverse()),
                 actual: BigIntegerFunctions.ModularInverse(value: new BigInteger(value: value), modulus: twoPow64)
@@ -638,7 +674,7 @@ internal static class CoreSurfaceClaims {
         foreach (var value in new ulong[] {
             1UL, 3UL, 5UL, 7UL, 9UL, 4294967295UL, 4294967297UL,
             9223372036854775807UL, 9223372036854775809UL,
-            12345678901234567UL, ulong.MaxValue - 2UL, ulong.MaxValue,
+            12345678901234567UL, (ulong.MaxValue - 2UL), ulong.MaxValue,
         }) {
             Assert.Equal(
                 expected: new BigInteger(value: value.ModularInverse()),
@@ -654,13 +690,14 @@ internal static class CoreSurfaceClaims {
             new(value: 2305843009213693951L), twoPow64, (twoPow64 + BigInteger.One),
             BigInteger.Pow(value: new BigInteger(value: 10), exponent: 40),
         ];
+
         foreach (var modulus in moduli) {
-            for (var offset = 0; offset < 64; ++offset) {
+            for (var offset = 0; (offset < 64); ++offset) {
                 var value = (new BigInteger(value: ((offset * 2654435761L) + 7L)) - (BigInteger.One << 40));
 
-                if (!BigInteger.GreatestCommonDivisor(value, modulus).IsOne) { continue; }
+                if (!BigInteger.GreatestCommonDivisor(left: value, right: modulus).IsOne) { continue; }
 
-                var inverse = BigIntegerFunctions.ModularInverse(value: value, modulus: modulus);
+                var inverse = BigIntegerFunctions.ModularInverse(modulus: modulus, value: value);
 
                 Assert.InRange(actual: inverse, low: BigInteger.Zero, high: (modulus - BigInteger.One));
                 Assert.Equal(
@@ -681,7 +718,7 @@ internal static class CoreSurfaceClaims {
             (new BigInteger(value: (ulong.MaxValue - 1UL)), twoPow64), (2, twoPow64),
         }) {
             var refusal = Assert.Throws<ArgumentException>(
-                testCode: () => BigIntegerFunctions.ModularInverse(value: value, modulus: modulus)
+                testCode: () => BigIntegerFunctions.ModularInverse(modulus: modulus, value: value)
             );
 
             Assert.Equal(expected: "value", actual: refusal.ParamName);
@@ -699,17 +736,16 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     public static string? BigIntegerModularSquareRootSurface() {
         // Hand-derived rows. Mod 7 the squares are 1, 4, 2, 2, 4, 1 at 1..6, so the residues are {0, 1, 2, 4} and the
         // non-residues are {3, 5, 6}; 7 = 3 (mod 4), so a residue answers with the single power v^((7+1)/4) = v^2, and
         // 2^2 = 4 is therefore the returned root of 2. -5 reduces to 2 first and answers identically.
-        AssertRoot(value: 2, oddPrime: 7, expected: 4);
-        AssertRoot(value: -5, oddPrime: 7, expected: 4);
-        AssertRoot(value: 0, oddPrime: 7, expected: 0);
-        AssertRoot(value: 14, oddPrime: 7, expected: 0);
+        AssertRoot(expected: 4, oddPrime: 7, value: 2);
+        AssertRoot(expected: 4, oddPrime: 7, value: -5);
+        AssertRoot(expected: 0, oddPrime: 7, value: 0);
+        AssertRoot(expected: 0, oddPrime: 7, value: 14);
         foreach (var nonResidue in new BigInteger[] { 3, 5, 6, -1, -2, -4 }) {
-            Assert.False(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(value: nonResidue, oddPrime: 7, root: out var refused));
+            Assert.False(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(oddPrime: 7, root: out var refused, value: nonResidue));
             Assert.Equal(expected: BigInteger.Zero, actual: refused);
         }
 
@@ -718,11 +754,11 @@ internal static class CoreSurfaceClaims {
         foreach (var (value, roots) in new (BigInteger Value, BigInteger[] Roots)[] {
             (1, [1, 12]), (3, [4, 9]), (4, [2, 11]), (9, [3, 10]), (10, [6, 7]), (12, [5, 8]),
         }) {
-            Assert.True(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(value: value, oddPrime: 13, root: out var root));
-            Assert.Contains(expected: root, collection: roots);
+            Assert.True(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(oddPrime: 13, root: out var root, value: value));
+            Assert.Contains(collection: roots, expected: root);
         }
         foreach (var nonResidue in new BigInteger[] { 2, 5, 6, 7, 8, 11 }) {
-            Assert.False(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(value: nonResidue, oddPrime: 13, root: out var refused));
+            Assert.False(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(oddPrime: 13, root: out var refused, value: nonResidue));
             Assert.Equal(expected: BigInteger.Zero, actual: refused);
         }
 
@@ -739,24 +775,24 @@ internal static class CoreSurfaceClaims {
             var field = PrimeField64.Create(modulus: modulus);
             var bigModulus = new BigInteger(value: modulus);
 
-            for (var step = 0; step < 48; ++step) {
-                var value = (new BigInteger(value: ((step * 6364136223846793005L) ^ 0x2545F4914F6CDD1DL)) - (BigInteger.One << 61));
+            for (var step = 0; (step < 48); ++step) {
+                var value = (new BigInteger(value: (step * 6364136223846793005L) ^ 0x2545F4914F6CDD1DL) - (BigInteger.One << 61));
                 var reduced = (((value % bigModulus) + bigModulus) % bigModulus);
-                var expected = field.TrySqrt(value: (ulong)reduced, root: out var fieldRoot);
-                var actual = BigIntegerFunctions.TrySquareRootModuloOddPrime(value: value, oddPrime: bigModulus, root: out var root);
+                var expected = field.TrySqrt(root: out var fieldRoot, value: ((ulong)reduced));
+                var actual = BigIntegerFunctions.TrySquareRootModuloOddPrime(oddPrime: bigModulus, root: out var root, value: value);
 
-                Assert.Equal(expected: expected, actual: actual);
+                Assert.Equal(actual: actual, expected: expected);
 
                 // The quadratic character, decided a third way: binary reciprocity, which neither side runs. A prime
                 // modulus makes the Jacobi symbol the Legendre symbol, and zero is the p-divides-value case both accept.
                 Assert.Equal(
-                    expected: (NumberTheoryFunctions.JacobiSymbol(numerator: value, denominator: bigModulus) >= 0),
+                    expected: (NumberTheoryFunctions.JacobiSymbol(denominator: bigModulus, numerator: value) >= 0),
                     actual: actual
                 );
 
                 if (actual) {
                     Assert.InRange(actual: root, low: BigInteger.Zero, high: (bigModulus - BigInteger.One));
-                    Assert.Equal(expected: reduced, actual: ((root * root) % bigModulus));
+                    Assert.Equal(actual: ((root * root) % bigModulus), expected: reduced);
 
                     var big = new BigInteger(value: fieldRoot);
 
@@ -771,19 +807,20 @@ internal static class CoreSurfaceClaims {
         // 3 (mod 4), so this reaches the single-power branch at an operand no prime field can hold. The root is checked
         // by squaring it back and the character by reciprocity; nothing here is compared against a second root-finder.
         var mersenne89 = ((BigInteger.One << 89) - BigInteger.One);
-        for (var step = 0; step < 24; ++step) {
+
+        for (var step = 0; (step < 24); ++step) {
             var value = new BigInteger(value: ((step * 2862933555777941757L) + 3037000493L));
             var reduced = (((value % mersenne89) + mersenne89) % mersenne89);
-            var accepted = BigIntegerFunctions.TrySquareRootModuloOddPrime(value: value, oddPrime: mersenne89, root: out var root);
+            var accepted = BigIntegerFunctions.TrySquareRootModuloOddPrime(oddPrime: mersenne89, root: out var root, value: value);
 
             Assert.Equal(
-                expected: (NumberTheoryFunctions.JacobiSymbol(numerator: value, denominator: mersenne89) >= 0),
+                expected: (NumberTheoryFunctions.JacobiSymbol(denominator: mersenne89, numerator: value) >= 0),
                 actual: accepted
             );
 
             if (accepted) {
                 Assert.InRange(actual: root, low: BigInteger.Zero, high: (mersenne89 - BigInteger.One));
-                Assert.Equal(expected: reduced, actual: ((root * root) % mersenne89));
+                Assert.Equal(actual: ((root * root) % mersenne89), expected: reduced);
             } else {
                 Assert.Equal(expected: BigInteger.Zero, actual: root);
             }
@@ -791,12 +828,14 @@ internal static class CoreSurfaceClaims {
         // A square by construction roots back to itself or its negation, so the accept direction is exercised at a
         // full-width operand rather than only at whatever the stream happened to land on.
         var planted = ((BigInteger.One << 44) + new BigInteger(value: 1234567));
-        Assert.True(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(value: ((planted * planted) % mersenne89), oddPrime: mersenne89, root: out var plantedRoot));
+
+        Assert.True(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(oddPrime: mersenne89, root: out var plantedRoot, value: ((planted * planted) % mersenne89)));
         Assert.True(condition: ((plantedRoot == planted) || (plantedRoot == (mersenne89 - planted))));
 
         // What is decidable at a glance is enforced; primality is not, and the doc says so.
         // Below three, and even at or above it: both are decidable without factoring, so both are refused outright.
         BigInteger[] refusedModuli = [0, 1, 2, -3, -7, 4, 8, 100, (BigInteger.One << 80)];
+
         foreach (var modulus in refusedModuli) {
             var rejected = modulus;
 
@@ -812,22 +851,21 @@ internal static class CoreSurfaceClaims {
     }
 
     private static void AssertRoot(BigInteger value, BigInteger oddPrime, BigInteger expected) {
-        Assert.True(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(value: value, oddPrime: oddPrime, root: out var root));
-        Assert.Equal(expected: expected, actual: root);
+        Assert.True(condition: BigIntegerFunctions.TrySquareRootModuloOddPrime(oddPrime: oddPrime, root: out var root, value: value));
+        Assert.Equal(actual: root, expected: expected);
     }
-
     private static BigInteger EvaluatePolynomial(ReadOnlySpan<BigInteger> coefficients, BigInteger point) {
         var result = BigInteger.Zero;
-        for (var index = coefficients.Length - 1; index >= 0; --index) {
-            result = (result * point) + coefficients[index];
+
+        for (var index = (coefficients.Length - 1); (index >= 0); --index) {
+            result = ((result * point) + coefficients[index]);
         }
         return result;
     }
-
     private static bool IsPrimeByTrialDivision(int value) {
         if (value < 2) { return false; }
-        for (var divisor = 2; ((long)divisor * divisor) <= value; ++divisor) {
-            if (value % divisor == 0) { return false; }
+        for (var divisor = 2; ((((long)divisor) * divisor) <= value); ++divisor) {
+            if ((value % divisor) == 0) { return false; }
         }
         return true;
     }
@@ -840,8 +878,8 @@ internal static class CoreSurfaceClaims {
         var secondMultiplier = InvertibleBitMix.SecondMultiplier;
         var secondInverse = InvertibleBitMix.SecondMultiplierInverse;
 
-        Assert.Equal(expected: 1U, actual: unchecked((firstMultiplier * firstInverse)));
-        Assert.Equal(expected: 1U, actual: unchecked((secondMultiplier * secondInverse)));
+        Assert.Equal(actual: unchecked((firstMultiplier * firstInverse)), expected: 1U);
+        Assert.Equal(actual: unchecked((secondMultiplier * secondInverse)), expected: 1U);
 
         // Both multipliers must be ODD, which is what makes them units modulo 2^32 at all; an even one has no inverse
         // and the pair above could not exist.
@@ -876,7 +914,6 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     public static string? BitMixIsAPermutationSurface() {
         // Unmix o Mix is the identity on EVERY 32-bit word. On a finite set a left inverse forces injectivity and
         // injectivity forces bijectivity, so this one sweep is the whole permutation claim — not a sample of it.
@@ -929,7 +966,6 @@ internal static class CoreSurfaceClaims {
 
         return quotient;
     }
-
     // The turn-fraction 2·π·step/30, correctly quantized to the NEAREST Q48.16 raw (ties to even) — using the SAME
     // Machin-derived circle constant scalar.sincos-vs-series cross-checks against the published expansion, never the
     // kernel's own TurnRawQ16 constant or its per-step integer-division formula, so this owes nothing to how
@@ -945,7 +981,7 @@ internal static class CoreSurfaceClaims {
         var numerator = ((circle.Low * 2) * step);
         var denominator = (((BigInteger)CyclicRotation.Period) << (WorkingBitCount - FixedQ4816.FractionBitCount));
 
-        return (long)RoundToNearestTiesToEven(numerator: numerator, positiveDenominator: denominator);
+        return ((long)RoundToNearestTiesToEven(numerator: numerator, positiveDenominator: denominator));
     }
 
     // The tolerance a "correctly quantized 30th root of unity" comparison allows, in guard units: the kernel's own
@@ -966,7 +1002,7 @@ internal static class CoreSurfaceClaims {
     private static string? CyclicRotationValueAt(int step) {
         var rotor = CyclicRotation.At(plane: 0, tick: step);
         var idealRaw = IdealTurnFractionRaw(step: step);
-        var enclosure = Oracles.EncloseSinCos(raw: idealRaw, guardBitCount: Oracles.GuardBitCount);
+        var enclosure = Oracles.EncloseSinCos(guardBitCount: Oracles.GuardBitCount, raw: idealRaw);
         var cosScaled = (new BigInteger(value: rotor.Real.Value) << Oracles.GuardBitCount);
         var sinScaled = (new BigInteger(value: rotor.Imaginary.Value) << Oracles.GuardBitCount);
 
@@ -993,9 +1029,9 @@ internal static class CoreSurfaceClaims {
             // handles the negative ticks the subject's FloorModulo is there to absorb.
             for (var tick = -90L; (tick <= 90L); ++tick) {
                 var step = CyclicRotation.Step(plane: plane, tick: tick);
-                var phase = (int)(((BigInteger)tick % period) + period) % period;
+                var phase = (((int)((((BigInteger)tick) % period) + period)) % period);
 
-                Assert.InRange(actual: step, low: 0, high: (period - 1));
+                Assert.InRange(actual: step, high: (period - 1), low: 0);
                 Assert.Equal(expected: step, actual: ((CyclicRotation.Step(plane: plane, tick: 1L) * phase) % period));
 
                 // The loop closes bit-exactly: a whole period later is the SAME rotor, not merely a near one.
@@ -1099,7 +1135,6 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     public static string? BigIntegerPrimeFactorsSurface() {
         // The shared range, against the SECOND shipped factorization: the word-sized kernel's Brent walk over a
         // Montgomery ring, which reaches none of the BigInteger splitter's lines.
@@ -1117,7 +1152,7 @@ internal static class CoreSurfaceClaims {
             new(value: 2305843009213693951L),
             ((BigInteger.One << 67) - BigInteger.One),
             ((BigInteger.One << 83) - BigInteger.One),
-            (((BigInteger.One << 61) - BigInteger.One) * ((BigInteger.One << 31) - BigInteger.One) * 8),
+            ((((BigInteger.One << 61) - BigInteger.One) * ((BigInteger.One << 31) - BigInteger.One)) * 8),
             BigInteger.Pow(value: new BigInteger(value: 10), exponent: 22),
         ];
 
@@ -1148,7 +1183,7 @@ internal static class CoreSurfaceClaims {
                 );
             }
 
-            Assert.Equal(expected: operand, actual: product);
+            Assert.Equal(actual: product, expected: operand);
         }
 
         // Cole's factorization of M67, published in 1903 and derived nowhere in this repository.
@@ -1186,7 +1221,6 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     /// <summary>Proves the factorization is sound at the ONE value the twelve-base witness set decides wrongly: the
     /// least strong pseudoprime to bases two through thirty-seven, <c>318665857834031151167461</c>. The gate calls it
     /// prime; the factorization must not, and must return its two genuine prime factors.</summary>
@@ -1228,12 +1262,11 @@ internal static class CoreSurfaceClaims {
             product *= factor;
         }
 
-        Assert.Equal(expected: new BigInteger[] { lesser, greater, }, actual: factors);
-        Assert.Equal(expected: pseudoprime, actual: product);
+        Assert.Equal(actual: factors, expected: new BigInteger[] { lesser, greater, });
+        Assert.Equal(actual: product, expected: pseudoprime);
 
         return null;
     }
-
     /// <summary>Proves the prime-counting function at EVERY argument through twenty thousand — composites included —
     /// against a sieve of Eratosthenes built here, and the nth-prime inverse across the same range.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
@@ -1282,7 +1315,6 @@ internal static class CoreSurfaceClaims {
 
         return null;
     }
-
     /// <summary>Proves a factorization's cost is heap-bounded rather than stack-bounded: an operand whose multiplicity
     /// is two hundred thousand factors deep returns them all.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>

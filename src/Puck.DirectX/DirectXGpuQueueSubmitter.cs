@@ -20,38 +20,35 @@ namespace Puck.DirectX;
 public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     /// <inheritdoc/>
     public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) =>
-        Execute(deviceContext: deviceContext, commandBufferHandles: commandBufferHandles);
-
+        Execute(commandBufferHandles: commandBufferHandles, deviceContext: deviceContext);
     /// <inheritdoc/>
     public void Submit(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
-        var dxContext = (IDirectXDeviceContext)deviceContext;
+        var dxContext = ((IDirectXDeviceContext)deviceContext);
 
-        Execute(deviceContext: deviceContext, commandBufferHandles: commandBufferHandles);
-        ((DirectXGpuSubmissionFence)fence).Arm(commandQueue: (ID3D12CommandQueue*)dxContext.CommandQueueHandle);
+        Execute(commandBufferHandles: commandBufferHandles, deviceContext: deviceContext);
+        ((DirectXGpuSubmissionFence)fence).Arm(commandQueue: ((ID3D12CommandQueue*)dxContext.CommandQueueHandle));
     }
-
     /// <inheritdoc/>
     public void SubmitAndWait(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        Execute(deviceContext: deviceContext, commandBufferHandles: commandBufferHandles);
+        Execute(commandBufferHandles: commandBufferHandles, deviceContext: deviceContext);
         deviceContext.WaitIdle();
     }
-
     /// <inheritdoc/>
     public IGpuSubmissionFence CreateSubmissionFence(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSubmissionFence(device: (ID3D12Device*)deviceContext.DeviceHandle);
+        new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.DeviceHandle));
 
     private static void Execute(IGpuDeviceContext deviceContext, ReadOnlySpan<nint> commandBufferHandles) {
-        var dxContext = (IDirectXDeviceContext)deviceContext;
-        var queue = (ID3D12CommandQueue*)dxContext.CommandQueueHandle;
+        var dxContext = ((IDirectXDeviceContext)deviceContext);
+        var queue = ((ID3D12CommandQueue*)dxContext.CommandQueueHandle);
         var lists = stackalloc ID3D12CommandList*[commandBufferHandles.Length];
 
         for (var i = 0; (i < commandBufferHandles.Length); i++) {
-            var state = (DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandles[i]).Target!;
+            var state = ((DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandles[i]).Target!);
 
-            lists[i] = (ID3D12CommandList*)state.CommandList;
+            lists[i] = ((ID3D12CommandList*)state.CommandList);
         }
 
-        queue->ExecuteCommandLists(NumCommandLists: (uint)commandBufferHandles.Length, ppCommandLists: lists);
+        queue->ExecuteCommandLists(NumCommandLists: ((uint)commandBufferHandles.Length), ppCommandLists: lists);
     }
 }
 
@@ -68,16 +65,16 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
 
     internal DirectXGpuSubmissionFence(ID3D12Device* device) {
         device->CreateFence(
-            InitialValue: 0,
             Flags: default,
-            riid: ID3D12Fence.IID_Guid,
-            ppFence: out var fence
+            InitialValue: 0,
+            ppFence: out var fence,
+            riid: ID3D12Fence.IID_Guid
         );
-        m_fence = (nint)fence;
+        m_fence = ((nint)fence);
         m_fenceEvent = PInvoke.CreateEvent(
-            lpEventAttributes: (SECURITY_ATTRIBUTES*)null,
-            bManualReset: false,
             bInitialState: false,
+            bManualReset: false,
+            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
             lpName: default(PCWSTR)
         );
 
@@ -99,7 +96,7 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         }
 
         m_pendingValue = m_nextValue++;
-        commandQueue->Signal(Value: m_pendingValue, pFence: (ID3D12Fence*)m_fence);
+        commandQueue->Signal(Value: m_pendingValue, pFence: ((ID3D12Fence*)m_fence));
     }
 
     /// <inheritdoc/>
@@ -108,16 +105,15 @@ file sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
             return;
         }
 
-        var fence = (ID3D12Fence*)m_fence;
+        var fence = ((ID3D12Fence*)m_fence);
 
         if (fence->GetCompletedValue() < m_pendingValue) {
             fence->SetEventOnCompletion(Value: m_pendingValue, hEvent: m_fenceEvent);
-            _ = PInvoke.WaitForSingleObject(hHandle: m_fenceEvent, dwMilliseconds: uint.MaxValue);
+            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_fenceEvent);
         }
 
         m_pendingValue = 0UL;
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         if (0 != m_fence) {

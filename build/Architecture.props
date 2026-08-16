@@ -28,11 +28,18 @@
         for a different and better reason — it carries its own Directory.Build.props/.targets firewall pair
         that stops both discovery walks — and that immunity is a property of ITS build, never of this list.
 
+        src/Web.Functions carries a second, unrelated exclusion below it: a separately built platform app that
+        shares this tree, not part of the graph — never quarantined code awaiting retirement. It is gitignored
+        and untracked, so it can carry no tracked Directory.Build.props/.targets firewall pair of its own the
+        way Puck.BareMetal does, and the same upward walk that reaches experimental/Puck.Demo reaches it too.
+        Puck.slnx never lists it, for the same reason.
+
         A filter that happens to exclude the right directories reads identically to one that excludes the
         wrong ones, which is why the reason sits beside the path.
     -->
     <PropertyGroup>
         <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == '' AND $(MSBuildProjectFullPath.Contains('$([System.IO.Path]::DirectorySeparatorChar)experimental$([System.IO.Path]::DirectorySeparatorChar)'))">false</PuckArchitectureGateEnabled>
+        <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == '' AND $(MSBuildProjectFullPath.Contains('$([System.IO.Path]::DirectorySeparatorChar)src$([System.IO.Path]::DirectorySeparatorChar)Web.Functions$([System.IO.Path]::DirectorySeparatorChar)'))">false</PuckArchitectureGateEnabled>
         <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == ''">true</PuckArchitectureGateEnabled>
     </PropertyGroup>
 
@@ -90,7 +97,7 @@
               the closure of whatever it composes and never introduces one. That inheritance is safe by
               COMPOSITION rather than by trust: every ranked project in the closure has passed this same
               gate in its own build, so a backend arriving through one arrived legally; or
-          (c) it is named below.
+          (c) it carries an explicitly reasoned <PuckArchitectureBackendException> entry below. None do today.
 
         The wider form that suggests itself — "nothing may hold a Backends assembly unless it sits at or
         above that row" — permits any Engine-services project to take a direct backend dependency: legal by
@@ -100,19 +107,12 @@
         would reopen the hole through the .Presentation row, letting an engine service reach a backend by
         referencing a presentation wrapper.
 
-        MEASURED, 2026-08-01, post-unit-2: exactly ONE exception across the settled graph. The absent finding
-        is the load-bearing half — no Engine-services project reached a backend at all — so the quarantine was
-        already real before it was armed, which is the best possible state to arm one
-        in. Empty-because-the-rule-was-too-wide and empty-because-the-graph-is-clean are indistinguishable in
-        a report and opposite in meaning; one honest exception is worth more than a clean sheet produced by
-        not asking.
+        MEASURED, 2026-08-14: zero exceptions across the live graph. Puck.Post was the sole exception before
+        its quarantine; experimental projects are now structurally outside this gate, so retaining that entry
+        would be dead policy for an assembly the build does not produce. The absent finding remains load-bearing:
+        the report proves no Engine-services project reaches a backend, rather than producing an empty sheet by
+        widening the rule.
     -->
-    <ItemGroup>
-        <PuckArchitectureBackendException
-            Include="Puck.Post"
-            Reason="It must name BOTH backends to prove the same contract on each. That is the reason the quarantine exists rather than a breach of it — and it is a statement about Puck.Post's REFERENCES, unrelated to and outliving any temporary posture about whether Puck.Post currently builds."
-        />
-    </ItemGroup>
 
     <!--
         LANE PROFILES — exact-equality closures for the assembly split.
@@ -133,32 +133,74 @@
         <!-- The neutral channel/WASM core. Its whole purpose is the ABSENCE of Puck.Commands and
              Puck.Input; exact equality is what makes that absence enforced rather than merely current. -->
         <PuckArchitectureProfile Include="Puck.Scripting" Closure="Puck.Assets;Puck.Maths" />
-        <!-- The Simulation adapter — the one project permitted to hold the command vocabulary alongside the
-             core. Puck.Abstractions arrives transitively through Puck.Input. -->
-        <PuckArchitectureProfile Include="Puck.Scripting.Simulation" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Input;Puck.Maths;Puck.Scripting" />
-        <!-- The headless P1 split (docs/project-map.md's Puck.World.Data row). The exact-equality closure is wider
-             than Puck.World.Data's own direct references because Puck.Forge already needed
-             Puck.HumbleGamingBrick and Puck.SdfVm before this split existed, and Puck.SdfVm in turn already needed
-             Puck.Hosting/Puck.Recording/Puck.Shaders/Puck.Text — none of that is new here. Puck.Attestation joined
-             2026-08-09: the admission handshake's identity door (Protocol/WorldAdmissionDoor.cs) verifies a
+        <!-- The field-as-data half of the SDF engine, split out of Puck.SdfVm: the instruction ISA, the packed-word
+             program representation, the fluent authoring builder (including laying Puck.Text-authored strings out
+             into marchable glyph geometry), and a warp-free deterministic fixed-point CPU interpreter
+             (Puck.SignedDistance.Queries). Its whole purpose is the ABSENCE of every GPU/presentation/frame-
+             production dependency Puck.SdfVm carries — exact equality enforces that a future member never quietly
+             grows one. -->
+        <PuckArchitectureProfile Include="Puck.SignedDistance" Closure="Puck.Assets;Puck.Maths;Puck.Text" />
+        <!-- The headless P1 split's document row (docs/project-map.md's Puck.World.Schema row; formerly
+             Puck.World.Data). The exact-equality closure is wider than Puck.World.Schema's own direct references
+             because Puck.World.Forge already needed Puck.HumbleGamingBrick and Puck.SignedDistance before this split
+             existed, and Puck.HumbleGamingBrick in turn already needed Puck.Hosting — none of that is new here.
+             Puck.Attestation: the admission handshake's identity door (WorldAdmissionDoor.cs) verifies a
              connecting peer's signed-attestation claim through it — Leaf contracts and data, same row as
-             Puck.Maths/Puck.Storage, so no layer boundary moves. What this profile
-             actually enforces is the ABSENCE that matters: no Backends row, no Presentation row, no Puck.Overlays,
-             no Puck.Input, no Puck.World.Server. A member that would need one of those (the engine-default binding
-             document, the live command/channel vocabulary check) crosses through BindingVocabularyHook instead — an
-             injection seam the composition root wires with a module initializer — rather than a direct reference.
-             Puck.Scripting left this closure with the lane-axis deletion (owner ruling, 2026-08-02, the L5
-             landing): WorldAddonRow no longer carries AddonLane, so nothing in this project names a Puck.Scripting
-             type any more — Puck.World.Server (below) is the one row that still needs it, for the addon host
-             itself. -->
-        <PuckArchitectureProfile Include="Puck.World.Data" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Recording;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Text" />
+             Puck.Maths/Puck.Storage, so no layer boundary moves. Puck.Physics is the production owner of
+             deterministic collider vocabulary and contact geometry previously embedded in World. What this profile
+             actually enforces is the ABSENCE that matters: no Backends row, no Presentation row, no Puck.SdfVm
+             (the GPU renderer — this row reaches only Puck.SignedDistance, its field-as-data half), no
+             Puck.Overlays, no Puck.Input, no Puck.World.Protocol, no Puck.World.Server. A member that would need
+             one of those (the engine-default binding document, the live command/channel vocabulary check, the
+             mutation-kind name catalog) crosses through an injection seam (BindingVocabularyHook,
+             MutationKindVocabularyHook) the composition root wires with a module initializer — rather than a direct
+             reference. Puck.Scripting is absent: WorldAddonRow carries no AddonLane, so nothing in this project
+             names a Puck.Scripting type — Puck.World.Server (below) is the one row that still needs it, for the
+             addon host itself. -->
+        <PuckArchitectureProfile Include="Puck.World.Schema" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.Forge" />
+        <!-- The world-agnostic wire substrate (docs/project-map.md's Puck.Networking row) — the socketless frame
+             grammar and the bounded reader/writer pair every World socket frames its bytes through. Carries no
+             World vocabulary, so its closure is exactly its one leaf dependency: Puck.Maths, for the fixed-point
+             scalar/vector/quaternion lanes the reader/writer read and write. -->
+        <PuckArchitectureProfile Include="Puck.Networking" Closure="Puck.Maths" />
+        <!-- The headless P1 split's wire-vocabulary row (docs/project-map.md's Puck.World.Protocol row; the residue
+             of the former Puck.World.Data after Puck.World.Schema and Puck.Networking split out of it). Everything
+             Puck.World.Schema's profile carries (Protocol references Schema) plus Schema itself and Puck.Networking
+             (the frame/wire grammar its codecs frame payloads through). Same absence this profile enforces: no
+             Backends row, no Presentation row, no Puck.Overlays, no Puck.Input, no Puck.World.Server. -->
+        <PuckArchitectureProfile Include="Puck.World.Protocol" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.Forge;Puck.World.Schema" />
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
-             Puck.World.Data's profile carries (Server references Data), plus Puck.Scripting.Simulation's own
-             closure (Puck.Input, Puck.Scripting.Simulation itself) and Puck.Storage (the owned-world cloud sync
-             substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives directly (WorldTcpHost/
-             WorldTcpWireFormat frame the admission handshake's attestation bytes). Same absence this profile actually
+             Puck.World.Protocol's profile carries (Server references both Schema and Protocol), plus Puck.Storage
+             (the owned-world cloud sync substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives
+             directly (WorldTcpHost/WorldTcpWireFormat frame the admission handshake's attestation bytes). No
+             Puck.Scripting/Puck.Input: the addon guest host that needed them physically moved to Puck.World.Addons
+             (below), which references this project rather than the reverse. Same absence this profile actually
              enforces: no Backends row, no Presentation row, no Puck.Overlays. -->
-        <PuckArchitectureProfile Include="Puck.World.Server" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Forge;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Input;Puck.Maths;Puck.Recording;Puck.Scripting;Puck.Scripting.Simulation;Puck.SdfVm;Puck.Shaders;Puck.Snapshots;Puck.Storage;Puck.Text;Puck.World.Data" />
+        <PuckArchitectureProfile Include="Puck.World.Server" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Storage;Puck.Text;Puck.World.Forge;Puck.World.Protocol;Puck.World.Schema" />
+        <!-- The addon guest host, split out of Puck.World.Server so the authoritative server carries no
+             WASM/Wasmtime surface of its own — everything Puck.World.Server's profile carries (Addons references
+             Server directly), plus Puck.Scripting itself (the guest ABI AddonSimulationPump, hosted directly in
+             this project, validates against) and Puck.Assets (the module bytes a mount reads). No Puck.Input: the
+             source-id vocabulary AddonSimulationPump's predecessor once read moved to Puck.World, not here. Same
+             absence enforced: no Backends row, no Presentation row, no Puck.Overlays. -->
+        <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.SignedDistance;Puck.Storage;Puck.Text;Puck.World.Forge;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
+        <!-- The Linux platform split (docs/project-map.md's Puck.Platform.Linux row). PUCKARCH002 clause (a)
+             already lets any Presentation-or-Composition-roots project hold a Backends assembly, so nothing stops
+             a stray Puck.DirectX* reference from compiling here by rank alone — this exact-equality closure is
+             what actually enforces the property the split exists to prove: a Linux build never links Windows or
+             DirectX code. No equivalent profile for Puck.Platform.Windows — it legitimately carries the full
+             Windows surface, so an exact-equality list there would only be a second place to keep that surface
+             in sync, with no forbidden edge to police (Architecture.props's own reasoning above: lane profiles
+             are "the only tier doing security work"). -->
+        <PuckArchitectureProfile Include="Puck.Platform.Linux" Closure="Puck.Abstractions;Puck.Commands;Puck.Input;Puck.Maths;Puck.Platform" />
+        <!-- The launcher family's OS-neutral member (docs/project-map.md's Puck.Launcher.Linux row). Same
+             reasoning as Puck.Platform.Linux above: PUCKARCH002 clause (a) already permits a Presentation-row
+             project to hold a Backends assembly, so only an exact-equality closure proves it never acquires
+             Puck.DirectX/Puck.DirectX.Presentation/Puck.Platform.Windows — the property the owner's falsifier
+             asks `puck architecture` to show directly, rather than by absence of a build error.
+             Puck.Launcher.Windows gets no equivalent profile for the same reason Puck.Platform.Windows does not:
+             it legitimately carries the full Windows surface. -->
+        <PuckArchitectureProfile Include="Puck.Launcher.Linux" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Maths;Puck.Platform;Puck.Platform.Linux;Puck.Shaders;Puck.Vulkan;Puck.Vulkan.Presentation" />
     </ItemGroup>
 
     <!--
@@ -197,11 +239,19 @@
         Puck.Scripting held nothing else once Puck.Cli's grant became publicity on
         Puck.Scripting.WasmStdlibSources, so both AssemblyInfo.cs files are deleted rather than emptied and
         neither project appears below at all.
+
+        Puck.Maths has one test-only friend, Puck.Maths.Tests, which reaches internal kernels to prove their
+        individual rungs directly.
+
+        Puck.Physics grants Puck.Physics.Tests its internal contact-solver state (the manifold slot table and
+        speculative activation), so the ordering and contact laws can assert on solver internals the public
+        surface deliberately does not expose. Test-only, like the Maths grant beside it.
     -->
     <ItemGroup>
         <PuckArchitectureFriends Include="Puck.Attestation" Friends="Puck.Attestation.Tests" />
         <PuckArchitectureFriends Include="Puck.Input" Friends="Puck.Input.Tests" />
         <PuckArchitectureFriends Include="Puck.Maths" Friends="Puck.Maths.Tests" />
+        <PuckArchitectureFriends Include="Puck.Physics" Friends="Puck.Physics.Tests" />
     </ItemGroup>
 
 </Project>

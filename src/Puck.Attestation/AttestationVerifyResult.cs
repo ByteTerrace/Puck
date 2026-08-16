@@ -31,38 +31,34 @@ public sealed class AttestationVerifyResult {
         ReplayCommit = replayCommit;
     }
 
-    /// <summary>Whether cryptographic verification and verifier policy succeeded. This is not an admission decision.</summary>
-    public bool Verified { get; }
-
-    /// <summary>Why verification refused, or <see langword="null"/> after successful verification.</summary>
-    public string? RefusalReason { get; }
-
     /// <summary>The admitting trust entry's authored reach, or <see langword="null"/> after refusal.</summary>
     internal IReadOnlySet<string>? Reach { get; }
-
     /// <summary>The transaction requirement for a verified sequenced claim, or <see langword="null"/> for an unsequenced claim.</summary>
     internal ReplayCommitRequirement? ReplayCommit { get; }
 
+    /// <summary>Why verification refused, or <see langword="null"/> after successful verification.</summary>
+    public string? RefusalReason { get; }
     /// <summary>Whether this verified result is awaiting a receiver-side replay/effect transaction.</summary>
     public bool RequiresReplayCommit => (ReplayCommit is not null);
+    /// <summary>Whether cryptographic verification and verifier policy succeeded. This is not an admission decision.</summary>
+    public bool Verified { get; }
 
     /// <summary>Builds a verified result carrying the admitting entry's authored slot reach.</summary>
     /// <param name="reach">The slot names the admitting trust entry reaches. Empty means the claim verified but reaches nothing.</param>
     /// <param name="replayCommit">The replay-mark commit to transact with the claim's effect, or <see langword="null"/> for an unsequenced claim.</param>
     internal static AttestationVerifyResult Accept(IReadOnlySet<string> reach, ReplayCommitRequirement? replayCommit) => new(
-        verified: true,
-        refusalReason: null,
         reach: reach,
-        replayCommit: replayCommit
+        refusalReason: null,
+        replayCommit: replayCommit,
+        verified: true
     );
-
     /// <summary>Builds a refused result carrying why. A refusal never carries reach — there is no verified claim to scope.</summary>
     /// <param name="reason">A human-readable refusal reason — never used for control flow, only for reporting.</param>
     internal static AttestationVerifyResult Refuse(string reason) => new(
-        verified: false,
-        refusalReason: reason,
         reach: null,
-        replayCommit: null
+        refusalReason: reason,
+        replayCommit: null,
+        verified: false
     );
 
     /// <summary>
@@ -80,7 +76,6 @@ public sealed class AttestationVerifyResult {
         (Reach is not null) &&
         Reach.Contains(item: slot)
     );
-
     /// <summary>
     /// Gets the transaction requirement for a verified sequenced claim whose authored reach covers
     /// <paramref name="slot"/>. Returning a requirement is deliberately not called admission: the receiver

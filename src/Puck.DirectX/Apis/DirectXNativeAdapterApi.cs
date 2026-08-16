@@ -16,13 +16,13 @@ public sealed unsafe class DirectXNativeAdapterApi : IDirectXAdapterApi {
     private static DirectXAdapterDescription Describe(in DXGI_ADAPTER_DESC1 description) {
         return new DirectXAdapterDescription(
             AdapterLuid: DxgiInterop.ToLuid(luid: in description.AdapterLuid),
-            DedicatedSystemMemory: (ulong)description.DedicatedSystemMemory,
-            DedicatedVideoMemory: (ulong)description.DedicatedVideoMemory,
+            DedicatedSystemMemory: ((ulong)description.DedicatedSystemMemory),
+            DedicatedVideoMemory: ((ulong)description.DedicatedVideoMemory),
             Description: description.Description.ToString(),
             DeviceId: description.DeviceId,
             IsSoftware: (DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE == (description.Flags & DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE)),
             Revision: description.Revision,
-            SharedSystemMemory: (ulong)description.SharedSystemMemory,
+            SharedSystemMemory: ((ulong)description.SharedSystemMemory),
             SubSystemId: description.SubSysId,
             VendorId: description.VendorId
         );

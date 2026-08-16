@@ -46,7 +46,6 @@ public sealed class VulkanStorageBufferFactory : IVulkanStorageBufferFactory {
             storageBufferApi: m_storageBufferApi
         );
     }
-
     /// <inheritdoc/>
     public VulkanDeviceStorageBuffer CreateDeviceLocal(
         VulkanInstance vulkanInstance,

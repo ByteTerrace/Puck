@@ -21,25 +21,9 @@ public static class FixedDual {
                        IAdditiveIdentity<TValue, TValue>,
                        IMultiplicativeIdentity<TValue, TValue> =>
         new(
-        Real: value,
-        Dual: TValue.AdditiveIdentity
-    );
-    /// <summary>Creates the differentiation variable (unit dual part).</summary>
-    /// <typeparam name="TValue">The carrier type providing the required arithmetic operators and identities.</typeparam>
-    /// <param name="value">The value to differentiate with respect to.</param>
-    /// <returns>The dual element <c>value + 1·ε</c>.</returns>
-    public static FixedDual<TValue> Variable<TValue>(TValue value)
-        where TValue : IAdditionOperators<TValue, TValue, TValue>,
-                       ISubtractionOperators<TValue, TValue, TValue>,
-                       IMultiplyOperators<TValue, TValue, TValue>,
-                       IUnaryNegationOperators<TValue, TValue>,
-                       IAdditiveIdentity<TValue, TValue>,
-                       IMultiplicativeIdentity<TValue, TValue> =>
-        new(
-        Real: value,
-        Dual: TValue.MultiplicativeIdentity
-    );
-
+            Real: value,
+            Dual: TValue.AdditiveIdentity
+        );
     /// <summary>Divides <paramref name="left"/> by <paramref name="right"/> (the quotient rule, preserving operand order for non-commutative carriers).</summary>
     /// <typeparam name="TValue">The carrier type; its division must be the inverse of its multiplication on the right for the operands used.</typeparam>
     /// <param name="left">The dividend.</param>
@@ -72,8 +56,17 @@ public static class FixedDual {
             // Real = a/c (correctly-rounded carrier division, thrown on a zero divisor before the dual denominator is
             // squared). Dual numerator b·c − a·d as sign + magnitude; denominator c²; one ties-to-even rounding.
             var real = (a / c);
-            var numerator = FusedArithmetic.AddProducts(firstLeft: b, firstRight: c.Value, secondLeft: a.Value, secondRight: d, subtractSecond: true);
-            var dual = FusedArithmetic.DivideProductSum(numerator: numerator, denominator: FusedArithmetic.SquareMagnitude(value: c.Value));
+            var numerator = FusedArithmetic.AddProducts(
+                firstLeft: b,
+                firstRight: c.Value,
+                secondLeft: a.Value,
+                secondRight: d,
+                subtractSecond: true
+            );
+            var dual = FusedArithmetic.DivideProductSum(
+                numerator: numerator,
+                denominator: FusedArithmetic.SquareMagnitude(value: c.Value)
+            );
 
             return new(
                 Real: Unsafe.BitCast<FixedQ4816, TValue>(source: real),
@@ -104,7 +97,10 @@ public static class FixedDual {
         return new(
             Real: FixedQ4816.Log2(value: value.Real),
             Dual: FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
-                numerator: FusedArithmetic.Product(left: value.Dual.Value, right: FixedQ4816.Log2E.Value),
+                numerator: FusedArithmetic.Product(
+                    left: value.Dual.Value,
+                    right: FixedQ4816.Log2E.Value
+                ),
                 denominator: (((UInt128)FusedArithmetic.RawMagnitude(value: value.Real.Value)) << FixedQ4816.FractionBitCount)
             ))
         );
@@ -144,9 +140,23 @@ public static class FixedDual {
             Dual: (value.Dual / (root * Two))
         );
     }
+    /// <summary>Creates the differentiation variable (unit dual part).</summary>
+    /// <typeparam name="TValue">The carrier type providing the required arithmetic operators and identities.</typeparam>
+    /// <param name="value">The value to differentiate with respect to.</param>
+    /// <returns>The dual element <c>value + 1·ε</c>.</returns>
+    public static FixedDual<TValue> Variable<TValue>(TValue value)
+        where TValue : IAdditionOperators<TValue, TValue, TValue>,
+                       ISubtractionOperators<TValue, TValue, TValue>,
+                       IMultiplyOperators<TValue, TValue, TValue>,
+                       IUnaryNegationOperators<TValue, TValue>,
+                       IAdditiveIdentity<TValue, TValue>,
+                       IMultiplicativeIdentity<TValue, TValue> =>
+        new(
+            Real: value,
+            Dual: TValue.MultiplicativeIdentity
+        );
 
 }
-
 /// <summary>
 /// The dual construction <c>a + b·ε</c> (<c>ε² = 0</c>) over any carrier that supplies the required arithmetic
 /// operators and identities: instantiated with
@@ -190,27 +200,27 @@ public readonly record struct FixedDual<TValue>(TValue Real, TValue Dual)
     /// <returns>The componentwise negation.</returns>
     public static FixedDual<TValue> operator -(FixedDual<TValue> value) =>
         new(
-        Real: -value.Real,
-        Dual: -value.Dual
-    );
+            Real: -value.Real,
+            Dual: -value.Dual
+        );
     /// <summary>Adds two dual elements.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns>The componentwise sum.</returns>
     public static FixedDual<TValue> operator +(FixedDual<TValue> left, FixedDual<TValue> right) =>
         new(
-        Real: (left.Real + right.Real),
-        Dual: (left.Dual + right.Dual)
-    );
+            Real: (left.Real + right.Real),
+            Dual: (left.Dual + right.Dual)
+        );
     /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/>.</summary>
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
     /// <returns>The componentwise difference.</returns>
     public static FixedDual<TValue> operator -(FixedDual<TValue> left, FixedDual<TValue> right) =>
         new(
-        Real: (left.Real - right.Real),
-        Dual: (left.Dual - right.Dual)
-    );
+            Real: (left.Real - right.Real),
+            Dual: (left.Dual - right.Dual)
+        );
     /// <summary>Multiplies two dual elements (the product rule; factor order is preserved for non-commutative carriers).</summary>
     /// <param name="left">The multiplicand.</param>
     /// <param name="right">The multiplier.</param>
@@ -223,46 +233,22 @@ public readonly record struct FixedDual<TValue>(TValue Real, TValue Dual)
         // Both typeof comparisons fold to JIT-time constants for every closed value-type instantiation, so a carrier
         // that is neither house type never sees the fused kernels or their raw casts.
         if (typeof(TValue) == typeof(FixedQ4816)) {
-            return MultiplyScalar(left: left, right: right);
+            return MultiplyScalar(
+                left: left,
+                right: right
+            );
         }
 
         if (typeof(TValue) == typeof(FixedQuaternion)) {
-            return MultiplyQuaternion(left: left, right: right);
+            return MultiplyQuaternion(
+                left: left,
+                right: right
+            );
         }
 
         return new(
             Real: (left.Real * right.Real),
             Dual: ((left.Real * right.Dual) + (left.Dual * right.Real))
-        );
-    }
-
-    // Fused product for the FixedQ4816 carrier: Real = round(a·c) computed from the raw Q32 product inline (the generic
-    // path makes three out-of-line carrier multiplies); Dual = ONE rounding of (a·d + b·c). Bit-identical to the fused
-    // (0, 0) QuadraticAlgebra kernel. Reached only under the JIT-constant guard in operator *.
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static FixedDual<TValue> MultiplyScalar(FixedDual<TValue> left, FixedDual<TValue> right) {
-        var a = Unsafe.BitCast<TValue, FixedQ4816>(source: left.Real).Value;
-        var b = Unsafe.BitCast<TValue, FixedQ4816>(source: left.Dual).Value;
-        var c = Unsafe.BitCast<TValue, FixedQ4816>(source: right.Real).Value;
-        var d = Unsafe.BitCast<TValue, FixedQ4816>(source: right.Dual).Value;
-        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: a) | FusedArithmetic.RawMagnitude(value: b) |
-                                 FusedArithmetic.RawMagnitude(value: c) | FusedArithmetic.RawMagnitude(value: d);
-        long real;
-        long dual;
-
-        if (combinedMagnitude < (1UL << 31)) {
-            // Every raw below 2^31: the single Real product stays below 2^62, and the two Dual products sum below 2^63,
-            // so both fit a signed long.
-            real = FixedQ4816.RoundProductSum(productSum: unchecked((a * c)));
-            dual = FixedQ4816.RoundProductSum(productSum: unchecked(((a * d) + (b * c))));
-        } else {
-            real = FixedQ4816.RoundProductSum(productSum: ((Int128)a * c));
-            dual = FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)a * d) + ((Int128)b * c))));
-        }
-
-        return new(
-            Real: Unsafe.BitCast<FixedQ4816, TValue>(source: FixedQ4816.FromRawBits(value: real)),
-            Dual: Unsafe.BitCast<FixedQ4816, TValue>(source: FixedQ4816.FromRawBits(value: dual))
         );
     }
 
@@ -314,17 +300,17 @@ public readonly record struct FixedDual<TValue>(TValue Real, TValue Dual)
                 (((((aw * dw) - (ax * dx)) - (ay * dy)) - (az * dz)) + ((((bw * cw) - (bx * cx)) - (by * cy)) - (bz * cz)))));
         } else {
             dualX = FixedQ4816.RoundProductSum(productSum: unchecked(
-                ((((((Int128)aw * dx) + ((Int128)ax * dw)) + ((Int128)ay * dz)) - ((Int128)az * dy)) +
-                (((((Int128)bw * cx) + ((Int128)bx * cw)) + ((Int128)by * cz)) - ((Int128)bz * cy)))));
+                (((((((Int128)aw) * dx) + (((Int128)ax) * dw)) + (((Int128)ay) * dz)) - (((Int128)az) * dy)) +
+                ((((((Int128)bw) * cx) + (((Int128)bx) * cw)) + (((Int128)by) * cz)) - (((Int128)bz) * cy)))));
             dualY = FixedQ4816.RoundProductSum(productSum: unchecked(
-                ((((((Int128)aw * dy) - ((Int128)ax * dz)) + ((Int128)ay * dw)) + ((Int128)az * dx)) +
-                (((((Int128)bw * cy) - ((Int128)bx * cz)) + ((Int128)by * cw)) + ((Int128)bz * cx)))));
+                (((((((Int128)aw) * dy) - (((Int128)ax) * dz)) + (((Int128)ay) * dw)) + (((Int128)az) * dx)) +
+                ((((((Int128)bw) * cy) - (((Int128)bx) * cz)) + (((Int128)by) * cw)) + (((Int128)bz) * cx)))));
             dualZ = FixedQ4816.RoundProductSum(productSum: unchecked(
-                ((((((Int128)aw * dz) + ((Int128)ax * dy)) - ((Int128)ay * dx)) + ((Int128)az * dw)) +
-                (((((Int128)bw * cz) + ((Int128)bx * cy)) - ((Int128)by * cx)) + ((Int128)bz * cw)))));
+                (((((((Int128)aw) * dz) + (((Int128)ax) * dy)) - (((Int128)ay) * dx)) + (((Int128)az) * dw)) +
+                ((((((Int128)bw) * cz) + (((Int128)bx) * cy)) - (((Int128)by) * cx)) + (((Int128)bz) * cw)))));
             dualW = FixedQ4816.RoundProductSum(productSum: unchecked(
-                ((((((Int128)aw * dw) - ((Int128)ax * dx)) - ((Int128)ay * dy)) - ((Int128)az * dz)) +
-                (((((Int128)bw * cw) - ((Int128)bx * cx)) - ((Int128)by * cy)) - ((Int128)bz * cz)))));
+                (((((((Int128)aw) * dw) - (((Int128)ax) * dx)) - (((Int128)ay) * dy)) - (((Int128)az) * dz)) +
+                ((((((Int128)bw) * cw) - (((Int128)bx) * cx)) - (((Int128)by) * cy)) - (((Int128)bz) * cz)))));
         }
 
         var dual = new FixedQuaternion(
@@ -337,6 +323,35 @@ public readonly record struct FixedDual<TValue>(TValue Real, TValue Dual)
         return new(
             Real: Unsafe.BitCast<FixedQuaternion, TValue>(source: real),
             Dual: Unsafe.BitCast<FixedQuaternion, TValue>(source: dual)
+        );
+    }
+    // Fused product for the FixedQ4816 carrier: Real = round(a·c) computed from the raw Q32 product inline (the generic
+    // path makes three out-of-line carrier multiplies); Dual = ONE rounding of (a·d + b·c). Bit-identical to the fused
+    // (0, 0) QuadraticAlgebra kernel. Reached only under the JIT-constant guard in operator *.
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static FixedDual<TValue> MultiplyScalar(FixedDual<TValue> left, FixedDual<TValue> right) {
+        var a = Unsafe.BitCast<TValue, FixedQ4816>(source: left.Real).Value;
+        var b = Unsafe.BitCast<TValue, FixedQ4816>(source: left.Dual).Value;
+        var c = Unsafe.BitCast<TValue, FixedQ4816>(source: right.Real).Value;
+        var d = Unsafe.BitCast<TValue, FixedQ4816>(source: right.Dual).Value;
+        var combinedMagnitude = FusedArithmetic.RawMagnitude(value: a) | FusedArithmetic.RawMagnitude(value: b) |
+                                 FusedArithmetic.RawMagnitude(value: c) | FusedArithmetic.RawMagnitude(value: d);
+        long real;
+        long dual;
+
+        if (combinedMagnitude < (1UL << 31)) {
+            // Every raw below 2^31: the single Real product stays below 2^62, and the two Dual products sum below 2^63,
+            // so both fit a signed long.
+            real = FixedQ4816.RoundProductSum(productSum: unchecked((a * c)));
+            dual = FixedQ4816.RoundProductSum(productSum: unchecked(((a * d) + (b * c))));
+        } else {
+            real = FixedQ4816.RoundProductSum(productSum: (((Int128)a) * c));
+            dual = FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)a) * d) + (((Int128)b) * c))));
+        }
+
+        return new(
+            Real: Unsafe.BitCast<FixedQ4816, TValue>(source: FixedQ4816.FromRawBits(value: real)),
+            Dual: Unsafe.BitCast<FixedQ4816, TValue>(source: FixedQ4816.FromRawBits(value: dual))
         );
     }
 }

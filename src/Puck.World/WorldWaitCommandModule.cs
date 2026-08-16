@@ -32,11 +32,19 @@ internal sealed class WorldWaitCommandModule(WorldConsoleWaitGate gate, WorldIns
                     return CommandResult.Error(output: "[world.wait: expected exactly one value — <ticks>]");
                 }
 
-                if (!ulong.TryParse(s: args[0], style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var ticks)) {
+                if (!ulong.TryParse(
+                    s: args[0],
+                    style: NumberStyles.None,
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var ticks
+                )) {
                     return CommandResult.Error(output: $"[world.wait: '{args[0]}' is not a whole number of ticks]");
                 }
 
-                if ((ticks == 0UL) || (ticks > MaxWaitTicks)) {
+                if (
+                    (ticks == 0UL) ||
+                    (ticks > MaxWaitTicks)
+                ) {
                     return CommandResult.Error(output: $"[world.wait: {ticks} ticks is outside 1..{MaxWaitTicks}]");
                 }
 
@@ -46,7 +54,11 @@ internal sealed class WorldWaitCommandModule(WorldConsoleWaitGate gate, WorldIns
                 // world.rate resume that would be the only thing able to lift it, since Immediate lines queue behind
                 // an armed wait too. See WorldConsoleWaitGate.ReleaseStalled for the OTHER edge this module does not
                 // own directly: a wait already armed when a pause lands mid-hold.
-                if (!instances.TryDescribeRate(name: WorldInstanceHost.BootInstanceName, status: out var status, reason: out var describeReason)) {
+                if (!instances.TryDescribeRate(
+                    name: WorldInstanceHost.BootInstanceName,
+                    reason: out var describeReason,
+                    status: out var status
+                )) {
                     // Unreachable in practice (the boot instance always exists), but a lookup failure must refuse
                     // rather than silently arm against unknown state.
                     return CommandResult.Error(output: $"[world.wait: refused (could not read the boot world's own schedule: {describeReason})]");

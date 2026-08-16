@@ -29,7 +29,6 @@ internal enum Tier {
     /// <summary>Timing facts with breach-tolerant failure semantics; opt in with <c>bench.runsettings</c>.</summary>
     Bench,
 }
-
 /// <summary>Locates the committed test artifacts relative to this source file, so a test run writes the ledger,
 /// frontier, manifest, and baselines back into the project directory rather than the build output.</summary>
 internal static class TestPaths {
@@ -43,9 +42,8 @@ internal static class TestPaths {
         Path.Combine(path1: ProjectDirectory, path2: fileName);
 
     private static string ResolveProjectDirectory([CallerFilePath] string callerFilePath = "") =>
-        Path.GetDirectoryName(path: callerFilePath) ?? Directory.GetCurrentDirectory();
+        (Path.GetDirectoryName(path: callerFilePath) ?? Directory.GetCurrentDirectory());
 }
-
 /// <summary>Deterministic JSON persistence for the committed artifacts: stable member and array ordering, LF line
 /// endings, and update-on-change writes so an unchanged artifact never churns the working tree.</summary>
 internal static class ArtifactJson {
@@ -62,8 +60,7 @@ internal static class ArtifactJson {
     /// <param name="value">The model to serialize.</param>
     /// <returns>The canonical JSON text.</returns>
     public static string Serialize<TValue>(TValue value) =>
-        (JsonSerializer.Serialize(value: value, options: Options).ReplaceLineEndings(replacementText: "\n") + "\n");
-
+        (JsonSerializer.Serialize(options: Options, value: value).ReplaceLineEndings(replacementText: "\n") + "\n");
     /// <summary>Reads and deserializes an artifact, or returns <see langword="default"/> when the file is absent.</summary>
     /// <typeparam name="TValue">The model type.</typeparam>
     /// <param name="path">The absolute artifact path.</param>
@@ -72,7 +69,6 @@ internal static class ArtifactJson {
         (File.Exists(path: path)
             ? JsonSerializer.Deserialize<TValue>(json: File.ReadAllText(path: path), options: Options)
             : default);
-
     /// <summary>Writes <paramref name="content"/> to <paramref name="path"/> only when it differs from the current
     /// file, comparing on LF-normalized text so line-ending drift never triggers a spurious write. The write is atomic:
     /// the content lands in a sibling temporary file that then replaces the target, so a crash mid-write can never leave
@@ -91,8 +87,8 @@ internal static class ArtifactJson {
         // process id and a fresh guid keep concurrent writers from colliding on the staging name.
         var temporaryPath = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
 
-        File.WriteAllText(path: temporaryPath, contents: normalized);
-        File.Move(sourceFileName: temporaryPath, destFileName: path, overwrite: true);
+        File.WriteAllText(contents: normalized, path: temporaryPath);
+        File.Move(destFileName: path, overwrite: true, sourceFileName: temporaryPath);
 
         return true;
     }

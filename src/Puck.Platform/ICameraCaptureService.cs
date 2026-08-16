@@ -20,7 +20,6 @@ public interface ICameraCaptureService {
     /// <param name="session">When this returns <see langword="true"/>, the opened live session; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if a device was opened.</returns>
     bool TryOpenDefault(int requestedWidth, int requestedHeight, [NotNullWhen(true)] out ICameraCaptureSession? session);
-
     /// <summary>Tries to open the default video capture device on the GPU-resident zero-copy tier: the platform's
     /// decode device (LUID-matched to the consumer's adapter) converts frames on-GPU and copies them into shared
     /// textures the consumer provisions after negotiation (see <see cref="ICameraSharedCaptureSession.Start"/>).

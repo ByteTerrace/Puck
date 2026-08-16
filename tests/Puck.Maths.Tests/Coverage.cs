@@ -8,7 +8,6 @@ namespace Puck.Maths.Tests;
 /// <param name="Type">The declaring type (open or closed generic; normalized on resolution).</param>
 /// <param name="Name">The member name (for example <c>op_Multiply</c>, <c>Norm</c>, <c>MobiusStep</c>).</param>
 internal readonly record struct CoverRef(Type Type, string Name);
-
 /// <summary>
 /// The reflected public surface of Puck.Maths: every public member of every public (or public-nested) type, each with a
 /// stable id. Record/object boilerplate and property accessors are excluded so the manifest tracks real API. The id
@@ -32,7 +31,7 @@ internal static class MemberSurface {
         var normalized = Normalize(type: reference.Type);
 
         return All
-            .Where(predicate: record => (record.DeclaringType == normalized) && (record.Name == reference.Name))
+            .Where(predicate: record => ((record.DeclaringType == normalized) && (record.Name == reference.Name)))
             .Select(selector: record => record.Id);
     }
 
@@ -41,7 +40,6 @@ internal static class MemberSurface {
 
     private static Type Normalize(Type type) =>
         (type.IsGenericType ? type.GetGenericTypeDefinition() : type);
-
     private static IReadOnlyList<Record> Enumerate() {
         var assembly = typeof(FixedQ4816).Assembly;
         var records = new List<Record>();
@@ -51,7 +49,7 @@ internal static class MemberSurface {
                 continue;
             }
 
-            foreach (var member in type.GetMembers(bindingAttr: (BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))) {
+            foreach (var member in type.GetMembers(bindingAttr: BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
                 if ((member is Type) || (member is EventInfo) || ExcludedNames.Contains(item: member.Name) || member.Name.Contains(value: '<')) {
                     continue;
                 }
@@ -69,13 +67,11 @@ internal static class MemberSurface {
             .Select(selector: group => group.First())
             .OrderBy(keySelector: record => record.Id, comparer: StringComparer.Ordinal)];
     }
-
     private static bool IsAccessor(string name) =>
-        name.StartsWith(value: "get_", comparisonType: StringComparison.Ordinal) ||
-        name.StartsWith(value: "set_", comparisonType: StringComparison.Ordinal) ||
-        name.StartsWith(value: "add_", comparisonType: StringComparison.Ordinal) ||
-        name.StartsWith(value: "remove_", comparisonType: StringComparison.Ordinal);
-
+        (name.StartsWith(comparisonType: StringComparison.Ordinal, value: "get_") ||
+        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "set_") ||
+        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "add_") ||
+        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "remove_"));
     private static string Format(Type declaringType, MemberInfo member) {
         var typeName = TypeName(type: declaringType);
 
@@ -91,10 +87,8 @@ internal static class MemberSurface {
 
         return $"{typeName}.{member.Name}";
     }
-
     private static string ParameterList(ParameterInfo[] parameters) =>
         string.Join(separator: ",", values: parameters.Select(selector: parameter => TypeName(type: parameter.ParameterType)));
-
     private static string TypeName(Type type) {
         if (type.IsByRef) {
             return (TypeName(type: type.GetElementType()!) + "&");
@@ -116,37 +110,35 @@ internal static class MemberSurface {
             return GenericTypeName(type: type, arguments: type.GetGenericArguments());
         }
 
-        return (type.FullName ?? type.Name).Replace(oldChar: '+', newChar: '.');
+        return (type.FullName ?? type.Name).Replace(newChar: '.', oldChar: '+');
     }
-
     // Renders a generic type, distributing the flattened argument list across the nesting chain so a type nested in a
     // generic keeps BOTH its own segment and its own arguments (QuadraticAlgebra<TScalar>.Element, never the collapsed
     // outer name). The reflection argument list is ordered outer-to-inner, so each level takes the arguments its
     // declaring type does not, and the remainder are its own.
     private static string GenericTypeName(Type type, Type[] arguments) {
         var declaring = type.DeclaringType;
-        var inherited = ((declaring is not null) && declaring.IsGenericType) ? declaring.GetGenericArguments().Length : 0;
+        var inherited = (((declaring is not null) && declaring.IsGenericType) ? declaring.GetGenericArguments().Length : 0);
         var ownArguments = arguments[inherited..];
         var simpleName = StripArity(name: type.Name);
-        var rendered = (ownArguments.Length == 0)
+        var rendered = ((ownArguments.Length == 0)
             ? simpleName
-            : $"{simpleName}<{string.Join(separator: ",", values: ownArguments.Select(selector: TypeName))}>";
+            : $"{simpleName}<{string.Join(separator: ",", values: ownArguments.Select(selector: TypeName))}>");
 
         if (declaring is null) {
             return ((type.Namespace is { Length: > 0 } space) ? $"{space}.{rendered}" : rendered);
         }
 
-        var declaringName = declaring.IsGenericType
+        var declaringName = (declaring.IsGenericType
             ? GenericTypeName(type: declaring, arguments: arguments[..inherited])
-            : TypeName(type: declaring);
+            : TypeName(type: declaring));
 
         return $"{declaringName}.{rendered}";
     }
-
     private static string StripArity(string name) {
         var tick = name.IndexOf(value: '`');
 
-        return (tick < 0 ? name : name[..tick]).Replace(oldChar: '+', newChar: '.');
+        return ((tick < 0) ? name : name[..tick]).Replace(newChar: '.', oldChar: '+');
     }
 
     /// <summary>One enumerated public member.</summary>
@@ -155,7 +147,6 @@ internal static class MemberSurface {
     /// <param name="Name">The member name.</param>
     public sealed record Record(string Id, Type DeclaringType, string Name);
 }
-
 /// <summary>One member's coverage state in the committed manifest.</summary>
 internal sealed class ManifestEntry {
     /// <summary>Gets or sets the member id.</summary>
@@ -167,13 +158,11 @@ internal sealed class ManifestEntry {
     /// <summary>Gets or sets the mandatory waiver reason (present only when <see cref="State"/> is waived).</summary>
     public string? Reason { get; set; }
 }
-
 /// <summary>The committed coverage manifest.</summary>
 internal sealed class Manifest {
     /// <summary>Gets the per-member states, ordered by id.</summary>
     public List<ManifestEntry> Members { get; init; } = [];
 }
-
 /// <summary>
 /// Module 4 — the coverage ratchet. Enumerates the public Puck.Maths surface, derives the covered set mechanically from
 /// the <see cref="LawRegistry"/> member declarations, and reconciles against the committed manifest. The gate fails iff
@@ -233,26 +222,26 @@ internal static class Coverage {
         // — are additionally named by integer.symmetry-lattice-exact-structure, so their entries are inert rather than
         // load-bearing; they are left in place because the waiver register is a declaration of intent and thinning it
         // is a separate review.
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "Antipode"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "CanonicalRay"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "Dimension"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "NodeCount"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "Project"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "RayCount"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "Ring"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "RingCount"), SymmetryLatticeReason),
-        (new CoverRef(Type: typeof(SymmetryLattice), Name: "RingSize"), SymmetryLatticeReason),
+        (new CoverRef(Name: "Antipode", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "CanonicalRay", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "Dimension", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "NodeCount", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "Project", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "RayCount", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "Ring", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "RingCount", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
+        (new CoverRef(Name: "RingSize", Type: typeof(SymmetryLattice)), SymmetryLatticeReason),
 
         // ---- the presented charged algebra ----
         // One CATEGORY reason per kind, repeated verbatim; an individual reason appears only where the category does
         // not honestly fit. Nothing here is arithmetic: every member that computes a value answers to a law.
-        (new CoverRef(Type: typeof(ChargeLane), Name: "value__"), EnumStorageReason),
-        (new CoverRef(Type: typeof(ClosureCertificate), Name: "value__"), EnumStorageReason),
-        (new CoverRef(Type: typeof(ClosureOutcome), Name: "value__"), EnumStorageReason),
-        (new CoverRef(Type: typeof(ResidualTwist), Name: "value__"), EnumStorageReason),
-        (new CoverRef(Type: typeof(RuleKind), Name: "value__"), EnumStorageReason),
-        (new CoverRef(Type: typeof(DiscreteMeasureCompilationFailure), Name: "value__"), EnumStorageReason),
-        (new CoverRef(Type: typeof(ClosureCertificate), Name: "LocallyFinite"), UnreachedCertificateReason),
+        (new CoverRef(Name: "value__", Type: typeof(ChargeLane)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(ClosureCertificate)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(ClosureOutcome)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(ResidualTwist)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(RuleKind)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(DiscreteMeasureCompilationFailure)), EnumStorageReason),
+        (new CoverRef(Name: "LocallyFinite", Type: typeof(ClosureCertificate)), UnreachedCertificateReason),
 
         // ---- the continued-fraction lenses ----
         // Nothing is waived here: every member of this group answers to a law.
@@ -298,7 +287,6 @@ internal static class Coverage {
 
         return covered.ToDictionary(keySelector: pair => pair.Key, elementSelector: IReadOnlyList<string> (pair) => [.. pair.Value], comparer: StringComparer.Ordinal);
     }
-
     /// <summary>The waived member ids resolved from the declarations.</summary>
     /// <returns>The map from waived member id to reason.</returns>
     public static IReadOnlyDictionary<string, string> WaivedMembers() {
@@ -312,7 +300,6 @@ internal static class Coverage {
 
         return waived;
     }
-
     /// <summary>Regenerates the manifest mechanically: upgrades to covered, applies waivers, keeps a previously-covered
     /// member covered (so a regression stays visible until fixed), and re-emits every other member with the state the
     /// committed manifest already gave it. A member the committed manifest does not mention is NOT written: an
@@ -331,13 +318,13 @@ internal static class Coverage {
 
         foreach (var id in MemberSurface.Ids) {
             if (covered.TryGetValue(key: id, value: out var laws)) {
-                members.Add(item: new ManifestEntry { Id = id, State = "covered", CoveredBy = [.. laws] });
+                members.Add(item: new ManifestEntry { CoveredBy = [.. laws], Id = id, State = "covered" });
             } else if (previous.TryGetValue(key: id, value: out var prior) && (prior.State == "covered")) {
                 // Sticky: a member that was covered but no longer is stays covered in the manifest so the ratchet keeps
                 // failing until coverage is restored (grow-only never silently downgrades).
-                members.Add(item: new ManifestEntry { Id = id, State = "covered", CoveredBy = prior.CoveredBy });
+                members.Add(item: new ManifestEntry { CoveredBy = prior.CoveredBy, Id = id, State = "covered" });
             } else if (waived.TryGetValue(key: id, value: out var reason)) {
-                members.Add(item: new ManifestEntry { Id = id, State = "waived", Reason = reason });
+                members.Add(item: new ManifestEntry { Id = id, Reason = reason, State = "waived" });
             } else if (bootstrapping || previous.ContainsKey(key: id)) {
                 members.Add(item: new ManifestEntry { Id = id, State = "uncovered" });
             }
@@ -347,7 +334,6 @@ internal static class Coverage {
 
         return new Manifest { Members = members };
     }
-
     /// <summary>Counts the manifest states.</summary>
     /// <param name="manifest">The manifest.</param>
     /// <returns>The covered/waived/uncovered counts.</returns>
@@ -358,7 +344,6 @@ internal static class Coverage {
 
         return (covered, waived, uncovered);
     }
-
     /// <summary>Applies the ratchet against the committed manifest. A member counts as classified when the committed
     /// manifest gives it a state OR a declaration does — a law case covering it, or a waiver naming it — so landing a
     /// new member together with its law or its waiver passes on the first run, while a member with neither fails on

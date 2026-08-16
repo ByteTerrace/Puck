@@ -15,11 +15,18 @@ public readonly record struct TextEnrichmentSegment(TextEnrichmentSegmentKind Ki
     /// <param name="text">The tag's raw text (including its control-char delimiters).</param>
     /// <returns>A <see cref="TextEnrichmentSegmentKind.Tag"/> segment.</returns>
     public static TextEnrichmentSegment Tag(string text) =>
-        new(Kind: TextEnrichmentSegmentKind.Tag, Rune: default, Text: text);
-
+        new(
+            Kind: TextEnrichmentSegmentKind.Tag,
+            Rune: default,
+            Text: text
+        );
     /// <summary>Creates a visible-rune segment.</summary>
     /// <param name="rune">The visible rune.</param>
     /// <returns>A <see cref="TextEnrichmentSegmentKind.VisibleRune"/> segment.</returns>
     public static TextEnrichmentSegment VisibleRune(Rune rune) =>
-        new(Kind: TextEnrichmentSegmentKind.VisibleRune, Rune: rune, Text: rune.ToString());
+        new(
+            Kind: TextEnrichmentSegmentKind.VisibleRune,
+            Rune: rune,
+            Text: rune.ToString()
+        );
 }

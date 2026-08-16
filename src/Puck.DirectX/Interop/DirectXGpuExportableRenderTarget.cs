@@ -29,6 +29,7 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
     private readonly IDirectXDeviceContext m_deviceContext;
     private readonly GCHandle m_commandBufferToken;
     private readonly GCHandle m_imageViewToken;
+
     private nint m_finalizeAllocator;
     private nint m_finalizeCommandList;
     private bool m_disposed;
@@ -62,7 +63,7 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
         Width = width;
         Height = height;
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         CreateSharedRenderTarget(device: device, format: format, height: height, width: width);
 
@@ -74,10 +75,10 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
 
         device->CreateDescriptorHeap(
             pDescriptorHeapDesc: in srvHeapDesc,
-            riid: ID3D12DescriptorHeap.IID_Guid,
-            ppvHeap: out var srvHeap
+            ppvHeap: out var srvHeap,
+            riid: ID3D12DescriptorHeap.IID_Guid
         );
-        m_srvHeap = (nint)srvHeap;
+        m_srvHeap = ((nint)srvHeap);
 
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
             Format = format,
@@ -88,32 +89,32 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
         srvDesc.Anonymous.Texture2D = new D3D12_TEX2D_SRV { MipLevels = 1, };
 
         device->CreateShaderResourceView(
-            pResource: (ID3D12Resource*)m_renderTarget,
+            pResource: ((ID3D12Resource*)m_renderTarget),
             pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)srvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)srvHeap))
         );
 
         device->CreateCommandAllocator(
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
+            ppCommandAllocator: out var commandAllocator,
             riid: ID3D12CommandAllocator.IID_Guid,
-            ppCommandAllocator: out var commandAllocator
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
 
         device->CreateCommandList(
             nodeMask: 0,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
-            pCommandAllocator: (ID3D12CommandAllocator*)commandAllocator,
+            pCommandAllocator: ((ID3D12CommandAllocator*)commandAllocator),
             pInitialState: null,
+            ppCommandList: out var commandList,
             riid: ID3D12GraphicsCommandList.IID_Guid,
-            ppCommandList: out var commandList
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
         ((ID3D12GraphicsCommandList*)commandList)->Close();
 
         // The texture starts in COMMON, so seed the recorder's tracked state to match: the first compose pass
         // then transitions COMMON -> RENDER_TARGET correctly.
         var state = new DirectXCommandBufferState {
-            Allocator = (nint)commandAllocator,
-            CommandList = (nint)commandList,
+            Allocator = ((nint)commandAllocator),
+            CommandList = ((nint)commandList),
             RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
         };
 
@@ -127,35 +128,35 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
         m_imageViewToken = GCHandle.Alloc(value: imageView);
 
         device->CreateCommandAllocator(
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
+            ppCommandAllocator: out var finalizeAllocator,
             riid: ID3D12CommandAllocator.IID_Guid,
-            ppCommandAllocator: out var finalizeAllocator
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
-        m_finalizeAllocator = (nint)finalizeAllocator;
+        m_finalizeAllocator = ((nint)finalizeAllocator);
 
         device->CreateCommandList(
             nodeMask: 0,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
-            pCommandAllocator: (ID3D12CommandAllocator*)finalizeAllocator,
+            pCommandAllocator: ((ID3D12CommandAllocator*)finalizeAllocator),
             pInitialState: null,
+            ppCommandList: out var finalizeCommandList,
             riid: ID3D12GraphicsCommandList.IID_Guid,
-            ppCommandList: out var finalizeCommandList
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
-        m_finalizeCommandList = (nint)finalizeCommandList;
+        m_finalizeCommandList = ((nint)finalizeCommandList);
         ((ID3D12GraphicsCommandList*)finalizeCommandList)->Close();
 
         device->CreateFence(
-            InitialValue: 0,
             Flags: default,
-            riid: ID3D12Fence.IID_Guid,
-            ppFence: out var fence
+            InitialValue: 0,
+            ppFence: out var fence,
+            riid: ID3D12Fence.IID_Guid
         );
-        m_fence = (nint)fence;
+        m_fence = ((nint)fence);
         m_fenceValue = 1;
         m_fenceEvent = PInvoke.CreateEvent(
-            lpEventAttributes: (SECURITY_ATTRIBUTES*)null,
-            bManualReset: false,
             bInitialState: false,
+            bManualReset: false,
+            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
             lpName: default(PCWSTR)
         );
 
@@ -170,7 +171,7 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
     /// <inheritdoc/>
     public nint CommandBufferHandle => GCHandle.ToIntPtr(value: m_commandBufferToken);
     /// <inheritdoc/>
-    public nint FramebufferHandle => (nint)GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)m_rtvHeap).ptr;
+    public nint FramebufferHandle => ((nint)GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_rtvHeap)).ptr);
     /// <inheritdoc/>
     public uint Height { get; }
     /// <inheritdoc/>
@@ -229,16 +230,16 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
             ppvResource: &renderTarget,
             riidResource: in resourceIid
         );
-        m_renderTarget = (nint)renderTarget;
+        m_renderTarget = ((nint)renderTarget);
 
         var sharedHandle = default(HANDLE);
 
         device->CreateSharedHandle(
-            pObject: (ID3D12DeviceChild*)renderTarget,
-            pAttributes: (SECURITY_ATTRIBUTES*)null,
             Access: GenericAll,
             Name: default(PCWSTR),
-            pHandle: &sharedHandle
+            pAttributes: ((SECURITY_ATTRIBUTES*)null),
+            pHandle: &sharedHandle,
+            pObject: ((ID3D12DeviceChild*)renderTarget)
         );
         m_sharedHandle = sharedHandle;
 
@@ -249,22 +250,22 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
 
         device->CreateDescriptorHeap(
             pDescriptorHeapDesc: in rtvHeapDesc,
-            riid: ID3D12DescriptorHeap.IID_Guid,
-            ppvHeap: out var rtvHeap
+            ppvHeap: out var rtvHeap,
+            riid: ID3D12DescriptorHeap.IID_Guid
         );
-        m_rtvHeap = (nint)rtvHeap;
+        m_rtvHeap = ((nint)rtvHeap);
 
         device->CreateRenderTargetView(
-            pResource: (ID3D12Resource*)renderTarget,
+            pResource: ((ID3D12Resource*)renderTarget),
             pDesc: null,
-            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)rtvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)rtvHeap))
         );
     }
     private void WaitForGpu() {
         DirectXFence.SignalAndWait(
             deviceContext: m_deviceContext,
-            fenceHandle: m_fence,
             fenceEvent: m_fenceEvent,
+            fenceHandle: m_fence,
             fenceValue: ref m_fenceValue
         );
     }
@@ -276,11 +277,11 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
             instance: this
         );
 
-        var state = (DirectXCommandBufferState)m_commandBufferToken.Target!;
+        var state = ((DirectXCommandBufferState)m_commandBufferToken.Target!);
 
         if (D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON != state.RenderTargetState) {
-            var allocator = (ID3D12CommandAllocator*)m_finalizeAllocator;
-            var commandList = (ID3D12GraphicsCommandList*)m_finalizeCommandList;
+            var allocator = ((ID3D12CommandAllocator*)m_finalizeAllocator);
+            var commandList = ((ID3D12GraphicsCommandList*)m_finalizeCommandList);
 
             allocator->Reset();
             commandList->Reset(
@@ -291,13 +292,13 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
             var toCommon = CreateTransition(
                 after: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
                 before: state.RenderTargetState,
-                resource: (ID3D12Resource*)m_renderTarget
+                resource: ((ID3D12Resource*)m_renderTarget)
             );
 
             commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &toCommon);
             commandList->Close();
 
-            var executable = (ID3D12CommandList*)commandList;
+            var executable = ((ID3D12CommandList*)commandList);
 
             ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
 
@@ -306,7 +307,6 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
 
         WaitForGpu();
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {
@@ -326,7 +326,7 @@ public sealed unsafe class DirectXGpuExportableRenderTarget : IGpuExportableRend
         }
 
         if (m_commandBufferToken.IsAllocated) {
-            var state = (DirectXCommandBufferState)m_commandBufferToken.Target!;
+            var state = ((DirectXCommandBufferState)m_commandBufferToken.Target!);
 
             Release(pointer: ref state.CommandList);
             Release(pointer: ref state.Allocator);

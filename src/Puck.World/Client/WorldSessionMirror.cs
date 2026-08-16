@@ -46,6 +46,28 @@ internal sealed class WorldSessionMirror : IClientSink {
     // constant's own single-sourcing remarks), but this mirror has no other reason to depend on WorldClient at all.
     private const int EntityCapacity = WorldAvatarCatalog.Capacity;
 
+    private WorldDefinition m_definition;
+    private int m_definitionRevision;
+    private WorldBodyContactMode[] m_kitBodyContacts;
+    private FixedWorldCollider?[] m_kitColliders;
+    // Attach replays the authority's most recently completed snapshot. A transfer committed after that snapshot
+    // can therefore seed an entity at the SAME tick immediately before attach replays an image in which the entity
+    // is still absent. Keep the causally newer commit image until an ordinary snapshot advances beyond its tick or
+    // explicitly contains the committed generation.
+    private WorldEntityAddress? m_seededRouteEntity;
+    private ulong m_seededRouteTick;
+    private int m_snapshotRevision;
+    // Seqlock guarding a coherent copy of the complete delivered entity image. Odd means the socket/server delivery
+    // is writing; even means stable. Per-field publication remains for render reads that do not require a whole-tick
+    // record, while adjacency simulation uses CopySnapshotTo below.
+    private int m_snapshotSequence;
+    // The destination's own step duration in seconds, derived from the latest snapshot's StepTicks — the
+    // presentation clock WorldSessionSceneEmitter normalizes real elapsed time against (see its own remarks on why
+    // it cannot read a host alpha/delta for a session view).
+    private int m_stepSecondsBits;
+    private long m_stepTicksBits;
+    private long m_tickBits;
+
     private readonly Vector3[] m_previousPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_previousOrientation = new Quaternion[EntityCapacity];
     private readonly Vector3[] m_currentPosition = new Vector3[EntityCapacity];
@@ -60,31 +82,8 @@ internal sealed class WorldSessionMirror : IClientSink {
     // A route seed is written by the transfer/route thread while ordinary snapshots arrive on the observer task.
     // Serialize those two writers: the seqlock below protects readers from a torn image, but by itself does not
     // prevent two writers from interleaving their odd/even sequence increments and publishing a mixture.
-    private readonly object m_snapshotWriteGate = new();
-
-    // Attach replays the authority's most recently completed snapshot. A transfer committed after that snapshot
-    // can therefore seed an entity at the SAME tick immediately before attach replays an image in which the entity
-    // is still absent. Keep the causally newer commit image until an ordinary snapshot advances beyond its tick or
-    // explicitly contains the committed generation.
-    private WorldEntityAddress? m_seededRouteEntity;
-    private ulong m_seededRouteTick;
-
-    private WorldDefinition m_definition;
-    private FixedWorldCollider?[] m_kitColliders;
-    private WorldBodyContactMode[] m_kitBodyContacts;
+    private readonly Lock m_snapshotWriteGate = new();
     private string m_authority = string.Empty;
-    private int m_definitionRevision;
-    private long m_tickBits;
-    private long m_stepTicksBits;
-    private int m_snapshotRevision;
-    // Seqlock guarding a coherent copy of the complete delivered entity image. Odd means the socket/server delivery
-    // is writing; even means stable. Per-field publication remains for render reads that do not require a whole-tick
-    // record, while adjacency simulation uses CopySnapshotTo below.
-    private int m_snapshotSequence;
-    // The destination's own step duration in seconds, derived from the latest snapshot's StepTicks — the
-    // presentation clock WorldSessionSceneEmitter normalizes real elapsed time against (see its own remarks on why
-    // it cannot read a host alpha/delta for a session view).
-    private int m_stepSecondsBits;
     // A real (wall-clock) timestamp — Stopwatch.GetTimestamp() — captured the instant the CURRENT snapshot's poses
     // were copied in. Presentation-only, exactly like WorldClient's own render-pose interpolation is presentation
     // floats never fed back into simulation state (rule 4's carve-out): the destination's tick thread and the render
@@ -109,233 +108,42 @@ internal sealed class WorldSessionMirror : IClientSink {
         }
     }
 
+    /// <summary>The authority named by the latest delivered snapshot.</summary>
+    public string Authority => Volatile.Read(location: ref m_authority);
     /// <summary>The destination's live world definition — the boot/attach definition until a later mutation batch or
     /// swap delivers a new one.</summary>
-    public WorldDefinition Definition => Volatile.Read(ref m_definition);
-
+    public WorldDefinition Definition => Volatile.Read(location: ref m_definition);
     /// <summary>The monotonic definition-delivery counter — bumped each time the destination delivers a new
     /// definition, the rebuild-watch component <see cref="WorldSessionSceneEmitter"/> reads.</summary>
-    public int DefinitionRevision => Volatile.Read(ref m_definitionRevision);
-
-    /// <summary>The destination's latest completed simulation tick — read-back (<c>world.faces</c>'s session echo)
-    /// AND the presentation clock <see cref="WorldSessionSceneEmitter"/> resolves its render alpha against (via
-    /// <see cref="StepSeconds"/>/<see cref="SnapshotArrivalTimestamp"/>).</summary>
-    public ulong Tick => unchecked((ulong)Interlocked.Read(ref m_tickBits));
-
-    /// <summary>The destination's own step width (engine ticks per its authored simulation step) at the latest
-    /// delivered snapshot — the destination presentation clock docs/vision.md's "Observation and display"
-    /// names.</summary>
-    public ulong StepTicks => unchecked((ulong)Interlocked.Read(ref m_stepTicksBits));
-
-    /// <summary><see cref="StepTicks"/> converted to seconds — the denominator
-    /// <see cref="WorldSessionSceneEmitter"/>'s self-derived render alpha divides real elapsed time by.</summary>
-    public float StepSeconds => BitConverter.Int32BitsToSingle(Volatile.Read(ref m_stepSecondsBits));
-
+    public int DefinitionRevision => Volatile.Read(location: ref m_definitionRevision);
+    /// <summary>The honest presentation fraction through the currently delivered snapshot interval. Remote and
+    /// colocated mirrors derive it from the snapshot's own step width and arrival time, never from whichever world
+    /// happens to be drawing them.</summary>
+    public float InterpolationAlpha => ResolveInterpolationAlpha(
+        stepSeconds: StepSeconds,
+        arrivalTimestamp: SnapshotArrivalTimestamp
+    );
     /// <summary>The wall-clock timestamp (<see cref="Stopwatch.GetTimestamp"/> units) the current snapshot's poses
     /// were copied in at — the "render call's arrival" baseline <see cref="WorldSessionSceneEmitter"/> measures
     /// elapsed real time against, since a session view supplies neither a host delta nor a host alpha (see that
     /// type's own remarks).</summary>
-    public long SnapshotArrivalTimestamp => Interlocked.Read(ref m_snapshotArrivalTimestamp);
-
-    /// <summary>The honest presentation fraction through the currently delivered snapshot interval. Remote and
-    /// colocated mirrors derive it from the snapshot's own step width and arrival time, never from whichever world
-    /// happens to be drawing them.</summary>
-    public float InterpolationAlpha => ResolveInterpolationAlpha(stepSeconds: StepSeconds, arrivalTimestamp: SnapshotArrivalTimestamp);
-
+    public long SnapshotArrivalTimestamp => Interlocked.Read(location: ref m_snapshotArrivalTimestamp);
     /// <summary>The declared-set/palette revision from the latest snapshot — a separate rebuild-watch component from
     /// <see cref="DefinitionRevision"/> (never summed with it: this one is assigned from the wire and can move down,
     /// exactly like <see cref="WorldClient.WriteRevision"/>'s own server-revision component, for the identical
     /// reason).</summary>
-    public int SnapshotRevision => Volatile.Read(ref m_snapshotRevision);
-
-    /// <summary>The authority named by the latest delivered snapshot.</summary>
-    public string Authority => Volatile.Read(ref m_authority);
-
-    /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    public bool IsActive(int index) => Volatile.Read(ref m_active[index]);
-
-    /// <summary>The durable address of the entity currently occupying a slot.</summary>
-    public WorldEntityAddress Address(int index) => new(Authority: Authority, Index: index, Generation: Volatile.Read(ref m_generation[index]));
-
-    /// <summary>The entity's previous-tick render position (one interpolation endpoint).</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    public Vector3 PreviousPosition(int index) => m_previousPosition[index];
-
-    /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    public Quaternion PreviousOrientation(int index) => m_previousOrientation[index];
-
-    /// <summary>The entity's latest-tick render position (the other interpolation endpoint).</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    public Vector3 CurrentPosition(int index) => m_currentPosition[index];
-
-    /// <summary>The entity's latest-tick render attitude (the other interpolation endpoint).</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    public Quaternion CurrentOrientation(int index) => m_currentOrientation[index];
-
-    /// <summary>The entity's render body color, mirrored verbatim from the snapshot (a pending seat's is already
-    /// gray-lerped server-side).</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    public Vector3 BodyColor(int index) => m_bodyColor[index];
-
-    /// <summary>The look row an entity wears: the delivered look table indexed by the entity's mirrored look index,
-    /// or the implicit single catalog look when the world authors no <c>looks</c> section, and for an index the
-    /// delivered table cannot cover. The same resolve <see cref="WorldClient.Look"/> performs, over this mirror's own
-    /// table instead.</summary>
-    /// <param name="index">The 0-based entity index.</param>
-    /// <returns>The entity's look row.</returns>
-    public WorldLook Look(int index) {
-        var rows = m_definition.Looks;
-
-        if (rows.Count == 0) {
-            return WorldLook.Implicit;
-        }
-
-        var lookIndex = m_look[index];
-
-        return ((lookIndex < rows.Count) ? rows[lookIndex] : WorldLook.Implicit);
-    }
-
-    /// <summary>The entity-owned procedural rig mirrored from the authoritative snapshot.</summary>
-    public byte CatalogRig(int index) => m_catalogRig[index];
-
-    public FixedWorldCollider? Collider(int index) {
-        var colliders = Volatile.Read(ref m_kitColliders);
-        var kit = m_kit[index];
-        return ((kit < colliders.Length) ? colliders[kit] : null);
-    }
-
-    public WorldBodyContactMode BodyContact(int index) {
-        var contacts = Volatile.Read(ref m_kitBodyContacts);
-        var kit = m_kit[index];
-        return ((kit < contacts.Length) ? contacts[kit] : WorldBodyContactMode.Overlap);
-    }
-
-    /// <summary>Publishes the exact committed head of a traveler route before its observation socket can deliver the
-    /// destination's first ordinary snapshot. This is not prediction: the route answer was read under the final
-    /// authority's operation gate after commit. The subsequent snapshot replaces the seed normally.</summary>
-    public void SeedRoute(in WorldAuthorityRouteDescription route) {
-        var index = route.Entity.Index;
-        if ((uint)index >= EntityCapacity) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(route), message: $"route entity {index} exceeds mirror capacity {EntityCapacity}");
-        }
-
-        lock (m_snapshotWriteGate) {
-            DeliverDefinition(definition: route.Definition);
-            _ = Interlocked.Increment(ref m_snapshotSequence);
-            var position = route.Position.ToVector3();
-            var orientation = route.Orientation.ToQuaternion();
-            m_previousPosition[index] = position;
-            m_currentPosition[index] = position;
-            m_previousOrientation[index] = orientation;
-            m_currentOrientation[index] = orientation;
-            m_bodyColor[index] = route.BodyColor;
-            m_kit[index] = route.Kit;
-            m_look[index] = route.Look;
-            m_catalogRig[index] = route.CatalogRig;
-            Volatile.Write(ref m_generation[index], route.Entity.Generation);
-            Volatile.Write(ref m_authority, route.Entity.Authority);
-            _ = Interlocked.Exchange(location1: ref m_tickBits, value: unchecked((long)route.Tick));
-            _ = Interlocked.Exchange(location1: ref m_snapshotArrivalTimestamp, value: Stopwatch.GetTimestamp());
-            Volatile.Write(ref m_active[index], value: true);
-            m_seededRouteEntity = route.Entity;
-            m_seededRouteTick = route.Tick;
-            _ = Interlocked.Increment(ref m_snapshotSequence);
-        }
-    }
-
-    /// <inheritdoc/>
-    public void DeliverDefinition(WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        Volatile.Write(ref m_kitColliders, CompileColliders(definition: definition));
-        Volatile.Write(ref m_kitBodyContacts, CompileBodyContacts(definition: definition));
-        Volatile.Write(ref m_definition, definition);
-        _ = Interlocked.Increment(ref m_definitionRevision);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>Copies every kept field out of the borrowed <paramref name="snapshot"/> before returning (see this
-    /// type's own borrowed-snapshot remarks). Continuity mirrors <see cref="WorldClient.DeliverSnapshot"/>'s
-    /// snap-vs-interpolate split only — a newly active entity or a <see cref="EntityContinuityKind.Teleport"/> resets
-    /// both interpolation endpoints to the fresh pose so the first/next frame never streaks; every other case
-    /// (including <see cref="EntityContinuityKind.Correction"/>, which the boot client eases with a decaying render-
-    /// error offset this mirror does not reproduce) shifts current into previous, ordinary double-buffering.</remarks>
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
-        lock (m_snapshotWriteGate) {
-            var seeded = m_seededRouteEntity;
-            var containsSeed = ((seeded is { } address) && SnapshotContains(snapshot: in snapshot, entity: in address));
-            var preserveSeed = ((seeded is not null) && !containsSeed && (snapshot.Tick <= m_seededRouteTick));
-            if (containsSeed || ((seeded is not null) && !preserveSeed)) {
-                m_seededRouteEntity = null;
-            }
-
-            _ = Interlocked.Increment(ref m_snapshotSequence);
-            Array.Clear(array: m_seen);
-
-            foreach (ref readonly var entry in snapshot.Entries.Span) {
-                var index = entry.Index;
-
-                if ((uint)index >= EntityCapacity ||
-                    (preserveSeed && (seeded is { } preserved) && (index == preserved.Index) &&
-                        (!string.Equals(a: snapshot.Authority, b: preserved.Authority, comparisonType: StringComparison.Ordinal) || (entry.Generation != preserved.Generation)))) {
-                    continue;
-                }
-
-                m_seen[index] = true;
-                m_bodyColor[index] = entry.BodyColor;
-                m_kit[index] = entry.Kit;
-                m_look[index] = entry.Look;
-                m_catalogRig[index] = entry.CatalogRig;
-                Volatile.Write(ref m_generation[index], entry.Generation);
-
-                if (!Volatile.Read(ref m_active[index]) || (entry.Continuity.Kind == EntityContinuityKind.Teleport)) {
-                    m_previousPosition[index] = entry.Position;
-                    m_previousOrientation[index] = entry.Orientation;
-                } else {
-                    m_previousPosition[index] = m_currentPosition[index];
-                    m_previousOrientation[index] = m_currentOrientation[index];
-                }
-
-                m_currentPosition[index] = entry.Position;
-                m_currentOrientation[index] = entry.Orientation;
-                // The release write is the publication edge for every pose/color/look field above. A local instance
-                // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
-                // IsActive's acquire read makes the completed record visible before an emitter consumes it.
-                Volatile.Write(ref m_active[index], value: entry.Active);
-            }
-
-            for (var index = 0; (index < EntityCapacity); index++) {
-                if (!m_seen[index] && (!preserveSeed || (seeded is not { } preserved) || (index != preserved.Index))) {
-                    Volatile.Write(ref m_active[index], value: false);
-                }
-            }
-
-            _ = Interlocked.Exchange(location1: ref m_tickBits, value: unchecked((long)Math.Max(snapshot.Tick, preserveSeed ? m_seededRouteTick : 0UL)));
-            if (!preserveSeed) {
-                Volatile.Write(ref m_authority, snapshot.Authority);
-            }
-            _ = Interlocked.Exchange(location1: ref m_stepTicksBits, value: unchecked((long)snapshot.StepTicks));
-            Volatile.Write(location: ref m_snapshotRevision, value: snapshot.Revision);
-            Volatile.Write(location: ref m_stepSecondsBits, value: BitConverter.SingleToInt32Bits((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)));
-            _ = Interlocked.Exchange(location1: ref m_snapshotArrivalTimestamp, value: Stopwatch.GetTimestamp());
-            _ = Interlocked.Increment(ref m_snapshotSequence);
-        }
-    }
-
-    private static bool SnapshotContains(in WorldSnapshot snapshot, in WorldEntityAddress entity) {
-        if (!string.Equals(a: snapshot.Authority, b: entity.Authority, comparisonType: StringComparison.Ordinal)) {
-            return false;
-        }
-
-        foreach (ref readonly var entry in snapshot.Entries.Span) {
-            if ((entry.Index == entity.Index) && (entry.Generation == entity.Generation) && entry.Active) {
-                return true;
-            }
-        }
-        return false;
-    }
+    public int SnapshotRevision => Volatile.Read(location: ref m_snapshotRevision);
+    /// <summary><see cref="StepTicks"/> converted to seconds — the denominator
+    /// <see cref="WorldSessionSceneEmitter"/>'s self-derived render alpha divides real elapsed time by.</summary>
+    public float StepSeconds => BitConverter.Int32BitsToSingle(value: Volatile.Read(location: ref m_stepSecondsBits));
+    /// <summary>The destination's own step width (engine ticks per its authored simulation step) at the latest
+    /// delivered snapshot — the destination presentation clock docs/vision.md's "Observation and display"
+    /// names.</summary>
+    public ulong StepTicks => unchecked((ulong)Interlocked.Read(location: ref m_stepTicksBits));
+    /// <summary>The destination's latest completed simulation tick — read-back (<c>world.faces</c>'s session echo)
+    /// AND the presentation clock <see cref="WorldSessionSceneEmitter"/> resolves its render alpha against (via
+    /// <see cref="StepSeconds"/>/<see cref="SnapshotArrivalTimestamp"/>).</summary>
+    public ulong Tick => unchecked((ulong)Interlocked.Read(location: ref m_tickBits));
 
     /// <summary>Copies one coherent delivered entity record for simulation pinning. If a socket delivery overlaps
     /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks.</summary>
@@ -356,14 +164,15 @@ internal sealed class WorldSessionMirror : IClientSink {
         out float stepSeconds,
         out long arrivalTimestamp
     ) {
-        for (;;) {
-            var sequence = Volatile.Read(ref m_snapshotSequence);
+        for (; ; ) {
+            var sequence = Volatile.Read(location: ref m_snapshotSequence);
+
             if ((sequence & 1) != 0) {
                 Thread.SpinWait(iterations: 1);
                 continue;
             }
 
-            for (var index = 0; index < EntityCapacity; index++) {
+            for (var index = 0; (index < EntityCapacity); index++) {
                 active[index] = IsActive(index: index);
                 addresses[index] = Address(index: index);
                 previousPositions[index] = PreviousPosition(index: index);
@@ -381,44 +190,323 @@ internal sealed class WorldSessionMirror : IClientSink {
             revision = SnapshotRevision;
             stepSeconds = StepSeconds;
             arrivalTimestamp = SnapshotArrivalTimestamp;
-            if (sequence == Volatile.Read(ref m_snapshotSequence)) {
+            if (sequence == Volatile.Read(location: ref m_snapshotSequence)) {
                 return;
             }
         }
     }
-
     internal static float ResolveInterpolationAlpha(float stepSeconds, long arrivalTimestamp) {
         if (stepSeconds <= 0f) {
             return 1f;
         }
 
-        var elapsedSeconds = (float)Stopwatch.GetElapsedTime(startingTimestamp: arrivalTimestamp).TotalSeconds;
-        return Math.Clamp(value: (elapsedSeconds / stepSeconds), min: 0f, max: 1f);
-    }
+        var elapsedSeconds = ((float)Stopwatch.GetElapsedTime(startingTimestamp: arrivalTimestamp).TotalSeconds);
 
-    private static FixedWorldCollider?[] CompileColliders(WorldDefinition definition) {
-        var colliders = new FixedWorldCollider?[definition.Kits.Count];
-        for (var index = 0; index < colliders.Length; index++) {
-            colliders[index] = FixedWorldCollider.Compile(collider: definition.Kits[index].Collider, creations: definition.Creations);
-        }
-        return colliders;
+        return Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: (elapsedSeconds / stepSeconds)
+        );
     }
 
     private static WorldBodyContactMode[] CompileBodyContacts(WorldDefinition definition) =>
         definition.Kits.Select(selector: static kit => kit.BodyContact).ToArray();
+    private static FixedWorldCollider?[] CompileColliders(WorldDefinition definition) {
+        var colliders = new FixedWorldCollider?[definition.Kits.Count];
 
+        for (var index = 0; (index < colliders.Length); index++) {
+            colliders[index] = FixedWorldCollider.Compile(
+                collider: definition.Kits[index].Collider,
+                creations: definition.Creations
+            );
+        }
+        return colliders;
+    }
+    private static bool SnapshotContains(in WorldSnapshot snapshot, in WorldEntityAddress entity) {
+        if (!string.Equals(
+            a: snapshot.Authority,
+            b: entity.Authority,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return false;
+        }
+
+        foreach (ref readonly var entry in snapshot.Entries.Span) {
+            if (
+                (entry.Index == entity.Index) &&
+                (entry.Generation == entity.Generation) &&
+                entry.Active
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>The durable address of the entity currently occupying a slot.</summary>
+    public WorldEntityAddress Address(int index) => new(
+        Authority: Authority,
+        Index: index,
+        Generation: Volatile.Read(location: ref m_generation[index])
+    );
+    /// <summary>The entity's render body color, mirrored verbatim from the snapshot (a pending seat's is already
+    /// gray-lerped server-side).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public Vector3 BodyColor(int index) => m_bodyColor[index];
+    public WorldBodyContactMode BodyContact(int index) {
+        var contacts = Volatile.Read(location: ref m_kitBodyContacts);
+        var kit = m_kit[index];
+
+        return ((kit < contacts.Length)
+            ? contacts[kit]
+            : WorldBodyContactMode.Overlap
+        );
+    }
+    /// <summary>The entity-owned procedural rig mirrored from the authoritative snapshot.</summary>
+    public byte CatalogRig(int index) => m_catalogRig[index];
+    public FixedWorldCollider? Collider(int index) {
+        var colliders = Volatile.Read(location: ref m_kitColliders);
+        var kit = m_kit[index];
+
+        return ((kit < colliders.Length)
+            ? colliders[kit]
+            : null
+        );
+    }
+    /// <summary>The entity's latest-tick render attitude (the other interpolation endpoint).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public Quaternion CurrentOrientation(int index) => m_currentOrientation[index];
+    /// <summary>The entity's latest-tick render position (the other interpolation endpoint).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public Vector3 CurrentPosition(int index) => m_currentPosition[index];
     /// <inheritdoc/>
     public void DeliverAnswer(in QueryAnswer answer) {
         // The mirror drives no console — nothing here ever queries the destination.
     }
-
     /// <inheritdoc/>
     public void DeliverComposition(WorldComposition composition) {
         // No window composer observes a destination through this seam.
     }
+    /// <inheritdoc/>
+    public void DeliverDefinition(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
+        Volatile.Write(
+            location: ref m_kitColliders,
+            value: CompileColliders(definition: definition)
+        );
+        Volatile.Write(
+            location: ref m_kitBodyContacts,
+            value: CompileBodyContacts(definition: definition)
+        );
+        Volatile.Write(
+            location: ref m_definition,
+            value: definition
+        );
+        _ = Interlocked.Increment(location: ref m_definitionRevision);
+    }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
         // No presentation service of the OBSERVING world is reachable from inside a destination's own delivery.
+    }
+    /// <inheritdoc/>
+    /// <remarks>Copies every kept field out of the borrowed <paramref name="snapshot"/> before returning (see this
+    /// type's own borrowed-snapshot remarks). Continuity mirrors <see cref="WorldClient.DeliverSnapshot"/>'s
+    /// snap-vs-interpolate split only — a newly active entity or a <see cref="EntityContinuityKind.Teleport"/> resets
+    /// both interpolation endpoints to the fresh pose so the first/next frame never streaks; every other case
+    /// (including <see cref="EntityContinuityKind.Correction"/>, which the boot client eases with a decaying render-
+    /// error offset this mirror does not reproduce) shifts current into previous, ordinary double-buffering.</remarks>
+    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        lock (m_snapshotWriteGate) {
+            var seeded = m_seededRouteEntity;
+            var containsSeed = ((seeded is { } address) && SnapshotContains(
+                entity: in address,
+                snapshot: in snapshot
+            ));
+            var preserveSeed = ((seeded is not null) && !containsSeed && (snapshot.Tick <= m_seededRouteTick));
+
+            if (
+                containsSeed ||
+                ((seeded is not null) && !preserveSeed)
+            ) {
+                m_seededRouteEntity = null;
+            }
+
+            _ = Interlocked.Increment(location: ref m_snapshotSequence);
+            Array.Clear(array: m_seen);
+
+            foreach (ref readonly var entry in snapshot.Entries.Span) {
+                var index = entry.Index;
+
+                if (
+                    (((uint)index) >= EntityCapacity) ||
+                    (preserveSeed && (seeded is { } preserved) && (index == preserved.Index) &&
+                        (!string.Equals(
+                    a: snapshot.Authority,
+                    b: preserved.Authority,
+                    comparisonType: StringComparison.Ordinal
+                ) || (entry.Generation != preserved.Generation)))
+                ) {
+                    continue;
+                }
+
+                m_seen[index] = true;
+                m_bodyColor[index] = entry.BodyColor;
+                m_kit[index] = entry.Kit;
+                m_look[index] = entry.Look;
+                m_catalogRig[index] = entry.CatalogRig;
+                Volatile.Write(
+                    location: ref m_generation[index],
+                    value: entry.Generation
+                );
+
+                if (
+                    !Volatile.Read(location: ref m_active[index]) ||
+                    (entry.Continuity.Kind == EntityContinuityKind.Teleport)
+                ) {
+                    m_previousPosition[index] = entry.Position;
+                    m_previousOrientation[index] = entry.Orientation;
+                } else {
+                    m_previousPosition[index] = m_currentPosition[index];
+                    m_previousOrientation[index] = m_currentOrientation[index];
+                }
+
+                m_currentPosition[index] = entry.Position;
+                m_currentOrientation[index] = entry.Orientation;
+                // The release write is the publication edge for every pose/color/look field above. A local instance
+                // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
+                // IsActive's acquire read makes the completed record visible before an emitter consumes it.
+                Volatile.Write(
+                    ref m_active[index],
+                    value: entry.Active
+                );
+            }
+
+            for (var index = 0; (index < EntityCapacity); index++) {
+                if (
+                    !m_seen[index] &&
+                    (!preserveSeed || (seeded is not { } preserved) || (index != preserved.Index))
+                ) {
+                    Volatile.Write(
+                        ref m_active[index],
+                        value: false
+                    );
+                }
+            }
+
+            _ = Interlocked.Exchange(
+                location1: ref m_tickBits,
+                value: unchecked((long)Math.Max(
+                    val1: snapshot.Tick,
+                    val2: (preserveSeed
+                ? m_seededRouteTick
+                : 0UL)
+                ))
+            );
+            if (!preserveSeed) {
+                Volatile.Write(
+                    location: ref m_authority,
+                    value: snapshot.Authority
+                );
+            }
+            _ = Interlocked.Exchange(
+                location1: ref m_stepTicksBits,
+                value: unchecked((long)snapshot.StepTicks)
+            );
+            Volatile.Write(
+                location: ref m_snapshotRevision,
+                value: snapshot.Revision
+            );
+            Volatile.Write(
+                location: ref m_stepSecondsBits,
+                value: BitConverter.SingleToInt32Bits(value: ((float)EngineTicks.ToSeconds(ticks: snapshot.StepTicks)))
+            );
+            _ = Interlocked.Exchange(
+                location1: ref m_snapshotArrivalTimestamp,
+                value: Stopwatch.GetTimestamp()
+            );
+            _ = Interlocked.Increment(location: ref m_snapshotSequence);
+        }
+    }
+    /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public bool IsActive(int index) => Volatile.Read(location: ref m_active[index]);
+    /// <summary>The look row an entity wears: the delivered look table indexed by the entity's mirrored look index,
+    /// or the implicit single catalog look when the world authors no <c>looks</c> section, and for an index the
+    /// delivered table cannot cover. The same resolve <see cref="WorldClient.Look"/> performs, over this mirror's own
+    /// table instead.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The entity's look row.</returns>
+    public WorldLook Look(int index) {
+        var rows = m_definition.Looks;
+
+        if (rows.Count == 0) {
+            return WorldLook.Implicit;
+        }
+
+        var lookIndex = m_look[index];
+
+        return ((lookIndex < rows.Count)
+            ? rows[lookIndex]
+            : WorldLook.Implicit
+        );
+    }
+    /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public Quaternion PreviousOrientation(int index) => m_previousOrientation[index];
+    /// <summary>The entity's previous-tick render position (one interpolation endpoint).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public Vector3 PreviousPosition(int index) => m_previousPosition[index];
+    /// <summary>Publishes the exact committed head of a traveler route before its observation socket can deliver the
+    /// destination's first ordinary snapshot. This is not prediction: the route answer was read under the final
+    /// authority's operation gate after commit. The subsequent snapshot replaces the seed normally.</summary>
+    public void SeedRoute(in WorldAuthorityRouteDescription route) {
+        var index = route.Entity.Index;
+
+        if (((uint)index) >= EntityCapacity) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(route),
+                message: $"route entity {index} exceeds mirror capacity {EntityCapacity}"
+            );
+        }
+
+        lock (m_snapshotWriteGate) {
+            DeliverDefinition(definition: route.Definition);
+            _ = Interlocked.Increment(location: ref m_snapshotSequence);
+            var position = route.Position.ToVector3();
+            var orientation = route.Orientation.ToQuaternion();
+
+            m_previousPosition[index] = position;
+            m_currentPosition[index] = position;
+            m_previousOrientation[index] = orientation;
+            m_currentOrientation[index] = orientation;
+            m_bodyColor[index] = route.BodyColor;
+            m_kit[index] = route.Kit;
+            m_look[index] = route.Look;
+            m_catalogRig[index] = route.CatalogRig;
+            Volatile.Write(
+                location: ref m_generation[index],
+                value: route.Entity.Generation
+            );
+            Volatile.Write(
+                location: ref m_authority,
+                value: route.Entity.Authority
+            );
+            _ = Interlocked.Exchange(
+                location1: ref m_tickBits,
+                value: unchecked((long)route.Tick)
+            );
+            _ = Interlocked.Exchange(
+                location1: ref m_snapshotArrivalTimestamp,
+                value: Stopwatch.GetTimestamp()
+            );
+            Volatile.Write(
+                ref m_active[index],
+                value: true
+            );
+            m_seededRouteEntity = route.Entity;
+            m_seededRouteTick = route.Tick;
+            _ = Interlocked.Increment(location: ref m_snapshotSequence);
+        }
     }
 }

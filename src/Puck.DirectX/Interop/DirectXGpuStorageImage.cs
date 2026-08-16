@@ -17,6 +17,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
     private readonly GCHandle m_imageViewToken;
+
     private bool m_disposed;
     private nint m_resource;
 
@@ -27,7 +28,7 @@ public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
         Height = height;
         Width = width;
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
@@ -51,11 +52,11 @@ public sealed unsafe class DirectXGpuStorageImage : IGpuStorageImage {
             InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             pDesc: in textureDesc,
             pHeapProperties: in heapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &resource,
             riidResource: in resourceIid
         );
-        m_resource = (nint)resource;
+        m_resource = ((nint)resource);
 
         m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
             Format = format,

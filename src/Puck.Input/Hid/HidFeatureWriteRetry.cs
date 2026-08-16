@@ -10,7 +10,10 @@ internal static class HidFeatureWriteRetry {
                 return true;
             }
 
-            await Task.Delay(millisecondsDelay: DelayMilliseconds, cancellationToken: cancellationToken);
+            await Task.Delay(
+                cancellationToken: cancellationToken,
+                millisecondsDelay: DelayMilliseconds
+            );
         }
 
         return false;

@@ -47,18 +47,18 @@ internal static class BessMalformedCorpus {
         ));
         yield return ("undersized palette (not 0 or 0x40)", WithResizedBufferEntry(
             goodFile: goodFile,
-            tableOffset: 0x28,
-            size: 1
+            size: 1,
+            tableOffset: 0x28
         ));
         yield return ("undersized OAM (not exactly 0xA0)", WithResizedBufferEntry(
             goodFile: goodFile,
-            tableOffset: 0x18,
-            size: 1
+            size: 1,
+            tableOffset: 0x18
         ));
         yield return ("undersized HRAM (not exactly 0x7F)", WithResizedBufferEntry(
             goodFile: goodFile,
-            tableOffset: 0x20,
-            size: 1
+            size: 1,
+            tableOffset: 0x20
         ));
         yield return ("trailing-fragment MBC (length % 3 != 0)", WithTrailingFragmentMbcBlock(goodFile: goodFile));
         yield return ("out-of-domain MBC address (0xC000)", WithOutOfDomainMbcAddress(goodFile: goodFile));
@@ -66,6 +66,7 @@ internal static class BessMalformedCorpus {
         yield return ("duplicate CORE block", WithDuplicateCoreBlock(goodFile: goodFile));
         yield return ("known block (MBC) before CORE", WithMbcBlockBeforeCore(goodFile: goodFile));
     }
+
     /// <summary>One legal-but-undersized CORE buffer-table case: the BESS spec's own "handle size mismatches
     /// gracefully" contract for work-RAM/video-RAM, which the spec gives no fixed size. A short entry here is valid
     /// input, not malformed data — <see cref="BessImporter.Import"/> must succeed and zero-fill the remainder rather
@@ -78,25 +79,26 @@ internal static class BessMalformedCorpus {
     /// <c>[DestinationStart, DestinationStart + ImportedBytes.Length)</c> after import; every remaining byte up to
     /// <see cref="DestinationCapacity"/> is expected to read back as 0.</param>
     public readonly record struct GracefulShapeCase(string Label, byte[] File, ushort DestinationStart, int DestinationCapacity, byte[] ImportedBytes);
+
     /// <summary>Builds the legal-undersized work-RAM/video-RAM cases from a known-good BESS export.</summary>
     /// <param name="goodFile">A well-formed BESS file (typically a fresh <see cref="BessExporter.Export"/> output).</param>
     /// <returns>Each case's file and the destination-region assertion it expects.</returns>
     public static IEnumerable<GracefulShapeCase> BuildGracefulShapeCases(byte[] goodFile) {
         yield return BuildUndersizedRangeCase(
-            goodFile: goodFile,
-            tableOffset: 0x00,
-            label: "undersized work-RAM",
-            destinationStart: MemoryMap.WorkRamBank0Start,
+            declaredSize: 0x100,
             destinationCapacity: ((MemoryMap.WorkRamBankNEnd - MemoryMap.WorkRamBank0Start) + 1),
-            declaredSize: 0x100
+            destinationStart: MemoryMap.WorkRamBank0Start,
+            goodFile: goodFile,
+            label: "undersized work-RAM",
+            tableOffset: 0x00
         );
         yield return BuildUndersizedRangeCase(
-            goodFile: goodFile,
-            tableOffset: 0x08,
-            label: "undersized video-RAM",
-            destinationStart: MemoryMap.VideoRamStart,
+            declaredSize: 0x100,
             destinationCapacity: ((MemoryMap.VideoRamEnd - MemoryMap.VideoRamStart) + 1),
-            declaredSize: 0x100
+            destinationStart: MemoryMap.VideoRamStart,
+            goodFile: goodFile,
+            label: "undersized video-RAM",
+            tableOffset: 0x08
         );
     }
     /// <summary>Builds the legal-extended <c>CORE</c> case: the BESS spec's own "implementations are expected
@@ -111,14 +113,14 @@ internal static class BessMalformedCorpus {
     /// read zeros past the prefix by coincidence.</returns>
     public static byte[] BuildExtendedCoreCase(byte[] goodFile) {
         var coreOffset = FindBlockOffset(
+            caseName: "extended-core",
             file: goodFile,
-            tag: "CORE",
-            caseName: "extended-core"
+            tag: "CORE"
         );
         var corePayload = ExtractBlockPayload(
+            caseName: "extended-core",
             file: goodFile,
-            tag: "CORE",
-            caseName: "extended-core"
+            tag: "CORE"
         );
         var afterCorePayloadOffset = ((coreOffset + 8) + corePayload.Length);
         var extendedPayload = new byte[(corePayload.Length + 16)];
@@ -126,7 +128,7 @@ internal static class BessMalformedCorpus {
         corePayload.AsSpan().CopyTo(destination: extendedPayload);
         Array.Fill(
             array: extendedPayload,
-            value: (byte)0x5A,
+            value: ((byte)0x5A),
             startIndex: corePayload.Length,
             count: 16
         );
@@ -134,32 +136,33 @@ internal static class BessMalformedCorpus {
         var spliced = new List<byte>(capacity: (goodFile.Length + 16));
 
         spliced.AddRange(collection: goodFile.AsSpan(
-            start: 0,
-            length: coreOffset
+            length: coreOffset,
+            start: 0
         ).ToArray());
         Bess.WriteBlock(
             destination: spliced,
-            tag: "CORE",
-            payload: extendedPayload
+            payload: extendedPayload,
+            tag: "CORE"
         );
         spliced.AddRange(collection: goodFile.AsSpan(start: afterCorePayloadOffset).ToArray());
 
         return spliced.ToArray();
     }
+
     // Clones the good export and rewrites the CORE block's work-RAM buffer-table entry (Bess.BufferTableOffset+0x04,
     // the file-offset half of the size/offset pair) to point past the end of the file — everything else about the file
     // stays well-formed, so this exercises the source-bounds half of ValidateBufferTable specifically.
     private static byte[] WithOutOfBoundsBufferOffset(byte[] goodFile) {
-        var malformed = (byte[])goodFile.Clone();
+        var malformed = ((byte[])goodFile.Clone());
         var coreDataOffset = FindCoreBlockDataOffset(
-            file: malformed,
-            caseName: "out-of-bounds-offset"
+            caseName: "out-of-bounds-offset",
+            file: malformed
         );
         var fileOffsetField = ((coreDataOffset + Bess.BufferTableOffset) + 0x04);
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: malformed.AsSpan(start: fileOffsetField),
-            value: (uint)(malformed.Length + 4_096)
+            value: ((uint)(malformed.Length + 4_096))
         );
 
         return malformed;
@@ -172,24 +175,24 @@ internal static class BessMalformedCorpus {
 
         Bess.WriteBlock(
             destination: file,
-            tag: "CORE",
-            payload: new byte[16]
+            payload: new byte[16],
+            tag: "CORE"
         );
         Bess.WriteBlock(
             destination: file,
-            tag: "END ",
-            payload: []
+            payload: [],
+            tag: "END "
         );
         Bess.WriteFooter(
             destination: file,
-            firstBlockOffset: (uint)firstBlockOffset
+            firstBlockOffset: ((uint)firstBlockOffset)
         );
 
         return file.ToArray();
     }
     // Flips a byte of the trailing "BESS" tag so TryReadFooter's magic check fails outright.
     private static byte[] WithGarbageFooterMagic(byte[] goodFile) {
-        var malformed = (byte[])goodFile.Clone();
+        var malformed = ((byte[])goodFile.Clone());
 
         malformed[^4] ^= 0xFF;
 
@@ -200,7 +203,7 @@ internal static class BessMalformedCorpus {
     // treated as an unsupported, ignored block per spec, so parsing completes normally and only the "was END seen"
     // flag is false: exercises the required-END check specifically, not the block-graph bounds check.
     private static byte[] WithoutEndBlock(byte[] goodFile) {
-        var malformed = (byte[])goodFile.Clone();
+        var malformed = ((byte[])goodFile.Clone());
 
         if (!Bess.TryReadFooter(
             file: malformed,
@@ -213,12 +216,12 @@ internal static class BessMalformedCorpus {
 
         while (cursor < end) {
             if (!Bess.TryReadBlock(
-                file: malformed,
-                offset: cursor,
                 end: end,
-                tag: out var tag,
+                file: malformed,
+                next: out var next,
+                offset: cursor,
                 payload: out _,
-                next: out var next
+                tag: out var tag
             )) {
                 throw new InvalidOperationException(message: "the good export's block graph is malformed; cannot build the missing-END corpus case.");
             }
@@ -243,17 +246,17 @@ internal static class BessMalformedCorpus {
 
         Bess.WriteBlock(
             destination: file,
-            tag: "CORE",
-            payload: new byte[16]
+            payload: new byte[16],
+            tag: "CORE"
         );
         Bess.WriteBlock(
             destination: file,
-            tag: "END ",
-            payload: new byte[4]
+            payload: new byte[4],
+            tag: "END "
         );
         Bess.WriteFooter(
             destination: file,
-            firstBlockOffset: (uint)firstBlockOffset
+            firstBlockOffset: ((uint)firstBlockOffset)
         );
 
         return file.ToArray();
@@ -267,13 +270,13 @@ internal static class BessMalformedCorpus {
 
         Bess.WriteBlock(
             destination: file,
-            tag: "CORE",
-            payload: new byte[16]
+            payload: new byte[16],
+            tag: "CORE"
         );
         Bess.WriteBlock(
             destination: file,
-            tag: "END ",
-            payload: []
+            payload: [],
+            tag: "END "
         );
         Bess.WriteBlock(
             destination: file,
@@ -282,7 +285,7 @@ internal static class BessMalformedCorpus {
         );
         Bess.WriteFooter(
             destination: file,
-            firstBlockOffset: (uint)firstBlockOffset
+            firstBlockOffset: ((uint)firstBlockOffset)
         );
 
         return file.ToArray();
@@ -293,13 +296,13 @@ internal static class BessMalformedCorpus {
     // than any destination region's real capacity (work-RAM/video-RAM 0x2000, palette 0x40 or less) — exercises the
     // destination-capacity half of ValidateBufferTable specifically, independent of file layout or cartridge RAM size.
     private static byte[] WithOversizedBufferEntry(byte[] goodFile, int tableOffset) {
-        var malformed = (byte[])goodFile.Clone();
+        var malformed = ((byte[])goodFile.Clone());
         var coreDataOffset = FindCoreBlockDataOffset(
-            file: malformed,
-            caseName: "oversized-destination"
+            caseName: "oversized-destination",
+            file: malformed
         );
         var absolute = ((coreDataOffset + Bess.BufferTableOffset) + tableOffset);
-        var declaredSize = (uint)(malformed.Length - Bess.FooterLength);
+        var declaredSize = ((uint)(malformed.Length - Bess.FooterLength));
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: malformed.AsSpan(start: (absolute + 4)),
@@ -317,10 +320,10 @@ internal static class BessMalformedCorpus {
     // fits more easily), so this isolates the exact-size-shape checks (BufferSizeShape.Exact/ExactOrZero) rather than
     // any bounds check. Used for palette/OAM/HRAM, whose spec rows carry a fixed size with no legal shorter form.
     private static byte[] WithResizedBufferEntry(byte[] goodFile, int tableOffset, uint size) {
-        var malformed = (byte[])goodFile.Clone();
+        var malformed = ((byte[])goodFile.Clone());
         var coreDataOffset = FindCoreBlockDataOffset(
-            file: malformed,
-            caseName: "undersized-buffer"
+            caseName: "undersized-buffer",
+            file: malformed
         );
         var absolute = ((coreDataOffset + Bess.BufferTableOffset) + tableOffset);
 
@@ -336,38 +339,38 @@ internal static class BessMalformedCorpus {
     // exact bytes BessImporter.Import is expected to write at the destination's start, with the caller then expected
     // to find zeros for every byte beyond declaredSize up to destinationCapacity.
     private static GracefulShapeCase BuildUndersizedRangeCase(byte[] goodFile, int tableOffset, string label, ushort destinationStart, int destinationCapacity, int declaredSize) {
-        var malformed = (byte[])goodFile.Clone();
+        var malformed = ((byte[])goodFile.Clone());
         var coreDataOffset = FindCoreBlockDataOffset(
-            file: malformed,
-            caseName: label
+            caseName: label,
+            file: malformed
         );
         var absolute = ((coreDataOffset + Bess.BufferTableOffset) + tableOffset);
-        var fileOffset = (int)BinaryPrimitives.ReadUInt32LittleEndian(source: malformed.AsSpan(start: (absolute + 4)));
+        var fileOffset = ((int)BinaryPrimitives.ReadUInt32LittleEndian(source: malformed.AsSpan(start: (absolute + 4))));
         var importedBytes = malformed.AsSpan(
-            start: fileOffset,
-            length: declaredSize
+            length: declaredSize,
+            start: fileOffset
         ).ToArray();
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: malformed.AsSpan(start: absolute),
-            value: (uint)declaredSize
+            value: ((uint)declaredSize)
         );
 
         return new GracefulShapeCase(
-            Label: label,
-            File: malformed,
-            DestinationStart: destinationStart,
             DestinationCapacity: destinationCapacity,
-            ImportedBytes: importedBytes
+            DestinationStart: destinationStart,
+            File: malformed,
+            ImportedBytes: importedBytes,
+            Label: label
         );
     }
     // Walks the block graph to find the CORE block's payload's absolute file offset — the shared lookup the
     // out-of-bounds-offset and oversized-destination cases both need to locate the buffer table they mutate.
     private static int FindCoreBlockDataOffset(byte[] file, string caseName) =>
         (FindBlockOffset(
+        caseName: caseName,
         file: file,
-        tag: "CORE",
-        caseName: caseName
+        tag: "CORE"
     ) + 8);
     // Walks the block graph to find a block's own absolute file offset (its tag's position) by tag — the shared
     // lookup FindCoreBlockDataOffset and the MBC-block-insertion cases below need to locate a block to read from or
@@ -384,12 +387,12 @@ internal static class BessMalformedCorpus {
 
         while (cursor < end) {
             if (!Bess.TryReadBlock(
-                file: file,
-                offset: cursor,
                 end: end,
-                tag: out var candidate,
+                file: file,
+                next: out var next,
+                offset: cursor,
                 payload: out _,
-                next: out var next
+                tag: out var candidate
             )) {
                 throw new InvalidOperationException(message: $"the good export's block graph is malformed; cannot build the {caseName} corpus case.");
             }
@@ -407,19 +410,19 @@ internal static class BessMalformedCorpus {
     // recover the good export's real CORE payload before splicing a mutated copy elsewhere in the file.
     private static byte[] ExtractBlockPayload(byte[] file, string tag, string caseName) {
         var offset = FindBlockOffset(
+            caseName: caseName,
             file: file,
-            tag: tag,
-            caseName: caseName
+            tag: tag
         );
         var end = (file.Length - Bess.FooterLength);
 
         if (!Bess.TryReadBlock(
-            file: file,
-            offset: offset,
             end: end,
-            tag: out _,
+            file: file,
+            next: out _,
+            offset: offset,
             payload: out var payload,
-            next: out _
+            tag: out _
         )) {
             throw new InvalidOperationException(message: $"the good export's {tag} block is malformed; cannot build the {caseName} corpus case.");
         }
@@ -432,20 +435,20 @@ internal static class BessMalformedCorpus {
     // required CORE block; a second CORE block is fatal wherever it appears) against an otherwise valid export.
     private static byte[] SpliceBlockBefore(byte[] goodFile, string insertBeforeTag, string tag, byte[] payload, string caseName) {
         var insertOffset = FindBlockOffset(
+            caseName: caseName,
             file: goodFile,
-            tag: insertBeforeTag,
-            caseName: caseName
+            tag: insertBeforeTag
         );
         var spliced = new List<byte>(capacity: ((goodFile.Length + payload.Length) + 8));
 
         spliced.AddRange(collection: goodFile.AsSpan(
-            start: 0,
-            length: insertOffset
+            length: insertOffset,
+            start: 0
         ).ToArray());
         Bess.WriteBlock(
             destination: spliced,
-            tag: tag,
-            payload: payload
+            payload: payload,
+            tag: tag
         );
         spliced.AddRange(collection: goodFile.AsSpan(start: insertOffset).ToArray());
 
@@ -457,20 +460,20 @@ internal static class BessMalformedCorpus {
     // exercises BessImporter.ValidateMbcBlock against an otherwise valid export.
     private static byte[] WithMbcBlock(byte[] goodFile, byte[] payload) =>
         SpliceBlockBefore(
+        caseName: "mbc-block",
         goodFile: goodFile,
         insertBeforeTag: "END ",
-        tag: "MBC ",
         payload: payload,
-        caseName: "mbc-block"
+        tag: "MBC "
     );
     // (H-10) Flips the good export's CORE major version field (offset 0x00, a little-endian 16-bit integer) to 2 —
     // the spec's "Both major and minor versions should be 1. Implementations are expected to reject incompatible
     // majors" — everything else about the file, including the minor version, stays untouched.
     private static byte[] WithIncompatibleMajorVersion(byte[] goodFile) {
-        var malformed = (byte[])goodFile.Clone();
+        var malformed = ((byte[])goodFile.Clone());
         var coreDataOffset = FindCoreBlockDataOffset(
-            file: malformed,
-            caseName: "incompatible-major"
+            caseName: "incompatible-major",
+            file: malformed
         );
 
         BinaryPrimitives.WriteUInt16LittleEndian(
@@ -485,17 +488,17 @@ internal static class BessMalformedCorpus {
     // duplicate lands, since BessImporter rejects the SECOND "CORE" tag it observes regardless of position.
     private static byte[] WithDuplicateCoreBlock(byte[] goodFile) {
         var corePayload = ExtractBlockPayload(
+            caseName: "duplicate-core",
             file: goodFile,
-            tag: "CORE",
-            caseName: "duplicate-core"
+            tag: "CORE"
         );
 
         return SpliceBlockBefore(
+            caseName: "duplicate-core",
             goodFile: goodFile,
             insertBeforeTag: "END ",
-            tag: "CORE",
             payload: corePayload,
-            caseName: "duplicate-core"
+            tag: "CORE"
         );
     }
     // (H-11) Splices a fabricated "MBC " block immediately before the good export's CORE block (i.e. after
@@ -505,11 +508,11 @@ internal static class BessMalformedCorpus {
     // here since the order check rejects the block first.
     private static byte[] WithMbcBlockBeforeCore(byte[] goodFile) =>
         SpliceBlockBefore(
+        caseName: "mbc-before-core",
         goodFile: goodFile,
         insertBeforeTag: "CORE",
-        tag: "MBC ",
         payload: [0x00, 0x00, 0x0A],
-        caseName: "mbc-before-core"
+        tag: "MBC "
     );
     // One legal 3-byte MBC record (RAM-enable write to 0x0000) followed by a single stray byte: a 4-byte payload,
     // not divisible by 3 — the spec's own "length ... must be divisible by 3" and a SameBoy fatal condition

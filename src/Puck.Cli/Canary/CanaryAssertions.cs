@@ -3,13 +3,10 @@ using System.Globalization;
 namespace Puck.Cli.Canary;
 
 internal sealed record CanaryTranscript(string RunDirectory, IReadOnlyList<string> Stderr, IReadOnlyList<string> Stdout);
-
 internal sealed record CanaryAssertionResult(string Detail, bool Passed);
-
 internal sealed record CanaryEvaluation(IReadOnlyList<CanaryAssertionResult> Results) {
     public bool Passed => Results.All(predicate: static result => result.Passed);
 }
-
 internal static class CanaryAssertions {
     public static CanaryEvaluation Evaluate(CanaryLeg leg, CanaryTranscript transcript) {
         var results = new List<CanaryAssertionResult>(capacity: leg.Assertions.Count);
@@ -54,7 +51,7 @@ internal static class CanaryAssertions {
         }
 
         var equal = File.ReadAllBytes(path: beforePath).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: afterPath));
-        var passed = assertion.Different ? !equal : equal;
+        var passed = (assertion.Different ? !equal : equal);
 
         return new CanaryAssertionResult(
             Detail: $"{assertion.Name}: {assertion.Before} and {assertion.After} are {(equal ? "byte-identical" : "different")}",
@@ -65,8 +62,8 @@ internal static class CanaryAssertions {
     public static IReadOnlyList<string> ResponseLines(CanaryTranscript transcript, CanaryStream stream, string verb) {
         var prefix = $"[{verb}:";
 
-        return Lines(transcript: transcript, stream: stream)
-            .Where(predicate: line => line.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal))
+        return Lines(stream: stream, transcript: transcript)
+            .Where(predicate: line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix))
             .ToArray();
     }
 
@@ -79,21 +76,22 @@ internal static class CanaryAssertions {
         var passed = (matched == assertion.Present);
         var expectation = (assertion.Present ? "present" : "absent");
 
-        return new CanaryAssertionResult(Detail: $"{assertion.Name}: {expectation} on {StreamName(assertion.Stream)}", Passed: passed);
+        return new CanaryAssertionResult(Detail: $"{assertion.Name}: {expectation} on {StreamName(stream: assertion.Stream)}", Passed: passed);
     }
-
     private static CanaryAssertionResult EvaluateResponse(CanaryResponseAssertion assertion, CanaryTranscript transcript, Dictionary<string, string> values) {
         var responses = ResponseLines(transcript: transcript, stream: assertion.Stream, verb: assertion.Verb);
+
         if (responses.Count != assertion.Count) {
             return new CanaryAssertionResult(
-                Detail: $"{assertion.Name}: {assertion.Verb} cardinality {responses.Count}, expected exactly {assertion.Count} on {StreamName(assertion.Stream)}",
+                Detail: $"{assertion.Name}: {assertion.Verb} cardinality {responses.Count}, expected exactly {assertion.Count} on {StreamName(stream: assertion.Stream)}",
                 Passed: false
             );
         }
 
-        var selected = responses[assertion.Occurrence - 1];
+        var selected = responses[(assertion.Occurrence - 1)];
+
         foreach (var extraction in assertion.Extractions) {
-            if (!TryExtract(line: selected, extraction: extraction, value: out var value, error: out var error)) {
+            if (!TryExtract(error: out var error, extraction: extraction, line: selected, value: out var value)) {
                 return new CanaryAssertionResult(Detail: $"{assertion.Name}: {error}", Passed: false);
             }
 
@@ -101,11 +99,10 @@ internal static class CanaryAssertions {
         }
 
         return new CanaryAssertionResult(
-            Detail: $"{assertion.Name}: selected {assertion.Verb} occurrence {assertion.Occurrence} of exactly {assertion.Count} on {StreamName(assertion.Stream)}",
+            Detail: $"{assertion.Name}: selected {assertion.Verb} occurrence {assertion.Occurrence} of exactly {assertion.Count} on {StreamName(stream: assertion.Stream)}",
             Passed: true
         );
     }
-
     private static CanaryAssertionResult EvaluateSequence(CanarySequenceAssertion assertion, CanaryTranscript transcript) {
         var lines = Lines(transcript: transcript, stream: assertion.Stream);
         var priorIndex = -1;
@@ -119,12 +116,13 @@ internal static class CanaryAssertions {
 
             if (indices.Length != selector.Count) {
                 return new CanaryAssertionResult(
-                    Detail: $"{assertion.Name}: {selector.Verb} cardinality {indices.Length}, expected exactly {selector.Count} on {StreamName(assertion.Stream)}",
+                    Detail: $"{assertion.Name}: {selector.Verb} cardinality {indices.Length}, expected exactly {selector.Count} on {StreamName(stream: assertion.Stream)}",
                     Passed: false
                 );
             }
 
-            var selectedIndex = indices[selector.Occurrence - 1];
+            var selectedIndex = indices[(selector.Occurrence - 1)];
+
             if (selectedIndex <= priorIndex) {
                 return new CanaryAssertionResult(Detail: $"{assertion.Name}: {selector.Verb} occurrence {selector.Occurrence} arrived out of order", Passed: false);
             }
@@ -132,9 +130,8 @@ internal static class CanaryAssertions {
             priorIndex = selectedIndex;
         }
 
-        return new CanaryAssertionResult(Detail: $"{assertion.Name}: {assertion.Responses.Count} selected responses arrived in order on {StreamName(assertion.Stream)}", Passed: true);
+        return new CanaryAssertionResult(Detail: $"{assertion.Name}: {assertion.Responses.Count} selected responses arrived in order on {StreamName(stream: assertion.Stream)}", Passed: true);
     }
-
     private static CanaryAssertionResult EvaluateRelation(CanaryRelationAssertion assertion, Dictionary<string, string> values) {
         if (!TryResolveOperand(operand: assertion.Left, values: values, value: out var left, error: out var leftError)) {
             return new CanaryAssertionResult(Detail: $"{assertion.Name}: {leftError}", Passed: false);
@@ -143,57 +140,56 @@ internal static class CanaryAssertions {
         switch (assertion.Operator) {
             case CanaryRelationOperator.Equal:
             case CanaryRelationOperator.NotEqual: {
-                if (!TryResolveOperand(operand: assertion.Right!, values: values, value: out var right, error: out var rightError)) {
-                    return new CanaryAssertionResult(Detail: $"{assertion.Name}: {rightError}", Passed: false);
+                    if (!TryResolveOperand(operand: assertion.Right!, values: values, value: out var right, error: out var rightError)) {
+                        return new CanaryAssertionResult(Detail: $"{assertion.Name}: {rightError}", Passed: false);
+                    }
+
+                    var equal = ValuesEqual(left: left, right: right);
+                    var passed = ((assertion.Operator == CanaryRelationOperator.Equal) ? equal : !equal);
+
+                    return new CanaryAssertionResult(Detail: $"{assertion.Name}: '{left}' {OperatorName(relationOperator: assertion.Operator)} '{right}'", Passed: passed);
                 }
-
-                var equal = ValuesEqual(left: left, right: right);
-                var passed = ((assertion.Operator == CanaryRelationOperator.Equal) ? equal : !equal);
-
-                return new CanaryAssertionResult(Detail: $"{assertion.Name}: '{left}' {OperatorName(assertion.Operator)} '{right}'", Passed: passed);
-            }
             case CanaryRelationOperator.BetweenInclusive:
             case CanaryRelationOperator.AtLeast:
             case CanaryRelationOperator.AtMost: {
-                if (!TryNumber(value: left, number: out var number)) {
-                    return new CanaryAssertionResult(Detail: $"{assertion.Name}: '{left}' is not a finite number", Passed: false);
+                    if (!TryNumber(number: out var number, value: left)) {
+                        return new CanaryAssertionResult(Detail: $"{assertion.Name}: '{left}' is not a finite number", Passed: false);
+                    }
+
+                    var passed = assertion.Operator switch {
+                        CanaryRelationOperator.BetweenInclusive => ((number >= assertion.Minimum) && (number <= assertion.Maximum)),
+                        CanaryRelationOperator.AtLeast => (number >= assertion.Minimum),
+                        CanaryRelationOperator.AtMost => (number <= assertion.Maximum),
+                        _ => false,
+                    };
+                    var bounds = assertion.Operator switch {
+                        CanaryRelationOperator.BetweenInclusive => $"in [{assertion.Minimum}, {assertion.Maximum}]",
+                        CanaryRelationOperator.AtLeast => $">= {assertion.Minimum}",
+                        CanaryRelationOperator.AtMost => $"<= {assertion.Maximum}",
+                        _ => string.Empty,
+                    };
+
+                    return new CanaryAssertionResult(Detail: $"{assertion.Name}: {number.ToString(provider: CultureInfo.InvariantCulture)} {bounds}", Passed: passed);
                 }
-
-                var passed = assertion.Operator switch {
-                    CanaryRelationOperator.BetweenInclusive => ((number >= assertion.Minimum) && (number <= assertion.Maximum)),
-                    CanaryRelationOperator.AtLeast => (number >= assertion.Minimum),
-                    CanaryRelationOperator.AtMost => (number <= assertion.Maximum),
-                    _ => false,
-                };
-                var bounds = assertion.Operator switch {
-                    CanaryRelationOperator.BetweenInclusive => $"in [{assertion.Minimum}, {assertion.Maximum}]",
-                    CanaryRelationOperator.AtLeast => $">= {assertion.Minimum}",
-                    CanaryRelationOperator.AtMost => $"<= {assertion.Maximum}",
-                    _ => string.Empty,
-                };
-
-                return new CanaryAssertionResult(Detail: $"{assertion.Name}: {number.ToString(provider: CultureInfo.InvariantCulture)} {bounds}", Passed: passed);
-            }
             case CanaryRelationOperator.MinimumMargin: {
-                if (!TryResolveOperand(operand: assertion.Right!, values: values, value: out var right, error: out var rightError)) {
-                    return new CanaryAssertionResult(Detail: $"{assertion.Name}: {rightError}", Passed: false);
-                }
-                if (!TryNumber(value: left, number: out var leftNumber) || !TryNumber(value: right, number: out var rightNumber)) {
-                    return new CanaryAssertionResult(Detail: $"{assertion.Name}: minimumMargin needs two finite numbers, got '{left}' and '{right}'", Passed: false);
-                }
+                    if (!TryResolveOperand(operand: assertion.Right!, values: values, value: out var right, error: out var rightError)) {
+                        return new CanaryAssertionResult(Detail: $"{assertion.Name}: {rightError}", Passed: false);
+                    }
+                    if (!TryNumber(number: out var leftNumber, value: left) || !TryNumber(number: out var rightNumber, value: right)) {
+                        return new CanaryAssertionResult(Detail: $"{assertion.Name}: minimumMargin needs two finite numbers, got '{left}' and '{right}'", Passed: false);
+                    }
 
-                var actual = Math.Abs(value: (leftNumber - rightNumber));
+                    var actual = Math.Abs(value: (leftNumber - rightNumber));
 
-                return new CanaryAssertionResult(
-                    Detail: $"{assertion.Name}: margin {actual.ToString(provider: CultureInfo.InvariantCulture)} >= {assertion.Margin}",
-                    Passed: (actual >= assertion.Margin)
-                );
-            }
+                    return new CanaryAssertionResult(
+                        Detail: $"{assertion.Name}: margin {actual.ToString(provider: CultureInfo.InvariantCulture)} >= {assertion.Margin}",
+                        Passed: (actual >= assertion.Margin)
+                    );
+                }
             default:
                 return new CanaryAssertionResult(Detail: $"{assertion.Name}: unsupported relation", Passed: false);
         }
     }
-
     private static bool TryExtract(string line, CanaryValueExtraction extraction, out string value, out string error) {
         value = string.Empty;
         error = string.Empty;
@@ -210,7 +206,8 @@ internal static class CanaryAssertions {
             return true;
         }
 
-        var components = fieldValue.Split(separator: ',', options: StringSplitOptions.TrimEntries);
+        var components = fieldValue.Split(options: StringSplitOptions.TrimEntries, separator: ',');
+
         if (component >= components.Length) {
             error = $"field '{extraction.Field}' has {components.Length} component(s), so component {component} does not exist";
 
@@ -221,23 +218,25 @@ internal static class CanaryAssertions {
 
         return true;
     }
-
     private static bool TryReadField(string line, string field, out string value) {
         value = string.Empty;
 
         var colon = line.IndexOf(value: ':');
-        var end = line.EndsWith(value: ']') ? (line.Length - 1) : line.Length;
+        var end = (line.EndsWith(value: ']') ? (line.Length - 1) : line.Length);
+
         if ((colon < 0) || (colon >= end)) {
             return false;
         }
 
-        var index = colon + 1;
+        var index = (colon + 1);
+
         while (index < end) {
             while ((index < end) && char.IsWhiteSpace(c: line[index])) {
                 index++;
             }
 
             var nameStart = index;
+
             while ((index < end) && !char.IsWhiteSpace(c: line[index]) && (line[index] != '=')) {
                 index++;
             }
@@ -253,10 +252,12 @@ internal static class CanaryAssertions {
 
             index++;
             var parenthesized = ((index < end) && (line[index] == '('));
+
             if (parenthesized) {
                 index++;
             }
             var valueStart = index;
+
             if (parenthesized) {
                 while ((index < end) && (line[index] != ')')) {
                     index++;
@@ -280,7 +281,6 @@ internal static class CanaryAssertions {
 
         return false;
     }
-
     private static bool TryResolveOperand(CanaryOperand operand, Dictionary<string, string> values, out string value, out string error) {
         error = string.Empty;
 
@@ -305,20 +305,15 @@ internal static class CanaryAssertions {
 
         return true;
     }
-
     private static bool ValuesEqual(string left, string right) =>
-        (TryNumber(value: left, number: out var leftNumber) && TryNumber(value: right, number: out var rightNumber))
+        ((TryNumber(number: out var leftNumber, value: left) && TryNumber(number: out var rightNumber, value: right))
             ? (leftNumber == rightNumber)
-            : string.Equals(a: left, b: right, comparisonType: StringComparison.Ordinal);
-
+            : string.Equals(a: left, b: right, comparisonType: StringComparison.Ordinal));
     private static bool TryNumber(string value, out double number) =>
-        double.TryParse(s: value, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out number) && double.IsFinite(d: number);
-
+        (double.TryParse(s: value, style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out number) && double.IsFinite(d: number));
     private static IReadOnlyList<string> Lines(CanaryTranscript transcript, CanaryStream stream) =>
         ((stream == CanaryStream.Stdout) ? transcript.Stdout : transcript.Stderr);
-
     private static string StreamName(CanaryStream stream) => ((stream == CanaryStream.Stdout) ? "stdout" : "stderr");
-
     private static string OperatorName(CanaryRelationOperator relationOperator) => relationOperator switch {
         CanaryRelationOperator.Equal => "==",
         CanaryRelationOperator.NotEqual => "!=",

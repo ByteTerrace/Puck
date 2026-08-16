@@ -19,9 +19,15 @@ public readonly record struct TextEffectParameter(
     /// <returns>The base value when unbound or the named channel is absent; otherwise the base folded with the channel
     /// per <see cref="BindingMode"/>. Non-finite inputs fall back to the finite base (or zero).</returns>
     public float Evaluate(IReadOnlyList<TextEnrichmentVariable>? variables) {
-        var baseValue = (float.IsFinite(f: BaseValue) ? BaseValue : 0.0f);
+        var baseValue = (float.IsFinite(f: BaseValue)
+            ? BaseValue
+            : 0.0f
+        );
 
-        if ((VariableHash == 0) || (variables is null)) {
+        if (
+            (VariableHash == 0) ||
+            (variables is null)
+        ) {
             return baseValue;
         }
 
@@ -40,7 +46,10 @@ public readonly record struct TextEffectParameter(
                 _ => (baseValue * variable.Value)
             };
 
-            return (float.IsFinite(f: evaluatedValue) ? evaluatedValue : baseValue);
+            return (float.IsFinite(f: evaluatedValue)
+                ? evaluatedValue
+                : baseValue
+            );
         }
 
         return baseValue;

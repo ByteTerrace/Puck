@@ -38,11 +38,6 @@
         "resolved": "10.0.11",
         "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
-      "Concentus": {
-        "type": "Transitive",
-        "resolved": "2.2.2",
-        "contentHash": "2B9YmHPKO+k7YpAAnqmiXwiMJnfjfj1C868RszOll2iZWLnGTAiC1q21L/d7CvTan7T+hyqU8dR0Dcy3cpjVfQ=="
-      },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
         "resolved": "10.0.11",
@@ -308,8 +303,14 @@
         "resolved": "10.0.11",
         "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
       },
-      "ByteTerrace.Puck.Assets": {
+      "ByteTerrace.Puck.Abstractions": {
         "type": "Project"
+      },
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project",
+        "dependencies": {
+          "System.IO.Hashing": "[10.*, )"
+        }
       },
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
@@ -318,108 +319,123 @@
           "System.CommandLine": "[2.*, )"
         }
       },
+      "ByteTerrace.Puck.DirectX": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Hosting": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
-      "puck.abstractions": {
-        "type": "Project"
-      },
-      "puck.directx": {
-        "type": "Project",
-        "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
-      "puck.directx.presentation": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.DirectX": "[1.0.0, )",
-          "Puck.Hosting": "[1.0.0, )"
-        }
-      },
-      "puck.hosting": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
-      "puck.input": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "System.IO.Hashing": "[10.*, )"
-        }
-      },
-      "puck.launcher": {
-        "type": "Project",
-        "dependencies": {
-          "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Hosting": "[1.0.0, )",
-          "Puck.Input": "[1.0.0, )"
-        }
-      },
-      "puck.platform": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
-          "Microsoft.Extensions.Options": "[10.*, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Input": "[1.0.0, )"
-        }
-      },
-      "puck.recording": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Concentus": "[2.*, )",
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
-      "puck.sdfvm": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Hosting": "[1.0.0, )",
-          "Puck.Recording": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )",
-          "Puck.Text": "[1.0.0, )"
-        }
-      },
-      "puck.shaders": {
+      "ByteTerrace.Puck.Shaders": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
         }
       },
-      "puck.text": {
+      "ByteTerrace.Puck.SignedDistance": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Text": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
-      "puck.vulkan": {
+      "ByteTerrace.Puck.Vulkan": {
         "type": "Project",
         "dependencies": {
-          "Puck.Abstractions": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )"
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )"
+        }
+      },
+      "puck.directx.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.DirectX": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.Hosting": "[10.*, )"
+        }
+      },
+      "puck.input": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "System.IO.Hashing": "[10.*, )"
+        }
+      },
+      "puck.launcher": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.Hosting": "[10.*, )",
+          "Puck.Input": "[1.0.0, )"
+        }
+      },
+      "puck.launcher.windows": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "Puck.DirectX.Presentation": "[1.0.0, )",
+          "Puck.Platform": "[1.0.0, )",
+          "Puck.Platform.Windows": "[1.0.0, )",
+          "Puck.Vulkan.Presentation": "[1.0.0, )"
+        }
+      },
+      "puck.platform": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
+          "Microsoft.Extensions.Options": "[10.*, )",
+          "Puck.Input": "[1.0.0, )"
+        }
+      },
+      "puck.platform.windows": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
+          "Microsoft.Extensions.Options": "[10.*, )",
+          "Puck.Input": "[1.0.0, )",
+          "Puck.Platform": "[1.0.0, )"
+        }
+      },
+      "puck.sdfvm": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )"
         }
       },
       "puck.vulkan.presentation": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.Hosting": "[10.*, )",
-          "Puck.Hosting": "[1.0.0, )",
-          "Puck.Shaders": "[1.0.0, )",
-          "Puck.Vulkan": "[1.0.0, )"
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Vulkan": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.Hosting": "[10.*, )"
         }
       }
     }

@@ -25,13 +25,13 @@ public static class ArmDisassembler {
 
         // BX Rn.
         if ((instruction & 0x0FFFFFF0u) == 0x012FFF10u) {
-            return $"BX{condition} {Register(index: (int)(instruction & 0xFu))}";
+            return $"BX{condition} {Register(index: ((int)(instruction & 0xFu)))}";
         }
 
         // Branch / branch-with-link.
         if ((instruction & 0x0E000000u) == 0x0A000000u) {
-            var offset = ((int)(instruction << 8) >> 6); // sign-extend the 24-bit field, then <<2
-            var target = (uint)((address + 8) + offset);
+            var offset = (((int)(instruction << 8)) >> 6); // sign-extend the 24-bit field, then <<2
+            var target = ((uint)((address + 8) + offset));
 
             return $"B{(((instruction & 0x01000000u) != 0u)
                 ? "L"
@@ -44,14 +44,14 @@ public static class ArmDisassembler {
             ((instruction & 0x0F8000F0u) == 0x00800090u)
         ) {
             return DecodeMultiply(
-                instruction: instruction,
-                condition: condition
+                condition: condition,
+                instruction: instruction
             );
         }
 
         // PSR transfer (MRS/MSR) — carved out of the data-processing space.
         if ((instruction & 0x0FBF0FFFu) == 0x010F0000u) {
-            return $"MRS{condition} {Register(index: (int)((instruction >> 12) & 0xFu))},{(((instruction & 0x00400000u) != 0u)
+            return $"MRS{condition} {Register(index: ((int)((instruction >> 12) & 0xFu)))},{(((instruction & 0x00400000u) != 0u)
                 ? "SPSR"
                 : "CPSR")}";
         }
@@ -61,8 +61,8 @@ public static class ArmDisassembler {
             ((instruction & 0x0FB000F0u) == 0x01200000u)
         ) {
             return DecodeMoveToStatus(
-                instruction: instruction,
-                condition: condition
+                condition: condition,
+                instruction: instruction
             );
         }
 
@@ -72,32 +72,32 @@ public static class ArmDisassembler {
             ((instruction & 0x00000060u) != 0u)
         ) {
             return DecodeHalfwordTransfer(
-                instruction: instruction,
-                condition: condition
+                condition: condition,
+                instruction: instruction
             );
         }
 
         // Data processing.
         if ((instruction & 0x0C000000u) == 0x00000000u) {
             return DecodeDataProcessing(
-                instruction: instruction,
-                condition: condition
+                condition: condition,
+                instruction: instruction
             );
         }
 
         // Single data transfer (LDR/STR).
         if ((instruction & 0x0C000000u) == 0x04000000u) {
             return DecodeSingleTransfer(
-                instruction: instruction,
-                condition: condition
+                condition: condition,
+                instruction: instruction
             );
         }
 
         // Block data transfer (LDM/STM).
         if ((instruction & 0x0E000000u) == 0x08000000u) {
             return DecodeBlockTransfer(
-                instruction: instruction,
-                condition: condition
+                condition: condition,
+                instruction: instruction
             );
         }
 
@@ -108,7 +108,6 @@ public static class ArmDisassembler {
 
         return $"DCD {Hex32(value: instruction)}";
     }
-
     /// <summary>Disassembles one THUMB instruction halfword.</summary>
     /// <param name="address">The instruction's address (for branch-target resolution).</param>
     /// <param name="instruction">The 16-bit instruction halfword.</param>
@@ -164,7 +163,7 @@ public static class ArmDisassembler {
 
         // Format 6: PC-relative load.
         if ((op & 0xF800) == 0x4800) {
-            var target = (((address + 4) & ~3u) + (uint)((op & 0xFF) << 2));
+            var target = (((address + 4) & ~3u) + ((uint)((op & 0xFF) << 2)));
 
             return $"LDR {Register(index: (op >> 8) & 7)},[{Hex32(value: target)}]";
         }
@@ -233,8 +232,8 @@ public static class ArmDisassembler {
             return $"{(pop
                 ? "POP"
                 : "PUSH")} {RegisterList(
-                mask: (byte)op,
-                extra: extra
+                extra: extra,
+                mask: ((byte)op)
             )}";
         }
 
@@ -243,8 +242,8 @@ public static class ArmDisassembler {
             return $"{(((op & 0x0800) != 0)
                 ? "LDMIA"
                 : "STMIA")} {Register(index: (op >> 8) & 7)}!,{RegisterList(
-                mask: (byte)op,
-                extra: null
+                extra: null,
+                mask: ((byte)op)
             )}";
         }
 
@@ -255,16 +254,16 @@ public static class ArmDisassembler {
 
         // Format 16: conditional branch.
         if ((op & 0xF000) == 0xD000) {
-            var offset = ((int)(sbyte)(op & 0xFF) << 1);
+            var offset = (((int)((sbyte)(op & 0xFF))) << 1);
 
-            return $"B{Conditions[(op >> 8) & 0xF]} {Hex32(value: (uint)((address + 4) + offset))}";
+            return $"B{Conditions[(op >> 8) & 0xF]} {Hex32(value: ((uint)((address + 4) + offset)))}";
         }
 
         // Format 18: unconditional branch.
         if ((op & 0xF800) == 0xE000) {
-            var offset = ((int)(op << 21) >> 20); // sign-extend 11-bit, <<1
+            var offset = (((int)(op << 21)) >> 20); // sign-extend 11-bit, <<1
 
-            return $"B {Hex32(value: (uint)((address + 4) + offset))}";
+            return $"B {Hex32(value: ((uint)((address + 4) + offset)))}";
         }
 
         // Format 19: long branch with link (two halfwords; the first stashes the high offset).
@@ -279,10 +278,10 @@ public static class ArmDisassembler {
         var setFlags = (((instruction & 0x00100000u) != 0u)
             ? "S"
             : "");
-        var rd = (int)((instruction >> 16) & 0xFu);
-        var rn = (int)((instruction >> 12) & 0xFu);
-        var rs = (int)((instruction >> 8) & 0xFu);
-        var rm = (int)(instruction & 0xFu);
+        var rd = ((int)((instruction >> 16) & 0xFu));
+        var rn = ((int)((instruction >> 12) & 0xFu));
+        var rs = ((int)((instruction >> 8) & 0xFu));
+        var rm = ((int)(instruction & 0xFu));
 
         if ((instruction & 0x00800000u) != 0u) {
             var unsigned = (((instruction & 0x00400000u) == 0u)
@@ -305,22 +304,22 @@ public static class ArmDisassembler {
             : "CPSR");
 
         if ((instruction & 0x02000000u) != 0u) {
-            var rotate = ((int)((instruction >> 8) & 0xFu) * 2);
-            var value = (uint)BitwiseRotateRight(
-                value: instruction & 0xFFu,
-                amount: rotate
-            );
+            var rotate = (((int)((instruction >> 8) & 0xFu)) * 2);
+            var value = ((uint)BitwiseRotateRight(
+                amount: rotate,
+                value: instruction & 0xFFu
+            ));
 
             return $"MSR{condition} {target}_flg,#{Hex32(value: value)}";
         }
 
-        return $"MSR{condition} {target},{Register(index: (int)(instruction & 0xFu))}";
+        return $"MSR{condition} {target},{Register(index: ((int)(instruction & 0xFu)))}";
     }
     private static string DecodeDataProcessing(uint instruction, string condition) {
-        var opcode = (int)((instruction >> 21) & 0xFu);
+        var opcode = ((int)((instruction >> 21) & 0xFu));
         var setFlags = ((instruction & 0x00100000u) != 0u);
-        var rn = (int)((instruction >> 16) & 0xFu);
-        var rd = (int)((instruction >> 12) & 0xFu);
+        var rn = ((int)((instruction >> 16) & 0xFu));
+        var rd = ((int)((instruction >> 12) & 0xFu));
         var mnemonic = DataOps[opcode];
         var operand = DecodeOperand2(instruction: instruction);
         var setSuffix = ((setFlags && (opcode is < 8 or > 11))
@@ -340,23 +339,23 @@ public static class ArmDisassembler {
     }
     private static string DecodeOperand2(uint instruction) {
         if ((instruction & 0x02000000u) != 0u) {
-            var rotate = ((int)((instruction >> 8) & 0xFu) * 2);
+            var rotate = (((int)((instruction >> 8) & 0xFu)) * 2);
             var value = BitwiseRotateRight(
-                value: instruction & 0xFFu,
-                amount: rotate
+                amount: rotate,
+                value: instruction & 0xFFu
             );
 
             return $"#{Hex32(value: value)}";
         }
 
-        var rm = Register(index: (int)(instruction & 0xFu));
+        var rm = Register(index: ((int)(instruction & 0xFu)));
         var shiftType = ShiftNames[(instruction >> 5) & 3u];
 
         if ((instruction & 0x00000010u) != 0u) {
-            return $"{rm},{shiftType} {Register(index: (int)((instruction >> 8) & 0xFu))}";
+            return $"{rm},{shiftType} {Register(index: ((int)((instruction >> 8) & 0xFu)))}";
         }
 
-        var amount = (int)((instruction >> 7) & 0x1Fu);
+        var amount = ((int)((instruction >> 7) & 0x1Fu));
 
         if (amount == 0) {
             // A zero immediate shift is just the register (LSL #0), except the special ROR #0 = RRX and LSR/ASR #32.
@@ -372,28 +371,28 @@ public static class ArmDisassembler {
     private static string DecodeSingleTransfer(uint instruction, string condition) {
         var load = ((instruction & 0x00100000u) != 0u);
         var byteAccess = ((instruction & 0x00400000u) != 0u);
-        var rd = (int)((instruction >> 12) & 0xFu);
-        var rn = (int)((instruction >> 16) & 0xFu);
+        var rd = ((int)((instruction >> 12) & 0xFu));
+        var rn = ((int)((instruction >> 16) & 0xFu));
         var mnemonic = $"{(load
             ? "LDR"
             : "STR")}{(byteAccess
             ? "B"
             : "")}{condition}";
         var offset = DecodeTransferOffset(
-            instruction: instruction,
-            immediateBitClearMeansImmediate: true
+            immediateBitClearMeansImmediate: true,
+            instruction: instruction
         );
 
         return $"{mnemonic} {Register(index: rd)},{FormatAddress(
-            rn: rn,
+            instruction: instruction,
             offset: offset,
-            instruction: instruction
+            rn: rn
         )}";
     }
     private static string DecodeHalfwordTransfer(uint instruction, string condition) {
         var load = ((instruction & 0x00100000u) != 0u);
-        var rd = (int)((instruction >> 12) & 0xFu);
-        var rn = (int)((instruction >> 16) & 0xFu);
+        var rd = ((int)((instruction >> 12) & 0xFu));
+        var rn = ((int)((instruction >> 16) & 0xFu));
         var kind = ((instruction >> 5) & 3u) switch {
             1u => "H",
             2u => "SB",
@@ -407,7 +406,7 @@ public static class ArmDisassembler {
         string offset;
 
         if ((instruction & 0x00400000u) != 0u) {
-            var immediate = (int)(((instruction >> 4) & 0xF0u) | (instruction & 0xFu));
+            var immediate = ((int)(((instruction >> 4) & 0xF0u) | (instruction & 0xFu)));
 
             offset = ((immediate != 0)
                 ? $",#{((((instruction & 0x00800000u) != 0u))
@@ -417,7 +416,7 @@ public static class ArmDisassembler {
         } else {
             offset = $",{((((instruction & 0x00800000u) != 0u))
                 ? ""
-                : "-")}{Register(index: (int)(instruction & 0xFu))}";
+                : "-")}{Register(index: ((int)(instruction & 0xFu)))}";
         }
 
         return $"{mnemonic} {Register(index: rd)},[{Register(index: rn)}{offset}]";
@@ -436,9 +435,9 @@ public static class ArmDisassembler {
                 : "");
         }
 
-        var rm = Register(index: (int)(instruction & 0xFu));
+        var rm = Register(index: ((int)(instruction & 0xFu)));
         var shiftType = ShiftNames[(instruction >> 5) & 3u];
-        var amount = (int)((instruction >> 7) & 0x1Fu);
+        var amount = ((int)((instruction >> 7) & 0x1Fu));
 
         return ((amount != 0)
             ? $",{down}{rm},{shiftType} #{amount}"
@@ -474,9 +473,9 @@ public static class ArmDisassembler {
 
         return $"{(load
             ? "LDM"
-            : "STM")}{condition}{mode} {Register(index: (int)((instruction >> 16) & 0xFu))}{writeBack},{RegisterList(
-            mask: (ushort)instruction,
-            extra: null
+            : "STM")}{condition}{mode} {Register(index: ((int)((instruction >> 16) & 0xFu)))}{writeBack},{RegisterList(
+            extra: null,
+            mask: ((ushort)instruction)
         )}{force}";
     }
     private static string RegisterList(ushort mask, string? extra) {

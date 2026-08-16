@@ -8,7 +8,7 @@ has already pinned. A **pin** is an identity and public key the receiver chose
 out of band. If a required chain does not arrive with the claim, verification
 refuses it instead of fetching anything.
 
-Inside this repository, `Puck.World`, `Puck.World.Data`, and
+Inside this repository, `Puck.World`, `Puck.World.Schema`, and
 `Puck.World.Server` reference the library. The world admission path verifies a
 connecting peer’s claim against trust entries authored in the world document.
 `dotnet pack` produces `ByteTerrace.Puck.Attestation`; the package depends on

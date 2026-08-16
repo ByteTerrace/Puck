@@ -13,7 +13,6 @@ internal sealed class AllocationStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "zero-alloc";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

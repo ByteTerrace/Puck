@@ -12,6 +12,22 @@ namespace Puck.Commands;
 /// culture, no thousands separators) can never drift between verbs.
 /// </summary>
 public static class CommandArgs {
+    /// <summary>The exception set a document-LOAD or file-capture verb treats as unreadable/corrupt INPUT — a JSON
+    /// parse failure, a schema/shape mismatch, a bad base64/number, or a filesystem fault — so a malformed file or a
+    /// hostile path echoes a friendly error instead of escaping the command pump (which catches only
+    /// <c>DeviceLostException</c>) and tearing the single-session host down. A genuine logic bug (a
+    /// <see cref="NullReferenceException"/>, an <see cref="InvalidOperationException"/>, …) is deliberately NOT in the
+    /// set, so it still surfaces rather than being masked.</summary>
+    /// <param name="exception">The caught exception.</param>
+    /// <returns>Whether it is a malformed-input or I/O fault safe to narrate rather than rethrow.</returns>
+    public static bool IsMalformedInput(Exception exception) =>
+        (exception is System.Text.Json.JsonException
+            or System.IO.InvalidDataException
+            or System.IO.IOException
+            or UnauthorizedAccessException
+            or NotSupportedException
+            or ArgumentException
+            or FormatException);
     /// <summary>The single float-parse rule for every console argument — finite, invariant-culture decimal or exponent
     /// notation with optional leading/trailing whitespace (no thousands separators, NaN, or infinities). Both the
     /// <see cref="string"/> overload and <see cref="WireArgs.TryFloat"/> route through this span core, so the rule has
@@ -21,13 +37,12 @@ public static class CommandArgs {
     /// <returns>Whether the token parsed.</returns>
     public static bool TryParseFloat(ReadOnlySpan<char> text, out float value) =>
         (float.TryParse(
-        s: text,
-        result: out value,
-        provider: CultureInfo.InvariantCulture,
-        style: NumberStyles.Float
-    ) &&
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.Float
+        ) &&
         float.IsFinite(f: value));
-
     /// <summary>Parses one finite float argument, invariant-culture (see the span overload for the rule).</summary>
     /// <param name="text">The argument token.</param>
     /// <param name="value">The parsed value, or 0 on failure.</param>
@@ -36,7 +51,6 @@ public static class CommandArgs {
         text: text.AsSpan(),
         value: out value
     );
-
     /// <summary>Parses <paramref name="count"/> consecutive float arguments starting at <paramref name="start"/>
     /// (e.g. an <c>&lt;x&gt; &lt;y&gt; &lt;z&gt;</c> triple) — fails as a unit if any token is missing or unparsable,
     /// so callers can offer one usage string rather than partial-parse errors.</summary>
@@ -63,7 +77,6 @@ public static class CommandArgs {
 
         return true;
     }
-
     /// <summary>The single integer-parse rule for every console argument — invariant-culture plain digit strings
     /// (console args are typed, not formatted numbers). Both the <see cref="string"/> overload and
     /// <see cref="WireArgs.TryInt"/> route through this span core.</summary>
@@ -72,12 +85,11 @@ public static class CommandArgs {
     /// <returns>Whether the token parsed.</returns>
     public static bool TryParseInt(ReadOnlySpan<char> text, out int value) =>
         int.TryParse(
-        s: text,
-        result: out value,
-        provider: CultureInfo.InvariantCulture,
-        style: NumberStyles.Integer
-    );
-
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.Integer
+        );
     /// <summary>Parses one integer argument, invariant-culture (see the span overload for the rule).</summary>
     /// <param name="text">The argument token.</param>
     /// <param name="value">The parsed value, or 0 on failure.</param>
@@ -86,21 +98,4 @@ public static class CommandArgs {
         text: text.AsSpan(),
         value: out value
     );
-
-    /// <summary>The exception set a document-LOAD or file-capture verb treats as unreadable/corrupt INPUT — a JSON
-    /// parse failure, a schema/shape mismatch, a bad base64/number, or a filesystem fault — so a malformed file or a
-    /// hostile path echoes a friendly error instead of escaping the command pump (which catches only
-    /// <c>DeviceLostException</c>) and tearing the single-session host down. A genuine logic bug (a
-    /// <see cref="NullReferenceException"/>, an <see cref="InvalidOperationException"/>, …) is deliberately NOT in the
-    /// set, so it still surfaces rather than being masked.</summary>
-    /// <param name="exception">The caught exception.</param>
-    /// <returns>Whether it is a malformed-input or I/O fault safe to narrate rather than rethrow.</returns>
-    public static bool IsMalformedInput(Exception exception) =>
-        (exception is System.Text.Json.JsonException
-            or System.IO.InvalidDataException
-            or System.IO.IOException
-            or UnauthorizedAccessException
-            or NotSupportedException
-            or ArgumentException
-            or FormatException);
 }

@@ -6,7 +6,6 @@ namespace Puck.HumbleGamingBrick.Post;
 internal static class PostMachine {
     /// <summary>The number of CPU T-cycles in one video frame at normal speed.</summary>
     public const int TCyclesPerFrame = 70_224;
-
     /// <summary>The hardware refresh rate in frames per second (~59.73&#160;Hz).</summary>
     public const double HardwareFps = (4_194_304.0 / TCyclesPerFrame);
 
@@ -27,22 +26,20 @@ internal static class PostMachine {
         ),
         compose: static services => services.AddHumbleGamingBrickComponents()
     );
-
     /// <summary>Advances a machine by a whole number of frames.</summary>
     /// <param name="instance">The machine to advance.</param>
     /// <param name="frames">The number of frames to run.</param>
     public static void RunFrames(MachineInstance instance, int frames) {
         for (var frame = 0; (frame < frames); ++frame) {
-            instance.Machine.Run(tCycles: (ulong)TCyclesPerFrame);
+            instance.Machine.Run(tCycles: ((ulong)TCyclesPerFrame));
         }
     }
-
     /// <summary>Advances a forked machine by a whole number of frames.</summary>
     /// <param name="fork">The fork rental to advance.</param>
     /// <param name="frames">The number of frames to run.</param>
     public static void RunFrames(MachineFork fork, int frames) {
         for (var frame = 0; (frame < frames); ++frame) {
-            fork.Machine.Run(tCycles: (ulong)TCyclesPerFrame);
+            fork.Machine.Run(tCycles: ((ulong)TCyclesPerFrame));
         }
     }
 }

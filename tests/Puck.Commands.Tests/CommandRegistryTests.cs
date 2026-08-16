@@ -16,7 +16,6 @@ public sealed class CommandRegistryTests {
         Assert.False(condition: result.IsError);
         Assert.Equal(expected: "5", actual: result.Output);
     }
-
     [Fact]
     public void AnUnknownVerbIsRejected() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
@@ -25,7 +24,6 @@ public sealed class CommandRegistryTests {
 
         Assert.True(condition: result.IsError);
     }
-
     [Fact]
     public void WireErrorsCountsRefusalsAndResetZeroesThem() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
@@ -37,10 +35,10 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: "[wire.errors: 2 rejected]", actual: registry.Submit(line: "wire.errors reset").Output);
         Assert.Equal(expected: "[wire.errors: 0 rejected]", actual: registry.Submit(line: "wire.errors").Output);
     }
-
     [Fact]
     public void QuietModeDropsAcknowledgementSuccessesButNotAnswersOrErrors() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
+
         _ = registry.Submit(line: "wire.ack quiet");
 
         // ackOnly success → dropped to None; an answer-bearing verb and every error still surface.
@@ -48,33 +46,29 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: "5", actual: registry.Submit(line: "sum 2 3").Output);
         Assert.True(condition: registry.Submit(line: "sum bad 3").IsError);
     }
-
     [Fact]
     public void CommandIdentityIsInternedInOrdinalNameOrder() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 
-        Assert.True(condition: registry.TryGetId(name: "alpha", id: out var alpha));
-        Assert.True(condition: registry.TryGetId(name: "beta", id: out var beta));
+        Assert.True(condition: registry.TryGetId(id: out var alpha, name: "alpha"));
+        Assert.True(condition: registry.TryGetId(id: out var beta, name: "beta"));
 
-        Assert.True(condition: alpha < beta);   // ordinal-sorted assignment: "alpha" precedes "beta"
+        Assert.True(condition: (alpha < beta));   // ordinal-sorted assignment: "alpha" precedes "beta"
         Assert.Equal(expected: "alpha", actual: registry.GetName(id: alpha));
-        Assert.False(condition: registry.TryGetId(name: "nope", id: out _));
+        Assert.False(condition: registry.TryGetId(id: out _, name: "nope"));
     }
-
     [Fact]
     public void RegisteredMapsAreImmutableCommandMetadata() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 
         Assert.Equal(expected: [CommandMaps.Global, "combat"], actual: registry.Maps);
-        Assert.True(condition: registry.TryGetMetadata(name: "beta", metadata: out var beta));
+        Assert.True(condition: registry.TryGetMetadata(metadata: out var beta, name: "beta"));
         Assert.Equal(expected: "combat", actual: beta.Map);
     }
-
     [Fact]
     public void ACommandNameClaimedTwiceIsRefusedAtConstruction() {
         _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new CoreModule(), new CoreModule()]));
     }
-
     [Fact]
     public void SimulationLinesSeparatedByNonSpaceWhitespaceDrainBehindTheSubmissionBarrier() {
         var submitted = new List<string>();
@@ -97,16 +91,15 @@ public sealed class CommandRegistryTests {
 
         // Both simulation mutations join the pending snapshot FIFO. The immediate read-back remains queued until
         // that snapshot applies.
-        Assert.Equal(expected: ["sim first", "sim\vsecond"], actual: submitted);
+        Assert.Equal(actual: submitted, expected: ["sim first", "sim\vsecond"]);
 
         var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
 
         registry.ApplySnapshot(snapshot: in snapshot);
         source.Collect();
 
-        Assert.Equal(expected: ["sim first", "sim\vsecond", "sum 2 3"], actual: submitted);
+        Assert.Equal(actual: submitted, expected: ["sim first", "sim\vsecond", "sum 2 3"]);
     }
-
     [Fact]
     public void PlainSimulationLineUsesWireArgumentsWhenItsTickApplies() {
         var seen = new List<(bool ParseWasNull, string Argument)>();
@@ -126,14 +119,12 @@ public sealed class CommandRegistryTests {
 
         registry.ApplySnapshot(snapshot: in snapshot);
 
-        Assert.Equal(expected: [(true, "payload")], actual: seen);
+        Assert.Equal(actual: seen, expected: [(true, "payload")]);
     }
-
     [Fact]
     public void AnUnspecifiedBindabilityRegistrationIsRefusedByName() {
         _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new UnspecifiedBindabilityModule()]));
     }
-
     [Fact]
     public void SnapshotCannotBeAppliedThroughAnotherRegistrysCommandIdNamespace() {
         var sourceRegistry = new CommandRegistry(modules: [new SingleCommandModule(name: "harmless")]);
@@ -154,7 +145,6 @@ public sealed class CommandRegistryTests {
         _ = Assert.Throws<ArgumentException>(testCode: () => targetRegistry.ApplySnapshot(snapshot: in snapshot));
         Assert.False(condition: invoked);
     }
-
     [Fact]
     public void WireNativeFastPathUsesTheCommandsDeclaredValueKind() {
         var registry = new CommandRegistry(modules: [new KindProbeModule()]);
@@ -162,17 +152,15 @@ public sealed class CommandRegistryTests {
         Assert.Equal(expected: "Axis1D", actual: registry.Submit(line: "kind").Output);
         Assert.Equal(expected: "Axis1D", actual: registry.Submit(line: "kind \"\"").Output);
     }
-
     [Fact]
     public void MoreCommandsThanTheSnapshotIdSpaceCanRepresentAreRefused() {
-        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: ushort.MaxValue + 2)]));
+        _ = Assert.Throws<InvalidOperationException>(testCode: static () => new CommandRegistry(modules: [new ManyCommandsModule(count: (ushort.MaxValue + 2))]));
     }
-
     [Fact]
     public void TheFinalRepresentableCommandIdStillResolves() {
-        var registry = new CommandRegistry(modules: [new ManyCommandsModule(count: ushort.MaxValue + 1)]);
+        var registry = new CommandRegistry(modules: [new ManyCommandsModule(count: (ushort.MaxValue + 1))]);
 
-        Assert.NotEmpty(registry.GetName(id: ushort.MaxValue));
+        Assert.NotEmpty(collection: registry.GetName(id: ushort.MaxValue));
     }
 
     private sealed class CoreModule : ICommandModule {
@@ -211,7 +199,6 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-
     private sealed class UnspecifiedBindabilityModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
@@ -223,7 +210,6 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-
     private sealed class SimulationModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
@@ -235,11 +221,9 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-
     private sealed class EmptyBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;
     }
-
     private sealed class SimulationProbeModule(List<(bool ParseWasNull, string Argument)> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
@@ -258,13 +242,11 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-
     private sealed class FixedBindings(string command) : IInputBindings {
         private readonly CommandBinding[] m_bindings = [new CommandBinding(Command: command)];
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;
     }
-
     private sealed class SingleCommandModule(string name, Action? onInvoke = null) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(
@@ -280,7 +262,6 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-
     private sealed class KindProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(
@@ -292,10 +273,9 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-
     private sealed class ManyCommandsModule(int count) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
-            for (var index = 0; index < count; index++) {
+            for (var index = 0; (index < count); index++) {
                 yield return CommandDefinition.Verb(
                     name: $"command.{index}",
                     description: "Capacity probe.",
@@ -306,7 +286,6 @@ public sealed class CommandRegistryTests {
             }
         }
     }
-
     private sealed class ConsolePrincipal : ICommandPrincipalResolver {
         public CommandPrincipal PrincipalOf(int slot) => CommandPrincipal.Console;
     }

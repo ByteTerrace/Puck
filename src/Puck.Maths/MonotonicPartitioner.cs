@@ -28,9 +28,11 @@ public readonly record struct MonotonicPartitionerMetrics(
     /// <summary>Gets the instantaneous migration pressure; 1.0f indicates a jump on the next increment, while 0.0f
     /// signifies complete stability.</summary>
     public float Velocity =>
-        ((0 == MigrationDistance) ? 0.0f : (1.0f / MigrationDistance));
+        ((0 == MigrationDistance)
+            ? 0.0f
+            : (1.0f / MigrationDistance)
+        );
 }
-
 /// <summary>
 /// A static router that maps 65536 values (or a <see cref="Guid"/>, through its trailing entropy) onto between 1 and
 /// 1024 buckets — jump-consistent-hash routing with the ownership chains compressed into checkpoint and tail-stream
@@ -48,11 +50,6 @@ public readonly record struct MonotonicPartitionerMetrics(
 /// </list>
 /// </remarks>
 public static class MonotonicPartitioner {
-    /// <summary>The largest supported bucket count.</summary>
-    public const int MaxBucketCount = 1024;
-    /// <summary>The size of the routed value domain.</summary>
-    public const int MaxValueCount = 65536;
-
     private const int BucketShift = 4;
     // Bucket counts at or below this limit resolve entirely from a checkpoint's 64-bit ownership bitmask.
     private const int FastPathBucketLimit = 64;
@@ -60,12 +57,17 @@ public static class MonotonicPartitioner {
     // Chains that own more than this many upper (>= 64) buckets are precompressed into the tail stream; shorter
     // chains re-walk from the checkpoint, which is cheaper than a decode.
     private const int MinUpperOwnersForTail = 16;
-    // Odd, so (value * multiplier) mod 65536 permutes the domain; decorrelates sequential values from bucket ranks.
-    private const uint PermutationMultiplier = 40503U;
     private const uint NaturalMaxRank = (65535U * PermutationMultiplier) & 0xFFFFU;
     private const uint NaturalRankSwapMask = NaturalMaxRank ^ 0xFFFFU;
+    // Odd, so (value * multiplier) mod 65536 permutes the domain; decorrelates sequential values from bucket ranks.
+    private const uint PermutationMultiplier = 40503U;
     private const int RankBucketCount = (MaxValueCount / RanksPerBucket);
     private const int RanksPerBucket = 16;
+
+    /// <summary>The largest supported bucket count.</summary>
+    public const int MaxBucketCount = 1024;
+    /// <summary>The size of the routed value domain.</summary>
+    public const int MaxValueCount = 65536;
 
     private static readonly OwnershipCheckpoint[] Checkpoints;
     private static readonly ushort[] CumulativeTailCountByBlock;
@@ -133,8 +135,14 @@ public static class MonotonicPartitioner {
         var jumpRemainder = unchecked((int)jumpDivMod);
         var priorDonationTotal = (
             ((currentBucket * (priorQuotient - jumpQuotient)) +
-            Math.Min(val1: currentBucket, val2: priorRemainder)) -
-            Math.Min(val1: currentBucket, val2: jumpRemainder)
+            Math.Min(
+            val1: currentBucket,
+            val2: priorRemainder
+        )) -
+            Math.Min(
+            val1: currentBucket,
+            val2: jumpRemainder
+        )
         );
         var donationThreshold = ((((MaxValueCount - 1) - currentBucket) / jumpAtBucketCount) + 1);
 
@@ -152,7 +160,8 @@ public static class MonotonicPartitioner {
 
         return ((runningTotal != expectedTailCount)
             ? throw new InvalidOperationException(message: $"Tail index mismatch. Expected {expectedTailCount}; got {runningTotal}.")
-            : cumulativeCounts);
+            : cumulativeCounts
+        );
     }
     private static ushort[] BuildFirstCheckpointByRankBucket(OwnershipCheckpoint[] checkpoints) {
         var bucketIndex = new ushort[RankBucketCount];
@@ -215,7 +224,10 @@ public static class MonotonicPartitioner {
                 throw new InvalidOperationException(message: $"Checkpoint bucket mismatch at rank {rank}.");
             }
 
-            if (!hasCheckpoint || (lowerBucketBitmask != currentBitmask)) {
+            if (
+                !hasCheckpoint ||
+                (lowerBucketBitmask != currentBitmask)
+            ) {
                 if (hasCheckpoint) {
                     checkpoints.Add(item: new(
                         checkpointRankOffset: unchecked((ushort)(currentCheckpointRankBase - currentCheckpointStartRank)),
@@ -420,10 +432,10 @@ public static class MonotonicPartitioner {
 
         if (tailBlockOffset < ((uint)tailPresenceBitsByBlock.Length)) {
             var rankBitInBlock = (1UL << (rank & 0x3F));
-            var tailPresenceBits = tailPresenceBitsByBlock[(int)tailBlockOffset];
+            var tailPresenceBits = tailPresenceBitsByBlock[((int)tailBlockOffset)];
 
             if (0 != (tailPresenceBits & rankBitInBlock)) {
-                var tailCountBeforeBlock = CumulativeTailCountByBlock[(int)tailBlockOffset];
+                var tailCountBeforeBlock = CumulativeTailCountByBlock[((int)tailBlockOffset)];
                 var tailCountWithinBlock = BitOperations.PopCount(value: tailPresenceBits & (rankBitInBlock - 1UL));
 
                 return DecodeTailOwner(
@@ -464,7 +476,10 @@ public static class MonotonicPartitioner {
                 index: ((uint)bitCount),
                 value: value
             )
-            : ((bitCount >= 64) ? value : value & ((1UL << bitCount) - 1UL)));
+            : ((bitCount >= 64)
+                ? value
+                : value & ((1UL << bitCount) - 1UL)
+        ));
     [DoesNotReturn]
     private static void ThrowBucketCountOutOfRange() =>
         throw new ArgumentOutOfRangeException(
@@ -480,7 +495,10 @@ public static class MonotonicPartitioner {
 
         // A no-op at runtime (callers validate the range); gives the JIT the bound that proves the two indexed
         // loads below never need a bounds check.
-        bucketCount = Math.Min(val1: bucketCount, val2: ((uint)MaxBucketCount));
+        bucketCount = Math.Min(
+            val1: bucketCount,
+            val2: ((uint)MaxBucketCount)
+        );
 
         unchecked {
             while (0 != remainingRank) {
@@ -491,8 +509,8 @@ public static class MonotonicPartitioner {
                 }
 
                 var donorBucket = (jumpAtBucketCount - 1U);
-                var priorDivMod = divModByBucketCount[(int)donorBucket];
-                var jumpDivMod = divModByBucketCount[(int)jumpAtBucketCount];
+                var priorDivMod = divModByBucketCount[((int)donorBucket)];
+                var jumpDivMod = divModByBucketCount[((int)jumpAtBucketCount)];
                 var priorQuotient = ((uint)(priorDivMod >> 32));
                 var priorRemainder = ((uint)priorDivMod);
                 var jumpQuotient = ((uint)(jumpDivMod >> 32));
@@ -502,7 +520,7 @@ public static class MonotonicPartitioner {
                 var diffJump = ((int)(currentBucket - jumpRemainder));
                 var minJump = (jumpRemainder + ((currentBucket - jumpRemainder) & ((uint)(diffJump >> 31))));
                 var priorDonationTotal = (((currentBucket * (priorQuotient - jumpQuotient)) + minPrior) - minJump);
-                var donationThreshold = (jumpQuotient + ((uint)(diffJump >> 31) & 1U));
+                var donationThreshold = (jumpQuotient + (((uint)(diffJump >> 31)) & 1U));
 
                 remainingRank = (priorDonationTotal + (remainingRank - donationThreshold));
                 currentBucket = donorBucket;
@@ -512,48 +530,6 @@ public static class MonotonicPartitioner {
         return currentBucket;
     }
 
-    /// <summary>
-    /// Maps an input value to a bucket id without any safety checks.
-    /// </summary>
-    /// <param name="value">The value to route.</param>
-    /// <param name="bucketCount">The bucket count; must be between 1 and 1024 inclusive, or the result is meaningless.</param>
-    /// <returns>The zero-based bucket id that owns <paramref name="value"/>.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static int GetBucketIdDangerous(ushort value, int bucketCount) {
-        var rank = GetNormalizedRank(value: value);
-        var checkpoints = Checkpoints;
-        var checkpointIndex = ((int)FirstCheckpointByRankBucket[(int)(rank >> BucketShift)]);
-
-        while (checkpoints[checkpointIndex].LastRank < rank) {
-            ++checkpointIndex;
-        }
-
-        ref readonly var checkpoint = ref checkpoints[checkpointIndex];
-
-        return ((FastPathBucketLimit >= bucketCount)
-            ? BitOperations.Log2(value: KeepLowestBits(
-                bitCount: bucketCount,
-                value: checkpoint.LowerBucketBitmask
-            ))
-            : GetBucketIdSlowPath(
-                bucketCount: bucketCount,
-                checkpointBucket: BitOperations.Log2(value: checkpoint.LowerBucketBitmask),
-                checkpointRankOffset: checkpoint.CheckpointRankOffset,
-                rank: ((int)rank)
-            ));
-    }
-    /// <summary>
-    /// Maps an input value to a bucket id without any safety checks.
-    /// </summary>
-    /// <param name="value">The value to route.</param>
-    /// <param name="bucketCount">The bucket count; must be between 1 and 1024 inclusive, or the result is meaningless.</param>
-    /// <returns>The zero-based bucket id that owns <paramref name="value"/>.</returns>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static int GetBucketIdDangerous(Guid value, int bucketCount) =>
-        GetBucketIdDangerous(
-            bucketCount: bucketCount,
-            value: GetGuidHash(value: value)
-        );
     /// <summary>
     /// Maps an input value to a bucket id.
     /// </summary>
@@ -589,6 +565,49 @@ public static class MonotonicPartitioner {
         );
     }
     /// <summary>
+    /// Maps an input value to a bucket id without any safety checks.
+    /// </summary>
+    /// <param name="value">The value to route.</param>
+    /// <param name="bucketCount">The bucket count; must be between 1 and 1024 inclusive, or the result is meaningless.</param>
+    /// <returns>The zero-based bucket id that owns <paramref name="value"/>.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static int GetBucketIdDangerous(ushort value, int bucketCount) {
+        var rank = GetNormalizedRank(value: value);
+        var checkpoints = Checkpoints;
+        var checkpointIndex = ((int)FirstCheckpointByRankBucket[((int)(rank >> BucketShift))]);
+
+        while (checkpoints[checkpointIndex].LastRank < rank) {
+            ++checkpointIndex;
+        }
+
+        ref readonly var checkpoint = ref checkpoints[checkpointIndex];
+
+        return ((FastPathBucketLimit >= bucketCount)
+            ? BitOperations.Log2(value: KeepLowestBits(
+                bitCount: bucketCount,
+                value: checkpoint.LowerBucketBitmask
+            ))
+            : GetBucketIdSlowPath(
+                bucketCount: bucketCount,
+                checkpointBucket: BitOperations.Log2(value: checkpoint.LowerBucketBitmask),
+                checkpointRankOffset: checkpoint.CheckpointRankOffset,
+                rank: ((int)rank)
+            )
+        );
+    }
+    /// <summary>
+    /// Maps an input value to a bucket id without any safety checks.
+    /// </summary>
+    /// <param name="value">The value to route.</param>
+    /// <param name="bucketCount">The bucket count; must be between 1 and 1024 inclusive, or the result is meaningless.</param>
+    /// <returns>The zero-based bucket id that owns <paramref name="value"/>.</returns>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static int GetBucketIdDangerous(Guid value, int bucketCount) =>
+        GetBucketIdDangerous(
+            bucketCount: bucketCount,
+            value: GetGuidHash(value: value)
+        );
+    /// <summary>
     /// Calculates the deterministic routing metrics of an input value.
     /// </summary>
     /// <param name="value">The value to route.</param>
@@ -614,7 +633,10 @@ public static class MonotonicPartitioner {
                 break;
             }
 
-            if ((0 == migrationDistance) && (nextJump > bucketCount)) {
+            if (
+                (0 == migrationDistance) &&
+                (nextJump > bucketCount)
+            ) {
                 migrationDistance = (nextJump - bucketCount);
             }
 

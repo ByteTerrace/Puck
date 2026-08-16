@@ -49,23 +49,23 @@ internal static class FixedPointContractClaims {
             }
         }
 
-        var flat = LayerSequence.Linear(size: 5L, seed: 3L);
+        var flat = LayerSequence.Linear(seed: 3L, size: 5L);
 
         Assert.Equal(expected: 0L, actual: flat.LayerOf(index: 2L));
         Assert.Equal(expected: 1L, actual: flat.LayerOf(index: 3L));
         Assert.Equal(expected: 2L, actual: flat.LayerOf(index: 12L));
-        Assert.Throws<OverflowException>(testCode: () => LayerSequence.Linear(size: 1L, seed: 0L).LayerOf(index: long.MaxValue));
+        Assert.Throws<OverflowException>(testCode: () => LayerSequence.Linear(seed: 0L, size: 1L).LayerOf(index: long.MaxValue));
 
-        var horizon = LayerSequence.Create(start: 6L, step: -2L, seed: 1L);
+        var horizon = LayerSequence.Create(seed: 1L, start: 6L, step: -2L);
 
         Assert.Equal(expected: 3L, actual: horizon.MaxLayer);
         Assert.Equal(expected: 13L, actual: horizon.Capacity);
         Assert.Equal(expected: 3L, actual: horizon.LayerOf(index: 12L));
         Assert.Equal(expected: new LayerLocation(Layer: 1L, Offset: 4L), actual: horizon.Locate(index: 5L));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => horizon.LayerOf(index: 13L));
-        Assert.Equal(expected: new LayerProjection(Layer: 3L, Overflow: 8L, Depth: 2L), actual: horizon.Project(index: 20L));
-        Assert.Equal(expected: new LayerProjection(Layer: 3L, Overflow: 0L, Depth: 0L), actual: horizon.Project(index: 12L));
-        Assert.Equal(expected: long.MaxValue, actual: LayerSequence.Linear(size: 0L, seed: 0L).Project(index: long.MaxValue).Overflow);
+        Assert.Equal(expected: new LayerProjection(Depth: 2L, Layer: 3L, Overflow: 8L), actual: horizon.Project(index: 20L));
+        Assert.Equal(expected: new LayerProjection(Depth: 0L, Layer: 3L, Overflow: 0L), actual: horizon.Project(index: 12L));
+        Assert.Equal(expected: long.MaxValue, actual: LayerSequence.Linear(seed: 0L, size: 0L).Project(index: long.MaxValue).Overflow);
 
         return null;
     }
@@ -86,7 +86,6 @@ internal static class FixedPointContractClaims {
 
         return paired;
     }
-
     /// <summary>Interleaves the full sixty-four-bit two's-complement pattern of <paramref name="value"/> and
     /// <paramref name="other"/> one bit at a time, transcribed from the DEFINITION and sharing no line with
     /// <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/>'s width-agnostic SWAR fallback for
@@ -109,7 +108,6 @@ internal static class FixedPointContractClaims {
         (short.MaxValue, short.MinValue), (-1, -1), (-1, 0), (0, -1),
         (unchecked((short)0xACE5), unchecked((short)0x53A1)),
     ];
-
     // The same shape at the wide (long -> Int128) width.
     private static readonly (long Value, long Other)[] WidePairLadder = [
         (long.MinValue, 0L), (0L, long.MinValue), (long.MinValue, long.MinValue),
@@ -127,7 +125,7 @@ internal static class FixedPointContractClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? BitwisePairSignedNarrowAndWideCarriersSurface() {
         foreach (var (value, other) in NarrowPairLadder) {
-            var expectedPair = NarrowBitwisePairReference(value: unchecked((ushort)value), other: unchecked((ushort)other));
+            var expectedPair = NarrowBitwisePairReference(other: unchecked((ushort)other), value: unchecked((ushort)value));
             var actualPair = value.BitwisePair<short, uint>(other: other);
 
             Assert.True(
@@ -137,11 +135,11 @@ internal static class FixedPointContractClaims {
 
             var unpaired = actualPair.BitwiseUnpair<uint, short>();
 
-            Assert.Equal(expected: (value, other), actual: unpaired);
+            Assert.Equal(actual: unpaired, expected: (value, other));
         }
 
         foreach (var (value, other) in WidePairLadder) {
-            var expectedPair = WideBitwisePairReference(value: unchecked((ulong)value), other: unchecked((ulong)other));
+            var expectedPair = WideBitwisePairReference(other: unchecked((ulong)other), value: unchecked((ulong)value));
             var actualPair = value.BitwisePair<long, Int128>(other: other);
 
             Assert.True(
@@ -151,12 +149,11 @@ internal static class FixedPointContractClaims {
 
             var unpaired = actualPair.BitwiseUnpair<Int128, long>();
 
-            Assert.Equal(expected: (value, other), actual: unpaired);
+            Assert.Equal(actual: unpaired, expected: (value, other));
         }
 
         return null;
     }
-
     // ---- FieldNoise: the WIDE hierarchical path, reached only when a FixedPosition's combined coordinate leaves signed-64 ----
 
     /// <summary>Proves <see cref="FieldNoise.Sample(ulong, FixedPosition)"/>'s WIDE path (<c>SampleWideLattice</c>,
@@ -204,13 +201,12 @@ internal static class FixedPointContractClaims {
         );
 
         Assert.Equal(
-            expected: FieldNoise.Sample(seed: 91UL, position: wide),
-            actual: FieldNoise.Sample(seed: 91UL, position: wideRebased)
+            expected: FieldNoise.Sample(position: wide, seed: 91UL),
+            actual: FieldNoise.Sample(position: wideRebased, seed: 91UL)
         );
 
         return null;
     }
-
     // ---- UnsignedNumberFunctions.SquareRoot at its T = UInt128 instantiation, near the carrier's own ceiling ----
 
     /// <summary>Proves <see cref="UnsignedNumberFunctions.SquareRoot{T}(T)"/> at <c>T = UInt128</c>, the instantiation
@@ -239,10 +235,10 @@ internal static class FixedPointContractClaims {
         // Thirty-two index-derived interior operands spanning the widest quarter of the carrier: 2^(127-k) plus a
         // small index-derived offset, for k from 0 through 31.
         for (var k = 0; (k < 32); ++k) {
-            var value = (((UInt128)1 << (127 - k)) + ((UInt128)(k * 104_729) << (k % 40)));
+            var value = ((((UInt128)1) << (127 - k)) + (((UInt128)(k * 104_729)) << (k % 40)));
             var root = value.SquareRoot();
-            var rootBig = (BigInteger)root;
-            var valueBig = (BigInteger)value;
+            var rootBig = ((BigInteger)root);
+            var valueBig = ((BigInteger)value);
 
             Assert.True(condition: ((rootBig * rootBig) <= valueBig), userMessage: $"SquareRoot<UInt128>({value}) = {root} overshoots: root^2 exceeds the radicand");
             Assert.True(condition: (((rootBig + 1) * (rootBig + 1)) > valueBig), userMessage: $"SquareRoot<UInt128>({value}) = {root} undershoots: (root+1)^2 does not exceed the radicand");
@@ -267,15 +263,15 @@ internal static class FixedPointContractClaims {
         if (raw <= 0L) {
             expected = BigInteger.Zero;
         } else {
-            var numerator = ((BigInteger)raw * FixedTickConversion.TicksPerSecond);
-            var denominator = (BigInteger)65536;
+            var numerator = (((BigInteger)raw) * FixedTickConversion.TicksPerSecond);
+            var denominator = ((BigInteger)65536);
 
             expected = ((numerator + (denominator - 1)) / denominator);
         }
 
-        return ((BigInteger)actual == expected)
+        return ((((BigInteger)actual) == expected)
             ? null
-            : $"FixedTickConversion.DurationEngineTicks(raw={raw}) = {actual}, expected ceil({raw}*{FixedTickConversion.TicksPerSecond}/65536) = {expected}";
+            : $"FixedTickConversion.DurationEngineTicks(raw={raw}) = {actual}, expected ceil({raw}*{FixedTickConversion.TicksPerSecond}/65536) = {expected}");
     }
 
     /// <summary>Exact-by-construction: <see cref="FixedTickConversion.DurationEngineTicks"/> matches independent
@@ -324,17 +320,17 @@ internal static class FixedPointContractClaims {
     private static string? CheckTryDurationEngineTicksExact(decimal seconds) {
         var actualExact = FixedTickConversion.TryDurationEngineTicksExact(seconds: seconds, ticks: out var actualTicks);
         var bits = decimal.GetBits(d: seconds);
-        var negative = (((uint)bits[3] & 0x80000000U) != 0U);
-        var scale = (((uint)bits[3] >> 16) & 0xFFU);
-        var unscaled = ((((BigInteger)(uint)bits[2]) << 64) | (((BigInteger)(uint)bits[1]) << 32) | ((BigInteger)(uint)bits[0]));
+        var negative = ((((uint)bits[3]) & 0x80000000U) != 0U);
+        var scale = (((uint)bits[3]) >> 16) & 0xFFU;
+        var unscaled = (((BigInteger)((uint)bits[2])) << 64) | (((BigInteger)((uint)bits[1])) << 32) | ((BigInteger)((uint)bits[0]));
 
         if (negative) {
-            return actualExact
+            return (actualExact
                 ? $"TryDurationEngineTicksExact({seconds}) = true (ticks={actualTicks}), expected false (negative duration)"
-                : null;
+                : null);
         }
 
-        var scalePower = BigInteger.Pow(value: 10, exponent: (int)scale);
+        var scalePower = BigInteger.Pow(exponent: ((int)scale), value: 10);
         var numerator = (unscaled * FixedTickConversion.TicksPerSecond);
         var expectedTicks = (numerator / scalePower);
         var expectedExact = (((numerator % scalePower) == BigInteger.Zero) && (expectedTicks <= ulong.MaxValue));
@@ -344,7 +340,7 @@ internal static class FixedPointContractClaims {
         }
 
         if (expectedExact) {
-            if ((BigInteger)actualTicks != expectedTicks) {
+            if (((BigInteger)actualTicks) != expectedTicks) {
                 return $"TryDurationEngineTicksExact({seconds}) = {actualTicks} ticks, expected {expectedTicks}";
             }
         }
@@ -360,6 +356,133 @@ internal static class FixedPointContractClaims {
     /// result carrier) plus a dense millisecond sweep.
     /// </summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    // ---- FixedPointRounding.TryRoundRational: the scale shift, the tie, the sign, and every refusal ----
+    // The scaling branch is the one no other law reaches: the mass-property chain calls this helper only with a zero
+    // fraction bit count, so a shift dropped from the body leaves that chain bit-identical. Physics is where nonzero
+    // shifts come from. Ties are counted rather than assumed, so the claim cannot quietly stop exercising them.
+    public static string? TryRoundRationalScalesTiesAndRefuses() {
+        int[] shifts = [0, 1, 2, 3, 7, 16, 31, 32, 48, 62, 63];
+        long[] numerators = [0L, 1L, -1L, 2L, -2L, 3L, -3L, 5L, -5L, 7L, 11L, -11L, 1023L, -1024L, 65535L, -65537L];
+        long[] denominators = [1L, -1L, 2L, -2L, 3L, 4L, -4L, 5L, 8L, 16L, -16L, 1000L, 65536L];
+        var ties = 0;
+
+        foreach (var shift in shifts) {
+            foreach (var numerator in numerators) {
+                foreach (var denominator in denominators) {
+                    var expectedOk = Oracles.RoundedRational(
+                        denominator: denominator,
+                        fractionBitCount: shift,
+                        numerator: numerator,
+                        result: out var expected
+                    );
+                    var actualOk = FixedPointRounding.TryRoundRational(
+                        denominator: denominator,
+                        fractionBitCount: shift,
+                        numerator: numerator,
+                        result: out var actual
+                    );
+
+                    if (
+                        (expectedOk != actualOk) ||
+                        (expected != actual)
+                    ) {
+                        return $"n={numerator} d={denominator} f={shift}: subject ({actualOk}, {actual}) but oracle ({expectedOk}, {expected})";
+                    }
+
+                    var scaled = (BigInteger.Abs(value: new BigInteger(value: numerator)) * BigInteger.Pow(exponent: shift, value: 2));
+                    var divisor = BigInteger.Abs(value: new BigInteger(value: denominator));
+
+                    if ((((scaled % divisor) * 2) == divisor) && !divisor.IsOne) {
+                        ++ties;
+                    }
+                }
+            }
+        }
+
+        if (ties < 16) {
+            return $"the case set stopped exercising the tie branch: only {ties} exact tie(s)";
+        }
+
+        // A zero denominator refuses, at every shift, and clears the result rather than leaving it.
+        foreach (var shift in shifts) {
+            if (FixedPointRounding.TryRoundRational(
+                denominator: BigInteger.Zero,
+                fractionBitCount: shift,
+                numerator: BigInteger.One,
+                result: out var zeroDenominator
+            ) || (zeroDenominator != 0L)) {
+                return $"a zero denominator was accepted at f={shift}";
+            }
+        }
+
+        // A negative fraction bit count refuses rather than shifting the other way.
+        foreach (var shift in ((int[])[-1, -16, -64, int.MinValue])) {
+            if (FixedPointRounding.TryRoundRational(
+                denominator: BigInteger.One,
+                fractionBitCount: shift,
+                numerator: BigInteger.One,
+                result: out var negativeShift
+            ) || (negativeShift != 0L)) {
+                return $"a negative fraction bit count was accepted at f={shift}";
+            }
+        }
+
+        // An obviously overflowing scale must be refused without attempting to materialize a 2^int.MaxValue
+        // numerator. Zero remains exactly representable at that same scale.
+        if (FixedPointRounding.TryRoundRational(
+            denominator: BigInteger.One,
+            fractionBitCount: int.MaxValue,
+            numerator: BigInteger.One,
+            result: out var enormousShift
+        ) || (enormousShift != 0L)) {
+            return "an obviously overflowing enormous fraction bit count was accepted";
+        }
+
+        if (!FixedPointRounding.TryRoundRational(
+            denominator: BigInteger.One,
+            fractionBitCount: int.MaxValue,
+            numerator: BigInteger.Zero,
+            result: out var enormousZero
+        ) || (enormousZero != 0L)) {
+            return "zero was refused at an enormous fraction bit count";
+        }
+
+        // Leaving the signed 64-bit raw refuses rather than wrapping — on both sides, and exactly at the boundary.
+        (BigInteger Numerator, BigInteger Denominator, int Shift, bool Representable)[] boundaries = [
+            (long.MaxValue, BigInteger.One, 0, true),
+            (long.MinValue, BigInteger.One, 0, true),
+            ((((BigInteger)long.MaxValue) + 1), BigInteger.One, 0, false),
+            ((((BigInteger)long.MinValue) - 1), BigInteger.One, 0, false),
+            (BigInteger.One, BigInteger.One, 63, false),
+            (BigInteger.MinusOne, BigInteger.One, 63, true),
+            (BigInteger.One, BigInteger.One, 62, true),
+        ];
+
+        foreach (var (numerator, denominator, shift, representable) in boundaries) {
+            var expectedOk = Oracles.RoundedRational(
+                denominator: denominator,
+                fractionBitCount: shift,
+                numerator: numerator,
+                result: out var expected
+            );
+            var actualOk = FixedPointRounding.TryRoundRational(
+                denominator: denominator,
+                fractionBitCount: shift,
+                numerator: numerator,
+                result: out var actual
+            );
+
+            if (
+                (expectedOk != representable) ||
+                (actualOk != representable) ||
+                (expected != actual)
+            ) {
+                return $"boundary n={numerator} d={denominator} f={shift}: expected representable={representable}, subject ({actualOk}, {actual}), oracle ({expectedOk}, {expected})";
+            }
+        }
+
+        return null;
+    }
     public static string? TryDurationEngineTicksExactAgainstDecimalBits() {
         decimal[] edges = [
             0.0m, -0.01m, -1.0m,

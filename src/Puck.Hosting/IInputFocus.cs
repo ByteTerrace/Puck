@@ -12,11 +12,9 @@ public interface IInputFocus {
     /// <summary>Gets whether input is currently being routed to the holder for the specified device. The terminal stops routing when
     /// focus is released (or the terminal is not foreground).</summary>
     bool IsActiveFor(Puck.Commands.InputDeviceId deviceId);
-
     /// <summary>Yields input focus for the specified device (or all devices if null): the terminal stops routing input to the holder until focus is granted
     /// to an engine again.</summary>
     void Release(Puck.Commands.InputDeviceId? deviceId = null);
-
     /// <summary>Claims or restores input focus for the specified device (or all devices if null): the terminal resumes routing input to the holder.</summary>
     void Claim(Puck.Commands.InputDeviceId? deviceId = null);
 }

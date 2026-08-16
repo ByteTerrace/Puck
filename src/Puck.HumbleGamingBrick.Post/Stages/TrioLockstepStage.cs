@@ -17,7 +17,6 @@ internal sealed class TrioLockstepStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "trio-lockstep";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -54,14 +53,14 @@ internal sealed class TrioLockstepStage : IPostStage {
             // A deterministic, edge-rich script: every button bit toggles over the run (multiplying by an odd
             // constant walks all 256 patterns), exercising the joypad lines and their interrupt edges identically
             // on every machine.
-            var buttons = (JoypadButtons)(byte)(frame * 37);
+            var buttons = ((JoypadButtons)((byte)(frame * 37)));
 
             foreach (var joypad in joypads) {
                 joypad.SetButtons(pressed: buttons);
             }
 
             foreach (var machine in machines) {
-                machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
             }
         }
 

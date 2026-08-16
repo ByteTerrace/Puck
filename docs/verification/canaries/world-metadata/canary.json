@@ -1,0 +1,38 @@
+{
+  "id": "world-metadata",
+  "title": "The metadata section reads back through world.metadata; an unauthored section reads none",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 3,
+  "timeoutSeconds": 20,
+  "binding": "The positive leg boots play (which authors title/description/authors/tags) and reads world.metadata back; the discriminating leg boots dive (no metadata authored) and gets the 'none' line instead.",
+  "fixtures": [],
+  "positive": {
+    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.metadata", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "authored title/description echo back", "stream": "stdout", "match": "contains", "text": "[world.metadata: title Play description The overworld hub", "present": true },
+      { "type": "line", "name": "authored authors/tags echo back", "stream": "stdout", "match": "contains", "text": "authors Puck(oid:11111111-1111-1111-1111-111111111111) tags overworld,hub", "present": true },
+      { "type": "line", "name": "unauthored custom bag reads none", "stream": "stdout", "match": "contains", "text": "custom none]", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "src/Puck.World/Assets/worlds/dive.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.metadata", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "no authored section reads as none", "stream": "stdout", "match": "contains", "text": "[world.metadata: none]", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

@@ -28,14 +28,15 @@ public sealed class AddonInstance : IDisposable {
     private const long MaxMemoryBytes = (256L * 65536L);
 
     private readonly AddonChannelBinding[] m_channelBindings;
-    private readonly AddonChannelDescriptor[] m_channels;
     private readonly IAddonChannelResolver? m_channelResolver;
+    private readonly AddonChannelDescriptor[] m_channels;
     private readonly AddonOutCell[] m_decoded;
     private readonly ScriptingEngine? m_engine;
     private readonly long m_fuelPerTick;
     private readonly AssetContentHash m_hash;
     private readonly Module? m_module;
     private readonly string m_name;
+
     private bool m_admitted;
     private int m_channelBindingCount;
     private int m_channelCount;
@@ -141,297 +142,6 @@ public sealed class AddonInstance : IDisposable {
     /// <summary>Gets the current lifecycle state.</summary>
     public AddonState State => m_state;
 
-    /// <summary>Admits the instance to the tick set: runs the guest's optional <c>puck_init</c> under the fuel
-    /// budget and marks the instance tickable. Called exactly once per store, after the consumer's own mount gates
-    /// (attenuation, quota, disclosure) — see the type remarks. A trap during <c>puck_init</c> faults the instance
-    /// exactly like a tick trap. No-op on a faulted or disabled instance.</summary>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">The instance is already admitted.</exception>
-    public void Admit() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        if (m_state != AddonState.Enabled) {
-            return;
-        }
-
-        if (m_admitted) {
-            throw new InvalidOperationException(message: $"addon {m_name} is already admitted");
-        }
-
-        var store = m_store!;
-
-        store.Fuel = (ulong)m_fuelPerTick;
-
-        try {
-            var init = m_initAction;
-
-            if (init is not null) {
-                init();
-            }
-
-            GC.KeepAlive(obj: store);
-        } catch (TrapException trap) {
-            var kind = Classify(code: trap.Type);
-
-            m_lastFuelConsumed = FuelConsumed();
-            SetFault(
-                kind: kind,
-                reason: $"{kind} during puck_init ({trap.Type})"
-            );
-            return;
-        }
-
-        m_lastFuelConsumed = FuelConsumed();
-        m_admitted = true;
-    }
-
-    /// <summary>Re-enables the addon by disposing any prior store and instantiating a fresh one from the cached
-    /// module — a clean reset to the module's initial state, back to the unadmitted phase (the consumer re-runs its
-    /// gates and calls <see cref="Admit"/> again). A load-faulted addon (no module) stays faulted.</summary>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public void Enable() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        if (
-            (m_engine is null) ||
-            (m_module is null)
-        ) {
-            return;
-        }
-
-        Instantiate();
-    }
-
-    /// <summary>Administratively disables the addon; it is skipped every tick until re-enabled.</summary>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public void Disable() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        m_lastCount = 0;
-        m_state = AddonState.Disabled;
-    }
-
-    /// <summary>Escalates a consumer-layer protocol violation (a verb outside the declared vocabulary, a payload
-    /// outside its domain) into the same sticky fault a structural decode error produces — the whole-batch-refused,
-    /// nothing-committed posture. The caller supplies the attributed reason, offending ordinal included.</summary>
-    /// <param name="reason">The refusal reason, naming the offending cell ordinal.</param>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public void FaultProtocol(string reason) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        SetFault(
-            kind: AddonFaultKind.DecodeError,
-            reason: $"DecodeError — {reason}"
-        );
-    }
-
-    /// <summary>Drives the addon once: writes the input-cell batch into the guest's input ring, sets the fuel
-    /// budget, invokes <c>puck_on_tick(count)</c>, and structurally decodes the returned output cells. Faults are
-    /// sticky; a faulted or disabled addon short-circuits.</summary>
-    /// <param name="input">The host-composed input batch, at most <see cref="InputCellCapacity"/> cells — the
-    /// caller owns the budget rule and staying within it.</param>
-    /// <returns>The tick outcome; on success read <see cref="OutCells"/> for the decoded batch.</returns>
-    /// <exception cref="InvalidOperationException">The instance was never admitted — a host sequencing bug, never a
-    /// guest fault.</exception>
-    /// <exception cref="ArgumentException"><paramref name="input"/> exceeds the guest's declared input capacity — a
-    /// host budget bug, never a guest fault.</exception>
-    public AddonTickResult Tick(ReadOnlySpan<AddonInCell> input) {
-        if (m_state != AddonState.Enabled) {
-            return AddonTickResult.Faulted(fault: m_fault);
-        }
-
-        if (!m_admitted) {
-            throw new InvalidOperationException(message: $"addon {m_name} ticked before Admit — the mount sequence was not honored");
-        }
-
-        if (input.Length > m_inCap) {
-            throw new ArgumentException(
-                message: $"input batch {input.Length} exceeds the guest's declared capacity {m_inCap} — the caller owns the budget rule",
-                paramName: nameof(input)
-            );
-        }
-
-        var memory = m_memory!;
-        var onTick = m_onTick!;
-        var store = m_store!;
-        var inRegion = memory.GetSpan(
-            address: m_inPtr,
-            length: (input.Length * AddonAbi.InCellBytes)
-        );
-
-        for (var index = 0; (index < input.Length); ++index) {
-            AddonInCellWriter.Write(
-                destination: inRegion.Slice(
-                    length: AddonAbi.InCellBytes,
-                    start: (index * AddonAbi.InCellBytes)
-                ),
-                cell: in input[index]
-            );
-        }
-
-        // Zeroed before every tick so a guest that under-writes its returned count can only ever replay an all-zero
-        // cell — which Kind = 0 makes MALFORMED under this ABI, so a lying count faults instead of replaying a
-        // benign stale record. Nothing else clears this region.
-        memory.GetSpan(
-            address: m_outPtr,
-            length: (m_outCap * AddonAbi.OutCellBytes)
-        ).Clear();
-        store.Fuel = (ulong)m_fuelPerTick;
-
-        int count;
-
-        try {
-            count = onTick(arg: input.Length);
-        } catch (TrapException trap) {
-            var kind = Classify(code: trap.Type);
-            var consumed = FuelConsumed();
-
-            m_lastFuelConsumed = consumed;
-            SetFault(
-                kind: kind,
-                reason: TrapReason(
-                    kind: kind,
-                    trap: trap
-                )
-            );
-            GC.KeepAlive(obj: store);
-            return AddonTickResult.Faulted(
-                fault: m_fault,
-                fuelConsumed: consumed
-            );
-        }
-
-        GC.KeepAlive(obj: store);
-
-        var fuelConsumed = FuelConsumed();
-
-        m_lastFuelConsumed = fuelConsumed;
-
-        if ((uint)count > (uint)m_outCap) {
-            SetFault(
-                kind: AddonFaultKind.DecodeError,
-                reason: $"DecodeError — puck_on_tick returned {count}, cap {m_outCap}"
-            );
-            return AddonTickResult.Faulted(
-                fault: m_fault,
-                fuelConsumed: fuelConsumed
-            );
-        }
-
-        var cells = memory.GetSpan(
-            address: m_outPtr,
-            length: (count * AddonAbi.OutCellBytes)
-        );
-
-        if (!AddonOutCellReader.TryDecode(
-            source: cells,
-            count: count,
-            channelCount: m_channelCount,
-            destination: m_decoded,
-            errorIndex: out var errorIndex,
-            error: out var decodeError
-        )) {
-            SetFault(
-                kind: AddonFaultKind.DecodeError,
-                reason: $"DecodeError — cell {errorIndex} {decodeError}"
-            );
-            return AddonTickResult.Faulted(
-                fault: m_fault,
-                fuelConsumed: fuelConsumed
-            );
-        }
-
-        m_lastCount = count;
-        return AddonTickResult.Ok(
-            cellCount: count,
-            fuelConsumed: fuelConsumed
-        );
-    }
-
-    /// <summary>Reads <paramref name="length"/> bytes at <paramref name="pointer"/> out of the guest's linear
-    /// memory into <paramref name="destination"/>, immediately — no live span is ever handed back, so nothing
-    /// outlives this call that could observe a later guest write. The addon mutation seam's stage-5 pointer-safety
-    /// copy: both <paramref name="pointer"/> and <paramref name="length"/> are guest-supplied and cross the ABI as
-    /// signed <c>i64</c> wire lanes reinterpreted unsigned, so every bound is checked before any read — negative,
-    /// over-capacity, and overflowing-end are all refused the identical way, never truncated into something that
-    /// happens to fit.</summary>
-    /// <param name="pointer">The guest-memory byte offset (an unsigned value carried in a signed wire lane).</param>
-    /// <param name="length">The byte count to copy (an unsigned value carried in a signed wire lane); must not
-    /// exceed <paramref name="destination"/>'s length.</param>
-    /// <param name="destination">The host-owned buffer to copy into.</param>
-    /// <param name="error">The refusal reason, on failure; empty on success.</param>
-    /// <returns><see langword="true"/> when the whole range was in bounds and copied.</returns>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public bool TryCopyMemory(long pointer, long length, Span<byte> destination, out string error) {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        if (
-            (pointer < 0L) ||
-            (pointer > uint.MaxValue)
-        ) {
-            error = $"pointer {pointer} is outside the guest's addressable range";
-            return false;
-        }
-
-        if (
-            (length < 0L) ||
-            (length > destination.Length)
-        ) {
-            error = $"length {length} exceeds the destination capacity {destination.Length}";
-            return false;
-        }
-
-        if (m_memory is not { } memory) {
-            error = "no guest memory is mounted";
-            return false;
-        }
-
-        var memoryLength = memory.GetLength();
-        // Overflow-checked end: pointer is bounded to uint.MaxValue and length to destination.Length above, so this
-        // sum cannot overflow long — the check exists to name the SPECIFIC out-of-bounds range in the refusal, not
-        // to guard arithmetic that could wrap.
-        var end = (pointer + length);
-
-        if (end > memoryLength) {
-            error = $"[{pointer}, {end}) exceeds guest memory {memoryLength}";
-            return false;
-        }
-
-        memory.GetSpan(
-            address: (int)pointer,
-            length: (int)length
-        ).CopyTo(destination: destination[..(int)length]);
-        error = "";
-        return true;
-    }
-
-    /// <summary>Disposes the store and its native resources. The compiled module is owned by the loader cache.</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-
-        DisposeStore();
-        GC.SuppressFinalize(obj: this);
-    }
-
     private static AddonFaultKind Classify(TrapCode code) {
         return code switch {
             TrapCode.OutOfFuel => AddonFaultKind.OutOfFuel,
@@ -440,20 +150,6 @@ public sealed class AddonInstance : IDisposable {
             TrapCode.Unreachable => AddonFaultKind.Unreachable,
             _ => AddonFaultKind.Trap,
         };
-    }
-    private static bool RangeFits(long length, int start, long memoryLength, string name, out string error) {
-        var end = ((long)start + length);
-
-        if (
-            (start < 0) ||
-            (end > memoryLength)
-        ) {
-            error = $"{name} region [{start}, {end}) exceeds memory {memoryLength}";
-            return false;
-        }
-
-        error = "";
-        return true;
     }
     private void DisposeStore() {
         m_admitted = false;
@@ -466,21 +162,14 @@ public sealed class AddonInstance : IDisposable {
             m_store = null;
         }
     }
-    private void SetFault(AddonFaultKind kind, string reason) {
-        m_fault = new AddonFault(
-            Detail: $"addon {m_name}: {reason}",
-            Kind: kind
-        );
-        m_lastCount = 0;
-        m_state = AddonState.Faulted;
-    }
     private ulong FuelConsumed() {
-        var budget = (ulong)m_fuelPerTick;
+        var budget = ((ulong)m_fuelPerTick);
         var remaining = (m_store?.Fuel ?? budget);
 
         return ((budget >= remaining)
             ? (budget - remaining)
-            : 0UL);
+            : 0UL
+        );
     }
     private void Instantiate() {
         ++m_generation;
@@ -516,7 +205,7 @@ public sealed class AddonInstance : IDisposable {
             store = new Store(engine: m_engine.Engine);
 
             store.SetLimits(memorySize: MaxMemoryBytes);
-            store.Fuel = (ulong)m_fuelPerTick;
+            store.Fuel = ((ulong)m_fuelPerTick);
 
             var instance = new Instance(
                 store: store,
@@ -549,6 +238,35 @@ public sealed class AddonInstance : IDisposable {
                 reason: $"BadExport — {error.Message}"
             );
         }
+    }
+    private static bool RangeFits(long length, int start, long memoryLength, string name, out string error) {
+        var end = (((long)start) + length);
+
+        if (
+            (start < 0) ||
+            (end > memoryLength)
+        ) {
+            error = $"{name} region [{start}, {end}) exceeds memory {memoryLength}";
+            return false;
+        }
+
+        error = "";
+        return true;
+    }
+    private void SetFault(AddonFaultKind kind, string reason) {
+        m_fault = new AddonFault(
+            Detail: $"addon {m_name}: {reason}",
+            Kind: kind
+        );
+        m_lastCount = 0;
+        m_state = AddonState.Faulted;
+    }
+    private string TrapReason(AddonFaultKind kind, TrapException trap) {
+        if (kind == AddonFaultKind.OutOfFuel) {
+            return $"OutOfFuel — disabled; 'world.addon.enable {m_name}' to retry (re-instantiates and re-admits; a genuine spin loop will exhaust fuel again)";
+        }
+
+        return $"{kind} ({trap.Type})";
     }
     // The handshake: version, geometry, channel table, channel-name table, bounds — everything EXCEPT
     // puck_init, which Admit runs after the consumer's gates (the mount-order contract in the type remarks).
@@ -620,7 +338,7 @@ public sealed class AddonInstance : IDisposable {
 
         var memory = instance.GetMemory(name: AddonAbi.Exports.Memory)!;
         var memoryLength = memory.GetLength();
-        var channelsLength = ((long)channelsCount * AddonAbi.ChannelDescriptorBytes);
+        var channelsLength = (((long)channelsCount) * AddonAbi.ChannelDescriptorBytes);
 
         if (!RangeFits(
             error: out var boundsError,
@@ -638,14 +356,14 @@ public sealed class AddonInstance : IDisposable {
 
         var channelTable = memory.GetSpan(
             address: channelsPtr,
-            length: (int)channelsLength
+            length: ((int)channelsLength)
         );
 
         if (!AddonChannelTableReader.TryDecode(
-            source: channelTable,
             count: channelsCount,
             destination: m_channels,
-            error: out var channelError
+            error: out var channelError,
+            source: channelTable
         )) {
             SetFault(
                 kind: AddonFaultKind.BadExport,
@@ -664,7 +382,7 @@ public sealed class AddonInstance : IDisposable {
 
         regions[regionCount++] = (channelsPtr, (channelsPtr + channelsLength), "channels");
 
-        var outLength = ((long)outCap * AddonAbi.OutCellBytes);
+        var outLength = (((long)outCap) * AddonAbi.OutCellBytes);
 
         if (!RangeFits(
             error: out boundsError,
@@ -682,7 +400,7 @@ public sealed class AddonInstance : IDisposable {
 
         regions[regionCount++] = (outPtr, (outPtr + outLength), "out ring");
 
-        var inLength = ((long)inCap * AddonAbi.InCellBytes);
+        var inLength = (((long)inCap) * AddonAbi.InCellBytes);
 
         if (!RangeFits(
             error: out boundsError,
@@ -718,7 +436,7 @@ public sealed class AddonInstance : IDisposable {
                 length: 0,
                 memoryLength: memoryLength,
                 name: "channel names",
-                start: (int)channel.VerbTablePtr
+                start: ((int)channel.VerbTablePtr)
             )) {
                 SetFault(
                     kind: AddonFaultKind.BadExport,
@@ -728,8 +446,8 @@ public sealed class AddonInstance : IDisposable {
             }
 
             var nameTableSpan = memory.GetSpan(
-                address: (int)channel.VerbTablePtr,
-                length: (int)(memoryLength - channel.VerbTablePtr)
+                address: ((int)channel.VerbTablePtr),
+                length: ((int)(memoryLength - channel.VerbTablePtr))
             );
 
             if (!AddonChannelNameTableReader.TryDecode(
@@ -777,11 +495,289 @@ public sealed class AddonInstance : IDisposable {
         m_outPtr = outPtr;
         return true;
     }
-    private string TrapReason(AddonFaultKind kind, TrapException trap) {
-        if (kind == AddonFaultKind.OutOfFuel) {
-            return $"OutOfFuel — disabled; 'world.addon.enable {m_name}' to retry (re-instantiates and re-admits; a genuine spin loop will exhaust fuel again)";
+
+    /// <summary>Admits the instance to the tick set: runs the guest's optional <c>puck_init</c> under the fuel
+    /// budget and marks the instance tickable. Called exactly once per store, after the consumer's own mount gates
+    /// (attenuation, quota, disclosure) — see the type remarks. A trap during <c>puck_init</c> faults the instance
+    /// exactly like a tick trap. No-op on a faulted or disabled instance.</summary>
+    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    /// <exception cref="InvalidOperationException">The instance is already admitted.</exception>
+    public void Admit() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (m_state != AddonState.Enabled) {
+            return;
         }
 
-        return $"{kind} ({trap.Type})";
+        if (m_admitted) {
+            throw new InvalidOperationException(message: $"addon {m_name} is already admitted");
+        }
+
+        var store = m_store!;
+
+        store.Fuel = ((ulong)m_fuelPerTick);
+
+        try {
+            var init = m_initAction;
+
+            if (init is not null) {
+                init();
+            }
+
+            GC.KeepAlive(obj: store);
+        } catch (TrapException trap) {
+            var kind = Classify(code: trap.Type);
+
+            m_lastFuelConsumed = FuelConsumed();
+            SetFault(
+                kind: kind,
+                reason: $"{kind} during puck_init ({trap.Type})"
+            );
+            return;
+        }
+
+        m_lastFuelConsumed = FuelConsumed();
+        m_admitted = true;
+    }
+    /// <summary>Administratively disables the addon; it is skipped every tick until re-enabled.</summary>
+    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    public void Disable() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        m_lastCount = 0;
+        m_state = AddonState.Disabled;
+    }
+    /// <summary>Disposes the store and its native resources. The compiled module is owned by the loader cache.</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+
+        DisposeStore();
+        GC.SuppressFinalize(obj: this);
+    }
+    /// <summary>Re-enables the addon by disposing any prior store and instantiating a fresh one from the cached
+    /// module — a clean reset to the module's initial state, back to the unadmitted phase (the consumer re-runs its
+    /// gates and calls <see cref="Admit"/> again). A load-faulted addon (no module) stays faulted.</summary>
+    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    public void Enable() {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (
+            (m_engine is null) ||
+            (m_module is null)
+        ) {
+            return;
+        }
+
+        Instantiate();
+    }
+    /// <summary>Escalates a consumer-layer protocol violation (a verb outside the declared vocabulary, a payload
+    /// outside its domain) into the same sticky fault a structural decode error produces — the whole-batch-refused,
+    /// nothing-committed posture. The caller supplies the attributed reason, offending ordinal included.</summary>
+    /// <param name="reason">The refusal reason, naming the offending cell ordinal.</param>
+    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    public void FaultProtocol(string reason) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        SetFault(
+            kind: AddonFaultKind.DecodeError,
+            reason: $"DecodeError — {reason}"
+        );
+    }
+    /// <summary>Drives the addon once: writes the input-cell batch into the guest's input ring, sets the fuel
+    /// budget, invokes <c>puck_on_tick(count)</c>, and structurally decodes the returned output cells. Faults are
+    /// sticky; a faulted or disabled addon short-circuits.</summary>
+    /// <param name="input">The host-composed input batch, at most <see cref="InputCellCapacity"/> cells — the
+    /// caller owns the budget rule and staying within it.</param>
+    /// <returns>The tick outcome; on success read <see cref="OutCells"/> for the decoded batch.</returns>
+    /// <exception cref="InvalidOperationException">The instance was never admitted — a host sequencing bug, never a
+    /// guest fault.</exception>
+    /// <exception cref="ArgumentException"><paramref name="input"/> exceeds the guest's declared input capacity — a
+    /// host budget bug, never a guest fault.</exception>
+    public AddonTickResult Tick(ReadOnlySpan<AddonInCell> input) {
+        if (m_state != AddonState.Enabled) {
+            return AddonTickResult.Faulted(fault: m_fault);
+        }
+
+        if (!m_admitted) {
+            throw new InvalidOperationException(message: $"addon {m_name} ticked before Admit — the mount sequence was not honored");
+        }
+
+        if (input.Length > m_inCap) {
+            throw new ArgumentException(
+                message: $"input batch {input.Length} exceeds the guest's declared capacity {m_inCap} — the caller owns the budget rule",
+                paramName: nameof(input)
+            );
+        }
+
+        var memory = m_memory!;
+        var onTick = m_onTick!;
+        var store = m_store!;
+        var inRegion = memory.GetSpan(
+            address: m_inPtr,
+            length: (input.Length * AddonAbi.InCellBytes)
+        );
+
+        for (var index = 0; (index < input.Length); ++index) {
+            AddonInCellWriter.Write(
+                destination: inRegion.Slice(
+                    length: AddonAbi.InCellBytes,
+                    start: (index * AddonAbi.InCellBytes)
+                ),
+                cell: in input[index]
+            );
+        }
+
+        // Zeroed before every tick so a guest that under-writes its returned count can only ever replay an all-zero
+        // cell — which Kind = 0 makes MALFORMED under this ABI, so a lying count faults instead of replaying a
+        // benign stale record. Nothing else clears this region.
+        memory.GetSpan(
+            address: m_outPtr,
+            length: (m_outCap * AddonAbi.OutCellBytes)
+        ).Clear();
+        store.Fuel = ((ulong)m_fuelPerTick);
+
+        int count;
+
+        try {
+            count = onTick(arg: input.Length);
+        } catch (TrapException trap) {
+            var kind = Classify(code: trap.Type);
+            var consumed = FuelConsumed();
+
+            m_lastFuelConsumed = consumed;
+            SetFault(
+                kind: kind,
+                reason: TrapReason(
+                    kind: kind,
+                    trap: trap
+                )
+            );
+            GC.KeepAlive(obj: store);
+            return AddonTickResult.Faulted(
+                fault: m_fault,
+                fuelConsumed: consumed
+            );
+        }
+
+        GC.KeepAlive(obj: store);
+
+        var fuelConsumed = FuelConsumed();
+
+        m_lastFuelConsumed = fuelConsumed;
+
+        if (((uint)count) > ((uint)m_outCap)) {
+            SetFault(
+                kind: AddonFaultKind.DecodeError,
+                reason: $"DecodeError — puck_on_tick returned {count}, cap {m_outCap}"
+            );
+            return AddonTickResult.Faulted(
+                fault: m_fault,
+                fuelConsumed: fuelConsumed
+            );
+        }
+
+        var cells = memory.GetSpan(
+            address: m_outPtr,
+            length: (count * AddonAbi.OutCellBytes)
+        );
+
+        if (!AddonOutCellReader.TryDecode(
+            channelCount: m_channelCount,
+            count: count,
+            destination: m_decoded,
+            error: out var decodeError,
+            errorIndex: out var errorIndex,
+            source: cells
+        )) {
+            SetFault(
+                kind: AddonFaultKind.DecodeError,
+                reason: $"DecodeError — cell {errorIndex} {decodeError}"
+            );
+            return AddonTickResult.Faulted(
+                fault: m_fault,
+                fuelConsumed: fuelConsumed
+            );
+        }
+
+        m_lastCount = count;
+        return AddonTickResult.Ok(
+            cellCount: count,
+            fuelConsumed: fuelConsumed
+        );
+    }
+    /// <summary>Reads <paramref name="length"/> bytes at <paramref name="pointer"/> out of the guest's linear
+    /// memory into <paramref name="destination"/>, immediately — no live span is ever handed back, so nothing
+    /// outlives this call that could observe a later guest write. The addon mutation seam's stage-5 pointer-safety
+    /// copy: both <paramref name="pointer"/> and <paramref name="length"/> are guest-supplied and cross the ABI as
+    /// signed <c>i64</c> wire lanes reinterpreted unsigned, so every bound is checked before any read — negative,
+    /// over-capacity, and overflowing-end are all refused the identical way, never truncated into something that
+    /// happens to fit.</summary>
+    /// <param name="pointer">The guest-memory byte offset (an unsigned value carried in a signed wire lane).</param>
+    /// <param name="length">The byte count to copy (an unsigned value carried in a signed wire lane); must not
+    /// exceed <paramref name="destination"/>'s length.</param>
+    /// <param name="destination">The host-owned buffer to copy into.</param>
+    /// <param name="error">The refusal reason, on failure; empty on success.</param>
+    /// <returns><see langword="true"/> when the whole range was in bounds and copied.</returns>
+    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
+    public bool TryCopyMemory(long pointer, long length, Span<byte> destination, out string error) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        if (
+            (pointer < 0L) ||
+            (pointer > uint.MaxValue)
+        ) {
+            error = $"pointer {pointer} is outside the guest's addressable range";
+            return false;
+        }
+
+        if (
+            (length < 0L) ||
+            (length > destination.Length)
+        ) {
+            error = $"length {length} exceeds the destination capacity {destination.Length}";
+            return false;
+        }
+
+        if (m_memory is not { } memory) {
+            error = "no guest memory is mounted";
+            return false;
+        }
+
+        var memoryLength = memory.GetLength();
+        // Overflow-checked end: pointer is bounded to uint.MaxValue and length to destination.Length above, so this
+        // sum cannot overflow long — the check exists to name the SPECIFIC out-of-bounds range in the refusal, not
+        // to guard arithmetic that could wrap.
+        var end = (pointer + length);
+
+        if (end > memoryLength) {
+            error = $"[{pointer}, {end}) exceeds guest memory {memoryLength}";
+            return false;
+        }
+
+        memory.GetSpan(
+            address: ((int)pointer),
+            length: ((int)length)
+        ).CopyTo(destination: destination[..((int)length)]);
+        error = "";
+        return true;
     }
 }

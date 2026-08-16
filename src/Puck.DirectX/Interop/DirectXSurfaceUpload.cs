@@ -23,6 +23,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     private readonly IDirectXDeviceContext m_deviceContext;
+
     private nint m_commandAllocator;
     private nint m_commandList;
     private bool m_disposed;
@@ -48,38 +49,38 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         m_deviceContext = deviceContext;
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         device->CreateCommandAllocator(
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
+            ppCommandAllocator: out var commandAllocator,
             riid: ID3D12CommandAllocator.IID_Guid,
-            ppCommandAllocator: out var commandAllocator
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
-        m_commandAllocator = (nint)commandAllocator;
+        m_commandAllocator = ((nint)commandAllocator);
 
         device->CreateCommandList(
             nodeMask: 0,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
-            pCommandAllocator: (ID3D12CommandAllocator*)commandAllocator,
+            pCommandAllocator: ((ID3D12CommandAllocator*)commandAllocator),
             pInitialState: null,
+            ppCommandList: out var commandList,
             riid: ID3D12GraphicsCommandList.IID_Guid,
-            ppCommandList: out var commandList
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
-        m_commandList = (nint)commandList;
+        m_commandList = ((nint)commandList);
         ((ID3D12GraphicsCommandList*)commandList)->Close();
 
         device->CreateFence(
-            InitialValue: 0,
             Flags: default,
-            riid: ID3D12Fence.IID_Guid,
-            ppFence: out var fence
+            InitialValue: 0,
+            ppFence: out var fence,
+            riid: ID3D12Fence.IID_Guid
         );
-        m_fence = (nint)fence;
+        m_fence = ((nint)fence);
         m_fenceValue = 1;
         m_fenceEvent = PInvoke.CreateEvent(
-            lpEventAttributes: (SECURITY_ATTRIBUTES*)null,
-            bManualReset: false,
             bInitialState: false,
+            bManualReset: false,
+            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
             lpName: default(PCWSTR)
         );
 
@@ -115,7 +116,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         );
         ArgumentOutOfRangeException.ThrowIfZero(value: width);
         ArgumentOutOfRangeException.ThrowIfZero(value: height);
-        var requiredByteLength = Surface.RequiredByteLength(width: width, height: height);
+        var requiredByteLength = Surface.RequiredByteLength(height: height, width: width);
 
         if (pixels.Length != requiredByteLength) {
             throw new ArgumentException(
@@ -151,9 +152,9 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             pixels: pixels
         );
 
-        var commandList = (ID3D12GraphicsCommandList*)m_commandList;
-        var allocator = (ID3D12CommandAllocator*)m_commandAllocator;
-        var texture = (ID3D12Resource*)m_texture;
+        var commandList = ((ID3D12GraphicsCommandList*)m_commandList);
+        var allocator = ((ID3D12CommandAllocator*)m_commandAllocator);
+        var texture = ((ID3D12Resource*)m_texture);
 
         allocator->Reset();
         commandList->Reset(
@@ -183,7 +184,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         var sourceLocation = new D3D12_TEXTURE_COPY_LOCATION {
             Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-            pResource = (ID3D12Resource*)m_uploadBuffer,
+            pResource = ((ID3D12Resource*)m_uploadBuffer),
         };
 
         sourceLocation.Anonymous.PlacedFootprint = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT {
@@ -203,7 +204,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             DstZ: 0,
             pDst: in destinationLocation,
             pSrc: in sourceLocation,
-            pSrcBox: (D3D12_BOX?)null
+            pSrcBox: ((D3D12_BOX?)null)
         );
 
         var toShaderResource = CreateTransition(
@@ -219,7 +220,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         commandList->Close();
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 
-        var executable = (ID3D12CommandList*)commandList;
+        var executable = ((ID3D12CommandList*)commandList);
 
         ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(
             NumCommandLists: 1,
@@ -286,7 +287,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
         DisposeImageResources();
 
-        var device = (ID3D12Device*)m_deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)m_deviceContext.Device.Handle);
         var textureHeapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
@@ -309,11 +310,11 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
             pDesc: in textureDesc,
             pHeapProperties: in textureHeapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &texture,
             riidResource: in resourceIid
         );
-        m_texture = (nint)texture;
+        m_texture = ((nint)texture);
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
 
         m_paddedRowPitch = (((width * FormatByteSize(format: format)) + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
@@ -329,7 +330,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
             MipLevels = 1,
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            Width = ((ulong)m_paddedRowPitch * height),
+            Width = (((ulong)m_paddedRowPitch) * height),
         };
 
         void* uploadBuffer;
@@ -339,11 +340,11 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
             pDesc: in uploadDesc,
             pHeapProperties: in uploadHeapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &uploadBuffer,
             riidResource: in resourceIid
         );
-        m_uploadBuffer = (nint)uploadBuffer;
+        m_uploadBuffer = ((nint)uploadBuffer);
 
         if (0 == m_srvHeap) {
             var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC {
@@ -354,11 +355,11 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
 
             device->CreateDescriptorHeap(
                 pDescriptorHeapDesc: in heapDesc,
-                riid: ID3D12DescriptorHeap.IID_Guid,
-                ppvHeap: out var srvHeap
+                ppvHeap: out var srvHeap,
+                riid: ID3D12DescriptorHeap.IID_Guid
             );
-            m_srvHeap = (nint)srvHeap;
-            m_gpuDescriptorPointer = GetGpuHeapStart(heap: (ID3D12DescriptorHeap*)srvHeap).ptr;
+            m_srvHeap = ((nint)srvHeap);
+            m_gpuDescriptorPointer = GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)srvHeap)).ptr;
         }
 
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {
@@ -375,9 +376,9 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         };
 
         device->CreateShaderResourceView(
-            pResource: (ID3D12Resource*)m_texture,
+            pResource: ((ID3D12Resource*)m_texture),
             pDesc: &srvDesc,
-            DestDescriptor: GetCpuHeapStart(heap: (ID3D12DescriptorHeap*)m_srvHeap)
+            DestDescriptor: GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_srvHeap))
         );
 
         m_format = format;
@@ -385,46 +386,46 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
         m_width = width;
     }
     private void WriteUploadBuffer(ReadOnlySpan<byte> pixels, int packedRowBytes) {
-        var uploadBuffer = (ID3D12Resource*)m_uploadBuffer;
+        var uploadBuffer = ((ID3D12Resource*)m_uploadBuffer);
 
         void* mapped;
 
         uploadBuffer->Map(
             Subresource: 0,
-            pReadRange: (D3D12_RANGE*)null,
+            pReadRange: ((D3D12_RANGE*)null),
             ppData: &mapped
         );
 
         try {
             var destination = new Span<byte>(
-                pointer: mapped,
-                length: checked((int)((ulong)m_paddedRowPitch * m_height))
+                length: checked((int)(((ulong)m_paddedRowPitch) * m_height)),
+                pointer: mapped
             );
             var paddedRowPitch = checked((int)m_paddedRowPitch);
 
             for (var row = 0; (row < m_height); row++) {
                 pixels
                     .Slice(
-                        start: (row * packedRowBytes),
-                        length: packedRowBytes
+                        length: packedRowBytes,
+                        start: (row * packedRowBytes)
                     )
                     .CopyTo(destination: destination.Slice(
-                        start: (row * paddedRowPitch),
-                        length: packedRowBytes
+                        length: packedRowBytes,
+                        start: (row * paddedRowPitch)
                     ));
             }
         } finally {
             uploadBuffer->Unmap(
                 Subresource: 0,
-                pWrittenRange: (D3D12_RANGE*)null
+                pWrittenRange: ((D3D12_RANGE*)null)
             );
         }
     }
     private void WaitForGpu() {
         DirectXFence.SignalAndWait(
             deviceContext: m_deviceContext,
-            fenceHandle: m_fence,
             fenceEvent: m_fenceEvent,
+            fenceHandle: m_fence,
             fenceValue: ref m_fenceValue
         );
     }

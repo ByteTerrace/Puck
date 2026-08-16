@@ -1,7 +1,8 @@
 name: Pack
 
-# Builds the three blessed NuGet packages (ByteTerrace.Puck.Maths,
-# .Commands, .Attestation) and uploads them as a build artifact. The package
+# Builds the blessed NuGet packages (ByteTerrace.Puck.Abstractions, .Maths,
+# .Commands, .Attestation, .Hosting, .Physics) and uploads them as a build
+# artifact. The package
 # version is whatever build/Packaging.targets declares — the single source of
 # truth. Runs on every change for validation, and is called by publish.yml so
 # the exact bytes that were validated are the bytes that get pushed.
@@ -32,7 +33,7 @@ jobs:
 
       - name: Pack blessed projects
         run: |
-          for project in src/Puck.Maths src/Puck.Commands src/Puck.Attestation; do
+          for project in src/Puck.Abstractions src/Puck.Maths src/Puck.Commands src/Puck.Attestation src/Puck.Hosting src/Puck.Physics; do
             dotnet pack "$project" --configuration Release --output artifacts/packages
           done
           ls -l artifacts/packages

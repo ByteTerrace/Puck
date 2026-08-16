@@ -4,22 +4,18 @@ internal enum CanaryBootShape {
     Headless,
     Windowed,
 }
-
 internal enum CanaryCommandOutcome {
     Accepted,
     Refused,
 }
-
 internal enum CanaryStream {
     Stdout,
     Stderr,
 }
-
 internal enum CanaryLineMatch {
     Exact,
     Contains,
 }
-
 internal enum CanaryRelationOperator {
     Equal,
     NotEqual,
@@ -28,7 +24,6 @@ internal enum CanaryRelationOperator {
     AtMost,
     MinimumMargin,
 }
-
 internal sealed record CanaryManifest(
     string Binding,
     CanaryBootShape BootShape,
@@ -44,7 +39,6 @@ internal sealed record CanaryManifest(
 ) {
     public bool IsAutomatic => ((BootShape == CanaryBootShape.Headless) && (Requirements.Count == 0));
 }
-
 internal sealed record CanaryLeg(
     IReadOnlyList<CanaryAssertion> Assertions,
     string? AuthorityWorldPath,
@@ -54,11 +48,8 @@ internal sealed record CanaryLeg(
     string ScriptPath,
     string WorldPath
 );
-
 internal sealed record CanaryCommandClaim(string Verb, int Occurrence, CanaryCommandOutcome Outcome);
-
 internal abstract record CanaryAssertion(string Name);
-
 internal sealed record CanaryLineAssertion(
     CanaryLineMatch Match,
     string Name,
@@ -66,7 +57,6 @@ internal sealed record CanaryLineAssertion(
     CanaryStream Stream,
     string Text
 ) : CanaryAssertion(Name: Name);
-
 internal sealed record CanaryResponseAssertion(
     int Count,
     IReadOnlyList<CanaryValueExtraction> Extractions,
@@ -75,13 +65,11 @@ internal sealed record CanaryResponseAssertion(
     CanaryStream Stream,
     string Verb
 ) : CanaryAssertion(Name: Name);
-
 internal sealed record CanarySequenceAssertion(
     string Name,
     IReadOnlyList<CanaryResponseSelector> Responses,
     CanaryStream Stream
 ) : CanaryAssertion(Name: Name);
-
 internal sealed record CanaryRelationAssertion(
     CanaryOperand Left,
     double? Margin,
@@ -91,16 +79,12 @@ internal sealed record CanaryRelationAssertion(
     CanaryRelationOperator Operator,
     CanaryOperand? Right
 ) : CanaryAssertion(Name: Name);
-
 internal sealed record CanaryFileDifferenceAssertion(
     string After,
     string Before,
     bool Different,
     string Name
 ) : CanaryAssertion(Name: Name);
-
 internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int Count);
-
 internal sealed record CanaryValueExtraction(string Field, int? Component, string Name);
-
 internal sealed record CanaryOperand(string? ValueName, string? StringLiteral, double? NumberLiteral);

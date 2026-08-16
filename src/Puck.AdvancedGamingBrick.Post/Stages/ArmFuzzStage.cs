@@ -10,7 +10,6 @@ internal sealed class ArmFuzzStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "arm-fuzz";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.B;

@@ -18,15 +18,12 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private const uint ModeMask = 0x1Fu;
 
     private readonly IAgbBus m_bus;
-
     // The 16 currently visible general-purpose registers (R0–R15); R13=SP, R14=LR, R15=PC.
     private readonly uint[] m_gpr = new uint[16];
-
     // Banked R13/R14/SPSR, indexed by bank (0=usr/sys, 1=fiq, 2=irq, 3=svc, 4=abt, 5=und).
     private readonly uint[] m_bankR13 = new uint[6];
     private readonly uint[] m_bankR14 = new uint[6];
     private readonly uint[] m_bankSpsr = new uint[6];
-
     // R8–R12 have a dedicated FIQ bank; every non-FIQ mode shares the other set.
     private readonly uint[] m_fiqR8to12 = new uint[5];
     private readonly uint[] m_usrR8to12 = new uint[5];
@@ -46,14 +43,12 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private bool m_reload;
     private uint m_cpsr;
     private bool m_irqLine;
-
     // The ARM7TDMI two-stage interrupt-recognition pipeline. m_decodeIrq
     // is sampled from CPSR.I when an instruction is fetched; it slides into m_executeIrq one boundary later, gated
     // by the live synchronizer, to decide whether that instruction is pre-empted by an IRQ. This delay is the
     // hardware's interrupt-recognition latency — not a tuned constant.
     private bool m_decodeIrq;
     private bool m_executeIrq;
-
     // Set after a data transfer so the next opcode fetch is charged as non-sequential.
     private bool m_nextFetchNonSequential;
 
@@ -70,7 +65,6 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
     /// <inheritdoc/>
     public uint Cpsr => m_cpsr;
-
     /// <inheritdoc/>
     public bool IrqLine {
         get => m_irqLine;
@@ -80,7 +74,6 @@ public sealed partial class Arm7Tdmi : IArmCpu {
     private uint CurrentMode => m_cpsr & ModeMask;
     private bool HasSpsr => (BankIndex(mode: CurrentMode) != 0);
     private bool ThumbState => ((m_cpsr & FlagT) != 0u);
-
     /// <summary>Gets or sets the SPSR of the current mode; in User/System mode (which have none) the getter
     /// returns the CPSR and the setter is ignored.</summary>
     private uint Spsr {
@@ -106,13 +99,10 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
         return true;
     }
-
     /// <inheritdoc/>
     public uint GetRegister(int index) => m_gpr[index];
-
     /// <inheritdoc/>
     public void SetRegister(int index, uint value) => m_gpr[index] = value;
-
     /// <inheritdoc/>
     public void Reset() {
         Array.Clear(array: m_gpr);
@@ -123,7 +113,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         Array.Clear(array: m_usrR8to12);
 
         // Power-on: Supervisor mode, ARM state, both interrupt lines masked, executing from the reset vector.
-        m_cpsr = (uint)CpuMode.Supervisor | FlagI | FlagF;
+        m_cpsr = ((uint)CpuMode.Supervisor) | FlagI | FlagF;
         m_irqLine = false;
         m_decodeIrq = false;
         m_executeIrq = false;
@@ -134,7 +124,6 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         // instruction exactly as hardware does (no eager pre-fill before the clock starts).
         m_reload = true;
     }
-
     /// <inheritdoc/>
     public void SetupDirectBoot(uint entryPoint) {
         Reset();
@@ -142,17 +131,16 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         // Lay down the stack pointers the BIOS leaves for each mode, then settle in System mode and vector
         // to the entry point. Each SwitchMode banks the SP just written before loading the next mode's bank.
         m_gpr[13] = 0x03007FE0u; // SP_svc (we are in Supervisor after Reset)
-        SwitchMode(newMode: (uint)CpuMode.Irq);
+        SwitchMode(newMode: ((uint)CpuMode.Irq));
         m_gpr[13] = 0x03007FA0u; // SP_irq
-        SwitchMode(newMode: (uint)CpuMode.System);
+        SwitchMode(newMode: ((uint)CpuMode.System));
         m_gpr[13] = 0x03007F00u; // SP_sys / SP_usr
 
-        m_cpsr = (uint)CpuMode.System; // System mode, ARM state, interrupts unmasked at the CPSR level
+        m_cpsr = ((uint)CpuMode.System); // System mode, ARM state, interrupts unmasked at the CPSR level
         m_gpr[15] = entryPoint;
 
         m_reload = true; // lazily refill from the cartridge entry on the first Step (hardware boot accounting)
     }
-
     /// <inheritdoc/>
     public void Step() {
         // Commit the previous instruction's cycles to the scheduler and fire any peripheral events now due (which
@@ -181,7 +169,7 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         var opcode = m_executeWord;
 
         if (m_executeThumb) {
-            var thumbOpcode = (ushort)opcode;
+            var thumbOpcode = ((ushort)opcode);
 
             unsafe {
                 ThumbTable[(thumbOpcode >> 8)](
@@ -195,8 +183,8 @@ public sealed partial class Arm7Tdmi : IArmCpu {
             if (
                 (condition == 0xEu) ||
                 CheckCondition(
-                cpu: this,
-                condition: condition
+                condition: condition,
+                cpu: this
             )
             ) {
                 unsafe {
@@ -213,14 +201,13 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
     // Maps a processor mode to its banked-register set.
     private static int BankIndex(uint mode) => mode switch {
-        (uint)CpuMode.Fiq => 1,
-        (uint)CpuMode.Irq => 2,
-        (uint)CpuMode.Supervisor => 3,
-        (uint)CpuMode.Abort => 4,
-        (uint)CpuMode.Undefined => 5,
+        ((uint)CpuMode.Fiq) => 1,
+        ((uint)CpuMode.Irq) => 2,
+        ((uint)CpuMode.Supervisor) => 3,
+        ((uint)CpuMode.Abort) => 4,
+        ((uint)CpuMode.Undefined) => 5,
         _ => 0,
     };
-
     // Swaps the banked registers from the current mode out and the target mode's in, then records the new mode.
     private void SwitchMode(uint newMode) {
         var oldMode = CurrentMode;
@@ -230,8 +217,8 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_bankR13[oldBank] = m_gpr[13];
         m_bankR14[oldBank] = m_gpr[14];
 
-        var oldFiq = (oldMode == (uint)CpuMode.Fiq);
-        var newFiq = (newMode == (uint)CpuMode.Fiq);
+        var oldFiq = (oldMode == ((uint)CpuMode.Fiq));
+        var newFiq = (newMode == ((uint)CpuMode.Fiq));
 
         if (oldFiq != newFiq) {
             if (oldFiq) {
@@ -251,7 +238,6 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_gpr[14] = m_bankR14[newBank];
         m_cpsr = (m_cpsr & ~ModeMask) | (newMode & ModeMask);
     }
-
     // Applies a whole CPSR value, performing a bank swap first when the mode field changes.
     private void WriteCpsr(uint value) {
         if ((value & ModeMask) != CurrentMode) {
@@ -260,7 +246,6 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
         m_cpsr = value;
     }
-
     // ARM7TDMI fetch: slide the pipeline one stage, gate the freshly-promoted
     // execute-stage IRQ flag against the live synchronizer (so it fires only if the line is still asserted), sample
     // the decode-stage Thumb/IRQ flags from the current CPSR, then advance R15 and refill the fetch slot.
@@ -286,7 +271,6 @@ public sealed partial class Arm7Tdmi : IArmCpu {
             thumb: thumb
         );
     }
-
     // A pipeline opcode read, charged as sequential unless a branch or data access made the next fetch non-seq.
     private uint FetchWord(uint address, bool thumb) {
         var access = (m_nextFetchNonSequential
@@ -297,15 +281,14 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
         return (thumb
             ? m_bus.ReadCode16(
-            address: address & ~1u,
-            access: access
+            access: access,
+            address: address & ~1u
         )
             : m_bus.ReadCode32(
-            address: address & ~3u,
-            access: access
+            access: access,
+            address: address & ~3u
         ));
     }
-
     // ARM7TDMI reload: after a branch/exception writes R15, the pipeline is refilled
     // lazily on the next Step — the first refill fetch is non-sequential, then fetch() slides+refills again, so the
     // three refill reads are charged to the instruction that consumes them (matching hardware, including at boot).
@@ -323,29 +306,26 @@ public sealed partial class Arm7Tdmi : IArmCpu {
 
         Fetch();
     }
-
     // Redirects execution to an address; the pipeline reloads lazily on the next Step (the reload flag is set
     // when R15 is written, rather than refetching immediately).
     private void BranchTo(uint address) {
         m_gpr[15] = address;
         m_reload = true;
     }
-
     // ARM7TDMI exception entry: bank the mode, save the old CPSR to its SPSR, set the
     // return link from the decode-stage address, mask IRQ, enter ARM state, and vector (which arms the reload).
     private void Exception(CpuMode mode, uint vector, uint linkRegister) {
         var savedCpsr = m_cpsr;
 
-        SwitchMode(newMode: (uint)mode);
+        SwitchMode(newMode: ((uint)mode));
 
-        m_bankSpsr[BankIndex(mode: (uint)mode)] = savedCpsr;
+        m_bankSpsr[BankIndex(mode: ((uint)mode))] = savedCpsr;
         m_gpr[14] = linkRegister;
         m_cpsr |= FlagI;
         m_cpsr &= ~FlagT;
 
         BranchTo(address: vector);
     }
-
     // A pre-empting IRQ recognised in Step. The link register is the decode-stage address (the instruction that was
     // about to execute); hardware adds 2 in Thumb so SUBS PC,LR,#4 returns to re-run it.
     private void TakeIrqException() {
@@ -354,24 +334,24 @@ public sealed partial class Arm7Tdmi : IArmCpu {
             : 0u));
 
         Exception(
+            linkRegister: linkRegister,
             mode: CpuMode.Irq,
-            vector: 0x18u,
-            linkRegister: linkRegister
+            vector: 0x18u
         );
     }
     private void SoftwareInterrupt() {
         // SWI returns with MOVS PC,LR straight to the following instruction (the decode-stage address).
         Exception(
+            linkRegister: m_decodeAddress,
             mode: CpuMode.Supervisor,
-            vector: 0x08u,
-            linkRegister: m_decodeAddress
+            vector: 0x08u
         );
     }
     private void UndefinedInstruction() {
         Exception(
+            linkRegister: m_decodeAddress,
             mode: CpuMode.Undefined,
-            vector: 0x04u,
-            linkRegister: m_decodeAddress
+            vector: 0x04u
         );
     }
 }

@@ -50,7 +50,6 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // every-other-dot table (0/2/4 dots of lead): 2 is the unique value clearing the whole table without moving the
     // "wave read/trigger while on" verdicts (those key off the read-side window above, which this does not touch).
     private const int WaveWriteFetchLeadDots = 2;
-
     // NR10 sweep, NR11 duty/length, NR12 envelope, NR13 frequency low, NR14 trigger/control.
     private const int Nr10 = 0x00;
     private const int Nr11 = 0x01;
@@ -102,6 +101,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // no envelope). The volume scales the channel's gated waveform into its digital output.
     private readonly int[] m_envelopeTimer = new int[ChannelCount];
     private readonly int[] m_envelopeVolume = new int[ChannelCount];
+
     // Whether the machine is Color hardware (the machine model, not the cartridge's compatibility mode): Color silicon
     // buffers the wave-RAM port, so CPU access while the channel plays always succeeds; monochrome access must hit the
     // window right after a fetch.
@@ -109,15 +109,20 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // length writes, power-off length clearing, retrigger corruption). The boot-beep frame-sequencer phase and wave-RAM
     // power-on pattern stay construction-only.
     private bool m_isColor;
+
     private readonly IKey1 m_key1;
+
     private readonly int[] m_lengthCounter = new int[ChannelCount];
     private readonly bool[] m_lengthEnabled = new bool[ChannelCount];
     private readonly byte[] m_registers = new byte[RegisterCount];
     // The square channels' duty-cycle position (0-7) and frequency-timer countdown, indexed 0 = channel 1, 1 = channel 2.
     private readonly int[] m_squarePosition = new int[2];
     private readonly int[] m_squareTimer = new int[2];
+
     private readonly ITimer m_timer;
+
     private readonly byte[] m_waveRam = new byte[WaveRamSize];
+
     private int m_frameSequencerStep;
     private bool m_lastDivApuBit;
     private int m_noiseLfsr;
@@ -283,9 +288,9 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
                 }
             }
 
-            return (byte)(Nr52Readable | (m_powered
+            return ((byte)(Nr52Readable | (m_powered
                 ? MasterPower
-                : 0) | status);
+                : 0) | status));
         }
 
         if (address > MemoryMap.AudioEnd) {
@@ -294,7 +299,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
         var offset = (address - MemoryMap.AudioStart);
 
-        return (byte)(m_registers[offset] | ReadMasks[offset]);
+        return ((byte)(m_registers[offset] | ReadMasks[offset]));
     }
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
@@ -355,23 +360,22 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         // PCM12 packs channel 1 in the low nibble and channel 2 in the high; PCM34 packs channel 3 (wave) low and
         // channel 4 (noise) high. Each nibble is the channel's live digital output, or zero while it is not sounding.
         if (address == MemoryMap.PcmAmplitude12) {
-            return (byte)((m_channelEnabled[0]
+            return ((byte)((m_channelEnabled[0]
                 ? SquareOutput(channel: 0)
                 : 0) | ((m_channelEnabled[1]
                 ? SquareOutput(channel: 1)
-                : 0) << 4));
+                : 0) << 4)));
         }
 
-        return (byte)((m_channelEnabled[2]
+        return ((byte)((m_channelEnabled[2]
             ? WaveOutput()
             : 0) | ((m_channelEnabled[3]
             ? NoiseOutput()
-            : 0) << 4));
+            : 0) << 4)));
     }
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>
         m_isColor = model.SupportsColor();
-
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteBoolean(value: m_powered);
@@ -968,8 +972,8 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     }
     // Store an eleven-bit frequency back into NR13 (low byte) and NR14 (low three bits), leaving NR14's control bits.
     private void WriteSweepFrequency(int frequency) {
-        m_registers[Nr13] = (byte)(frequency & 0xFF);
-        m_registers[Nr14] = (byte)((m_registers[Nr14] & 0xF8) | ((frequency >> 8) & 0x07));
+        m_registers[Nr13] = ((byte)(frequency & 0xFF));
+        m_registers[Nr14] = ((byte)((m_registers[Nr14] & 0xF8) | ((frequency >> 8) & 0x07)));
     }
     private int CurrentFrequency() =>
         m_registers[Nr13] | ((m_registers[Nr14] & 0x07) << 8);

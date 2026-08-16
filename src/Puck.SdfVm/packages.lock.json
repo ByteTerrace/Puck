@@ -8,18 +8,24 @@
         "resolved": "10.0.11",
         "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
-      "Concentus": {
-        "type": "Transitive",
-        "resolved": "2.2.2",
-        "contentHash": "2B9YmHPKO+k7YpAAnqmiXwiMJnfjfj1C868RszOll2iZWLnGTAiC1q21L/d7CvTan7T+hyqU8dR0Dcy3cpjVfQ=="
-      },
       "System.CommandLine": {
         "type": "Transitive",
         "resolved": "2.0.11",
         "contentHash": "Pmg3/T0M37ZS3ovwPHtfBNTCdqNpnxo+tnZMg8JDHVR0qD8KwcPUKlheEiZysb1En8IyH7yDoa9QDq97Ny/vhQ=="
       },
-      "ByteTerrace.Puck.Assets": {
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
+      },
+      "ByteTerrace.Puck.Abstractions": {
         "type": "Project"
+      },
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project",
+        "dependencies": {
+          "System.IO.Hashing": "[10.*, )"
+        }
       },
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
@@ -28,34 +34,24 @@
           "System.CommandLine": "[2.*, )"
         }
       },
+      "ByteTerrace.Puck.Hosting": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
-      "puck.abstractions": {
-        "type": "Project"
-      },
-      "puck.hosting": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Abstractions": "[1.0.0, )"
-        }
-      },
-      "puck.recording": {
+      "ByteTerrace.Puck.SignedDistance": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Concentus": "[2.*, )",
-          "Puck.Abstractions": "[1.0.0, )"
+          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
         }
       },
-      "puck.shaders": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
-        }
-      },
-      "puck.text": {
+      "ByteTerrace.Puck.Text": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",

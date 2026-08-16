@@ -36,14 +36,14 @@ var stages = PostStages.Create()
     tierFilter: tierFilter
 ))
     .Where(predicate: stage => NameMatches(
-    stage: stage,
-    nameFilter: nameFilter
+    nameFilter: nameFilter,
+    stage: stage
 ))
     .ToArray();
 var context = new PostContext(
     artifactsDirectory: artifactsDirectory,
-    testRomRoot: testRomRoot,
-    sstRoot: sstRoot
+    sstRoot: sstRoot,
+    testRomRoot: testRomRoot
 );
 var report = new PostBattery(stages: stages).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
@@ -111,6 +111,6 @@ static bool TierMatches(IPostStage stage, string? tierFilter) =>
 ));
 static bool NameMatches(IPostStage stage, string? nameFilter) =>
     (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
-    value: nameFilter,
-    comparisonType: StringComparison.OrdinalIgnoreCase
+    comparisonType: StringComparison.OrdinalIgnoreCase,
+    value: nameFilter
 ));

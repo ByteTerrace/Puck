@@ -192,13 +192,16 @@ to be.
 
 ## Related resources
 
-- API contracts for bake requests, pool layout, planning, and sampled-region
-  packing: `SdfBrickBake`, `SdfBrickPoolLayout`, `SdfCarveBakePlanner`, and
-  `SdfProgramBuilder.SampledRegion` in [`src/Puck.SdfVm`](../../src/Puck.SdfVm/).
+- API contracts for bake requests, pool layout, and sampled-region packing:
+  `SdfBrickBake`, `SdfBrickPoolLayout`, and `SdfProgramBuilder.SampledRegion`
+  in [`src/Puck.SignedDistance`](../../src/Puck.SignedDistance/); the
+  interactive carve-pool planner, `SdfCarveBakePlanner`, stays in
+  [`src/Puck.SdfVm`](../../src/Puck.SdfVm/) (an engine behavior, not
+  field-as-data).
 - The `SampledRegion` shape, its lane layout, cull bound, and conservative
   fallback: the `SampledRegion` sync-pair row in
   [`.claude/skills/sdf-world/SKILL.md`](../../.claude/skills/sdf-world/SKILL.md)
-  and the enum doc in [`src/Puck.SdfVm/SdfShapeType.cs`](../../src/Puck.SdfVm/SdfShapeType.cs).
+  and the enum doc in [`src/Puck.SignedDistance/SdfShapeType.cs`](../../src/Puck.SignedDistance/SdfShapeType.cs).
 - The clustered-vs-spread penalty and the clustered `views` ceiling the brick
   targets: the carve ladders that measured both were deleted on 2026-08-02 and
   are recorded nowhere else. The motivation for the brick survives in this

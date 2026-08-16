@@ -24,7 +24,6 @@ public sealed record BindingPageView(
     IReadOnlyList<BindingModifierView> Modifiers,
     IReadOnlyList<BindingChordCommandView> CommandChords
 );
-
 /// <summary>One bound source as the UI presents it.</summary>
 /// <param name="Source">The provider-neutral input source id.</param>
 /// <param name="Command">The name of the command the source activates on this page.</param>
@@ -36,7 +35,6 @@ public sealed record BindingPageButtonView(
     string? Label,
     string? Icon
 );
-
 /// <summary>One declared modifier as the UI presents it.</summary>
 /// <param name="Id">The modifier's profile-unique identifier.</param>
 /// <param name="Source">The provider-neutral input source id that drives the modifier.</param>
@@ -50,7 +48,6 @@ public sealed record BindingModifierView(
     string? Icon,
     bool Required
 );
-
 /// <summary>One command-meaning chord row as the UI presents it — a binding bar's chord hint.</summary>
 /// <param name="Chord">The ordered modifier ids that fire the command, in press order.</param>
 /// <param name="Sources">The chord members' input source ids, parallel to <paramref name="Chord"/> (glyph resolution).</param>

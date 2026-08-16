@@ -76,7 +76,7 @@ internal static class ScanCommand {
 
             var (jsonl, grouped) = analyzer.Analyze(corpus: corpus, options: options);
 
-            ScanSink.Emit(name: name, jsonl: jsonl, grouped: grouped, options: options);
+            ScanSink.Emit(grouped: grouped, jsonl: jsonl, name: name, options: options);
         }
 
         return 0;
@@ -91,7 +91,7 @@ internal static class ScanCommand {
             return known;
         }
 
-        var requested = only.Split(separator: ',', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var requested = only.Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: ',')
             .Select(selector: static name => name.ToLowerInvariant())
             .ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -113,7 +113,6 @@ internal static class ScanCommand {
 
         return known.Where(predicate: requested.Contains).ToList();
     }
-
     // The synopsis, with the analyzer registry read from its single declaration site. What each analyzer
     // emits, and the record shapes, are the README's job; this exists so every verb answers -h.
     private static string HelpText() =>

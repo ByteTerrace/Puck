@@ -47,7 +47,6 @@ public interface IConjugationRing<TSelf>
     /// <returns>The difference <c><paramref name="left"/> − <paramref name="right"/></c>.</returns>
     static abstract TSelf Subtract(TSelf left, TSelf right);
 }
-
 /// <summary>
 /// The doubling construction: the functor that builds each algebra in the real division-algebra ladder from ordered
 /// pairs of the floor beneath it. An element is a pair <c>(<see cref="Left"/>, <see cref="Right"/>)</c> of the inner
@@ -113,127 +112,9 @@ public readonly record struct DoublingAlgebra<TInner>(TInner Left, TInner Right)
         Right: TInner.AdditiveIdentity
     );
 
-    /// <summary>Adds two elements componentwise.</summary>
-    /// <param name="left">The first addend.</param>
-    /// <param name="right">The second addend.</param>
-    /// <returns>The componentwise sum.</returns>
-    public static DoublingAlgebra<TInner> Add(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) =>
-        new(
-        Left: TInner.Add(left: left.Left, right: right.Left),
-        Right: TInner.Add(left: left.Right, right: right.Right)
-    );
-    /// <summary>Returns the conjugate <c>(ā, −b)</c> — the inner conjugate of the scalar half, the negation of the
-    /// imaginary half.</summary>
-    /// <param name="value">The element to conjugate.</param>
-    /// <returns>The doubling conjugate.</returns>
-    public static DoublingAlgebra<TInner> Conjugate(DoublingAlgebra<TInner> value) =>
-        new(
-        Left: TInner.Conjugate(value: value.Left),
-        Right: TInner.Negate(value: value.Right)
-    );
-    /// <summary>Multiplies two elements by the doubling product <c>(a, b)·(c, d) = (a·c − d̄·b, d·a + b·c̄)</c>.</summary>
-    /// <param name="left">The multiplicand <c>(a, b)</c>.</param>
-    /// <param name="right">The multiplier <c>(c, d)</c>.</param>
-    /// <returns>The pair product; operand order is preserved so the result is correct once the inner floor stops
-    /// commuting.</returns>
-    /// <remarks>Over the closed <see cref="FixedScalarRing"/>-leaf towers the complex floor delegates to
-    /// <see cref="FixedComplex"/> and the quaternion floor to <see cref="FixedQuaternion"/> — bit-identical by
-    /// construction — while the octonion floor keeps its own fused eight-product kernel. Every other carrier takes the
-    /// generic per-product path below.</remarks>
-    public static DoublingAlgebra<TInner> Multiply(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) {
-        // JIT-constant guards: exactly one branch survives for a closed value-type instantiation, and every non-leaf
-        // carrier compiles straight to the generic path with no raw casts.
-        if (typeof(TInner) == typeof(FixedScalarRing)) {
-            return MultiplyLeafComplex(left: left, right: right);
-        }
-
-        if (typeof(TInner) == typeof(LeafComplex)) {
-            return MultiplyLeafQuaternion(left: left, right: right);
-        }
-
-        if (typeof(TInner) == typeof(LeafQuaternion)) {
-            return MultiplyLeafOctonion(left: left, right: right);
-        }
-
-        var a = left.Left;
-        var b = left.Right;
-        var c = right.Left;
-        var d = right.Right;
-
-        return new(
-            Left: TInner.Subtract(left: TInner.Multiply(left: a, right: c), right: TInner.Multiply(left: TInner.Conjugate(value: d), right: b)),
-            Right: TInner.Add(left: TInner.Multiply(left: d, right: a), right: TInner.Multiply(left: b, right: TInner.Conjugate(value: c)))
-        );
-    }
-    /// <summary>Negates an element componentwise.</summary>
-    /// <param name="value">The element to negate.</param>
-    /// <returns>The componentwise negation.</returns>
-    public static DoublingAlgebra<TInner> Negate(DoublingAlgebra<TInner> value) =>
-        new(
-        Left: TInner.Negate(value: value.Left),
-        Right: TInner.Negate(value: value.Right)
-    );
-    /// <summary>Subtracts one element from another componentwise.</summary>
-    /// <param name="left">The minuend.</param>
-    /// <param name="right">The subtrahend.</param>
-    /// <returns>The componentwise difference.</returns>
-    public static DoublingAlgebra<TInner> Subtract(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) =>
-        new(
-        Left: TInner.Subtract(left: left.Left, right: right.Left),
-        Right: TInner.Subtract(left: left.Right, right: right.Right)
-    );
-
-    /// <summary>Computes the norm form <c>a·ā + b̄·b</c> — the scalar part of <c><paramref name="value"/> · valuē</c>,
-    /// carried as a real element of the inner algebra <typeparamref name="TInner"/>.</summary>
-    /// <param name="value">The element whose norm is taken.</param>
-    /// <returns>The value <c>a·ā + b̄·b</c>. It lies in the real subalgebra of <typeparamref name="TInner"/>; project
-    /// through <see cref="Left"/> to descend to the base scalar. The norm is multiplicative on every composition floor
-    /// (through the octonions) and over any exact carrier.</returns>
-    public static TInner Norm(DoublingAlgebra<TInner> value) {
-        // Floors 1–2 delegate their norm to the hand-written complex/quaternion product-with-conjugate; the octonion floor
-        // sums its leaf squares with one rounding. The guards fold to JIT-time constants exactly as in Multiply.
-        if (typeof(TInner) == typeof(FixedScalarRing)) {
-            return NormLeafComplex(value: value);
-        }
-
-        if (typeof(TInner) == typeof(LeafComplex)) {
-            return NormLeafQuaternion(value: value);
-        }
-
-        if (typeof(TInner) == typeof(LeafQuaternion)) {
-            return NormLeafOctonion(value: value);
-        }
-
-        return TInner.Add(
-            left: TInner.Multiply(left: value.Left, right: TInner.Conjugate(value: value.Left)),
-            right: TInner.Multiply(left: TInner.Conjugate(value: value.Right), right: value.Right)
-        );
-    }
-    /// <summary>Computes the commutator <c>a·b − b·a</c> — the exact, testable amount by which multiplication fails to
-    /// commute on this floor.</summary>
-    /// <param name="left">The left operand <c>a</c>.</param>
-    /// <param name="right">The right operand <c>b</c>.</param>
-    /// <returns>The additive identity on the commutative floors (real, complex); a nonzero witness from the quaternion
-    /// floor up.</returns>
-    public static DoublingAlgebra<TInner> Commutator(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) =>
-        Subtract(left: Multiply(left: left, right: right), right: Multiply(left: right, right: left));
-    /// <summary>Computes the associator <c>(a·b)·c − a·(b·c)</c> — the exact, testable amount by which multiplication
-    /// fails to associate on this floor.</summary>
-    /// <param name="left">The first operand <c>a</c>.</param>
-    /// <param name="middle">The second operand <c>b</c>.</param>
-    /// <param name="right">The third operand <c>c</c>.</param>
-    /// <returns>The additive identity on the associative floors (real, complex, quaternion) and whenever two arguments
-    /// coincide on the octonion floor (alternativity); a nonzero witness for three independent octonions.</returns>
-    public static DoublingAlgebra<TInner> Associator(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> middle, DoublingAlgebra<TInner> right) =>
-        Subtract(
-            left: Multiply(left: Multiply(left: left, right: middle), right: right),
-            right: Multiply(left: left, right: Multiply(left: middle, right: right))
-        );
-
     // Wraps a raw Q16 value as a leaf scalar; the leaf towers are built from these.
     private static FixedScalarRing Leaf(long raw) =>
         new(Value: FixedQ4816.FromRawBits(value: raw));
-
     // FLOOR 1 — complex leaf. (a, b)·(c, d) = (a·c − d·b, d·a + b·c) with a scalar (self-conjugate, commutative) inner
     // floor is exactly the FixedComplex product, so this DELEGATES to it. The leaf pair (Left, Right) shares FixedComplex's
     // (Real, Imaginary) layout, so a raw BitCast maps both ways with no copy — identity by construction.
@@ -243,24 +124,6 @@ public readonly record struct DoublingAlgebra<TInner>(TInner Left, TInner Right)
 
         return Unsafe.BitCast<FixedComplex, DoublingAlgebra<TInner>>(source: product);
     }
-
-    // FLOOR 2 — quaternion leaf. The doubling product over the complex inner floor, flattened under
-    // (w, x, y, z) ↦ ((w, x), (y, z)), is exactly the Hamilton product, so this DELEGATES to FixedQuaternion. The leaf
-    // nesting orders the raws (w, x, y, z) while FixedQuaternion stores (X, Y, Z, W), so the pair coordinates are mapped
-    // explicitly at the boundary rather than bit-cast — identity by construction.
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static DoublingAlgebra<TInner> MultiplyLeafQuaternion(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) {
-        var l = Unsafe.BitCast<DoublingAlgebra<TInner>, LeafQuaternion>(source: left);
-        var r = Unsafe.BitCast<DoublingAlgebra<TInner>, LeafQuaternion>(source: right);
-        var product = (new FixedQuaternion(X: l.Left.Right.Value, Y: l.Right.Left.Value, Z: l.Right.Right.Value, W: l.Left.Left.Value)
-                     * new FixedQuaternion(X: r.Left.Right.Value, Y: r.Right.Left.Value, Z: r.Right.Right.Value, W: r.Left.Left.Value));
-
-        return Unsafe.BitCast<LeafQuaternion, DoublingAlgebra<TInner>>(source: new LeafQuaternion(
-            Left: new LeafComplex(Left: new FixedScalarRing(Value: product.W), Right: new FixedScalarRing(Value: product.X)),
-            Right: new LeafComplex(Left: new FixedScalarRing(Value: product.Y), Right: new FixedScalarRing(Value: product.Z))
-        ));
-    }
-
     // FLOOR 3 — octonion leaf. The doubling product over the quaternion inner floor, flattened to eight leaf raws
     // a0..a7 (left) and c0..c7 (right) under the nested pairing: each returned component is an eight-product fused sum.
     // No hand-written oracle exists; the one-rounding discipline itself is the contract. Eight raw Q32 products fit
@@ -313,28 +176,71 @@ public readonly record struct DoublingAlgebra<TInner>(TInner Left, TInner Right)
             o6 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((a0 * c6) + (a1 * c7)) + (a2 * c4)) - (a3 * c5)) - (a4 * c2)) + (a5 * c3)) + (a6 * c0)) - (a7 * c1))));
             o7 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((a0 * c7) - (a1 * c6)) + (a2 * c5)) + (a3 * c4)) - (a4 * c3)) - (a5 * c2)) + (a6 * c1)) + (a7 * c0))));
         } else {
-            o0 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c0) - ((Int128)a1 * c1)) - ((Int128)a2 * c2)) - ((Int128)a3 * c3)) - ((Int128)a4 * c4)) - ((Int128)a5 * c5)) - ((Int128)a6 * c6)) - ((Int128)a7 * c7))));
-            o1 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c1) + ((Int128)a1 * c0)) + ((Int128)a2 * c3)) - ((Int128)a3 * c2)) + ((Int128)a4 * c5)) - ((Int128)a5 * c4)) - ((Int128)a6 * c7)) + ((Int128)a7 * c6))));
-            o2 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c2) - ((Int128)a1 * c3)) + ((Int128)a2 * c0)) + ((Int128)a3 * c1)) + ((Int128)a4 * c6)) + ((Int128)a5 * c7)) - ((Int128)a6 * c4)) - ((Int128)a7 * c5))));
-            o3 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c3) + ((Int128)a1 * c2)) - ((Int128)a2 * c1)) + ((Int128)a3 * c0)) + ((Int128)a4 * c7)) - ((Int128)a5 * c6)) + ((Int128)a6 * c5)) - ((Int128)a7 * c4))));
-            o4 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c4) - ((Int128)a1 * c5)) - ((Int128)a2 * c6)) - ((Int128)a3 * c7)) + ((Int128)a4 * c0)) + ((Int128)a5 * c1)) + ((Int128)a6 * c2)) + ((Int128)a7 * c3))));
-            o5 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c5) + ((Int128)a1 * c4)) - ((Int128)a2 * c7)) + ((Int128)a3 * c6)) - ((Int128)a4 * c1)) + ((Int128)a5 * c0)) - ((Int128)a6 * c3)) + ((Int128)a7 * c2))));
-            o6 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c6) + ((Int128)a1 * c7)) + ((Int128)a2 * c4)) - ((Int128)a3 * c5)) - ((Int128)a4 * c2)) + ((Int128)a5 * c3)) + ((Int128)a6 * c0)) - ((Int128)a7 * c1))));
-            o7 = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)a0 * c7) - ((Int128)a1 * c6)) + ((Int128)a2 * c5)) + ((Int128)a3 * c4)) - ((Int128)a4 * c3)) - ((Int128)a5 * c2)) + ((Int128)a6 * c1)) + ((Int128)a7 * c0))));
+            o0 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c0) - (((Int128)a1) * c1)) - (((Int128)a2) * c2)) - (((Int128)a3) * c3)) - (((Int128)a4) * c4)) - (((Int128)a5) * c5)) - (((Int128)a6) * c6)) - (((Int128)a7) * c7))));
+            o1 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c1) + (((Int128)a1) * c0)) + (((Int128)a2) * c3)) - (((Int128)a3) * c2)) + (((Int128)a4) * c5)) - (((Int128)a5) * c4)) - (((Int128)a6) * c7)) + (((Int128)a7) * c6))));
+            o2 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c2) - (((Int128)a1) * c3)) + (((Int128)a2) * c0)) + (((Int128)a3) * c1)) + (((Int128)a4) * c6)) + (((Int128)a5) * c7)) - (((Int128)a6) * c4)) - (((Int128)a7) * c5))));
+            o3 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c3) + (((Int128)a1) * c2)) - (((Int128)a2) * c1)) + (((Int128)a3) * c0)) + (((Int128)a4) * c7)) - (((Int128)a5) * c6)) + (((Int128)a6) * c5)) - (((Int128)a7) * c4))));
+            o4 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c4) - (((Int128)a1) * c5)) - (((Int128)a2) * c6)) - (((Int128)a3) * c7)) + (((Int128)a4) * c0)) + (((Int128)a5) * c1)) + (((Int128)a6) * c2)) + (((Int128)a7) * c3))));
+            o5 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c5) + (((Int128)a1) * c4)) - (((Int128)a2) * c7)) + (((Int128)a3) * c6)) - (((Int128)a4) * c1)) + (((Int128)a5) * c0)) - (((Int128)a6) * c3)) + (((Int128)a7) * c2))));
+            o6 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c6) + (((Int128)a1) * c7)) + (((Int128)a2) * c4)) - (((Int128)a3) * c5)) - (((Int128)a4) * c2)) + (((Int128)a5) * c3)) + (((Int128)a6) * c0)) - (((Int128)a7) * c1))));
+            o7 = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)a0) * c7) - (((Int128)a1) * c6)) + (((Int128)a2) * c5)) + (((Int128)a3) * c4)) - (((Int128)a4) * c3)) - (((Int128)a5) * c2)) + (((Int128)a6) * c1)) + (((Int128)a7) * c0))));
         }
 
         return Unsafe.BitCast<LeafOctonion, DoublingAlgebra<TInner>>(source: new LeafOctonion(
             Left: new LeafQuaternion(
-                Left: new LeafComplex(Left: Leaf(raw: o0), Right: Leaf(raw: o1)),
-                Right: new LeafComplex(Left: Leaf(raw: o2), Right: Leaf(raw: o3))
+                Left: new LeafComplex(
+                    Left: Leaf(raw: o0),
+                    Right: Leaf(raw: o1)
+                ),
+                Right: new LeafComplex(
+                    Left: Leaf(raw: o2),
+                    Right: Leaf(raw: o3)
+                )
             ),
             Right: new LeafQuaternion(
-                Left: new LeafComplex(Left: Leaf(raw: o4), Right: Leaf(raw: o5)),
-                Right: new LeafComplex(Left: Leaf(raw: o6), Right: Leaf(raw: o7))
+                Left: new LeafComplex(
+                    Left: Leaf(raw: o4),
+                    Right: Leaf(raw: o5)
+                ),
+                Right: new LeafComplex(
+                    Left: Leaf(raw: o6),
+                    Right: Leaf(raw: o7)
+                )
             )
         ));
     }
+    // FLOOR 2 — quaternion leaf. The doubling product over the complex inner floor, flattened under
+    // (w, x, y, z) ↦ ((w, x), (y, z)), is exactly the Hamilton product, so this DELEGATES to FixedQuaternion. The leaf
+    // nesting orders the raws (w, x, y, z) while FixedQuaternion stores (X, Y, Z, W), so the pair coordinates are mapped
+    // explicitly at the boundary rather than bit-cast — identity by construction.
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static DoublingAlgebra<TInner> MultiplyLeafQuaternion(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) {
+        var l = Unsafe.BitCast<DoublingAlgebra<TInner>, LeafQuaternion>(source: left);
+        var r = Unsafe.BitCast<DoublingAlgebra<TInner>, LeafQuaternion>(source: right);
+        var product = (new FixedQuaternion(
+            X: l.Left.Right.Value,
+            Y: l.Right.Left.Value,
+            Z: l.Right.Right.Value,
+            W: l.Left.Left.Value
+        )
+                     * new FixedQuaternion(
+            X: r.Left.Right.Value,
+            Y: r.Right.Left.Value,
+            Z: r.Right.Right.Value,
+            W: r.Left.Left.Value
+        ));
 
+        return Unsafe.BitCast<LeafQuaternion, DoublingAlgebra<TInner>>(source: new LeafQuaternion(
+            Left: new LeafComplex(
+                Left: new FixedScalarRing(Value: product.W),
+                Right: new FixedScalarRing(Value: product.X)
+            ),
+            Right: new LeafComplex(
+                Left: new FixedScalarRing(Value: product.Y),
+                Right: new FixedScalarRing(Value: product.Z)
+            )
+        ));
+    }
     // FLOOR 1 norm — a·ā + b̄·b collapses to re² + im², which is the real component of the FixedComplex product with the
     // conjugate (the imaginary component cancels to exactly zero), so this DELEGATES to that product's one fused rounding.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
@@ -344,19 +250,6 @@ public readonly record struct DoublingAlgebra<TInner>(TInner Left, TInner Right)
 
         return Unsafe.BitCast<FixedScalarRing, TInner>(source: new FixedScalarRing(Value: product.Real));
     }
-
-    // FLOOR 2 norm — a·ā + b̄·b collapses to (w² + x² + y² + z², 0), which is the scalar component of the FixedQuaternion
-    // product with the conjugate (the vector part cancels to exactly zero), so this DELEGATES to that product's one
-    // rounding and packages the scalar back onto the real leaf.
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static TInner NormLeafQuaternion(DoublingAlgebra<TInner> value) {
-        var v = Unsafe.BitCast<DoublingAlgebra<TInner>, LeafQuaternion>(source: value);
-        var quaternion = new FixedQuaternion(X: v.Left.Right.Value, Y: v.Right.Left.Value, Z: v.Right.Right.Value, W: v.Left.Left.Value);
-        var product = (quaternion * quaternion.Conjugate());
-
-        return Unsafe.BitCast<LeafComplex, TInner>(source: new LeafComplex(Left: new FixedScalarRing(Value: product.W), Right: FixedScalarRing.AdditiveIdentity));
-    }
-
     // FLOOR 3 norm — a·ā + b̄·b collapses to (Σ o², 0, 0, 0), one fused rounding on the real leaf. Eight raw Q32 squares
     // fit Int64 below 2^29.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
@@ -378,16 +271,219 @@ public readonly record struct DoublingAlgebra<TInner>(TInner Left, TInner Right)
              FixedVectorMath.RawMagnitude(value: o6) | FixedVectorMath.RawMagnitude(value: o7)) < (1UL << 29)) {
             norm = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((o0 * o0) + (o1 * o1)) + (o2 * o2)) + (o3 * o3)) + (o4 * o4)) + (o5 * o5)) + (o6 * o6)) + (o7 * o7))));
         } else {
-            norm = FixedQ4816.RoundProductSum(productSum: unchecked((((((((((Int128)o0 * o0) + ((Int128)o1 * o1)) + ((Int128)o2 * o2)) + ((Int128)o3 * o3)) + ((Int128)o4 * o4)) + ((Int128)o5 * o5)) + ((Int128)o6 * o6)) + ((Int128)o7 * o7))));
+            norm = FixedQ4816.RoundProductSum(productSum: unchecked(((((((((((Int128)o0) * o0) + (((Int128)o1) * o1)) + (((Int128)o2) * o2)) + (((Int128)o3) * o3)) + (((Int128)o4) * o4)) + (((Int128)o5) * o5)) + (((Int128)o6) * o6)) + (((Int128)o7) * o7))));
         }
 
         return Unsafe.BitCast<LeafQuaternion, TInner>(source: new LeafQuaternion(
-            Left: new LeafComplex(Left: Leaf(raw: norm), Right: FixedScalarRing.AdditiveIdentity),
+            Left: new LeafComplex(
+                Left: Leaf(raw: norm),
+                Right: FixedScalarRing.AdditiveIdentity
+            ),
             Right: LeafComplex.AdditiveIdentity
         ));
     }
-}
+    // FLOOR 2 norm — a·ā + b̄·b collapses to (w² + x² + y² + z², 0), which is the scalar component of the FixedQuaternion
+    // product with the conjugate (the vector part cancels to exactly zero), so this DELEGATES to that product's one
+    // rounding and packages the scalar back onto the real leaf.
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    private static TInner NormLeafQuaternion(DoublingAlgebra<TInner> value) {
+        var v = Unsafe.BitCast<DoublingAlgebra<TInner>, LeafQuaternion>(source: value);
+        var quaternion = new FixedQuaternion(
+            X: v.Left.Right.Value,
+            Y: v.Right.Left.Value,
+            Z: v.Right.Right.Value,
+            W: v.Left.Left.Value
+        );
+        var product = (quaternion * quaternion.Conjugate());
 
+        return Unsafe.BitCast<LeafComplex, TInner>(source: new LeafComplex(
+            Left: new FixedScalarRing(Value: product.W),
+            Right: FixedScalarRing.AdditiveIdentity
+        ));
+    }
+
+    /// <summary>Adds two elements componentwise.</summary>
+    /// <param name="left">The first addend.</param>
+    /// <param name="right">The second addend.</param>
+    /// <returns>The componentwise sum.</returns>
+    public static DoublingAlgebra<TInner> Add(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) =>
+        new(
+            Left: TInner.Add(
+                left: left.Left,
+                right: right.Left
+            ),
+            Right: TInner.Add(
+                left: left.Right,
+                right: right.Right
+            )
+        );
+    /// <summary>Computes the associator <c>(a·b)·c − a·(b·c)</c> — the exact, testable amount by which multiplication
+    /// fails to associate on this floor.</summary>
+    /// <param name="left">The first operand <c>a</c>.</param>
+    /// <param name="middle">The second operand <c>b</c>.</param>
+    /// <param name="right">The third operand <c>c</c>.</param>
+    /// <returns>The additive identity on the associative floors (real, complex, quaternion) and whenever two arguments
+    /// coincide on the octonion floor (alternativity); a nonzero witness for three independent octonions.</returns>
+    public static DoublingAlgebra<TInner> Associator(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> middle, DoublingAlgebra<TInner> right) =>
+        Subtract(
+            left: Multiply(
+                left: Multiply(
+                    left: left,
+                    right: middle
+                ),
+                right: right
+            ),
+            right: Multiply(
+                left: left,
+                right: Multiply(
+                    left: middle,
+                    right: right
+                )
+            )
+        );
+    /// <summary>Computes the commutator <c>a·b − b·a</c> — the exact, testable amount by which multiplication fails to
+    /// commute on this floor.</summary>
+    /// <param name="left">The left operand <c>a</c>.</param>
+    /// <param name="right">The right operand <c>b</c>.</param>
+    /// <returns>The additive identity on the commutative floors (real, complex); a nonzero witness from the quaternion
+    /// floor up.</returns>
+    public static DoublingAlgebra<TInner> Commutator(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) =>
+        Subtract(
+            left: Multiply(
+                left: left,
+                right: right
+            ),
+            right: Multiply(
+                left: right,
+                right: left
+            )
+        );
+    /// <summary>Returns the conjugate <c>(ā, −b)</c> — the inner conjugate of the scalar half, the negation of the
+    /// imaginary half.</summary>
+    /// <param name="value">The element to conjugate.</param>
+    /// <returns>The doubling conjugate.</returns>
+    public static DoublingAlgebra<TInner> Conjugate(DoublingAlgebra<TInner> value) =>
+        new(
+            Left: TInner.Conjugate(value: value.Left),
+            Right: TInner.Negate(value: value.Right)
+        );
+    /// <summary>Multiplies two elements by the doubling product <c>(a, b)·(c, d) = (a·c − d̄·b, d·a + b·c̄)</c>.</summary>
+    /// <param name="left">The multiplicand <c>(a, b)</c>.</param>
+    /// <param name="right">The multiplier <c>(c, d)</c>.</param>
+    /// <returns>The pair product; operand order is preserved so the result is correct once the inner floor stops
+    /// commuting.</returns>
+    /// <remarks>Over the closed <see cref="FixedScalarRing"/>-leaf towers the complex floor delegates to
+    /// <see cref="FixedComplex"/> and the quaternion floor to <see cref="FixedQuaternion"/> — bit-identical by
+    /// construction — while the octonion floor keeps its own fused eight-product kernel. Every other carrier takes the
+    /// generic per-product path below.</remarks>
+    public static DoublingAlgebra<TInner> Multiply(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) {
+        // JIT-constant guards: exactly one branch survives for a closed value-type instantiation, and every non-leaf
+        // carrier compiles straight to the generic path with no raw casts.
+        if (typeof(TInner) == typeof(FixedScalarRing)) {
+            return MultiplyLeafComplex(
+                left: left,
+                right: right
+            );
+        }
+
+        if (typeof(TInner) == typeof(LeafComplex)) {
+            return MultiplyLeafQuaternion(
+                left: left,
+                right: right
+            );
+        }
+
+        if (typeof(TInner) == typeof(LeafQuaternion)) {
+            return MultiplyLeafOctonion(
+                left: left,
+                right: right
+            );
+        }
+
+        var a = left.Left;
+        var b = left.Right;
+        var c = right.Left;
+        var d = right.Right;
+
+        return new(
+            Left: TInner.Subtract(
+                left: TInner.Multiply(
+                    left: a,
+                    right: c
+                ),
+                right: TInner.Multiply(
+                    left: TInner.Conjugate(value: d),
+                    right: b
+                )
+            ),
+            Right: TInner.Add(
+                left: TInner.Multiply(
+                    left: d,
+                    right: a
+                ),
+                right: TInner.Multiply(
+                    left: b,
+                    right: TInner.Conjugate(value: c)
+                )
+            )
+        );
+    }
+    /// <summary>Negates an element componentwise.</summary>
+    /// <param name="value">The element to negate.</param>
+    /// <returns>The componentwise negation.</returns>
+    public static DoublingAlgebra<TInner> Negate(DoublingAlgebra<TInner> value) =>
+        new(
+            Left: TInner.Negate(value: value.Left),
+            Right: TInner.Negate(value: value.Right)
+        );
+    /// <summary>Computes the norm form <c>a·ā + b̄·b</c> — the scalar part of <c><paramref name="value"/> · valuē</c>,
+    /// carried as a real element of the inner algebra <typeparamref name="TInner"/>.</summary>
+    /// <param name="value">The element whose norm is taken.</param>
+    /// <returns>The value <c>a·ā + b̄·b</c>. It lies in the real subalgebra of <typeparamref name="TInner"/>; project
+    /// through <see cref="Left"/> to descend to the base scalar. The norm is multiplicative on every composition floor
+    /// (through the octonions) and over any exact carrier.</returns>
+    public static TInner Norm(DoublingAlgebra<TInner> value) {
+        // Floors 1–2 delegate their norm to the hand-written complex/quaternion product-with-conjugate; the octonion floor
+        // sums its leaf squares with one rounding. The guards fold to JIT-time constants exactly as in Multiply.
+        if (typeof(TInner) == typeof(FixedScalarRing)) {
+            return NormLeafComplex(value: value);
+        }
+
+        if (typeof(TInner) == typeof(LeafComplex)) {
+            return NormLeafQuaternion(value: value);
+        }
+
+        if (typeof(TInner) == typeof(LeafQuaternion)) {
+            return NormLeafOctonion(value: value);
+        }
+
+        return TInner.Add(
+            left: TInner.Multiply(
+                left: value.Left,
+                right: TInner.Conjugate(value: value.Left)
+            ),
+            right: TInner.Multiply(
+                left: TInner.Conjugate(value: value.Right),
+                right: value.Right
+            )
+        );
+    }
+    /// <summary>Subtracts one element from another componentwise.</summary>
+    /// <param name="left">The minuend.</param>
+    /// <param name="right">The subtrahend.</param>
+    /// <returns>The componentwise difference.</returns>
+    public static DoublingAlgebra<TInner> Subtract(DoublingAlgebra<TInner> left, DoublingAlgebra<TInner> right) =>
+        new(
+            Left: TInner.Subtract(
+                left: left.Left,
+                right: right.Left
+            ),
+            Right: TInner.Subtract(
+                left: left.Right,
+                right: right.Right
+            )
+        );
+}
 /// <summary>
 /// The floor-zero carrier for the doubling construction: the raw signed fixed-point scalar <see cref="FixedQ4816"/>
 /// presented as an <see cref="IConjugationRing{TSelf}"/> whose conjugation is the identity (a real number is its own
@@ -431,7 +527,6 @@ public readonly record struct FixedScalarRing(FixedQ4816 Value)
     public static FixedScalarRing Subtract(FixedScalarRing left, FixedScalarRing right) =>
         new(Value: (left.Value - right.Value));
 }
-
 /// <summary>
 /// The complex plane presented as an <see cref="IConjugationRing{TSelf}"/>: the house <see cref="FixedComplex"/> with
 /// its native fused multiply and its complex conjugation. Doubling this yields the quaternions built directly on

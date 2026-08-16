@@ -1,6 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <AssemblyName>Puck.Abstractions</AssemblyName>
+        <Description>The engine's neutral contract layer: backend- and platform-agnostic interfaces and value types that every backend, host, and content module implements against. Surfaces and presentation, native windowing, screen-machines and their linking, GPU compute services, frame capture and video recording, RGB lamp arrays, allocators, and frame pacing. Depends on nothing else in the engine.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Abstractions</PackageId>
+        <PackageTags>abstractions;contracts;determinism;presentation;screen-machine;windowing</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Leaf contracts and data</PuckLayer>
+        <RootNamespace>Puck.Abstractions</RootNamespace>
     </PropertyGroup>
 </Project>

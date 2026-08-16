@@ -25,6 +25,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     private readonly IInterruptController m_interrupts;
     private readonly IJoypad m_joypad;
     private readonly IKey1 m_key1;
+
     // Mutable so a LIVE device swap re-gates the only live model read (ExecuteStop: color arms a KEY1 speed switch,
     // monochrome halts). The boot register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays construction-only.
     private bool m_supportsColor;
@@ -93,7 +94,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     /// <inheritdoc/>
     public byte F {
         get => m_f;
-        set => m_f = (byte)(value & 0xF0);
+        set => m_f = ((byte)(value & 0xF0));
     }
     /// <inheritdoc/>
     public byte B {
@@ -143,31 +144,31 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_interruptMasterEnable;
 
     private ushort Af {
-        get => (ushort)((m_a << 8) | m_f);
+        get => ((ushort)((m_a << 8) | m_f));
         set {
-            m_a = (byte)(value >> 8);
-            m_f = (byte)(value & 0xF0);
+            m_a = ((byte)(value >> 8));
+            m_f = ((byte)(value & 0xF0));
         }
     }
     private ushort Bc {
-        get => (ushort)((m_b << 8) | m_c);
+        get => ((ushort)((m_b << 8) | m_c));
         set {
-            m_b = (byte)(value >> 8);
-            m_c = (byte)value;
+            m_b = ((byte)(value >> 8));
+            m_c = ((byte)value);
         }
     }
     private ushort De {
-        get => (ushort)((m_d << 8) | m_e);
+        get => ((ushort)((m_d << 8) | m_e));
         set {
-            m_d = (byte)(value >> 8);
-            m_e = (byte)value;
+            m_d = ((byte)(value >> 8));
+            m_e = ((byte)value);
         }
     }
     private ushort Hl {
-        get => (ushort)((m_h << 8) | m_l);
+        get => ((ushort)((m_h << 8) | m_l));
         set {
-            m_h = (byte)(value >> 8);
-            m_l = (byte)value;
+            m_h = ((byte)(value >> 8));
+            m_l = ((byte)value);
         }
     }
 
@@ -268,7 +269,6 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>
         m_supportsColor = model.SupportsColor();
-
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteByte(value: m_a);
@@ -361,13 +361,13 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         // The AGB's extra `inc b`: zero and half-carry reflect the increment, subtract clears, carry is untouched
         // (both CGB handoff paths leave it clear).
         if (model == ConsoleModel.Agb) {
-            var incremented = (byte)(m_b + 1);
+            var incremented = ((byte)(m_b + 1));
 
-            m_f = (byte)(((incremented == 0x00)
+            m_f = ((byte)(((incremented == 0x00)
                 ? 0x80
                 : 0x00) | (((m_b & 0x0F) == 0x0F)
                 ? 0x20
-                : 0x00));
+                : 0x00)));
             m_b = incremented;
         }
 
@@ -385,26 +385,26 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         InternalCycle();
         InternalCycle();
 
-        m_stackPointer = (ushort)(m_stackPointer - 1);
+        m_stackPointer = ((ushort)(m_stackPointer - 1));
         WriteCycle(
             address: m_stackPointer,
-            value: (byte)(m_programCounter >> 8)
+            value: ((byte)(m_programCounter >> 8))
         );
 
         var enabled = m_interrupts.Enabled;
 
-        m_stackPointer = (ushort)(m_stackPointer - 1);
+        m_stackPointer = ((ushort)(m_stackPointer - 1));
         WriteCycle(
             address: m_stackPointer,
-            value: (byte)m_programCounter
+            value: ((byte)m_programCounter)
         );
 
-        var pending = (InterruptKind)((byte)m_interrupts.Requested & (byte)enabled & 0x1F);
+        var pending = ((InterruptKind)(((byte)m_interrupts.Requested) & ((byte)enabled) & 0x1F));
 
         if (pending == InterruptKind.None) {
             m_programCounter = 0x0000;
         } else {
-            var kind = (InterruptKind)((byte)pending & (byte)(-(sbyte)pending)); // the lowest set line = highest priority
+            var kind = ((InterruptKind)(((byte)pending) & ((byte)(-((sbyte)pending))))); // the lowest set line = highest priority
 
             m_interrupts.Acknowledge(kind: kind);
 

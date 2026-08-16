@@ -12,7 +12,7 @@ public sealed class MarketDeterministicResolutionLawTests {
         var first = RunScenario();
         var second = RunScenario();
 
-        Assert.Equal(expected: first, actual: second);
+        Assert.Equal(actual: second, expected: first);
     }
 
     private static byte[] RunScenario() {
@@ -45,7 +45,7 @@ public sealed class MarketDeterministicResolutionLawTests {
         var settled = MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1)!;
 
         Assert.Equal(expected: WorldMarketListingStatus.Settled, actual: settled.Status);
-        Assert.Equal(expected: WorldPrincipal.Seat(slot: 2), actual: (WorldPrincipal)settled.CurrentBidder!);
+        Assert.Equal(expected: WorldPrincipal.Seat(slot: 2), actual: ((WorldPrincipal)settled.CurrentBidder!));
 
         return fixture.DefinitionBytes();
     }

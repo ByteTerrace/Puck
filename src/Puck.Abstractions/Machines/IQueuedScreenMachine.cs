@@ -14,7 +14,6 @@ public enum QueuedMachineSubmission {
     /// dropped or coalesced.</summary>
     AcceptedAfterBackpressure,
 }
-
 /// <summary>
 /// Optional asynchronous submission capability for a computationally heavy <see cref="IScreenMachine"/>. Below its
 /// capacity, a host submits exact tick/input segments without waiting for emulation; the machine executes every accepted
@@ -34,18 +33,14 @@ public interface IQueuedScreenMachine {
     /// <summary>Gets the number of accepted segments whose emulation has completed. The machine independently swaps
     /// each complete native video frame into its presentation buffer.</summary>
     long CompletedSteps { get; }
-
     /// <summary>Gets the number of accepted segments not yet completed, including one currently executing.</summary>
     long PendingSteps { get; }
-
     /// <summary>Gets the maximum number of accepted segments that may remain incomplete. The bound counts segments, not
     /// elapsed machine time: individual tick budgets may differ.</summary>
     int MaximumPendingSteps { get; }
-
     /// <summary>Gets the number of submissions that encountered a full pending-segment window and waited for capacity
     /// since the current content was loaded.</summary>
     long BackpressureEvents { get; }
-
     /// <summary>Gets a worker fault description, or <see langword="null"/> while the queue is healthy.</summary>
     string? QueueFault { get; }
 

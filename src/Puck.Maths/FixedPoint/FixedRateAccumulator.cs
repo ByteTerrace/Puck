@@ -33,7 +33,8 @@ namespace Puck.Maths;
 /// </remarks>
 public struct FixedRateAccumulator {
     private long m_remainder;
-    private long m_ticksPerSecond;
+
+    private readonly long m_ticksPerSecond;
 
     /// <summary>Initializes an accumulator bound to a fixed positive time base.</summary>
     /// <param name="ticksPerSecond">The positive number of time-base ticks in one second.</param>
@@ -52,9 +53,51 @@ public struct FixedRateAccumulator {
 
     /// <summary>Gets the signed numerator remainder, in raw-Q48.16-units × time-ticks.</summary>
     public readonly long Remainder => m_remainder;
-
     /// <summary>Gets the bound time-base denominator, in ticks per second. Zero for a default-initialized value.</summary>
     public readonly long TicksPerSecond => m_ticksPerSecond;
+
+    internal static (long DeltaRaw, long Remainder) IntegrateRaw(
+        long rateRaw,
+        long remainder,
+        ulong elapsedTicks,
+        long ticksPerSecond
+    ) {
+        var numerator = ((((Int128)rateRaw) * ((Int128)elapsedTicks)) + remainder);
+        var denominator = ((Int128)ticksPerSecond);
+
+        var (quotient, nextRemainder) = Int128.DivRem(
+            left: numerator,
+            right: denominator
+        );
+
+        return (
+            DeltaRaw: checked((long)quotient),
+            Remainder: checked((long)nextRemainder)
+        );
+    }
+    // A default-initialized value carries denominator zero. Integrating it would divide by zero; fail loudly instead.
+    internal static void ThrowIfUnbound(long ticksPerSecond) {
+        if (ticksPerSecond <= 0L) {
+            throw new InvalidOperationException(message: "The accumulator is default-initialized; construct it with a positive ticksPerSecond before integrating.");
+        }
+    }
+    // Callers name the parameter themselves so a multi-axis restore reports the axis it rejected rather than a generic
+    // 'remainder'. The band is open on both sides; ticksPerSecond is already known positive when this runs.
+    internal static void ValidateRemainder(long remainder, long ticksPerSecond, string paramName) {
+        if (
+            (remainder <= -ticksPerSecond) ||
+            (remainder >= ticksPerSecond)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: remainder,
+                message: "The remainder magnitude must be smaller than ticksPerSecond.",
+                paramName: paramName
+            );
+        }
+    }
+    internal static void ValidateTicksPerSecond(long ticksPerSecond) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: ticksPerSecond);
+    }
 
     /// <summary>Restores an accumulator from a snapshotted remainder and its bound time base.</summary>
     /// <param name="remainder">The signed remainder returned by <see cref="Remainder"/>.</param>
@@ -66,11 +109,17 @@ public struct FixedRateAccumulator {
     /// </exception>
     public static FixedRateAccumulator FromRemainder(long remainder, long ticksPerSecond) {
         ValidateTicksPerSecond(ticksPerSecond: ticksPerSecond);
-        ValidateRemainder(remainder: remainder, ticksPerSecond: ticksPerSecond, paramName: nameof(remainder));
+        ValidateRemainder(
+            remainder: remainder,
+            ticksPerSecond: ticksPerSecond,
+            paramName: nameof(remainder)
+        );
 
-        return new(remainder: remainder, ticksPerSecond: ticksPerSecond);
+        return new(
+            remainder: remainder,
+            ticksPerSecond: ticksPerSecond
+        );
     }
-
     /// <summary>Integrates the bound per-second rate over an integer tick interval and retains the unrepresentable tail.</summary>
     /// <param name="ratePerSecond">The Q48.16 rate per second.</param>
     /// <param name="elapsedTicks">The number of time-base ticks elapsed.</param>
@@ -91,54 +140,11 @@ public struct FixedRateAccumulator {
 
         return FixedQ4816.FromRawBits(value: deltaRaw);
     }
-
     /// <summary>Clears the retained sub-raw-unit remainder. The bound time base is preserved.</summary>
     public void Reset() {
         m_remainder = 0L;
     }
-
-    internal static (long DeltaRaw, long Remainder) IntegrateRaw(
-        long rateRaw,
-        long remainder,
-        ulong elapsedTicks,
-        long ticksPerSecond
-    ) {
-        var numerator = (((Int128)rateRaw * (Int128)elapsedTicks) + remainder);
-        var denominator = (Int128)ticksPerSecond;
-
-        var (quotient, nextRemainder) = Int128.DivRem(left: numerator, right: denominator);
-
-        return (
-            DeltaRaw: checked((long)quotient),
-            Remainder: checked((long)nextRemainder)
-        );
-    }
-
-    // Callers name the parameter themselves so a multi-axis restore reports the axis it rejected rather than a generic
-    // 'remainder'. The band is open on both sides; ticksPerSecond is already known positive when this runs.
-    internal static void ValidateRemainder(long remainder, long ticksPerSecond, string paramName) {
-        if ((remainder <= -ticksPerSecond) || (remainder >= ticksPerSecond)) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: remainder,
-                message: "The remainder magnitude must be smaller than ticksPerSecond.",
-                paramName: paramName
-            );
-        }
-    }
-    internal static void ValidateTicksPerSecond(long ticksPerSecond) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: ticksPerSecond);
-    }
-
-    // A default-initialized value carries denominator zero. Integrating it would divide by zero; fail loudly instead.
-    internal static void ThrowIfUnbound(long ticksPerSecond) {
-        if (ticksPerSecond <= 0L) {
-            throw new InvalidOperationException(
-                message: "The accumulator is default-initialized; construct it with a positive ticksPerSecond before integrating."
-            );
-        }
-    }
 }
-
 /// <summary>Three independent <see cref="FixedRateAccumulator"/> axes integrated as one fixed-point vector rate.</summary>
 /// <remarks>The time base is bound once at construction and shared by all three axes; see <see cref="FixedRateAccumulator"/>.
 /// Like the scalar form, this is a mutable struct whose <see cref="Integrate"/> and reset members write the receiver in
@@ -150,7 +156,8 @@ public struct FixedVector3RateAccumulator {
     private long m_xRemainder;
     private long m_yRemainder;
     private long m_zRemainder;
-    private long m_ticksPerSecond;
+
+    private readonly long m_ticksPerSecond;
 
     /// <summary>Initializes a vector accumulator bound to a fixed positive time base.</summary>
     /// <param name="ticksPerSecond">The positive number of time-base ticks in one second.</param>
@@ -171,14 +178,14 @@ public struct FixedVector3RateAccumulator {
         m_ticksPerSecond = ticksPerSecond;
     }
 
+    /// <summary>Gets the bound time-base denominator, in ticks per second. Zero for a default-initialized value.</summary>
+    public readonly long TicksPerSecond => m_ticksPerSecond;
     /// <summary>Gets the X-axis numerator remainder.</summary>
     public readonly long XRemainder => m_xRemainder;
     /// <summary>Gets the Y-axis numerator remainder.</summary>
     public readonly long YRemainder => m_yRemainder;
     /// <summary>Gets the Z-axis numerator remainder.</summary>
     public readonly long ZRemainder => m_zRemainder;
-    /// <summary>Gets the bound time-base denominator, in ticks per second. Zero for a default-initialized value.</summary>
-    public readonly long TicksPerSecond => m_ticksPerSecond;
 
     /// <summary>Restores three snapshotted axis remainders under their shared bound time base.</summary>
     /// <param name="xRemainder">The signed X-axis remainder returned by <see cref="XRemainder"/>.</param>
@@ -198,18 +205,29 @@ public struct FixedVector3RateAccumulator {
         long ticksPerSecond
     ) {
         FixedRateAccumulator.ValidateTicksPerSecond(ticksPerSecond: ticksPerSecond);
-        FixedRateAccumulator.ValidateRemainder(remainder: xRemainder, ticksPerSecond: ticksPerSecond, paramName: nameof(xRemainder));
-        FixedRateAccumulator.ValidateRemainder(remainder: yRemainder, ticksPerSecond: ticksPerSecond, paramName: nameof(yRemainder));
-        FixedRateAccumulator.ValidateRemainder(remainder: zRemainder, ticksPerSecond: ticksPerSecond, paramName: nameof(zRemainder));
+        FixedRateAccumulator.ValidateRemainder(
+            remainder: xRemainder,
+            ticksPerSecond: ticksPerSecond,
+            paramName: nameof(xRemainder)
+        );
+        FixedRateAccumulator.ValidateRemainder(
+            remainder: yRemainder,
+            ticksPerSecond: ticksPerSecond,
+            paramName: nameof(yRemainder)
+        );
+        FixedRateAccumulator.ValidateRemainder(
+            remainder: zRemainder,
+            ticksPerSecond: ticksPerSecond,
+            paramName: nameof(zRemainder)
+        );
 
         return new(
+            ticksPerSecond: ticksPerSecond,
             xRemainder: xRemainder,
             yRemainder: yRemainder,
-            zRemainder: zRemainder,
-            ticksPerSecond: ticksPerSecond
+            zRemainder: zRemainder
         );
     }
-
     /// <summary>Integrates the bound vector rate over an integer tick interval and retains every axis's unrepresentable tail.</summary>
     /// <param name="ratePerSecond">The Q48.16 rate per second, one component per axis.</param>
     /// <param name="elapsedTicks">The number of time-base ticks elapsed.</param>
@@ -251,24 +269,20 @@ public struct FixedVector3RateAccumulator {
             Z: FixedQ4816.FromRawBits(value: z.DeltaRaw)
         );
     }
-
     /// <summary>Clears all retained axis remainders. The bound time base is preserved.</summary>
     public void Reset() {
         m_xRemainder = 0L;
         m_yRemainder = 0L;
         m_zRemainder = 0L;
     }
-
     /// <summary>Clears the X-axis remainder.</summary>
     public void ResetX() {
         m_xRemainder = 0L;
     }
-
     /// <summary>Clears the Y-axis remainder.</summary>
     public void ResetY() {
         m_yRemainder = 0L;
     }
-
     /// <summary>Clears the Z-axis remainder.</summary>
     public void ResetZ() {
         m_zRemainder = 0L;

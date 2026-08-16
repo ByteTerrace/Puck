@@ -69,7 +69,6 @@ internal sealed class ArgScanner {
         m_present.Contains(item: Canonical(name: name));
     public string? Get(string name) =>
         (m_values.TryGetValue(key: Canonical(name: name), value: out var occurrences) ? occurrences[^1] : null);
-
     // Every occurrence of a repeatable valued flag (-g, --not), in command-line order.
     public IReadOnlyList<string> GetAll(string name) =>
         (m_values.TryGetValue(key: Canonical(name: name), value: out var occurrences) ? occurrences : []);
@@ -77,5 +76,5 @@ internal sealed class ArgScanner {
         int.TryParse(s: Get(name: name), style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out value);
 
     private static string Canonical(string name) =>
-        name.TrimStart(trimChar: '-').Replace(oldValue: "-", newValue: string.Empty).ToLowerInvariant();
+        name.TrimStart(trimChar: '-').Replace(newValue: string.Empty, oldValue: "-").ToLowerInvariant();
 }

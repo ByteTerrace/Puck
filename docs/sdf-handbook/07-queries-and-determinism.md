@@ -227,8 +227,8 @@ all if a different consumer read it differently.
 - [CLAUDE.md](../../CLAUDE.md) — the determinism contract (core rule 4). Note
   that it no longer pairs with a verification contract for the engine: the
   battery that gated one is quarantined with `Puck.Post`.
-- Source: `src/Puck.SdfVm/Queries/IWorldQuery.cs`,
-  `src/Puck.SdfVm/Queries/IFieldEvaluator.cs`,
-  `src/Puck.SdfVm/Queries/SdfFieldEvaluator.cs`,
-  `src/Puck.SdfVm/Queries/BakedWorldQuery.cs`,
-  `src/Puck.SdfVm/Queries/WorldQueryProviders.cs`.
+- Source: `src/Puck.SignedDistance/Queries/IWorldQuery.cs`,
+  `src/Puck.SignedDistance/Queries/IFieldEvaluator.cs`,
+  `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs`,
+  `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`,
+  `src/Puck.SignedDistance/Queries/WorldQueryProviders.cs`.

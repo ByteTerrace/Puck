@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.GamingBricks;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -12,7 +12,6 @@ internal sealed class QueuedHostFramePublicationStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-frame-publication";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

@@ -14,13 +14,15 @@ public sealed class ConsoleTape : ICommandObserver {
     private const string EchoPrefix = "> ";
     private const int MaxLines = 64;
 
-    private string m_input = string.Empty;
-    private readonly ConsoleTapeLine[] m_ring = new ConsoleTapeLine[MaxLines];
-    private bool m_selected;
     private readonly ConsoleTapeStore m_store;
+
     private int m_count;
     private int m_head;
+    private bool m_selected;
     private bool m_visible;
+
+    private string m_input = string.Empty;
+    private readonly ConsoleTapeLine[] m_ring = new ConsoleTapeLine[MaxLines];
 
     /// <summary>Initializes a new instance of the <see cref="ConsoleTape"/> class — hidden by default.</summary>
     /// <remarks>The pipe is the control plane and carries it whether or not the panel draws, so drawing it by
@@ -35,32 +37,41 @@ public sealed class ConsoleTape : ICommandObserver {
         Publish();
     }
 
-    /// <summary>Gets a value indicating whether the panel is currently shown.</summary>
-    public bool Visible => m_visible;
-
     /// <summary>Gets or sets the callback invoked once each time the panel's visibility changes, carrying the new
     /// state — the session bank wires it to <see cref="IInputFocus.Release"/>/<see cref="IInputFocus.Claim"/> for
     /// that seat's tracked text devices, and resets the line editor on the hide edge so a reopened console never
     /// resurrects a half-typed line.</summary>
     public Action<bool>? VisibilityChanged { get; set; }
+    /// <summary>Gets a value indicating whether the panel is currently shown.</summary>
+    public bool Visible => m_visible;
 
-    /// <summary>Records one submitted console line and its result: the echoed input (the phosphor voice) then each
-    /// output line, each carrying the result's verdict so the panel paints a refusal as a refusal.</summary>
-    /// <param name="line">The submitted command line.</param>
-    /// <param name="result">The command's result.</param>
-    public void Record(string line, CommandResult result) {
-        ArgumentNullException.ThrowIfNull(argument: line);
+    private void Append(string line, bool refused) {
+        m_ring[((m_head + m_count) % MaxLines)] = new ConsoleTapeLine(
+            Refused: refused,
+            Text: line
+        );
 
-        // The echo keeps the phosphor voice whatever the verdict; only the OUTPUT rows carry the refusal.
-        Append(line: (EchoPrefix + line), refused: false);
+        if (m_count < MaxLines) {
+            m_count++;
+        } else {
+            m_head = ((m_head + 1) % MaxLines);
+        }
+    }
+    // Snapshot allocation is event-scoped (per recorded exchange), never per frame — the render thread only ever
+    // reads the immutable array the frame carries.
+    private void Publish() {
+        var lines = new ConsoleTapeLine[m_count];
 
-        if (result.Output is { Length: > 0 } output) {
-            foreach (var range in output.AsSpan().Split(separator: '\n')) {
-                Append(line: output[range].TrimEnd(trimChar: '\r'), refused: result.IsError);
-            }
+        for (var index = 0; (index < m_count); index++) {
+            lines[index] = m_ring[((m_head + index) % MaxLines)];
         }
 
-        Publish();
+        m_store.Publish(frame: new ConsoleTapeFrame(
+            Input: m_input,
+            Lines: lines,
+            Selected: m_selected,
+            Visible: m_visible
+        ));
     }
 
     /// <summary>Records the deferred verdict of a Simulation-routed console line — <see cref="Record"/> only ever saw
@@ -72,17 +83,46 @@ public sealed class ConsoleTape : ICommandObserver {
     /// returns no output here — its outcome arrives on the server's edit-echo tap through
     /// <see cref="RecordEcho"/>.</remarks>
     public void OnCommand(in CommandActivation activation) {
-        if ((activation.Text is null) || (activation.Result.Output is not { Length: > 0 } output)) {
+        if (
+            (activation.Text is null) ||
+            (activation.Result.Output is not { Length: > 0 } output)
+        ) {
             return;
         }
 
         foreach (var range in output.AsSpan().Split(separator: '\n')) {
-            Append(line: output[range].TrimEnd(trimChar: '\r'), refused: activation.Result.IsError);
+            Append(
+                line: output[range].TrimEnd(trimChar: '\r'),
+                refused: activation.Result.IsError
+            );
         }
 
         Publish();
     }
+    /// <summary>Records one submitted console line and its result: the echoed input (the phosphor voice) then each
+    /// output line, each carrying the result's verdict so the panel paints a refusal as a refusal.</summary>
+    /// <param name="line">The submitted command line.</param>
+    /// <param name="result">The command's result.</param>
+    public void Record(string line, CommandResult result) {
+        ArgumentNullException.ThrowIfNull(argument: line);
 
+        // The echo keeps the phosphor voice whatever the verdict; only the OUTPUT rows carry the refusal.
+        Append(
+            line: (EchoPrefix + line),
+            refused: false
+        );
+
+        if (result.Output is { Length: > 0 } output) {
+            foreach (var range in output.AsSpan().Split(separator: '\n')) {
+                Append(
+                    line: output[range].TrimEnd(trimChar: '\r'),
+                    refused: result.IsError
+                );
+            }
+        }
+
+        Publish();
+    }
     /// <summary>Records one unsolicited edit-boundary echo — a tick-boundary mutation outcome has no submitted line
     /// to hang off, so without this the panel would never show it and only the (wrapped, still bounded) toast and
     /// stderr would carry the reason.</summary>
@@ -91,10 +131,21 @@ public sealed class ConsoleTape : ICommandObserver {
     public void RecordEcho(string message, bool refused) {
         ArgumentNullException.ThrowIfNull(argument: message);
 
-        Append(line: message, refused: refused);
+        Append(
+            line: message,
+            refused: refused
+        );
         Publish();
     }
-
+    /// <summary>Sets the prompt row's live input echo — <see cref="ConsoleLineEditor"/>'s republish seam.</summary>
+    /// <param name="input">The input line to display: caret marker included when <paramref name="selected"/> is
+    /// <see langword="false"/>, the raw line otherwise (the highlight rect stands in for the caret).</param>
+    /// <param name="selected">Whether the whole input line is selected (Ctrl+A).</param>
+    public void SetInput(string input, bool selected) {
+        m_input = (input ?? string.Empty);
+        m_selected = selected;
+        Publish();
+    }
     /// <summary>Shows or hides the panel (the console verb's seam and <c>Escape</c>'s close).</summary>
     /// <param name="visible">Whether the panel is shown.</param>
     public void SetVisible(bool visible) {
@@ -116,37 +167,5 @@ public sealed class ConsoleTape : ICommandObserver {
         if (wasVisible != visible) {
             VisibilityChanged?.Invoke(visible);
         }
-    }
-
-    /// <summary>Sets the prompt row's live input echo — <see cref="ConsoleLineEditor"/>'s republish seam.</summary>
-    /// <param name="input">The input line to display: caret marker included when <paramref name="selected"/> is
-    /// <see langword="false"/>, the raw line otherwise (the highlight rect stands in for the caret).</param>
-    /// <param name="selected">Whether the whole input line is selected (Ctrl+A).</param>
-    public void SetInput(string input, bool selected) {
-        m_input = (input ?? string.Empty);
-        m_selected = selected;
-        Publish();
-    }
-
-    private void Append(string line, bool refused) {
-        m_ring[((m_head + m_count) % MaxLines)] = new ConsoleTapeLine(Text: line, Refused: refused);
-
-        if (m_count < MaxLines) {
-            m_count++;
-        } else {
-            m_head = ((m_head + 1) % MaxLines);
-        }
-    }
-
-    // Snapshot allocation is event-scoped (per recorded exchange), never per frame — the render thread only ever
-    // reads the immutable array the frame carries.
-    private void Publish() {
-        var lines = new ConsoleTapeLine[m_count];
-
-        for (var index = 0; (index < m_count); index++) {
-            lines[index] = m_ring[((m_head + index) % MaxLines)];
-        }
-
-        m_store.Publish(frame: new ConsoleTapeFrame(Input: m_input, Lines: lines, Selected: m_selected, Visible: m_visible));
     }
 }

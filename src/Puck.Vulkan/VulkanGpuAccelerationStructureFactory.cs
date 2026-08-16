@@ -13,7 +13,7 @@ public sealed class VulkanGpuAccelerationStructureFactory(IVulkanWorldAccelerati
 
         return new VulkanGpuAccelerationStructure(
             api: worldAccelerationApi,
-            deviceContext: (IVulkanDeviceContext)deviceContext
+            deviceContext: ((IVulkanDeviceContext)deviceContext)
         );
     }
 }

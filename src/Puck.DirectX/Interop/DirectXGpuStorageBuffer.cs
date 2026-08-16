@@ -36,12 +36,11 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
     public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged {
         Write(data: data, destinationOffsetBytes: 0UL);
     }
-
     /// <inheritdoc/>
     public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
-        var size = ((ulong)data.Length * (ulong)sizeof(T));
+        var size = (((ulong)data.Length) * ((ulong)sizeof(T)));
 
         if ((destinationOffsetBytes > SizeBytes) || (size > (SizeBytes - destinationOffsetBytes))) {
             throw new ArgumentOutOfRangeException(
@@ -50,11 +49,10 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
             );
         }
 
-        var destination = new Span<byte>(pointer: ((byte*)m_mapped + destinationOffsetBytes), length: (int)(SizeBytes - destinationOffsetBytes));
+        var destination = new Span<byte>(pointer: (((byte*)m_mapped) + destinationOffsetBytes), length: ((int)(SizeBytes - destinationOffsetBytes)));
 
         MemoryMarshal.AsBytes(span: data).CopyTo(destination: destination);
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {
@@ -70,7 +68,6 @@ public sealed unsafe class DirectXGpuStorageBuffer : IGpuStorageBuffer {
         }
     }
 }
-
 /// <summary>Owns a Direct3D 12 device-local buffer without exposing host-write operations.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuDeviceBuffer : IGpuBuffer {

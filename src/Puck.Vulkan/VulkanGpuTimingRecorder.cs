@@ -17,7 +17,6 @@ public sealed class VulkanGpuTimingRecorder(IVulkanQueryPoolApi queryPoolApi) : 
             queryCount: queryCount,
             queryPoolHandle: poolHandle
         );
-
     /// <inheritdoc/>
     public void WriteTimestamp(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint queryIndex, GpuTimingStage stageFlags) =>
         queryPoolApi.CmdWriteTimestamp(
@@ -27,12 +26,10 @@ public sealed class VulkanGpuTimingRecorder(IVulkanQueryPoolApi queryPoolApi) : 
             query: queryIndex,
             queryPoolHandle: poolHandle
         );
-
     /// <inheritdoc/>
     public void ResolveTimestamps(nint deviceHandle, nint commandBufferHandle, nint poolHandle, uint firstQuery, uint queryCount) {
         // Vulkan reads results directly from the query pool — no resolve step.
     }
-
     /// <inheritdoc/>
     public uint ReadTimestamps(nint deviceHandle, nint poolHandle, uint firstQuery, uint queryCount, Span<ulong> rawTicks) {
         return (queryPoolApi.GetTimestampResults(

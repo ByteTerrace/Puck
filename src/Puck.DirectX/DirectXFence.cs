@@ -9,8 +9,8 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 internal static unsafe class DirectXFence {
     public static void SignalAndWait(IDirectXDeviceContext deviceContext, nint fenceHandle, HANDLE fenceEvent, ref ulong fenceValue) {
-        var queue = (ID3D12CommandQueue*)deviceContext.CommandQueueHandle;
-        var fence = (ID3D12Fence*)fenceHandle;
+        var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
+        var fence = ((ID3D12Fence*)fenceHandle);
         var value = fenceValue;
 
         queue->Signal(
@@ -25,8 +25,8 @@ internal static unsafe class DirectXFence {
                 hEvent: fenceEvent
             );
             _ = PInvoke.WaitForSingleObject(
-                hHandle: fenceEvent,
-                dwMilliseconds: uint.MaxValue
+                dwMilliseconds: uint.MaxValue,
+                hHandle: fenceEvent
             );
         }
     }

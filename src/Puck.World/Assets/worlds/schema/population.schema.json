@@ -35,10 +35,12 @@
       "type": "object",
       "properties": {
         "region": {
-          "$ref": "./common.schema.json#/$defs/WorldDistributionRegion"
+          "$ref": "./common.schema.json#/$defs/WorldDistributionRegion",
+          "description": "The region to fill."
         },
         "fill": {
-          "$ref": "./common.schema.json#/$defs/WorldSequence"
+          "$ref": "./common.schema.json#/$defs/WorldSequence",
+          "description": "The per-index fill sequence."
         }
       },
       "required": [
@@ -48,70 +50,16 @@
       "additionalProperties": false
     },
     "peerVariation": {
-      "description": "The independently authored producer-state sequences for peer bodies.",
-      "type": "object",
-      "properties": {
-        "phase": {
-          "$ref": "./common.schema.json#/$defs/WorldSequence2"
-        },
-        "weave": {
-          "$ref": "./common.schema.json#/$defs/WorldSequence3"
-        },
-        "activity": {
-          "$ref": "./common.schema.json#/$defs/WorldSequence4"
-        }
-      },
-      "required": [
-        "phase",
-        "weave",
-        "activity"
-      ],
-      "additionalProperties": false
+      "$ref": "./common.schema.json#/$defs/WorldPopulationVariation",
+      "description": "The independently authored producer-state sequences for peer bodies."
     },
     "seatVariation": {
-      "description": "The independently authored producer-state sequences for local-seat bodies.",
-      "type": "object",
-      "properties": {
-        "phase": {
-          "$ref": "./common.schema.json#/$defs/WorldSequence2"
-        },
-        "weave": {
-          "$ref": "./common.schema.json#/$defs/WorldSequence3"
-        },
-        "activity": {
-          "$ref": "./common.schema.json#/$defs/WorldSequence4"
-        }
-      },
-      "required": [
-        "phase",
-        "weave",
-        "activity"
-      ],
-      "additionalProperties": false
+      "$ref": "./common.schema.json#/$defs/WorldPopulationVariation",
+      "description": "The independently authored producer-state sequences for local-seat bodies."
     },
     "peerColors": {
-      "description": "The stand-in color sequence, independent of producer-state variation.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "description": "The sequence name: None, Index, Additive, R1, or R2.",
-          "type": "string"
-        },
-        "offset": {
-          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
-          "type": "integer"
-        },
-        "step": {
-          "description": "The turn-sized increment for Additive; zero for every other sequence.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "name",
-        "offset",
-        "step"
-      ],
-      "additionalProperties": false
+      "$ref": "./common.schema.json#/$defs/WorldSequence",
+      "description": "The stand-in color sequence, independent of producer-state variation."
     },
     "capacity": {
       "description": "The total authoritative body capacity, including reserved local seats.",
@@ -122,28 +70,8 @@
       "type": "number"
     },
     "capacityDraw": {
-      "description": "The census\u0027s authored-randomness facet, or null for an ordinary literal Capacity. A boot-only site (PopulationCapacity): settled into Capacity, cleared, and narrated exactly like BackendDraw. The census coherence rule. The site\u0027s admissible domain is not the capacity ceiling alone \u2014 NetworkPlayers is validated against capacity minus the local seats, so a drawn capacity below that sum is a document this same validator would refuse once resolved. The domain is narrowed statically at authoring instead, so the roll can never decide whether the world boots. Not an XOR. Unlike BackendDraw, this site cannot refuse both-declared: WorldPopulationDefaults is a struct, so an authored capacity: 128 and the C# default 128 are indistinguishable once parsed. When both are present the draw simply wins \u2014 a stated limitation, not a silent guess.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "source": {
-          "description": "The declared source to draw from, by name \u2014 or null when Generator inlines one.",
-          "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "generator": {
-          "$ref": "./common.schema.json#/$defs/WorldGenerator"
-        },
-        "timing": {
-          "$ref": "./common.schema.json#/$defs/WorldDrawTiming"
-        }
-      },
-      "additionalProperties": false
+      "$ref": "./common.schema.json#/$defs/WorldDraw",
+      "description": "The census\u0027s authored-randomness facet, or null for an ordinary literal Capacity. A boot-only site (PopulationCapacity): settled into Capacity, cleared, and narrated exactly like BackendDraw. The census coherence rule. The site\u0027s admissible domain is not the capacity ceiling alone \u2014 NetworkPlayers is validated against capacity minus the local seats, so a drawn capacity below that sum is a document this same validator would refuse once resolved. The domain is narrowed statically at authoring instead, so the roll can never decide whether the world boots. Not an XOR. Unlike BackendDraw, this site cannot refuse both-declared: WorldPopulationDefaults is a struct, so an authored capacity: 128 and the C# default 128 are indistinguishable once parsed. When both are present the draw simply wins \u2014 a stated limitation, not a silent guess."
     },
     "disclosure": {
       "description": "The per-observer snapshot disclosure policy (default null = Default, disclose-all) \u2014 read through ObserverDisclosure. Applied at the output hub\u0027s sink boundary, never inside the tick, so it changes what an observer is told and never what the simulation computes.",

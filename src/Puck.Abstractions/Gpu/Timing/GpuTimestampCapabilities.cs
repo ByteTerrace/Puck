@@ -15,7 +15,8 @@ public readonly record struct GpuTimestampCapabilities(double PeriodNanoseconds,
     /// <summary>Gets a mask selecting the meaningful low-order bits of a raw timestamp value.</summary>
     public ulong ValidBitsMask => ((ValidBits >= 64u)
         ? ulong.MaxValue
-        : ((1UL << (int)ValidBits) - 1UL));
+        : ((1UL << ((int)ValidBits)) - 1UL)
+    );
 
     /// <summary>Converts a start/end raw timestamp pair to elapsed milliseconds: masks both to the valid bits,
     /// applies a wrap-around guard, then scales by the tick period.</summary>
@@ -33,7 +34,8 @@ public readonly record struct GpuTimestampCapabilities(double PeriodNanoseconds,
         // The counter can wrap within its valid bits between the two writes; recover the true delta if so.
         var delta = ((end >= start)
             ? (end - start)
-            : (((mask - start) + end) + 1UL));
+            : (((mask - start) + end) + 1UL)
+        );
 
         return ((delta * PeriodNanoseconds) / 1_000_000.0);
     }

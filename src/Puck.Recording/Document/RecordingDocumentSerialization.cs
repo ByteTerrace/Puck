@@ -9,28 +9,10 @@ namespace Puck.Recording.Document;
 /// stay diffable. Loading runs the one thick <see cref="RecordingDocumentValidator"/> and never half-accepts.
 /// </summary>
 public static class RecordingDocumentSerialization {
-    private static readonly JsonWriterOptions s_writerOptions = new() {
+    private static readonly JsonWriterOptions WriterOptions = new() {
         Indented = true,
         NewLine = "\n",
     };
-
-    /// <summary>Serializes a document to its canonical UTF-8 bytes.</summary>
-    /// <param name="document">The document to serialize.</param>
-    /// <returns>The canonical UTF-8 byte form.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public static byte[] Serialize(RecordingDocument document) {
-        ArgumentNullException.ThrowIfNull(argument: document);
-
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(utf8Json: stream, options: s_writerOptions)) {
-            JsonSerializer.Serialize(writer: writer, value: document, jsonTypeInfo: RecordingJsonContext.Default.RecordingDocument);
-        }
-
-        stream.WriteByte(value: (byte)'\n');
-
-        return stream.ToArray();
-    }
 
     /// <summary>Writes a document to <paramref name="path"/> in canonical form.</summary>
     /// <param name="document">The document to write.</param>
@@ -44,11 +26,37 @@ public static class RecordingDocumentSerialization {
 
         var bytes = Serialize(document: document);
 
-        File.WriteAllBytes(path: path, bytes: bytes);
+        File.WriteAllBytes(
+            bytes: bytes,
+            path: path
+        );
 
         return bytes.LongLength;
     }
+    /// <summary>Serializes a document to its canonical UTF-8 bytes.</summary>
+    /// <param name="document">The document to serialize.</param>
+    /// <returns>The canonical UTF-8 byte form.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    public static byte[] Serialize(RecordingDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
 
+        using var stream = new MemoryStream();
+
+        using (var writer = new Utf8JsonWriter(
+            options: WriterOptions,
+            utf8Json: stream
+        )) {
+            JsonSerializer.Serialize(
+                writer: writer,
+                value: document,
+                jsonTypeInfo: RecordingJsonContext.Default.RecordingDocument
+            );
+        }
+
+        stream.WriteByte(value: ((byte)'\n'));
+
+        return stream.ToArray();
+    }
     /// <summary>Parses and validates a document from UTF-8 JSON.</summary>
     /// <param name="utf8Json">The document bytes.</param>
     /// <param name="document">The parsed, validated document on success; otherwise <see langword="null"/>.</param>
@@ -58,7 +66,10 @@ public static class RecordingDocumentSerialization {
         RecordingDocument? parsed;
 
         try {
-            parsed = JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: RecordingJsonContext.Default.RecordingDocument);
+            parsed = JsonSerializer.Deserialize(
+                utf8Json: utf8Json,
+                jsonTypeInfo: RecordingJsonContext.Default.RecordingDocument
+            );
             // A tape is a hand-editable file: polymorphic ($type) rows reject as NotSupportedException/InvalidOperationException
             // as readily as JsonException, and none of them may escape a load seam.
         } catch (Exception exception) when ((exception is JsonException or NotSupportedException or InvalidOperationException or ArgumentException)) {
@@ -75,7 +86,10 @@ public static class RecordingDocumentSerialization {
             return false;
         }
 
-        if (!RecordingDocumentValidator.TryValidate(document: parsed, reason: out reason)) {
+        if (!RecordingDocumentValidator.TryValidate(
+            document: parsed,
+            reason: out reason
+        )) {
             document = null;
 
             return false;

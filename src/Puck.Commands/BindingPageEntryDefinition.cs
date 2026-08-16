@@ -63,8 +63,8 @@ public sealed record BindingPageEntryDefinition(
     /// refusal, so it must never itself throw on the malformed shape it is describing.</summary>
     internal string TriggerLabel => (Source ?? ((Activator is { } activator)
         ? $"activator[{string.Join(
-        separator: ',',
-        values: (activator.Sequence ?? [])
-    )}]"
+            separator: ',',
+            values: (activator.Sequence ?? [])
+        )}]"
         : "(unset)"));
 }

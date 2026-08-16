@@ -30,7 +30,6 @@ public sealed class MarketPeerGenerationIsolationLawTests {
 
         return (baseDocument with { State = [seededAppleRow, .. otherRows] });
     }
-
     private static long AppleCellOf(WorldDefinition definition, WorldPrincipal peer) {
         var row = WorldDefinitionRows.FindStateRow(rows: definition.State, name: MarketFixtures.AppleRow)!;
         var key = $"{peer.Index}_{peer.Generation}";
@@ -84,7 +83,6 @@ public sealed class MarketPeerGenerationIsolationLawTests {
         // Generation 1's remaining balance is untouched by generation 2's refused attempt.
         Assert.Equal(expected: 6L, actual: AppleCellOf(definition: fixture.Server.Definition, peer: PeerGeneration1));
     }
-
     [Fact]
     public void SameGeneration_ContinuesItsOwnBalanceAcrossMutations() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument());

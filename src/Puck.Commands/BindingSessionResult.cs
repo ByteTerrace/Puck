@@ -15,7 +15,6 @@ public sealed record BindingSessionCapture(
     string? Label = null,
     string? Icon = null
 );
-
 /// <summary>
 /// The outcome of a binding session: the confirmed captures, in step order. <see cref="Apply"/> folds them back
 /// into a <see cref="BindingProfileDocument"/> so the result round-trips through the same storage and
@@ -84,7 +83,8 @@ public sealed record BindingSessionResult(
             foreach (var entry in page.Entries) {
                 var effectiveCommand = ((entry.Channel is { } channel)
                     ? BindingProfile.ChannelCommandName(channel: channel)
-                    : entry.Command!);
+                    : entry.Command!
+                );
 
                 if (captureByCommand.TryGetValue(
                     key: effectiveCommand,

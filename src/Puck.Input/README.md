@@ -6,11 +6,11 @@ slots, per-frame coalescing, sub-frame timestamps, motion fusion, haptics, and
 the physical-control vocabulary. `Puck.Commands` owns the next step: binding
 those physical controls to named commands and producing a fixed-step snapshot.
 
-The project contains no operating-system transport. `Puck.Platform` supplies
-HID and Xbox acquisition on Windows through injected interfaces; another
-platform can implement the same interfaces without changing a parser. Pointer
-events remain presentation-side browsing state and deliberately do not become
-bindable input sources.
+The project contains no operating-system transport. `Puck.Platform.Windows`
+supplies HID and Xbox acquisition through injected interfaces; another
+platform package can implement the same interfaces without changing a parser.
+Absolute cursor position remains presentation-side browsing state; relative
+mouse motion, wheel motion, and mouse buttons are ordinary bindable sources.
 
 This README is the human entry point. The
 [generated API reference](../../docs/api) owns complete member signatures,
@@ -44,7 +44,7 @@ same `IGamepadConnection` surface. The manager's `Drain` is destructive, so
 
 ```mermaid
 flowchart LR
-    subgraph Platform ["Puck.Platform — injected OS transports"]
+    subgraph Platform ["Puck.Platform.Windows — injected OS transports"]
         HidSource["HID source"]
         XboxSource["Xbox acquisition source"]
         Window["Native window events"]
@@ -154,9 +154,10 @@ history, and the player slot before that receiver carries another controller.
 The motion-capable parsers map their sensor frames to a common right-handed
 frame before calling `ImuOrientationTracker`. DualSense uses its report counter
 for `dt`; Switch integrates three fixed five-millisecond samples per report;
-Steam families use their device timing. The tracker integrates angular
-velocity, estimates stationary gyro bias, and corrects pitch and roll toward
-accelerometer gravity.
+Triton derives `dt` from its microsecond sensor timestamp, while the classic
+Steam Controller uses a nominal four milliseconds per report. The tracker
+integrates angular velocity, estimates stationary gyro bias, and corrects pitch
+and roll toward accelerometer gravity.
 
 DualSense reads factory gyro calibration from feature report `0x05`. Switch
 reads factory or user stick calibration from SPI flash and falls back to its
@@ -236,8 +237,6 @@ vendor software, or a replug reclaims it.
 
 The transport and composer have been exercised on a Logitech G915 LampArray
 (115 lamps, 33-millisecond minimum update), a G502 mouse, and a POWERPLAY pad.
-The repository also contains `LightCelebration`, but no production host calls
-it.
 
 ## ⚠️ Limits and hardware evidence
 
@@ -290,7 +289,7 @@ feature framing. Triton feature messages use report id 1 and
 The concrete controller parsers are `NintendoSwitchController`,
 `DualSenseController`, `SteamController`, and `SteamControllerTriton`.
 Windows implementations of `IHidDeviceSource`, `IHidDevice`, and the Xbox
-acquisition source live under `src/Puck.Platform/Windows`.
+acquisition source live in `src/Puck.Platform.Windows`.
 
 ## 🧪 Testing
 

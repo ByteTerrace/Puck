@@ -27,6 +27,7 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
     /// to 12 full bands before the write cursor wraps (see <see cref="UnpackBand"/>). Sized once at construction, so it
     /// never allocates on the emulation path.</summary>
     public const int MaxImageHeight = 200;
+
     // A full DATA band is exactly 0x280 (640) decompressed bytes = two 8-pixel tile rows of twenty 2bpp tiles.
     private const int BandByteCount = 0x280;
     // The two magic bytes that frame every printer packet.
@@ -66,6 +67,7 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
     private readonly byte[] m_commandData = new byte[BandByteCount];
     private readonly byte[] m_image = new byte[(ImageWidth * MaxImageHeight)];
+
     private ParseState m_state;
     private byte m_bitsReceived;
     private byte m_byteBeingReceived;
@@ -86,12 +88,10 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
     /// host-side observation seam: it is never serialized, so setting it cannot perturb determinism, and it is
     /// <see langword="null"/> in a headless run.</summary>
     public Action<GamePrintout>? PrintEmitted { get; set; }
-
     /// <summary>Gets the printer's current status byte — the value a STATUS poll reads back (bit 0 checksum error, bit 1
     /// printing in progress, bit 2 print requested/done, bit 3 unprocessed data). Snapshot state.</summary>
     public byte Status =>
         m_status;
-
     /// <summary>Gets the number of pixels accumulated into the image since the last INIT/PRINT — a host- and
     /// gate-facing progress read (0 immediately after a print flushes the buffer). Snapshot state.</summary>
     public int ImageOffset =>
@@ -103,10 +103,10 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
         // shift the console's bit in, and on the eighth bit process the received byte and latch the next reply byte.
         var outgoing = ((m_sendByte & 0x80) != 0);
 
-        m_sendByte = (byte)(m_sendByte << 1);
-        m_byteBeingReceived = (byte)((m_byteBeingReceived << 1) | (incoming
+        m_sendByte = ((byte)(m_sendByte << 1));
+        m_byteBeingReceived = ((byte)((m_byteBeingReceived << 1) | (incoming
             ? 0x01
-            : 0x00));
+            : 0x00)));
 
         if (++m_bitsReceived == 8) {
             var received = m_byteBeingReceived;
@@ -140,10 +140,9 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
             m_remainingBusyCycles -= tCycles;
         }
     }
-
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
-        writer.WriteByte(value: (byte)m_state);
+        writer.WriteByte(value: ((byte)m_state));
         writer.WriteByte(value: m_bitsReceived);
         writer.WriteByte(value: m_byteBeingReceived);
         writer.WriteByte(value: m_commandId);
@@ -160,10 +159,9 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
         writer.WriteBlock<byte>(values: m_commandData);
         writer.WriteBlock<byte>(values: m_image);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
-        m_state = (ParseState)reader.ReadByte();
+        m_state = ((ParseState)reader.ReadByte());
         m_bitsReceived = reader.ReadByte();
         m_byteBeingReceived = reader.ReadByte();
         m_commandId = reader.ReadByte();
@@ -210,7 +208,7 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
                 break;
             case ParseState.CommandId:
-                m_commandId = (byte)(received & 0x0F);
+                m_commandId = ((byte)(received & 0x0F));
 
                 break;
             case ParseState.Compression:
@@ -222,7 +220,7 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
                 break;
             case ParseState.LengthHigh:
-                m_lengthLeft |= (ushort)((received & 0x03) << 8);
+                m_lengthLeft |= ((ushort)((received & 0x03) << 8));
 
                 break;
             case ParseState.Data:
@@ -235,7 +233,7 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
                 break;
             case ParseState.ChecksumHigh:
-                m_checksum ^= (ushort)(received << 8);
+                m_checksum ^= ((ushort)(received << 8));
 
                 // The console's transmitted checksum equals the printer's additive sum on a clean packet, so the two
                 // XORs cancel to zero; any non-zero residue is a corrupted packet — raise the error bit and re-sync.
@@ -296,7 +294,6 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
             ++m_state;
         }
     }
-
     // Stores one payload byte into the command buffer, decompressing an RLE run when the packet's compression flag is
     // set: a control byte with bit 7 set introduces a compressed run of (len&0x7F)+2 copies of the next byte; bit 7
     // clear introduces (len&0x7F)+1 raw bytes. The buffer never overruns a full band.
@@ -313,9 +310,9 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
         if (m_compressionRunLength == 0) {
             m_compressionRunIsCompressed = ((received & 0x80) != 0);
-            m_compressionRunLength = (byte)(((received & 0x7F) + 1) + (m_compressionRunIsCompressed
+            m_compressionRunLength = ((byte)(((received & 0x7F) + 1) + (m_compressionRunIsCompressed
                 ? 1
-                : 0));
+                : 0)));
 
             return;
         }
@@ -336,7 +333,6 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
         m_commandData[m_commandLength++] = received;
         --m_compressionRunLength;
     }
-
     // Acts on a completed packet: INIT clears the status and the image, DATA unpacks a full band into the image, PRINT
     // renders the assembled image with the command's palette and raises it to the host, arming the print countdown.
     private void HandleCommand() {
@@ -363,7 +359,6 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
                 break;
         }
     }
-
     // Renders the accumulated image with the PRINT command's palette (each 2-bit source dot indexes the palette byte for
     // its 0-3 shade), raises the printout to the host, arms the tick-clock print countdown, and flushes the buffer.
     // UnpackBand keeps m_imageOffset inside the buffer by construction, so this clamp is never live on the emulation
@@ -374,7 +369,7 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
         var margins = m_commandData[1];
         var palette = m_commandData[2];
-        var exposure = (byte)(m_commandData[3] & 0x7F);
+        var exposure = ((byte)(m_commandData[3] & 0x7F));
         var length = Math.Min(
             val1: m_imageOffset,
             val2: m_image.Length
@@ -382,26 +377,25 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
         var pixels = new byte[length];
 
         for (var index = 0; (index < length); ++index) {
-            pixels[index] = (byte)((palette >> (m_image[index] * 2)) & 0x03);
+            pixels[index] = ((byte)((palette >> (m_image[index] * 2)) & 0x03));
         }
 
         var height = (length / ImageWidth);
 
-        m_remainingBusyCycles = ((ulong)height * CyclesPerPrintedRow);
+        m_remainingBusyCycles = (((ulong)height) * CyclesPerPrintedRow);
 
         PrintEmitted?.Invoke(obj: new GamePrintout(
-            width: ImageWidth,
-            height: height,
-            topMargin: (byte)(margins >> 4),
-            bottomMargin: (byte)(margins & 0x0F),
-            palette: palette,
+            bottomMargin: ((byte)(margins & 0x0F)),
             exposure: exposure,
-            pixels: pixels
+            height: height,
+            palette: palette,
+            pixels: pixels,
+            topMargin: ((byte)(margins >> 4)),
+            width: ImageWidth
         ));
 
         m_imageOffset = 0;
     }
-
     // Unpacks a full 0x280-byte DATA band (two 8-pixel tile rows of twenty 2bpp tiles) into the image at the running
     // offset, MSB-first per the console's 2bpp tile format (byte pair = low then high bitplane). Reads the command
     // buffer without mutating it.
@@ -425,7 +419,7 @@ public sealed class GamePrinterDevice : ISerialPeer, ISnapshotable {
 
                     for (var x = 0; (x < 8); ++x) {
                         var bit = (7 - x);
-                        var value = (byte)(((low >> bit) & 0x01) | (((high >> bit) & 0x01) << 1));
+                        var value = ((byte)(((low >> bit) & 0x01) | (((high >> bit) & 0x01) << 1)));
                         var pixel = (((m_imageOffset + (tileX * 8)) + x) + (y * ImageWidth));
 
                         m_image[pixel] = value;

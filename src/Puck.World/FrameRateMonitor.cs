@@ -11,6 +11,7 @@ internal sealed class FrameRateMonitor {
     private const float WindowSeconds = 2f;
 
     private readonly Queue<float> m_deltas = new();
+
     private float m_totalSeconds;
 
     /// <summary>Records one frame's delta. A non-positive delta (the very first frame) is skipped.</summary>
@@ -23,11 +24,13 @@ internal sealed class FrameRateMonitor {
         m_deltas.Enqueue(item: deltaSeconds);
         m_totalSeconds += deltaSeconds;
 
-        while ((m_deltas.Count > 1) && ((m_totalSeconds - m_deltas.Peek()) >= WindowSeconds)) {
+        while (
+            (m_deltas.Count > 1) &&
+            ((m_totalSeconds - m_deltas.Peek()) >= WindowSeconds)
+        ) {
             m_totalSeconds -= m_deltas.Dequeue();
         }
     }
-
     /// <summary>Summarizes the window: the average rate, the slowest single frame's instantaneous rate (the floor
     /// check — one hitch surfaces here before it moves the average), and the sample count.</summary>
     public (float AverageFps, float WorstFps, int FrameCount) Summarize() {
@@ -38,7 +41,10 @@ internal sealed class FrameRateMonitor {
         var worstDelta = 0f;
 
         foreach (var delta in m_deltas) {
-            worstDelta = MathF.Max(x: worstDelta, y: delta);
+            worstDelta = MathF.Max(
+                x: worstDelta,
+                y: delta
+            );
         }
 
         return (

@@ -32,7 +32,6 @@ public sealed partial class Arm7Tdmi : ISnapshotable {
         writer.WriteBoolean(value: m_executeIrq);
         writer.WriteBoolean(value: m_nextFetchNonSequential);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

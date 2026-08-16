@@ -18,7 +18,6 @@ public sealed class InterchangeTests {
             Directory.Delete(path: directory, recursive: true);
         }
     }
-
     [Fact]
     public void CorruptedClaim_OneFlippedByte_IsRefused() {
         var directory = ExportToTempDirectory();
@@ -29,23 +28,22 @@ public sealed class InterchangeTests {
 
             bytes[^1] ^= 0xFF;
 
-            File.WriteAllBytes(path: claimPath, bytes: bytes);
+            File.WriteAllBytes(bytes: bytes, path: claimPath);
 
             Assert.Equal(expected: 1, actual: AttestationInterchangeHarness.Verify(directory: directory));
         } finally {
             Directory.Delete(path: directory, recursive: true);
         }
     }
-
     [Fact]
     public void MissingManifestKey_DroppingAudience_IsRefused() {
         var directory = ExportToTempDirectory();
 
         try {
             var manifestPath = Path.Combine(path1: directory, path2: "manifest.txt");
-            var lines = File.ReadAllLines(path: manifestPath).Where(predicate: line => !line.StartsWith(value: "audience=", comparisonType: StringComparison.Ordinal));
+            var lines = File.ReadAllLines(path: manifestPath).Where(predicate: line => !line.StartsWith(comparisonType: StringComparison.Ordinal, value: "audience="));
 
-            File.WriteAllLines(path: manifestPath, contents: lines);
+            File.WriteAllLines(contents: lines, path: manifestPath);
 
             Assert.Equal(expected: 1, actual: AttestationInterchangeHarness.Verify(directory: directory));
         } finally {

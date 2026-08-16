@@ -18,7 +18,6 @@ internal sealed class SolarDeviceStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "solar-device";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -30,8 +29,8 @@ internal sealed class SolarDeviceStage : IPostStage {
         var rom = new byte[0x200];
 
         GameCode.CopyTo(destination: rom.AsSpan(
-            start: 0xAC,
-            length: 4
+            length: 4,
+            start: 0xAC
         ));
 
         var cartridge = new AgbCartridge(rom: rom);
@@ -50,7 +49,7 @@ internal sealed class SolarDeviceStage : IPostStage {
             value: 0x01
         ); // enable readback
 
-        foreach (var level in (ReadOnlySpan<byte>)[0, 1, 64, 128, 200, 254, 255]) {
+        foreach (var level in ((ReadOnlySpan<byte>)[0, 1, 64, 128, 200, 254, 255])) {
             cartridge.SetLightLevel(level: level);
 
             // RESET high (CS low: the light sensor is selected, not the RTC) samples the just-recorded level.

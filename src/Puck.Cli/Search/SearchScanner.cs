@@ -8,7 +8,6 @@ namespace Puck.Cli.Search;
 // Existence detail (-q/-l), where the scan stops at the first match and it is 1. Lines and Hits are filled only for
 // the line-block modes that print them, Spans only for span mode. Produced by SearchScanner, consumed by SearchEmitter.
 internal sealed record SearchFileResult(string Path, int Count, string[]? Lines, List<int>? Hits, List<(int Start, int End)>? Spans);
-
 // File discovery and per-file scanning. The engine builds its DFA lazily and is NOT safe under concurrent access to one
 // Regex, so callers give each worker its own instance via MakeRegex.
 internal static class SearchScanner {
@@ -21,9 +20,8 @@ internal static class SearchScanner {
 
         options.IgnoreCase = ignoreCase;
 
-        return new Regex(pattern: pattern, options: options);
+        return new Regex(options: options, pattern: pattern);
     }
-
     // ---- file enumeration -------------------------------------------------------------------
 
     // Null when a path argument names nothing on disk; SearchCommand turns that into a usage error.
@@ -46,13 +44,13 @@ internal static class SearchScanner {
 
             return true;
         } catch (Exception ex) when ((ex is UnauthorizedAccessException or IOException)) {
-            WarnUnreadable(path: path, ex: ex);
+            WarnUnreadable(ex: ex, path: path);
 
             return false;
         }
     }
     private static void WarnUnreadable(string path, Exception ex) =>
-        FileWalk.WarnUnreadable(verb: "search", path: path, exception: ex);
+        FileWalk.WarnUnreadable(exception: ex, path: path, verb: "search");
 
     // ---- scanning ---------------------------------------------------------------------------
 
@@ -68,7 +66,7 @@ internal static class SearchScanner {
         if (opt.Detail != SearchDetail.Locations) {
             var count = CountMatchingLines(text: text, regex: regex, stopAtFirstMatch: (opt.Detail == SearchDetail.Existence));
 
-            return ((count == 0) ? null : new SearchFileResult(Path: path, Count: count, Lines: null, Hits: null, Spans: null));
+            return ((count == 0) ? null : new SearchFileResult(Count: count, Hits: null, Lines: null, Path: path, Spans: null));
         }
 
         var lines = SplitLines(text: text);
@@ -90,7 +88,7 @@ internal static class SearchScanner {
         }
 
         if (opt.Detail == SearchDetail.Existence) {
-            return (regex.IsMatch(input: text) ? new SearchFileResult(Path: path, Count: 1, Lines: null, Hits: null, Spans: null) : null);
+            return (regex.IsMatch(input: text) ? new SearchFileResult(Count: 1, Hits: null, Lines: null, Path: path, Spans: null) : null);
         }
 
         var matches = regex.Matches(input: text);
@@ -127,7 +125,7 @@ internal static class SearchScanner {
         try {
             bytes = File.ReadAllBytes(path: path);
         } catch (Exception ex) when ((ex is UnauthorizedAccessException or IOException)) {
-            WarnUnreadable(path: path, ex: ex);
+            WarnUnreadable(ex: ex, path: path);
 
             return null;
         }
@@ -136,7 +134,6 @@ internal static class SearchScanner {
 
         return Utf8.GetString(bytes: (span.StartsWith(value: Utf8Bom) ? span[Utf8Bom.Length..] : span));
     }
-
     // Walks the same lines SplitLines produces without materializing any of them.
     private static int CountMatchingLines(string text, Regex regex, bool stopAtFirstMatch) {
         var count = 0;

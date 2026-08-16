@@ -51,6 +51,7 @@ internal static class BinaryFieldRegionClaims {
     private static readonly ushort[] WideRegionTails = [0x2B, 0x47];
     /// <summary>The scalars the wide-region-tier law scales by.</summary>
     private static readonly ushort[] WideRegionScalars = [0x0000, 0x0001, 0x0002, 0x00FF, 0x0100, 0x1234, 0x8000, 0xFFFF];
+
     /// <summary>The longest region the length-sweep law covers: four whole 512-bit vectors and a partial one,
     /// the ceiling this family admits.</summary>
     private const int RegionLengthCeiling = ((4 * 64) + 3);
@@ -68,7 +69,7 @@ internal static class BinaryFieldRegionClaims {
 
             for (var left = 0; (left < 16); ++left) {
                 for (var right = 0; (right < 16); ++right) {
-                    var expected = Oracles.BinaryFieldProduct(left: left, right: right, degree: 4, reductionTail: tail);
+                    var expected = Oracles.BinaryFieldProduct(degree: 4, left: left, reductionTail: tail, right: right);
                     var actual = field.Multiply(left: ((byte)left), right: ((byte)right));
 
                     if (expected != actual) {
@@ -79,13 +80,13 @@ internal static class BinaryFieldRegionClaims {
                 if (0 == left) { continue; }
 
                 var inverse = field.Inverse(value: ((byte)left));
-                var oracleInverse = Oracles.BinaryFieldInverse(value: left, degree: 4, reductionTail: tail);
+                var oracleInverse = Oracles.BinaryFieldInverse(degree: 4, reductionTail: tail, value: left);
 
                 if (oracleInverse != inverse) {
                     return $"degree-4 inverse of 0x{left:X1} under tail 0x{tail:X1} gave 0x{inverse:X2}, the oracle gives 0x{oracleInverse:X2}";
                 }
 
-                var certificate = Oracles.BinaryFieldProduct(left: left, right: inverse, degree: 4, reductionTail: tail);
+                var certificate = Oracles.BinaryFieldProduct(degree: 4, left: left, reductionTail: tail, right: inverse);
 
                 if (BigInteger.One != certificate) {
                     return $"degree-4 inverse of 0x{left:X1} under tail 0x{tail:X1} does not multiply back to one (got 0x{certificate:X1})";
@@ -133,15 +134,15 @@ internal static class BinaryFieldRegionClaims {
 
         for (var index = 0; (index < Ceiling); ++index) {
             var element = BigInteger.CreateTruncating(value: source[index]);
-            var product = Oracles.BinaryFieldProduct(left: scalarValue, right: element, degree: degree, reductionTail: tail);
+            var product = Oracles.BinaryFieldProduct(degree: degree, left: scalarValue, reductionTail: tail, right: element);
 
             expectedScale[index] = T.CreateTruncating(value: product);
-            expectedAccumulate[index] = T.CreateTruncating(value: (BigInteger.CreateTruncating(value: seed[index]) ^ product));
+            expectedAccumulate[index] = T.CreateTruncating(value: BigInteger.CreateTruncating(value: seed[index]) ^ product);
         }
 
         foreach (var length in NarrowDegreeRegionLengths) {
-            Array.Copy(sourceArray: seed, destinationArray: destination, length: Ceiling);
-            field.ScaleRegion(destination: destination.AsSpan(start: 0, length: length), source: source.AsSpan(start: 0, length: length), scalar: scalar);
+            Array.Copy(destinationArray: destination, length: Ceiling, sourceArray: seed);
+            field.ScaleRegion(destination: destination.AsSpan(length: length, start: 0), source: source.AsSpan(length: length, start: 0), scalar: scalar);
 
             for (var index = 0; (index < length); ++index) {
                 if (destination[index] != expectedScale[index]) {
@@ -149,8 +150,8 @@ internal static class BinaryFieldRegionClaims {
                 }
             }
 
-            Array.Copy(sourceArray: seed, destinationArray: destination, length: Ceiling);
-            field.MultiplyAccumulateRegion(destination: destination.AsSpan(start: 0, length: length), source: source.AsSpan(start: 0, length: length), scalar: scalar);
+            Array.Copy(destinationArray: destination, length: Ceiling, sourceArray: seed);
+            field.MultiplyAccumulateRegion(destination: destination.AsSpan(length: length, start: 0), source: source.AsSpan(length: length, start: 0), scalar: scalar);
 
             for (var index = 0; (index < length); ++index) {
                 if (destination[index] != expectedAccumulate[index]) {
@@ -158,8 +159,8 @@ internal static class BinaryFieldRegionClaims {
                 }
             }
 
-            Array.Copy(sourceArray: source, destinationArray: destination, length: Ceiling);
-            field.ScaleRegionInPlace(values: destination.AsSpan(start: 0, length: length), scalar: scalar);
+            Array.Copy(destinationArray: destination, length: Ceiling, sourceArray: source);
+            field.ScaleRegionInPlace(values: destination.AsSpan(length: length, start: 0), scalar: scalar);
 
             for (var index = 0; (index < length); ++index) {
                 if (destination[index] != expectedScale[index]) {
@@ -178,12 +179,13 @@ internal static class BinaryFieldRegionClaims {
     /// <param name="salt">The per-region salt.</param>
     /// <returns>The derived carrier value, not yet reduced into any field.</returns>
     private static T NarrowDegreeRegionWalk<T>(int index, ulong salt) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        var seed = unchecked(((ulong)index) + salt);
-        var low = unchecked(seed * 0x9E3779B97F4A7C15UL);
-        var high = unchecked((seed ^ 0xD1B54A32D192ED03UL) * 0xBF58476D1CE4E5B9UL);
+        var seed = unchecked((((ulong)index) + salt));
+        var low = unchecked((seed * 0x9E3779B97F4A7C15UL));
+        var high = unchecked(((seed ^ 0xD1B54A32D192ED03UL) * 0xBF58476D1CE4E5B9UL));
 
-        return T.CreateTruncating(value: ((((UInt128)high) << 64) | low));
+        return T.CreateTruncating(value: (((UInt128)high) << 64) | low);
     }
+
     /// <summary>Proves every byte-wide region rung <see cref="BinaryFieldKernels"/> ships — the 128-, 256- and
     /// 512-bit Galois-field affine transform and the 128-, 256- and 512-bit nibble-split table shuffle — against the
     /// element-at-a-time scalar rung, over the WHOLE 256-by-256 scalar-by-element byte cross product at three
@@ -215,10 +217,10 @@ internal static class BinaryFieldRegionClaims {
                         source.CopyTo(destination: actual);
                         source.CopyTo(destination: expected);
                         BinaryFieldKernels.MultiplyAccumulateRegionScalar(destination: expected, source: source, scalar: ((byte)scalar), accumulate: (1 == accumulate), degree: 8, tail: tail);
-                        RunByteRegionTier(tier: tier, destination: actual, source: source, scalar: ((byte)scalar), accumulate: (1 == accumulate), degree: 8, tail: tail);
+                        RunByteRegionTier(accumulate: (1 == accumulate), degree: 8, destination: actual, scalar: ((byte)scalar), source: source, tail: tail, tier: tier);
 
                         if (!actual.SequenceEqual(other: expected)) {
-                            return $"region rung {tier} disagreed with the scalar rung at degree 8, tail 0x{tail:X2}, scalar 0x{scalar:X2}, accumulate {1 == accumulate}";
+                            return $"region rung {tier} disagreed with the scalar rung at degree 8, tail 0x{tail:X2}, scalar 0x{scalar:X2}, accumulate {(1 == accumulate)}";
                         }
                     }
                 }
@@ -256,10 +258,10 @@ internal static class BinaryFieldRegionClaims {
                         source.CopyTo(array: actual, index: 0);
                         source.CopyTo(array: expected, index: 0);
                         BinaryFieldKernels.MultiplyAccumulateRegionScalar(destination: expected, source: source, scalar: scalar, accumulate: (1 == accumulate), degree: 16, tail: tail);
-                        RunWideRegionTier(tier: tier, destination: actual, source: source, scalar: scalar, accumulate: (1 == accumulate), degree: 16, tail: tail);
+                        RunWideRegionTier(accumulate: (1 == accumulate), degree: 16, destination: actual, scalar: scalar, source: source, tail: tail, tier: tier);
 
                         if (!actual.AsSpan().SequenceEqual(other: expected)) {
-                            return $"sixteen-bit region rung {tier} disagreed with the scalar rung at degree 16, tail 0x{tail:X4}, scalar 0x{scalar:X4}, accumulate {1 == accumulate}";
+                            return $"sixteen-bit region rung {tier} disagreed with the scalar rung at degree 16, tail 0x{tail:X4}, scalar 0x{scalar:X4}, accumulate {(1 == accumulate)}";
                         }
                     }
                 }
@@ -293,7 +295,7 @@ internal static class BinaryFieldRegionClaims {
             wideSource[index] = ((ushort)((index * 7_919) + 13));
         }
 
-        foreach (var scalar in (byte[])[0x00, 0x01, 0x1D, 0xFF]) {
+        foreach (var scalar in ((byte[])[0x00, 0x01, 0x1D, 0xFF])) {
             for (var length = 0; (length <= RegionLengthCeiling); ++length) {
                 foreach (var tier in ByteRegionTiers) {
                     if (!BinaryFieldKernels.IsRegionTierSupported(tier: tier)) {
@@ -301,13 +303,13 @@ internal static class BinaryFieldRegionClaims {
                     }
 
                     for (var accumulate = 0; (accumulate < 2); ++accumulate) {
-                        source.AsSpan(start: 0, length: length).CopyTo(destination: actual);
-                        source.AsSpan(start: 0, length: length).CopyTo(destination: expected);
-                        BinaryFieldKernels.MultiplyAccumulateRegionScalar(destination: expected.AsSpan(start: 0, length: length), source: source.AsSpan(start: 0, length: length), scalar: scalar, accumulate: (1 == accumulate), degree: 8, tail: ((byte)0x1BU));
-                        RunByteRegionTier(tier: tier, destination: actual.AsSpan(start: 0, length: length), source: source.AsSpan(start: 0, length: length), scalar: scalar, accumulate: (1 == accumulate), degree: 8, tail: 0x1B);
+                        source.AsSpan(length: length, start: 0).CopyTo(destination: actual);
+                        source.AsSpan(length: length, start: 0).CopyTo(destination: expected);
+                        BinaryFieldKernels.MultiplyAccumulateRegionScalar(destination: expected.AsSpan(length: length, start: 0), source: source.AsSpan(length: length, start: 0), scalar: scalar, accumulate: (1 == accumulate), degree: 8, tail: ((byte)0x1BU));
+                        RunByteRegionTier(tier: tier, destination: actual.AsSpan(length: length, start: 0), source: source.AsSpan(length: length, start: 0), scalar: scalar, accumulate: (1 == accumulate), degree: 8, tail: 0x1B);
 
-                        if (!actual.AsSpan(start: 0, length: length).SequenceEqual(other: expected.AsSpan(start: 0, length: length))) {
-                            return $"region rung {tier} disagreed with the scalar rung at length {length}, scalar 0x{scalar:X2}, accumulate {1 == accumulate}";
+                        if (!actual.AsSpan(length: length, start: 0).SequenceEqual(other: expected.AsSpan(length: length, start: 0))) {
+                            return $"region rung {tier} disagreed with the scalar rung at length {length}, scalar 0x{scalar:X2}, accumulate {(1 == accumulate)}";
                         }
                     }
                 }
@@ -320,13 +322,13 @@ internal static class BinaryFieldRegionClaims {
                     for (var accumulate = 0; (accumulate < 2); ++accumulate) {
                         var wideScalar = ((ushort)((scalar * 259) + 1));
 
-                        wideSeed.AsSpan(start: 0, length: length).CopyTo(destination: wideActual);
-                        wideSeed.AsSpan(start: 0, length: length).CopyTo(destination: wideExpected);
-                        BinaryFieldKernels.MultiplyAccumulateRegionScalar(destination: wideExpected.AsSpan(start: 0, length: length), source: wideSource.AsSpan(start: 0, length: length), scalar: wideScalar, accumulate: (1 == accumulate), degree: 16, tail: ((ushort)0x2BU));
-                        RunWideRegionTier(tier: tier, destination: wideActual.AsSpan(start: 0, length: length), source: wideSource.AsSpan(start: 0, length: length), scalar: wideScalar, accumulate: (1 == accumulate), degree: 16, tail: 0x2B);
+                        wideSeed.AsSpan(length: length, start: 0).CopyTo(destination: wideActual);
+                        wideSeed.AsSpan(length: length, start: 0).CopyTo(destination: wideExpected);
+                        BinaryFieldKernels.MultiplyAccumulateRegionScalar(destination: wideExpected.AsSpan(length: length, start: 0), source: wideSource.AsSpan(length: length, start: 0), scalar: wideScalar, accumulate: (1 == accumulate), degree: 16, tail: ((ushort)0x2BU));
+                        RunWideRegionTier(tier: tier, destination: wideActual.AsSpan(length: length, start: 0), source: wideSource.AsSpan(length: length, start: 0), scalar: wideScalar, accumulate: (1 == accumulate), degree: 16, tail: 0x2B);
 
-                        if (!wideActual.AsSpan(start: 0, length: length).SequenceEqual(other: wideExpected.AsSpan(start: 0, length: length))) {
-                            return $"sixteen-bit region rung {tier} disagreed with the scalar rung at length {length}, scalar 0x{wideScalar:X4}, accumulate {1 == accumulate}";
+                        if (!wideActual.AsSpan(length: length, start: 0).SequenceEqual(other: wideExpected.AsSpan(length: length, start: 0))) {
+                            return $"sixteen-bit region rung {tier} disagreed with the scalar rung at length {length}, scalar 0x{wideScalar:X4}, accumulate {(1 == accumulate)}";
                         }
                     }
                 }
@@ -335,6 +337,7 @@ internal static class BinaryFieldRegionClaims {
 
         return null;
     }
+
     /// <summary>Runs one named byte-wide region rung directly, bypassing <see cref="BinaryFieldKernels"/>'s own
     /// dispatch and support gate — the byte region-tier seam.</summary>
     /// <param name="tier">The rung to run.</param>

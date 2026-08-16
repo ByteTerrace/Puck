@@ -15,16 +15,14 @@ public sealed class AgbLinkResumeToken {
     private readonly AgbMachineIdentity[] m_identities;
 
     internal AgbLinkResumeToken(long[] credits, AgbMachineIdentity[] identities) {
-        m_credits = (long[])credits.Clone();
-        m_identities = (AgbMachineIdentity[])identities.Clone();
+        m_credits = ((long[])credits.Clone());
+        m_identities = ((AgbMachineIdentity[])identities.Clone());
     }
 
     /// <summary>Gets the number of consoles this token carries a credit and identity for.</summary>
     public int Count => m_credits.Length;
-
     /// <summary>Gets each console's instruction-overshoot credit at suspend, in session order.</summary>
     public ReadOnlySpan<long> Credits => m_credits;
-
     /// <summary>Gets each console's identity (format version / BIOS / ROM fingerprint) at suspend, in session
     /// order — the binding a resume validates the reconnecting consoles against.</summary>
     public ReadOnlySpan<AgbMachineIdentity> Identities => m_identities;

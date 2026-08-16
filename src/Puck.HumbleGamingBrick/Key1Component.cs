@@ -34,6 +34,7 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
     private const int TimerBlockToNormalTCycles = (2 * 4);
 
     private readonly IInterruptController m_interrupts;
+
     private bool m_armed;
     private bool m_hdmaBlocked;
     private int m_hdmaToggleCountdown;
@@ -127,11 +128,11 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
     }
     /// <inheritdoc/>
     public byte ReadRegister() =>
-        (byte)(0x7E | (m_armed
+        ((byte)(0x7E | (m_armed
         ? 0x01
         : 0x00) | (m_isDoubleSpeed
         ? 0x80
-        : 0x00));
+        : 0x00)));
     /// <inheritdoc/>
     public void WriteRegister(byte value) =>
         m_armed = ((value & 0x01) != 0);

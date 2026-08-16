@@ -4,7 +4,6 @@ namespace Puck.Maths;
 /// <param name="First">The lowest token the run accepts.</param>
 /// <param name="Last">The highest token the run accepts; never below <paramref name="First"/>.</param>
 public readonly record struct TokenRange(ulong First, ulong Last);
-
 /// <summary>
 /// A canonical set of tokens, packed as ascending disjoint non-adjacent runs. The nontrivial end of the refinement
 /// axis: the label space is the whole of <see cref="ulong"/>, so a predicate can never be enumerated and every
@@ -28,29 +27,17 @@ public readonly struct TokenRangeSet {
     public ReadOnlySpan<TokenRange> Ranges =>
         m_ranges;
 
-    /// <summary>Creates the canonical set of a run list.</summary>
-    /// <param name="ranges">The runs, in any order, allowed to overlap.</param>
-    /// <returns>The canonical set.</returns>
-    /// <exception cref="ArgumentException">A run ends below where it starts.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">More than <see cref="MaximumRangeCount"/> runs were listed.</exception>
-    public static TokenRangeSet Create(ReadOnlySpan<TokenRange> ranges) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: ranges.Length, other: MaximumRangeCount, paramName: nameof(ranges));
-
-        for (var index = 0; (index < ranges.Length); ++index) {
-            if (ranges[index].Last < ranges[index].First) {
-                throw new ArgumentException(message: "A token run ends below where it starts.", paramName: nameof(ranges));
-            }
-        }
-
-        return new(ranges: Canonicalize(ranges: ranges.ToArray(), count: ranges.Length));
-    }
-
     // Sorts by start, then merges every overlapping or adjacent pair. Adjacency is collapsed because two runs that
     // touch accept the same tokens as one, and a canonical form is what makes the partition reproducible.
     internal static TokenRange[] Canonicalize(TokenRange[] ranges, int count) {
         if (0 == count) { return []; }
 
-        Array.Sort(array: ranges, index: 0, length: count, comparer: TokenRangeOrder.Instance);
+        Array.Sort(
+            array: ranges,
+            comparer: TokenRangeOrder.Instance,
+            index: 0,
+            length: count
+        );
 
         var written = 0;
 
@@ -60,8 +47,16 @@ public readonly struct TokenRangeSet {
             if (0 != written) {
                 var previous = ranges[(written - 1)];
 
-                if ((ulong.MaxValue == previous.Last) || (candidate.First <= (previous.Last + 1UL))) {
-                    ranges[(written - 1)] = new(First: previous.First, Last: ((previous.Last < candidate.Last) ? candidate.Last : previous.Last));
+                if (
+                    (ulong.MaxValue == previous.Last) ||
+                    (candidate.First <= (previous.Last + 1UL))
+                ) {
+                    ranges[(written - 1)] = new(
+                        First: previous.First,
+                        Last: ((previous.Last < candidate.Last)
+                        ? candidate.Last
+                        : previous.Last)
+                    );
 
                     continue;
                 }
@@ -70,17 +65,49 @@ public readonly struct TokenRangeSet {
             ranges[written++] = candidate;
         }
 
-        return ranges.AsSpan(start: 0, length: written).ToArray();
+        return ranges.AsSpan(
+            length: written,
+            start: 0
+        ).ToArray();
+    }
+
+    /// <summary>Creates the canonical set of a run list.</summary>
+    /// <param name="ranges">The runs, in any order, allowed to overlap.</param>
+    /// <returns>The canonical set.</returns>
+    /// <exception cref="ArgumentException">A run ends below where it starts.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">More than <see cref="MaximumRangeCount"/> runs were listed.</exception>
+    public static TokenRangeSet Create(ReadOnlySpan<TokenRange> ranges) {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: ranges.Length,
+            other: MaximumRangeCount,
+            paramName: nameof(ranges)
+        );
+
+        for (var index = 0; (index < ranges.Length); ++index) {
+            if (ranges[index].Last < ranges[index].First) {
+                throw new ArgumentException(
+                    message: "A token run ends below where it starts.",
+                    paramName: nameof(ranges)
+                );
+            }
+        }
+
+        return new(ranges: Canonicalize(
+            ranges: ranges.ToArray(),
+            count: ranges.Length
+        ));
     }
 
     private sealed class TokenRangeOrder : IComparer<TokenRange> {
         internal static readonly TokenRangeOrder Instance = new();
 
         public int Compare(TokenRange x, TokenRange y) =>
-            ((x.First != y.First) ? x.First.CompareTo(value: y.First) : x.Last.CompareTo(value: y.Last));
+            ((x.First != y.First)
+                ? x.First.CompareTo(value: y.First)
+                : x.Last.CompareTo(value: y.Last)
+            );
     }
 }
-
 /// <summary>
 /// The packed-run predicate algebra over <see cref="ulong"/> tokens: conjunction is run intersection, complement is
 /// the gap walk, and satisfiability is emptiness. An unbounded label space served without enumerating it.
@@ -90,7 +117,10 @@ public readonly struct TokenRangeSet {
 public readonly struct TokenRangeAlphabet : IAlphabetRefinement<TokenRangeSet> {
     /// <summary>Gets the set of every token.</summary>
     public TokenRangeSet Full =>
-        new(ranges: [new(First: ulong.MinValue, Last: ulong.MaxValue)]);
+        new(ranges: [new(
+                First: ulong.MinValue,
+                Last: ulong.MaxValue
+            )]);
 
     /// <summary>Returns the set of exactly the tokens this one rejects.</summary>
     /// <param name="predicate">The set to complement.</param>
@@ -108,7 +138,12 @@ public readonly struct TokenRangeAlphabet : IAlphabetRefinement<TokenRangeSet> {
         for (var index = 0; (index < ranges.Length); ++index) {
             var range = ranges[index];
 
-            if (range.First > cursor) { gaps[written++] = new(First: cursor, Last: (range.First - 1UL)); }
+            if (range.First > cursor) {
+                gaps[written++] = new(
+                    First: cursor,
+                    Last: (range.First - 1UL)
+                );
+            }
 
             if (ulong.MaxValue == range.Last) {
                 open = false;
@@ -119,9 +154,17 @@ public readonly struct TokenRangeAlphabet : IAlphabetRefinement<TokenRangeSet> {
             cursor = (range.Last + 1UL);
         }
 
-        if (open) { gaps[written++] = new(First: cursor, Last: ulong.MaxValue); }
+        if (open) {
+            gaps[written++] = new(
+                First: cursor,
+                Last: ulong.MaxValue
+            );
+        }
 
-        return new(ranges: gaps.AsSpan(start: 0, length: written).ToArray());
+        return new(ranges: gaps.AsSpan(
+            length: written,
+            start: 0
+        ).ToArray());
     }
     /// <summary>Returns the set of exactly the tokens both accept.</summary>
     /// <param name="left">The first set.</param>
@@ -131,25 +174,45 @@ public readonly struct TokenRangeAlphabet : IAlphabetRefinement<TokenRangeSet> {
         var leftRanges = left.Ranges;
         var rightRanges = right.Ranges;
 
-        if ((0 == leftRanges.Length) || (0 == rightRanges.Length)) { return default; }
+        if (
+            (0 == leftRanges.Length) ||
+            (0 == rightRanges.Length)
+        ) { return default; }
 
         var meets = new TokenRange[(leftRanges.Length + rightRanges.Length)];
         var leftIndex = 0;
         var rightIndex = 0;
         var written = 0;
 
-        while ((leftIndex < leftRanges.Length) && (rightIndex < rightRanges.Length)) {
+        while (
+            (leftIndex < leftRanges.Length) &&
+            (rightIndex < rightRanges.Length)
+        ) {
             var leftRange = leftRanges[leftIndex];
             var rightRange = rightRanges[rightIndex];
-            var first = ((leftRange.First < rightRange.First) ? rightRange.First : leftRange.First);
-            var last = ((leftRange.Last < rightRange.Last) ? leftRange.Last : rightRange.Last);
+            var first = ((leftRange.First < rightRange.First)
+                ? rightRange.First
+                : leftRange.First
+            );
+            var last = ((leftRange.Last < rightRange.Last)
+                ? leftRange.Last
+                : rightRange.Last
+            );
 
-            if (first <= last) { meets[written++] = new(First: first, Last: last); }
+            if (first <= last) {
+                meets[written++] = new(
+                    First: first,
+                    Last: last
+                );
+            }
 
             if (leftRange.Last < rightRange.Last) { ++leftIndex; } else { ++rightIndex; }
         }
 
-        return new(ranges: TokenRangeSet.Canonicalize(ranges: meets, count: written));
+        return new(ranges: TokenRangeSet.Canonicalize(
+            count: written,
+            ranges: meets
+        ));
     }
     /// <summary>Indicates whether a token falls in a set.</summary>
     /// <param name="predicate">The set.</param>
@@ -185,5 +248,9 @@ public readonly struct TokenRangeAlphabet : IAlphabetRefinement<TokenRangeSet> {
     /// <param name="minterms">Receives the partition's blocks.</param>
     /// <returns>The number of blocks written, or <c>-1</c> when the partition exceeds the cap or the destination.</returns>
     public int Minterms(ReadOnlySpan<TokenRangeSet> predicates, Span<TokenRangeSet> minterms) =>
-        AlphabetRefinement.Refine<TokenRangeSet, TokenRangeAlphabet>(refinement: this, predicates: predicates, minterms: minterms);
+        AlphabetRefinement.Refine<TokenRangeSet, TokenRangeAlphabet>(
+            minterms: minterms,
+            predicates: predicates,
+            refinement: this
+        );
 }

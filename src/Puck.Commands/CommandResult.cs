@@ -20,7 +20,6 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     /// <c>IsError: true</c> on every failure return — that is what makes quiet mode safe.
     /// </summary>
     public bool IsError { get; init; }
-
     /// <summary>Gets a result that produces no transcript output and leaves the transcript unchanged.</summary>
     public static CommandResult None => new("");
 
@@ -30,7 +29,6 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
         ClearTranscript: true,
         Output: ""
     );
-
     /// <summary>Creates an error result with transcript output.</summary>
     /// <param name="output">The text to append to the transcript.</param>
     /// <returns>A result with <see cref="IsError"/> set to <see langword="true"/>.</returns>

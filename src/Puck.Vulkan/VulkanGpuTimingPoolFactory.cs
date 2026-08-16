@@ -28,12 +28,11 @@ public sealed class VulkanGpuTimingPoolFactory(IVulkanQueryPoolApi queryPoolApi,
             queryPoolApi: queryPoolApi
         );
     }
-
     /// <inheritdoc/>
     public GpuTimestampCapabilities GetCapabilities(IGpuDeviceContext deviceContext) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
-        var context = (IVulkanDeviceContext)deviceContext;
+        var context = ((IVulkanDeviceContext)deviceContext);
         var instanceHandle = context.Instance.Handle;
         var physicalDeviceHandle = context.PhysicalDevice.Handle;
         var graphicsQueueFamilyIndex = 0u;

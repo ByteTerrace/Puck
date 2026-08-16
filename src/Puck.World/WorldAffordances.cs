@@ -1,6 +1,5 @@
 using Puck.Commands;
 using Puck.Scripting;
-using Puck.Scripting.Simulation;
 using Puck.World.Protocol;
 
 namespace Puck.World;
@@ -24,15 +23,66 @@ namespace Puck.World;
 /// installed once from the boot world let a second world's document validate against the boot world's table, which
 /// both refused a self-consistent document and — the direction that actually loses state — admitted a document
 /// binding a channel it never declares, because some other world happened to declare it.</para>
-/// <para>Source kinds resolve through <see cref="AddonSourceCatalog"/> (derived from <c>InputSources</c>' own
-/// attributes); a source outside that catalog — a motion source, a future device — skips the kind half of the check
-/// only.</para></remarks>
+/// <para>Source kinds resolve through <see cref="AddonSourceVocabulary"/> (derived from <c>InputSources</c>' own
+/// attributes); a source outside that vocabulary — a motion source, a future device — skips the kind half of the
+/// check only.</para></remarks>
 internal static class WorldAffordances {
-    private static volatile CommandRegistry? s_registry;
+    private static volatile CommandRegistry? Registry;
 
     /// <summary>Whether the command vocabulary has been installed — validators skip the command half (never the
     /// structural half, never the channel half) while this is <see langword="false"/>.</summary>
-    public static bool Installed => (s_registry is not null);
+    public static bool Installed => (Registry is not null);
+
+    // The physical source's declared kind, via the engine's one reflection-derived source catalog. Unknown and
+    // catalog-unaddressable sources (motion sensors, text) answer null — the kind check is skipped for them, the
+    // existence check never runs on sources at all (that is a different defect class than a dead command).
+    private static CommandValueKind? SourceKind(string source) {
+        if (!AddonSourceVocabulary.TryResolve(
+            shape: out var shape,
+            sourceId: source
+        )) {
+            return null;
+        }
+
+        return shape switch {
+            AddonSourceShape.Digital => CommandValueKind.Digital,
+            AddonSourceShape.Axis1D => CommandValueKind.Axis1D,
+            AddonSourceShape.Axis2D => CommandValueKind.Axis2D,
+            _ => null,
+        };
+    }
+    // The context-row admission half: family and state must come from the engine's published registry
+    // (WorldContextFamilies — a closed, compile-time vocabulary, so this check never waits on Install). Empty
+    // members and null rows are the structural gate's findings (BindingProfile.Compile), not this one's; every
+    // refusal here names the offending row.
+    private static void ValidateContexts(BindingProfileDocument document, List<string> errors) {
+        var rows = (document.Contexts ?? []);
+
+        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
+            if (
+                (rows[rowIndex] is not { } row) ||
+                string.IsNullOrEmpty(value: row.Family) ||
+                string.IsNullOrEmpty(value: row.State)
+            ) {
+                continue;
+            }
+
+            if (WorldContextFamilies.StatesOf(family: row.Family) is not { } states) {
+                errors.Add(item: $"contexts row {rowIndex} names family \"{row.Family}\", which is not an admitted context family (admitted: {string.Join(
+                    separator: ", ",
+                    values: WorldContextFamilies.Families
+                )})");
+            } else if (!states.Contains(
+                value: row.State,
+                comparer: StringComparer.Ordinal
+            )) {
+                errors.Add(item: $"contexts row {rowIndex} (family \"{row.Family}\") names state \"{row.State}\", which that family never publishes (states: {string.Join(
+                    separator: ", ",
+                    values: states
+                )})");
+            }
+        }
+    }
 
     /// <summary>Installs the command registry the vocabulary reads through. Called once by the composition root,
     /// after the container is built.</summary>
@@ -41,9 +91,8 @@ internal static class WorldAffordances {
     public static void Install(CommandRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        s_registry = registry;
+        Registry = registry;
     }
-
     /// <summary>Whether <paramref name="command"/> names a command (or alias) THIS composition's registry declares —
     /// the exact registration FACT <see cref="Validate"/>'s command half checks, exposed standalone so a caller can
     /// key a decision on registration itself (never on boot shape) instead of parsing a refusal string. Always
@@ -54,11 +103,16 @@ internal static class WorldAffordances {
     public static bool IsCommandRegistered(string command) {
         ArgumentNullException.ThrowIfNull(argument: command);
 
-        var registry = s_registry;
+        var registry = Registry;
 
-        return ((registry is null) || registry.TryGetMetadata(name: command, metadata: out _));
+        return (
+            (registry is null) ||
+            registry.TryGetMetadata(
+            metadata: out _,
+            name: command
+        )
+        );
     }
-
     /// <summary>Runs the vocabulary check over <paramref name="document"/>, appending refusal lines to
     /// <paramref name="errors"/>. The command half is a no-op while no registry is installed; the channel half runs
     /// against <paramref name="channels"/> unconditionally, and the context-family admission half
@@ -70,58 +124,38 @@ internal static class WorldAffordances {
     /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
     public static void Validate(BindingProfileDocument document, WorldChannelTable channels, List<string> errors) {
         ArgumentNullException.ThrowIfNull(argument: channels);
-        ValidateContexts(document: document, errors: errors);
+        ValidateContexts(
+            document: document,
+            errors: errors
+        );
 
         // An absent registry withholds the COMMAND lookup and nothing else. Returning early here instead made the
         // channel half — a pure function of the document's own table, needing no registry at all — conditional on
         // whether a container happened to exist yet, so one document was refused as world.instance.start and admitted
         // as --world. Whether a document is valid must not depend on which door it walked through.
-        var registry = s_registry;
+        var registry = Registry;
 
         BindingVocabularyCheck.Validate(
-            command: ((registry is null) ? null : name => (registry.TryGetMetadata(name: name, metadata: out var metadata) ? metadata : null)),
+            command: ((registry is null)
+            ? null
+            : name => (registry.TryGetMetadata(
+                    metadata: out var metadata,
+                    name: name
+                )
+                ? metadata
+                : null)),
             document: document,
             sourceKind: SourceKind,
             errors: errors,
-            channel: reference => channels.TryGetOrdinal(reference: reference, ordinal: out _),
-            channelBinary: reference => (channels.TryGetOrdinal(reference: reference, ordinal: out var ordinal) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
-            sourceAddressable: source => !AddonSourceCatalog.IsUnaddressable(sourceId: source)
+            channel: reference => channels.TryGetOrdinal(
+                ordinal: out _,
+                reference: reference
+            ),
+            channelBinary: reference => (channels.TryGetOrdinal(
+                ordinal: out var ordinal,
+                reference: reference
+            ) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
+            sourceAddressable: source => !AddonSourceVocabulary.IsUnaddressable(sourceId: source)
         );
-    }
-
-    // The context-row admission half: family and state must come from the engine's published registry
-    // (WorldContextFamilies — a closed, compile-time vocabulary, so this check never waits on Install). Empty
-    // members and null rows are the structural gate's findings (BindingProfile.Compile), not this one's; every
-    // refusal here names the offending row.
-    private static void ValidateContexts(BindingProfileDocument document, List<string> errors) {
-        var rows = (document.Contexts ?? []);
-
-        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
-            if ((rows[rowIndex] is not { } row) || string.IsNullOrEmpty(value: row.Family) || string.IsNullOrEmpty(value: row.State)) {
-                continue;
-            }
-
-            if (WorldContextFamilies.StatesOf(family: row.Family) is not { } states) {
-                errors.Add(item: $"contexts row {rowIndex} names family \"{row.Family}\", which is not an admitted context family (admitted: {string.Join(separator: ", ", values: WorldContextFamilies.Families)})");
-            } else if (!states.Contains(value: row.State, comparer: StringComparer.Ordinal)) {
-                errors.Add(item: $"contexts row {rowIndex} (family \"{row.Family}\") names state \"{row.State}\", which that family never publishes (states: {string.Join(separator: ", ", values: states)})");
-            }
-        }
-    }
-
-    // The physical source's declared kind, via the engine's one reflection-derived source catalog. Unknown and
-    // catalog-unaddressable sources (motion sensors, text) answer null — the kind check is skipped for them, the
-    // existence check never runs on sources at all (that is a different defect class than a dead command).
-    private static CommandValueKind? SourceKind(string source) {
-        if (!AddonSourceCatalog.TryResolve(sourceId: source, shape: out var shape)) {
-            return null;
-        }
-
-        return shape switch {
-            AddonSourceShape.Digital => CommandValueKind.Digital,
-            AddonSourceShape.Axis1D => CommandValueKind.Axis1D,
-            AddonSourceShape.Axis2D => CommandValueKind.Axis2D,
-            _ => null,
-        };
     }
 }

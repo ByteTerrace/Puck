@@ -15,7 +15,6 @@ public interface ISystemBus {
     /// <param name="address">The 16-bit address to write.</param>
     /// <param name="value">The byte to write.</param>
     void WriteByte(ushort address, byte value);
-
     /// <summary>Notes the program counter at the start of the CPU's CURRENT instruction dispatch — the debug watchpoint
     /// PC witness. The bus has no other way to know which instruction is making an access (its own <c>ReadByte</c>/
     /// <c>WriteByte</c> only ever see an address), so the CPU calls this once per <c>StepInstruction</c>, before any

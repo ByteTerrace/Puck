@@ -12,7 +12,6 @@ internal sealed class AgsStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "ags";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.B;

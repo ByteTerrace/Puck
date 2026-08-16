@@ -12,29 +12,29 @@ public sealed class DynamicBodyContactLawTests {
         var first = ResolveCoincidentPair();
         var second = ResolveCoincidentPair();
 
-        Assert.Equal(first, second);
-        Assert.True(Vector3.Distance(value1: first.Left, value2: first.Right) >= 0.69f,
+        Assert.Equal(actual: second, expected: first);
+        Assert.True((Vector3.Distance(value1: first.Left, value2: first.Right) >= 0.69f),
             userMessage: $"capsule pair remained overlapped at {first.Left} / {first.Right}");
     }
-
     [Fact]
     public void OverlapIsTheDefaultAndDoesNotIntroduceCrowdShoving() {
         using var fixture = TwoBodies(mode: WorldBodyContactMode.Overlap);
         var coincident = new Vector3(x: 10f, y: 5f, z: 10f);
-        fixture.Server.Body(index: 0)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        fixture.Server.Body(index: 1)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        fixture.Server.Body(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: coincident.X, y: coincident.Y, yawRadians: 0f, z: coincident.Z);
+        fixture.Server.Body(index: 1)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: coincident.X, y: coincident.Y, yawRadians: 0f, z: coincident.Z);
 
         fixture.Step();
 
         Assert.Equal(expected: fixture.Server.Body(index: 0)!.Position, actual: fixture.Server.Body(index: 1)!.Position);
         Assert.Equal(expected: 0, actual: fixture.Server.Population.DynamicContactPotentialPairs);
     }
-
     [Fact]
     public void SolidBodiesUseTheSpatialBroadphaseBeforeNarrowPhase() {
         using var fixture = TwoBodies(mode: WorldBodyContactMode.Solid);
-        fixture.Server.Body(index: 0)!.Pose(x: -20f, y: 5f, z: 10f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        fixture.Server.Body(index: 1)!.Pose(x: 20f, y: 5f, z: 10f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        fixture.Server.Body(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: -20f, y: 5f, yawRadians: 0f, z: 10f);
+        fixture.Server.Body(index: 1)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 20f, y: 5f, yawRadians: 0f, z: 10f);
 
         fixture.Step();
 
@@ -46,21 +46,22 @@ public sealed class DynamicBodyContactLawTests {
     private static (Vector3 Left, Vector3 Right) ResolveCoincidentPair() {
         using var fixture = TwoBodies(mode: WorldBodyContactMode.Solid);
         var coincident = new Vector3(x: 10f, y: 5f, z: 10f);
-        fixture.Server.Body(index: 0)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        fixture.Server.Body(index: 1)!.Pose(x: coincident.X, y: coincident.Y, z: coincident.Z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        fixture.Server.Body(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: coincident.X, y: coincident.Y, yawRadians: 0f, z: coincident.Z);
+        fixture.Server.Body(index: 1)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: coincident.X, y: coincident.Y, yawRadians: 0f, z: coincident.Z);
 
         fixture.Step();
         return (fixture.Server.Body(index: 0)!.Position, fixture.Server.Body(index: 1)!.Position);
     }
-
     private static WorldFixture TwoBodies(WorldBodyContactMode mode) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with { Kits = source.Kits.Select(selector: kit => kit with { BodyContact = mode }).ToArray() };
         var fixture = Fixtures.FreshServer(definition: definition);
         var left = WorldPrincipal.Seat(slot: 0);
         var right = WorldPrincipal.Seat(slot: 1);
-        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
-        Assert.True(fixture.Server.ApplySession(new SessionRequest.Join(right, right.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(right, right.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         return fixture;
     }
 }

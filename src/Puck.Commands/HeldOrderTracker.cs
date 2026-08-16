@@ -32,7 +32,6 @@ public sealed class HeldOrderTracker {
         )
     ) {
     }
-
     /// <summary>Initializes a new instance with a PER-MODIFIER press/release threshold pair — the shape
     /// <see cref="BindingModifierDefinition"/> declares, where every modifier may pick its own feel.</summary>
     /// <param name="pressThresholds">Each modifier's press threshold, by index.</param>
@@ -50,7 +49,7 @@ public sealed class HeldOrderTracker {
             );
         }
 
-        for (var index = 0; index < pressThresholds.Count; index++) {
+        for (var index = 0; (index < pressThresholds.Count); index++) {
             if (
                 !float.IsFinite(f: pressThresholds[index]) ||
                 !float.IsFinite(f: releaseThresholds[index]) ||
@@ -70,10 +69,27 @@ public sealed class HeldOrderTracker {
 
     /// <summary>Gets how many modifiers are currently held.</summary>
     public int Count => m_heldOrder.Count;
-
     /// <summary>Gets the held modifier indices, in press order (index 0 = pressed first).</summary>
     public ReadOnlySpan<int> HeldOrder => CollectionsMarshal.AsSpan(list: m_heldOrder);
 
+    private static float[] Fill(int count, float value) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: count);
+
+        var array = new float[count];
+
+        Array.Fill(
+            array: array,
+            value: value
+        );
+
+        return array;
+    }
+
+    /// <summary>Releases every modifier (focus loss, device disconnect, or a mode reset).</summary>
+    public void Reset() {
+        Array.Clear(array: m_latched);
+        m_heldOrder.Clear();
+    }
     /// <summary>Feeds one modifier's raw value this frame — an analog trigger's magnitude or a digital button's 0/1.
     /// Latches held when unlatched and the value crosses <c>pressThreshold</c>; releases when latched and the value
     /// falls to/below <c>releaseThreshold</c>; otherwise holds its current state (the hysteresis band).</summary>
@@ -104,7 +120,6 @@ public sealed class HeldOrderTracker {
 
         return false;
     }
-
     /// <summary>Feeds one modifier's <see cref="InputSignal"/> this frame, folding the phase-to-value rule in one
     /// place: a release/cancel edge releases (value 0) whatever value it carries; otherwise the signal's
     /// <see cref="CommandValue.AsAxis1D"/> magnitude — an analog trigger's level or a digital button's 0/1 — drives
@@ -115,30 +130,12 @@ public sealed class HeldOrderTracker {
     public bool Set(int index, in InputSignal signal) {
         var value = ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled)
             ? 0f
-            : signal.Value.AsAxis1D);
+            : signal.Value.AsAxis1D
+        );
 
         return Set(
             index: index,
             value: value
         );
-    }
-
-    /// <summary>Releases every modifier (focus loss, device disconnect, or a mode reset).</summary>
-    public void Reset() {
-        Array.Clear(array: m_latched);
-        m_heldOrder.Clear();
-    }
-
-    private static float[] Fill(int count, float value) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: count);
-
-        var array = new float[count];
-
-        Array.Fill(
-            array: array,
-            value: value
-        );
-
-        return array;
     }
 }

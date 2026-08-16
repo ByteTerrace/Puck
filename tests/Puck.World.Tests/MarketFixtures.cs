@@ -11,22 +11,18 @@ namespace Puck.World.Tests;
 internal static class MarketFixtures {
     /// <summary>The currency row every market law in this suite prices against.</summary>
     public static readonly WorldCellName GoldRow = WorldCellName.Parse(candidate: "gold");
-
     /// <summary>The item row every market law in this suite trades.</summary>
     public static readonly WorldCellName AppleRow = WorldCellName.Parse(candidate: "apple");
 
     /// <summary>The house fee — 10%, chosen so a fee amount is exact and easy to hand-verify against any bid.</summary>
     public const int FeeBasisPoints = 1_000;
-
     /// <summary>The fixture market's declared minimum listing duration — the shortest legal duration, so a law that
     /// needs a listing to reach its deadline steps the fewest ticks.</summary>
     public const float MinDurationSeconds = 1f;
-
-    public const float MaxDurationSeconds = 3_600f;
-
-    public const long SellerStartingGold = 500;
-    public const long SellerStartingApples = 10;
     public const long BidderStartingGold = 500;
+    public const float MaxDurationSeconds = 3_600f;
+    public const long SellerStartingApples = 10;
+    public const long SellerStartingGold = 500;
 
     /// <summary>Builds the market-flavored document: <see cref="Fixtures.BuildDocument"/> plus the <c>gold</c>/<c>apple</c>
     /// state rows and a <c>market</c> section admitting both formats.</summary>
@@ -62,7 +58,6 @@ internal static class MarketFixtures {
 
         return (Fixtures.BuildDocument() with { State = [gold, apple], Market = market });
     }
-
     /// <summary>Reads a principal's cell value out of a keyed state row, defaulting to zero when the row declares no
     /// cell for that holder — the same convention the market compose arms themselves read through.</summary>
     public static long CellValueOf(WorldDefinition definition, WorldCellName row, WorldPrincipal principal) {
@@ -82,7 +77,6 @@ internal static class MarketFixtures {
 
         return 0L;
     }
-
     /// <summary>Finds a listing by id, or <see langword="null"/> when none exists.</summary>
     public static WorldMarketListing? FindListing(WorldDefinition definition, long id) {
         foreach (var listing in (definition.Market?.Listings ?? [])) {

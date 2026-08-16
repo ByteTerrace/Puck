@@ -56,6 +56,43 @@ public sealed class ContentAddressedStore {
         _ = Directory.CreateDirectory(path: m_tmpDirectory);
     }
 
+    // Accepts either "sha256/<hex64>" or a bare "<hex64>" and returns the lowercase hex64 form.
+    private static string NormalizeToHex(string hash) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: hash);
+
+        var hex = (hash.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: Sha256Prefix
+        )
+            ? hash[Sha256Prefix.Length..]
+            : hash
+        );
+
+        if (hex.Length != 64) {
+            throw new ArgumentException(
+                message: $"'{hash}' is not a well-formed sha256 hash (expected 64 hex characters).",
+                paramName: nameof(hash)
+            );
+        }
+
+        return hex.ToLowerInvariant();
+    }
+    private string ObjectPath(string hash) {
+        var hex = NormalizeToHex(hash: hash);
+
+        return Path.Combine(
+            path1: m_objectsDirectory,
+            path2: hex[..2],
+            path3: hex
+        );
+    }
+    private string RefPath(string category, string name) =>
+        Path.Combine(
+            path1: m_refsDirectory,
+            path2: category,
+            path3: name
+        );
+
     /// <summary>Computes the lowercase hex64 SHA-256 digest of <paramref name="content"/> (no <c>sha256/</c> prefix).</summary>
     /// <param name="content">The bytes to hash.</param>
     /// <returns>The lowercase hex64 digest.</returns>
@@ -68,129 +105,11 @@ public sealed class ContentAddressedStore {
         );
         return Convert.ToHexStringLower(bytes: hashBytes);
     }
-
     /// <summary>Determines whether an object exists for <paramref name="hash"/>.</summary>
     /// <param name="hash">The object's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
     /// <returns><see langword="true"/> if the object exists; otherwise <see langword="false"/>.</returns>
     public bool Contains(string hash) =>
         File.Exists(path: ObjectPath(hash: hash));
-
-    /// <summary>Writes <paramref name="content"/> to the store, deduplicating on identical bytes.</summary>
-    /// <param name="content">The object bytes to store.</param>
-    /// <returns>The canonical <c>sha256/&lt;hex64&gt;</c> hash string.</returns>
-    public string Put(ReadOnlySpan<byte> content) {
-        var hex = ComputeHash(content: content);
-        var objectPath = ObjectPath(hash: hex);
-
-        if (!File.Exists(path: objectPath)) {
-            var tmpPath = Path.Combine(
-                path1: m_tmpDirectory,
-                path2: $"{Guid.NewGuid():n}.tmp"
-            );
-
-            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: objectPath)!);
-            File.WriteAllBytes(
-                path: tmpPath,
-                bytes: content.ToArray()
-            );
-
-            try {
-                File.Move(
-                    sourceFileName: tmpPath,
-                    destFileName: objectPath,
-                    overwrite: false
-                );
-            } catch (IOException) when (File.Exists(path: objectPath)) {
-                // Lost a race with a concurrent identical Put — the object already landed; discard our temp copy.
-                File.Delete(path: tmpPath);
-            }
-        }
-
-        return $"{Sha256Prefix}{hex}";
-    }
-
-    /// <summary>Attempts to read the object bytes for <paramref name="hash"/>.</summary>
-    /// <param name="hash">The object's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
-    /// <param name="content">When this method returns <see langword="true"/>, the object's bytes.</param>
-    /// <returns><see langword="true"/> if the object was found; otherwise <see langword="false"/>.</returns>
-    public bool TryGet(string hash, out byte[] content) {
-        var objectPath = ObjectPath(hash: hash);
-
-        if (!File.Exists(path: objectPath)) {
-            content = [];
-            return false;
-        }
-
-        content = File.ReadAllBytes(path: objectPath);
-        return true;
-    }
-
-    /// <summary>Points a named ref at an object hash, atomically.</summary>
-    /// <param name="category">The ref category (a single path segment, e.g. <c>worlds</c>, <c>tunes</c>, <c>derived/bake</c>).</param>
-    /// <param name="name">The ref name within the category.</param>
-    /// <param name="hash">The target object's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
-    public void SetRef(string category, string name, string hash) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: category);
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
-
-        var hex = NormalizeToHex(hash: hash);
-        var refPath = RefPath(
-            category: category,
-            name: name
-        );
-        var tmpPath = Path.Combine(
-            path1: m_tmpDirectory,
-            path2: $"{Guid.NewGuid():n}.tmp"
-        );
-
-        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: refPath)!);
-        File.WriteAllText(
-            path: tmpPath,
-            contents: $"{Sha256Prefix}{hex}"
-        );
-        File.Move(
-            sourceFileName: tmpPath,
-            destFileName: refPath,
-            overwrite: true
-        );
-    }
-
-    /// <summary>Attempts to resolve a named ref to its target object hash.</summary>
-    /// <param name="category">The ref category.</param>
-    /// <param name="name">The ref name within the category.</param>
-    /// <param name="hash">When this method returns <see langword="true"/>, the canonical <c>sha256/&lt;hex64&gt;</c> hash.</param>
-    /// <returns><see langword="true"/> if the ref exists and is well-formed; otherwise <see langword="false"/>.</returns>
-    public bool TryResolveRef(string category, string name, out string hash) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: category);
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
-
-        var refPath = RefPath(
-            category: category,
-            name: name
-        );
-
-        if (!File.Exists(path: refPath)) {
-            hash = "";
-            return false;
-        }
-
-        var text = File.ReadAllText(path: refPath).Trim();
-
-        if (
-            !text.StartsWith(
-            value: Sha256Prefix,
-            comparisonType: StringComparison.Ordinal
-        ) ||
-            (text.Length != (Sha256Prefix.Length + 64))
-        ) {
-            hash = "";
-            return false;
-        }
-
-        hash = text;
-        return true;
-    }
-
     /// <summary>Lists the ref names declared under a category.</summary>
     /// <param name="category">The ref category.</param>
     /// <returns>The ref names, sorted ordinally (empty when the category has no refs).</returns>
@@ -216,7 +135,97 @@ public sealed class ContentAddressedStore {
 
         return names;
     }
+    /// <summary>Writes <paramref name="content"/> to the store, deduplicating on identical bytes.</summary>
+    /// <param name="content">The object bytes to store.</param>
+    /// <returns>The canonical <c>sha256/&lt;hex64&gt;</c> hash string.</returns>
+    public string Put(ReadOnlySpan<byte> content) {
+        var hex = ComputeHash(content: content);
+        var objectPath = ObjectPath(hash: hex);
 
+        if (!File.Exists(path: objectPath)) {
+            var tmpPath = Path.Combine(
+                path1: m_tmpDirectory,
+                path2: $"{Guid.NewGuid():n}.tmp"
+            );
+
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: objectPath)!);
+            File.WriteAllBytes(
+                path: tmpPath,
+                bytes: content.ToArray()
+            );
+
+            try {
+                File.Move(
+                    destFileName: objectPath,
+                    overwrite: false,
+                    sourceFileName: tmpPath
+                );
+            } catch (IOException) when (File.Exists(path: objectPath)) {
+                // Lost a race with a concurrent identical Put — the object already landed; discard our temp copy.
+                File.Delete(path: tmpPath);
+            }
+        }
+
+        return $"{Sha256Prefix}{hex}";
+    }
+    /// <summary>Records a derived-cache entry: points <c>derived/&lt;kind&gt;/&lt;inputHash&gt;</c> at
+    /// <paramref name="outputHash"/>, atomically.</summary>
+    /// <param name="kind">The derived artifact kind (e.g. <c>bake</c>).</param>
+    /// <param name="inputHash">The input's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
+    /// <param name="outputHash">The derived artifact's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
+    public void SetDerived(string kind, string inputHash, string outputHash) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: kind);
+
+        SetRef(
+            category: $"derived/{kind}",
+            name: NormalizeToHex(hash: inputHash),
+            hash: outputHash
+        );
+    }
+    /// <summary>Points a named ref at an object hash, atomically.</summary>
+    /// <param name="category">The ref category (a single path segment, e.g. <c>worlds</c>, <c>tunes</c>, <c>derived/bake</c>).</param>
+    /// <param name="name">The ref name within the category.</param>
+    /// <param name="hash">The target object's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
+    public void SetRef(string category, string name, string hash) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: category);
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
+
+        var hex = NormalizeToHex(hash: hash);
+        var refPath = RefPath(
+            category: category,
+            name: name
+        );
+        var tmpPath = Path.Combine(
+            path1: m_tmpDirectory,
+            path2: $"{Guid.NewGuid():n}.tmp"
+        );
+
+        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: refPath)!);
+        File.WriteAllText(
+            contents: $"{Sha256Prefix}{hex}",
+            path: tmpPath
+        );
+        File.Move(
+            destFileName: refPath,
+            overwrite: true,
+            sourceFileName: tmpPath
+        );
+    }
+    /// <summary>Attempts to read the object bytes for <paramref name="hash"/>.</summary>
+    /// <param name="hash">The object's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
+    /// <param name="content">When this method returns <see langword="true"/>, the object's bytes.</param>
+    /// <returns><see langword="true"/> if the object was found; otherwise <see langword="false"/>.</returns>
+    public bool TryGet(string hash, out byte[] content) {
+        var objectPath = ObjectPath(hash: hash);
+
+        if (!File.Exists(path: objectPath)) {
+            content = [];
+            return false;
+        }
+
+        content = File.ReadAllBytes(path: objectPath);
+        return true;
+    }
     /// <summary>Attempts to resolve a derived-cache entry: a ref under <c>derived/&lt;kind&gt;/&lt;inputHash&gt;</c>,
     /// the store's build-cache convenience for artifacts derived from an already-hashed input.</summary>
     /// <param name="kind">The derived artifact kind (e.g. <c>bake</c>).</param>
@@ -232,56 +241,39 @@ public sealed class ContentAddressedStore {
             hash: out hash
         );
     }
+    /// <summary>Attempts to resolve a named ref to its target object hash.</summary>
+    /// <param name="category">The ref category.</param>
+    /// <param name="name">The ref name within the category.</param>
+    /// <param name="hash">When this method returns <see langword="true"/>, the canonical <c>sha256/&lt;hex64&gt;</c> hash.</param>
+    /// <returns><see langword="true"/> if the ref exists and is well-formed; otherwise <see langword="false"/>.</returns>
+    public bool TryResolveRef(string category, string name, out string hash) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: category);
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
 
-    /// <summary>Records a derived-cache entry: points <c>derived/&lt;kind&gt;/&lt;inputHash&gt;</c> at
-    /// <paramref name="outputHash"/>, atomically.</summary>
-    /// <param name="kind">The derived artifact kind (e.g. <c>bake</c>).</param>
-    /// <param name="inputHash">The input's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
-    /// <param name="outputHash">The derived artifact's hash, as <c>sha256/&lt;hex64&gt;</c> or bare <c>&lt;hex64&gt;</c>.</param>
-    public void SetDerived(string kind, string inputHash, string outputHash) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: kind);
-
-        SetRef(
-            category: $"derived/{kind}",
-            name: NormalizeToHex(hash: inputHash),
-            hash: outputHash
+        var refPath = RefPath(
+            category: category,
+            name: name
         );
-    }
 
-    private string ObjectPath(string hash) {
-        var hex = NormalizeToHex(hash: hash);
-
-        return Path.Combine(
-            path1: m_objectsDirectory,
-            path2: hex[..2],
-            path3: hex
-        );
-    }
-    private string RefPath(string category, string name) =>
-        Path.Combine(
-        path1: m_refsDirectory,
-        path2: category,
-        path3: name
-    );
-
-    // Accepts either "sha256/<hex64>" or a bare "<hex64>" and returns the lowercase hex64 form.
-    private static string NormalizeToHex(string hash) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(argument: hash);
-
-        var hex = (hash.StartsWith(
-            value: Sha256Prefix,
-            comparisonType: StringComparison.Ordinal
-        )
-            ? hash[Sha256Prefix.Length..]
-            : hash);
-
-        if (hex.Length != 64) {
-            throw new ArgumentException(
-                message: $"'{hash}' is not a well-formed sha256 hash (expected 64 hex characters).",
-                paramName: nameof(hash)
-            );
+        if (!File.Exists(path: refPath)) {
+            hash = "";
+            return false;
         }
 
-        return hex.ToLowerInvariant();
+        var text = File.ReadAllText(path: refPath).Trim();
+
+        if (
+            !text.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: Sha256Prefix
+        ) ||
+            (text.Length != (Sha256Prefix.Length + 64))
+        ) {
+            hash = "";
+            return false;
+        }
+
+        hash = text;
+        return true;
     }
 }

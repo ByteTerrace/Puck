@@ -47,7 +47,6 @@ public sealed partial class AgbBus : ISnapshotable {
         writer.WriteBoolean(value: m_prefetchStopped);
         writer.WriteBoolean(value: m_prefetchAhead);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

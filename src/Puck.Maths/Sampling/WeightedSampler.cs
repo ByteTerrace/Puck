@@ -130,7 +130,6 @@ public static class WeightedSampler {
         return AliasTable<TElement>.CreateCore(entries: converted);
     }
 }
-
 /// <summary>
 /// An immutable weighted-choice table (the Walker/Vose alias method). Construction is O(n) exact integer
 /// arithmetic; sampling is O(1) — one masked column draw plus one threshold compare — and consumes exactly two
@@ -207,8 +206,15 @@ public sealed class AliasTable<TElement> {
             // itself, so making the otherwise-dead alias self preserves every uint draw while keeping the packed
             // threshold at uint.MaxValue.
             columns[s] = ((threshold > uint.MaxValue)
-                ? new(Threshold: uint.MaxValue, Alias: s)
-                : new(Threshold: ((uint)threshold), Alias: l));
+                ? new(
+                    Alias: s,
+                    Threshold: uint.MaxValue
+                )
+                : new(
+                    Alias: l,
+                    Threshold: ((uint)threshold)
+                )
+            );
             scaled[l] -= (totalWeight - scaled[s]);
             ((scaled[l] < totalWeight)
                 ? small
@@ -218,13 +224,19 @@ public sealed class AliasTable<TElement> {
         while (large.Count > 0) {
             var l = large.Pop();
 
-            columns[l] = new(Threshold: uint.MaxValue, Alias: l);
+            columns[l] = new(
+                Alias: l,
+                Threshold: uint.MaxValue
+            );
         }
 
         while (small.Count > 0) { // unreachable under exact arithmetic; kept as a belt against future edits
             var s = small.Pop();
 
-            columns[s] = new(Threshold: uint.MaxValue, Alias: s);
+            columns[s] = new(
+                Alias: s,
+                Threshold: uint.MaxValue
+            );
         }
 
         return new(
@@ -233,9 +245,6 @@ public sealed class AliasTable<TElement> {
             elements: elements
         );
     }
-
-    /// <summary>Gets the number of entries the table was built from (excluding power-of-two padding).</summary>
-    public int Count => m_count;
 
     /// <summary>Samples one element in proportion to the construction weights.</summary>
     /// <param name="generator">The generator to draw from; consumes exactly two advances.</param>
@@ -252,6 +261,10 @@ public sealed class AliasTable<TElement> {
 
         return ((generator.NextUInt32() < selection.Threshold)
             ? column
-            : selection.Alias);
+            : selection.Alias
+        );
     }
+
+    /// <summary>Gets the number of entries the table was built from (excluding power-of-two padding).</summary>
+    public int Count => m_count;
 }

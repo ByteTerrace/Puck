@@ -66,7 +66,7 @@ internal static class DeclarationsCommand {
             return new HashSet<string>(comparer: StringComparer.Ordinal);
         }
 
-        var requested = raw.Split(separator: ',', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var requested = raw.Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: ',')
             .Select(selector: static kind => kind.ToLowerInvariant())
             .ToHashSet(comparer: StringComparer.Ordinal);
 

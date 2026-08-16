@@ -13,7 +13,6 @@ public interface IHostContext {
     /// <see langword="false"/> when none is available. Inherited capabilities flow to every descendant. (A
     /// held capability is not found here — check it with <see cref="HoldsCapability{TCapability}"/>.)</summary>
     bool TryResolveCapability<TCapability>(out TCapability capability) where TCapability : class;
-
     /// <summary>Returns whether this context <em>holds</em> the given capability — one granted to a single
     /// holder and, unlike an inherited capability, not propagated to children: a host withholds it by default
     /// and re-grants it explicitly through <see cref="HeldCapabilityGrants.Grant{TCapability}"/>, preserving ancestor

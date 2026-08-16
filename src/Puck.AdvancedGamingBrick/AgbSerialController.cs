@@ -26,9 +26,11 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         [5750, 10998, 16241, 20972],   //  57600 bps
         [3140, 5755, 8376, 10486],     // 115200 bps
     ];
+
     private readonly AgbScheduler m_scheduler;
     private readonly IAgbInterruptController m_interrupts;
     private readonly AgbScheduler.Event m_transferEvent;
+
     private IAgbLink m_link = NullAgbLink.Instance;
     private IAgbLinkNode m_node = NullAgbLink.Instance;
 
@@ -43,9 +45,10 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
     private bool m_irqEnable;             // bit 14
     private int m_multiplayerId;          // bits 4-5 (read-only, assigned on a multiplayer round)
     private bool m_multiplayerError;      // bit 6  (read-only)
-    private readonly ushort[] m_data = new ushort[4]; // SIOMULTI0-3 / SIODATA32 (data[0..1]) / SIODATA8
-    private ushort m_dataSend;                         // SIOMLT_SEND / SIODATA8 (0x12A)
 
+    private readonly ushort[] m_data = new ushort[4]; // SIOMULTI0-3 / SIODATA32 (data[0..1]) / SIODATA8
+
+    private ushort m_dataSend;                         // SIOMLT_SEND / SIODATA8 (0x12A)
     // RCNT (0x134) / JOY-bus fields — the JOY-bus register fields.
     private bool m_rcntSc, m_rcntSd, m_rcntSi, m_rcntSo;
     private bool m_rcntScMode, m_rcntSdMode, m_rcntSiMode, m_rcntSoMode;
@@ -84,32 +87,31 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         // 0x120/0x122 are SIODATA32 in Normal-32 and SIOMULTI0/1 in Multiplayer; 0x124/0x126 are SIOMULTI2/3
         // (Multiplayer only). In any other mode these read 0 on hardware — without this read-gating a
         // UART/Normal-8 read would return stale Normal-32 data.
-        0x120u => (ushort)(((m_sioMode == 1) || (m_sioMode == 2))
+        0x120u => ((ushort)(((m_sioMode == 1) || (m_sioMode == 2))
         ? m_data[0]
-        : 0),
-        0x122u => (ushort)(((m_sioMode == 1) || (m_sioMode == 2))
+        : 0)),
+        0x122u => ((ushort)(((m_sioMode == 1) || (m_sioMode == 2))
         ? m_data[1]
-        : 0),
-        0x124u => (ushort)((m_sioMode == 2)
+        : 0)),
+        0x124u => ((ushort)((m_sioMode == 2)
         ? m_data[2]
-        : 0),
-        0x126u => (ushort)((m_sioMode == 2)
+        : 0)),
+        0x126u => ((ushort)((m_sioMode == 2)
         ? m_data[3]
-        : 0),
+        : 0)),
         0x128u => PackSioControl(),
-        0x12Au => (ushort)((m_sioMode == 3)
+        0x12Au => ((ushort)((m_sioMode == 3)
         ? 0
-        : m_dataSend), // SIODATA8/SIOMLT_SEND reads 0 in UART mode
+        : m_dataSend)), // SIODATA8/SIOMLT_SEND reads 0 in UART mode
         0x134u => PackRcnt(),
         0x140u => PackJoyControl(),
-        0x150u => (ushort)m_joyRecv,
-        0x152u => (ushort)(m_joyRecv >> 16),
-        0x154u => (ushort)m_joyTrans,
-        0x156u => (ushort)(m_joyTrans >> 16),
+        0x150u => ((ushort)m_joyRecv),
+        0x152u => ((ushort)(m_joyRecv >> 16)),
+        0x154u => ((ushort)m_joyTrans),
+        0x156u => ((ushort)(m_joyTrans >> 16)),
         0x158u => PackJoyStat(),
         _ => 0,
     };
-
     /// <inheritdoc/>
     public void WriteRegister(uint offset, ushort value) {
         switch (offset) {
@@ -150,15 +152,15 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             | (m_startBit
             ? 0x0080u
             : 0u)
-            | ((uint)m_uartFlags << 8)
-            | ((uint)m_sioMode << 12)
+            | (((uint)m_uartFlags) << 8)
+            | (((uint)m_sioMode) << 12)
             | (m_irqEnable
             ? 0x4000u
             : 0u);
 
         // In multiplayer mode bits 4-5 expose the assigned player id and bit 6 the error flag.
         if (m_sioMode == 2) {
-            value |= ((uint)m_multiplayerId << 4);
+            value |= (((uint)m_multiplayerId) << 4);
 
             if (m_multiplayerError) {
                 value |= 0x0040u;
@@ -170,7 +172,7 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             value |= 0x0020u;
         }
 
-        return (ushort)value;
+        return ((ushort)value);
     }
     private void WriteSioControl(ushort value) {
         m_shiftClockInternal = ((value & 0x0001u) != 0u);
@@ -178,7 +180,7 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         m_recvEnable = ((value & 0x0004u) != 0u);
         m_sendEnable = ((value & 0x0008u) != 0u);
         m_startBit = ((value & 0x0080u) != 0u);
-        m_uartFlags = (byte)((value >> 8) & 0xFu);
+        m_uartFlags = ((byte)((value >> 8) & 0xFu));
         m_sioMode = (value >> 12) & 0x3;
         m_irqEnable = ((value & 0x4000u) != 0u);
 
@@ -193,7 +195,6 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             m_scheduler.Deschedule(e: m_transferEvent);
         }
     }
-
     // Begins a transfer in the current mode. A self-clocked transfer (normal internal-clock master, multiplayer
     // parent, UART) completes after the appropriate bit-time — even on a lone console, where hardware still shifts
     // and reads the idle-high lines back as all ones. An externally-clocked normal transfer with no partner has no
@@ -272,7 +273,6 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             cyclesFromNow: cycles
         );
     }
-
     // SIOCNT bits 0-1 select the Baud Rate in Multiplayer/UART mode (0=9600, 1=38400, 2=57600, 3=115200 bps) — the
     // same two bits that select the Normal-mode shift clock (SC/SC2), decomposed into m_shiftClockInternal/
     // m_shiftClock2MHz.
@@ -287,7 +287,6 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         2 => 16,  //  57600 bps
         _ => 8,   // 115200 bps
     };
-
     // Fired by the scheduler when a partner-driven transfer finishes: exchange the data through the link, clear the
     // start/busy bit, and raise the serial IRQ if enabled.
     private void CompleteTransfer() {
@@ -296,23 +295,23 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         switch (m_sioMode) {
             case 0: {
                     var incoming = m_node.NormalExchange(
-                        outgoing: (uint)(m_data[0] & 0xFFu),
+                        outgoing: ((uint)(m_data[0] & 0xFFu)),
                         word: false
                     );
 
-                    m_data[0] = (ushort)((m_data[0] & 0xFF00u) | (incoming & 0xFFu));
+                    m_data[0] = ((ushort)((m_data[0] & 0xFF00u) | (incoming & 0xFFu)));
 
                     break;
                 }
             case 1: {
-                    var outgoing = (uint)(m_data[0] | (m_data[1] << 16));
+                    var outgoing = ((uint)(m_data[0] | (m_data[1] << 16)));
                     var incoming = m_node.NormalExchange(
                         outgoing: outgoing,
                         word: true
                     );
 
-                    m_data[0] = (ushort)incoming;
-                    m_data[1] = (ushort)(incoming >> 16);
+                    m_data[0] = ((ushort)incoming);
+                    m_data[1] = ((ushort)(incoming >> 16));
 
                     break;
                 }
@@ -352,7 +351,6 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             ((m_rcntMode & 0x2) == 0)
         );
     }
-
     /// <inheritdoc/>
     void IAgbLinkClient.CompleteMultiplayerRound(ReadOnlySpan<ushort> slots, int playerId) {
         // The parent's round lands whether or not this child wrote its own start bit (hardware exchanges with every
@@ -372,7 +370,6 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             m_interrupts.Request(source: InterruptSource.Serial);
         }
     }
-
     /// <inheritdoc/>
     bool IAgbLinkClient.TryCompleteNormalSlave(uint incoming, bool word, out uint outgoing) {
         // The slave participates only if it is armed for exactly this shift: Normal mode of the matching width,
@@ -394,12 +391,12 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         m_startBit = false;
 
         if (word) {
-            outgoing = (uint)m_data[0] | ((uint)m_data[1] << 16);
-            m_data[0] = (ushort)incoming;
-            m_data[1] = (ushort)(incoming >> 16);
+            outgoing = ((uint)m_data[0]) | (((uint)m_data[1]) << 16);
+            m_data[0] = ((ushort)incoming);
+            m_data[1] = ((ushort)(incoming >> 16));
         } else {
             outgoing = m_data[0] & 0xFFu;
-            m_data[0] = (ushort)((m_data[0] & 0xFF00u) | (incoming & 0xFFu));
+            m_data[0] = ((ushort)((m_data[0] & 0xFF00u) | (incoming & 0xFFu)));
         }
 
         if (m_irqEnable) {
@@ -437,7 +434,7 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             | (m_siIrqEnable
             ? 0x0100u
             : 0u)
-            | ((uint)m_rcntMode << 14);
+            | (((uint)m_rcntMode) << 14);
 
         // While RCNT is in SIO mode (not GPIO/JOY) and SIOCNT is in a Normal mode, the SD (bit 1) and SO (bit 3)
         // lines are driven by the serial unit and read back 0 (on hardware Normal RCNT reads 0x01F5 vs 0x01FF for M/UART).
@@ -457,7 +454,7 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
             value &= ~0x0003u;
         }
 
-        return (ushort)value;
+        return ((ushort)value);
     }
     private void WriteRcnt(ushort value) {
         m_rcntSc = ((value & 0x0001u) != 0u);
@@ -471,7 +468,7 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         m_siIrqEnable = ((value & 0x0100u) != 0u);
         m_rcntMode = (value >> 14) & 0x3;
     }
-    private ushort PackJoyControl() => (ushort)(
+    private ushort PackJoyControl() => ((ushort)(
         (m_joyReset
         ? 0x0001u
         : 0u)
@@ -483,7 +480,7 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
         : 0u)
         | (m_joyResetIrqEnable
         ? 0x0040u
-        : 0u));
+        : 0u)));
     private void WriteJoyControl(ushort value) {
         // The status bits are write-one-to-clear; bit 6 is the reset-IRQ enable.
         if ((value & 0x0001u) != 0u) {
@@ -500,14 +497,14 @@ public sealed partial class AgbSerialController : IAgbSerialController, IAgbLink
 
         m_joyResetIrqEnable = ((value & 0x0040u) != 0u);
     }
-    private ushort PackJoyStat() => (ushort)(
+    private ushort PackJoyStat() => ((ushort)(
         (m_joyRecvFlag
         ? 0x0002u
         : 0u)
         | (m_joySendFlag
         ? 0x0008u
         : 0u)
-        | ((uint)m_joyGeneralFlag << 4));
+        | (((uint)m_joyGeneralFlag) << 4)));
     private void WriteJoyStat(ushort value) {
         m_joyRecvFlag = ((value & 0x0002u) != 0u);
         m_joySendFlag = ((value & 0x0008u) != 0u);

@@ -3,6 +3,7 @@ using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.SignedDistance;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -45,14 +46,20 @@ namespace Puck.World.Client;
 /// </para>
 /// </remarks>
 internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser {
-    private readonly WorldSessionMirror m_mirror;
-    private readonly float m_fieldOfViewRadians;
     // The BIND-time resolved camera choice: a validated, currently-present camera NAME, or null for "use the
     // destination's default projection" (its first declared camera, else the spawn-centroid overview) — see this
     // type's own construction site in WorldScreenBinder.TrySession, which is where the "unknown camera refuses at
     // bind with a loud note, falling back to the default projection" decision is made and narrated.
     private readonly string? m_effectiveCameraName;
+    private readonly float m_fieldOfViewRadians;
+    private readonly WorldSessionMirror m_mirror;
+
     private SdfProgram? m_lastProgram;
+    // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.RenderViews (the one place with
+    // access to both the local eye and the border pair's two face rows) immediately before this view's Resolve.
+    // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
+    private (CameraSnapshot Camera, Vector2 Offset)? m_windowOverride;
+
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -63,10 +70,6 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
     private readonly int[] m_emittedRigs = new int[WorldAvatarCatalog.Capacity];
     private readonly float[] m_emittedScales = new float[WorldAvatarCatalog.Capacity];
     private readonly float[] m_emittedGaitAmplitudes = new float[WorldAvatarCatalog.Capacity];
-    // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.RenderViews (the one place with
-    // access to both the local eye and the border pair's two face rows) immediately before this view's Resolve.
-    // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
-    private (CameraSnapshot Camera, Vector2 Offset)? m_windowOverride;
 
     /// <summary>Initializes the emitter over a resolved session mirror and a bind-time-resolved camera choice.</summary>
     /// <param name="mirror">The destination's client-side mirror this emitter reads static geometry from.</param>
@@ -82,6 +85,232 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
         m_fieldOfViewRadians = fieldOfViewRadians;
     }
 
+    // Registers the avatar palette and emits the catalog range — the probe branch (worst-case, every rig at unit
+    // scale) and the live branch (only mirrored-active avatars, each sourcing its LOOK's pinned rig and uniform
+    // scale) both flow through the ONE WorldAvatarCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
+    // own avatar block.
+    private void EmitAvatars(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
+        var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
+        var accentMaterials = new int[WorldAvatarCatalog.Capacity];
+        var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
+
+        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+            var bodyColor = m_mirror.BodyColor(index: index);
+            var look = m_mirror.Look(index: index);
+
+            m_emittedRigs[index] = LookRig(
+                look: look,
+                catalogRig: m_mirror.CatalogRig(index: index)
+            );
+            m_emittedScales[index] = look.Scale;
+            m_emittedGaitAmplitudes[index] = look.Motion.GaitAmplitude;
+
+            bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
+            accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * noseFactor)));
+        }
+
+        WorldAvatarCatalog.Emit(
+            builder: builder,
+            isActive: m_mirror.IsActive,
+            bodyMaterials: bodyMaterials,
+            accentMaterials: accentMaterials,
+            probeWorstCase: probeWorstCase,
+            slotBase: slotBase,
+            rigFor: (probeWorstCase
+            ? null
+            : index => m_emittedRigs[index]),
+            scaleFor: (probeWorstCase
+            ? null
+            : index => m_emittedScales[index])
+        );
+    }
+    // The catalog geometry-source rig for a look: an authored Catalog(Index) pin, or the occupant-owned carried rig
+    // for an unpinned catalog OR a Creation look — the identical selector Client.WorldSceneEmitter.LookRig applies.
+    // A Creation look's body would render through the stamp pool on the boot path; this emitter has no stamp-pool
+    // seam (see this type's own remarks), so a mirrored Creation-look body still renders as its catalog avatar.
+    private static int LookRig(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned })
+        ? pinned
+        : catalogRig
+    );
+    // The camera row's anchor pose, restricted to what a STATIC-geometry-only mirror can resolve: a Placement anchor
+    // reads the destination's own authored transform (real data, no pose mirror needed); Entity/EntityPart/Group
+    // anchors have no live body pose to read this wave (see WorldSessionMirror's own staged-boundary remarks) and
+    // resolve to the world origin rather than reaching into state that was never mirrored.
+    private static (Vector3 Position, Quaternion Orientation) ResolveAnchorPose(WorldDefinition definition, WorldAnchor? anchor) {
+        if (anchor is WorldAnchor.Placement placement) {
+            return (WorldAnchorGeometry.StaticPlacementPosition(
+                definition: definition,
+                placementId: placement.PlacementId,
+                shapeId: placement.ShapeId
+            ), Quaternion.Identity);
+        }
+
+        return (Vector3.Zero, Quaternion.Identity);
+    }
+    // Resolves this frame's camera: the bind-time-effective named camera if it still exists, else the destination's
+    // first declared camera, else a fixed overview derived from its spawn points.
+    // Re-resolved every frame from the LIVE mirrored definition (never cached past a name lookup) so a
+    // live pose/aim/lens edit on the destination's own camera row is visible without rebinding the session face.
+    private CameraSnapshot ResolveCamera(uint width, uint height) {
+        var definition = m_mirror.Definition;
+        var row = ResolveCameraRow(definition: definition);
+
+        if (row is { } cameraRow) {
+            var (position, orientation) = ResolveAnchorPose(
+                definition: definition,
+                anchor: cameraRow.Anchor
+            );
+            var rig = WorldCameraRigCompiler.Compile(rig: cameraRow.Rig);
+            var anchor = new SdfAnchor(
+                Orientation: orientation,
+                Position: position
+            );
+            var clock = new SdfCameraClock(
+                PresentationSeconds: 0f,
+                AuthoritativeTick: m_mirror.Tick
+            );
+
+            var (eye, target, fieldOfView) = rig.Resolve(
+                anchor: in anchor,
+                clock: in clock
+            );
+
+            return CameraSnapshot.LookAt(
+                position: eye,
+                target: target,
+                fieldOfViewRadians: fieldOfView,
+                viewportWidth: Math.Max(
+                    val1: 1u,
+                    val2: width
+                ),
+                viewportHeight: Math.Max(
+                    val1: 1u,
+                    val2: height
+                )
+            );
+        }
+
+        return ResolveOverviewCamera(
+            definition: definition,
+            height: height,
+            width: width
+        );
+    }
+    private WorldCamera? ResolveCameraRow(WorldDefinition definition) {
+        if (m_effectiveCameraName is { } name) {
+            foreach (var camera in definition.Cameras) {
+                if (string.Equals(
+                    a: camera.Name,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return camera;
+                }
+            }
+
+            // The named camera vanished from a LATER destination mutation — fall through to the destination's
+            // default projection rather than freezing on a dangling reference.
+            return ((definition.Cameras.Count > 0)
+                ? definition.Cameras[0]
+                : null
+            );
+        }
+
+        return ((definition.Cameras.Count > 0)
+            ? definition.Cameras[0]
+            : null
+        );
+    }
+    // The spawn-centroid overview — the SAME construction WorldFrameSource.ResolveSpectatorCamera uses for the
+    // boot world's own no-local-seats fallback, applied here to a destination with no declared camera at all: a
+    // pulled-back, elevated look-at over the centroid of its authored local-seat spawn points.
+    private static CameraSnapshot ResolveOverviewCamera(WorldDefinition definition, uint width, uint height) {
+        var centroid = Vector3.Zero;
+        var resolved = 0;
+
+        foreach (var name in definition.Population.SeatSpawns) {
+            if (WorldDefinitionRows.FindSpawnPoint(
+                spawnPoints: definition.SpawnPoints,
+                id: name
+            ) is { } spawn) {
+                centroid += spawn.Position;
+                resolved++;
+            }
+        }
+
+        if (resolved > 0) {
+            centroid /= resolved;
+        }
+
+        var target = (centroid + new Vector3(
+            x: 0f,
+            y: 1f,
+            z: 0f
+        ));
+        var eye = (centroid + new Vector3(
+            x: 0f,
+            y: 14f,
+            z: 18f
+        ));
+
+        return CameraSnapshot.LookAt(
+            position: eye,
+            target: target,
+            fieldOfViewRadians: (MathF.PI / 3f),
+            viewportWidth: Math.Max(
+                val1: 1u,
+                val2: width
+            ),
+            viewportHeight: Math.Max(
+                val1: 1u,
+                val2: height
+            )
+        );
+    }
+
+    /// <inheritdoc/>
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        var programChanged = !ReferenceEquals(
+            objA: program,
+            objB: m_lastProgram
+        );
+
+        m_lastProgram = program;
+
+        var (camera, offset) = ((m_windowOverride is { } window)
+            ? (window.Camera, window.Offset)
+            : (ResolveCamera(
+                height: height,
+                width: width
+            ), Vector2.Zero)
+        );
+
+        return new SdfFrame(
+            Program: program,
+            ProgramChanged: programChanged,
+            Views: [new SdfViewSnapshot(
+                    Camera: camera,
+                    Region: new NormalizedRect(
+                        Height: 1f,
+                        Width: 1f,
+                        X: 0f,
+                        Y: 0f
+                    )
+                ) { AsymmetricFrustumOffset = offset }],
+            Time: 0f,
+            WarpAmount: 0f
+        ) {
+            DynamicTransforms = transforms,
+            // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound/shadow-escape/
+            // shadow-accumulation here costs real GPU time for a tiny screen-space result no player is closely
+            // scrutinizing — the same cost posture SdfCameraView's own jumbotron rig already takes.
+            DisableAmbientOcclusion = true,
+            DisableSoftShadows = true,
+            DisableFarBound = true,
+            DisableShadowEscapeExit = true,
+            DisableShadowAccumulation = true,
+        };
+    }
     /// <inheritdoc/>
     /// <remarks>The placement branch is unchanged (static reservation vs. static emission). The avatar branch is
     /// appended after it, in both the probe and the live arm: <see cref="WorldAvatarCatalog.Emit"/> already owns its
@@ -91,53 +320,36 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
         var definition = m_mirror.Definition;
 
         if (context.Probe) {
-            WorldSessionRenderEnvelope.EmitProbe(builder: builder, candidate: definition, bodyColor: m_mirror.BodyColor, slotBase: context.SlotBase);
+            WorldSessionRenderEnvelope.EmitProbe(
+                builder: builder,
+                candidate: definition,
+                bodyColor: m_mirror.BodyColor,
+                slotBase: context.SlotBase
+            );
 
             return;
         } else {
-            WorldPlacementStamper.EmitStatic(builder: builder, creations: definition.Creations, placements: definition.Placements);
+            // A remote session mirror carries its document but no font asset origin/bytes. Its creation text stays
+            // omitted until session delivery transports pinned assets and this view can share the merged glyph atlas.
+            WorldPlacementStamper.EmitStatic(
+                builder: builder,
+                creations: definition.Creations,
+                placements: definition.Placements
+            );
         }
 
-        EmitAvatars(builder: builder, probeWorstCase: false, slotBase: context.SlotBase);
+        EmitAvatars(
+            builder: builder,
+            probeWorstCase: false,
+            slotBase: context.SlotBase
+        );
     }
-
-    /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
-    /// <c>WorldWindowFrustumFit.TryFitWindow</c> fit against the border pair's two face rows and the local
-    /// viewer's eye. Called once per produced frame by <see cref="WorldScreenBinder.RenderViews"/>, immediately
-    /// before this session's <see cref="Puck.SdfVm.Views.WorldSessionView.Resolve"/>; <see langword="null"/> (no
-    /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
-    /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
-    /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
-    /// ordinary projection.</param>
-    /// <param name="offset">The fitted frustum's tangent-space center offset — ignored when <paramref name="camera"/>
-    /// is <see langword="null"/>.</param>
-    public void SetWindowCamera(CameraSnapshot? camera, Vector2 offset) {
-        m_windowOverride = ((camera is { } resolved) ? (resolved, offset) : null);
-    }
-
     /// <summary>Measures a proposed destination definition against this view's frozen render envelope.</summary>
     public (int Words, int Instances) MeasureCandidate(WorldDefinition candidate) =>
-        WorldSessionRenderEnvelope.MeasureCandidate(candidate: candidate, bodyColor: m_mirror.BodyColor);
-
-    /// <summary>The frozen transform-slot count this emitter declares: the all-128-rig avatar catalog's leaf capacity
-    /// — the same frozen worst case <see cref="Client.WorldSceneEmitter.DynamicSlotCount"/> reserves for its own
-    /// avatar range, sized off the destination's population capacity (<see cref="WorldAvatarCatalog.Capacity"/> and
-    /// <see cref="WorldPopulationLimits.CapacityCeiling"/> are single-sourced today), so a full destination can never
-    /// outgrow this emitter's own probe.</summary>
-    public int DynamicSlotCount => WorldAvatarCatalog.DynamicTransformCapacity;
-
-    /// <inheritdoc/>
-    public int RevisionComponentCount => 2;
-
-    /// <summary>Writes two components, never their sum: the definition-delivery revision, and the mirrored
-    /// snapshot's declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the
-    /// wire and able to move down) — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for
-    /// the identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
-    public void WriteRevision(Span<int> destination) {
-        destination[0] = m_mirror.DefinitionRevision;
-        destination[1] = m_mirror.SnapshotRevision;
-    }
-
+        WorldSessionRenderEnvelope.MeasureCandidate(
+            candidate: candidate,
+            bodyColor: m_mirror.BodyColor
+        );
     /// <inheritdoc/>
     /// <remarks>Packs every mirrored-active avatar's interpolated pose into its frozen catalog leaf slots (see
     /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase; every other slot
@@ -145,7 +357,10 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
     /// any emitter's <see cref="PackDynamicTransforms"/> runs (see <see cref="Client.WorldSceneEmitter"/>'s identical
     /// remark).</remarks>
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context) {
-        var avatars = slots.Slice(start: context.SlotBase, length: WorldAvatarCatalog.DynamicTransformCapacity);
+        var avatars = slots.Slice(
+            start: context.SlotBase,
+            length: WorldAvatarCatalog.DynamicTransformCapacity
+        );
         var alpha = m_mirror.InterpolationAlpha;
 
         for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
@@ -155,14 +370,32 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
                 continue;
             }
 
-            var position = Vector3.Lerp(value1: m_mirror.PreviousPosition(index: index), value2: m_mirror.CurrentPosition(index: index), amount: alpha);
+            var position = Vector3.Lerp(
+                value1: m_mirror.PreviousPosition(index: index),
+                value2: m_mirror.CurrentPosition(index: index),
+                amount: alpha
+            );
             // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize — the SAME formula
             // Client.WorldClient.UpdateRenderPoses uses.
-            var orientation = Quaternion.Lerp(quaternion1: m_mirror.PreviousOrientation(index: index), quaternion2: m_mirror.CurrentOrientation(index: index), amount: alpha);
+            var orientation = Quaternion.Lerp(
+                quaternion1: m_mirror.PreviousOrientation(index: index),
+                quaternion2: m_mirror.CurrentOrientation(index: index),
+                amount: alpha
+            );
 
             var address = m_mirror.Address(index: index);
-            if (m_avatarPoseSeeded[index] && (m_avatarMotionAddresses[index] == address)) {
-                var travelled = MathF.Min(x: Vector3.Distance(value1: position, value2: m_avatarPreviousPositions[index]), y: 0.25f);
+
+            if (
+                m_avatarPoseSeeded[index] &&
+                (m_avatarMotionAddresses[index] == address)
+            ) {
+                var travelled = MathF.Min(
+                    x: Vector3.Distance(
+                        value1: position,
+                        value2: m_avatarPreviousPositions[index]
+                    ),
+                    y: 0.25f
+                );
 
                 m_avatarGaitPhases[index] += (travelled * 8.0f);
             } else {
@@ -187,155 +420,37 @@ internal sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDres
             );
         }
     }
-
-    // Registers the avatar palette and emits the catalog range — the probe branch (worst-case, every rig at unit
-    // scale) and the live branch (only mirrored-active avatars, each sourcing its LOOK's pinned rig and uniform
-    // scale) both flow through the ONE WorldAvatarCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
-    // own avatar block.
-    private void EmitAvatars(SdfProgramBuilder builder, bool probeWorstCase, int slotBase) {
-        var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
-        var accentMaterials = new int[WorldAvatarCatalog.Capacity];
-        var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
-
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
-            var bodyColor = m_mirror.BodyColor(index: index);
-            var look = m_mirror.Look(index: index);
-
-            m_emittedRigs[index] = LookRig(look: look, catalogRig: m_mirror.CatalogRig(index: index));
-            m_emittedScales[index] = look.Scale;
-            m_emittedGaitAmplitudes[index] = look.Motion.GaitAmplitude;
-
-            bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
-            accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * noseFactor)));
-        }
-
-        WorldAvatarCatalog.Emit(
-            builder: builder,
-            isActive: m_mirror.IsActive,
-            bodyMaterials: bodyMaterials,
-            accentMaterials: accentMaterials,
-            probeWorstCase: probeWorstCase,
-            slotBase: slotBase,
-            rigFor: (probeWorstCase ? null : index => m_emittedRigs[index]),
-            scaleFor: (probeWorstCase ? null : index => m_emittedScales[index])
+    /// <summary>Sets (or clears) this frame's window camera override — the off-axis frustum
+    /// <c>WorldWindowFrustumFit.TryFitWindow</c> fit against the border pair's two face rows and the local
+    /// viewer's eye. Called once per produced frame by <see cref="WorldScreenBinder.RenderViews"/>, immediately
+    /// before this session's <see cref="Puck.SdfVm.Views.WorldSessionView.Resolve"/>; <see langword="null"/> (no
+    /// eye/aperture available yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
+    /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that one frame.</summary>
+    /// <param name="camera">The fitted camera apexed at the mapped eye, or <see langword="null"/> to use the
+    /// ordinary projection.</param>
+    /// <param name="offset">The fitted frustum's tangent-space center offset — ignored when <paramref name="camera"/>
+    /// is <see langword="null"/>.</param>
+    public void SetWindowCamera(CameraSnapshot? camera, Vector2 offset) {
+        m_windowOverride = ((camera is { } resolved)
+            ? (resolved, offset)
+            : null
         );
     }
+    /// <summary>Writes two components, never their sum: the definition-delivery revision, and the mirrored
+    /// snapshot's declared-set/palette revision (<see cref="WorldSessionMirror.SnapshotRevision"/>, assigned from the
+    /// wire and able to move down) — the same non-summing rule <see cref="WorldClient.WriteRevision"/> documents for
+    /// the identical reason: a rebuild must never be maskable by two counters moving in opposite directions.</summary>
+    public void WriteRevision(Span<int> destination) {
+        destination[0] = m_mirror.DefinitionRevision;
+        destination[1] = m_mirror.SnapshotRevision;
+    }
 
-    // The catalog geometry-source rig for a look: an authored Catalog(Index) pin, or the occupant-owned carried rig
-    // for an unpinned catalog OR a Creation look — the identical selector Client.WorldSceneEmitter.LookRig applies.
-    // A Creation look's body would render through the stamp pool on the boot path; this emitter has no stamp-pool
-    // seam (see this type's own remarks), so a mirrored Creation-look body still renders as its catalog avatar.
-    private static int LookRig(WorldLook look, byte catalogRig) => ((look.Source is WorldLookSource.Catalog { Index: { } pinned }) ? pinned : catalogRig);
-
+    /// <summary>The frozen transform-slot count this emitter declares: the all-128-rig avatar catalog's leaf capacity
+    /// — the same frozen worst case <see cref="Client.WorldSceneEmitter.DynamicSlotCount"/> reserves for its own
+    /// avatar range, sized off the destination's population capacity (<see cref="WorldAvatarCatalog.Capacity"/> and
+    /// <see cref="WorldPopulationLimits.CapacityCeiling"/> are single-sourced today), so a full destination can never
+    /// outgrow this emitter's own probe.</summary>
+    public int DynamicSlotCount => WorldAvatarCatalog.DynamicTransformCapacity;
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
-        var programChanged = !ReferenceEquals(objA: program, objB: m_lastProgram);
-
-        m_lastProgram = program;
-
-        var (camera, offset) = ((m_windowOverride is { } window) ? (window.Camera, window.Offset) : (ResolveCamera(width: width, height: height), Vector2.Zero));
-
-        return new SdfFrame(
-            Program: program,
-            ProgramChanged: programChanged,
-            Views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(X: 0f, Y: 0f, Width: 1f, Height: 1f)) { AsymmetricFrustumOffset = offset }],
-            Time: 0f,
-            WarpAmount: 0f
-        ) {
-            DynamicTransforms = transforms,
-            // A budgeted 160x144-class panel image: re-marching full soft shadows/AO/far-bound/shadow-escape/
-            // shadow-accumulation here costs real GPU time for a tiny screen-space result no player is closely
-            // scrutinizing — the same cost posture SdfCameraView's own jumbotron rig already takes.
-            DisableAmbientOcclusion = true,
-            DisableSoftShadows = true,
-            DisableFarBound = true,
-            DisableShadowEscapeExit = true,
-            DisableShadowAccumulation = true,
-        };
-    }
-
-    // Resolves this frame's camera: the bind-time-effective named camera if it still exists, else the destination's
-    // first declared camera, else a fixed overview derived from its spawn points.
-    // Re-resolved every frame from the LIVE mirrored definition (never cached past a name lookup) so a
-    // live pose/aim/lens edit on the destination's own camera row is visible without rebinding the session face.
-    private CameraSnapshot ResolveCamera(uint width, uint height) {
-        var definition = m_mirror.Definition;
-        var row = ResolveCameraRow(definition: definition);
-
-        if (row is { } cameraRow) {
-            var (position, orientation) = ResolveAnchorPose(definition: definition, anchor: cameraRow.Anchor);
-            var rig = WorldCameraRigCompiler.Compile(rig: cameraRow.Rig);
-            var anchor = new SdfAnchor(Position: position, Orientation: orientation);
-            var clock = new SdfCameraClock(PresentationSeconds: 0f, AuthoritativeTick: m_mirror.Tick);
-            var (eye, target, fieldOfView) = rig.Resolve(anchor: in anchor, clock: in clock);
-
-            return CameraSnapshot.LookAt(
-                position: eye,
-                target: target,
-                fieldOfViewRadians: fieldOfView,
-                viewportWidth: Math.Max(val1: 1u, val2: width),
-                viewportHeight: Math.Max(val1: 1u, val2: height)
-            );
-        }
-
-        return ResolveOverviewCamera(definition: definition, width: width, height: height);
-    }
-
-    private WorldCamera? ResolveCameraRow(WorldDefinition definition) {
-        if (m_effectiveCameraName is { } name) {
-            foreach (var camera in definition.Cameras) {
-                if (string.Equals(a: camera.Name, b: name, comparisonType: StringComparison.Ordinal)) {
-                    return camera;
-                }
-            }
-
-            // The named camera vanished from a LATER destination mutation — fall through to the destination's
-            // default projection rather than freezing on a dangling reference.
-            return ((definition.Cameras.Count > 0) ? definition.Cameras[0] : null);
-        }
-
-        return ((definition.Cameras.Count > 0) ? definition.Cameras[0] : null);
-    }
-
-    // The camera row's anchor pose, restricted to what a STATIC-geometry-only mirror can resolve: a Placement anchor
-    // reads the destination's own authored transform (real data, no pose mirror needed); Entity/EntityPart/Group
-    // anchors have no live body pose to read this wave (see WorldSessionMirror's own staged-boundary remarks) and
-    // resolve to the world origin rather than reaching into state that was never mirrored.
-    private static (Vector3 Position, Quaternion Orientation) ResolveAnchorPose(WorldDefinition definition, WorldAnchor? anchor) {
-        if (anchor is WorldAnchor.Placement placement) {
-            return (WorldAnchorGeometry.StaticPlacementPosition(definition: definition, placementId: placement.PlacementId, shapeId: placement.ShapeId), Quaternion.Identity);
-        }
-
-        return (Vector3.Zero, Quaternion.Identity);
-    }
-
-    // The spawn-centroid overview — the SAME construction WorldFrameSource.ResolveSpectatorCamera uses for the
-    // boot world's own no-local-seats fallback, applied here to a destination with no declared camera at all: a
-    // pulled-back, elevated look-at over the centroid of its authored local-seat spawn points.
-    private static CameraSnapshot ResolveOverviewCamera(WorldDefinition definition, uint width, uint height) {
-        var centroid = Vector3.Zero;
-        var resolved = 0;
-
-        foreach (var name in definition.Population.SeatSpawns) {
-            if (WorldDefinitionRows.FindSpawnPoint(spawnPoints: definition.SpawnPoints, id: name) is { } spawn) {
-                centroid += spawn.Position;
-                resolved++;
-            }
-        }
-
-        if (resolved > 0) {
-            centroid /= resolved;
-        }
-
-        var target = (centroid + new Vector3(x: 0f, y: 1f, z: 0f));
-        var eye = (centroid + new Vector3(x: 0f, y: 14f, z: 18f));
-
-        return CameraSnapshot.LookAt(
-            position: eye,
-            target: target,
-            fieldOfViewRadians: (MathF.PI / 3f),
-            viewportWidth: Math.Max(val1: 1u, val2: width),
-            viewportHeight: Math.Max(val1: 1u, val2: height)
-        );
-    }
+    public int RevisionComponentCount => 2;
 }

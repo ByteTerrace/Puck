@@ -52,7 +52,10 @@ public sealed class IncidenceAlgebra<TValue, TOps>
         Algebra = algebra;
         ElementCount = elementCount;
         IntervalCount = count;
-        Zeta = algebra.FromSupport(keys: everyKey, coefficients: ones);
+        Zeta = algebra.FromSupport(
+            coefficients: ones,
+            keys: everyKey
+        );
         m_lower = lower;
         m_signed = (material as ISignedMaterial<TValue, TOps>);
         m_symbolOf = symbolOf;
@@ -68,6 +71,9 @@ public sealed class IncidenceAlgebra<TValue, TOps>
     /// <summary>Gets the zeta element — the coefficient one at every interval of the order.</summary>
     public PresentedAlgebra<TValue, TOps>.Element Zeta { get; }
 
+    private ISignedMaterial<TValue, TOps> RequireSigned() =>
+        (m_signed ?? throw new InvalidOperationException(message: "Möbius inversion alternates in sign, which an unsigned material cannot express."));
+
     /// <summary>Creates the incidence algebra of a finite order.</summary>
     /// <param name="elementCount">The number of elements, from one through 256.</param>
     /// <param name="relations">Pairs <c>(lower, upper)</c> generating the strict order; they need not be transitively
@@ -78,13 +84,20 @@ public sealed class IncidenceAlgebra<TValue, TOps>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="elementCount"/> is outside one through 256, or the
     /// order has more than 256 intervals.</exception>
     public static IncidenceAlgebra<TValue, TOps> Create(int elementCount, ReadOnlySpan<(int Lower, int Upper)> relations, TOps material) {
-        var presentation = Presentations.IntervalPoset<TValue, TOps>(elementCount: elementCount, relations: relations, material: material);
+        var presentation = Presentations.IntervalPoset<TValue, TOps>(
+            elementCount: elementCount,
+            material: material,
+            relations: relations
+        );
         var count = presentation.NormalFormCount;
         var lower = new int[count];
         var symbolOf = new long[(elementCount * elementCount)];
         var upper = new int[count];
 
-        Array.Fill(array: symbolOf, value: -1L);
+        Array.Fill(
+            array: symbolOf,
+            value: -1L
+        );
 
         // The endpoints are read back off the presentation's own generator boundaries rather than re-derived, so the
         // key scheme is whatever the presentation says it is and this map cannot drift from it.
@@ -104,19 +117,23 @@ public sealed class IncidenceAlgebra<TValue, TOps>
             symbolOf: symbolOf
         );
     }
-
     /// <summary>Returns the interval one key names.</summary>
     /// <param name="key">The key.</param>
     /// <returns>The interval's two endpoints.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The key names no interval of this order.</exception>
     public (int Lower, int Upper) Interval(long key) {
-        if ((key < 0L) || (key >= m_lower.Length)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(key), message: "The key names no interval of this order.");
+        if (
+            (key < 0L) ||
+            (key >= m_lower.Length)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(key),
+                message: "The key names no interval of this order."
+            );
         }
 
         return (m_lower[((int)key)], m_upper[((int)key)]);
     }
-
     /// <summary>Attempts to find the key of one interval.</summary>
     /// <param name="lower">The lower endpoint.</param>
     /// <param name="upper">The upper endpoint.</param>
@@ -128,15 +145,20 @@ public sealed class IncidenceAlgebra<TValue, TOps>
     /// key when and only when <c>lower ≤ upper</c>.</remarks>
     public bool TryKey(int lower, int upper, out long key) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: lower);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: lower, other: ElementCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: lower,
+            other: ElementCount
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(value: upper);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: upper, other: ElementCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: upper,
+            other: ElementCount
+        );
 
         key = m_symbolOf[((lower * ElementCount) + upper)];
 
         return (key >= 0L);
     }
-
     /// <summary>Attempts to compute the Möbius element — the convolution inverse of <see cref="Zeta"/>.</summary>
     /// <param name="mobius">On success, the element whose coefficient at <c>[x, y]</c> is <c>μ(x, y)</c>.</param>
     /// <param name="obstruction">On failure, the certificate attempted and where the attempt stopped.</param>
@@ -150,11 +172,15 @@ public sealed class IncidenceAlgebra<TValue, TOps>
         // The guard runs first so the refusal names Möbius inversion rather than the negation it happens to reach.
         _ = RequireSigned();
 
-        var strict = Algebra.Subtract(left: Zeta, right: Algebra.Identity);
+        var strict = Algebra.Subtract(
+            left: Zeta,
+            right: Algebra.Identity
+        );
 
-        return Algebra.TrySumOverAllLengths(value: Algebra.Negate(value: strict), total: out mobius, obstruction: out obstruction);
+        return Algebra.TrySumOverAllLengths(
+            value: Algebra.Negate(value: strict),
+            total: out mobius,
+            obstruction: out obstruction
+        );
     }
-
-    private ISignedMaterial<TValue, TOps> RequireSigned() =>
-        (m_signed ?? throw new InvalidOperationException(message: "Möbius inversion alternates in sign, which an unsigned material cannot express."));
 }

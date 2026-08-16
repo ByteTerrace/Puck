@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsAotCompatible>false</IsAotCompatible>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
+        <PackageReference Include="xunit.v3" Version="[3.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Puck.Physics\Puck.Physics.csproj" />
+        <!-- One fixture builds a standalone SdfProgram and reads it through SdfFieldEvaluator, so the field-sample
+             budget is measured against the real evaluator rather than an analytic stand-in. No GPU host is touched. -->
+        <ProjectReference Include="..\..\src\Puck.SignedDistance\Puck.SignedDistance.csproj" />
+    </ItemGroup>
+</Project>

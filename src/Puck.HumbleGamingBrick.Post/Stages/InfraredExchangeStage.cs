@@ -24,6 +24,7 @@ namespace Puck.HumbleGamingBrick.Post;
 internal sealed class InfraredExchangeStage : IPostStage {
     private const ulong BudgetStep = 256;
     private const int StepCount = 512;
+
     // Two distinct, non-uniform 24-bit patterns so every received bit is attributable to its sender and neither transcript
     // is a trivial all-0/all-1 line.
     private static readonly byte[] FirstPatternSource = [0xB4, 0x6C, 0x39];
@@ -32,7 +33,6 @@ internal sealed class InfraredExchangeStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "infrared-exchange";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -46,14 +46,14 @@ internal sealed class InfraredExchangeStage : IPostStage {
         var firstPattern = InfraredRom.ExpandPattern(sourceBytes: FirstPatternSource);
         var secondPattern = InfraredRom.ExpandPattern(sourceBytes: SecondPatternSource);
         var reference = RunScenario(
+            churnAtStep: -1,
             firstPattern: firstPattern,
-            secondPattern: secondPattern,
-            churnAtStep: -1
+            secondPattern: secondPattern
         );
 
         if (Judge(
-            result: reference,
             firstPattern: firstPattern,
+            result: reference,
             secondPattern: secondPattern
         ) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
@@ -72,14 +72,14 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
         // Determinism: a second fresh run on the same schedule reproduces both transcripts and both final snapshots.
         var replay = RunScenario(
+            churnAtStep: -1,
             firstPattern: firstPattern,
-            secondPattern: secondPattern,
-            churnAtStep: -1
+            secondPattern: secondPattern
         );
 
         if (Difference(
-            expected: reference,
             actual: replay,
+            expected: reference,
             leg: "replay"
         ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
@@ -87,14 +87,14 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
         // Churn: suspend/snapshot/restore/reconnect (with the resume token) mid-exchange, continue, demand the identical tail.
         var churned = RunScenario(
+            churnAtStep: churnStep,
             firstPattern: firstPattern,
-            secondPattern: secondPattern,
-            churnAtStep: churnStep
+            secondPattern: secondPattern
         );
 
         if (Difference(
-            expected: reference,
             actual: churned,
+            expected: reference,
             leg: "churn"
         ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
@@ -125,7 +125,6 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
         return null;
     }
-
     // An unpaired CGB arms RP's data-read-enable bits and lights its own LED bit — with no peer at all, it must read its
     // own light back (RP bit 1 clear), not dark.
     private static string? VerifyCgbSelfSensesOwnLedViaRp() {
@@ -237,7 +236,6 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
         return null;
     }
-
     // One complete linked scenario on the fixed budget schedule. The first machine transmits its pattern, then receives
     // the second's; the second receives first, then transmits — pairing the two roles keeps each transmit phase inside
     // the peer's matching receive phase (see InfraredRom's remarks). With churnAtStep >= 0 the session is suspended at
@@ -296,8 +294,8 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
                         session = new IrLinkSession(
                             first: first,
-                            second: second,
-                            resumeToken: token
+                            resumeToken: token,
+                            second: second
                         );
                     }
 
@@ -310,8 +308,8 @@ internal sealed class InfraredExchangeStage : IPostStage {
                         count: secondPattern.Length
                     ),
                     FirstMarker: ReadByte(
-                        instance: first,
-                        address: InfraredRom.CompletionMarkerAddress
+                        address: InfraredRom.CompletionMarkerAddress,
+                        instance: first
                     ),
                     FirstProgress: ReadProgress(instance: first),
                     FirstState: first.Machine.Snapshot(),
@@ -321,8 +319,8 @@ internal sealed class InfraredExchangeStage : IPostStage {
                         count: firstPattern.Length
                     ),
                     SecondMarker: ReadByte(
-                        instance: second,
-                        address: InfraredRom.CompletionMarkerAddress
+                        address: InfraredRom.CompletionMarkerAddress,
+                        instance: second
                     ),
                     SecondProgress: ReadProgress(instance: second),
                     SecondState: second.Machine.Snapshot()
@@ -335,7 +333,6 @@ internal sealed class InfraredExchangeStage : IPostStage {
             second.Dispose();
         }
     }
-
     // Judges the reference run: both sides finished every bit, and each side received the OTHER side's exact pattern — so
     // the light really crossed both ways and was read back bit-for-bit.
     private static string? Judge(InfraredScenarioResult result, byte[] firstPattern, byte[] secondPattern) {
@@ -366,7 +363,6 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
         return null;
     }
-
     // Compares a later run against the reference: both received transcripts and both final snapshots must match exactly.
     private static string? Difference(InfraredScenarioResult expected, InfraredScenarioResult actual, string leg) {
         if (!expected.FirstReceived.AsSpan().SequenceEqual(other: actual.FirstReceived)) {
@@ -393,7 +389,6 @@ internal sealed class InfraredExchangeStage : IPostStage {
 
         return null;
     }
-
     // The first budget boundary with at least one bit received but not all — a genuine mid-exchange severable instant. (Any
     // IR boundary is a clean severing instant — no bit is ever mid-shift — so only the mid-exchange window matters here.)
     private static int PickChurnStep(List<int> probes, int total) {
@@ -413,15 +408,15 @@ internal sealed class InfraredExchangeStage : IPostStage {
         var received = new byte[count];
 
         for (var index = 0; (index < count); ++index) {
-            received[index] = bus.ReadByte(address: (ushort)(InfraredRom.ReceiveBufferAddress + index));
+            received[index] = bus.ReadByte(address: ((ushort)(InfraredRom.ReceiveBufferAddress + index)));
         }
 
         return received;
     }
     private static int ReadProgress(MachineInstance instance) =>
         ReadByte(
-        instance: instance,
-        address: InfraredRom.ProgressAddress
+        address: InfraredRom.ProgressAddress,
+        instance: instance
     );
     private static byte ReadByte(MachineInstance instance, ushort address) =>
         instance.GetRequiredService<ISystemBus>().ReadByte(address: address);

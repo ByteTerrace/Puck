@@ -27,7 +27,6 @@ public interface IVulkanGraphicsPipelineFactory {
         uint textureSamplerCount = 64,
         bool enableStorageBuffer = true
     );
-
     /// <summary>Creates a graphics pipeline whose viewport and scissor are sized to an explicit width and height (for offscreen targets).</summary>
     /// <param name="logicalDevice">The logical device the pipeline is created on.</param>
     /// <param name="renderPass">The render pass the pipeline is used with.</param>

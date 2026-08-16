@@ -22,13 +22,13 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
     ) {
         var logicalDevice = ((IVulkanDeviceContext)deviceContext).LogicalDevice;
         var renderPass = ((IVulkanRenderTarget)renderTarget).RenderPass;
-        var vertexShader = (VulkanShaderModule)vertexShaderModule;
-        var fragmentShader = (VulkanShaderModule)fragmentShaderModule;
+        var vertexShader = ((VulkanShaderModule)vertexShaderModule);
+        var fragmentShader = ((VulkanShaderModule)fragmentShaderModule);
         var vkPushConstant = ((pushConstantBinding is null) ? null
             : new VulkanPushConstantBinding(
                 data: pushConstantBinding.Data,
                 offset: pushConstantBinding.Offset,
-                stageFlags: (uint)pushConstantBinding.StageFlags
+                stageFlags: ((uint)pushConstantBinding.StageFlags)
             ));
 
         return pipelineFactory.Create(

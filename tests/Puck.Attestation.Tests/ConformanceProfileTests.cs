@@ -14,56 +14,50 @@ public sealed class ConformanceProfileTests {
         var trust = BuildDirectTrustList(keys: keys, reach: DefaultReach);
         var claim = SignTestClaim(codec: cbor, keys: keys, purpose: "profile.test", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:profile", sequence: null, text: "base profile");
 
-        var result = AttestationProfile.Base.VerifyChain(codec: cbor, claim: claim, chain: null, trustList: trust, now: Now, expectedPurpose: "profile.test", expectedAudience: "world:profile");
+        var result = AttestationProfile.Base.VerifyChain(chain: null, claim: claim, codec: cbor, expectedAudience: "world:profile", expectedPurpose: "profile.test", now: Now, trustList: trust);
 
         AssertAccepted(result: result);
     }
-
     [Fact]
     public void ResourceProfileFacade_IsTheOnlyPublicVerificationBoundary() {
         Assert.False(condition: typeof(AttestationVerifier).IsPublic);
     }
-
     [Fact]
     public void ComposedProfileNames_UseTheNormativeExtensionSpelling() {
         var profile = AttestationProfile.Base.WithExtensions(extensions: AttestationExtensions.SealedAttestationV1);
 
         Assert.Equal(expected: "attestation-v1-base+sealed-attestation-v1", actual: profile.Name);
     }
-
     [Fact]
     public void AttestationCeiling_IsEnforcedBeforeCborParsing() {
         var cbor = new CborAttestationCodec();
 
-        var exception = Assert.Throws<FormatException>(testCode: () => _ = AttestationProfile.Base.DecodeAttestation(codec: cbor, wire: new byte[AttestationResourceLimits.AttestationBytes + 1]));
+        var exception = Assert.Throws<FormatException>(testCode: () => _ = AttestationProfile.Base.DecodeAttestation(codec: cbor, wire: new byte[(AttestationResourceLimits.AttestationBytes + 1)]));
 
         Assert.Contains(expectedSubstring: "permits at most", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void PayloadAboveTheExplicitCeiling_IsRefusedDeterministically() {
         var cbor = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:profile");
-        var oversizedPayloadClaim = AttestationSigner.SignClaim(codec: cbor, domain: keys.Domain, subject: keys.Subject, signerKey: keys.SubjectSigningKey, signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256, purpose: "profile.test", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:profile", sequence: null, claimBytes: new byte[AttestationResourceLimits.PayloadBytes + 1]);
+        var oversizedPayloadClaim = AttestationSigner.SignClaim(codec: cbor, domain: keys.Domain, subject: keys.Subject, signerKey: keys.SubjectSigningKey, signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256, purpose: "profile.test", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:profile", sequence: null, claimBytes: new byte[(AttestationResourceLimits.PayloadBytes + 1)]);
 
         var exception = Assert.Throws<FormatException>(testCode: () => _ = AttestationProfile.Base.DecodeAttestation(codec: cbor, wire: cbor.EncodeAttestation(attestation: oversizedPayloadClaim)));
 
         Assert.Contains(expectedSubstring: "payload", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void SignatureOutsideTheExactCeiling_IsRefusedBeforeSignatureVerification() {
         var cbor = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:profile");
         var trust = BuildDirectTrustList(keys: keys, reach: DefaultReach);
         var claim = SignTestClaim(codec: cbor, keys: keys, purpose: "profile.test", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:profile", sequence: null, text: "base profile");
-        var oversizedSignature = new byte[AttestationResourceLimits.SignatureBytes + 1];
+        var oversizedSignature = new byte[(AttestationResourceLimits.SignatureBytes + 1)];
 
         var result = AttestationProfile.Base.VerifyChain(codec: cbor, claim: (claim with { Signature = oversizedSignature }), chain: null, trustList: trust, now: Now, expectedPurpose: "profile.test", expectedAudience: "world:profile");
 
-        AssertRefused(result: result, reasonMustContain: "exactly 64");
+        AssertRefused(reasonMustContain: "exactly 64", result: result);
     }
-
     [Fact]
     public void TextCeilings_AreMeasuredInUtf8BytesNotCharacters() {
         var cbor = new CborAttestationCodec();
@@ -74,13 +68,12 @@ public sealed class ConformanceProfileTests {
 
         Assert.Contains(expectedSubstring: "UTF-8 bytes", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
-    [Theory]
     [InlineData(0)]
     [InlineData(16)]
     [InlineData(230)]
     [InlineData(300)]
     [InlineData(65_400)]
+    [Theory]
     public void DerivedAttestationLength_MatchesTheRealCborEncoding(int payloadLength) {
         var codec = new CborAttestationCodec();
         var header = new AttestationHeader(
@@ -96,8 +89,8 @@ public sealed class ConformanceProfileTests {
         var attestation = SignedAttestation.Reencode(
             codec: codec,
             header: header,
-            payloadKind: AttestationPayloadKind.Opaque,
             payloadBytes: new byte[payloadLength],
+            payloadKind: AttestationPayloadKind.Opaque,
             signature: new byte[AttestationResourceLimits.SignatureBytes]
         );
 
@@ -106,7 +99,6 @@ public sealed class ConformanceProfileTests {
             actual: CborAttestationCodec.EncodedAttestationLength(attestation: attestation)
         );
     }
-
     [Fact]
     public void SealedRecipientTextCeiling_IsCheckedOnTheAuthenticatedPayloadDecode() {
         var codec = new CborAttestationCodec();
@@ -141,18 +133,18 @@ public sealed class ConformanceProfileTests {
             signingKey: keys.SubjectSigningKey,
             signingAlgorithm: AttestationAlgorithms.EcdsaP256Sha256
         );
-        var profile = AttestationProfile.Base.WithExtensions(AttestationExtensions.SealedAttestationV1);
+        var profile = AttestationProfile.Base.WithExtensions(extensions: AttestationExtensions.SealedAttestationV1);
 
         var result = profile.VerifyChain(
-            codec: codec,
-            claim: claim,
             chain: [],
-            trustList: trust,
-            now: Now,
+            claim: claim,
+            codec: codec,
+            expectedAudience: "world:profile",
             expectedPurpose: "profile.sealed",
-            expectedAudience: "world:profile"
+            now: Now,
+            trustList: trust
         );
 
-        AssertRefused(result: result, reasonMustContain: "UTF-8 bytes");
+        AssertRefused(reasonMustContain: "UTF-8 bytes", result: result);
     }
 }

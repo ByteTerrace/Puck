@@ -1,9 +1,10 @@
 using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 using Puck.Launcher;
+using Puck.Platform.Windows;
 using Puck.World;
 using Puck.World.Protocol;
 
@@ -77,7 +78,7 @@ var connectOption = new Option<string?>(name: "--connect") {
 };
 var federationKeyFileOption = new Option<string?>(name: "--federation-key-file") {
     DefaultValueFactory = static _ => null,
-    Description = "A deployment-secret file shared by authorities allowed to federate. Accepts exactly 32 raw bytes or 64 hexadecimal characters; absent disables federation while leaving ordinary admitted-peer listening available.",
+    Description = "A deployment-secret file holding this authority's own PKCS8 ECDSA P-256 private key (raw DER bytes) — the SignsDirectly signing identity peers pin against this world's host.authority (or its \"boot\" instance identity when host.authority is absent). Absent disables federation while leaving ordinary admitted-peer listening available.",
 };
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
@@ -97,7 +98,6 @@ var launchCommand = new RootCommand(description: "Puck World") {
     worldOption,
 };
 var parseResult = launchCommand.Parse(args);
-
 // Fail loudly on an unrecognized/invalid option (a typo, a bad value) rather than silently falling through to a live
 // window with defaults — checked BEFORE the --connect branch so a malformed flag refuses even a client-mode run.
 if (parseResult.Errors.Count > 0) {
@@ -107,32 +107,7 @@ if (parseResult.Errors.Count > 0) {
 
     return 1;
 }
-
 var connectTarget = parseResult.GetValue(option: connectOption);
-var federationSecurity = new Puck.World.Server.WorldFederationSecurity(secret: null);
-if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
-    try {
-        var raw = File.ReadAllBytes(path: Path.GetFullPath(path: federationKeyFile));
-        byte[] key;
-
-        if (raw.Length == Puck.World.Server.WorldFederationSecurity.SecretBytes) {
-            key = raw;
-        } else {
-            var text = System.Text.Encoding.UTF8.GetString(bytes: raw).Trim();
-            key = ((text.Length == (Puck.World.Server.WorldFederationSecurity.SecretBytes * 2)) ? Convert.FromHexString(s: text) : []);
-        }
-
-        if (key.Length != Puck.World.Server.WorldFederationSecurity.SecretBytes) {
-            Console.Error.WriteLine(value: $"--federation-key-file must contain exactly {Puck.World.Server.WorldFederationSecurity.SecretBytes} raw bytes or {Puck.World.Server.WorldFederationSecurity.SecretBytes * 2} hexadecimal characters.");
-            return 1;
-        }
-
-        federationSecurity = new Puck.World.Server.WorldFederationSecurity(secret: key);
-    } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FormatException) {
-        Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");
-        return 1;
-    }
-}
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
 }
@@ -164,7 +139,6 @@ if (parseResult.GetValue(option: presentModeOption) is { } presentModeName) {
         return 1;
     }
 }
-
 // The --headless reflection, parsed at the boundary like --backend/--present-mode: null lets the document's
 // host.presentation decide; an explicit true/false overrides it for this run only.
 WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: headlessOption) switch {
@@ -172,23 +146,67 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
     false => WorldHostPresentation.Windowed,
     null => null,
 });
-
 // The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/play.world.json beside
 // the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
 // window/launcher/presentation registrations because those now read their values from the resolved host section. Read
 // by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is
 // registered so world.save knows its default target. Any path that will not load ends the boot here — a typo or missing
 // shipped document must never quietly run a different world.
-if (!WorldDefinitionLoader.TryResolve(explicitPath: parseResult.GetValue(option: worldOption), source: out var worldSource, failure: out var worldFailure)) {
+if (!WorldDefinitionLoader.TryResolve(
+    explicitPath: parseResult.GetValue(option: worldOption),
+    source: out var worldSource,
+    failure: out var worldFailure
+)) {
     Console.Error.WriteLine(value: worldFailure);
 
     return 1;
 }
+// The federation identity door — deny-by-default, mirroring --listen's own absent-means-closed posture: an
+// unconfigured authenticator refuses the federation dialect outright at WorldTcpHost's IsConfigured gate, leaving
+// ordinary admitted-peer listening (the interactive attestation door) untouched. A configured one signs
+// SignsDirectly claims under this run's own pinned key, naming this document's host.authority as the subject a
+// peer's own admission entries pin against; verification reads the CURRENT document's admission rows fresh on
+// every attempt, so a live world.reload/edit is honored the same way the interactive door already is.
+Puck.Networking.IAuthenticator authenticator = new Puck.World.Server.WorldAttestedAuthenticator();
+if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
+    // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authority absent
+    // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key
+    // never has to also change what every LOCAL entity in this world is addressed under.
+    var federationSubject = ((worldSource.Definition.Host.Authority is { Length: > 0 } authored)
+        ? authored
+        : Puck.World.WorldDefinitionLoader.BootInstanceName);
 
+    try {
+        var pkcs8 = File.ReadAllBytes(path: Path.GetFullPath(path: federationKeyFile));
+        var key = System.Security.Cryptography.ECDsa.Create();
+
+        key.ImportPkcs8PrivateKey(
+            bytesRead: out _,
+            source: pkcs8
+        );
+
+        authenticator = new Puck.World.Server.WorldAttestedAuthenticator(
+            oracle: new Puck.World.Server.LocalKeySigningOracle(
+                key: key,
+                subject: federationSubject,
+                validity: Puck.World.Server.WorldAttestedAuthenticator.MaximumClaimAge
+            ),
+            trustEntries: () => worldSource.Definition.Admission
+        );
+    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)) {
+        Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");
+
+        return 1;
+    }
+}
 // Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Default,
 // which reproduces World's current boot) overlaid by the nullable CLI flags. Backend authority differs by source — a CLI
 // assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
-var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240);
+var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(
+    major: 10,
+    minor: 0,
+    build: 10240
+);
 var hostSettings = WorldHostSettings.Resolve(
     defaults: worldSource.Definition.Host,
     directXAvailable: directXAvailable,
@@ -209,8 +227,8 @@ if (hostSettings.BackendDowngraded) {
     Console.Error.WriteLine(value: $"[world.host] backend \"{WorldHostTokens.BackendToken(backend: hostSettings.RequestedBackend)}\" is unavailable on this OS; hosting on Vulkan instead.");
 }
 var hostsOnDirectX = hostSettings.HostsOnDirectX;
-var width = (uint)hostSettings.Width;
-var height = (uint)hostSettings.Height;
+var width = ((uint)hostSettings.Width);
+var height = ((uint)hostSettings.Height);
 // The GPU-timing arm boots from the host section's timing field — the lowest-precedence seed (a live world.timing
 // SetArmed always overrides). TrySeed is idempotent and claims the control only if nothing above has.
 GpuTimingControl.Shared.TrySeed(armed: hostSettings.Timing);
@@ -218,18 +236,19 @@ var builder = Host.CreateApplicationBuilder(args: args);
 var services = builder.Services;
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
-services.AddSingleton(implementationInstance: federationSecurity);
+services.AddSingleton<Puck.Networking.IAuthenticator>(implementationInstance: authenticator);
 // The resolved host settings — read by the composition modules below and the world.host verb.
 services.AddSingleton(implementationInstance: hostSettings);
-// Registered before the launcher terminal block (AddWorldGpuHost/AddWorldHeadlessHost → AddLauncherTerminal/
-// AddLauncherHeadlessTerminal) so the launcher's TryAddSingleton<LauncherOptions> defers to this one, IN EITHER BOOT
-// SHAPE — --exit-after-seconds applies to the headless tick host exactly like the windowed one. A null target
+// Registered before the launcher terminal block (AddLauncherTerminal/AddLauncherHeadlessTerminal, reached through
+// AddWorldPresentation/AddHeadlessHost) so the launcher's TryAddSingleton<LauncherOptions> defers to this one, IN
+// EITHER BOOT SHAPE — --exit-after-seconds applies to the headless tick host exactly like the windowed one. A null target
 // selects automatic display pacing from verified VRR capabilities or active signal timing (windowed only).
 services.AddSingleton(implementationInstance: new LauncherOptions {
-    ExitAfter = ((hostSettings.ExitAfterSeconds > 0) ? TimeSpan.FromSeconds(value: hostSettings.ExitAfterSeconds) : null),
+    ExitAfter = ((hostSettings.ExitAfterSeconds > 0)
+    ? TimeSpan.FromSeconds(value: hostSettings.ExitAfterSeconds)
+    : null),
     TargetRenderRate = hostSettings.TargetRenderRate,
 });
-
 // The storage host-section: the world doc's endpoint + user-id + discovery endpoint, overlaid by the
 // --storage-uri / --user-id / --storage-discovery-uri CLI reflection. The identity resolver maps an explicit
 // user-id to a per-user container Guid, or DECLINES (local-only). Endpoint plus resolved identity wires the
@@ -252,7 +271,6 @@ services.AddSingleton(implementationFactory: static provider => WorldStorageSync
     store: provider.GetRequiredService<Puck.Storage.IObjectBlobStore>(),
     worlds: provider.GetRequiredService<Puck.World.Server.WorldOwnedWorlds>()
 ));
-
 // The player's controls as DATA: the engine-default binding document (WASD/arrows movement, Space/South/East
 // gestures, Enter/F1-F4 roster, sticks, Start),
 // composed per seat with the world's binding overlays, the seat's profile bindings, and its live session rebinds. One
@@ -262,24 +280,36 @@ services.AddSingleton(implementationFactory: static provider => WorldStorageSync
 // post-step overlay sync push the per-seat and overlay layers in as they change.
 // The per-seat control-feel store is built here too, seeded from the boot document's own authored feel — the
 // resolution every seat sits at until a profile is delivered for it, from wherever that profile arrives.
-var seatBindings = new WorldSeatBindings(engineDefault: WorldDefaultBindings.BuildDocument(), definition: worldSource.Definition);
+var seatBindings = new WorldSeatBindings(
+    engineDefault: WorldDefaultBindings.BuildDocument(),
+    definition: worldSource.Definition
+);
 services.AddSingleton(implementationInstance: seatBindings);
-
 // Boot shape resolves before registration: the authoritative core registers in every shape; the GPU host, render
 // root, overlays, audio device, screens/machines, gamepads, and editor register only when presentation is
 // composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared every-shape wiring.
 services.AddWorldAuthoritativeCore();
 if (hostSettings.Headless) {
-    // NO window, NO GPU device, NO swapchain, NO allocator, NO backend presenter, NO audio device — the headless
-    // twin of the block below. Nothing under AddWorldPresentation is ever called on this path.
-    WorldHost.AddWorldHeadlessHost(services: services);
+    // No window, GPU device, swapchain, allocator, backend presenter, or audio device — the headless twin of the
+    // block below (command pump + tick host). Nothing under AddWorldPresentation is ever called on this path.
+    services.AddLauncherHeadlessTerminal();
+    // The standalone high-resolution precision waiter for the headless tick host's pacing loop — Windows only,
+    // registered by the composition root so Puck.Launcher stays platform-neutral. A no-op on an unsupported OS
+    // version (the tick host falls back to a coarse sleep).
+    if (OperatingSystem.IsWindows()) {
+        services.AddWindowsPrecisionWaiter();
+    }
     services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
 } else {
     // The recording graph (puck.recording.v1) — native capture for streaming/upload workflows, defined as data.
-    // PRESENTATION-ONLY (AddWorldPresentation registers the encoder ladder/RecordingTap/verb module), but the
+    // PRESENTATION-ONLY (AddWorldPresentation registers the encoder ladder/capture controller/verb module), but the
     // document resolution itself can fail-and-exit, so it stays here beside World's other --world/--recording
     // loaders. Skipped headless: a GPU-less CI box has no reason to carry a valid recordings asset.
-    if (!RecordingDocumentLoader.TryResolve(explicitPath: parseResult.GetValue(option: recordingOption), source: out var recordingSource, failure: out var recordingFailure)) {
+    if (!RecordingDocumentLoader.TryResolve(
+        explicitPath: parseResult.GetValue(option: recordingOption),
+        source: out var recordingSource,
+        failure: out var recordingFailure
+    )) {
         Console.Error.WriteLine(value: recordingFailure);
 
         return 1;
@@ -299,7 +329,6 @@ if (hostSettings.Headless) {
     services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
 }
 var host = builder.Build();
-
 // The every-shape post-build wiring step: affordance install, the boot document's genuine binding-vocabulary
 // re-validation (WorldAffordances.Installed is only true from here on — see WorldPostBuildWiring.Install's remarks
 // for why the first validation at WorldDefinitionLoader.TryResolve above could not have caught this), the
@@ -310,14 +339,18 @@ var host = builder.Build();
 if (!WorldPostBuildWiring.Install(services: host.Services)) {
     return 1;
 }
-
 if (connectTarget is { } remoteEndpoint) {
     var instances = host.Services.GetRequiredService<WorldInstanceHost>();
+
     _ = instances.EnqueueTransfer(
         sourceInstance: WorldInstanceHost.BootInstanceName,
         scope: WorldInstanceHost.TransferScope.Body,
         sourceSlot: 0,
-        destination: WorldInstanceHost.TransferDestination.Remote(name: "remote-boot", documentPath: worldSource.SourcePath, authority: remoteEndpoint),
+        destination: WorldInstanceHost.TransferDestination.Remote(
+            name: "remote-boot",
+            documentPath: worldSource.SourcePath,
+            authority: remoteEndpoint
+        ),
         actingPrincipal: WorldPrincipal.Console
     );
 }

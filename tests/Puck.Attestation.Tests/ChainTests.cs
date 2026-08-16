@@ -12,7 +12,8 @@ public sealed class ChainTests {
     private static (CborAttestationCodec Codec, DomainKeys Keys, SignedAttestation[] Chain, TrustList Trust, SignedAttestation Claim) BuildFixture() {
         var codec = new CborAttestationCodec();
         var keys = MintDomainKeys(subject: "user:frank");
-        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notBefore: (Epoch - 30), notAfter: (Epoch + (86_400L * 30)));
+
+        var (rootToIssuing, issuingToSubject) = BuildChain(codec: codec, keys: keys, notAfter: (Epoch + (86_400L * 30)), notBefore: (Epoch - 30));
         var chain = new[] { rootToIssuing, issuingToSubject };
         var trust = BuildTrustList(keys: keys, defaultMaximumAge: TimeSpan.FromHours(hours: 24));
         var claim = SignTestClaim(codec: codec, keys: keys, purpose: "test.claim", notBefore: (Epoch - 60), notAfter: (Epoch + 3_600), audience: "world:home", sequence: null, text: "frank's claim");
@@ -27,7 +28,6 @@ public sealed class ChainTests {
         Assert.Equal(expected: trust.DefaultMaximumAge, actual: trust.DefaultRootBindingMaximumAge);
         Assert.Equal(expected: trust.DefaultMaximumAge, actual: trust.DefaultSubjectBindingMaximumAge);
     }
-
     [Fact]
     public void DepthTwo_ExactlyTwoBindingsUnderVouchingRoot_Accepts() {
         var (codec, _, chain, trust, claim) = BuildFixture();
@@ -36,7 +36,6 @@ public sealed class ChainTests {
 
         AssertAccepted(result: result);
     }
-
     [Fact]
     public void SlotReach_VerifiedClaimCarriesAdmittingEntrysAuthoredReach() {
         var (codec, _, chain, trust, claim) = BuildFixture();
@@ -46,7 +45,6 @@ public sealed class ChainTests {
         Assert.NotNull(@object: result.Reach);
         Assert.True(condition: result.Reach!.SetEquals(other: DefaultReach));
     }
-
     [Fact]
     public void SlotReach_AdmitsAnswersTheReceivingWorldsQuestion() {
         var (codec, _, chain, trust, claim) = BuildFixture();
@@ -56,7 +54,6 @@ public sealed class ChainTests {
         Assert.True(condition: result.Admits(slot: "slot:wallet"));
         Assert.False(condition: result.Admits(slot: "slot:unlisted"));
     }
-
     [Fact]
     public void SlotReach_NarrowerEntryYieldsNarrowerReachForTheSameClaim() {
         var (codec, keys, chain, _, claim) = BuildFixture();
@@ -68,7 +65,6 @@ public sealed class ChainTests {
         Assert.True(condition: result.Admits(slot: "slot:title"));
         Assert.False(condition: result.Admits(slot: "slot:wallet"));
     }
-
     [Fact]
     public void SlotReach_DenyByDefault_EmptyReachVerifiesButReachesNothing() {
         var (codec, keys, chain, _, claim) = BuildFixture();
@@ -80,7 +76,6 @@ public sealed class ChainTests {
         Assert.NotNull(@object: result.Reach);
         Assert.Empty(collection: result.Reach!);
     }
-
     [Fact]
     public void SlotReach_VerifiedIsNotAdmission_EmptyReachAdmitsNoSlot() {
         var (codec, keys, chain, _, claim) = BuildFixture();
@@ -93,7 +88,6 @@ public sealed class ChainTests {
         Assert.False(condition: result.Admits(slot: "slot:title"));
         Assert.False(condition: result.Admits(slot: ""));
     }
-
     [Fact]
     public void SlotReach_RefusedClaimAdmitsNothingAndCarriesNoReach() {
         var (codec, _, chain, trust, claim) = BuildFixture();
@@ -104,16 +98,14 @@ public sealed class ChainTests {
         Assert.False(condition: result.Admits(slot: "slot:wallet"));
         Assert.Null(@object: result.Reach);
     }
-
     [Fact]
     public void PurposeSeparation_ClaimPresentedForADifferentExpectedPurpose_IsRefused() {
         var (codec, _, chain, trust, claim) = BuildFixture();
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: trust, now: Now, expectedPurpose: "test.other", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "purpose mismatch");
+        AssertRefused(reasonMustContain: "purpose mismatch", result: result);
     }
-
     [Fact]
     public void PayloadKindSeparation_ClaimDeclaringKeyBindingKind_IsRefused() {
         var (codec, _, chain, trust, claim) = BuildFixture();
@@ -121,19 +113,17 @@ public sealed class ChainTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: kindConfused, chain: chain, trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "payload kind must be opaque or sealed");
+        AssertRefused(reasonMustContain: "payload kind must be opaque or sealed", result: result);
     }
-
     [Fact]
     public void PayloadKindSeparation_ClaimDeclaringAnUndefinedKind_IsRefusedByDefault() {
         var (codec, _, chain, trust, claim) = BuildFixture();
-        var unknownKind = SignedAttestation.Reencode(codec: codec, header: claim.Header, payloadKind: (AttestationPayloadKind)99, payloadBytes: claim.PayloadBytes, signature: claim.Signature);
+        var unknownKind = SignedAttestation.Reencode(codec: codec, header: claim.Header, payloadKind: ((AttestationPayloadKind)99), payloadBytes: claim.PayloadBytes, signature: claim.Signature);
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: unknownKind, chain: chain, trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "payload kind must be opaque or sealed");
+        AssertRefused(reasonMustContain: "payload kind must be opaque or sealed", result: result);
     }
-
     [Fact]
     public void DepthThree_SubjectKeyVouchesForAFurtherKey_IsRefused() {
         var (codec, keys, chain, trust, _) = BuildFixture();
@@ -147,31 +137,29 @@ public sealed class ChainTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: delegateClaim, chain: [chain[0], chain[1], subjectToDelegate], trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "broken chain");
+        AssertRefused(reasonMustContain: "broken chain", result: result);
     }
-
     [Fact]
     public void DepthAboveTwo_IsRefusedBeforeAnyBindingIsProfileValidated() {
         var (codec, _, chain, trust, claim) = BuildFixture();
         var bindingWithInvalidSignatureWidth = chain[0] with { Signature = ReadOnlyMemory<byte>.Empty };
 
         var result = AttestationProfile.Base.VerifyChain(
-            codec: codec,
-            claim: claim,
             chain: [bindingWithInvalidSignatureWidth, bindingWithInvalidSignatureWidth, bindingWithInvalidSignatureWidth],
-            trustList: trust,
-            now: Now,
+            claim: claim,
+            codec: codec,
+            expectedAudience: "world:home",
             expectedPurpose: "test.claim",
-            expectedAudience: "world:home"
+            now: Now,
+            trustList: trust
         );
 
-        AssertRefused(result: result, reasonMustContain: "broken chain");
+        AssertRefused(reasonMustContain: "broken chain", result: result);
     }
-
     [Fact]
     public void BindingTargetSpki_TrailingBytesAreRefusedAtTheFollowingSignatureHop() {
         var (codec, keys, chain, trust, claim) = BuildFixture();
-        var tailedIssuingSpki = (byte[])[.. keys.IssuingSpki, 0x00];
+        var tailedIssuingSpki = ((byte[])[.. keys.IssuingSpki, 0x00]);
         var tailedIssuingId = KeyId.ForIssuing(
             domain: keys.Domain,
             subjectPublicKeyInfo: tailedIssuingSpki,
@@ -198,9 +186,8 @@ public sealed class ChainTests {
             expectedAudience: "world:home"
         );
 
-        AssertRefused(result: result, reasonMustContain: "issuing-vouches-subject binding signature");
+        AssertRefused(reasonMustContain: "issuing-vouches-subject binding signature", result: result);
     }
-
     [Fact]
     public void DepthOneInDisguise_RootVouchesForItselfAsTheIssuingKey_IsRefused() {
         var (codec, keys, _, trust, claim) = BuildFixture();
@@ -210,9 +197,8 @@ public sealed class ChainTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: claim, chain: [rootVouchesItself, rootVouchesSubject], trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "depth one in disguise");
+        AssertRefused(reasonMustContain: "depth one in disguise", result: result);
     }
-
     [Fact]
     public void DepthZero_DirectlyPinnedSubjectKeyAdmitsClaimWithNoBindings() {
         var (codec, keys, _, _, claim) = BuildFixture();
@@ -226,7 +212,6 @@ public sealed class ChainTests {
 
         AssertAccepted(result: result);
     }
-
     [Fact]
     public void DepthZero_BindingsAttachedToADirectlyPinnedClaim_AreRefusedNeverIgnored() {
         var (codec, keys, chain, _, claim) = BuildFixture();
@@ -238,9 +223,8 @@ public sealed class ChainTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: claim, chain: chain, trustList: directTrust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "no bindings");
+        AssertRefused(reasonMustContain: "no bindings", result: result);
     }
-
     [Fact]
     public void PinnedDomain_ClaimNamingADomainNoEntryPins_IsRefused() {
         var (codec, keys, chain, trust, _) = BuildFixture();
@@ -249,9 +233,8 @@ public sealed class ChainTests {
 
         var result = AttestationVerifier.VerifyChain(codec: codec, claim: foreignDomainClaim, chain: chain, trustList: trust, now: Now, expectedPurpose: "test.claim", expectedAudience: "world:home");
 
-        AssertRefused(result: result, reasonMustContain: "not a trusted vouching root");
+        AssertRefused(reasonMustContain: "not a trusted vouching root", result: result);
     }
-
     [Fact]
     public void TrustListShape_SelfConsistentVouchingEntry_Constructs() {
         var (_, keys, _, _, _) = BuildFixture();
@@ -260,7 +243,6 @@ public sealed class ChainTests {
 
         Assert.Null(@object: exception);
     }
-
     [Fact]
     public void TrustListShape_KeyBytesDoNotHashToPinnedId_Throws() {
         var (_, keys, _, _, _) = BuildFixture();
@@ -273,14 +255,13 @@ public sealed class ChainTests {
 
         Assert.Contains(expectedSubstring: "not self-certifying", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void TrustListShape_SpkiWithTrailingBytes_ThrowsInsteadOfCreatingAKeyAlias() {
         var (_, keys, _, _, _) = BuildFixture();
-        var tailedRootSpki = (byte[])[.. keys.RootSpki, 0x00];
+        var tailedRootSpki = ((byte[])[.. keys.RootSpki, 0x00]);
         var tailedRootId = KeyId.ForRoot(
-            subjectPublicKeyInfo: tailedRootSpki,
-            algorithm: AttestationAlgorithms.EcdsaP256Sha256
+            algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            subjectPublicKeyInfo: tailedRootSpki
         );
 
         var exception = Assert.Throws<ArgumentException>(testCode: () => _ = new TrustList(
@@ -296,7 +277,6 @@ public sealed class ChainTests {
 
         Assert.Contains(expectedSubstring: "trailing", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void TrustListShape_VouchingEntryPinsAnIssuingKeyRatherThanARoot_Throws() {
         var (_, keys, _, _, _) = BuildFixture();
@@ -309,7 +289,6 @@ public sealed class ChainTests {
 
         Assert.Contains(expectedSubstring: "must pin a root id", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void TrustListShape_DirectlySigningEntryPinsARootRatherThanASubjectKey_Throws() {
         var (_, keys, _, _, _) = BuildFixture();
@@ -322,7 +301,6 @@ public sealed class ChainTests {
 
         Assert.Contains(expectedSubstring: "must pin a SUBJECT key", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void TrustListShape_EntryPinningASealingKey_Throws() {
         var (_, keys, _, _, _) = BuildFixture();
@@ -335,7 +313,6 @@ public sealed class ChainTests {
 
         Assert.Contains(expectedSubstring: "not an attestation SIGNING algorithm", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void TrustListShape_SameDomainPinnedTwiceInOneMode_Throws() {
         var (_, keys, _, _, _) = BuildFixture();
@@ -346,7 +323,6 @@ public sealed class ChainTests {
 
         Assert.Contains(expectedSubstring: "twice in the same mode", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void TrustListShape_TwoDifferentKeysPinnedForOneSubjectInOneMode_Throws() {
         var (_, keys, _, _, _) = BuildFixture();
@@ -367,7 +343,6 @@ public sealed class ChainTests {
 
         Assert.Contains(expectedSubstring: "lookup returns the first match", actualString: exception.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
-
     [Fact]
     public void TrustListShape_SameTwoKeysInDifferentSlots_Constructs() {
         var (_, keys, _, _, _) = BuildFixture();

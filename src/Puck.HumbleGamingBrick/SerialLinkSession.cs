@@ -23,12 +23,14 @@ namespace Puck.HumbleGamingBrick;
 /// <para>
 /// Suspend/resume for a credit-preserving reconnect. Because stepping is instruction-atomic, a machine typically ends a
 /// budget having overshot its cumulative target by a few cycles; that overshoot is a credit that carries into the next
-/// budget. <see cref="Suspend"/> severs the cable and hands back a <see cref="SerialLinkResumeToken"/> capturing both
-/// credits, and the resume constructor re-anchors each machine's target at <c>CycleCount − credit</c> so a
-/// snapshot/restore/reconnect cycle continues the exact pacing the suspend severed at. A naive reconnect (the plain
-/// constructor, which anchors targets at the current instant) instead discards the credit and runs those extra cycles,
-/// diverging the trace by construction — so a linked pair may only be snapshotted across a <see cref="Suspend"/>, and
-/// only at a transfer-idle instant.
+/// budget. <see cref="Suspend"/> requires both ports to be transfer-idle (SC bit 7 clear) — it throws
+/// <see cref="InvalidOperationException"/> rather than severing a cable mid-transfer, since a round no console can
+/// recover would leave the resumed session unable to reconstruct hardware state. On success it severs the cable and
+/// hands back a <see cref="SerialLinkResumeToken"/> capturing both credits, and the resume constructor re-anchors each
+/// machine's target at <c>CycleCount − credit</c> so a snapshot/restore/reconnect cycle continues the exact pacing the
+/// suspend severed at. A naive reconnect (the plain constructor, which anchors targets at the current instant) instead
+/// discards the credit and runs those extra cycles, diverging the trace by construction — so a linked pair may only be
+/// snapshotted across a <see cref="Suspend"/>.
 /// </para>
 /// </summary>
 public sealed class SerialLinkSession : IDisposable {
@@ -36,6 +38,7 @@ public sealed class SerialLinkSession : IDisposable {
     private readonly SerialComponent m_firstPort;
     private readonly Machine m_second;
     private readonly SerialComponent m_secondPort;
+
     private bool m_disposed;
     private ulong m_firstTarget;
     private ulong m_secondTarget;
@@ -68,7 +71,6 @@ public sealed class SerialLinkSession : IDisposable {
         m_firstTarget = m_first.Clock.CycleCount;
         m_secondTarget = m_second.Clock.CycleCount;
     }
-
     /// <summary>Reconnects a suspended pair, re-anchoring each machine's pacing target at <c>CycleCount − credit</c> so
     /// the run continues the exact pacing the matching <see cref="Suspend"/> severed at — the credit-preserving path a
     /// snapshot/restore/reconnect cycle needs. Use this (never the plain constructor) after restoring both machines from
@@ -77,15 +79,43 @@ public sealed class SerialLinkSession : IDisposable {
     /// <param name="second">The second machine, restored from its across-suspend snapshot.</param>
     /// <param name="resumeToken">The token the matching <see cref="Suspend"/> returned.</param>
     /// <exception cref="ArgumentNullException">Either machine is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Both machines are the same instance.</exception>
+    /// <exception cref="ArgumentException">Both machines are the same instance, or a credit exceeds its machine's own
+    /// cycle count — a token that does not fit either machine, the signature a reordered, substituted, or otherwise
+    /// corrupted token leaves behind.</exception>
     /// <exception cref="InvalidOperationException">Either machine's serial port is already linked.</exception>
     public SerialLinkSession(MachineInstance first, MachineInstance second, SerialLinkResumeToken resumeToken)
         : this(
-        first: first,
-        second: second
+        // Validated before either port is connected: an oversized credit must fail here, never after the cable is
+        // already wired (there is no seam left to disconnect it through once construction has thrown).
+        first: RequireCreditFits(
+            credit: resumeToken.FirstCredit,
+            instance: first,
+            side: "first"
+        ),
+        second: RequireCreditFits(
+            credit: resumeToken.SecondCredit,
+            instance: second,
+            side: "second"
+        )
     ) {
         m_firstTarget = (m_first.Clock.CycleCount - resumeToken.FirstCredit);
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
+    }
+
+    // CycleCount - credit is unsigned subtraction: an oversized credit (a mismatched or corrupted token) would
+    // otherwise wrap to a target billions of cycles away instead of failing here. Runs as a constructor-initializer
+    // argument, before the plain constructor connects either port.
+    private static MachineInstance RequireCreditFits(MachineInstance instance, ulong credit, string side) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
+
+        if (credit > instance.Machine.Clock.CycleCount) {
+            throw new ArgumentException(
+                message: $"the resume token's {side} credit ({credit}) exceeds the machine's cycle count ({instance.Machine.Clock.CycleCount}).",
+                paramName: "resumeToken"
+            );
+        }
+
+        return instance;
     }
 
     /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically —
@@ -136,11 +166,20 @@ public sealed class SerialLinkSession : IDisposable {
     /// Suspend only at a transfer-idle instant (no transfer bit set on either port), never mid-transfer.</summary>
     /// <returns>The token carrying both machines' overshoot credits.</returns>
     /// <exception cref="ObjectDisposedException">The session has already been disposed.</exception>
+    /// <exception cref="InvalidOperationException">Either port has a transfer armed or in flight (SC bit 7 set).</exception>
     public SerialLinkResumeToken Suspend() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
+
+        if (m_firstPort.IsTransferActive) {
+            throw new InvalidOperationException(message: "the first port has a transfer armed or in flight (SC bit 7 set); suspend only at a transfer-idle instant, never mid-transfer.");
+        }
+
+        if (m_secondPort.IsTransferActive) {
+            throw new InvalidOperationException(message: "the second port has a transfer armed or in flight (SC bit 7 set); suspend only at a transfer-idle instant, never mid-transfer.");
+        }
 
         var token = new SerialLinkResumeToken(
             FirstCredit: (m_first.Clock.CycleCount - m_firstTarget),

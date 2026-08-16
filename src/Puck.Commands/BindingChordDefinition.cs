@@ -30,7 +30,6 @@ public sealed record BindingChordDefinition(
     BindingPageDefinition? Page = null,
     BindingCommandDefinition? Command = null
 );
-
 /// <summary>
 /// The command meaning of a <see cref="BindingChordDefinition"/>: a direct chord-to-destination binding — exactly one
 /// of <paramref name="Command"/> or <paramref name="Channel"/>, the same two-kind split

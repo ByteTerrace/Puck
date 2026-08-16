@@ -29,7 +29,7 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     /// <inheritdoc/>
     public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
         GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
-        recordingApi.PushConstants(commandBufferHandle: commandBufferHandle, data: data, deviceHandle: deviceHandle, offset: offset, pipelineLayoutHandle: pipelineLayoutHandle, stageFlags: (uint)stageFlags);
+        recordingApi.PushConstants(commandBufferHandle: commandBufferHandle, data: data, deviceHandle: deviceHandle, offset: offset, pipelineLayoutHandle: pipelineLayoutHandle, stageFlags: ((uint)stageFlags));
     }
     /// <inheritdoc/>
     public void Dispatch(nint deviceHandle, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) =>

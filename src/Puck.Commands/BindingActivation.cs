@@ -12,9 +12,9 @@ public sealed class BindingActivation {
         Value = value;
     }
 
-    /// <summary>The authored command name, for display and diagnostics.</summary>
-    public string Command { get; }
-
     internal CommandPhase Phase { get; }
     internal CommandValue Value { get; }
+
+    /// <summary>The authored command name, for display and diagnostics.</summary>
+    public string Command { get; }
 }

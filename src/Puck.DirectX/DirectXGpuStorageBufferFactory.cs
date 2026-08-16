@@ -14,7 +14,7 @@ namespace Puck.DirectX;
 public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFactory {
     /// <inheritdoc/>
     public IGpuStorageBuffer Create(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        var device = (ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle;
+        var device = ((ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle);
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
         };
@@ -37,25 +37,24 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
             InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
             pDesc: in bufferDesc,
             pHeapProperties: in heapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &buffer,
             riidResource: in resourceIid
         );
 
         void* mapped;
 
-        ((ID3D12Resource*)buffer)->Map(Subresource: 0, pReadRange: (D3D12_RANGE*)null, ppData: &mapped);
+        ((ID3D12Resource*)buffer)->Map(Subresource: 0, pReadRange: ((D3D12_RANGE*)null), ppData: &mapped);
 
         return new DirectXGpuStorageBuffer(
-            bufferHandle: (nint)buffer,
+            bufferHandle: ((nint)buffer),
             mapped: mapped,
             sizeBytes: sizeBytes
         );
     }
-
     /// <inheritdoc/>
     public IGpuBuffer CreateDeviceLocal(IGpuDeviceContext deviceContext, ulong sizeBytes) {
-        var device = (ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle;
+        var device = ((ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle);
         // A default-heap buffer that allows unordered access: the GPU writes it (the beam prepass UAV); D3D12 forbids
         // UAVs on the upload heap that Create uses, so the GPU-written cull buffer needs its own default-heap resource.
         var heapProperties = new D3D12_HEAP_PROPERTIES {
@@ -84,17 +83,16 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
             // UNORDERED_ACCESS implicitly on the beam prepass's first UAV write); passing COMMON avoids the
             // debug-layer warning that an UNORDERED_ACCESS initial state triggers.
             D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
-            (D3D12_CLEAR_VALUE?)null,
+            ((D3D12_CLEAR_VALUE?)null),
             in resourceIid,
             &buffer
         );
 
         return new DirectXGpuDeviceBuffer(
-            bufferHandle: (nint)buffer,
+            bufferHandle: ((nint)buffer),
             sizeBytes: sizeBytes
         );
     }
-
     /// <inheritdoc/>
     public IGpuStorageBuffer CreateIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) {
         // Device-local: a default-heap ALLOW_UNORDERED_ACCESS buffer a compute shader writes (then the caller barriers
@@ -103,7 +101,6 @@ public sealed unsafe class DirectXGpuStorageBufferFactory : IGpuStorageBufferFac
         // resources never leave it, so no buffer-state transition is needed. Neither needs an extra D3D12 buffer flag.
         return Create(deviceContext: deviceContext, sizeBytes: sizeBytes);
     }
-
     /// <inheritdoc/>
     public IGpuBuffer CreateDeviceLocalIndirectArgs(IGpuDeviceContext deviceContext, ulong sizeBytes) =>
         CreateDeviceLocal(deviceContext: deviceContext, sizeBytes: sizeBytes);

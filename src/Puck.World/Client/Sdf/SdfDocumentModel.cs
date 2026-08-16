@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.SdfVm;
+using Puck.SignedDistance;
 
 namespace Puck.World.Client.Sdf;
 
@@ -18,7 +18,6 @@ internal sealed class SdfDocumentException(SdfRefusal reason, string message) : 
     /// <summary>Which of this door's finite refusal reasons fired.</summary>
     public SdfRefusal Reason { get; } = reason;
 }
-
 /// <summary>One decoded <c>puck.sdf.v1</c> op — the typed argument record <see cref="SdfDocumentDecoder"/> produces
 /// per array entry, replayed against an <see cref="SdfProgramBuilder"/> by <see cref="SdfDocumentDecoder.Replay"/>.
 /// Which fields are meaningful depends on <see cref="Kind"/> (see the decoder's per-kind allowed-member tables);
@@ -45,7 +44,6 @@ internal sealed record SdfDocumentOp(
     SdfBlendOp Blend = SdfBlendOp.Union,
     float Smooth = 0f
 );
-
 /// <summary>The <c>puck.sdf.v1</c> op vocabulary this prototype decoder covers — see the front door's report for the
 /// full skipped-op list (glyph/text, the positional-recolor folds, screens, instances, sampled regions, and every
 /// warp/bend/repeat op).</summary>
@@ -78,7 +76,6 @@ internal enum SdfDocumentOpKind {
     /// <summary><see cref="SdfProgramBuilder.Plane"/>.</summary>
     Plane,
 }
-
 /// <summary>A fully decoded, dry-validated <c>puck.sdf.v1</c> document — the immutable, replayable result of
 /// <see cref="SdfDocumentDecoder.Decode"/>. Replaying the same program twice against a fresh builder in a fresh
 /// material scope produces byte-identical instructions (no wall-clock, no RNG — every value came from the source

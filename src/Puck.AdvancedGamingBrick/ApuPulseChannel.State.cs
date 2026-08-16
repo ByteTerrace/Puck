@@ -26,7 +26,6 @@ public sealed partial class ApuPulseChannel : ISnapshotable {
         writer.WriteInt32(value: m_sweepShadow);
         writer.WriteBoolean(value: m_sweepActive);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

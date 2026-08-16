@@ -13,25 +13,24 @@ namespace Puck.Cli.Format.Rewriters;
 // operands get wrapped — and unary operators are left alone. Purely syntactic and idempotent.
 internal sealed class ParenClarityRewriter : CSharpSyntaxRewriter {
     public override SyntaxNode? VisitBinaryExpression(BinaryExpressionSyntax node) =>
-        MaybeWrap(original: node, visited: (ExpressionSyntax)base.VisitBinaryExpression(node: node)!);
+        MaybeWrap(original: node, visited: ((ExpressionSyntax)base.VisitBinaryExpression(node: node)!));
     public override SyntaxNode? VisitConditionalExpression(ConditionalExpressionSyntax node) =>
-        MaybeWrap(original: node, visited: (ExpressionSyntax)base.VisitConditionalExpression(node: node)!);
+        MaybeWrap(original: node, visited: ((ExpressionSyntax)base.VisitConditionalExpression(node: node)!));
     public override SyntaxNode? VisitIsPatternExpression(IsPatternExpressionSyntax node) =>
-        MaybeWrap(original: node, visited: (ExpressionSyntax)base.VisitIsPatternExpression(node: node)!);
+        MaybeWrap(original: node, visited: ((ExpressionSyntax)base.VisitIsPatternExpression(node: node)!));
     public override SyntaxNode? VisitCastExpression(CastExpressionSyntax node) =>
-        MaybeWrap(original: node, visited: (ExpressionSyntax)base.VisitCastExpression(node: node)!);
-
+        MaybeWrap(original: node, visited: ((ExpressionSyntax)base.VisitCastExpression(node: node)!));
     // Flag-combining bitwise (`a | b`) is idiomatic bare in value position — the gold standard wraps it
     // only inside a comparison (precedence vs ==/!=). Drop a redundant bitwise paren wherever the
     // surrounding construct binds looser than the operator (arguments, initializers, returns,
     // assignments, ternary arms), so the pass settles on the gold shape regardless of any extra parens
     // already present.
     public override SyntaxNode? VisitParenthesizedExpression(ParenthesizedExpressionSyntax node) {
-        var visited = (ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node: node)!;
+        var visited = ((ParenthesizedExpressionSyntax)base.VisitParenthesizedExpression(node: node)!);
 
         if ((visited.Expression is BinaryExpressionSyntax inner)
             && IsBitwise(kind: inner.Kind())
-            && (IsLooseContext(parent: node.Parent) || IsSameOperatorChain(innerKind: inner.Kind(), parent: node.Parent))) {
+            && IsLooseContext(parent: node.Parent)) {
             return inner.WithLeadingTrivia(trivia: visited.GetLeadingTrivia()).WithTrailingTrivia(trivia: visited.GetTrailingTrivia());
         }
 
@@ -49,7 +48,6 @@ internal sealed class ParenClarityRewriter : CSharpSyntaxRewriter {
             .WithLeadingTrivia(trivia: visited.GetLeadingTrivia())
             .WithTrailingTrivia(trivia: visited.GetTrailingTrivia());
     }
-
     // Decided on the ORIGINAL node, so the parent is the real (pre-rewrite) context.
     private static bool NeedsParens(ExpressionSyntax node) {
         var parent = node.Parent;
@@ -96,15 +94,9 @@ internal sealed class ParenClarityRewriter : CSharpSyntaxRewriter {
     }
     private static bool IsBitwise(SyntaxKind kind) => (kind
         is SyntaxKind.BitwiseAndExpression or SyntaxKind.BitwiseOrExpression or SyntaxKind.ExclusiveOrExpression);
-
-    // A bitwise paren whose parent is the SAME bitwise operator is redundant (the op is associative):
-    // `(a | b) | c` == `a | b | c`. Mixed operators keep their parens.
-    private static bool IsSameOperatorChain(SyntaxKind innerKind, SyntaxNode? parent) =>
-        ((parent is BinaryExpressionSyntax parentBinary) && (parentBinary.Kind() == innerKind));
     private static bool IsComparison(SyntaxKind kind) => (kind
         is SyntaxKind.EqualsExpression or SyntaxKind.NotEqualsExpression or SyntaxKind.LessThanExpression
         or SyntaxKind.LessThanOrEqualExpression or SyntaxKind.GreaterThanExpression or SyntaxKind.GreaterThanOrEqualExpression);
-
     // Constructs that bind looser than a bitwise operator, so wrapping its result adds nothing: a
     // redundant bitwise paren in any of these can be dropped safely.
     private static bool IsLooseContext(SyntaxNode? parent) => (parent is ArgumentSyntax

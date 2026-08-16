@@ -23,6 +23,363 @@ public static class BindingProfile {
     /// lowering callback so a fixed command vocabulary can represent a per-seat or remotely discovered table.</summary>
     public const string ChannelCommandPrefix = "channel.";
 
+    private static (IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, ref int nextActivatorIndex) {
+        var entries = (page.Entries ?? []);
+        // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
+        // expressiveness (activation edge, constant value). An entry triggered by an ACTIVATOR instead of a plain
+        // source (BindingPageEntryDefinition.Activator) is excluded from this table entirely and collected into
+        // `activators` — PagedInputBindings evaluates those out-of-band, one RowActivatorTracker per entry.
+        var grouped = new Dictionary<string, List<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
+        var activators = new List<CompiledBindingProfile.CompiledActivatorEntry>();
+        // OrdinalIgnoreCase to match how a sequence member is actually compared at runtime (RowActivatorTracker,
+        // BindingSourceComponent) — a case-variant duplicate ("Gamepad.LeftTrigger" vs "gamepad.leftTrigger") is
+        // the SAME shadowed activator there and must be refused here too, not admitted as two distinct rows.
+        var seenActivatorKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
+            var entry = (entries[entryIndex]
+                ?? throw new ArgumentException(
+                message: $"Page \"{page.Id}\" entry {entryIndex} is null.",
+                paramName: nameof(page)
+            ));
+
+            if (
+                !Enum.IsDefined(value: entry.Mode) ||
+                ((entry.ActivateOn is { } activateOn) && !Enum.IsDefined(value: activateOn))
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry {entryIndex} carries an invalid mode or activation phase.",
+                    paramName: nameof(page)
+                );
+            }
+            var hasSource = !string.IsNullOrEmpty(value: entry.Source);
+            var hasActivator = (entry.Activator is not null);
+
+            if (hasSource == hasActivator) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" carries an entry that must name exactly one trigger — a source or an activator.",
+                    paramName: nameof(page)
+                );
+            }
+
+            var label = entry.TriggerLabel;
+
+            if ((entry.Command is null) == (entry.Channel is null)) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {label} must carry exactly one destination — a command or a channel.",
+                    paramName: nameof(page)
+                );
+            }
+
+            ValidateValue(
+                value: entry.Value,
+                path: $"Page \"{page.Id}\" entry for {label}",
+                isChannel: (entry.Channel is not null),
+                paramName: nameof(page)
+            );
+
+            if (
+                (entry.Mode == BindingEntryMode.Toggle) &&
+                (entry.Channel is null)
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {label} sets mode Toggle on a command destination — toggle is only meaningful on a channel destination.",
+                    paramName: nameof(page)
+                );
+            }
+
+            string effectiveCommand;
+            CommandValue? effectiveValue;
+            float? channelScale;
+
+            if (entry.Channel is { } channel) {
+                ValidateChannelRef(
+                    channel: channel,
+                    path: $"Page \"{page.Id}\" entry for {label}",
+                    paramName: nameof(page)
+                );
+
+                ValidateChannelScale(
+                    channel: channel,
+                    path: $"Page \"{page.Id}\" entry for {label}",
+                    paramName: nameof(page),
+                    scale: entry.Scale
+                );
+
+                effectiveCommand = channelCommandName(arg: channel);
+                // The scale rides ChannelScale, never Value: Value is an UNCONDITIONAL override (see CommandBinding's
+                // own remarks), which would replace an analog source's live sample with the constant scale (the B2
+                // defect). InputRouter decides constant-vs-multiply from the live signal's OWN value kind.
+                effectiveValue = null;
+                channelScale = (entry.Scale ?? 1f);
+            } else if (string.IsNullOrEmpty(value: entry.Command)) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" carries an entry without a command or channel.",
+                    paramName: nameof(page)
+                );
+            } else {
+                effectiveCommand = entry.Command;
+                effectiveValue = entry.Value;
+                channelScale = null;
+            }
+
+            if (hasActivator) {
+                var activator = entry.Activator!;
+
+                if (!Enum.IsDefined(value: activator.Mode)) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} carries an invalid activator mode.",
+                        paramName: nameof(page)
+                    );
+                }
+
+                if (entry.ActivateOn is not null) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} carries ActivateOn beside an activator — the activator's own transition is the entry's edge.",
+                        paramName: nameof(page)
+                    );
+                }
+
+                if (activator.Sequence is not { Count: > 0 }) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} activator sequence must be non-empty.",
+                        paramName: nameof(page)
+                    );
+                }
+
+                foreach (var step in activator.Sequence) {
+                    if (string.IsNullOrEmpty(value: step)) {
+                        throw new ArgumentException(
+                            message: $"Page \"{page.Id}\" entry for {label} activator sequence carries an empty control name.",
+                            paramName: nameof(page)
+                        );
+                    }
+                }
+
+                if (activator.Mode == BindingActivatorMode.Held) {
+                    var seenSteps = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var step in activator.Sequence) {
+                        if (!seenSteps.Add(item: step)) {
+                            throw new ArgumentException(
+                                message: $"Page \"{page.Id}\" entry for {label} repeats control \"{step}\" in a Held activator sequence — a simultaneous hold cannot distinguish a repeat.",
+                                paramName: nameof(page)
+                            );
+                        }
+                    }
+
+                    if (activator.TimeoutTicks is not null) {
+                        throw new ArgumentException(
+                            message: $"Page \"{page.Id}\" entry for {label} sets timeoutTicks on a Held activator — timeout only applies to a Tapped sequence.",
+                            paramName: nameof(page)
+                        );
+                    }
+                } else if (
+                    (activator.TimeoutTicks is { } timeout) &&
+                    (timeout <= 0)
+                ) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" entry for {label} activator timeoutTicks must be positive.",
+                        paramName: nameof(page)
+                    );
+                }
+
+                var shadowKey = $"{activator.Mode}\0{string.Join(
+                    separator: ',',
+                    values: activator.Sequence
+                )}";
+
+                if (!seenActivatorKeys.Add(item: shadowKey)) {
+                    throw new ArgumentException(
+                        message: $"Page \"{page.Id}\" declares two activators for the same {activator.Mode} sequence [{string.Join(
+                            separator: ", ",
+                            values: activator.Sequence
+                        )}] — the second can never fire (shadowed).",
+                        paramName: nameof(page)
+                    );
+                }
+
+                var pressValue = CompiledBindingProfile.PressValue(
+                    channelScale: channelScale,
+                    explicitValue: entry.Value
+                );
+
+                activators.Add(item: new CompiledBindingProfile.CompiledActivatorEntry(
+                    ActivatorIndex: nextActivatorIndex++,
+                    Activator: activator with { Sequence = activator.Sequence.ToImmutableArray(), },
+                    Edge: new CompiledBindingProfile.CompiledCommandEdge(
+                        Command: effectiveCommand,
+                        // A channel destination must dispatch its release edge: CommandRegistry.ApplySnapshot skips any
+                        // entry whose Dispatch is false, and only the channel verb's handler calls seat.ReleaseChannel —
+                        // without dispatch, a closed gate or completed tap would hold the channel forever. A command
+                        // destination keeps HoldRelease's own default (momentary; no release needed).
+                        DispatchRelease: (channelScale is not null),
+                        PressValue: pressValue,
+                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
+                        Reassertable: (channelScale is not null)
+                    )
+                ));
+
+                continue;
+            }
+
+            // A plain-source entry may name an axis COMPONENT (gamepad.leftStick.x) instead of a bare control — the
+            // table key is always the BASE source (what a raw InputSignal actually carries); the component rides
+            // the compiled CommandBinding and is extracted at resolve time (see InputRouter's ResolveValue).
+            if (!BindingSourceComponent.TrySplit(
+                source: entry.Source!,
+                baseSource: out var baseSource,
+                component: out var component
+            )) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {entry.Source} names a malformed axis component — the final segment must be \"x\" or \"y\".",
+                    paramName: nameof(page)
+                );
+            }
+
+            if (
+                (component is not null) &&
+                (channelScale is null)
+            ) {
+                throw new ArgumentException(
+                    message: $"Page \"{page.Id}\" entry for {entry.Source} names an axis component, which is only meaningful on a channel destination.",
+                    paramName: nameof(page)
+                );
+            }
+
+            if (!grouped.TryGetValue(
+                key: baseSource,
+                value: out var list
+            )) {
+                list = [];
+                grouped[baseSource] = list;
+            }
+
+            list.Add(item: new CommandBinding(
+                ActivateOn: entry.ActivateOn,
+                ChannelScale: channelScale,
+                Command: effectiveCommand,
+                Value: effectiveValue,
+                Component: component,
+                Mode: entry.Mode
+            ));
+        }
+
+        var table = new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (source, list) in grouped) {
+            table[source] = list.ToImmutableArray();
+        }
+
+        return (table, activators);
+    }
+    private static BindingPageView BuildView(
+        HashSet<int> chord,
+        string group,
+        IReadOnlyList<BindingChordCommandView> hints,
+        IReadOnlyList<BindingModifierDefinition> modifiers,
+        BindingPageDefinition page,
+        Func<ChannelRef, string> channelCommandName
+    ) {
+        var buttons = new BindingPageButtonView[(page.Entries?.Count ?? 0)];
+
+        for (var entryIndex = 0; (entryIndex < buttons.Length); entryIndex++) {
+            var entry = page.Entries![entryIndex];
+
+            buttons[entryIndex] = new BindingPageButtonView(
+                Command: ((entry.Channel is { } channel)
+                ? channelCommandName(arg: channel)
+                : entry.Command!),
+                Icon: entry.Icon,
+                Label: entry.Label,
+                // An activator entry has no Source — its synthetic "activator[...]" label stands in, so a
+                // binding-bar consumer never renders a null/blank chip for it.
+                Source: entry.TriggerLabel
+            );
+        }
+
+        var modifierViews = new BindingModifierView[modifiers.Count];
+
+        for (var modifierIndex = 0; (modifierIndex < modifiers.Count); modifierIndex++) {
+            var modifier = modifiers[modifierIndex];
+
+            modifierViews[modifierIndex] = new BindingModifierView(
+                Icon: modifier.Icon,
+                Id: modifier.Id,
+                Label: modifier.Label,
+                Required: chord.Contains(item: modifierIndex),
+                Source: modifier.Source
+            );
+        }
+
+        return new BindingPageView(
+            Buttons: buttons.ToImmutableArray(),
+            CommandChords: hints.ToImmutableArray(),
+            Group: group,
+            Icon: page.Icon,
+            Label: page.Label,
+            Modifiers: modifierViews.ToImmutableArray(),
+            PageId: page.Id
+        );
+    }
+    private static void ValidateChannelRef(ChannelRef channel, string path, string paramName) {
+        switch (channel) {
+            case ChannelRef.Name { Value.Length: > 0 }:
+                return;
+            case ChannelRef.Name:
+                throw new ArgumentException(
+                    message: $"{path} channel name must be non-empty.",
+                    paramName: paramName
+                );
+            default:
+                throw new ArgumentException(
+                    message: $"{path} channel reference is not a declared name variant.",
+                    paramName: paramName
+                );
+        }
+    }
+    // A channel destination's scale must be a finite value in [-1, 1]; an omitted scale is the default (+1) and
+    // always valid. The one check both a chord-command channel and a page-entry channel run.
+    private static void ValidateChannelScale(float? scale, ChannelRef channel, string path, string paramName) {
+        if (
+            (scale is { } value) &&
+            (!float.IsFinite(f: value) || (value < -1f) || (value > 1f))
+        ) {
+            throw new ArgumentException(
+                message: $"{path} channel {channel.Describe()} scale must be in [-1, 1].",
+                paramName: paramName
+            );
+        }
+    }
+    private static void ValidateValue(CommandValue? value, string path, bool isChannel, string paramName) {
+        if (value is not { } constant) {
+            return;
+        }
+        if (isChannel) {
+            throw new ArgumentException(
+                message: $"{path} carries a Value on a channel destination; Scale is the channel constant.",
+                paramName: paramName
+            );
+        }
+        if (!Enum.IsDefined(value: constant.Kind)) {
+            throw new ArgumentException(
+                message: $"{path} Value kind {((int)constant.Kind)} is not declared.",
+                paramName: paramName
+            );
+        }
+        if (
+            !float.IsFinite(f: constant.Raw.X) ||
+            !float.IsFinite(f: constant.Raw.Y) ||
+            !float.IsFinite(f: constant.Raw.Z) ||
+            !float.IsFinite(f: constant.Raw.W)
+        ) {
+            throw new ArgumentException(
+                message: $"{path} Value components must be finite.",
+                paramName: paramName
+            );
+        }
+    }
+
     /// <summary>The synthesized command name a channel destination named <paramref name="channel"/> compiles down to.</summary>
     public static string ChannelCommandName(ChannelRef channel) => channel switch {
         ChannelRef.Name name => $"{ChannelCommandPrefix}name.{name.Value}",
@@ -31,7 +388,6 @@ public static class BindingProfile {
         paramName: nameof(channel)
     ),
     };
-
     /// <summary>Validates and compiles a profile document.</summary>
     /// <param name="document">The profile document to compile.</param>
     /// <param name="channelCommandName">Optional runtime lowering for an authored channel reference. When omitted,
@@ -116,9 +472,10 @@ public static class BindingProfile {
         var documentRows = ((document.Chords is { Count: > 0 } chords)
             ? chords
             : throw new ArgumentException(
-            message: "A binding profile must carry at least one chord row.",
-            paramName: nameof(document)
-        ));
+                message: "A binding profile must carry at least one chord row.",
+                paramName: nameof(document)
+            )
+        );
         // First pass: group registration, chord resolution, the uniqueness rules, and the raw row facts. Views are
         // built in a second pass so each page view can carry its whole group's command-chord hints.
         var groupIndexByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -411,13 +768,13 @@ public static class BindingProfile {
 
             var authoredStyle = (wheel.Style ?? new BindingWheelStyleDefinition());
             var style = authoredStyle with {
-                Excursion = authoredStyle.Excursion is { } authoredExcursion
-                    ? authoredExcursion with {
-                        Thresholds = authoredExcursion.Thresholds is null
-                            ? null!
-                            : authoredExcursion.Thresholds.ToImmutableArray(),
-                    }
-                    : null,
+                Excursion = ((authoredStyle.Excursion is { } authoredExcursion)
+                ? authoredExcursion with {
+                    Thresholds = ((authoredExcursion.Thresholds is null)
+                    ? null!
+                    : authoredExcursion.Thresholds.ToImmutableArray()),
+                }
+                : null),
             };
 
             if (
@@ -715,7 +1072,8 @@ public static class BindingProfile {
 
                 var effectiveCommand = ((command.Channel is { } channel)
                     ? channelCommandName(arg: channel)
-                    : command.Command!);
+                    : command.Command!
+                );
 
                 commandRows.Add(item: rowIndex);
                 hints.Add(item: new BindingChordCommandView(
@@ -742,9 +1100,9 @@ public static class BindingProfile {
 
             if (row.Page is { } page) {
                 var (table, activators) = BuildTable(
-                    page: page,
                     channelCommandName: channelCommandName,
-                    nextActivatorIndex: ref nextActivatorIndex
+                    nextActivatorIndex: ref nextActivatorIndex,
+                    page: page
                 );
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
@@ -769,13 +1127,14 @@ public static class BindingProfile {
                 var isChannel = (command.Channel is not null);
                 var pressValue = CompiledBindingProfile.PressValue(
                     channelScale: (isChannel
-                        ? (command.Scale ?? 1f)
-                        : null),
+                    ? (command.Scale ?? 1f)
+                    : null),
                     explicitValue: command.Value
                 );
                 var effectiveCommand = (isChannel
                     ? channelCommandName(arg: command.Channel!)
-                    : command.Command!);
+                    : command.Command!
+                );
 
                 rows[rowIndex] = new CompiledBindingProfile.CompiledChordRow(
                     Chord: chord,
@@ -794,6 +1153,7 @@ public static class BindingProfile {
         }
 
         return new CompiledBindingProfile(
+            activatorCount: nextActivatorIndex,
             commandRowsByGroup: commandRowsByGroup,
             groupIndexByName: groupIndexByName,
             groups: [.. groupNames],
@@ -801,367 +1161,8 @@ public static class BindingProfile {
             modifiers: modifiers,
             restingRowByGroup: [.. restingByGroup],
             rows: rows,
-            activatorCount: nextActivatorIndex,
             wheelViewByRow: wheelViewByRow
         );
-    }
-
-    private static (IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> Table, List<CompiledBindingProfile.CompiledActivatorEntry> Activators) BuildTable(BindingPageDefinition page, Func<ChannelRef, string> channelCommandName, ref int nextActivatorIndex) {
-        var entries = (page.Entries ?? []);
-        // Group by source into the runtime source→commands table, carrying each entry's full CommandBinding
-        // expressiveness (activation edge, constant value). An entry triggered by an ACTIVATOR instead of a plain
-        // source (BindingPageEntryDefinition.Activator) is excluded from this table entirely and collected into
-        // `activators` — PagedInputBindings evaluates those out-of-band, one RowActivatorTracker per entry.
-        var grouped = new Dictionary<string, List<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
-        var activators = new List<CompiledBindingProfile.CompiledActivatorEntry>();
-        // OrdinalIgnoreCase to match how a sequence member is actually compared at runtime (RowActivatorTracker,
-        // BindingSourceComponent) — a case-variant duplicate ("Gamepad.LeftTrigger" vs "gamepad.leftTrigger") is
-        // the SAME shadowed activator there and must be refused here too, not admitted as two distinct rows.
-        var seenActivatorKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
-            var entry = (entries[entryIndex]
-                ?? throw new ArgumentException(
-                message: $"Page \"{page.Id}\" entry {entryIndex} is null.",
-                paramName: nameof(page)
-            ));
-
-            if (
-                !Enum.IsDefined(value: entry.Mode) ||
-                ((entry.ActivateOn is { } activateOn) && !Enum.IsDefined(value: activateOn))
-            ) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" entry {entryIndex} carries an invalid mode or activation phase.",
-                    paramName: nameof(page)
-                );
-            }
-            var hasSource = !string.IsNullOrEmpty(value: entry.Source);
-            var hasActivator = (entry.Activator is not null);
-
-            if (hasSource == hasActivator) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" carries an entry that must name exactly one trigger — a source or an activator.",
-                    paramName: nameof(page)
-                );
-            }
-
-            var label = entry.TriggerLabel;
-
-            if ((entry.Command is null) == (entry.Channel is null)) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" entry for {label} must carry exactly one destination — a command or a channel.",
-                    paramName: nameof(page)
-                );
-            }
-
-            ValidateValue(
-                value: entry.Value,
-                path: $"Page \"{page.Id}\" entry for {label}",
-                isChannel: (entry.Channel is not null),
-                paramName: nameof(page)
-            );
-
-            if (
-                (entry.Mode == BindingEntryMode.Toggle) &&
-                (entry.Channel is null)
-            ) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" entry for {label} sets mode Toggle on a command destination — toggle is only meaningful on a channel destination.",
-                    paramName: nameof(page)
-                );
-            }
-
-            string effectiveCommand;
-            CommandValue? effectiveValue;
-            float? channelScale;
-
-            if (entry.Channel is { } channel) {
-                ValidateChannelRef(
-                    channel: channel,
-                    path: $"Page \"{page.Id}\" entry for {label}",
-                    paramName: nameof(page)
-                );
-
-                ValidateChannelScale(
-                    channel: channel,
-                    path: $"Page \"{page.Id}\" entry for {label}",
-                    paramName: nameof(page),
-                    scale: entry.Scale
-                );
-
-                effectiveCommand = channelCommandName(arg: channel);
-                // The scale rides ChannelScale, never Value: Value is an UNCONDITIONAL override (see CommandBinding's
-                // own remarks), which would replace an analog source's live sample with the constant scale (the B2
-                // defect). InputRouter decides constant-vs-multiply from the live signal's OWN value kind.
-                effectiveValue = null;
-                channelScale = (entry.Scale ?? 1f);
-            } else if (string.IsNullOrEmpty(value: entry.Command)) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" carries an entry without a command or channel.",
-                    paramName: nameof(page)
-                );
-            } else {
-                effectiveCommand = entry.Command;
-                effectiveValue = entry.Value;
-                channelScale = null;
-            }
-
-            if (hasActivator) {
-                var activator = entry.Activator!;
-
-                if (!Enum.IsDefined(value: activator.Mode)) {
-                    throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" entry for {label} carries an invalid activator mode.",
-                        paramName: nameof(page)
-                    );
-                }
-
-                if (entry.ActivateOn is not null) {
-                    throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" entry for {label} carries ActivateOn beside an activator — the activator's own transition is the entry's edge.",
-                        paramName: nameof(page)
-                    );
-                }
-
-                if (activator.Sequence is not { Count: > 0 }) {
-                    throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" entry for {label} activator sequence must be non-empty.",
-                        paramName: nameof(page)
-                    );
-                }
-
-                foreach (var step in activator.Sequence) {
-                    if (string.IsNullOrEmpty(value: step)) {
-                        throw new ArgumentException(
-                            message: $"Page \"{page.Id}\" entry for {label} activator sequence carries an empty control name.",
-                            paramName: nameof(page)
-                        );
-                    }
-                }
-
-                if (activator.Mode == BindingActivatorMode.Held) {
-                    var seenSteps = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var step in activator.Sequence) {
-                        if (!seenSteps.Add(item: step)) {
-                            throw new ArgumentException(
-                                message: $"Page \"{page.Id}\" entry for {label} repeats control \"{step}\" in a Held activator sequence — a simultaneous hold cannot distinguish a repeat.",
-                                paramName: nameof(page)
-                            );
-                        }
-                    }
-
-                    if (activator.TimeoutTicks is not null) {
-                        throw new ArgumentException(
-                            message: $"Page \"{page.Id}\" entry for {label} sets timeoutTicks on a Held activator — timeout only applies to a Tapped sequence.",
-                            paramName: nameof(page)
-                        );
-                    }
-                } else if (
-                    (activator.TimeoutTicks is { } timeout) &&
-                    (timeout <= 0)
-                ) {
-                    throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" entry for {label} activator timeoutTicks must be positive.",
-                        paramName: nameof(page)
-                    );
-                }
-
-                var shadowKey = $"{activator.Mode}\0{string.Join(
-                    separator: ',',
-                    values: activator.Sequence
-                )}";
-
-                if (!seenActivatorKeys.Add(item: shadowKey)) {
-                    throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" declares two activators for the same {activator.Mode} sequence [{string.Join(
-                            separator: ", ",
-                            values: activator.Sequence
-                        )}] — the second can never fire (shadowed).",
-                        paramName: nameof(page)
-                    );
-                }
-
-                var pressValue = CompiledBindingProfile.PressValue(
-                    channelScale: channelScale,
-                    explicitValue: entry.Value
-                );
-
-                activators.Add(item: new CompiledBindingProfile.CompiledActivatorEntry(
-                    ActivatorIndex: nextActivatorIndex++,
-                    Activator: activator with { Sequence = activator.Sequence.ToImmutableArray(), },
-                    Edge: new CompiledBindingProfile.CompiledCommandEdge(
-                        Command: effectiveCommand,
-                        // A channel destination must dispatch its release edge: CommandRegistry.ApplySnapshot skips any
-                        // entry whose Dispatch is false, and only the channel verb's handler calls seat.ReleaseChannel —
-                        // without dispatch, a closed gate or completed tap would hold the channel forever. A command
-                        // destination keeps HoldRelease's own default (momentary; no release needed).
-                        DispatchRelease: (channelScale is not null),
-                        PressValue: pressValue,
-                        ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
-                        Reassertable: (channelScale is not null)
-                    )
-                ));
-
-                continue;
-            }
-
-            // A plain-source entry may name an axis COMPONENT (gamepad.leftStick.x) instead of a bare control — the
-            // table key is always the BASE source (what a raw InputSignal actually carries); the component rides
-            // the compiled CommandBinding and is extracted at resolve time (see InputRouter's ResolveValue).
-            if (!BindingSourceComponent.TrySplit(
-                source: entry.Source!,
-                baseSource: out var baseSource,
-                component: out var component
-            )) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" entry for {entry.Source} names a malformed axis component — the final segment must be \"x\" or \"y\".",
-                    paramName: nameof(page)
-                );
-            }
-
-            if (
-                (component is not null) &&
-                (channelScale is null)
-            ) {
-                throw new ArgumentException(
-                    message: $"Page \"{page.Id}\" entry for {entry.Source} names an axis component, which is only meaningful on a channel destination.",
-                    paramName: nameof(page)
-                );
-            }
-
-            if (!grouped.TryGetValue(
-                key: baseSource,
-                value: out var list
-            )) {
-                list = [];
-                grouped[baseSource] = list;
-            }
-
-            list.Add(item: new CommandBinding(
-                ActivateOn: entry.ActivateOn,
-                ChannelScale: channelScale,
-                Command: effectiveCommand,
-                Value: effectiveValue,
-                Component: component,
-                Mode: entry.Mode
-            ));
-        }
-
-        var table = new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (source, list) in grouped) {
-            table[source] = list.ToImmutableArray();
-        }
-
-        return (table, activators);
-    }
-
-    private static BindingPageView BuildView(
-        HashSet<int> chord,
-        string group,
-        IReadOnlyList<BindingChordCommandView> hints,
-        IReadOnlyList<BindingModifierDefinition> modifiers,
-        BindingPageDefinition page,
-        Func<ChannelRef, string> channelCommandName
-    ) {
-        var buttons = new BindingPageButtonView[(page.Entries?.Count ?? 0)];
-
-        for (var entryIndex = 0; (entryIndex < buttons.Length); entryIndex++) {
-            var entry = page.Entries![entryIndex];
-
-            buttons[entryIndex] = new BindingPageButtonView(
-                Command: ((entry.Channel is { } channel)
-                ? channelCommandName(arg: channel)
-                : entry.Command!),
-                Icon: entry.Icon,
-                Label: entry.Label,
-                // An activator entry has no Source — its synthetic "activator[...]" label stands in, so a
-                // binding-bar consumer never renders a null/blank chip for it.
-                Source: entry.TriggerLabel
-            );
-        }
-
-        var modifierViews = new BindingModifierView[modifiers.Count];
-
-        for (var modifierIndex = 0; (modifierIndex < modifiers.Count); modifierIndex++) {
-            var modifier = modifiers[modifierIndex];
-
-            modifierViews[modifierIndex] = new BindingModifierView(
-                Icon: modifier.Icon,
-                Id: modifier.Id,
-                Label: modifier.Label,
-                Required: chord.Contains(item: modifierIndex),
-                Source: modifier.Source
-            );
-        }
-
-        return new BindingPageView(
-            Buttons: buttons.ToImmutableArray(),
-            CommandChords: hints.ToImmutableArray(),
-            Group: group,
-            Icon: page.Icon,
-            Label: page.Label,
-            Modifiers: modifierViews.ToImmutableArray(),
-            PageId: page.Id
-        );
-    }
-    private static void ValidateChannelRef(ChannelRef channel, string path, string paramName) {
-        switch (channel) {
-            case ChannelRef.Name { Value.Length: > 0 }:
-                return;
-            case ChannelRef.Name:
-                throw new ArgumentException(
-                    message: $"{path} channel name must be non-empty.",
-                    paramName: paramName
-                );
-            default:
-                throw new ArgumentException(
-                    message: $"{path} channel reference is not a declared name variant.",
-                    paramName: paramName
-                );
-        }
-    }
-    // A channel destination's scale must be a finite value in [-1, 1]; an omitted scale is the default (+1) and
-    // always valid. The one check both a chord-command channel and a page-entry channel run.
-    private static void ValidateChannelScale(float? scale, ChannelRef channel, string path, string paramName) {
-        if (
-            (scale is { } value) &&
-            (!float.IsFinite(f: value) || (value < -1f) || (value > 1f))
-        ) {
-            throw new ArgumentException(
-                message: $"{path} channel {channel.Describe()} scale must be in [-1, 1].",
-                paramName: paramName
-            );
-        }
-    }
-    private static void ValidateValue(CommandValue? value, string path, bool isChannel, string paramName) {
-        if (value is not { } constant) {
-            return;
-        }
-        if (isChannel) {
-            throw new ArgumentException(
-                message: $"{path} carries a Value on a channel destination; Scale is the channel constant.",
-                paramName: paramName
-            );
-        }
-        if (!Enum.IsDefined(value: constant.Kind)) {
-            throw new ArgumentException(
-                message: $"{path} Value kind {(int)constant.Kind} is not declared.",
-                paramName: paramName
-            );
-        }
-        if (
-            !float.IsFinite(f: constant.Raw.X) ||
-            !float.IsFinite(f: constant.Raw.Y) ||
-            !float.IsFinite(f: constant.Raw.Z) ||
-            !float.IsFinite(f: constant.Raw.W)
-        ) {
-            throw new ArgumentException(
-                message: $"{path} Value components must be finite.",
-                paramName: paramName
-            );
-        }
     }
 
 }

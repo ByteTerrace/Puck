@@ -1,5 +1,5 @@
+using Puck.GamingBricks;
 using Puck.Maths;
-using Puck.Snapshots;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -36,8 +36,8 @@ internal static partial class Diagnostics {
             name: "--frames"
         );
         var frames = (((framesArg is not null) && int.TryParse(
-            s: framesArg,
-            result: out var parsedFrames
+            result: out var parsedFrames,
+            s: framesArg
         ))
             ? parsedFrames
             : DefaultDumpSnapshotFrames);

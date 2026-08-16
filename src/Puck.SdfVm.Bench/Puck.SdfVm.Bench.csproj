@@ -21,12 +21,14 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.DirectX.Presentation\Puck.DirectX.Presentation.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
+        <!-- Bench is windowed-only and Windows-only in practice (no Linux variant); the shared presenter
+             registration comes from Puck.Launcher.Windows rather than a private copy of the block Puck.World's own
+             composition root used to duplicate. -->
+        <ProjectReference Include="..\Puck.Launcher.Windows\Puck.Launcher.Windows.csproj" />
         <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
         <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
-        <ProjectReference Include="..\Puck.Vulkan.Presentation\Puck.Vulkan.Presentation.csproj" />
     </ItemGroup>
 
     <ItemGroup>

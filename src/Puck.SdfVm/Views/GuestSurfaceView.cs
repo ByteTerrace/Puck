@@ -31,7 +31,6 @@ public sealed class GuestSurfaceView : IViewContent {
 
     /// <inheritdoc/>
     public Vector3 RoomGlow { get; set; }
-
     /// <inheritdoc/>
     public bool IsBudgeted => false;
 

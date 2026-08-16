@@ -16,9 +16,8 @@ public sealed class BindingBarAuthoringValidationLawTests {
         yield return ["layout.glyphSizeRatio", Policy(layout with { GlyphSizeRatio = 0f }), Policy(layout with { GlyphSizeRatio = 0.01f })];
         yield return ["layout.scale", Policy(layout with { Scale = 0f }), Policy(layout with { Scale = 0.01f })];
     }
-
-    [Theory]
     [MemberData(nameof(Cases))]
+    [Theory]
     public void InvalidValueRefusesByNameBesidePassingControl(string field, WorldBindingBarAuthoring invalid, WorldBindingBarAuthoring control) {
         var denied = WithPolicy(policy: invalid);
         var admitted = WithPolicy(policy: control);
@@ -29,7 +28,6 @@ public sealed class BindingBarAuthoringValidationLawTests {
     }
 
     private static WorldBindingBarAuthoring Policy(WorldBindingBarLayout layout) => new(Layout: layout);
-
     private static WorldDefinition WithPolicy(WorldBindingBarAuthoring policy) => Fixtures.BuildDocument() with {
         BindingOverlays = [
             new WorldBindingOverlay(

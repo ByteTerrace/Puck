@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>The low-level Direct3D 12 backend (DXGI + D3D12) implementing Puck's neutral GPU contracts from Puck.Abstractions: compute pipelines, descriptor allocation, storage buffers and images, shared-surface export, DXR acceleration structures, queue submission, and timestamp pools. The COM bindings are source-generated at build time rather than hand-written; only this project's own interfaces cross its public boundary. It carries no presentation, windowing, or shader-compilation dependency of its own.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.DirectX</PackageId>
+        <PackageTags>com;d3d12;directx;dxgi;gpu</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Backends</PuckLayer>
     </PropertyGroup>

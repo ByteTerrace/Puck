@@ -6,7 +6,6 @@ namespace Puck.Maths;
 /// <remarks>A run that walks off the machine is an answer — the span does not match — while a span past the window is a
 /// refusal, because beyond it the compiled machine has no arrows and could only report a false negative.</remarks>
 public readonly record struct MatchObstruction(int Length, int Window);
-
 /// <summary>
 /// A pattern compiled to a finite machine: the eager residual closure, flattened into a transition table and an
 /// acceptance weight per state, so a membership run is a table read per token and allocates nothing.
@@ -56,7 +55,10 @@ public sealed class PatternMatcher<TValue, TOps>
             accept[state] = readout[state];
 
             for (var letter = 0; (letter < letterCount); ++letter) {
-                transition[((state * letterCount) + letter)] = ((int)closure.Transition(state: state, symbol: letter));
+                transition[((state * letterCount) + letter)] = ((int)closure.Transition(
+                    state: state,
+                    symbol: letter
+                ));
             }
         }
 
@@ -70,6 +72,10 @@ public sealed class PatternMatcher<TValue, TOps>
         m_transition = transition;
     }
 
+    // The material's zero, without walking the closure's chain back to the presentation to find the same value.
+    internal TValue Zero =>
+        m_material.Zero;
+
     /// <summary>Gets the residual closure this was flattened from.</summary>
     public ResidualClosure<TValue, TOps> Closure { get; }
     /// <summary>Gets the number of letters the machine steps on.</summary>
@@ -79,6 +85,64 @@ public sealed class PatternMatcher<TValue, TOps>
     /// <summary>Gets the longest token span the pattern represents, or zero when the monoid was left free.</summary>
     public int Window { get; }
 
+    // The bare table reads, for callers inside the library whose state is this machine's own output and therefore
+    // already in range. The public Step and Accept re-check it for callers whose state is not.
+    internal TValue AcceptCore(int state) =>
+        m_accept[state];
+    internal bool IsBoundTo(object alphabet) =>
+        ReferenceEquals(
+            objA: m_alphabetIdentity,
+            objB: alphabet
+        );
+    internal int StepCore(int state, int letter) =>
+        m_transition[((state * LetterCount) + letter)];
+
+    private static bool TryCompileCore(
+        TokenPattern<TValue, TOps> pattern,
+        in PresentedAlgebra<TValue, TOps>.Element seed,
+        int stateLimit,
+        object? alphabetIdentity,
+        out PatternMatcher<TValue, TOps> matcher,
+        out ClosureObstruction obstruction
+    ) {
+        matcher = null!;
+
+        if (!pattern.Algebra.TryCompileClosure(
+            closure: out var closure,
+            obstruction: out obstruction,
+            seed: seed,
+            shiftSymbol: -1,
+            stateLimit: stateLimit,
+            twist: ResidualTwist.Counit
+        )) {
+            return false;
+        }
+
+        matcher = new(
+            closure: closure,
+            letterCount: pattern.LetterCount,
+            window: pattern.Window,
+            material: pattern.Algebra.Presentation.Material,
+            alphabetIdentity: alphabetIdentity
+        );
+
+        return true;
+    }
+
+    /// <summary>Returns the weight one state accepts with.</summary>
+    /// <param name="state">The state number.</param>
+    /// <returns>The residual's trace: membership over a Boolean material, a match count over a counting one, a cost
+    /// over a tropical one.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The state number is outside <see cref="StateCount"/>.</exception>
+    public TValue Accept(int state) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: state,
+            other: StateCount
+        );
+
+        return m_accept[state];
+    }
     /// <summary>Decides whether two compiled patterns weigh every token span alike, and returns the shortest span that
     /// separates them when they do not.</summary>
     /// <param name="left">The first matcher.</param>
@@ -100,9 +164,12 @@ public sealed class PatternMatcher<TValue, TOps>
         ArgumentNullException.ThrowIfNull(argument: left);
         ArgumentNullException.ThrowIfNull(argument: right);
 
-        return PresentedMachine<TValue, TOps>.AreEquivalent(left: left.Closure.Machine, right: right.Closure.Machine, witness: out witness);
+        return PresentedMachine<TValue, TOps>.AreEquivalent(
+            left: left.Closure.Machine,
+            right: right.Closure.Machine,
+            witness: out witness
+        );
     }
-
     /// <summary>Intersects two compiled patterns by pairing their machines.</summary>
     /// <param name="left">The first matcher.</param>
     /// <param name="right">The second matcher.</param>
@@ -130,30 +197,64 @@ public sealed class PatternMatcher<TValue, TOps>
         ArgumentNullException.ThrowIfNull(argument: right);
 
         if (left.LetterCount != right.LetterCount) {
-            throw new ArgumentException(message: "Two machines pair only when they step on the same letters.", paramName: nameof(right));
+            throw new ArgumentException(
+                message: "Two machines pair only when they step on the same letters.",
+                paramName: nameof(right)
+            );
         }
 
         var leftMachine = left.Closure.Machine;
         var rightMachine = right.Closure.Machine;
         var rightPresentation = rightMachine.Algebra.Presentation;
         var stride = rightPresentation.NormalFormCount;
-        var tensor = PresentedAlgebra<TValue, TOps>.Create(
-            presentation: Presentations.Tensor(left: leftMachine.Algebra.Presentation, right: rightPresentation)
-        );
+        var tensor = PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Tensor(
+            left: leftMachine.Algebra.Presentation,
+            right: rightPresentation
+        ));
         var steps = new PresentedAlgebra<TValue, TOps>.Element[left.LetterCount];
 
         for (var letter = 0; (letter < steps.Length); ++letter) {
-            steps[letter] = tensor.PairUp(left: leftMachine.Step(index: letter), right: rightMachine.Step(index: letter), rightKeyCount: stride);
+            steps[letter] = tensor.PairUp(
+                left: leftMachine.Step(index: letter),
+                right: rightMachine.Step(index: letter),
+                rightKeyCount: stride
+            );
         }
 
         return PresentedMachine<TValue, TOps>.Create(
             algebra: tensor,
-            initial: tensor.PairUp(left: leftMachine.Initial, right: rightMachine.Initial, rightKeyCount: stride),
+            initial: tensor.PairUp(
+                left: leftMachine.Initial,
+                right: rightMachine.Initial,
+                rightKeyCount: stride
+            ),
             steps: steps,
-            readout: tensor.PairUp(left: leftMachine.Readout, right: rightMachine.Readout, rightKeyCount: stride)
+            readout: tensor.PairUp(
+                left: leftMachine.Readout,
+                right: rightMachine.Readout,
+                rightKeyCount: stride
+            )
         );
     }
+    /// <summary>Returns the state one letter moves a state to.</summary>
+    /// <param name="state">The state number.</param>
+    /// <param name="letter">The letter.</param>
+    /// <returns>The target state, or <c>-1</c> when the residual is zero and no span can complete a match from here.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The state number or the letter is outside its range.</exception>
+    public int Step(int state, int letter) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: state,
+            other: StateCount
+        );
+        ArgumentOutOfRangeException.ThrowIfNegative(value: letter);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: letter,
+            other: LetterCount
+        );
 
+        return m_transition[((state * LetterCount) + letter)];
+    }
     /// <summary>Compiles a pattern to a finite machine, eagerly and bounded.</summary>
     /// <param name="pattern">The pattern surface the value belongs to.</param>
     /// <param name="value">The pattern.</param>
@@ -176,18 +277,20 @@ public sealed class PatternMatcher<TValue, TOps>
         out ClosureObstruction obstruction
     ) {
         ArgumentNullException.ThrowIfNull(argument: pattern);
-        pattern.Algebra.RequireOwned(value: value, paramName: nameof(value));
+        pattern.Algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         return TryCompileCore(
-            pattern: pattern,
-            seed: value,
-            stateLimit: stateLimit,
             alphabetIdentity: null,
             matcher: out matcher,
-            obstruction: out obstruction
+            obstruction: out obstruction,
+            pattern: pattern,
+            seed: value,
+            stateLimit: stateLimit
         );
     }
-
     /// <summary>Compiles a pattern to a finite machine bound to the exact refined alphabet whose letter numbering the
     /// pattern uses.</summary>
     /// <typeparam name="TPredicate">The predicate form.</typeparam>
@@ -220,92 +323,27 @@ public sealed class PatternMatcher<TValue, TOps>
         where TRefinement : struct, IAlphabetRefinement<TPredicate> {
         ArgumentNullException.ThrowIfNull(argument: pattern);
         ArgumentNullException.ThrowIfNull(argument: alphabet);
-        pattern.Algebra.RequireOwned(value: value, paramName: nameof(value));
+        pattern.Algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         if (pattern.LetterCount != alphabet.LetterCount) {
-            throw new ArgumentException(message: "A pattern can be bound only to an alphabet with the same letter count.", paramName: nameof(alphabet));
+            throw new ArgumentException(
+                message: "A pattern can be bound only to an alphabet with the same letter count.",
+                paramName: nameof(alphabet)
+            );
         }
 
         return TryCompileCore(
-            seed: value,
-            pattern: pattern,
-            stateLimit: stateLimit,
             alphabetIdentity: alphabet,
             matcher: out matcher,
-            obstruction: out obstruction
+            obstruction: out obstruction,
+            pattern: pattern,
+            seed: value,
+            stateLimit: stateLimit
         );
     }
-
-    private static bool TryCompileCore(
-        TokenPattern<TValue, TOps> pattern,
-        in PresentedAlgebra<TValue, TOps>.Element seed,
-        int stateLimit,
-        object? alphabetIdentity,
-        out PatternMatcher<TValue, TOps> matcher,
-        out ClosureObstruction obstruction
-    ) {
-        matcher = null!;
-
-        if (!pattern.Algebra.TryCompileClosure(
-            seed: seed,
-            twist: ResidualTwist.Counit,
-            shiftSymbol: -1,
-            stateLimit: stateLimit,
-            closure: out var closure,
-            obstruction: out obstruction
-        )) {
-            return false;
-        }
-
-        matcher = new(
-            closure: closure,
-            letterCount: pattern.LetterCount,
-            window: pattern.Window,
-            material: pattern.Algebra.Presentation.Material,
-            alphabetIdentity: alphabetIdentity
-        );
-
-        return true;
-    }
-
-    /// <summary>Returns the weight one state accepts with.</summary>
-    /// <param name="state">The state number.</param>
-    /// <returns>The residual's trace: membership over a Boolean material, a match count over a counting one, a cost
-    /// over a tropical one.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The state number is outside <see cref="StateCount"/>.</exception>
-    public TValue Accept(int state) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: state, other: StateCount);
-
-        return m_accept[state];
-    }
-    /// <summary>Returns the state one letter moves a state to.</summary>
-    /// <param name="state">The state number.</param>
-    /// <param name="letter">The letter.</param>
-    /// <returns>The target state, or <c>-1</c> when the residual is zero and no span can complete a match from here.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The state number or the letter is outside its range.</exception>
-    public int Step(int state, int letter) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: state, other: StateCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: letter);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: letter, other: LetterCount);
-
-        return m_transition[((state * LetterCount) + letter)];
-    }
-
-    // The bare table reads, for callers inside the library whose state is this machine's own output and therefore
-    // already in range. The public Step and Accept re-check it for callers whose state is not.
-    internal TValue AcceptCore(int state) =>
-        m_accept[state];
-    internal int StepCore(int state, int letter) =>
-        m_transition[((state * LetterCount) + letter)];
-    internal bool IsBoundTo(object alphabet) =>
-        ReferenceEquals(objA: m_alphabetIdentity, objB: alphabet);
-
-    // The material's zero, without walking the closure's chain back to the presentation to find the same value.
-    internal TValue Zero =>
-        m_material.Zero;
-
     /// <summary>Runs a token span, already classified into letters, through the machine.</summary>
     /// <param name="letters">The span, as letter numbers.</param>
     /// <param name="weight">On success, the weight the pattern gives the span; the material's zero for no match.</param>
@@ -322,8 +360,14 @@ public sealed class PatternMatcher<TValue, TOps>
         obstruction = default;
         weight = m_material.Zero;
 
-        if ((0 != Window) && (letters.Length > Window)) {
-            obstruction = new(Length: letters.Length, Window: Window);
+        if (
+            (0 != Window) &&
+            (letters.Length > Window)
+        ) {
+            obstruction = new(
+                Length: letters.Length,
+                Window: Window
+            );
 
             return false;
         }
@@ -333,8 +377,15 @@ public sealed class PatternMatcher<TValue, TOps>
         for (var index = 0; (index < letters.Length); ++index) {
             var letter = letters[index];
 
-            ArgumentOutOfRangeException.ThrowIfNegative(value: letter, paramName: nameof(letters));
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: letter, other: letterCount, paramName: nameof(letters));
+            ArgumentOutOfRangeException.ThrowIfNegative(
+                value: letter,
+                paramName: nameof(letters)
+            );
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+                value: letter,
+                other: letterCount,
+                paramName: nameof(letters)
+            );
 
             state = m_transition[((state * letterCount) + letter)];
 
@@ -346,7 +397,6 @@ public sealed class PatternMatcher<TValue, TOps>
         return true;
     }
 }
-
 /// <summary>Running a compiled pattern over raw tokens, with the refinement axis classifying each one.</summary>
 /// <remarks>This is the only place the two axes meet during a run: the alphabet turns a token into a letter and the
 /// machine steps on the letter. A token no block accepts decides the span immediately, because it lies outside every
@@ -383,14 +433,23 @@ public static class TokenMatching {
         ArgumentNullException.ThrowIfNull(argument: alphabet);
 
         if (!matcher.IsBoundTo(alphabet: alphabet)) {
-            throw new ArgumentException(message: "A raw-token run requires the exact refined alphabet instance the matcher was compiled with.", paramName: nameof(alphabet));
+            throw new ArgumentException(
+                message: "A raw-token run requires the exact refined alphabet instance the matcher was compiled with.",
+                paramName: nameof(alphabet)
+            );
         }
 
         obstruction = default;
         weight = matcher.Zero;
 
-        if ((0 != matcher.Window) && (tokens.Length > matcher.Window)) {
-            obstruction = new(Length: tokens.Length, Window: matcher.Window);
+        if (
+            (0 != matcher.Window) &&
+            (tokens.Length > matcher.Window)
+        ) {
+            obstruction = new(
+                Length: tokens.Length,
+                Window: matcher.Window
+            );
 
             return false;
         }
@@ -399,14 +458,23 @@ public static class TokenMatching {
         var state = 0;
 
         for (var index = 0; (index < tokens.Length); ++index) {
-            if (!alphabet.TryLetterOf(token: tokens[index], letter: out var letter)) { return true; }
+            if (!alphabet.TryLetterOf(
+                token: tokens[index],
+                letter: out var letter
+            )) { return true; }
 
             // Checked per token, never hoisted: an alphabet with more blocks than the matcher has letters still decides
             // every span whose tokens land inside the machine, and a pre-loop comparison would refuse those.
             ArgumentOutOfRangeException.ThrowIfNegative(value: letter);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: letter, other: letterCount);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+                value: letter,
+                other: letterCount
+            );
 
-            state = matcher.StepCore(state: state, letter: letter);
+            state = matcher.StepCore(
+                letter: letter,
+                state: state
+            );
 
             if (state < 0) { return true; }
         }

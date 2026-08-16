@@ -30,6 +30,7 @@ public sealed class TestPatternSource {
         0xFF0000u, // red
         0x0000FFu, // blue
     ];
+
     private readonly byte[] m_pixels;
 
     /// <summary>Initializes a pattern producer sized to <paramref name="width"/> × <paramref name="height"/>.</summary>
@@ -59,7 +60,6 @@ public sealed class TestPatternSource {
 
         return m_pixels;
     }
-
     /// <summary>Renders the pattern into a caller-owned buffer — the pure "fill this buffer" producer. Writes exactly
     /// <paramref name="width"/> × <paramref name="height"/> × 4 bytes in B8G8R8A8 order.</summary>
     /// <param name="destination">The buffer to fill; must hold at least <paramref name="width"/> × <paramref name="height"/> × 4 bytes.</param>
@@ -83,7 +83,7 @@ public sealed class TestPatternSource {
 
         var barCount = Bars.Length;
         var barRegionHeight = ((height * BarRegionNumerator) / BarRegionDenominator);
-        var sweepColumn = (int)((tick / SweepTicksPerColumn) % (ulong)width);
+        var sweepColumn = ((int)((tick / SweepTicksPerColumn) % ((ulong)width)));
         var sweepHalfWidth = Math.Max(val1: 1, val2: (width / 64));
 
         for (var y = 0; (y < height); y++) {
@@ -97,9 +97,9 @@ public sealed class TestPatternSource {
                     color = Bars[((x * barCount) / width)];
                 } else {
                     // A horizontal luma ramp that scrolls with the sweep phase, so the bottom band also moves.
-                    var ramp = (byte)(((x + sweepColumn) * 255) / width);
+                    var ramp = ((byte)(((x + sweepColumn) * 255) / width));
 
-                    color = ((uint)ramp << 16) | ((uint)ramp << 8) | ramp;
+                    color = (((uint)ramp) << 16) | (((uint)ramp) << 8) | ramp;
                 }
 
                 // The sweep column brightens to solid white over the whole height.
@@ -109,9 +109,9 @@ public sealed class TestPatternSource {
 
                 var offset = (row + (x * BytesPerPixel));
 
-                destination[(offset + 0)] = (byte)color;         // B
-                destination[(offset + 1)] = (byte)(color >> 8);  // G
-                destination[(offset + 2)] = (byte)(color >> 16); // R
+                destination[(offset + 0)] = ((byte)color);         // B
+                destination[(offset + 1)] = ((byte)(color >> 8));  // G
+                destination[(offset + 2)] = ((byte)(color >> 16)); // R
                 destination[(offset + 3)] = 0xFF;                // A
             }
         }

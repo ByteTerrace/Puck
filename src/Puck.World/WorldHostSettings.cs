@@ -54,10 +54,12 @@ internal sealed record WorldHostSettings(
     /// <summary>Whether this boot composes the authoritative core alone — no window, no GPU device, no swapchain, no
     /// audio device. The single predicate <c>Program.cs</c> branches boot-shape registration on.</summary>
     public bool Headless => (Presentation == WorldHostPresentation.None);
-
     /// <summary>The launcher present target: the boot Hz, or <see langword="null"/> for automatic display pacing (the
     /// <c>0</c>-means-automatic convention <see cref="Puck.Launcher.PresentPacingControl"/> uses).</summary>
-    public double? TargetRenderRate => ((TargetHertz > 0.0) ? TargetHertz : null);
+    public double? TargetRenderRate => ((TargetHertz > 0.0)
+        ? TargetHertz
+        : null
+    );
 
     /// <summary>Resolves the effective host settings by overlaying the CLI window/backend flags over the world-doc host
     /// defaults (an absent flag keeps the authored default). Stays PURE: it returns the degraded backend plus the
@@ -105,7 +107,10 @@ internal sealed record WorldHostSettings(
         // A DirectX request the OS cannot satisfy splits by authority: a CLI assertion hard-exits (the caller reads the
         // flag), a document preference degrades LOUDLY to Vulkan. Auto never reaches here unsatisfiable — it resolved to
         // directXAvailable above.
-        if (wantsDirectX && !directXAvailable) {
+        if (
+            wantsDirectX &&
+            !directXAvailable
+        ) {
             wantsDirectX = false;
 
             if (fromCli) {
@@ -122,8 +127,14 @@ internal sealed record WorldHostSettings(
             BackendFromCli: fromCli,
             BackendUnsatisfiable: unsatisfiable,
             BackendDowngraded: downgraded,
-            Width: Math.Max(val1: 1, val2: (widthOverride ?? defaults.Width)),
-            Height: Math.Max(val1: 1, val2: (heightOverride ?? defaults.Height)),
+            Width: Math.Max(
+                val1: 1,
+                val2: (widthOverride ?? defaults.Width)
+            ),
+            Height: Math.Max(
+                val1: 1,
+                val2: (heightOverride ?? defaults.Height)
+            ),
             SurfaceFormat: defaults.SurfaceFormat,
             Fullscreen: defaults.Fullscreen,
             PresentMode: (presentModeOverride ?? defaults.PresentMode),

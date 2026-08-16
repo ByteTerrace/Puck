@@ -92,6 +92,33 @@ public static class BinaryIntegerFunctions {
         return ((startDigits * BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: countAsT)) + endDigits);
     }
 
+    private static BigInteger NextSamePopulationCount(BigInteger value) {
+        // Gosper's hack with unbounded headroom: strictly ascending and never terminal, because a positive
+        // BigInteger always has another zero above its highest set bit.
+        var x = value.FillFromLowestSetBit();
+        var y = int.CreateChecked(value: (BigInteger.TrailingZeroCount(value: value) + BigInteger.One));
+        // The increment's carry lands exactly on x's lowest clear bit.
+        var carry = (x + BigInteger.One);
+        var z = (((carry & ~x) - BigInteger.One) >> y);
+
+        return carry | z;
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static BigInteger PermuteBigIntegerBits(BigInteger value) {
+        // The two constant strings — all zeros and all ones — are the sole members of their minority-bit classes.
+        if (
+            value.IsZero ||
+            (BigInteger.MinusOne == value)
+        ) { return value; }
+
+        // Complementation reverses order and exchanges the two families, so the descending negative walk is the
+        // complemented ascending walk of the complement.
+        return ((value.Sign > 0)
+            ? NextSamePopulationCount(value: value)
+            : ~NextSamePopulationCount(value: ~value)
+        );
+    }
+
     /// <summary>
     /// Interleaves the bits of two integers into a single value (a Morton, or Z-order, code), placing the bits of
     /// <paramref name="value"/> in the even-indexed positions and the bits of <paramref name="other"/> in the
@@ -385,7 +412,10 @@ public static class BinaryIntegerFunctions {
     /// <exception cref="OverflowException"><paramref name="value"/> is the signed minimum and <paramref name="divisor"/> is <c>-1</c>; the underlying division rejects that one pair because its quotient is unrepresentable.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T CeilingDivide<T>(this T value, T divisor) where T : IBinaryInteger<T> {
-        var (quotient, remainder) = T.DivRem(left: value, right: divisor);
+        var (quotient, remainder) = T.DivRem(
+            left: value,
+            right: divisor
+        );
 
         // The exact quotient sits above the truncated one exactly when the discarded fraction was positive — a non-zero
         // remainder signed the SAME way as the divisor. XOR reads both sign bits in one operation.
@@ -414,7 +444,8 @@ public static class BinaryIntegerFunctions {
 
         return ((T.Zero == residue)
             ? BinaryIntegerConstants<T>.Nine
-            : residue);
+            : residue
+        );
     }
     /// <summary>Enumerates the base-10 digits of <paramref name="value"/>, from least significant to most significant.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -479,24 +510,6 @@ public static class BinaryIntegerFunctions {
     /// <returns><paramref name="value"/> with all bits below its least significant set bit turned on; an all-ones value when <paramref name="value"/> is zero.</returns>
     public static T FillFromLowestSetBit<T>(this T value) where T : IBinaryInteger<T> =>
         value | (value - T.One);
-    /// <summary>Divides <paramref name="value"/> by <paramref name="divisor"/> with a quotient rounded toward negative infinity.</summary>
-    /// <typeparam name="T">The binary integer type.</typeparam>
-    /// <param name="value">The dividend.</param>
-    /// <param name="divisor">The divisor.</param>
-    /// <returns>The largest value that is no greater than the exact quotient. This differs from the built-in <c>/</c> — which truncates toward zero — only when the division is inexact and the operands carry opposing signs.</returns>
-    /// <remarks>The correction is branchless: the truncated quotient is nudged by a single conditional decrement. This is the quotient that pairs with <see cref="FloorModulo{T}(T, T)"/>; <see cref="FloorDivRem{T}(T, T)"/> produces both halves from one division. An unsigned <typeparamref name="T"/> is never signed opposite its divisor, so the correction folds away to nothing there.</remarks>
-    /// <exception cref="DivideByZeroException"><paramref name="divisor"/> is zero.</exception>
-    /// <exception cref="OverflowException"><paramref name="value"/> is the signed minimum and <paramref name="divisor"/> is <c>-1</c>; the underlying division rejects that one pair because its quotient is unrepresentable.</exception>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static T FloorDivide<T>(this T value, T divisor) where T : IBinaryInteger<T> {
-        var (quotient, remainder) = T.DivRem(left: value, right: divisor);
-
-        // The exact quotient sits below the truncated one exactly when the discarded fraction was negative — a non-zero
-        // remainder signed OPPOSITE the divisor. XOR reads both sign bits in one operation.
-        var borrow = remainder.IsNonZero() & T.IsNegative(value: remainder ^ divisor).As<T>();
-
-        return (quotient - borrow);
-    }
     /// <summary>Divides <paramref name="value"/> by <paramref name="divisor"/> and returns the floored quotient together with the matching floored remainder.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The dividend.</param>
@@ -507,7 +520,10 @@ public static class BinaryIntegerFunctions {
     /// <exception cref="OverflowException"><paramref name="value"/> is the signed minimum and <paramref name="divisor"/> is <c>-1</c>; the underlying division rejects that one pair because its quotient is unrepresentable.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static (T Quotient, T Remainder) FloorDivRem<T>(this T value, T divisor) where T : IBinaryInteger<T> {
-        var (quotient, remainder) = T.DivRem(left: value, right: divisor);
+        var (quotient, remainder) = T.DivRem(
+            left: value,
+            right: divisor
+        );
 
         // One condition drives both halves: the decrement that lowers the quotient is the same event that adds the divisor
         // back to the remainder, so the pair stays consistent. The addend never overflows — it only fires when the two
@@ -515,6 +531,27 @@ public static class BinaryIntegerFunctions {
         var borrow = remainder.IsNonZero() & T.IsNegative(value: remainder ^ divisor).As<T>();
 
         return ((quotient - borrow), (remainder + (divisor & (-borrow))));
+    }
+    /// <summary>Divides <paramref name="value"/> by <paramref name="divisor"/> with a quotient rounded toward negative infinity.</summary>
+    /// <typeparam name="T">The binary integer type.</typeparam>
+    /// <param name="value">The dividend.</param>
+    /// <param name="divisor">The divisor.</param>
+    /// <returns>The largest value that is no greater than the exact quotient. This differs from the built-in <c>/</c> — which truncates toward zero — only when the division is inexact and the operands carry opposing signs.</returns>
+    /// <remarks>The correction is branchless: the truncated quotient is nudged by a single conditional decrement. This is the quotient that pairs with <see cref="FloorModulo{T}(T, T)"/>; <see cref="FloorDivRem{T}(T, T)"/> produces both halves from one division. An unsigned <typeparamref name="T"/> is never signed opposite its divisor, so the correction folds away to nothing there.</remarks>
+    /// <exception cref="DivideByZeroException"><paramref name="divisor"/> is zero.</exception>
+    /// <exception cref="OverflowException"><paramref name="value"/> is the signed minimum and <paramref name="divisor"/> is <c>-1</c>; the underlying division rejects that one pair because its quotient is unrepresentable.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T FloorDivide<T>(this T value, T divisor) where T : IBinaryInteger<T> {
+        var (quotient, remainder) = T.DivRem(
+            left: value,
+            right: divisor
+        );
+
+        // The exact quotient sits below the truncated one exactly when the discarded fraction was negative — a non-zero
+        // remainder signed OPPOSITE the divisor. XOR reads both sign bits in one operation.
+        var borrow = remainder.IsNonZero() & T.IsNegative(value: remainder ^ divisor).As<T>();
+
+        return (quotient - borrow);
     }
     /// <summary>Reduces <paramref name="value"/> modulo <paramref name="modulus"/> with a floored quotient, so the result carries the sign of <paramref name="modulus"/> rather than of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -599,7 +636,8 @@ public static class BinaryIntegerFunctions {
         // product's sign would mistake an overflowed positive result for a negative input and change its modular bits.
         return ((T.IsNegative(value: quotient) != T.IsNegative(value: other))
             ? -result
-            : result);
+            : result
+        );
     }
     /// <summary>Returns the one-based position of the lowest set bit of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -701,30 +739,8 @@ public static class BinaryIntegerFunctions {
 
         return ((populationCount == bitCount)
             ? ~T.Zero
-            : ((T.One << populationCount) - T.One));
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static BigInteger PermuteBigIntegerBits(BigInteger value) {
-        // The two constant strings — all zeros and all ones — are the sole members of their minority-bit classes.
-        if (value.IsZero || (BigInteger.MinusOne == value)) { return value; }
-
-        // Complementation reverses order and exchanges the two families, so the descending negative walk is the
-        // complemented ascending walk of the complement.
-        return ((value.Sign > 0)
-            ? NextSamePopulationCount(value: value)
-            : ~NextSamePopulationCount(value: ~value));
-    }
-    private static BigInteger NextSamePopulationCount(BigInteger value) {
-        // Gosper's hack with unbounded headroom: strictly ascending and never terminal, because a positive
-        // BigInteger always has another zero above its highest set bit.
-        var x = value.FillFromLowestSetBit();
-        var y = int.CreateChecked(value: (BigInteger.TrailingZeroCount(value: value) + BigInteger.One));
-        // The increment's carry lands exactly on x's lowest clear bit.
-        var carry = (x + BigInteger.One);
-        var z = (((carry & ~x) - BigInteger.One) >> y);
-
-        return carry | z;
+            : ((T.One << populationCount) - T.One)
+        );
     }
     /// <summary>Returns the parity of the population count of <paramref name="value"/>.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -890,5 +906,5 @@ public static class BinaryIntegerFunctions {
     /// direction.
     /// </remarks>
     public static T RotateDigitsRight<T>(this T value, int count) where T : IBinaryInteger<T> =>
-        value.RotateDigits(count: -(long)count);
+        value.RotateDigits(count: -((long)count));
 }

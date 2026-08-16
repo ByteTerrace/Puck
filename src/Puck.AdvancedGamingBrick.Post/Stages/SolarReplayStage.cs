@@ -11,10 +11,8 @@ namespace Puck.AdvancedGamingBrick.Post;
 internal sealed class SolarReplayStage : IPostStage {
     /// <summary>The environment variable naming the commercial solar-sensor ROM this stage replays a light script against.</summary>
     private const string RomEnvironmentVariable = "PUCK_AGB_SOLARROM";
-
     // Frames to advance: enough to cover a boot + several seconds of the varying-light script.
     private const int Frames = 300;
-
     // The light level changes every this many frames, cycling through the script below — coarse enough that a whole
     // engine-tick segment (a queued host's real granularity) plausibly holds one value, fine enough to exercise
     // several RESET/threshold transitions inside the run.
@@ -25,7 +23,6 @@ internal sealed class SolarReplayStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "solar-replay";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -81,7 +78,7 @@ internal sealed class SolarReplayStage : IPostStage {
     private static AgbMachineSnapshot RunScripted(ReadOnlyMemory<byte> bios, byte[] rom, out AgbCartridge cartridge) {
         var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
             bios: bios,
-            rom: (byte[])rom.Clone()
+            rom: ((byte[])rom.Clone())
         ));
 
         instance.Machine.Cpu.Reset();

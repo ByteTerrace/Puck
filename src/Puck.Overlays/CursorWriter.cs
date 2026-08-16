@@ -9,17 +9,16 @@ namespace Puck.Overlays;
 /// every other surface.
 /// </summary>
 public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
+    private const float CursorAlpha = 0.9f;
+    // The same emptied-viewport guard the gizmo writer applies before opening a clip scope on the region.
+    private const float MinRegionExtent = 0.05f;
+
     /// <summary>The hover-label character clamp — the ONE source <see cref="OverlayChannelLeases"/> reads for the
     /// cursor channel's text-word reservation; every label <c>WriteText</c> call clamps to it.</summary>
     public const int MaxLabelChars = 48;
-
     /// <summary>The largest ring radius a seat may publish, px — the writer's own declared cap (the world-authored
     /// size is validated against its document band; this is the render-side backstop the host clamps to).</summary>
     public const float MaxSizePx = 64f;
-
-    // The same emptied-viewport guard the gizmo writer applies before opening a clip scope on the region.
-    private const float MinRegionExtent = 0.05f;
-    private const float CursorAlpha = 0.9f;
 
     private readonly ICursorSource m_source;
 
@@ -32,24 +31,11 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
         m_source = source;
     }
 
-    /// <summary>Emits this frame's per-seat cursor records, when a snapshot has been published.</summary>
-    /// <param name="builder">The frame builder.</param>
-    /// <exception cref="InvalidOperationException">The published frame carries more seats than
-    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
-    public void Emit(OverlayFrameBuilder builder) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        if (!m_source.TrySnapshot(frame: out var frame)) {
-            return;
-        }
-
-        OverlaySeatLoop.Emit(
+    void IOverlaySeatEmitter<OverlayCursorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) =>
+        EmitSeat(
             builder: builder,
-            seats: frame.Seats.Span,
-            writerName: nameof(CursorWriter),
-            writer: this
+            seat: in seat
         );
-    }
 
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) {
         var region = seat.Viewport;
@@ -73,9 +59,9 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             max: MaxSizePx
         );
         var dotHalf = Math.Clamp(
-            value: (ringRadius * 0.22f),
+            max: 4f,
             min: 1f,
-            max: 4f
+            value: (ringRadius * 0.22f)
         );
         var labelOffset = (ringRadius + 5f);
 
@@ -119,9 +105,22 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
         builder.EndClip();
     }
 
-    void IOverlaySeatEmitter<OverlayCursorSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayCursorSeat seat) =>
-        EmitSeat(
+    /// <summary>Emits this frame's per-seat cursor records, when a snapshot has been published.</summary>
+    /// <param name="builder">The frame builder.</param>
+    /// <exception cref="InvalidOperationException">The published frame carries more seats than
+    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
+    public void Emit(OverlayFrameBuilder builder) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
+        if (!m_source.TrySnapshot(frame: out var frame)) {
+            return;
+        }
+
+        OverlaySeatLoop.Emit(
             builder: builder,
-            seat: in seat
+            seats: frame.Seats.Span,
+            writerName: nameof(CursorWriter),
+            writer: this
         );
+    }
 }

@@ -12,31 +12,28 @@ namespace Puck.World;
 /// it. States carry no expressions: the moment these carry logic, the document has grown a programming language.
 /// </summary>
 internal static class WorldContextFamilies {
-    /// <summary>The roster family: a seat's participant-lifecycle state.</summary>
-    public const string Roster = "roster";
-
-    /// <summary>The roster state of a slot with no participant.</summary>
-    public const string RosterUnjoined = "unjoined";
-    /// <summary>The roster state of a slot under an exclusive programmatic claim (<c>PlayerRoster.TryClaimSlot</c>) —
-    /// checked before pending/active because the claim overrides the participant's own lifecycle for gestures.</summary>
-    public const string RosterClaimed = "claimed";
-    /// <summary>The roster state of a joined participant still choosing a profile.</summary>
-    public const string RosterPending = "pending";
-    /// <summary>The roster state of a joined, confirmed participant. Deliberately ships with no default context row:
-    /// active is the state where the seat's requested group (the mode) owns the seat.</summary>
-    public const string RosterActive = "active";
-
     /// <summary>The engagement family: whether the seat's acting principal holds a Control route over a screen.</summary>
     public const string Engagement = "engagement";
-
     /// <summary>The engagement state while the seat's principal holds a Control route (<c>IWorldGrantsView.ControlRoute</c>
     /// answers a screen).</summary>
     public const string EngagementEngaged = "engaged";
     /// <summary>The engagement state while the seat's principal holds no Control route.</summary>
     public const string EngagementNone = "none";
+    /// <summary>The roster family: a seat's participant-lifecycle state.</summary>
+    public const string Roster = "roster";
+    /// <summary>The roster state of a joined, confirmed participant. Deliberately ships with no default context row:
+    /// active is the state where the seat's requested group (the mode) owns the seat.</summary>
+    public const string RosterActive = "active";
+    /// <summary>The roster state of a slot under an exclusive programmatic claim (<c>PlayerRoster.TryClaimSlot</c>) —
+    /// checked before pending/active because the claim overrides the participant's own lifecycle for gestures.</summary>
+    public const string RosterClaimed = "claimed";
+    /// <summary>The roster state of a joined participant still choosing a profile.</summary>
+    public const string RosterPending = "pending";
+    /// <summary>The roster state of a slot with no participant.</summary>
+    public const string RosterUnjoined = "unjoined";
 
-    private static readonly string[] s_rosterStates = [RosterUnjoined, RosterClaimed, RosterPending, RosterActive];
-    private static readonly string[] s_engagementStates = [EngagementEngaged, EngagementNone];
+    private static readonly string[] RosterStates = [RosterUnjoined, RosterClaimed, RosterPending, RosterActive];
+    private static readonly string[] EngagementStates = [EngagementEngaged, EngagementNone];
 
     /// <summary>The admitted family names, in the order the derivation read-back reports them.</summary>
     public static readonly IReadOnlyList<string> Families = [Roster, Engagement];
@@ -46,8 +43,8 @@ internal static class WorldContextFamilies {
     /// <param name="family">The family name to look up (ordinal).</param>
     public static IReadOnlyList<string>? StatesOf(string family) {
         return family switch {
-            Roster => s_rosterStates,
-            Engagement => s_engagementStates,
+            Roster => RosterStates,
+            Engagement => EngagementStates,
             _ => null,
         };
     }

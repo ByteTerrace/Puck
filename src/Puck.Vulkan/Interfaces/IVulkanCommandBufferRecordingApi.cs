@@ -118,7 +118,6 @@ public interface IVulkanCommandBufferRecordingApi {
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle holding the group counts (must carry <c>VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT</c>).</param>
     /// <param name="offset">The byte offset into <paramref name="bufferHandle"/> of the <c>VkDispatchIndirectCommand</c>.</param>
     void DispatchIndirect(nint deviceHandle, nint commandBufferHandle, nint bufferHandle, ulong offset);
-
     // Low-level synchronization and transfer primitives: no barriers are implied, so the
     // caller sequences layouts and access/stage masks. All operate on 2D, single-layer,
     // color images.

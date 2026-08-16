@@ -34,7 +34,6 @@ internal static class PresentedKernelClaims {
 
         return map;
     }
-
     private static int[] InvertBladeMap(int[] keyToBlade) {
         var bladeToKey = new int[keyToBlade.Length];
 
@@ -42,7 +41,6 @@ internal static class PresentedKernelClaims {
 
         return bladeToKey;
     }
-
     // The charge on an ordered pair of basis blades, by writing both out as explicit ascending generator lists,
     // concatenating, bubble sorting while counting transpositions, and cancelling adjacent equal pairs against the
     // generators' own squares. Deliberately
@@ -71,7 +69,7 @@ internal static class PresentedKernelClaims {
             }
         }
 
-        for (var position = 0; ((position + 1) < letters.Count); ) {
+        for (var position = 0; ((position + 1) < letters.Count);) {
             if (letters[position] != letters[(position + 1)]) {
                 ++position;
 
@@ -87,13 +85,12 @@ internal static class PresentedKernelClaims {
 
             sign *= square;
 
-            letters.RemoveRange(index: position, count: 2);
+            letters.RemoveRange(count: 2, index: position);
             position = ((position > 0) ? (position - 1) : 0);
         }
 
         return sign;
     }
-
     // Reads the compiled BigInteger table back in LANE coordinates, refusing (returning null) unless every occupied
     // cell carries exactly one entry whose
     // target key is the lane XOR and whose charge is a unit +-1 sign — the shape a twisted GROUP algebra must have.
@@ -123,7 +120,6 @@ internal static class PresentedKernelClaims {
 
         return table;
     }
-
     // The multiplicative 2-cocycle condition sigma(a,b)*sigma(a^b,c) == sigma(b,c)*sigma(a,b^c), stated so a
     // degenerate zero is served without a
     // quotient. Its failures are exactly the support of the associator.
@@ -169,8 +165,8 @@ internal static class PresentedKernelClaims {
 
         foreach (var (positiveCount, negativeCount, degenerateCount) in signatures) {
             var name = $"clifford({positiveCount},{negativeCount},{degenerateCount})";
-            var geometric = GeometricAlgebra.Create(positiveCount: positiveCount, negativeCount: negativeCount, degenerateCount: degenerateCount);
-            var presentation = Presentations.Clifford<FixedQ4816, FixedMaterial>(positiveCount: positiveCount, negativeCount: negativeCount, degenerateCount: degenerateCount, material: default);
+            var geometric = GeometricAlgebra.Create(degenerateCount: degenerateCount, negativeCount: negativeCount, positiveCount: positiveCount);
+            var presentation = Presentations.Clifford<FixedQ4816, FixedMaterial>(degenerateCount: degenerateCount, material: default, negativeCount: negativeCount, positiveCount: positiveCount);
             var algebra = PresentedAlgebra<FixedQ4816, FixedMaterial>.Create(presentation: presentation);
             var compiled = algebra.Compile();
             var keyToBlade = KeyToBladeMap(presentation: presentation);
@@ -204,7 +200,7 @@ internal static class PresentedKernelClaims {
                     right[rightBlade] = FixedQ4816.One;
 
                     var product = geometric.GeometricProduct(left: left, right: right);
-                    var targetBlade = (leftBlade ^ rightBlade);
+                    var targetBlade = leftBlade ^ rightBlade;
 
                     for (var blade = 0; (blade < Multivector.BladeCapacity); ++blade) {
                         if ((blade != targetBlade) && (0L != product[blade].Value)) {
@@ -213,7 +209,7 @@ internal static class PresentedKernelClaims {
                     }
 
                     var sign = product[targetBlade].Value;
-                    var oracleCharge = CliffordChargeByBubbleSort(leftBlade: leftBlade, rightBlade: rightBlade, positiveCount: positiveCount, negativeCount: negativeCount, degenerateCount: degenerateCount);
+                    var oracleCharge = CliffordChargeByBubbleSort(degenerateCount: degenerateCount, leftBlade: leftBlade, negativeCount: negativeCount, positiveCount: positiveCount, rightBlade: rightBlade);
 
                     if (sign != (oracleCharge * FixedQ4816.One.Value)) {
                         return $"{name}: unit blades ({leftBlade},{rightBlade}) GeometricAlgebra charge {sign}, the bubble-sort oracle says {(oracleCharge * FixedQ4816.One.Value)}";
@@ -233,7 +229,7 @@ internal static class PresentedKernelClaims {
                 }
             }
 
-            var integerPresentation = Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: positiveCount, negativeCount: negativeCount, degenerateCount: degenerateCount, material: default);
+            var integerPresentation = Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: degenerateCount, material: default, negativeCount: negativeCount, positiveCount: positiveCount);
             var integerAlgebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: integerPresentation);
             var integerCompiled = integerAlgebra.Compile();
 
@@ -246,7 +242,7 @@ internal static class PresentedKernelClaims {
             }
 
             var certificate = integerAlgebra.Certify(overlapLimit: (1L << 20));
-            var degenerateMask = (((1 << geometric.GeneratorCount) - 1) & ~((1 << (positiveCount + negativeCount)) - 1));
+            var degenerateMask = ((1 << geometric.GeneratorCount) - 1) & ~((1 << (positiveCount + negativeCount)) - 1);
             var expectedDivisors = 0;
 
             for (var leftBlade = 0; (leftBlade < dimension); ++leftBlade) {
@@ -272,13 +268,10 @@ internal static class PresentedKernelClaims {
 
     private static FixedScalarRing UnitScalarAt(int index, int offset) =>
         new(Value: ((offset == index) ? FixedQ4816.One : FixedQ4816.Zero));
-
     private static DoublingAlgebra<FixedScalarRing> UnitComplexAt(int index, int offset) =>
         new(Left: UnitScalarAt(index: index, offset: offset), Right: UnitScalarAt(index: index, offset: (offset + 1)));
-
     private static DoublingAlgebra<DoublingAlgebra<FixedScalarRing>> UnitQuaternionAt(int index, int offset) =>
         new(Left: UnitComplexAt(index: index, offset: offset), Right: UnitComplexAt(index: index, offset: (offset + 2)));
-
     private static LeafOctonion UnitOctonion(int index) =>
         new(Left: UnitQuaternionAt(index: index, offset: 0), Right: UnitQuaternionAt(index: index, offset: 4));
 
@@ -335,35 +328,31 @@ internal static class PresentedKernelClaims {
     // BinaryField<T> reduction.
     private static int PolynomialDegree(BigInteger value) =>
         (value.IsZero ? -1 : (((int)value.GetBitLength()) - 1));
-
     private static BigInteger CarrylessMultiply(BigInteger left, BigInteger right) {
         var product = BigInteger.Zero;
 
-        for (var exponent = 0; (exponent <= PolynomialDegree(right)); ++exponent) {
+        for (var exponent = 0; (exponent <= PolynomialDegree(value: right)); ++exponent) {
             if (!((right >> exponent) & BigInteger.One).IsZero) { product ^= (left << exponent); }
         }
 
         return product;
     }
-
     private static BigInteger CarrylessRemainder(BigInteger dividend, BigInteger divisor) {
-        var divisorDegree = PolynomialDegree(divisor);
+        var divisorDegree = PolynomialDegree(value: divisor);
         var remainder = dividend;
 
-        for (var shift = (PolynomialDegree(remainder) - divisorDegree); (0 <= shift); shift = (PolynomialDegree(remainder) - divisorDegree)) {
+        for (var shift = (PolynomialDegree(value: remainder) - divisorDegree); (0 <= shift); shift = (PolynomialDegree(value: remainder) - divisorDegree)) {
             remainder ^= (divisor << shift);
         }
 
         return remainder;
     }
-
     private static ulong BinaryFieldOracleProduct(ulong left, ulong right, int degree, ulong tail) {
         var product = CarrylessMultiply(left: left, right: right);
-        var modulus = ((BigInteger.One << degree) | tail);
+        var modulus = (BigInteger.One << degree) | tail;
 
         return ((ulong)CarrylessRemainder(dividend: product, divisor: modulus));
     }
-
     // Builds the two coefficient-bitmask elements from the raw lanes and reads the product's support back as a
     // bitmask.
     private static ulong ParityFieldProduct(PresentedAlgebra<ulong, ParityMaterial> algebra, int degree, ulong left, ulong right) {
@@ -380,7 +369,7 @@ internal static class PresentedKernelClaims {
             }
         }
 
-        var leftElement = algebra.FromSupport(keys: keys.AsSpan(start: 0, length: leftSupport), coefficients: coefficients.AsSpan(start: 0, length: leftSupport));
+        var leftElement = algebra.FromSupport(keys: keys.AsSpan(length: leftSupport, start: 0), coefficients: coefficients.AsSpan(length: leftSupport, start: 0));
 
         for (var exponent = 0; (exponent < degree); ++exponent) {
             if (0UL != ((right >> exponent) & 1UL)) {
@@ -392,7 +381,7 @@ internal static class PresentedKernelClaims {
 
         var product = algebra.Multiply(
             left: leftElement,
-            right: algebra.FromSupport(keys: keys.AsSpan(start: 0, length: rightSupport), coefficients: coefficients.AsSpan(start: 0, length: rightSupport))
+            right: algebra.FromSupport(keys: keys.AsSpan(length: rightSupport, start: 0), coefficients: coefficients.AsSpan(length: rightSupport, start: 0))
         );
         var bits = 0UL;
 
@@ -413,20 +402,20 @@ internal static class PresentedKernelClaims {
         foreach (var (degree, tail) in cases) {
             var modulus = new ulong[degree];
 
-            for (var exponent = 0; (exponent < degree); ++exponent) { modulus[exponent] = ((tail >> exponent) & 1UL); }
+            for (var exponent = 0; (exponent < degree); ++exponent) { modulus[exponent] = (tail >> exponent) & 1UL; }
 
-            var algebra = PresentedAlgebra<ulong, ParityMaterial>.Create(presentation: Presentations.Monogenic<ulong, ParityMaterial>(modulus: modulus, material: default));
+            var algebra = PresentedAlgebra<ulong, ParityMaterial>.Create(presentation: Presentations.Monogenic<ulong, ParityMaterial>(material: default, modulus: modulus));
             var mask = ((64 == degree) ? ulong.MaxValue : ((1UL << degree) - 1UL));
 
             for (var sample = 0; (sample < 256); ++sample) {
-                var left = (unchecked((ulong)((sample * 2) + 1) * 0x9E3779B97F4A7C15UL) & mask);
-                var right = (unchecked((ulong)((sample * 2) + 2) * 0xBF58476D1CE4E5B9UL) & mask);
+                var left = unchecked((((ulong)((sample * 2) + 1)) * 0x9E3779B97F4A7C15UL)) & mask;
+                var right = unchecked((((ulong)((sample * 2) + 2)) * 0xBF58476D1CE4E5B9UL)) & mask;
 
                 var subject = ParityFieldProduct(algebra: algebra, degree: degree, left: left, right: right);
-                var oracle = BinaryFieldOracleProduct(left: left, right: right, degree: degree, tail: tail);
-                var shipped = (32 == degree)
+                var oracle = BinaryFieldOracleProduct(degree: degree, left: left, right: right, tail: tail);
+                var shipped = ((32 == degree)
                     ? ((ulong)BinaryFields.Degree32.Multiply(left: ((uint)left), right: ((uint)right)))
-                    : BinaryFields.Degree64.Multiply(left: left, right: right);
+                    : BinaryFields.Degree64.Multiply(left: left, right: right));
 
                 if ((subject != shipped) || (subject != oracle)) {
                     return $"degree {degree} sample {sample}: presented={subject:X} BinaryFields={shipped:X} oracle={oracle:X}";
@@ -436,7 +425,6 @@ internal static class PresentedKernelClaims {
 
         return null;
     }
-
     // ---- sedenion two-term basis-pair zero divisors ----
 
     /// <summary>Proves the sedenion tower carries exactly 84 zero divisors among the two-term basis-pair sums —
@@ -483,13 +471,12 @@ internal static class PresentedKernelClaims {
             return (paramName == exception.ParamName);
         }
     }
-
     private static bool ThrowsMismatchedLength(Action action, string paramName) {
         try {
             action();
 
             return false;
-        } catch (ArgumentException exception) when (exception is not ArgumentOutOfRangeException) {
+        } catch (ArgumentException exception) when ((exception is not ArgumentOutOfRangeException)) {
             return (paramName == exception.ParamName);
         }
     }

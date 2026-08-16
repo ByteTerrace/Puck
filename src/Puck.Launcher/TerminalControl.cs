@@ -9,16 +9,40 @@ namespace Puck.Launcher;
 /// input focus is a simple held/released flag.</summary>
 public sealed class TerminalControl : ITerminalControl, IInputFocus {
     private readonly HashSet<Puck.Commands.InputDeviceId> m_releasedDevices = [];
+
     private volatile bool m_allReleased;
     private volatile bool m_exitRequested;
 
     /// <inheritdoc />
-    public bool IsActiveFor(Puck.Commands.InputDeviceId deviceId) {
+    public void Claim(Puck.Commands.InputDeviceId? deviceId = null) {
         lock (m_releasedDevices) {
-            return (!m_allReleased && !m_releasedDevices.Contains(item: deviceId));
+            if (deviceId.HasValue) {
+                m_releasedDevices.Remove(item: deviceId.Value);
+            } else {
+                m_allReleased = false;
+                m_releasedDevices.Clear();
+            }
         }
     }
-
+    /// <inheritdoc />
+    public bool IsActiveFor(Puck.Commands.InputDeviceId deviceId) {
+        lock (m_releasedDevices) {
+            return (
+                !m_allReleased &&
+                !m_releasedDevices.Contains(item: deviceId)
+            );
+        }
+    }
+    /// <inheritdoc />
+    public void Release(Puck.Commands.InputDeviceId? deviceId = null) {
+        lock (m_releasedDevices) {
+            if (deviceId.HasValue) {
+                m_releasedDevices.Add(item: deviceId.Value);
+            } else {
+                m_allReleased = true;
+            }
+        }
+    }
     /// <inheritdoc />
     public void RequestExit() {
         m_exitRequested = true;
@@ -31,27 +55,5 @@ public sealed class TerminalControl : ITerminalControl, IInputFocus {
 
         m_exitRequested = false;
         return true;
-    }
-    /// <inheritdoc />
-    public void Release(Puck.Commands.InputDeviceId? deviceId = null) {
-        lock (m_releasedDevices) {
-            if (deviceId.HasValue) {
-                m_releasedDevices.Add(item: deviceId.Value);
-            } else {
-                m_allReleased = true;
-            }
-        }
-    }
-
-    /// <inheritdoc />
-    public void Claim(Puck.Commands.InputDeviceId? deviceId = null) {
-        lock (m_releasedDevices) {
-            if (deviceId.HasValue) {
-                m_releasedDevices.Remove(item: deviceId.Value);
-            } else {
-                m_allReleased = false;
-                m_releasedDevices.Clear();
-            }
-        }
     }
 }

@@ -13,13 +13,17 @@ people and tools stable names for content that may change. `ContentPetname`
 turns a hash into a short label such as `Willow-Lantern-Nine` when raw hex would
 be awkward to read aloud.
 
-Nothing here decodes an image, font, shader, or document. Puck.Assets does not
-mount archives, layer sources, or normalize paths. It supplies the byte and
-identity layer; each consumer owns the meaning of those bytes.
+The one decoder the library does carry is PNG: `PngEncoder` and `PngDecoder`
+round-trip 8-bit RGBA stills and APNG animations for capture frames and baked
+font atlases. Beyond that, nothing here decodes a font, shader, or document,
+and Puck.Assets does not mount archives, layer sources, or normalize paths. It
+supplies the byte and identity layer; each other consumer owns the meaning of
+its own bytes.
 
 `dotnet pack` produces `ByteTerrace.Puck.Assets`; the first NuGet.org release
-has not been published yet. The package targets .NET 10 and has no package or
-project dependencies.
+has not been published yet. The package targets .NET 10 and depends only on
+the `System.IO.Hashing` package (CRC-32 for the PNG codec); it has no project
+dependencies.
 
 This README is the human entry point. The
 [generated API reference](../../docs/api) owns complete member signatures,
@@ -40,8 +44,12 @@ parameters, return values, and exceptions.
   derived refs remember the output produced from a particular input hash.
 - *Readable diagnostics:* `ContentPetname` maps a hash to a deterministic
   three-word label for logs and operator-facing output.
-- *A small dependency surface:* the package depends only on the .NET base
-  class library and does not perform decoding or dependency-injection wiring.
+- *A minimal PNG/APNG codec:* `PngEncoder` and `PngDecoder` write and read
+  8-bit RGBA stills and full-frame APNG animations — just enough to round-trip
+  the files Puck itself writes and bakes, not a general image library.
+- *A small dependency surface:* the package depends on nothing beyond the
+  .NET base class library and `System.IO.Hashing`, and does not perform
+  dependency-injection wiring.
 
 ## 📐 How bytes move through the library
 
@@ -219,6 +227,28 @@ The same hash always gets the same label on every machine and build. A petname
 is only a compact aid for conversation and logs: many hashes share one, so it
 must always remain paired with the real content hash when identity matters.
 
+## 🖼️ PNG stills and animations
+
+`PngEncoder.Write` takes tightly packed 8-bit RGBA pixels (row-major, no row
+padding) and writes them as color-type-6 PNG: no row filtering, zlib-compressed
+scanlines. `PngEncoder.WriteAnimation` writes the same pixel shape as an APNG —
+`acTL`/`fcTL`/`fdAT`, every frame full-size at a uniform delay, looped
+`playCount` times (0 loops forever).
+
+`PngDecoder.Decode` reads 8-bit, non-interlaced PNGs back to tightly packed
+RGBA: color types 0 (grayscale), 2 (RGB), 4 (grayscale + alpha), and 6 (RGBA),
+all five standard scanline filters, every chunk CRC-checked, `tRNS`
+transparent-color metadata applied, and unknown critical chunks refused.
+`PngDecoder.DecodeAnimation` reads an APNG's frames the same way; a
+non-animated PNG decodes as one zero-delay frame. Only full-size,
+source-blended APNG frames are supported — sub-rectangle and `over`-blended
+frames are refused.
+
+This is a minimal codec pair, not a general image library: just enough to
+round-trip the files Puck itself writes and bakes, including `Puck.Text`'s
+font atlas artifacts (`FontAtlasArtifactWriter` / `FontAtlasImageDataLoader`)
+and `Puck.Recording`'s capture stills (`CaptureSink`).
+
 ## 📋 Core types
 
 This table is the conceptual map. The
@@ -233,11 +263,13 @@ surface.
 | `ContentAddressedLruCache<TValue>` | Retains a fixed number of decoded values by content identity. |
 | `ContentAddressedStore` | Persists immutable objects under full SHA-256 addresses and manages named and derived refs. |
 | `ContentPetname` | Produces a deterministic three-word label from a hexadecimal content hash. |
+| `PngEncoder` / `PngDecoder` | Write and read 8-bit RGBA PNG stills and full-frame APNG animations. |
+| `PngImage` / `PngAnimation` / `PngAnimationFrame` | The decoded still and animation shapes `PngDecoder` returns. |
 
 ## 📌 Design notes
 
-- **Bytes stay untyped.** Decoders, serializers, GPU uploaders, and format
-  validation belong to consumers.
+- **Bytes stay mostly untyped.** Beyond the PNG codec, decoders, serializers,
+  GPU uploaders, and format validation belong to consumers.
 - **Paths stay with the caller.** There is no virtual file system, mount table,
   fallback search, or normalization policy in this package.
 - **The two hash widths are deliberate.** A process cache uses the compact
@@ -250,6 +282,16 @@ surface.
 - **Atomic files do not make a transaction.** Object promotion and individual
   ref replacement are atomic, but a caller coordinating several refs or other
   state must supply its own transaction boundary.
+
+## 🧪 Verification
+
+```powershell
+dotnet test tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj
+```
+
+`PngCodecLawTests` builds hand-crafted chunk streams to exercise the decoder's
+chunk and CRC handling directly, alongside encode/decode round-trips for both
+stills and animations.
 
 ## 🧪 Building the package
 

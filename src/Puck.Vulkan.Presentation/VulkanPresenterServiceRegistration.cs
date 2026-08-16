@@ -67,7 +67,8 @@ public static class VulkanPresenterServiceRegistration {
         ));
         services.TryAddSingleton(implementationFactory: static sp => new VulkanSurfacePresenter(
             compositor: sp.GetRequiredService<SurfaceCompositor>(),
-            renderer: sp.GetRequiredService<VulkanRenderer>()
+            renderer: sp.GetRequiredService<VulkanRenderer>(),
+            surfaceTransferFactory: sp.GetRequiredService<IGpuSurfaceTransferFactory>()
         ));
         services.TryAddSingleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<VulkanSurfacePresenter>());
 
@@ -141,7 +142,6 @@ public static class VulkanPresenterServiceRegistration {
 
         return services;
     }
-
     /// <summary>Registers one native API per Vulkan capability the renderer, compositor, and engine use.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
@@ -169,7 +169,6 @@ public static class VulkanPresenterServiceRegistration {
 
         return services;
     }
-
     /// <summary>Registers the factories, command-buffer recorder, asset source, and shader loader the
     /// renderer and compositor compose over the native APIs.</summary>
     /// <param name="services">The service collection.</param>

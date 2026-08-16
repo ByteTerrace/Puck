@@ -16,7 +16,6 @@ public enum PresentPacingBasis {
     /// <summary>The active display cadence, with no claim that VRR is available.</summary>
     SignalTiming,
 }
-
 /// <summary>A pure, inspectable present-rate policy result.</summary>
 /// <param name="TargetHertz">The effective target, or zero when unbounded.</param>
 /// <param name="Basis">The fact that selected the target.</param>
@@ -27,7 +26,10 @@ public readonly record struct PresentPacingDecision(double TargetHertz, PresentP
     public long ToPeriodTicks(long frequency) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frequency);
 
-        if (!double.IsFinite(d: TargetHertz) || (TargetHertz < 0.0)) {
+        if (
+            !double.IsFinite(d: TargetHertz) ||
+            (TargetHertz < 0.0)
+        ) {
             throw new InvalidOperationException(message: "A pacing decision must contain a finite, non-negative target.");
         }
 
@@ -41,10 +43,12 @@ public readonly record struct PresentPacingDecision(double TargetHertz, PresentP
             return long.MaxValue;
         }
 
-        return Math.Max(val1: 1L, val2: (long)period);
+        return Math.Max(
+            val1: 1L,
+            val2: ((long)period)
+        );
     }
 }
-
 /// <summary>Resolves explicit or display-aware presentation pacing from independent signal and VRR facts.</summary>
 public static class PresentPacingPolicy {
     /// <summary>
@@ -53,19 +57,53 @@ public static class PresentPacingPolicy {
     /// </summary>
     public const double VariableRefreshCeilingGuardHertz = 3.0;
 
+    private static double? ResolveVariableRefreshCeiling(DisplayTimingSnapshot timing) {
+        if (!timing.Signal.IsKnown) {
+            return null;
+        }
+
+        var advertisedCeiling = (
+            ((timing.VariableRefresh.Support == VariableRefreshSupport.Supported) &&
+            (timing.VariableRefresh.Range is { } range))
+            ? range.MaximumHertz
+            : null
+        );
+
+        return (
+            (advertisedCeiling is { } advertised)
+            ? Math.Min(
+                val1: timing.Signal.Hertz,
+                val2: advertised
+            )
+            : timing.Signal.Hertz
+        );
+    }
+
     /// <summary>Resolves an effective present-rate target.</summary>
     /// <param name="timing">The current display timing snapshot.</param>
     /// <param name="requestedHertz">A positive explicit target, or zero for display-aware automatic pacing.</param>
     /// <returns>The effective target and the fact that selected it.</returns>
     public static PresentPacingDecision Resolve(DisplayTimingSnapshot timing, double requestedHertz) {
-        if (!double.IsFinite(d: requestedHertz) || (requestedHertz < 0.0)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(requestedHertz), actualValue: requestedHertz, message: "A present-rate request must be finite and non-negative.");
+        if (
+            !double.IsFinite(d: requestedHertz) ||
+            (requestedHertz < 0.0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(requestedHertz),
+                actualValue: requestedHertz,
+                message: "A present-rate request must be finite and non-negative."
+            );
         }
 
         if (requestedHertz > 0.0) {
             return new PresentPacingDecision(
                 // An explicit fixed cadence is bounded by the active display cadence, not by the monitor's adaptive interval.
-                TargetHertz: (timing.Signal.IsKnown ? Math.Min(val1: requestedHertz, val2: timing.Signal.Hertz) : requestedHertz),
+                TargetHertz: (timing.Signal.IsKnown
+                ? Math.Min(
+                        val1: requestedHertz,
+                        val2: timing.Signal.Hertz
+                    )
+                : requestedHertz),
                 Basis: PresentPacingBasis.ExplicitTarget
             );
         }
@@ -94,25 +132,9 @@ public static class PresentPacingPolicy {
             );
         }
 
-        return new PresentPacingDecision(TargetHertz: 0.0, Basis: PresentPacingBasis.Unbounded);
-    }
-
-    private static double? ResolveVariableRefreshCeiling(DisplayTimingSnapshot timing) {
-        if (!timing.Signal.IsKnown) {
-            return null;
-        }
-
-        var advertisedCeiling = (
-            ((timing.VariableRefresh.Support == VariableRefreshSupport.Supported) &&
-            (timing.VariableRefresh.Range is { } range)) ?
-            range.MaximumHertz :
-            null
-        );
-
-        return (
-            (advertisedCeiling is { } advertised) ?
-            Math.Min(val1: timing.Signal.Hertz, val2: advertised) :
-            timing.Signal.Hertz
+        return new PresentPacingDecision(
+            Basis: PresentPacingBasis.Unbounded,
+            TargetHertz: 0.0
         );
     }
 }

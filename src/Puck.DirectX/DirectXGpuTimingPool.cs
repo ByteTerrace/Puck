@@ -40,7 +40,7 @@ public sealed unsafe class DirectXGpuTimingPool : IGpuTimingPool {
         m_disposed = true;
 
         if (m_token.IsAllocated) {
-            var state = (DirectXTimingPoolState)m_token.Target!;
+            var state = ((DirectXTimingPoolState)m_token.Target!);
 
             if (0 != state.ReadbackBufferHandle) {
                 _ = ((IUnknown*)state.ReadbackBufferHandle)->Release();

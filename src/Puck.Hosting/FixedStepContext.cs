@@ -8,7 +8,6 @@ namespace Puck.Hosting;
 /// <param name="ElapsedTicks">The exact simulation time after this step completes.</param>
 /// <param name="StepTicks">The exact duration of one step in <see cref="EngineTicks"/>.</param>
 public readonly record struct FixedStepContext(ulong Tick, ulong ElapsedTicks, ulong StepTicks);
-
 /// <summary>The optional deterministic simulation seam driven by a Puck host. For each due fixed tick the launcher
 /// builds one <see cref="CommandSnapshot"/>, applies it to the command registry, then calls <see cref="Step"/> once.</summary>
 public interface IFixedStepSimulation {

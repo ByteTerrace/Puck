@@ -27,12 +27,12 @@ internal sealed class WorldSessionLeverSink(WorldRenderSettings settings, Presen
     public void Apply(WorldSessionLever lever) {
         switch (lever.Kind) {
             case WorldLeverKind.MasterVolume:
-                audio.SetMasterVolume(value: (float)lever.A);
+                audio.SetMasterVolume(value: ((float)lever.A));
 
                 break;
             case WorldLeverKind.Shadows:
-                settings.ShadowReach = (float)lever.A;
-                settings.ShadowCrowdRadius = (float)lever.B;
+                settings.ShadowReach = ((float)lever.A);
+                settings.ShadowCrowdRadius = ((float)lever.B);
 
                 break;
             case WorldLeverKind.AmbientOcclusion:
@@ -40,7 +40,7 @@ internal sealed class WorldSessionLeverSink(WorldRenderSettings settings, Presen
 
                 break;
             case WorldLeverKind.AmbientOcclusionQuality:
-                settings.AmbientOcclusionQuality = (AmbientOcclusionMode)(int)lever.A;
+                settings.AmbientOcclusionQuality = ((AmbientOcclusionMode)((int)lever.A));
 
                 break;
             case WorldLeverKind.FarBound:
@@ -56,19 +56,19 @@ internal sealed class WorldSessionLeverSink(WorldRenderSettings settings, Presen
 
                 break;
             case WorldLeverKind.ShadowMask:
-                settings.ShadowMask = (ShadowMaskMode)(int)lever.A;
+                settings.ShadowMask = ((ShadowMaskMode)((int)lever.A));
 
                 break;
             case WorldLeverKind.ShadowMarch:
-                settings.ShadowMarch = (ShadowMarchMode)(int)lever.A;
+                settings.ShadowMarch = ((ShadowMarchMode)((int)lever.A));
 
                 break;
             case WorldLeverKind.RenderScale:
-                settings.RenderScale = (float)lever.A;
+                settings.RenderScale = ((float)lever.A);
 
                 break;
             case WorldLeverKind.UpscaleSharpness:
-                settings.UpscaleSharpness = (float)lever.A;
+                settings.UpscaleSharpness = ((float)lever.A);
 
                 break;
             default:

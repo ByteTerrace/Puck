@@ -15,6 +15,7 @@ public sealed class Mbc5Cartridge : CartridgeBase {
     private const int RumbleMotorBit = 0x08;
 
     private readonly bool m_isRumbleVariant;
+
     private int m_ramBank;
     private bool m_ramEnabled;
     private int m_romBank;
@@ -41,7 +42,6 @@ public sealed class Mbc5Cartridge : CartridgeBase {
     /// only: it never influences emulated behavior, mirroring the joypad's read-only relationship to host input.</summary>
     public bool MotorOn =>
         (m_isRumbleVariant && m_motorOn);
-
     /// <inheritdoc/>
     /// <remarks>The MBC5 rumble hardware is on/off only (no PWM), so this is always exactly 0 or 1.</remarks>
     public override float MotorLevel =>

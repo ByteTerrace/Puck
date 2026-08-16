@@ -204,7 +204,7 @@ uint sdfInstanceCountClamped() {
 // The world-space UNIFORM-GRID instance cull (world render path, the beam prepass ONLY): a uint-granular block appended
 // after the world-segment list, so mapCore — which stops at that list — never reads it and every rendered pixel is
 // unchanged by its presence. The beam walks it instead of testing every instance in every tile, so its cost tracks the
-// instances NEAR a tile's cone. KEEP IN SYNC with Puck.SdfVm.SdfInstanceGrid (the host packer) — the header layout,
+// instances NEAR a tile's cone. KEEP IN SYNC with Puck.SignedDistance.SdfInstanceGrid (the host packer) — the header layout,
 // SDF_GRID_HEADER_WORDS, and SDF_GRID_MAX_DIM.
 #define SDF_GRID_HEADER_WORDS 16u
 #define SDF_GRID_MAX_DIM 64u     // per-axis cell-count cap (KEEP IN SYNC with SdfInstanceGrid.MaxDimension)
@@ -338,7 +338,7 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 [[vk::binding(46, 0)]] StructuredBuffer<float> sdfBrickPool : register(SDF_BRICK_POOL_REGISTER);
 #endif
 
-// --- opcodes (mirror Puck.SdfVm.SdfOp) ---
+// --- opcodes (mirror Puck.SignedDistance.SdfOp) ---
 #define SDF_OP_RESET             0u
 #define SDF_OP_TRANSLATE         1u
 #define SDF_OP_ROTATE            2u
@@ -362,7 +362,7 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_OP_DISPLACE        24u
 #define SDF_OP_DOMAIN_WARP     25u
 #define SDF_OP_SYMMETRY_PLANE  26u
-// Scoped field accumulator (KEEP IN SYNC with Puck.SdfVm.SdfOp.PushField/PopField). PUSH saves the running accumulator
+// Scoped field accumulator (KEEP IN SYNC with Puck.SignedDistance.SdfOp.PushField/PopField). PUSH saves the running accumulator
 // into a one-deep slot and reseeds a fresh scope; POP composes the scope's field back into the saved parent as a
 // candidate (reusing SHAPE's blend tail). SDF_MAX_FIELD_SCOPE_DEPTH is DOCUMENTATION ONLY — no shader expression reads
 // it; the real capacity is the single non-indexed (savedFieldDistance, savedFieldMaterial) scalar pair in mapCore, which
@@ -384,17 +384,17 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // with SdfViewsKernelVariants.Select (Puck.SdfVm/SdfViewsKernelVariant.cs) — a case guarded here must make Select
 // answer Full, or the core variant silently no-ops the op.
 // SDF_OP_CELL_JITTER Blend-lane (instructionHeader.z) noise flavor: how the per-cell POSITION offset is distributed
-// (KEEP IN SYNC with Puck.SdfVm.SdfNoiseFlavor). Reshapes ONLY r0 — tumble and material variant are unaffected.
+// (KEEP IN SYNC with Puck.SignedDistance.SdfNoiseFlavor). Reshapes ONLY r0 — tumble and material variant are unaffected.
 #define SDF_NOISE_WHITE          0u
 #define SDF_NOISE_BLUE           1u
 #define SDF_NOISE_GAUSSIAN       2u
-// SDF_OP_REPEAT_POLAR Shape-lane (instructionHeader.y) rotation axis (KEEP IN SYNC with Puck.SdfVm.SdfPolarAxis): the
+// SDF_OP_REPEAT_POLAR Shape-lane (instructionHeader.y) rotation axis (KEEP IN SYNC with Puck.SignedDistance.SdfPolarAxis): the
 // angular fold acts in the plane PERPENDICULAR to it (the axial coordinate is untouched).
 #define SDF_POLAR_AXIS_X         0u
 #define SDF_POLAR_AXIS_Y         1u
 #define SDF_POLAR_AXIS_Z         2u
 
-// --- wallpaper symmetry groups, IUC order (mirror Puck.SdfVm.SdfWallpaperGroup) ---
+// --- wallpaper symmetry groups, IUC order (mirror Puck.SignedDistance.SdfWallpaperGroup) ---
 #define SDF_WPG_P1    0u
 #define SDF_WPG_P2    1u
 #define SDF_WPG_PM    2u
@@ -490,11 +490,11 @@ static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8
 #define SDF_SHAPE_SAMPLED_REGION  16u
 
 // Lift mode for the 2D-primitive family (data1.y). Decoded as `> 0.5` so a float lane carries it cleanly on both
-// backends. KEEP IN SYNC with Puck.SdfVm.SdfLift.
+// backends. KEEP IN SYNC with Puck.SignedDistance.SdfLift.
 #define SDF_LIFT_REVOLVE 0u
 #define SDF_LIFT_EXTRUDE 1u
 
-// --- bounding-sphere entry modes (mirror Puck.SdfVm.SdfProgram's PackBounds) ---
+// --- bounding-sphere entry modes (mirror Puck.SignedDistance.SdfProgram's PackBounds) ---
 #define SDF_BOUND_NONE    0u
 #define SDF_BOUND_STATIC  1u
 #define SDF_BOUND_DYNAMIC 2u
@@ -506,7 +506,7 @@ static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8
 #define SDF_RIGID_LEAF_SHAPE_MASK        0x7FFFFFFFu
 
 // --- blend operators ---
-// THE ACCUMULATOR RULE (KEEP IN SYNC with Puck.SdfVm.SdfBlendOp's summary). mapCore carries ONE running nearest-surface
+// THE ACCUMULATOR RULE (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp's summary). mapCore carries ONE running nearest-surface
 // distance across the WHOLE program; SDF_OP_RESET resets the evaluation POINT, never result.distance. So a blend never
 // sees a subtree - it sees every shape emitted before it. Union (a min) and subtraction (a max against the NEGATED
 // candidate, which only bites inside the subtrahend) are therefore LOCAL and may appear anywhere. The INTERSECTION
@@ -524,7 +524,7 @@ static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8
 // For unit outward gradients meeting at angle φ, |∇((a + b - r)·√½)| = √2·cos(φ/2): the bevel plane's gradient reaches
 // √2 at a FLAT / near-parallel seam (two tangent surfaces, φ → 0), is exactly 1 at a perpendicular seam, and falls to 0
 // at an acute knife edge. The √2 ceiling is real and attained, so a chamfer blend carries a conservative √2 step clamp
-// via SdfProgram.AnalyzeLipschitz — the one blend family that is not 1-Lipschitz (KEEP IN SYNC with Puck.SdfVm.SdfBlendOp).
+// via SdfProgram.AnalyzeLipschitz — the one blend family that is not 1-Lipschitz (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp).
 #define SDF_BLEND_CHAMFER_UNION        7u
 #define SDF_BLEND_CHAMFER_INTERSECTION 8u
 #define SDF_BLEND_CHAMFER_SUBTRACTION  9u
@@ -532,7 +532,7 @@ static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8
 // Material sentinel range: a SCREEN_SLAB shades as a "screen" rather than a table albedo. The plain sentinel
 // (SdfProgramBuilder.ScreenSlab with no screen index) shades the procedural test-card. SDF_SCREEN_MATERIAL + 1 +
 // screenIndex (SdfProgramBuilder's screen-surface overload) additionally identifies WHICH declared screen surface —
-// and so which screen source slot (0..7) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
+// and so which screen source slot (0..31) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
 // Every material id in this range is screen shading; test with >= SDF_SCREEN_MATERIAL, never ==.
 #define SDF_SCREEN_MATERIAL 65535
 #define SDF_ISA_ERROR_MATERIAL (-1) // sdfMaterialLoad decodes this as emissive diagnostic magenta.
@@ -1114,9 +1114,9 @@ float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
 }
 
 #ifdef SDF_GLYPH_ATLAS
-// One texel's TRUE single-channel signed distance from the ALPHA channel (the font-atlas bake pipeline
-// (`tools/font-atlas`) packs the true distance there; this engine's runtime generator replicates its single channel
-// into alpha, so alpha decodes both). The RGB
+// One texel's TRUE single-channel signed distance from the ALPHA channel (`puck font-atlas` and compatible external
+// oracles pack the true distance there; Puck.Text's in-process generator writes the same channel into alpha, so alpha
+// decodes both). The RGB
 // median MTSDF tooling reconstructs is deliberately NOT read: it is only C0 at channel-crossover lines and so kinks
 // the field a sphere tracer steps through — GEOMETRY MARCHES THE TRUE CHANNEL. Edge-clamped; SampleLevel(…, 0) because
 // implicit-derivative filtering is undefined inside the march's non-uniform control flow.
@@ -2214,7 +2214,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     uint3 h0 = sdfPcg3d(key);   // still used by the material-variant apply below (every flavor)
 
                     // The POSITION offset r0, shaped by the Blend-lane noise flavor (KEEP IN SYNC with
-                    // Puck.SdfVm.SdfNoiseFlavor). Only r0 changes. Every flavor stays in [0, 1] per axis — CLOSED at 1,
+                    // Puck.SignedDistance.SdfNoiseFlavor). Only r0 changes. Every flavor stays in [0, 1] per axis — CLOSED at 1,
                     // because (float)0xFFFFFFFFu rounds up to 2^32 — so (r0 - 0.5) * jitter holds within +-jitter/2 per
                     // axis (White's bound) and the AnalyzeLipschitz reach term is unchanged for all three.
                     uint noiseFlavor = instructionHeader.z;
@@ -2500,7 +2500,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
 #ifndef SDF_CORE_OPS
-                // Scoped field accumulator (KEEP IN SYNC with Puck.SdfVm.SdfOp.PushField/PopField). A scope touches ONLY
+                // Scoped field accumulator (KEEP IN SYNC with Puck.SignedDistance.SdfOp.PushField/PopField). A scope touches ONLY
                 // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
                 // and ResetPoint semantics are unchanged.
                 case SDF_OP_PUSH_FIELD: {

@@ -117,16 +117,16 @@ internal static class ReferencesCommand {
             return 2;
         }
 
-        var symbols = await FindTargetsAsync(solution: solution, options: options);
+        var symbols = await FindTargetsAsync(options: options, solution: solution);
         var records = new List<AnalysisRecord>();
         var seen = new HashSet<(string Path, int Line, int Column, string Definition)>();
 
         foreach (var symbol in symbols) {
-            AddDeclarations(symbol: symbol, relation: "decl", records: records, seen: seen);
+            AddDeclarations(records: records, relation: "decl", seen: seen, symbol: symbol);
 
             switch (options.Mode) {
                 case ReferencesMode.References:
-                    await AddReferencesAsync(symbol: symbol, solution: solution, options: options, records: records, seen: seen);
+                    await AddReferencesAsync(options: options, records: records, seen: seen, solution: solution, symbol: symbol);
 
                     break;
                 case ReferencesMode.Declarations:
@@ -140,7 +140,6 @@ internal static class ReferencesCommand {
 
         return AnalysisEmitter.Emit(records: records, json: options.Json, quiet: options.Quiet);
     }
-
     // ---- symbol discovery -------------------------------------------------------------------
 
     // Declarations ordered by display string then documentation-comment id, so groups are stable across runs.
@@ -158,7 +157,7 @@ internal static class ReferencesCommand {
             ? candidate.Contains(value: options.Name, comparisonType: comparison)
             : candidate.Equals(value: options.Name, comparisonType: comparison));
 
-        await AddEntryPointsAsync(solution: solution, selects: Selects, found: found);
+        await AddEntryPointsAsync(found: found, selects: Selects, solution: solution);
 
         if (options.Metadata) {
             // This search is per-project and includes symbols from referenced assemblies; the source-only
@@ -184,7 +183,6 @@ internal static class ReferencesCommand {
             .OrderBy(keySelector: static symbol => symbol.ToDisplayString(), comparer: StringComparer.Ordinal)
             .ThenBy(keySelector: static symbol => (symbol.GetDocumentationCommentId() ?? string.Empty), comparer: StringComparer.Ordinal)];
     }
-
     // The entry point of every project that has one, when the query can select it. A top-level-statements
     // file declares no type, so the compiler synthesizes `Program`/`<Main>$` with real source locations that
     // the syntax-based declaration index does not reliably carry; asking each compilation for its entry point
@@ -199,7 +197,7 @@ internal static class ReferencesCommand {
                 continue;
             }
 
-            foreach (var candidate in (ISymbol?[])[entryPoint, entryPoint.ContainingType]) {
+            foreach (var candidate in ((ISymbol?[])[entryPoint, entryPoint.ContainingType])) {
                 if ((candidate is not null)
                     && candidate.Locations.Any(predicate: static location => location.IsInSource)
                     && selects(arg: candidate.Name)) {
@@ -208,7 +206,6 @@ internal static class ReferencesCommand {
             }
         }
     }
-
     // The --kind categories, decided on the found symbol rather than inside the search. Anything that is
     // neither a namespace nor a type is a member.
     private static bool InKind(ISymbol symbol, SymbolFilter filter) =>
@@ -217,7 +214,6 @@ internal static class ReferencesCommand {
             ITypeSymbol => ((filter & SymbolFilter.Type) != 0),
             _ => ((filter & SymbolFilter.Member) != 0),
         };
-
     // ---- record collection ------------------------------------------------------------------
 
     private static void AddDeclarations(ISymbol symbol, string relation, List<AnalysisRecord> records, HashSet<(string, int, int, string)> seen) {
@@ -310,7 +306,7 @@ internal static class ReferencesCommand {
         var related = mode switch {
             ReferencesMode.Implementers => await SymbolFinder.FindImplementationsAsync(symbol: symbol, solution: solution),
             ReferencesMode.Overrides => await SymbolFinder.FindOverridesAsync(symbol: symbol, solution: solution),
-            _ => await FindDerivedAsync(symbol: symbol, solution: solution),
+            _ => await FindDerivedAsync(solution: solution, symbol: symbol),
         };
         var relation = mode switch {
             ReferencesMode.Implementers => "impl",
@@ -321,7 +317,7 @@ internal static class ReferencesCommand {
         foreach (var found in related
             .OrderBy(keySelector: static found => found.ToDisplayString(), comparer: StringComparer.Ordinal)
             .ThenBy(keySelector: static found => (found.GetDocumentationCommentId() ?? string.Empty), comparer: StringComparer.Ordinal)) {
-            AddDeclarations(symbol: found, relation: relation, records: records, seen: seen);
+            AddDeclarations(records: records, relation: relation, seen: seen, symbol: found);
         }
     }
     private static async Task<IEnumerable<ISymbol>> FindDerivedAsync(ISymbol symbol, Solution solution) {
@@ -333,7 +329,6 @@ internal static class ReferencesCommand {
             ? await SymbolFinder.FindDerivedInterfacesAsync(type: type, solution: solution, transitive: true)
             : await SymbolFinder.FindDerivedClassesAsync(type: type, solution: solution, transitive: true));
     }
-
     // ---- helpers ----------------------------------------------------------------------------
 
     private static bool Add(
@@ -351,15 +346,13 @@ internal static class ReferencesCommand {
             return false;
         }
 
-        records.Add(item: new AnalysisRecord(Path: path, Line: line, Column: column, Relation: relation, Kind: kind, Name: name, Detail: null));
+        records.Add(item: new AnalysisRecord(Column: column, Detail: null, Kind: kind, Line: line, Name: name, Path: path, Relation: relation));
 
         return true;
     }
-
     // A stable identity key for a definition, used to tell two same-position records apart.
     private static string Identity(ISymbol symbol) =>
         (symbol.GetDocumentationCommentId() ?? symbol.ToDisplayString());
-
     // Whether a reference location sits inside XML documentation. `<see cref="..."/>` targets come back
     // as ordinary reference locations — neither implicit nor candidate — so a symbol whose only inbound
     // references are documentation crefs is not actually used by any code.
@@ -394,7 +387,7 @@ internal static class ReferencesCommand {
 
         var filter = SymbolFilter.None;
 
-        foreach (var token in raw.Split(separator: ',', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
+        foreach (var token in raw.Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: ',')) {
             switch (token.ToLowerInvariant()) {
                 case "t" or "type":
                     filter |= SymbolFilter.Type;
@@ -422,7 +415,6 @@ internal static class ReferencesCommand {
 
         return filter;
     }
-
     // ---- target resolution ------------------------------------------------------------------
 
     // The file the workspace loader is pointed at: an explicit --project or --solution, else the nearest solution
@@ -473,7 +465,7 @@ internal static class ReferencesCommand {
         try {
             return directory.EnumerateFiles()
                 .Select(selector: static file => file.FullName)
-                .Where(predicate: file => Path.GetExtension(path: file).Equals(value: extension, comparisonType: StringComparison.OrdinalIgnoreCase))
+                .Where(predicate: file => Path.GetExtension(path: file).Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension))
                 .OrderBy(keySelector: static file => file, comparer: StringComparer.Ordinal)
                 .FirstOrDefault();
         } catch (Exception ex) when ((ex is UnauthorizedAccessException or IOException)) {

@@ -28,6 +28,8 @@ public sealed class FontAtlasGenerationOptions {
     /// columns when required to respect <see cref="MaxAtlasDimension"/>. Defaults to <c>16</c>.
     /// </summary>
     public int Columns { get; set; } = 16;
+    /// <summary>Gets or sets the signed-distance band width, in atlas pixels. Defaults to <c>8</c>.</summary>
+    public float DistanceRange { get; set; } = SdfCoverageAtlas.DefaultDistanceRange;
     /// <summary>Gets or sets the em size, in pixels, at which glyphs are rasterized. Defaults to <c>32</c>.</summary>
     public int FontPixelSize { get; set; } = 32;
     /// <summary>Gets or sets the maximum allowed width or height of the atlas image, in pixels. Defaults to <c>16384</c>.</summary>
@@ -36,4 +38,10 @@ public sealed class FontAtlasGenerationOptions {
     public long MaxAtlasPixels { get; set; } = 67_108_864;
     /// <summary>Gets or sets the padding, in pixels, reserved around each glyph cell. Defaults to <c>8</c>.</summary>
     public int Padding { get; set; } = 8;
+
+    /// <summary>
+    /// Gets or sets the zero-based face index to select from an OpenType collection. A standalone font has
+    /// exactly one face at index <c>0</c>. Defaults to <c>0</c>.
+    /// </summary>
+    public int FaceIndex { get; set; }
 }

@@ -47,6 +47,7 @@ internal static class BinaryIntegerConstants<T> where T : IBinaryInteger<T> {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => (T.One << 3) | (T.One << 1);
     }
+
     /// <summary>Throws when <typeparamref name="T"/> has no fixed bit width, for an operation whose result requires one.</summary>
     /// <param name="operationName">The name of the operation being guarded, reported in the exception message.</param>
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>.</exception>

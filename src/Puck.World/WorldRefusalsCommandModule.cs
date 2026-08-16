@@ -21,21 +21,35 @@ internal sealed class WorldRefusalsCommandModule : ICommandModule {
                     return CommandResult.Error(output: "[world.refusals: expected at most 1 value — an optional door filter]");
                 }
 
-                var filter = ((args.Count == 1) ? args[0].ToString() : null);
+                var filter = ((args.Count == 1)
+                    ? args[0].ToString()
+                    : null
+                );
                 var rows = new List<string>();
                 var doors = new HashSet<string>(comparer: StringComparer.Ordinal);
 
                 foreach (var entry in RefusalCatalog.All()) {
-                    if ((filter is not null) && !string.Equals(a: entry.Door, b: filter, comparisonType: StringComparison.Ordinal)) {
+                    if (
+                        (filter is not null) &&
+                        !string.Equals(
+                        a: entry.Door,
+                        b: filter,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                    ) {
                         continue;
                     }
 
                     _ = doors.Add(item: entry.Door);
-                    rows.Add(item: $"{entry.Door}/{entry.Id} [{((entry.Kind == RefusalKind.ProtocolFault) ? "protocol-fault" : "verdict")}] {entry.Condition}");
+                    rows.Add(item: $"{entry.Door}/{entry.Id} [{((entry.Kind == RefusalKind.ProtocolFault)
+                        ? "protocol-fault"
+                        : "verdict")}] {entry.Condition}");
                 }
 
                 if (rows.Count == 0) {
-                    return CommandResult.Error(output: $"[world.refusals: {((filter is null) ? "no refusals are declared in this build" : $"door '{filter}' names no declared refusal")}]");
+                    return CommandResult.Error(output: $"[world.refusals: {((filter is null)
+                        ? "no refusals are declared in this build"
+                        : $"door '{filter}' names no declared refusal")}]");
                 }
 
                 var builder = new StringBuilder(value: $"[world.refusals: {rows.Count} across {doors.Count} door(s)");

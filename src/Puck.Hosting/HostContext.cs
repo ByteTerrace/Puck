@@ -7,11 +7,12 @@ namespace Puck.Hosting;
 public sealed class HostContext : IHostContext, IHeldCapabilityLeaseSource {
     private static readonly IReadOnlyDictionary<Type, object> None = new Dictionary<Type, object>();
     private static readonly IReadOnlyDictionary<Type, HeldCapabilityLease> NoneHeld = new Dictionary<Type, HeldCapabilityLease>();
-    private readonly IReadOnlyDictionary<Type, object> m_capabilities;
-    private readonly IReadOnlyDictionary<Type, HeldCapabilityLease> m_heldLeases;
 
     /// <summary>A context that publishes no capabilities and holds nothing.</summary>
     public static HostContext Empty { get; } = new HostContext(capabilities: None);
+
+    private readonly IReadOnlyDictionary<Type, object> m_capabilities;
+    private readonly IReadOnlyDictionary<Type, HeldCapabilityLease> m_heldLeases;
 
     /// <summary>Initializes a context with inherited capabilities and optional <em>permanent</em> held
     /// capabilities — held capabilities the holder never passes on and so cannot be reclaimed.</summary>
@@ -24,9 +25,9 @@ public sealed class HostContext : IHostContext, IHeldCapabilityLeaseSource {
         m_capabilities = capabilities;
         m_heldLeases = ((heldCapabilities is null)
             ? NoneHeld
-            : WrapPermanent(heldCapabilities: heldCapabilities));
+            : WrapPermanent(heldCapabilities: heldCapabilities)
+        );
     }
-
     /// <summary>Initializes a context with inherited capabilities and <em>granted</em> held capabilities —
     /// passed on with <see cref="HeldCapabilityGrants"/>, each revocable unless granted "no take backsies".</summary>
     /// <param name="capabilities">The inherited capabilities, keyed by type, that flow to every descendant.</param>
@@ -40,49 +41,12 @@ public sealed class HostContext : IHostContext, IHeldCapabilityLeaseSource {
         m_heldLeases = heldGrants.Leases;
     }
 
-    /// <inheritdoc />
-    public bool TryResolveCapability<TCapability>(out TCapability capability) where TCapability : class {
-        if (
-            m_capabilities.TryGetValue(
-                key: typeof(TCapability),
-                value: out var resolved
-            ) &&
-            (resolved is TCapability typed)
-        ) {
-            capability = typed;
-
-            return true;
-        }
-
-        capability = null!;
-
-        return false;
-    }
-    /// <inheritdoc />
-    public bool HoldsCapability<TCapability>(out TCapability capability) where TCapability : class {
-        if (
-            m_heldLeases.TryGetValue(
-                key: typeof(TCapability),
-                value: out var lease
-            ) &&
-            (lease.Resolve() is TCapability typed)
-        ) {
-            capability = typed;
-
-            return true;
-        }
-
-        capability = null!;
-
-        return false;
-    }
-
     bool IHeldCapabilityLeaseSource.TryResolveHeldLease(Type capabilityType, out HeldCapabilityLease lease) {
         if (
             m_heldLeases.TryGetValue(
-                key: capabilityType,
-                value: out var resolved
-            ) &&
+            key: capabilityType,
+            value: out var resolved
+        ) &&
             (resolved.Resolve() is not null)
         ) {
             lease = resolved;
@@ -106,5 +70,42 @@ public sealed class HostContext : IHostContext, IHeldCapabilityLeaseSource {
         }
 
         return leases;
+    }
+
+    /// <inheritdoc />
+    public bool HoldsCapability<TCapability>(out TCapability capability) where TCapability : class {
+        if (
+            m_heldLeases.TryGetValue(
+            key: typeof(TCapability),
+            value: out var lease
+        ) &&
+            (lease.Resolve() is TCapability typed)
+        ) {
+            capability = typed;
+
+            return true;
+        }
+
+        capability = null!;
+
+        return false;
+    }
+    /// <inheritdoc />
+    public bool TryResolveCapability<TCapability>(out TCapability capability) where TCapability : class {
+        if (
+            m_capabilities.TryGetValue(
+            key: typeof(TCapability),
+            value: out var resolved
+        ) &&
+            (resolved is TCapability typed)
+        ) {
+            capability = typed;
+
+            return true;
+        }
+
+        capability = null!;
+
+        return false;
     }
 }

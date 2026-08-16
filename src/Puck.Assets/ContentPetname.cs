@@ -17,6 +17,10 @@ public static class ContentPetname {
         "Thistle", "Clover", "Heather", "Bramble", "Lichen", "Fungus", "Sprout", "Blossom",
         "Comet", "Nebula", "Meteor", "Aurora", "Zenith", "Horizon", "Tundra", "Glacier",
     ];
+    private static readonly string[] NumberWords = [
+        "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
+        "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+    ];
     private static readonly string[] SecondWords = [
         "Lantern", "Compass", "Anchor", "Beacon", "Kettle", "Ladder", "Basket", "Barrel",
         "Satchel", "Locket", "Whistle", "Buckle", "Bobbin", "Spindle", "Chisel", "Mallet",
@@ -27,10 +31,16 @@ public static class ContentPetname {
         "Thimble", "Needle", "Loom", "Spool", "Quill", "Parchment", "Scroll", "Envelope",
         "Nugget", "Pebblestone", "Shard", "Crystal", "Ingot", "Medallion", "Trinket", "Charm",
     ];
-    private static readonly string[] NumberWords = [
-        "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
-        "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
-    ];
+
+    // Parses a two-hex-character byte at the given character offset (offsets are always even, from hex64 input).
+    private static int ParseByte(string hex, int offset) =>
+        byte.Parse(
+            s: hex.AsSpan(
+                length: 2,
+                start: offset
+            ),
+            style: System.Globalization.NumberStyles.HexNumber
+        );
 
     /// <summary>Derives the petname for a content hash.</summary>
     /// <param name="hashHex">The content hash, as <c>sha256/&lt;hex64&gt;</c> or a bare hex string (any length ≥ 6
@@ -42,11 +52,12 @@ public static class ContentPetname {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: hashHex);
 
         var hex = (hashHex.StartsWith(
-            value: "sha256/",
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            value: "sha256/"
         )
             ? hashHex["sha256/".Length..]
-            : hashHex);
+            : hashHex
+        );
 
         if (hex.Length < 6) {
             throw new ArgumentException(
@@ -70,14 +81,4 @@ public static class ContentPetname {
 
         return $"{FirstWords[firstIndex]}-{SecondWords[secondIndex]}-{NumberWords[numberIndex]}";
     }
-
-    // Parses a two-hex-character byte at the given character offset (offsets are always even, from hex64 input).
-    private static int ParseByte(string hex, int offset) =>
-        byte.Parse(
-        s: hex.AsSpan(
-            start: offset,
-            length: 2
-        ),
-        style: System.Globalization.NumberStyles.HexNumber
-    );
 }

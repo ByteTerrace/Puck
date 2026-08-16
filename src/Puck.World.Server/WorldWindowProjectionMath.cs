@@ -22,11 +22,10 @@ public readonly record struct WorldFaceGeometry(Vector3 Origin, Vector3 Right, V
         Right: frame.Right.ToVector3(),
         Up: frame.Up.ToVector3(),
         Normal: frame.Normal.ToVector3(),
-        HalfWidth: (float)(double)frame.HalfWidth,
-        HalfHeight: (float)(double)frame.HalfHeight
+        HalfWidth: ((float)((double)frame.HalfWidth)),
+        HalfHeight: ((float)((double)frame.HalfHeight))
     );
 }
-
 /// <summary>
 /// Presentation-float border-window math: maps a viewer's eye through a mapped border pair's isometry into the
 /// destination side. It is the float mirror of <see cref="WorldFrameIsometry.MapPoint"/>, kept separate because
@@ -70,10 +69,19 @@ public static class WorldWindowProjectionMath {
     /// <returns>The mapped point, in destination-world space.</returns>
     public static Vector3 MapPoint(Vector3 point, WorldFaceGeometry source, WorldFaceGeometry destination) {
         var offset = (point - source.Origin);
-        var u = Vector3.Dot(vector1: offset, vector2: source.Right);
-        var v = Vector3.Dot(vector1: offset, vector2: source.Up);
-        var n = Vector3.Dot(vector1: offset, vector2: source.Normal);
+        var u = Vector3.Dot(
+            vector1: offset,
+            vector2: source.Right
+        );
+        var v = Vector3.Dot(
+            vector1: offset,
+            vector2: source.Up
+        );
+        var n = Vector3.Dot(
+            vector1: offset,
+            vector2: source.Normal
+        );
 
-        return (destination.Origin - (u * destination.Right) + (v * destination.Up) - (n * destination.Normal));
+        return (((destination.Origin - (u * destination.Right)) + (v * destination.Up)) - (n * destination.Normal));
     }
 }

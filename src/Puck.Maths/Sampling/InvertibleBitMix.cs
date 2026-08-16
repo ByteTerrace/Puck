@@ -62,7 +62,7 @@ public static class InvertibleBitMix {
         unchecked {
             value ^= (value >>> FirstShift);
             value *= SecondMultiplierInverse;
-            value ^= ((value >>> MiddleShift) ^ (value >>> (2 * MiddleShift)));
+            value ^= (value >>> MiddleShift) ^ (value >>> (2 * MiddleShift));
             value *= FirstMultiplierInverse;
             value ^= (value >>> FirstShift);
 

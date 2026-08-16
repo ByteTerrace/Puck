@@ -44,19 +44,14 @@ internal static class PresentedModuleClaims {
             Left: new FixedScalarRing(Value: ((offset == index) ? FixedQ4816.One : FixedQ4816.Zero)),
             Right: new FixedScalarRing(Value: (((offset + 1) == index) ? FixedQ4816.One : FixedQ4816.Zero))
         );
-
     private static DoublingAlgebra<DoublingAlgebra<FixedScalarRing>> UnitQuaternion(int index, int offset) =>
         new(Left: UnitComplex(index: index, offset: offset), Right: UnitComplex(index: index, offset: (offset + 2)));
-
     private static Floor3 UnitOctonionAt(int index, int offset) =>
         new(Left: UnitQuaternion(index: index, offset: offset), Right: UnitQuaternion(index: index, offset: (offset + 4)));
-
     private static Floor3 UnitOctonion(int index) =>
         UnitOctonionAt(index: index, offset: 0);
-
     private static Floor4 UnitSedenion(int index) =>
         new(Left: UnitOctonionAt(index: index, offset: 0), Right: UnitOctonionAt(index: index, offset: 8));
-
     private static void WriteOctonionLanes(Floor3 value, Span<long> lanes) {
         lanes[0] = value.Left.Left.Left.Value.Value;
         lanes[1] = value.Left.Left.Right.Value.Value;
@@ -67,14 +62,12 @@ internal static class PresentedModuleClaims {
         lanes[6] = value.Right.Right.Left.Value.Value;
         lanes[7] = value.Right.Right.Right.Value.Value;
     }
-
     private static void WriteSedenionLanes(Floor4 value, Span<long> lanes) {
         WriteOctonionLanes(value: value.Left, lanes: lanes[..8]);
-        WriteOctonionLanes(value: value.Right, lanes: lanes.Slice(start: 8, length: 8));
+        WriteOctonionLanes(value: value.Right, lanes: lanes.Slice(length: 8, start: 8));
     }
-
     private static Term Bracket(Term left, Term right) =>
-        Term.Node(symbol: Term.Product, children: [left, right]);
+        Term.Node(children: [left, right], symbol: Term.Product);
 
     /// <summary>Proves that the LIVE-associator normalizer's <c>TryNormalize</c> output, at every ordered basis
     /// triple of both bracketing shapes, equals <see cref="DoublingAlgebra{TInner}"/>'s own hand-written nested
@@ -85,7 +78,7 @@ internal static class PresentedModuleClaims {
         // ---- octonion floor: 8^3 = 512 ordered triples, both bracketing shapes, against Floor3 (DoublingAlgebra over
         // the quaternion floor's own eight-product fused kernel — DoublingAlgebra.cs:265-337). ----
         var octonionAlgebra = PresentedAlgebra<FixedQ4816, FixedMaterial>.Create(
-            presentation: Presentations.CayleyDickson<FixedQ4816, FixedMaterial>(floors: 3, basisRelabelling: [], material: default, liveAssociator: true));
+            presentation: Presentations.CayleyDickson<FixedQ4816, FixedMaterial>(basisRelabelling: [], floors: 3, liveAssociator: true, material: default));
         var octonionWritten = new long[8];
         var octonionMoved = 0;
 
@@ -97,11 +90,11 @@ internal static class PresentedModuleClaims {
                     var nestedValue = Floor3.Multiply(left: UnitOctonion(index: first), right: Floor3.Multiply(left: UnitOctonion(index: second), right: UnitOctonion(index: third)));
                     var flatValue = Floor3.Multiply(left: Floor3.Multiply(left: UnitOctonion(index: first), right: UnitOctonion(index: second)), right: UnitOctonion(index: third));
 
-                    if (!octonionAlgebra.TryNormalize(term: nestedTerm, stepLimit: NormalizationSteps, normalForm: out var nestedForm, obstruction: out var nestedObstruction)) {
+                    if (!octonionAlgebra.TryNormalize(normalForm: out var nestedForm, obstruction: out var nestedObstruction, stepLimit: NormalizationSteps, term: nestedTerm)) {
                         return $"cayley-dickson(3, live): the right-nested triple ({first},{second},{third}) did not normalize (steps={nestedObstruction.StepsTaken} blocked={nestedObstruction.BlockedKey})";
                     }
 
-                    WriteOctonionLanes(value: nestedValue, lanes: octonionWritten);
+                    WriteOctonionLanes(lanes: octonionWritten, value: nestedValue);
 
                     for (var lane = 0; (lane < 8); ++lane) {
                         if (nestedForm[lane].Value != octonionWritten[lane]) {
@@ -109,11 +102,11 @@ internal static class PresentedModuleClaims {
                         }
                     }
 
-                    if (!octonionAlgebra.TryNormalize(term: flatTerm, stepLimit: NormalizationSteps, normalForm: out var flatForm, obstruction: out var flatObstruction)) {
+                    if (!octonionAlgebra.TryNormalize(normalForm: out var flatForm, obstruction: out var flatObstruction, stepLimit: NormalizationSteps, term: flatTerm)) {
                         return $"cayley-dickson(3, live): the left-normed triple ({first},{second},{third}) did not normalize (steps={flatObstruction.StepsTaken} blocked={flatObstruction.BlockedKey})";
                     }
 
-                    WriteOctonionLanes(value: flatValue, lanes: octonionWritten);
+                    WriteOctonionLanes(lanes: octonionWritten, value: flatValue);
 
                     for (var lane = 0; (lane < 8); ++lane) {
                         if (flatForm[lane].Value != octonionWritten[lane]) {
@@ -132,7 +125,7 @@ internal static class PresentedModuleClaims {
 
         // ---- sedenion floor: 16^3 = 4096 ordered triples, both bracketing shapes, against Floor4. ----
         var sedenionAlgebra = PresentedAlgebra<FixedQ4816, FixedMaterial>.Create(
-            presentation: Presentations.CayleyDickson<FixedQ4816, FixedMaterial>(floors: 4, basisRelabelling: [], material: default, liveAssociator: true));
+            presentation: Presentations.CayleyDickson<FixedQ4816, FixedMaterial>(basisRelabelling: [], floors: 4, liveAssociator: true, material: default));
         var sedenionWritten = new long[16];
         var sedenionMoved = 0;
 
@@ -144,11 +137,11 @@ internal static class PresentedModuleClaims {
                     var nestedValue = Floor4.Multiply(left: UnitSedenion(index: first), right: Floor4.Multiply(left: UnitSedenion(index: second), right: UnitSedenion(index: third)));
                     var flatValue = Floor4.Multiply(left: Floor4.Multiply(left: UnitSedenion(index: first), right: UnitSedenion(index: second)), right: UnitSedenion(index: third));
 
-                    if (!sedenionAlgebra.TryNormalize(term: nestedTerm, stepLimit: NormalizationSteps, normalForm: out var nestedForm, obstruction: out var nestedObstruction)) {
+                    if (!sedenionAlgebra.TryNormalize(normalForm: out var nestedForm, obstruction: out var nestedObstruction, stepLimit: NormalizationSteps, term: nestedTerm)) {
                         return $"cayley-dickson(4, live): the right-nested triple ({first},{second},{third}) did not normalize (steps={nestedObstruction.StepsTaken} blocked={nestedObstruction.BlockedKey})";
                     }
 
-                    WriteSedenionLanes(value: nestedValue, lanes: sedenionWritten);
+                    WriteSedenionLanes(lanes: sedenionWritten, value: nestedValue);
 
                     for (var lane = 0; (lane < 16); ++lane) {
                         if (nestedForm[lane].Value != sedenionWritten[lane]) {
@@ -156,11 +149,11 @@ internal static class PresentedModuleClaims {
                         }
                     }
 
-                    if (!sedenionAlgebra.TryNormalize(term: flatTerm, stepLimit: NormalizationSteps, normalForm: out var flatForm, obstruction: out var flatObstruction)) {
+                    if (!sedenionAlgebra.TryNormalize(normalForm: out var flatForm, obstruction: out var flatObstruction, stepLimit: NormalizationSteps, term: flatTerm)) {
                         return $"cayley-dickson(4, live): the left-normed triple ({first},{second},{third}) did not normalize (steps={flatObstruction.StepsTaken} blocked={flatObstruction.BlockedKey})";
                     }
 
-                    WriteSedenionLanes(value: flatValue, lanes: sedenionWritten);
+                    WriteSedenionLanes(lanes: sedenionWritten, value: flatValue);
 
                     for (var lane = 0; (lane < 16); ++lane) {
                         if (flatForm[lane].Value != sedenionWritten[lane]) {
@@ -179,7 +172,6 @@ internal static class PresentedModuleClaims {
 
         return null;
     }
-
     /// <summary>MIRROR of <c>presented.reassociation-route-coherent</c>'s quadruple-bracketing statement at strictly
     /// stronger operands. Proves that all five bracketings of EVERY ordered quadruple of the live sedenion
     /// floor (16⁴ = 65,536 quadruples) normalize to their own nested <c>Multiply</c> chain — the full cross product the
@@ -187,7 +179,7 @@ internal static class PresentedModuleClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? SedenionQuadrupleBracketingsExhaustive() {
         var algebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(
-            presentation: Presentations.CayleyDickson<BigInteger, IntegerMaterial>(floors: 4, basisRelabelling: [], material: default, liveAssociator: true));
+            presentation: Presentations.CayleyDickson<BigInteger, IntegerMaterial>(basisRelabelling: [], floors: 4, liveAssociator: true, material: default));
         var basis = new PresentedAlgebra<BigInteger, IntegerMaterial>.Element[16];
 
         for (var key = 0; (key < 16); ++key) {

@@ -11,7 +11,7 @@ namespace Puck.Text;
 /// of that encoded band in em units; multiplying it by the on-screen pixels-per-em gives the
 /// <em>screen pixel range</em>, the band width in destination pixels, which sets the slope of the
 /// anti-aliasing ramp. The naming follows the committed atlas metadata's own convention (see the
-/// font-atlas bake pipeline, <c>experimental/tools/font-atlas</c>).
+/// imported MTSDF oracle atlas).
 /// </remarks>
 public static class MtsdfSampling {
     /// <summary>
@@ -71,9 +71,9 @@ public static class MtsdfSampling {
                     glyph: glyph
                 )
             )
-            : 1.0f);
+            : 1.0f
+        );
     }
-
     /// <summary>
     /// Computes the screen pixels per em for a glyph rendered into a destination rectangle, taking the
     /// worst case of the two axes so the anti-aliasing band never under-covers when the aspect ratio is
@@ -153,7 +153,6 @@ public static class MtsdfSampling {
             _ => TextGlyphSamplingMode.Mask
         };
     }
-
     /// <summary>Reconstructs the true signed distance for a multi-channel field by taking the median of its three channel pseudo-distances.</summary>
     /// <param name="first">The first channel's pseudo-distance.</param>
     /// <param name="second">The second channel's pseudo-distance.</param>

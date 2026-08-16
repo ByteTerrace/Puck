@@ -41,6 +41,7 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     private const int RomBankSize = 0x4000;
 
     private readonly int m_ramBankWrapMask;
+
     // The machine's shared IR transceiver, injected by the component factory (null when built bare in a test — then the IR
     // window keeps its lone-hardware behaviour: dark reads, dropped writes). Host wiring, never serialized.
     private IInfrared? m_infrared;
@@ -73,7 +74,6 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Lcd;
-
     /// <inheritdoc/>
     public IInfrared? Infrared {
         set => m_infrared = value;
@@ -94,11 +94,11 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
 
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[0..],
-            value: (uint)m_minutes
+            value: ((uint)m_minutes)
         );
         BinaryPrimitives.WriteUInt32LittleEndian(
             destination: span[4..],
-            value: (uint)m_days
+            value: ((uint)m_days)
         );
         BinaryPrimitives.WriteInt64LittleEndian(
             destination: span[8..],
@@ -116,11 +116,10 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
         // Masked to the three/four nibbles the write protocol itself can produce; the trailing timestamp is
         // deliberately ignored (the deterministic clock resumes, never advancing from wall time), and the
         // sub-minute prescaler restarts.
-        m_minutes = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0xFFF);
-        m_days = (int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0xFFF);
+        m_minutes = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[0..]) & 0xFFF));
+        m_days = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: source[4..]) & 0xFFF));
         m_dotAccumulator = 0;
     }
-
     /// <inheritdoc/>
     public void Tick() {
         // Determinism: the sole time source is the emulated LCD clock.
@@ -170,9 +169,9 @@ public sealed class HuC3Cartridge : CartridgeBase, IClockedComponent, IInfraredC
         ? (byte)0x01
         : (byte)m_readValue),
             ModeStatus => 0x01,
-            ModeInfrared => (byte)((m_infrared?.ReceivedLight ?? false)
+            ModeInfrared => ((byte)((m_infrared?.ReceivedLight ?? false)
         ? 0x01
-        : 0x00),
+        : 0x00)),
             _ => 0x01,
         };
     /// <summary>Writes to the external window according to the selected mode: banked RAM, an RTC command, or nothing —

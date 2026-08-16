@@ -15,7 +15,7 @@ namespace Puck.HumbleGamingBrick;
 /// which is what lets <see cref="Snapshot"/> capture the machine completely.
 /// </para>
 /// </summary>
-public sealed class Machine {
+public sealed class Machine : ISnapshotableMachine {
     private readonly ICpu? m_busMaster;
     private readonly ComponentClock m_componentClock;
     private readonly MachineIdentity m_identity;
@@ -26,6 +26,7 @@ public sealed class Machine {
     private readonly ISnapshotable[] m_snapshotables;
     private readonly string[] m_snapshotableNames;
     private readonly StateWriter m_stateWriter = new();
+
     private ulong m_runTargetCycles;
 
     /// <summary>Assembles a machine from the clock and the services resolved for its scope.</summary>
@@ -118,7 +119,7 @@ public sealed class Machine {
     /// a reboot. It re-gates every color-path component, and on a Color→monochrome demote repages the switchable RAM to
     /// its DMG-equivalent banks and drops double speed so the game's now-monochrome code addresses shared state and
     /// times correctly (the Color banks 2–7 / VRAM bank 1 survive un-paged, cartridge-move style). Finally it applies
-    /// the per-ROM <paramref name="pokes"/> — the small set of cached hardware-detection bytes that flip a GB-compatible
+    /// the per-ROM <paramref name="pokes"/> — the small set of cached hardware-detection bytes that flip an SM83-compatible
     /// game onto the target model's own code path, so it re-renders natively. Progress in shared RAM is untouched. Call
     /// only between frames (the machine idle at an instruction boundary), never mid-step.</summary>
     /// <param name="model">The model to switch to.</param>
@@ -147,7 +148,6 @@ public sealed class Machine {
             );
         }
     }
-
     /// <summary>Advances the machine by exactly one CPU T-cycle (one dot at normal speed), ticking every component in
     /// domain-aware lockstep. This is the finest step for a component-driven machine; a machine with a bus master is
     /// instruction-atomic, so advance it with <see cref="StepInstruction"/> or <see cref="Run(ulong)"/> instead.</summary>
@@ -233,7 +233,6 @@ public sealed class Machine {
             )
         );
     }
-
     /// <summary>Serializes the machine's entire mutable state into a writer, in the same clock-first, then-each-component
     /// order <see cref="Snapshot"/> uses — but without the section table or a materialized snapshot image. The
     /// zero-copy producer half of a pooled fork: the sibling reads it straight back through <see cref="RestoreState"/>.</summary>
@@ -245,7 +244,6 @@ public sealed class Machine {
             snapshotable.SaveState(writer: writer);
         }
     }
-
     /// <summary>Reads the machine's entire mutable state back from a reader positioned at the start of a serialized
     /// image, repositioning the clock and every component and re-deriving model gates — the shared body of both
     /// <see cref="Restore"/> and a pooled fork. It performs no identity check (callers that need one check before

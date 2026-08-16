@@ -15,84 +15,6 @@ internal static class JsonText {
     /// <param name="Length">The number of characters the value occupies.</param>
     internal readonly record struct ValueSpan(int Start, int Length);
 
-    /// <summary>
-    /// Locates the string value at <c>entries[<paramref name="id"/>].sha256</c>.
-    /// </summary>
-    /// <param name="json">The manifest text.</param>
-    /// <param name="id">The manifest entry id, matched exactly against a key of the <c>entries</c> object.</param>
-    /// <returns>The recorded hash's span including its quotes, or <see langword="null"/> when that path does not exist.</returns>
-    public static ValueSpan? FindRecordedHash(string json, string id) {
-        var root = SkipWhitespace(
-            json: json,
-            index: 0
-        );
-
-        if (
-            (root >= json.Length) ||
-            (json[root] != '{')
-        ) {
-            return null;
-        }
-
-        if (FindMember(
-            json: json,
-            objectStart: root,
-            name: "entries"
-        ) is not int entries) {
-            return null;
-        }
-
-        if (
-            (entries >= json.Length) ||
-            (json[entries] != '{') ||
-            (FindMember(
-            json: json,
-            objectStart: entries,
-            name: id
-        ) is not int entry)
-        ) {
-            return null;
-        }
-
-        if (
-            (entry >= json.Length) ||
-            (json[entry] != '{') ||
-            (FindMember(
-            json: json,
-            objectStart: entry,
-            name: "sha256"
-        ) is not int hash)
-        ) {
-            return null;
-        }
-
-        if (
-            (hash >= json.Length) ||
-            (json[hash] != '"')
-        ) {
-            return null;
-        }
-
-        var end = SkipValue(
-            json: json,
-            index: hash
-        );
-
-        return ((end < 0)
-            ? null
-            : new ValueSpan(
-            Start: hash,
-            Length: (end - hash)
-        ));
-    }
-
-    /// <summary>Replaces the value at <paramref name="span"/> with <paramref name="replacement"/>, leaving every other character untouched.</summary>
-    public static string Replace(string json, ValueSpan span, string replacement) =>
-        ((json.Substring(
-        startIndex: 0,
-        length: span.Start
-    ) + replacement) + json.Substring(startIndex: (span.Start + span.Length)));
-
     /// <summary>Finds the value of the member named <paramref name="name"/> directly inside the object opening at <paramref name="objectStart"/>.</summary>
     /// <returns>The index of the value's first character, or <see langword="null"/> when the object has no such member.</returns>
     private static int? FindMember(string json, int objectStart, string name) {
@@ -104,8 +26,8 @@ internal static class JsonText {
         }
 
         var index = SkipWhitespace(
-            json: json,
-            index: (objectStart + 1)
+            index: (objectStart + 1),
+            json: json
         );
 
         if (
@@ -117,22 +39,22 @@ internal static class JsonText {
 
         while (index < json.Length) {
             index = SkipWhitespace(
-                json: json,
-                index: index
+                index: index,
+                json: json
             );
 
             if (!TryReadString(
-                json: json,
                 index: index,
-                value: out var key,
-                next: out var afterKey
+                json: json,
+                next: out var afterKey,
+                value: out var key
             )) {
                 return null;
             }
 
             index = SkipWhitespace(
-                json: json,
-                index: afterKey
+                index: afterKey,
+                json: json
             );
 
             if (
@@ -143,8 +65,8 @@ internal static class JsonText {
             }
 
             index = SkipWhitespace(
-                json: json,
-                index: (index + 1)
+                index: (index + 1),
+                json: json
             );
 
             if (index >= json.Length) {
@@ -160,8 +82,8 @@ internal static class JsonText {
             }
 
             var afterValue = SkipValue(
-                json: json,
-                index: index
+                index: index,
+                json: json
             );
 
             if (afterValue < 0) {
@@ -169,8 +91,8 @@ internal static class JsonText {
             }
 
             index = SkipWhitespace(
-                json: json,
-                index: afterValue
+                index: afterValue,
+                json: json
             );
 
             if (
@@ -185,7 +107,6 @@ internal static class JsonText {
 
         return null;
     }
-
     /// <summary>The index just past the value starting at <paramref name="index"/>, or -1 when the text is malformed.</summary>
     private static int SkipValue(string json, int index) {
         if (index >= json.Length) {
@@ -196,13 +117,14 @@ internal static class JsonText {
 
         if (start == '"') {
             return (TryReadString(
-                json: json,
                 index: index,
-                value: out _,
-                next: out var afterString
+                json: json,
+                next: out var afterString,
+                value: out _
             )
                 ? afterString
-                : -1);
+                : -1
+            );
         }
 
         if (
@@ -216,10 +138,10 @@ internal static class JsonText {
 
                 if (character == '"') {
                     if (!TryReadString(
-                        json: json,
                         index: index,
-                        value: out _,
-                        next: out var afterString
+                        json: json,
+                        next: out var afterString,
+                        value: out _
                     )) {
                         return -1;
                     }
@@ -257,6 +179,16 @@ internal static class JsonText {
             (json[index] != '}') &&
             (json[index] != ']') &&
             !char.IsWhiteSpace(c: json[index])
+        ) {
+            index++;
+        }
+
+        return index;
+    }
+    private static int SkipWhitespace(string json, int index) {
+        while (
+            (index < json.Length) &&
+            char.IsWhiteSpace(c: json[index])
         ) {
             index++;
         }
@@ -318,8 +250,8 @@ internal static class JsonText {
 
             if (!ushort.TryParse(
                 s: json.Substring(
-                    startIndex: index,
-                    length: 4
+                    length: 4,
+                    startIndex: index
                 ),
                 style: NumberStyles.AllowHexSpecifier,
                 provider: CultureInfo.InvariantCulture,
@@ -328,20 +260,88 @@ internal static class JsonText {
                 return false;
             }
 
-            builder.Append(value: (char)codeUnit);
+            builder.Append(value: ((char)codeUnit));
             index += 4;
         }
 
         return false;
     }
-    private static int SkipWhitespace(string json, int index) {
-        while (
-            (index < json.Length) &&
-            char.IsWhiteSpace(c: json[index])
+
+    /// <summary>
+    /// Locates the string value at <c>entries[<paramref name="id"/>].sha256</c>.
+    /// </summary>
+    /// <param name="json">The manifest text.</param>
+    /// <param name="id">The manifest entry id, matched exactly against a key of the <c>entries</c> object.</param>
+    /// <returns>The recorded hash's span including its quotes, or <see langword="null"/> when that path does not exist.</returns>
+    public static ValueSpan? FindRecordedHash(string json, string id) {
+        var root = SkipWhitespace(
+            index: 0,
+            json: json
+        );
+
+        if (
+            (root >= json.Length) ||
+            (json[root] != '{')
         ) {
-            index++;
+            return null;
         }
 
-        return index;
+        if (FindMember(
+            json: json,
+            name: "entries",
+            objectStart: root
+        ) is not int entries) {
+            return null;
+        }
+
+        if (
+            (entries >= json.Length) ||
+            (json[entries] != '{') ||
+            (FindMember(
+            json: json,
+            name: id,
+            objectStart: entries
+        ) is not int entry)
+        ) {
+            return null;
+        }
+
+        if (
+            (entry >= json.Length) ||
+            (json[entry] != '{') ||
+            (FindMember(
+            json: json,
+            name: "sha256",
+            objectStart: entry
+        ) is not int hash)
+        ) {
+            return null;
+        }
+
+        if (
+            (hash >= json.Length) ||
+            (json[hash] != '"')
+        ) {
+            return null;
+        }
+
+        var end = SkipValue(
+            index: hash,
+            json: json
+        );
+
+        return ((end < 0)
+            ? null
+            : new ValueSpan(
+                Length: (end - hash),
+                Start: hash
+            )
+        );
     }
+    /// <summary>Replaces the value at <paramref name="span"/> with <paramref name="replacement"/>, leaving every other character untouched.</summary>
+    public static string Replace(string json, ValueSpan span, string replacement) =>
+        ((json.Substring(
+            startIndex: 0,
+            length: span.Start
+        ) + replacement) + json.Substring(startIndex: (span.Start + span.Length)));
 }

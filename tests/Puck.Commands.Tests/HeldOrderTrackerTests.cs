@@ -18,7 +18,6 @@ public sealed class HeldOrderTrackerTests {
         Assert.True(condition: tracker.Set(index: 0, value: 0.2f));   // crosses release → unlatched
         Assert.Equal(expected: 0, actual: tracker.Count);
     }
-
     [Fact]
     public void HeldOrderRecoversPressOrder() {
         var tracker = new HeldOrderTracker(modifierCount: 3, pressThreshold: 0.5f, releaseThreshold: 0.25f);
@@ -28,7 +27,6 @@ public sealed class HeldOrderTrackerTests {
 
         Assert.Equal(expected: [2, 0], actual: tracker.HeldOrder.ToArray());
     }
-
     [Fact]
     public void SignalOverloadReleasesOnACompletedEdgeWhateverValueItCarries() {
         var tracker = new HeldOrderTracker(modifierCount: 1, pressThreshold: 0.5f, releaseThreshold: 0.25f);
@@ -39,7 +37,6 @@ public sealed class HeldOrderTrackerTests {
         Assert.True(condition: tracker.Set(index: 0, signal: InputSignal.Release(source: "trigger")));
         Assert.Equal(expected: 0, actual: tracker.Count);
     }
-
     [Fact]
     public void ResetReleasesEveryModifier() {
         var tracker = new HeldOrderTracker(modifierCount: 2, pressThreshold: 0.5f, releaseThreshold: 0.25f);
@@ -50,7 +47,6 @@ public sealed class HeldOrderTrackerTests {
 
         Assert.Equal(expected: 0, actual: tracker.Count);
     }
-
     [Fact]
     public void MismatchedPerModifierThresholdListsAreRefused() {
         _ = Assert.Throws<ArgumentException>(testCode: static () => new HeldOrderTracker(pressThresholds: [0.5f, 0.5f], releaseThresholds: [0.25f]));

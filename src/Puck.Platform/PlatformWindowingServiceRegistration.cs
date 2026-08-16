@@ -1,17 +1,18 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Puck.Platform.Windows;
 
 namespace Puck.Platform;
 
 /// <summary>
-/// Registers the concrete native-windowing stack: the display-environment probe, platform-window support, the clipboard
-/// service (Win32 or a no-op), and the native window factory. The composition root calls this to supply the platform
-/// IMPLEMENTATIONS behind the windowing contract that the generic launcher consumes — so the launcher itself references
-/// nothing platform-specific.
+/// Registers the OS-neutral half of the native-windowing stack: the display-environment probe, platform-window
+/// support, and the native window factory (which dispatches over whatever <see cref="INativeWindowBackend"/>s are
+/// registered). The composition root calls this AND one of <c>Puck.Platform.Windows</c>'s
+/// <c>AddWindowsPlatformWindowing</c> or <c>Puck.Platform.Linux</c>'s <c>AddLinuxPlatformWindowing</c> — the latter
+/// contributes the concrete clipboard service and window backend(s), so this method alone leaves no
+/// <see cref="IClipboardService"/> and no window backend registered.
 /// </summary>
 public static class PlatformWindowingServiceRegistration {
-    /// <summary>Registers the native window factory + its supporting platform services.</summary>
+    /// <summary>Registers the display probe, platform support, and native window factory.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The same service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
@@ -20,10 +21,6 @@ public static class PlatformWindowingServiceRegistration {
 
         services.TryAddSingleton<INativeDisplayEnvironment, NativeDisplayEnvironment>();
         services.TryAddSingleton<INativeWindowPlatformSupport, NativeWindowPlatformSupport>();
-        services.TryAddSingleton<IClipboardService>(implementationFactory: static sp =>
-            ((sp.GetRequiredService<INativeWindowPlatformSupport>().CurrentDisplayKind == NativeDisplayKind.Win32)
-                ? new Win32ClipboardService()
-                : new NullClipboardService()));
         services.TryAddSingleton<INativeWindowFactory, NativeWindowFactory>();
 
         return services;

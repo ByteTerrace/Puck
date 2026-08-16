@@ -1,11 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <PuckKind>Tool</PuckKind>
-    </PropertyGroup>
-    <PropertyGroup>
+        <AssemblyName>Puck.Cli</AssemblyName>
         <IsAotCompatible>false</IsAotCompatible>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
         <OutputType>Exe</OutputType>
+        <PuckKind>Tool</PuckKind>
         <RootNamespace>Puck.Cli</RootNamespace>
         <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
         <ServerGarbageCollection>true</ServerGarbageCollection>
@@ -19,9 +18,11 @@
         <PackageReference Include="Resharp" Version="[1.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
-        <ProjectReference Include="..\Puck.World.Data\Puck.World.Data.csproj" />
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">
         <Copy

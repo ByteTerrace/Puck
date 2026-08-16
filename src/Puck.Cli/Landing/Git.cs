@@ -27,7 +27,6 @@ internal static class Git {
 
         return output;
     }
-
     /// <summary>Indicates whether <paramref name="candidate"/> is an ancestor of <paramref name="descendant"/>.</summary>
     /// <param name="candidate">The possible ancestor.</param>
     /// <param name="descendant">The commit to test against.</param>
@@ -53,7 +52,6 @@ internal static class Git {
 
         return (process.ExitCode == 0);
     }
-
     /// <summary>Resolves a revision to its full object name, refusing an unknown one by name rather than letting a
     /// typo'd ref resolve to nothing and read as a clean landing.</summary>
     /// <param name="revision">The revision to resolve.</param>

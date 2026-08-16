@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.World.Addons;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -16,6 +16,9 @@ namespace Puck.World;
 internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldEditorSession editor, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances) : IFixedStepSimulation {
     private const ulong TimingReportInterval = 60UL;
 
+    private ulong m_timingSamples;
+    private SimulationTiming m_timingWorst;
+
     private readonly WorldServer m_server = server;
     private readonly WorldClient m_client = client;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
@@ -25,8 +28,6 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldTcpHost m_tcpHost = tcpHost;
     private readonly WorldPerceptionAnchor m_anchor = anchor;
     private readonly WorldInstanceHost m_instances = instances;
-    private SimulationTiming m_timingWorst;
-    private ulong m_timingSamples;
 
     /// <summary>The mounted addon runtime this shell holds — never called from here: the addon principals tick INSIDE
     /// <see cref="WorldServer.Step"/>, at its own three pinned points. It is a CONSTRUCTOR DEPENDENCY so that DI
@@ -35,14 +36,46 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     /// world silently addon-less.</summary>
     public WorldAddonRuntime Addons { get; } = addons;
 
+    /// <summary>The exact engine time completed by the authoritative simulation.</summary>
+    public ulong ElapsedTicks { get; private set; }
+    /// <inheritdoc/>
+    public uint RatePerSecond => ((uint)m_server.Definition.SimulationRateHz);
     /// <summary>The number of fixed ticks completed.</summary>
     public ulong Tick { get; private set; }
 
-    /// <summary>The exact engine time completed by the authoritative simulation.</summary>
-    public ulong ElapsedTicks { get; private set; }
+    private void ReportTiming(SimulationTiming sample) {
+        m_timingSamples++;
 
-    /// <inheritdoc/>
-    public uint RatePerSecond => (uint)m_server.Definition.SimulationRateHz;
+        if (sample.TotalTicks >= m_timingWorst.TotalTicks) {
+            m_timingWorst = sample;
+        }
+
+        if (0UL != (m_timingSamples % TimingReportInterval)) {
+            return;
+        }
+
+        var worst = m_timingWorst;
+        var frequency = Stopwatch.Frequency;
+
+        static double ToMs(long ticks, long frequency) =>
+            ((((double)ticks) * 1000.0) / frequency);
+
+        Console.Error.WriteLine(value: $"[frame-timing] world-simulation worst-of-{TimingReportInterval} tick {worst.Tick} total {ToMs(
+            ticks: worst.TotalTicks,
+            frequency: frequency
+        ):0.000}ms | population {ToMs(
+            ticks: worst.PopulationTicks,
+            frequency: frequency
+        ):0.000} | roster {ToMs(
+            ticks: worst.RosterTicks,
+            frequency: frequency
+        ):0.000} | finish {ToMs(
+            ticks: worst.FinishTicks,
+            frequency: frequency
+        ):0.000}");
+
+        m_timingWorst = default;
+    }
 
     /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
@@ -53,7 +86,10 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         // ShouldStepBoot can refuse a call whose pump-supplied width no longer matches boot's current rate.
         var stepsBoot = m_instances.ShouldStepBoot(stepTicks: context.StepTicks);
 
-        var phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
+        var phaseStart = (timingEnabled
+            ? Stopwatch.GetTimestamp()
+            : 0L
+        );
 
         // Seat intents are simulation input, submitted only when boot will actually consume them this call. A
         // paused/rate-0 boot world behaves as if no ticks existed: held seat input is never buffered into the
@@ -61,11 +97,21 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         // uses this shell's own contiguous next-tick coordinate (frozen below while boot does not step), matching
         // what WorldServerStepShell.Step is about to report as the completed tick — never context.Tick + 1, the
         // pump's raw un-frozen cursor (see the bootContext remarks below).
-        m_instances.PrepareBootSeatIntents(stepsBoot: stepsBoot, tick: (Tick + 1UL), stepTicks: context.StepTicks);
+        m_instances.PrepareBootSeatIntents(
+            stepsBoot: stepsBoot,
+            tick: (Tick + 1UL),
+            stepTicks: context.StepTicks
+        );
 
-        var rosterTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
+        var rosterTicks = (timingEnabled
+            ? (Stopwatch.GetTimestamp() - phaseStart)
+            : 0L
+        );
 
-        phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
+        phaseStart = (timingEnabled
+            ? Stopwatch.GetTimestamp()
+            : 0L
+        );
 
         // The host-level pending-transfer FIFO's one fixed drain point — before either the boot instance or any
         // other instance steps this tick, mirroring where WorldServer.DrainPendingOps sits relative to the rest of
@@ -102,7 +148,13 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
                 Tick: Tick
             );
 
-            stepTick = WorldServerStepShell.Step(server: m_server, tape: m_replayTape, waitGate: m_waitGate, context: in bootContext, tcpHost: m_tcpHost);
+            stepTick = WorldServerStepShell.Step(
+                context: in bootContext,
+                server: m_server,
+                tape: m_replayTape,
+                tcpHost: m_tcpHost,
+                waitGate: m_waitGate
+            );
             m_instances.ScanBootBoundaryTriggers();
             // Frozen — not merely unchanged — while boot did not step: ElapsedTicks/Tick report the AUTHORITATIVE
             // simulation's own completed engine time, so a paused/stopped boot's read-back must show exactly the
@@ -141,23 +193,40 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         m_seatBindings.SyncDefinition(definition: m_client.Definition);
 
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-            m_seatBindings.SyncSeat(slot: slot, definition: m_instances.ResolveRoutedDefinition(slot: slot));
+            m_seatBindings.SyncSeat(
+                slot: slot,
+                definition: m_instances.ResolveRoutedDefinition(slot: slot)
+            );
         }
 
-        WorldSeatContextSync.Publish(seatBindings: m_seatBindings, roster: m_client.Roster, grants: m_server.Grants, anchor: m_anchor);
+        WorldSeatContextSync.Publish(
+            seatBindings: m_seatBindings,
+            roster: m_client.Roster,
+            grants: m_server.Grants,
+            anchor: m_anchor
+        );
 
         // Machine stepping runs INSIDE WorldServerStepShell.Step (Server.WorldMachineHost.Advance, called from
         // WorldServer.Step right after WorldEngagement.FoldTick), so its cost is already folded into
         // populationTicks below; there is no separate phase to time here.
-        var populationTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
+        var populationTicks = (timingEnabled
+            ? (Stopwatch.GetTimestamp() - phaseStart)
+            : 0L
+        );
 
-        phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
+        phaseStart = (timingEnabled
+            ? Stopwatch.GetTimestamp()
+            : 0L
+        );
         m_instances.FinishSeatIntents();
         // Promote this tick's staged editor-stick samples to the frame-visible latch (the editor camera's per-frame
         // integration cadence), beside the seats' own analog clear.
         m_editor.LatchTick();
 
-        var finishTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
+        var finishTicks = (timingEnabled
+            ? (Stopwatch.GetTimestamp() - phaseStart)
+            : 0L
+        );
 
         if (timingEnabled) {
             ReportTiming(sample: new SimulationTiming(
@@ -167,28 +236,6 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
                 FinishTicks: finishTicks
             ));
         }
-    }
-
-    private void ReportTiming(SimulationTiming sample) {
-        m_timingSamples++;
-
-        if (sample.TotalTicks >= m_timingWorst.TotalTicks) {
-            m_timingWorst = sample;
-        }
-
-        if (0UL != (m_timingSamples % TimingReportInterval)) {
-            return;
-        }
-
-        var worst = m_timingWorst;
-        var frequency = Stopwatch.Frequency;
-
-        static double ToMs(long ticks, long frequency) =>
-            (((double)ticks * 1000.0) / frequency);
-
-        Console.Error.WriteLine(value: $"[frame-timing] world-simulation worst-of-{TimingReportInterval} tick {worst.Tick} total {ToMs(ticks: worst.TotalTicks, frequency: frequency):0.000}ms | population {ToMs(ticks: worst.PopulationTicks, frequency: frequency):0.000} | roster {ToMs(ticks: worst.RosterTicks, frequency: frequency):0.000} | finish {ToMs(ticks: worst.FinishTicks, frequency: frequency):0.000}");
-
-        m_timingWorst = default;
     }
 
     private readonly record struct SimulationTiming(

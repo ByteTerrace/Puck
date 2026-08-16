@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
-using Puck.Abstractions.Gpu;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.Launcher;
 using Puck.SdfVm;
 using Puck.World.Protocol;
@@ -21,6 +21,504 @@ namespace Puck.World;
 /// (<see cref="PresentPacingControl"/>, <see cref="GpuTimingControl"/>), read by the frame source each captured frame.
 /// </summary>
 internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link) : ICommandModule {
+    // The anchor keyword for a camera's declared ride — kind plus the target it names, the stable token a piped proof
+    // asserts against. An unanchored camera's own offset IS its world position, so it reads 'none'.
+    private static string CameraAnchorKind(WorldAnchor? anchor) {
+        return anchor switch {
+            WorldAnchor.Entity entity => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"anchor=entity:{entity.Index}"
+        ),
+            WorldAnchor.EntityPart part => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"anchor=entityPart:{part.Index}/{part.PartId}"
+        ),
+            WorldAnchor.Placement placement => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"anchor=placement:{placement.PlacementId}{((placement.ShapeId is { } shape)
+            ? $"/{shape}"
+            : "")}"
+        ),
+            WorldAnchor.Group group => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"anchor=group:{((group.Indices is { } indices)
+            ? indices.Count.ToString(provider: CultureInfo.InvariantCulture)
+            : "all")}"
+        ),
+            _ => "anchor=none",
+        };
+    }
+    // Camera motion and aim are independent closed vocabularies.
+    private static string CameraRigKind(WorldCameraRig rig) {
+        var motion = rig.Motion switch {
+            WorldCameraMotion.Follow => "follow",
+            WorldCameraMotion.Orbit => "orbit",
+            WorldCameraMotion.Static => "static",
+            _ => "track",
+        };
+        var aim = rig.Aim switch {
+            WorldCameraAim.Anchor => "anchor",
+            WorldCameraAim.Forward => "forward",
+            _ => "worldPoint",
+        };
+
+        return $"motion={motion} aim={aim}";
+    }
+    // The world.cameras listing: one segment per declared camera — name, the anchor it rides, the rig it frames with,
+    // and its offscreen render dimensions. Reads the LIVE definition (never the boot snapshot), so a camera mutation's
+    // new row narrates honestly. A query (not AcknowledgementOnly): its listing always surfaces.
+    private CommandResult CamerasHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 0) {
+            return CommandResult.Error(output: "[world.cameras: no arguments — lists every declared camera]");
+        }
+
+        var cameras = server.Definition.Cameras;
+
+        if (cameras.Count == 0) {
+            return new CommandResult(Output: "[world.cameras: none declared]");
+        }
+
+        var builder = new StringBuilder(value: "[world.cameras:");
+
+        for (var index = 0; (index < cameras.Count); index++) {
+            var camera = cameras[index];
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{((index == 0)
+                ? " "
+                : " | ")}{camera.Name} {CameraAnchorKind(anchor: camera.Anchor)} {CameraRigKind(rig: camera.Rig)} {camera.RenderWidth}x{camera.RenderHeight}"
+            );
+        }
+
+        return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
+    /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
+    private string DescribeAdaptiveQuality(string verb, (string Configured, bool? Fast) modes, string exact, string fast) {
+        var resolved = ((modes.Fast ?? (population.SimulatedCount >= 16))
+            ? fast
+            : exact
+        );
+
+        return $"[{verb}: {modes.Configured} → {resolved} | simulated={population.SimulatedCount}]";
+    }
+    private string DescribeAmbientOcclusionQuality() =>
+        DescribeAdaptiveQuality(
+            verb: "world.ao-quality",
+            modes: settings.AmbientOcclusionQuality switch {
+                AmbientOcclusionMode.Exact => ("exact", false),
+                AmbientOcclusionMode.Fast => ("fast", true),
+                _ => ("auto", ((bool?)null)),
+            },
+            exact: "exact",
+            fast: "fast"
+        );
+    // The world.gpu readout: the previous frame's per-pass GPU ms, read live off the render probe's engine node.
+    private string DescribeGpu() {
+        if (renderProbe.Node is not { } node) {
+            return "[world.gpu: renderer not built yet]";
+        }
+
+        Span<double> passMilliseconds = stackalloc double[SdfEngineNode.PassTimingCount];
+
+        if (!node.TryReadPassTimings(
+            frame: out var frame,
+            passCount: out var passCount,
+            passMilliseconds: passMilliseconds
+        )) {
+            return "[world.gpu: timing off — world.timing on]";
+        }
+
+        var builder = new StringBuilder(value: "[world.gpu:");
+        var labels = SdfEngineNode.PassTimingLabels;
+
+        _ = builder.Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $" frame {frame:0.00}ms"
+        );
+
+        for (var index = 0; (index < passCount); index++) {
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" | {labels[index]} {passMilliseconds[index]:0.00}"
+            );
+        }
+
+        // The unified overlay decorator's own pass (a separate submit after the engine's) — appended once the
+        // overlay has drawn a timed frame.
+        if (renderProbe.Overlay is { } overlay) {
+            Span<double> overlayMilliseconds = stackalloc double[1];
+
+            if (
+                overlay.TryReadPassTimings(
+                frameMilliseconds: out _,
+                passCount: out var overlayCount,
+                passMilliseconds: overlayMilliseconds
+            ) &&
+                (overlayCount > 0)
+            ) {
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $" | overlay {overlayMilliseconds[0]:0.000}"
+                );
+            }
+        }
+
+        return builder.Append(value: ']').ToString();
+    }
+    // The world.quality echo: the current individual settings the preset (or a later override) left in place.
+    private string DescribeQuality() {
+        return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion
+            ? "on"
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
+    }
+    private string DescribeShadowMarch() =>
+        DescribeAdaptiveQuality(
+            verb: "world.shadow-march",
+            modes: settings.ShadowMarch switch {
+                ShadowMarchMode.Exact => ("exact", false),
+                ShadowMarchMode.Fast => ("fast", true),
+                _ => ("auto", ((bool?)null)),
+            },
+            exact: "exact",
+            fast: "fast"
+        );
+    private string DescribeShadowMask() =>
+        DescribeAdaptiveQuality(
+            verb: "world.shadow-mask",
+            modes: settings.ShadowMask switch {
+                ShadowMaskMode.ExactGather => ("exact", false),
+                ShadowMaskMode.CameraTile => ("camera-tile", true),
+                _ => ("auto", ((bool?)null)),
+            },
+            exact: "exact",
+            fast: "camera-tile"
+        );
+    // The FPS-target readout: a set rate paces to that Hz; 0 is automatic display pacing.
+    private static string DescribeTarget(double target) {
+        return ((target > 0.0)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{target:0.###} Hz — the display-aware pacer targets this rate"
+            )
+            : "display (automatic — verified VRR capabilities or active signal timing)"
+        );
+    }
+    // The world.far-field echo: both isolator lanes (F1 bound, F2 shadow exit) and their on/off state.
+    private static string FarFieldEcho(WorldRenderSettings settings) {
+        return $"[world.far-field: bound {(settings.FarBound
+            ? "on"
+            : "off")}, shadow {(settings.ShadowFarExit
+            ? "on"
+            : "off")}]";
+    }
+    // Shared on/off token parse for the boolean isolator verbs (null = unrecognized).
+    private static bool? ParseOnOff(ReadOnlySpan<char> token) {
+        if (token.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "on"
+        )) {
+            return true;
+        }
+
+        if (token.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "off"
+        )) {
+            return false;
+        }
+
+        return null;
+    }
+    private static string RenderScaleName(float scale) {
+        foreach (var tier in Enum.GetValues<WorldRenderScaleTier>()) {
+            if (MathF.Abs(x: (scale - WorldRenderScaleTiers.Scale(tier: tier))) <= (0.5f / 255f)) {
+                return WorldRenderScaleTiers.Name(tier: tier);
+            }
+        }
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"{(scale * 100f):0.#}%"
+        );
+    }
+    // The source-kind keyword for a screen's declared source — the stable token a piped proof asserts against.
+    private static string ScreenSourceKind(WorldScreenSource source) {
+        return source switch {
+            WorldScreenSource.TestPattern => "test-pattern",
+            WorldScreenSource.Machine machine => $"machine:{machine.Engine}",
+            WorldScreenSource.Camera => "camera",
+            WorldScreenSource.View => "view",
+            WorldScreenSource.Capture => "capture",
+            WorldScreenSource.Console => "console",
+            WorldScreenSource.Qr => "qr",
+            WorldScreenSource.Session session => $"session:{session.Destination}",
+            WorldScreenSource.Text text => $"text:{text.Lines.Count}-line",
+            _ => "none",
+        };
+    }
+    // The world.screens listing: one segment per declared screen — index, source kind, live bound/unbound state (a
+    // nonzero provider handle this frame), and engage policy. A query (not AcknowledgementOnly): its listing always surfaces, so a
+    // piped proof can assert the test-pattern screen is bound and the None screen stays unbound (procedural fallback).
+    private CommandResult ScreensHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 0) {
+            return CommandResult.Error(output: "[world.screens: no arguments — lists every declared screen]");
+        }
+
+        // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly.
+        var declaredScreens = server.Definition.Screens;
+
+        if (declaredScreens.Count == 0) {
+            return new CommandResult(Output: "[world.screens: none declared]");
+        }
+
+        var builder = new StringBuilder(value: "[world.screens:");
+
+        for (var index = 0; (index < declaredScreens.Count); index++) {
+            var screen = declaredScreens[index];
+            var bound = (screens.CurrentHandle(index: screen.Index) != 0);
+            // The engaged marker (only when players are engaged) — reflects the route state, kept bracket-agnostic so the
+            // proof regexes are undisturbed.
+            var engaged = server.Engagement.PlayersOn(screenIndex: screen.Index);
+            var engagedText = ((engaged.Count > 0)
+                ? $" engaged:{string.Join(
+                    separator: "+",
+                    values: engaged.Select(selector: static entry => (entry.Capture
+                    ? $"p{entry.Display}"
+                    : $"p{entry.Display}(mirror)"))
+                )}"
+                : ""
+            );
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{((index == 0)
+                ? " "
+                : " | ")}{screen.Index} {ScreenSourceKind(source: screen.Source)} {(bound
+                ? "bound"
+                : "unbound")} {(screen.Route.Engageable
+                ? "engageable"
+                : "fixed")}{engagedText}"
+            );
+        }
+
+        return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
+    // The world.shadow.accumulate echo.
+    private static string ShadowAccumulationEcho(WorldRenderSettings settings) {
+        return $"[world.shadow.accumulate: {(settings.ShadowAccumulation
+            ? "on"
+            : "off")}]";
+    }
+    private static string ShadowEcho(WorldRenderSettings settings) {
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##}]"
+        );
+    }
+    // The world.shadows echo: continuous reach plus crowd radius; named-notch values render through their facade.
+    // Submits one live presentation-knob write through the server's grant check (WorldServer.ApplySessionLever) instead
+    // of writing the injected service here. Defaults to the Render section because most of these knobs fold into it;
+    // world.target passes Host explicitly.
+    private void SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, double b = 0.0, WorldSection section = WorldSection.Render) {
+        link.SubmitSessionLever(
+            lever: new WorldSessionLever(
+                A: a,
+                B: b,
+                Kind: kind,
+                Section: section
+            ),
+            principal: principal
+        );
+    }
+    // Overload wired to the completion model: SubmitSessionLever is fire-and-forget (it carries no completion of its
+    // own — the accept/reject outcome is already reported loud on stderr and through WorldServer.EchoTap), but the
+    // console echo must still read the settings/pacing service ONLY after the lever has actually applied (or been
+    // refused). Over loopback DeliverSessionLever runs synchronously inside SubmitSessionLever, so formatEcho is
+    // invoked immediately after the submit call returns — never before it, and never from a stale prior read.
+    private CommandResult SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, Func<CommandResult> formatEcho, double b = 0.0, WorldSection section = WorldSection.Render) {
+        SubmitLever(
+            a: a,
+            b: b,
+            kind: kind,
+            principal: principal,
+            section: section
+        );
+
+        return formatEcho();
+    }
+    private static bool TryParseRenderScale(ReadOnlySpan<char> text, out float scale) {
+        if (WorldRenderScaleTiers.TryParse(
+            name: text.ToString(),
+            tier: out var tier
+        )) {
+            scale = WorldRenderScaleTiers.Scale(tier: tier);
+
+            return true;
+        }
+
+        var token = text.Trim();
+        var percent = (!token.IsEmpty && (token[^1] == '%'));
+
+        if (percent) {
+            token = token[..^1];
+        }
+
+        if (!float.TryParse(
+            provider: CultureInfo.InvariantCulture,
+            result: out scale,
+            s: token,
+            style: NumberStyles.Float
+        )) {
+            return false;
+        }
+
+        if (percent) {
+            scale /= 100f;
+        }
+
+        return (
+            float.IsFinite(f: scale) &&
+            (scale >= 0.125f) &&
+            (scale <= 1f)
+        );
+    }
+    private static bool TryParseShadowReach(ReadOnlySpan<char> text, out float reach) {
+        if (text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "off"
+        )) {
+            reach = 0f;
+        } else if (text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "low"
+        )) {
+            reach = 0.25f;
+        } else if (text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "medium"
+        )) {
+            reach = 0.5f;
+        } else if (
+            text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "high"
+        ) ||
+            text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "on"
+        )
+        ) {
+            reach = 1f;
+        } else {
+            reach = float.NaN;
+        }
+
+        if (!float.IsNaN(f: reach)) {
+            return true;
+        }
+
+        var token = text.Trim();
+        var percent = (!token.IsEmpty && (token[^1] == '%'));
+
+        if (percent) {
+            token = token[..^1];
+        }
+
+        if (!float.TryParse(
+            provider: CultureInfo.InvariantCulture,
+            result: out reach,
+            s: token,
+            style: NumberStyles.Float
+        )) {
+            return false;
+        }
+
+        if (percent) {
+            reach /= 100f;
+        }
+
+        return (
+            float.IsFinite(f: reach) &&
+            (reach >= 0f) &&
+            (reach <= 1f)
+        );
+    }
+    private static bool TryParseUpscaleSharpness(ReadOnlySpan<char> text, out float sharpness) {
+        if (
+            text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "bilinear"
+        ) ||
+            text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "off"
+        )
+        ) {
+            sharpness = 0f;
+        } else if (text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "balanced"
+        )) {
+            sharpness = 0.5f;
+        } else if (text.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "sharp"
+        )) {
+            sharpness = 1f;
+        } else {
+            sharpness = float.NaN;
+        }
+
+        if (!float.IsNaN(f: sharpness)) {
+            return true;
+        }
+
+        var token = text.Trim();
+        var percent = (!token.IsEmpty && (token[^1] == '%'));
+
+        if (percent) {
+            token = token[..^1];
+        }
+
+        if (!float.TryParse(
+            provider: CultureInfo.InvariantCulture,
+            result: out sharpness,
+            s: token,
+            style: NumberStyles.Float
+        )) {
+            return false;
+        }
+
+        if (percent) {
+            sharpness /= 100f;
+        }
+
+        return (
+            float.IsFinite(f: sharpness) &&
+            (sharpness >= 0f) &&
+            (sharpness <= 1f)
+        );
+    }
+    private static string UpscaleSharpnessName(float sharpness) {
+        if (MathF.Abs(x: sharpness) <= 0.0001f) {
+            return "bilinear";
+        }
+
+        if (MathF.Abs(x: (sharpness - 0.5f)) <= 0.0001f) {
+            return "balanced";
+        }
+
+        if (MathF.Abs(x: (sharpness - 1f)) <= 0.0001f) {
+            return "sharp";
+        }
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"{(sharpness * 100f):0.#}%"
+        );
+    }
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
@@ -32,14 +530,26 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: ShadowEcho(settings: settings));
                 }
 
-                if (!TryParseShadowReach(text: args[0], reach: out var reach)) {
+                if (!TryParseShadowReach(
+                    text: args[0],
+                    reach: out var reach
+                )) {
                     return CommandResult.Error(output: $"[world.shadows: invalid reach '{args[0]}' — off|low|medium|high, 0..1, or 0%..100%]");
                 }
 
                 var crowdRadius = settings.ShadowCrowdRadius;
 
                 if (args.Count >= 2) {
-                    if (!float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) || (radius < 0f) || (radius > 100f)) {
+                    if (
+                        !float.TryParse(
+                        args[1],
+                        NumberStyles.Float,
+                        CultureInfo.InvariantCulture,
+                        out var radius
+                    ) ||
+                        (radius < 0f) ||
+                        (radius > 100f)
+                    ) {
                         return CommandResult.Error(output: $"[world.shadows: bad crowd-radius '{args[1]}' — a number 0..100]");
                     }
 
@@ -48,7 +558,13 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 // The echo formats INSIDE SubmitLever's completion — after the lever has applied (or been refused),
                 // never a live read taken separately and possibly before that.
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.Shadows, a: reach, b: crowdRadius, formatEcho: () => new CommandResult(Output: ShadowEcho(settings: settings)));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.Shadows,
+                    a: reach,
+                    b: crowdRadius,
+                    formatEcho: () => new CommandResult(Output: ShadowEcho(settings: settings))
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -57,7 +573,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             description: "Toggles ambient occlusion engine-wide, live (no rebuild): world.ao [on|off] — no argument echoes the current state. AO darkens creases and contact seams; turning it off skips the per-lit-pixel occlusion march (a small GPU saving, see world.gpu).",
             handler: (context, args) => {
                 if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion ? "on" : "off")}]");
+                    return new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
+                        ? "on"
+                        : "off")}]");
                 }
 
                 var on = ParseOnOff(token: args[0]);
@@ -66,7 +584,16 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: $"[world.ao: unknown state '{args[0]}' — on|off]");
                 }
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.AmbientOcclusion, a: (resolved ? 1.0 : 0.0), formatEcho: () => new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion ? "on" : "off")}]"));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.AmbientOcclusion,
+                    a: (resolved
+                    ? 1.0
+                    : 0.0),
+                    formatEcho: () => new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
+                    ? "on"
+                    : "off")}]")
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -74,20 +601,53 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             name: "world.far-field",
             description: "Toggles the far-field termination optimizations live (no rebuild) — the isolators for the owner's paired A/B: world.far-field [on|off|status] moves BOTH lanes together; world.far-field bound [on|off] is the F1 beam-published per-tile far bound (output-identical, skips empty-sky march steps); world.far-field shadow [on|off] is the F2 soft-shadow light-side early exit (a march-path change). No argument (or 'status') echoes both. Both ship ON; 'off' is the paired-run baseline.",
             handler: (context, args) => {
-                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                if (
+                    (args.Count == 0) ||
+                    args.Is(
+                    index: 0,
+                    value: "status"
+                )
+                ) {
                     return new CommandResult(Output: FarFieldEcho(settings: settings));
                 }
 
                 // Lane-scoped form: world.far-field bound|shadow on|off.
-                if (args.Is(index: 0, value: "bound") || args.Is(index: 0, value: "shadow")) {
-                    if ((args.Count < 2) || (ParseOnOff(token: args[1]) is not { } laneState)) {
+                if (
+                    args.Is(
+                    index: 0,
+                    value: "bound"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "shadow"
+                )
+                ) {
+                    if (
+                        (args.Count < 2) ||
+                        (ParseOnOff(token: args[1]) is not { } laneState)
+                    ) {
                         return CommandResult.Error(output: $"[world.far-field: expected '{args[0].ToString().ToLowerInvariant()} on|off']");
                     }
 
-                    if (args.Is(index: 0, value: "bound")) {
-                        SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.FarBound, a: (laneState ? 1.0 : 0.0));
+                    if (args.Is(
+                        index: 0,
+                        value: "bound"
+                    )) {
+                        SubmitLever(
+                            principal: context.ActingPrincipal(),
+                            kind: WorldLeverKind.FarBound,
+                            a: (laneState
+                            ? 1.0
+                            : 0.0)
+                        );
                     } else {
-                        SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowFarExit, a: (laneState ? 1.0 : 0.0));
+                        SubmitLever(
+                            principal: context.ActingPrincipal(),
+                            kind: WorldLeverKind.ShadowFarExit,
+                            a: (laneState
+                            ? 1.0
+                            : 0.0)
+                        );
                     }
 
                     // Read AFTER the lever above has applied (or been refused) — loopback drains it inline, so this
@@ -100,9 +660,22 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: $"[world.far-field: unknown '{args.Tail(start: 0)}' — on|off|status, or bound|shadow on|off]");
                 }
 
-                SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.FarBound, a: (bothState ? 1.0 : 0.0));
+                SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.FarBound,
+                    a: (bothState
+                    ? 1.0
+                    : 0.0)
+                );
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowFarExit, a: (bothState ? 1.0 : 0.0), formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings)));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.ShadowFarExit,
+                    a: (bothState
+                    ? 1.0
+                    : 0.0),
+                    formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings))
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -110,7 +683,13 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             name: "world.shadow.accumulate",
             description: "Toggles the area-light shadow estimator's TEMPORAL ACCUMULATION live (no rebuild): world.shadow.accumulate [on|off|status]. On (the default) folds each frame's two sun-disc samples into the reprojected previous value, which is what makes the penumbra smooth; off shades the raw per-frame estimate and is deliberately stippled — an A/B isolator, not a quality tier.",
             handler: (context, args) => {
-                if ((args.Count == 0) || args.Is(index: 0, value: "status")) {
+                if (
+                    (args.Count == 0) ||
+                    args.Is(
+                    index: 0,
+                    value: "status"
+                )
+                ) {
                     return new CommandResult(Output: ShadowAccumulationEcho(settings: settings));
                 }
 
@@ -118,7 +697,14 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: $"[world.shadow.accumulate: unknown '{args.Tail(start: 0)}' — on|off|status]");
                 }
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowAccumulation, a: (state ? 1.0 : 0.0), formatEcho: () => new CommandResult(Output: ShadowAccumulationEcho(settings: settings)));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.ShadowAccumulation,
+                    a: (state
+                    ? 1.0
+                    : 0.0),
+                    formatEcho: () => new CommandResult(Output: ShadowAccumulationEcho(settings: settings))
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -132,11 +718,36 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 ShadowMaskMode? mode = null;
 
-                if (args.Is(index: 0, value: "auto")) {
+                if (args.Is(
+                    index: 0,
+                    value: "auto"
+                )) {
                     mode = ShadowMaskMode.Auto;
-                } else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "gather")) {
+                } else if (
+                    args.Is(
+                    index: 0,
+                    value: "exact"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "gather"
+                )
+                ) {
                     mode = ShadowMaskMode.ExactGather;
-                } else if (args.Is(index: 0, value: "camera") || args.Is(index: 0, value: "camera-tile") || args.Is(index: 0, value: "tile")) {
+                } else if (
+                    args.Is(
+                    index: 0,
+                    value: "camera"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "camera-tile"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "tile"
+                )
+                ) {
                     mode = ShadowMaskMode.CameraTile;
                 }
 
@@ -144,7 +755,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]");
                 }
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowMask, a: (double)resolved, formatEcho: () => new CommandResult(Output: DescribeShadowMask()));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.ShadowMask,
+                    a: ((double)resolved),
+                    formatEcho: () => new CommandResult(Output: DescribeShadowMask())
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -158,11 +774,32 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 AmbientOcclusionMode? mode = null;
 
-                if (args.Is(index: 0, value: "auto")) {
+                if (args.Is(
+                    index: 0,
+                    value: "auto"
+                )) {
                     mode = AmbientOcclusionMode.Auto;
-                } else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "quality")) {
+                } else if (
+                    args.Is(
+                    index: 0,
+                    value: "exact"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "quality"
+                )
+                ) {
                     mode = AmbientOcclusionMode.Exact;
-                } else if (args.Is(index: 0, value: "fast") || args.Is(index: 0, value: "fleet")) {
+                } else if (
+                    args.Is(
+                    index: 0,
+                    value: "fast"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "fleet"
+                )
+                ) {
                     mode = AmbientOcclusionMode.Fast;
                 }
 
@@ -170,7 +807,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.AmbientOcclusionQuality, a: (double)resolved, formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality()));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.AmbientOcclusionQuality,
+                    a: ((double)resolved),
+                    formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality())
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -184,11 +826,32 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 ShadowMarchMode? mode = null;
 
-                if (args.Is(index: 0, value: "auto")) {
+                if (args.Is(
+                    index: 0,
+                    value: "auto"
+                )) {
                     mode = ShadowMarchMode.Auto;
-                } else if (args.Is(index: 0, value: "exact") || args.Is(index: 0, value: "quality")) {
+                } else if (
+                    args.Is(
+                    index: 0,
+                    value: "exact"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "quality"
+                )
+                ) {
                     mode = ShadowMarchMode.Exact;
-                } else if (args.Is(index: 0, value: "fast") || args.Is(index: 0, value: "fleet")) {
+                } else if (
+                    args.Is(
+                    index: 0,
+                    value: "fast"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "fleet"
+                )
+                ) {
                     mode = ShadowMarchMode.Fast;
                 }
 
@@ -196,7 +859,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.ShadowMarch, a: (double)resolved, formatEcho: () => new CommandResult(Output: DescribeShadowMarch()));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.ShadowMarch,
+                    a: ((double)resolved),
+                    formatEcho: () => new CommandResult(Output: DescribeShadowMarch())
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -208,7 +876,14 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: $"[world.view-refresh: every {screens.ViewRefreshDivisor} produced frame(s); {screens.ActiveCameraViewCount} camera view(s) registered]");
                 }
 
-                if (!args.TryInt(index: 0, value: out var divisor) || (divisor < 1) || (divisor > 8)) {
+                if (
+                    !args.TryInt(
+                    index: 0,
+                    value: out var divisor
+                ) ||
+                    (divisor < 1) ||
+                    (divisor > 8)
+                ) {
                     return CommandResult.Error(output: $"[world.view-refresh: expected an integer divisor from 1 through 8, got '{args[0]}']");
                 }
 
@@ -230,8 +905,17 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: $"[world.debug-view: {DebugViewModes.Name(mode: node.DebugMode)}]");
                 }
 
-                if ((args.Count != 1) || !DebugViewModes.TryParse(name: args[0].ToString(), mode: out var mode)) {
-                    return CommandResult.Error(output: $"[world.debug-view: unknown mode '{args.Tail(start: 0)}' — {string.Join(separator: '|', value: DebugViewModes.Names)}]");
+                if (
+                    (args.Count != 1) ||
+                    !DebugViewModes.TryParse(
+                    name: args[0].ToString(),
+                    mode: out var mode
+                )
+                ) {
+                    return CommandResult.Error(output: $"[world.debug-view: unknown mode '{args.Tail(start: 0)}' — {string.Join(
+                        separator: '|',
+                        value: DebugViewModes.Names
+                    )}]");
                 }
 
                 node.DebugMode = mode;
@@ -248,16 +932,24 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: settings.RenderScale)} | named: {WorldRenderScaleTiers.ValidNames} | numeric: 12.5%..100%]");
                 }
 
-                if (!TryParseRenderScale(text: args[0], scale: out var scale)) {
+                if (!TryParseRenderScale(
+                    text: args[0],
+                    scale: out var scale
+                )) {
                     return CommandResult.Error(output: $"[world.render-scale: invalid '{args[0]}' — named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]");
                 }
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.RenderScale, a: scale, formatEcho: () => {
-                    var liveScale = settings.RenderScale;
-                    var pixelPercent = (int)Math.Round(a: ((liveScale * liveScale) * 100f));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.RenderScale,
+                    a: scale,
+                    formatEcho: () => {
+                        var liveScale = settings.RenderScale;
+                        var pixelPercent = ((int)Math.Round(a: ((liveScale * liveScale) * 100f)));
 
-                    return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: liveScale)} — ~{pixelPercent}% of native internal pixels; measure GPU cost with world.gpu]");
-                });
+                        return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: liveScale)} — ~{pixelPercent}% of native internal pixels; measure GPU cost with world.gpu]");
+                    }
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -269,11 +961,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]");
                 }
 
-                if (!TryParseUpscaleSharpness(text: args[0], sharpness: out var sharpness)) {
+                if (!TryParseUpscaleSharpness(
+                    text: args[0],
+                    sharpness: out var sharpness
+                )) {
                     return CommandResult.Error(output: $"[world.upscale-sharpness: invalid '{args[0]}' — bilinear|balanced|sharp, 0..1, or 0%..100%]");
                 }
 
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.UpscaleSharpness, a: sharpness, formatEcho: () => new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]"));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.UpscaleSharpness,
+                    a: sharpness,
+                    formatEcho: () => new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]")
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -285,16 +985,46 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]");
                 }
 
-                if (args.Is(index: 0, value: "display") || args.Is(index: 0, value: "vrr")) {
-                    return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.TargetHertz, a: 0.0, section: WorldSection.Host, formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]"));
+                if (
+                    args.Is(
+                    index: 0,
+                    value: "display"
+                ) ||
+                    args.Is(
+                    index: 0,
+                    value: "vrr"
+                )
+                ) {
+                    return SubmitLever(
+                        principal: context.ActingPrincipal(),
+                        kind: WorldLeverKind.TargetHertz,
+                        a: 0.0,
+                        section: WorldSection.Host,
+                        formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]")
+                    );
                 }
 
-                if (!double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var hz) || !double.IsFinite(d: hz) || (hz <= 0.0)) {
+                if (
+                    !double.TryParse(
+                    args[0],
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var hz
+                ) ||
+                    !double.IsFinite(d: hz) ||
+                    (hz <= 0.0)
+                ) {
                     return CommandResult.Error(output: "[world.target: expected a positive finite Hz value, or 'display'/'vrr' for automatic display pacing]");
                 }
 
                 // The echo formats INSIDE the completion — after the lever has applied (or been refused).
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.TargetHertz, a: hz, section: WorldSection.Host, formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]"));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.TargetHertz,
+                    a: hz,
+                    section: WorldSection.Host,
+                    formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]")
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -313,12 +1043,28 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — low|medium|high]");
                 }
 
-                SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.Shadows, a: ShadowTiers.Scale(tier: preset.Shadows), b: settings.ShadowCrowdRadius);
-                SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.AmbientOcclusion, a: (preset.AmbientOcclusion ? 1.0 : 0.0));
+                SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.Shadows,
+                    a: ShadowTiers.Scale(tier: preset.Shadows),
+                    b: settings.ShadowCrowdRadius
+                );
+                SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.AmbientOcclusion,
+                    a: (preset.AmbientOcclusion
+                    ? 1.0
+                    : 0.0)
+                );
 
                 // The echo formats INSIDE the LAST lever's completion — all three have applied (or the last was
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
-                return SubmitLever(principal: context.ActingPrincipal(), kind: WorldLeverKind.RenderScale, a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale), formatEcho: () => new CommandResult(Output: DescribeQuality()));
+                return SubmitLever(
+                    principal: context.ActingPrincipal(),
+                    kind: WorldLeverKind.RenderScale,
+                    a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale),
+                    formatEcho: () => new CommandResult(Output: DescribeQuality())
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -327,7 +1073,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             description: "Arms per-pass GPU timing engine-wide, live (no restart, no magic env var): world.timing [on|off] — no argument echoes the armed state. On lights BOTH the GPU per-pass digest (readable with world.gpu) and the launcher's CPU frame-timing hub; performance metrics are a first-class citizen here.",
             handler: (_, args) => {
                 if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.timing: {(GpuTimingControl.Shared.Armed ? "on" : "off")}]");
+                    return new CommandResult(Output: $"[world.timing: {(GpuTimingControl.Shared.Armed
+                        ? "on"
+                        : "off")}]");
                 }
 
                 var on = ParseOnOff(token: args[0]);
@@ -338,7 +1086,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 GpuTimingControl.Shared.SetArmed(armed: resolved);
 
-                return new CommandResult(Output: $"[world.timing: {(resolved ? "on" : "off")}]");
+                return new CommandResult(Output: $"[world.timing: {(resolved
+                    ? "on"
+                    : "off")}]");
             }
         );
         yield return CommandDefinition.Verb(
@@ -374,8 +1124,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 var target = pacing.TargetHertz;
                 var pacer = ((target > 0.0)
-                    ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{target:0.###} Hz")
-                    : "automatic (verified VRR range or active signal timing)");
+                    ? string.Create(
+                        provider: CultureInfo.InvariantCulture,
+                        handler: $"{target:0.###} Hz"
+                    )
+                    : "automatic (verified VRR range or active signal timing)"
+                );
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
@@ -383,354 +1137,5 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 ));
             }
         );
-    }
-
-    // The world.screens listing: one segment per declared screen — index, source kind, live bound/unbound state (a
-    // nonzero provider handle this frame), and engage policy. A query (not AcknowledgementOnly): its listing always surfaces, so a
-    // piped proof can assert the test-pattern screen is bound and the None screen stays unbound (procedural fallback).
-    private CommandResult ScreensHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[world.screens: no arguments — lists every declared screen]");
-        }
-
-        // The LIVE definition's rows (never the boot snapshot), so a screen mutation's new source narrates honestly.
-        var declaredScreens = server.Definition.Screens;
-
-        if (declaredScreens.Count == 0) {
-            return new CommandResult(Output: "[world.screens: none declared]");
-        }
-
-        var builder = new StringBuilder(value: "[world.screens:");
-
-        for (var index = 0; (index < declaredScreens.Count); index++) {
-            var screen = declaredScreens[index];
-            var bound = (screens.CurrentHandle(index: screen.Index) != 0);
-            // The engaged marker (only when players are engaged) — reflects the route state, kept bracket-agnostic so the
-            // proof regexes are undisturbed.
-            var engaged = server.Engagement.PlayersOn(screenIndex: screen.Index);
-            var engagedText = ((engaged.Count > 0)
-                ? $" engaged:{string.Join(separator: "+", values: engaged.Select(selector: static entry => (entry.Capture ? $"p{entry.Display}" : $"p{entry.Display}(mirror)")))}"
-                : "");
-
-            _ = builder.Append(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"{((index == 0) ? " " : " | ")}{screen.Index} {ScreenSourceKind(source: screen.Source)} {(bound ? "bound" : "unbound")} {(screen.Route.Engageable ? "engageable" : "fixed")}{engagedText}"
-            );
-        }
-
-        return new CommandResult(Output: builder.Append(value: ']').ToString());
-    }
-
-    // The world.cameras listing: one segment per declared camera — name, the anchor it rides, the rig it frames with,
-    // and its offscreen render dimensions. Reads the LIVE definition (never the boot snapshot), so a camera mutation's
-    // new row narrates honestly. A query (not AcknowledgementOnly): its listing always surfaces.
-    private CommandResult CamerasHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[world.cameras: no arguments — lists every declared camera]");
-        }
-
-        var cameras = server.Definition.Cameras;
-
-        if (cameras.Count == 0) {
-            return new CommandResult(Output: "[world.cameras: none declared]");
-        }
-
-        var builder = new StringBuilder(value: "[world.cameras:");
-
-        for (var index = 0; (index < cameras.Count); index++) {
-            var camera = cameras[index];
-
-            _ = builder.Append(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"{((index == 0) ? " " : " | ")}{camera.Name} {CameraAnchorKind(anchor: camera.Anchor)} {CameraRigKind(rig: camera.Rig)} {camera.RenderWidth}x{camera.RenderHeight}"
-            );
-        }
-
-        return new CommandResult(Output: builder.Append(value: ']').ToString());
-    }
-
-    // The anchor keyword for a camera's declared ride — kind plus the target it names, the stable token a piped proof
-    // asserts against. An unanchored camera's own offset IS its world position, so it reads 'none'.
-    private static string CameraAnchorKind(WorldAnchor? anchor) {
-        return anchor switch {
-            WorldAnchor.Entity entity => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=entity:{entity.Index}"),
-            WorldAnchor.EntityPart part => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=entityPart:{part.Index}/{part.PartId}"),
-            WorldAnchor.Placement placement => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=placement:{placement.PlacementId}{((placement.ShapeId is { } shape) ? $"/{shape}" : "")}"),
-            WorldAnchor.Group group => string.Create(provider: CultureInfo.InvariantCulture, handler: $"anchor=group:{((group.Indices is { } indices) ? indices.Count.ToString(provider: CultureInfo.InvariantCulture) : "all")}"),
-            _ => "anchor=none",
-        };
-    }
-
-    // Camera motion and aim are independent closed vocabularies.
-    private static string CameraRigKind(WorldCameraRig rig) {
-        var motion = rig.Motion switch {
-            WorldCameraMotion.Follow => "follow",
-            WorldCameraMotion.Orbit => "orbit",
-            WorldCameraMotion.Static => "static",
-            _ => "track",
-        };
-        var aim = rig.Aim switch {
-            WorldCameraAim.Anchor => "anchor",
-            WorldCameraAim.Forward => "forward",
-            _ => "worldPoint",
-        };
-
-        return $"motion={motion} aim={aim}";
-    }
-
-    // The source-kind keyword for a screen's declared source — the stable token a piped proof asserts against.
-    private static string ScreenSourceKind(WorldScreenSource source) {
-        return source switch {
-            WorldScreenSource.TestPattern => "test-pattern",
-            WorldScreenSource.Machine machine => $"machine:{machine.Engine}",
-            WorldScreenSource.Camera => "camera",
-            WorldScreenSource.View => "view",
-            WorldScreenSource.Capture => "capture",
-            _ => "none",
-        };
-    }
-    // The world.shadow.accumulate echo.
-    private static string ShadowAccumulationEcho(WorldRenderSettings settings) {
-        return $"[world.shadow.accumulate: {(settings.ShadowAccumulation ? "on" : "off")}]";
-    }
-
-    // The world.shadows echo: continuous reach plus crowd radius; named-notch values render through their facade.
-    // Submits one live presentation-knob write through the server's grant check (WorldServer.ApplySessionLever) instead
-    // of writing the injected service here. Defaults to the Render section because most of these knobs fold into it;
-    // world.target passes Host explicitly.
-    private void SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, double b = 0.0, WorldSection section = WorldSection.Render) {
-        link.SubmitSessionLever(
-            lever: new WorldSessionLever(Section: section, Kind: kind, A: a, B: b),
-            principal: principal
-        );
-    }
-
-    // Overload wired to the completion model: SubmitSessionLever is fire-and-forget (it carries no completion of its
-    // own — the accept/reject outcome is already reported loud on stderr and through WorldServer.EchoTap), but the
-    // console echo must still read the settings/pacing service ONLY after the lever has actually applied (or been
-    // refused). Over loopback DeliverSessionLever runs synchronously inside SubmitSessionLever, so formatEcho is
-    // invoked immediately after the submit call returns — never before it, and never from a stale prior read.
-    private CommandResult SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, Func<CommandResult> formatEcho, double b = 0.0, WorldSection section = WorldSection.Render) {
-        SubmitLever(principal: principal, kind: kind, a: a, b: b, section: section);
-
-        return formatEcho();
-    }
-    private static string ShadowEcho(WorldRenderSettings settings) {
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##}]");
-    }
-
-    // The world.far-field echo: both isolator lanes (F1 bound, F2 shadow exit) and their on/off state.
-    private static string FarFieldEcho(WorldRenderSettings settings) {
-        return $"[world.far-field: bound {(settings.FarBound ? "on" : "off")}, shadow {(settings.ShadowFarExit ? "on" : "off")}]";
-    }
-
-    // Shared on/off token parse for the boolean isolator verbs (null = unrecognized).
-    private static bool? ParseOnOff(ReadOnlySpan<char> token) {
-        if (token.Equals(other: "on", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            return true;
-        }
-
-        if (token.Equals(other: "off", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            return false;
-        }
-
-        return null;
-    }
-
-    // The FPS-target readout: a set rate paces to that Hz; 0 is automatic display pacing.
-    private static string DescribeTarget(double target) {
-        return ((target > 0.0)
-            ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{target:0.###} Hz — the display-aware pacer targets this rate")
-            : "display (automatic — verified VRR capabilities or active signal timing)");
-    }
-
-    // The world.quality echo: the current individual settings the preset (or a later override) left in place.
-    private string DescribeQuality() {
-        return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion ? "on" : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
-    }
-    private static bool TryParseShadowReach(ReadOnlySpan<char> text, out float reach) {
-        if (text.Equals(other: "off", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            reach = 0f;
-        } else if (text.Equals(other: "low", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            reach = 0.25f;
-        } else if (text.Equals(other: "medium", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            reach = 0.5f;
-        } else if (text.Equals(other: "high", comparisonType: StringComparison.OrdinalIgnoreCase) || text.Equals(other: "on", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            reach = 1f;
-        } else {
-            reach = float.NaN;
-        }
-
-        if (!float.IsNaN(f: reach)) {
-            return true;
-        }
-
-        var token = text.Trim();
-        var percent = (!token.IsEmpty && (token[^1] == '%'));
-
-        if (percent) {
-            token = token[..^1];
-        }
-
-        if (!float.TryParse(provider: CultureInfo.InvariantCulture, result: out reach, s: token, style: NumberStyles.Float)) {
-            return false;
-        }
-
-        if (percent) {
-            reach /= 100f;
-        }
-
-        return (float.IsFinite(f: reach) && (reach >= 0f) && (reach <= 1f));
-    }
-    private static bool TryParseRenderScale(ReadOnlySpan<char> text, out float scale) {
-        if (WorldRenderScaleTiers.TryParse(name: text.ToString(), tier: out var tier)) {
-            scale = WorldRenderScaleTiers.Scale(tier: tier);
-
-            return true;
-        }
-
-        var token = text.Trim();
-        var percent = (!token.IsEmpty && (token[^1] == '%'));
-
-        if (percent) {
-            token = token[..^1];
-        }
-
-        if (!float.TryParse(provider: CultureInfo.InvariantCulture, result: out scale, s: token, style: NumberStyles.Float)) {
-            return false;
-        }
-
-        if (percent) {
-            scale /= 100f;
-        }
-
-        return (float.IsFinite(f: scale) && (scale >= 0.125f) && (scale <= 1f));
-    }
-    private static bool TryParseUpscaleSharpness(ReadOnlySpan<char> text, out float sharpness) {
-        if (text.Equals(other: "bilinear", comparisonType: StringComparison.OrdinalIgnoreCase) || text.Equals(other: "off", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            sharpness = 0f;
-        } else if (text.Equals(other: "balanced", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            sharpness = 0.5f;
-        } else if (text.Equals(other: "sharp", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            sharpness = 1f;
-        } else {
-            sharpness = float.NaN;
-        }
-
-        if (!float.IsNaN(f: sharpness)) {
-            return true;
-        }
-
-        var token = text.Trim();
-        var percent = (!token.IsEmpty && (token[^1] == '%'));
-
-        if (percent) {
-            token = token[..^1];
-        }
-
-        if (!float.TryParse(provider: CultureInfo.InvariantCulture, result: out sharpness, s: token, style: NumberStyles.Float)) {
-            return false;
-        }
-
-        if (percent) {
-            sharpness /= 100f;
-        }
-
-        return (float.IsFinite(f: sharpness) && (sharpness >= 0f) && (sharpness <= 1f));
-    }
-    private static string RenderScaleName(float scale) {
-        foreach (var tier in Enum.GetValues<WorldRenderScaleTier>()) {
-            if (MathF.Abs(x: (scale - WorldRenderScaleTiers.Scale(tier: tier))) <= (0.5f / 255f)) {
-                return WorldRenderScaleTiers.Name(tier: tier);
-            }
-        }
-
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(scale * 100f):0.#}%");
-    }
-    private static string UpscaleSharpnessName(float sharpness) {
-        if (MathF.Abs(x: sharpness) <= 0.0001f) {
-            return "bilinear";
-        }
-
-        if (MathF.Abs(x: (sharpness - 0.5f)) <= 0.0001f) {
-            return "balanced";
-        }
-
-        if (MathF.Abs(x: (sharpness - 1f)) <= 0.0001f) {
-            return "sharp";
-        }
-
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(sharpness * 100f):0.#}%");
-    }
-    private string DescribeShadowMask() =>
-        DescribeAdaptiveQuality(
-            verb: "world.shadow-mask",
-            modes: settings.ShadowMask switch {
-                ShadowMaskMode.ExactGather => ("exact", false),
-                ShadowMaskMode.CameraTile => ("camera-tile", true),
-                _ => ("auto", (bool?)null),
-            },
-            exact: "exact",
-            fast: "camera-tile");
-    private string DescribeShadowMarch() =>
-        DescribeAdaptiveQuality(
-            verb: "world.shadow-march",
-            modes: settings.ShadowMarch switch {
-                ShadowMarchMode.Exact => ("exact", false),
-                ShadowMarchMode.Fast => ("fast", true),
-                _ => ("auto", (bool?)null),
-            },
-            exact: "exact",
-            fast: "fast");
-    private string DescribeAmbientOcclusionQuality() =>
-        DescribeAdaptiveQuality(
-            verb: "world.ao-quality",
-            modes: settings.AmbientOcclusionQuality switch {
-                AmbientOcclusionMode.Exact => ("exact", false),
-                AmbientOcclusionMode.Fast => ("fast", true),
-                _ => ("auto", (bool?)null),
-            },
-            exact: "exact",
-            fast: "fast");
-
-    /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
-    private string DescribeAdaptiveQuality(string verb, (string Configured, bool? Fast) modes, string exact, string fast) {
-        var resolved = ((modes.Fast ?? (population.SimulatedCount >= 16)) ? fast : exact);
-
-        return $"[{verb}: {modes.Configured} → {resolved} | simulated={population.SimulatedCount}]";
-    }
-
-    // The world.gpu readout: the previous frame's per-pass GPU ms, read live off the render probe's engine node.
-    private string DescribeGpu() {
-        if (renderProbe.Node is not { } node) {
-            return "[world.gpu: renderer not built yet]";
-        }
-
-        Span<double> passMilliseconds = stackalloc double[SdfEngineNode.PassTimingCount];
-
-        if (!node.TryReadPassTimings(passMilliseconds: passMilliseconds, passCount: out var passCount, frame: out var frame)) {
-            return "[world.gpu: timing off — world.timing on]";
-        }
-
-        var builder = new StringBuilder(value: "[world.gpu:");
-        var labels = SdfEngineNode.PassTimingLabels;
-
-        _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" frame {frame:0.00}ms");
-
-        for (var index = 0; (index < passCount); index++) {
-            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" | {labels[index]} {passMilliseconds[index]:0.00}");
-        }
-
-        // The unified overlay decorator's own pass (a separate submit after the engine's) — appended once the
-        // overlay has drawn a timed frame.
-        if (renderProbe.Overlay is { } overlay) {
-            Span<double> overlayMilliseconds = stackalloc double[1];
-
-            if (overlay.TryReadPassTimings(passMilliseconds: overlayMilliseconds, passCount: out var overlayCount, frameMilliseconds: out _) && (overlayCount > 0)) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" | overlay {overlayMilliseconds[0]:0.000}");
-            }
-        }
-
-        return builder.Append(value: ']').ToString();
     }
 }

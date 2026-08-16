@@ -6,13 +6,14 @@
     <!--
         Puck.World.Server — the authoritative world runtime, physically split out of Puck.World (headless P1) so it
         is structurally unable to reach presentation: no GPU backend, no renderer, and no Puck.Overlays. Its contact
-        field consumes Puck.Forge's canonical creation emitter and Puck.SdfVm's fixed-point field evaluator through
-        the resolved World.Data → Forge dependency chain.
+        field consumes Puck.World.Forge's canonical creation emitter and Puck.SignedDistance's fixed-point field evaluator.
         It carries WorldServer (the fold, the mutation journal, snapshot emission), WorldGrants (the one grant
         table), WorldPopulation/WorldBody (the entity table and its per-tick advance, including the fold plumbing),
-        WorldOwnedWorlds (the owned-world identity catalog), WorldAddonRuntime and its wire/receipt types
-        (WorldAddonWire), the collision/contact/solid-field support WorldBody advances against
-        (WorldColliderSet/IContactField/WorldSolidField), WorldHandleTable, and the true-deterministic-replay codec
+        WorldOwnedWorlds (the owned-world identity catalog), the addon host seam (IWorldAddonHost/WorldAddonReceipt —
+        the mounted guest runtime itself lives in Puck.World.Addons, which references this project rather than the
+        other way around), the collision/contact/solid-field support WorldBody advances against
+        (WorldColliderSet/IContactField/WorldSolidField), while Puck.Physics owns the generic fixed contact geometry
+        those adapters call; WorldHandleTable, and the true-deterministic-replay codec
         (WorldReplayTape/WorldReplaySnapshot/WorldReplayVerdict/WorldReplayRefusal/WorldReplayCodecException).
         Puck.World (the composition root) is the only consumer that also holds presentation; the console verbs that
         drive this layer (replay.*, world.grant/revoke, etc.) stay there as thin wrappers.
@@ -23,13 +24,18 @@
              references below (Puck.Hosting sits on Shared substrate, beside Puck.Commands/Puck.Input, not upstream
              of any of them). -->
         <!-- The TCP socket door's admission handshake (WorldTcpHost/WorldTcpWireFormat) frames the challenge/identity
-             exchange over mandatory-base CBOR attestation bytes; verification itself lives in Puck.World.Data's
+             exchange over mandatory-base CBOR attestation bytes; verification itself lives in Puck.World.Schema's
              WorldAdmissionDoor, which this project already reaches transitively, but the wire framing here
              constructs Puck.Attestation types directly. -->
         <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
-        <ProjectReference Include="..\Puck.Scripting.Simulation\Puck.Scripting.Simulation.csproj" />
+        <ProjectReference Include="..\Puck.Networking\Puck.Networking.csproj" />
+        <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
+        <!-- WorldSolidField's SDF-backed contact field: the compiled program (SdfProgram/SdfProgramBuilder/
+             SdfMaterial) and the fixed-point CPU query layer (SdfFieldEvaluator/IFieldEvaluator). -->
+        <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
-        <ProjectReference Include="..\Puck.World.Data\Puck.World.Data.csproj" />
+        <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
+        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
 </Project>

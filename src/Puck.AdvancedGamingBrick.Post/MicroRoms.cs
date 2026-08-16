@@ -16,30 +16,22 @@ internal static class MicroRoms {
 
     /// <summary>The number of multiplayer rounds the link-parent/link-child protocol runs.</summary>
     public const int LinkRounds = 4;
-
     /// <summary>The base of the parent's per-round send words (round k sends <c>LinkParentSendBase + k</c>).</summary>
     public const ushort LinkParentSendBase = 0x1000;
-
     /// <summary>The child's seeded first send word (its round-0 reply, latched before any exchange).</summary>
     public const ushort LinkChildSeedWord = 0xA000;
-
     /// <summary>The child's transform: each round it re-arms <c>SIOMLT_SEND</c> with the parent word it just
     /// received XOR this mask — so every reply after the first PROVES data crossed the cable.</summary>
     public const ushort LinkChildTransformMask = 0xFF00;
-
     /// <summary>IWRAM address of the observed serial-IRQ (IF bit 7) count, written by both link ROMs at the end.</summary>
     public const uint LinkIrqCountAddress = 0x03000000u;
-
     /// <summary>IWRAM address of the completion marker (<see cref="LinkCompletionMarker"/>).</summary>
     public const uint LinkMarkerAddress = 0x03000004u;
-
     /// <summary>IWRAM address of the final SIOCNT read-back (id bits, cleared start) both link ROMs record.</summary>
     public const uint LinkControlAddress = 0x03000008u;
-
     /// <summary>IWRAM base of the per-round records: 8 bytes per round — the SIOMULTI0/1 word then the SIOMULTI2/3
     /// word, exactly as read back after each round's IRQ.</summary>
     public const uint LinkRecordAddress = 0x03000010u;
-
     /// <summary>The completion-marker value both link ROMs store once all rounds are done.</summary>
     public const uint LinkCompletionMarker = 0x600DF00Du;
 
@@ -47,12 +39,12 @@ internal static class MicroRoms {
     // without a temp file.
     public static byte[] GenerateBytes(string kind) => kind switch {
         "timer-irq" => TimerIrq(
-        reload: 0xFF00,
-        control: 0x00C0
+        control: 0x00C0,
+        reload: 0xFF00
     ),
         "timer-irq-iwram" => TimerIrqIwram(
-        reload: 0xFF00,
-        control: 0x00C0
+        control: 0x00C0,
+        reload: 0xFF00
     ),
         "cascade-irq" => CascadeIrq(),
         "ime-delay" => ImeDelay(),
@@ -64,8 +56,8 @@ internal static class MicroRoms {
         var rom = GenerateBytes(kind: kind);
 
         File.WriteAllBytes(
-            path: outPath,
-            bytes: rom
+            bytes: rom,
+            path: outPath
         );
         Console.WriteLine(value: $"== wrote '{kind}' micro-rom ({rom.Length} bytes) to {outPath} ==");
     }
@@ -80,54 +72,54 @@ internal static class MicroRoms {
             value: 0x04000000u
         );          // r0 = I/O base
         a.LdrLabel(
-            rd: 1,
-            label: "handler"
+            label: "handler",
+            rd: 1
         );
         a.LdrConst(
             rd: 2,
             value: 0x03007FFCu
         );          // BIOS user-IRQ-handler pointer
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Mov(
-            rd: 1,
-            imm8: 1
+            imm8: 1,
+            rd: 1
         );
         a.Str(
+            imm12: 0x208,
             rd: 1,
-            rn: 0,
-            imm12: 0x208
+            rn: 0
         );              // IME = 1
         a.Mov(
-            rd: 1,
-            imm8: 8
+            imm8: 8,
+            rd: 1
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );              // IE = timer0 (bit 3); IF high half = 0
         a.LdrConst(
             rd: 1,
             value: (control << 16) | (reload & 0xFFFFu)
         );
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // TM0CNT_L reload + TM0CNT_H control, one word
         a.Mov(
-            rd: 4,
-            imm8: 0
+            imm8: 0,
+            rd: 4
         );
         a.Label(name: "loop");
         a.Add(
+            imm8: 1,
             rd: 4,
-            rn: 4,
-            imm8: 1
+            rn: 4
         );
         a.BBack(instructions: 1);                        // b loop
 
@@ -141,15 +133,14 @@ internal static class MicroRoms {
             value: 0x00080008u
         );          // IE = timer0; IF write-one-to-clear bit 3
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );
         a.Bx(rn: 14);                                    // return to the BIOS dispatcher
 
         return a.Finish();
     }
-
     // As TimerIrq, but the counting loop runs from IWRAM (0-wait, no prefetch), so the per-instruction cycle
     // accounting is deterministic and identical between cores — any remaining divergence is purely IRQ-recognition
     // timing, with the slow-ROM bus-cost attribution noise removed. The loop body is two opcodes written straight
@@ -170,62 +161,62 @@ internal static class MicroRoms {
             value: 0xE2844001u
         );          // add r4,r4,#1
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.LdrConst(
             rd: 1,
             value: 0xEAFFFFFDu
         );          // b .-4  (back to 0x03000000)
         a.Str(
+            imm12: 4,
             rd: 1,
-            rn: 2,
-            imm12: 4
+            rn: 2
         );
         a.LdrLabel(
-            rd: 1,
-            label: "handler"
+            label: "handler",
+            rd: 1
         );
         a.LdrConst(
             rd: 3,
             value: 0x03007FFCu
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 3,
-            imm12: 0
+            rn: 3
         );
         a.Mov(
-            rd: 1,
-            imm8: 1
+            imm8: 1,
+            rd: 1
         );
         a.Str(
+            imm12: 0x208,
             rd: 1,
-            rn: 0,
-            imm12: 0x208
+            rn: 0
         );              // IME = 1
         a.Mov(
-            rd: 1,
-            imm8: 8
+            imm8: 8,
+            rd: 1
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );              // IE = timer0
         a.LdrConst(
             rd: 1,
             value: (control << 16) | (reload & 0xFFFFu)
         );
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // TM0CNT
         a.Mov(
-            rd: 4,
-            imm8: 0
+            imm8: 0,
+            rd: 4
         );
         a.LdrConst(
             rd: 15,
@@ -242,15 +233,14 @@ internal static class MicroRoms {
             value: 0x00080008u
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );
         a.Bx(rn: 14);
 
         return a.Finish();
     }
-
     // Timer0 (prescaler ÷1) cascades into Timer1 (count-up); Timer1 raises the IRQ. Probes the synchronous
     // in-cycle cascade + the cascade-timer overflow→IRQ path.
     private static byte[] CascadeIrq() {
@@ -261,35 +251,35 @@ internal static class MicroRoms {
             value: 0x04000000u
         );
         a.LdrLabel(
-            rd: 1,
-            label: "handler"
+            label: "handler",
+            rd: 1
         );
         a.LdrConst(
             rd: 2,
             value: 0x03007FFCu
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Mov(
-            rd: 1,
-            imm8: 1
+            imm8: 1,
+            rd: 1
         );
         a.Str(
+            imm12: 0x208,
             rd: 1,
-            rn: 0,
-            imm12: 0x208
+            rn: 0
         );              // IME = 1
         a.Mov(
-            rd: 1,
-            imm8: 0x10
+            imm8: 0x10,
+            rd: 1
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );              // IE = timer1 (bit 4)
         // Timer1: reload 0xFFFE (cascade overflows after 2 cascade ticks), control 0xC4 = enable+irq+cascade.
         a.LdrConst(
@@ -297,9 +287,9 @@ internal static class MicroRoms {
             value: (0x00C4u << 16) | 0xFFFEu
         );
         a.Str(
+            imm12: 0x104,
             rd: 1,
-            rn: 0,
-            imm12: 0x104
+            rn: 0
         );              // TM1CNT
         // Timer0: reload 0xFFF0 (overflows every 16 cycles), control 0x80 = enable, prescale ÷1.
         a.LdrConst(
@@ -307,19 +297,19 @@ internal static class MicroRoms {
             value: (0x0080u << 16) | 0xFFF0u
         );
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );              // TM0CNT
         a.Mov(
-            rd: 4,
-            imm8: 0
+            imm8: 0,
+            rd: 4
         );
         a.Label(name: "loop");
         a.Add(
+            imm8: 1,
             rd: 4,
-            rn: 4,
-            imm8: 1
+            rn: 4
         );
         a.BBack(instructions: 1);
 
@@ -333,15 +323,14 @@ internal static class MicroRoms {
             value: 0x00100010u
         );          // IE = timer1; IF clear bit 4
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );
         a.Bx(rn: 14);
 
         return a.Finish();
     }
-
     // IF is pre-pended with a timer0 request while IME is left 0, then IME is enabled mid-stream: the IRQ must be
     // recognised one instruction after the IME store (the ime[1]→ime[0] pipeline), not on the store itself.
     private static byte[] ImeDelay() {
@@ -352,26 +341,26 @@ internal static class MicroRoms {
             value: 0x04000000u
         );
         a.LdrLabel(
-            rd: 1,
-            label: "handler"
+            label: "handler",
+            rd: 1
         );
         a.LdrConst(
             rd: 2,
             value: 0x03007FFCu
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Mov(
-            rd: 1,
-            imm8: 8
+            imm8: 8,
+            rd: 1
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );              // IE = timer0
         // Timer0 reload 0xFFFF (overflows next cycle), enable+irq prescale ÷1 — arms a pending IF quickly.
         a.LdrConst(
@@ -379,36 +368,36 @@ internal static class MicroRoms {
             value: (0x00C0u << 16) | 0xFFFFu
         );
         a.Str(
+            imm12: 0x100,
             rd: 1,
-            rn: 0,
-            imm12: 0x100
+            rn: 0
         );
         a.Mov(
-            rd: 4,
-            imm8: 0
+            imm8: 0,
+            rd: 4
         );                           // marker before IME
         a.Mov(
-            rd: 5,
-            imm8: 0
+            imm8: 0,
+            rd: 5
         );
         a.Mov(
-            rd: 1,
-            imm8: 1
+            imm8: 1,
+            rd: 1
         );
         a.Str(
+            imm12: 0x208,
             rd: 1,
-            rn: 0,
-            imm12: 0x208
+            rn: 0
         );              // IME = 1  (IRQ must NOT fire on this instruction)
         a.Mov(
-            rd: 4,
-            imm8: 1
+            imm8: 1,
+            rd: 4
         );                           // r4 = 1: executed iff IRQ deferred past the IME store
         a.Label(name: "loop");
         a.Add(
+            imm8: 1,
             rd: 5,
-            rn: 5,
-            imm8: 1
+            rn: 5
         );
         a.BBack(instructions: 1);
 
@@ -422,15 +411,14 @@ internal static class MicroRoms {
             value: 0x00080008u
         );
         a.Str(
+            imm12: 0x200,
             rd: 1,
-            rn: 0,
-            imm12: 0x200
+            rn: 0
         );
         a.Bx(rn: 14);
 
         return a.Finish();
     }
-
     // The multiplayer link-exchange pair: the parent drives LinkRounds SIO multiplayer rounds, the child answers.
     // No BIOS is involved — IME stays 0 and both sides observe completion by polling IF bit 7 (the serial request,
     // which SIOCNT bit 14 latches regardless of IE/IME) and acknowledging it write-one-to-clear, so the pair runs on
@@ -456,13 +444,13 @@ internal static class MicroRoms {
             value: 0x04000200u
         );          // r11 = halfword base for IF
         a.Mov(
-            rd: 1,
-            imm8: 0
+            imm8: 0,
+            rd: 1
         );
         a.Strh(
+            imm8: 0x34,
             rd: 1,
-            rn: 10,
-            imm8: 0x34
+            rn: 10
         );               // RCNT = 0: pins owned by SIO
         a.LdrConst(
             rd: 7,
@@ -473,62 +461,62 @@ internal static class MicroRoms {
             value: LinkParentSendBase
         );
         a.Mov(
-            rd: 4,
-            imm8: 0
+            imm8: 0,
+            rd: 4
         );                           // r4 = observed serial-IRQ (IF) count
         a.Mov(
-            rd: 6,
-            imm8: 0
+            imm8: 0,
+            rd: 6
         );                           // r6 = round index
 
         a.Label(name: "round");
         a.AddReg(
             rd: 1,
-            rn: 8,
-            rm: 6
+            rm: 6,
+            rn: 8
         );
         a.Strh(
+            imm8: 0x2A,
             rd: 1,
-            rn: 10,
-            imm8: 0x2A
+            rn: 10
         );               // SIOMLT_SEND = base + round
         a.LdrConst(
             rd: 1,
             value: 0x00006083u
         );           // multiplayer | 115200 bps | IRQ-enable | start
         a.Strh(
+            imm8: 0x28,
             rd: 1,
-            rn: 10,
-            imm8: 0x28
+            rn: 10
         );               // SIOCNT — the parent clocks the round
 
         a.Label(name: "wait");
         a.Ldrh(
+            imm8: 0x02,
             rd: 1,
-            rn: 11,
-            imm8: 0x02
+            rn: 11
         );               // IF
         a.Tst(
-            rn: 1,
-            imm8: 0x80
+            imm8: 0x80,
+            rn: 1
         );                        // serial request?
         a.B(
-            label: "wait",
-            cond: Asm.CondEq
+            cond: Asm.CondEq,
+            label: "wait"
         );
         a.Mov(
-            rd: 1,
-            imm8: 0x80
+            imm8: 0x80,
+            rd: 1
         );
         a.Strh(
+            imm8: 0x02,
             rd: 1,
-            rn: 11,
-            imm8: 0x02
+            rn: 11
         );               // acknowledge (write-one-to-clear)
         a.Add(
+            imm8: 1,
             rd: 4,
-            rn: 4,
-            imm8: 1
+            rn: 4
         );
 
         a.LslImm(
@@ -538,42 +526,42 @@ internal static class MicroRoms {
         );
         a.AddReg(
             rd: 2,
-            rn: 7,
-            rm: 2
+            rm: 2,
+            rn: 7
         );
         a.Ldr(
+            imm12: 0x120,
             rd: 1,
-            rn: 0,
-            imm12: 0x120
+            rn: 0
         );               // SIOMULTI0/1
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Ldr(
+            imm12: 0x124,
             rd: 1,
-            rn: 0,
-            imm12: 0x124
+            rn: 0
         );               // SIOMULTI2/3
         a.Str(
+            imm12: 4,
             rd: 1,
-            rn: 2,
-            imm12: 4
+            rn: 2
         );
 
         a.Add(
+            imm8: 1,
             rd: 6,
-            rn: 6,
-            imm8: 1
+            rn: 6
         );
         a.Cmp(
-            rn: 6,
-            imm8: LinkRounds
+            imm8: LinkRounds,
+            rn: 6
         );
         a.B(
-            label: "round",
-            cond: Asm.CondNe
+            cond: Asm.CondNe,
+            label: "round"
         );
 
         EmitLinkEpilogue(a: a);
@@ -596,13 +584,13 @@ internal static class MicroRoms {
             value: 0x04000200u
         );          // r11 = halfword base for IF
         a.Mov(
-            rd: 1,
-            imm8: 0
+            imm8: 0,
+            rd: 1
         );
         a.Strh(
+            imm8: 0x34,
             rd: 1,
-            rn: 10,
-            imm8: 0x34
+            rn: 10
         );               // RCNT = 0: pins owned by SIO
         a.LdrConst(
             rd: 7,
@@ -617,55 +605,55 @@ internal static class MicroRoms {
             value: LinkChildSeedWord
         );
         a.Strh(
+            imm8: 0x2A,
             rd: 1,
-            rn: 10,
-            imm8: 0x2A
+            rn: 10
         );               // seed SIOMLT_SEND — the round-0 reply
         a.LdrConst(
             rd: 1,
             value: 0x00006003u
         );           // multiplayer | 115200 bps | IRQ-enable (no start: parent clocks)
         a.Strh(
+            imm8: 0x28,
             rd: 1,
-            rn: 10,
-            imm8: 0x28
+            rn: 10
         );
         a.Mov(
-            rd: 4,
-            imm8: 0
+            imm8: 0,
+            rd: 4
         );                           // r4 = observed serial-IRQ (IF) count
         a.Mov(
-            rd: 6,
-            imm8: 0
+            imm8: 0,
+            rd: 6
         );                           // r6 = round index
 
         a.Label(name: "round");
         a.Ldrh(
+            imm8: 0x02,
             rd: 1,
-            rn: 11,
-            imm8: 0x02
+            rn: 11
         );               // IF
         a.Tst(
-            rn: 1,
-            imm8: 0x80
+            imm8: 0x80,
+            rn: 1
         );                        // the parent's round landed?
         a.B(
-            label: "round",
-            cond: Asm.CondEq
+            cond: Asm.CondEq,
+            label: "round"
         );
         a.Mov(
-            rd: 1,
-            imm8: 0x80
+            imm8: 0x80,
+            rd: 1
         );
         a.Strh(
+            imm8: 0x02,
             rd: 1,
-            rn: 11,
-            imm8: 0x02
+            rn: 11
         );               // acknowledge (write-one-to-clear)
         a.Add(
+            imm8: 1,
             rd: 4,
-            rn: 4,
-            imm8: 1
+            rn: 4
         );
 
         a.LslImm(
@@ -675,28 +663,28 @@ internal static class MicroRoms {
         );
         a.AddReg(
             rd: 2,
-            rn: 7,
-            rm: 2
+            rm: 2,
+            rn: 7
         );
         a.Ldr(
+            imm12: 0x120,
             rd: 1,
-            rn: 0,
-            imm12: 0x120
+            rn: 0
         );               // SIOMULTI0/1
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Ldr(
+            imm12: 0x124,
             rd: 3,
-            rn: 0,
-            imm12: 0x124
+            rn: 0
         );               // SIOMULTI2/3
         a.Str(
+            imm12: 4,
             rd: 3,
-            rn: 2,
-            imm12: 4
+            rn: 2
         );
 
         a.LslImm(
@@ -711,59 +699,58 @@ internal static class MicroRoms {
         );
         a.EorReg(
             rd: 3,
-            rn: 3,
-            rm: 8
+            rm: 8,
+            rn: 3
         );                   // the transform
         a.Strh(
+            imm8: 0x2A,
             rd: 3,
-            rn: 10,
-            imm8: 0x2A
+            rn: 10
         );               // re-arm SIOMLT_SEND for the next round
 
         a.Add(
+            imm8: 1,
             rd: 6,
-            rn: 6,
-            imm8: 1
+            rn: 6
         );
         a.Cmp(
-            rn: 6,
-            imm8: LinkRounds
+            imm8: LinkRounds,
+            rn: 6
         );
         a.B(
-            label: "round",
-            cond: Asm.CondNe
+            cond: Asm.CondNe,
+            label: "round"
         );
 
         EmitLinkEpilogue(a: a);
 
         return a.Finish();
     }
-
     // Shared tail of the two link ROMs: record the final SIOCNT (id bits + cleared start), the IF-observation count,
     // and the completion marker, then hang.
     private static void EmitLinkEpilogue(Asm a) {
         a.Ldrh(
+            imm8: 0x28,
             rd: 1,
-            rn: 10,
-            imm8: 0x28
+            rn: 10
         );               // final SIOCNT
         a.LdrConst(
             rd: 2,
             value: LinkControlAddress
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.LdrConst(
             rd: 2,
             value: LinkIrqCountAddress
         );
         a.Str(
+            imm12: 0,
             rd: 4,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.LdrConst(
             rd: 1,
@@ -774,9 +761,9 @@ internal static class MicroRoms {
             value: LinkMarkerAddress
         );
         a.Str(
+            imm12: 0,
             rd: 1,
-            rn: 2,
-            imm12: 0
+            rn: 2
         );
         a.Label(name: "hang");
         a.B(label: "hang");
@@ -798,46 +785,42 @@ internal static class MicroRoms {
         private readonly Dictionary<string, int> m_labels = new();
 
         public void Label(string name) => m_labels[name] = m_code.Count;
-        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | ((uint)rd << 12) | (imm8 & 0xFFu));
+        public void Mov(int rd, uint imm8) => m_code.Add(item: 0xE3A00000u | (((uint)rd) << 12) | (imm8 & 0xFFu));
         public void Add(int rd, int rn, uint imm8) =>
-            m_code.Add(item: 0xE2800000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm8 & 0xFFu));
+            m_code.Add(item: 0xE2800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm8 & 0xFFu));
         public void AddReg(int rd, int rn, int rm) =>
-            m_code.Add(item: 0xE0800000u | ((uint)rn << 16) | ((uint)rd << 12) | (uint)rm);
+            m_code.Add(item: 0xE0800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((uint)rm));
         public void EorReg(int rd, int rn, int rm) =>
-            m_code.Add(item: 0xE0200000u | ((uint)rn << 16) | ((uint)rd << 12) | (uint)rm);
-
+            m_code.Add(item: 0xE0200000u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((uint)rm));
         // MOV rd, rm, LSL #shift / LSR #shift — the register-shift-by-immediate movs.
         public void LslImm(int rd, int rm, int shift) =>
-            m_code.Add(item: 0xE1A00000u | ((uint)rd << 12) | ((uint)shift << 7) | (uint)rm);
+            m_code.Add(item: 0xE1A00000u | (((uint)rd) << 12) | (((uint)shift) << 7) | ((uint)rm));
         public void LsrImm(int rd, int rm, int shift) =>
-            m_code.Add(item: 0xE1A00020u | ((uint)rd << 12) | ((uint)shift << 7) | (uint)rm);
-        public void Cmp(int rn, uint imm8) => m_code.Add(item: 0xE3500000u | ((uint)rn << 16) | (imm8 & 0xFFu));
-        public void Tst(int rn, uint imm8) => m_code.Add(item: 0xE3100000u | ((uint)rn << 16) | (imm8 & 0xFFu));
+            m_code.Add(item: 0xE1A00020u | (((uint)rd) << 12) | (((uint)shift) << 7) | ((uint)rm));
+        public void Cmp(int rn, uint imm8) => m_code.Add(item: 0xE3500000u | (((uint)rn) << 16) | (imm8 & 0xFFu));
+        public void Tst(int rn, uint imm8) => m_code.Add(item: 0xE3100000u | (((uint)rn) << 16) | (imm8 & 0xFFu));
         public void Ldr(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5900000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm12 & 0xFFFu));
+            m_code.Add(item: 0xE5900000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
         public void Str(int rd, int rn, uint imm12) =>
-            m_code.Add(item: 0xE5800000u | ((uint)rn << 16) | ((uint)rd << 12) | (imm12 & 0xFFFu));
-
+            m_code.Add(item: 0xE5800000u | (((uint)rn) << 16) | (((uint)rd) << 12) | (imm12 & 0xFFFu));
         // LDRH/STRH split their 8-bit offset into two nibbles (addressing mode 3).
         public void Ldrh(int rd, int rn, uint imm8) =>
-            m_code.Add(item: 0xE1D000B0u | ((uint)rn << 16) | ((uint)rd << 12) | ((imm8 & 0xF0u) << 4) | (imm8 & 0x0Fu));
+            m_code.Add(item: 0xE1D000B0u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((imm8 & 0xF0u) << 4) | (imm8 & 0x0Fu));
         public void Strh(int rd, int rn, uint imm8) =>
-            m_code.Add(item: 0xE1C000B0u | ((uint)rn << 16) | ((uint)rd << 12) | ((imm8 & 0xF0u) << 4) | (imm8 & 0x0Fu));
-        public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | (uint)rn);
-
+            m_code.Add(item: 0xE1C000B0u | (((uint)rn) << 16) | (((uint)rd) << 12) | ((imm8 & 0xF0u) << 4) | (imm8 & 0x0Fu));
+        public void Bx(int rn) => m_code.Add(item: 0xE12FFF10u | ((uint)rn));
         // A (conditional) branch to a label, forward or backward; the offset is fixed up in Finish once every label
         // is known.
         public void B(string label, uint cond = CondAl) {
             m_branches.Add(item: (m_code.Count, label, cond));
             m_code.Add(item: 0);
         }
-
         // Branch back to the instruction `instructions` slots before this one (1 = the immediately preceding one).
         public void BBack(int instructions) {
             var idx = m_code.Count;
             var off = ((idx - instructions) - (idx + 2)); // ARM PC is 2 instructions (8 bytes) ahead
 
-            m_code.Add(item: 0xEA000000u | ((uint)off & 0xFFFFFFu));
+            m_code.Add(item: 0xEA000000u | (((uint)off) & 0xFFFFFFu));
         }
         public void LdrConst(int rd, uint value) {
             m_loads.Add(item: (m_code.Count, rd, value, null));
@@ -851,7 +834,7 @@ internal static class MicroRoms {
             foreach (var (instr, label, cond) in m_branches) {
                 var off = (m_labels[label] - (instr + 2)); // ARM PC is 2 instructions (8 bytes) ahead
 
-                m_code[instr] = (cond << 28) | 0x0A000000u | ((uint)off & 0xFFFFFFu);
+                m_code[instr] = (cond << 28) | 0x0A000000u | (((uint)off) & 0xFFFFFFu);
             }
 
             var poolBase = m_code.Count;
@@ -860,7 +843,7 @@ internal static class MicroRoms {
             foreach (var (instr, rd, value, label) in m_loads) {
                 var resolved = ((label is null)
                     ? value
-                    : (RomBase + ((uint)m_labels[label] * 4u)));
+                    : (RomBase + (((uint)m_labels[label]) * 4u)));
                 var poolIndex = pool.IndexOf(item: resolved);
 
                 if (poolIndex < 0) {
@@ -871,7 +854,7 @@ internal static class MicroRoms {
                 var literalWord = (poolBase + poolIndex);
                 var offsetBytes = ((literalWord - (instr + 2)) * 4); // pc = instr*4 + 8
 
-                m_code[instr] = 0xE59F0000u | ((uint)rd << 12) | ((uint)offsetBytes & 0xFFFu);
+                m_code[instr] = 0xE59F0000u | (((uint)rd) << 12) | (((uint)offsetBytes) & 0xFFFu);
             }
 
             var words = new List<uint>(collection: m_code);

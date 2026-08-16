@@ -10,6 +10,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXVertexBuffer : IDisposable {
     private readonly IDirectXVertexBufferApi m_vertexBufferApi;
+
     private bool m_disposed;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXVertexBuffer"/> class, taking ownership of a resource.</summary>

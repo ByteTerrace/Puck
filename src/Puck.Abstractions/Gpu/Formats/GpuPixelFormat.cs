@@ -16,7 +16,6 @@ public enum GpuPixelFormat : uint {
     /// <summary>The B8G8R8A8 unsigned normalized format.</summary>
     B8G8R8A8Unorm = 2,
 }
-
 /// <summary>
 /// Conversions into the <see cref="GpuPixelFormat"/> vocabulary.
 /// </summary>

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>The machine-neutral substrate every GamingBrick core builds on: little-endian whole-state snapshot serialization with section-localized divergence reporting, a pooled forked-instance lifecycle, bounded rewind/runahead/fast-forward time travel, and a queued off-thread host that turns a core into a backpressured emulation worker. It carries no console-specific CPU, PPU, or cartridge logic of its own — that lives in each brick that references it.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.GamingBricks</PackageId>
+        <PackageTags>determinism;emulation;fork;queued-host;snapshot;time-travel</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*,)" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+    </ItemGroup>
+</Project>

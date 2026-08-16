@@ -39,7 +39,6 @@ internal static class MeetClaims {
 
         return null;
     }
-
     /// <summary>Meet is associative on every carrier: a delegation chain folds to one envelope however it is
     /// bracketed.</summary>
     /// <param name="left">The first lane vector (width 3).</param>
@@ -72,7 +71,6 @@ internal static class MeetClaims {
             ? null
             : $"MeetProduct.Meet is not associative at masks ({envelopeA.First.Bits:x}, {envelopeB.First.Bits:x}, {envelopeC.First.Bits:x}), amounts ({envelopeA.Second.Amount}, {envelopeB.Second.Amount}, {envelopeC.Second.Amount})");
     }
-
     /// <summary>Meet is commutative on every carrier: the two links of a delegation step contribute symmetrically.</summary>
     /// <param name="left">The first lane vector (width 2).</param>
     /// <param name="right">The second lane vector (width 2).</param>
@@ -101,7 +99,6 @@ internal static class MeetClaims {
             ? null
             : $"MeetProduct.Meet is not commutative at masks ({envelopeA.First.Bits:x}, {envelopeB.First.Bits:x}), amounts ({envelopeA.Second.Amount}, {envelopeB.Second.Amount})");
     }
-
     /// <summary>Meet is idempotent on every carrier: an envelope folded with itself is unchanged, so repeating a link
     /// in a delegation chain attenuates nothing further.</summary>
     /// <param name="left">The first lane vector (width 2).</param>
@@ -130,7 +127,6 @@ internal static class MeetClaims {
             ? null
             : $"MeetProduct.Meet is not idempotent at ({envelope.First.Bits:x}, {envelope.Second.Amount})");
     }
-
     /// <summary>THE SECURITY PROPERTY, both halves of the greatest-lower-bound statement, against order spellings
     /// independent of the subject: the meet is at most each operand (no attenuation step can widen authority), and any
     /// common lower bound is at most the meet (attenuation discards nothing both operands allow).</summary>
@@ -148,7 +144,7 @@ internal static class MeetClaims {
 
         // The greatest half: a common lower bound of both operands, built independently of the subject by clearing
         // bits from one operand through the OTHER operand's complement image, must sit at or below the meet.
-        var maskLower = new MeetMask64(Bits: (maskA.Bits & ~unchecked((ulong)left[2])));
+        var maskLower = new MeetMask64(Bits: maskA.Bits & ~unchecked((ulong)left[2]));
 
         if (BitwiseSubset(narrow: maskLower.Bits, wide: maskB.Bits) && !BitwiseSubset(narrow: maskLower.Bits, wide: maskMeet.Bits)) {
             return $"MeetMask64.Meet is not greatest: common lower bound {maskLower.Bits:x} exceeds meet {maskMeet.Bits:x}";
@@ -180,7 +176,6 @@ internal static class MeetClaims {
             ? null
             : $"MeetProduct.Meet widened a component at masks ({envelopeA.First.Bits:x}, {envelopeB.First.Bits:x}), amounts ({envelopeA.Second.Amount}, {envelopeB.Second.Amount})");
     }
-
     /// <summary>The shipped order predicate decides exactly the meet's order, on every carrier:
     /// <c>a.IsAtMost(b)</c> if and only if <c>Meet(a, b) == a</c>. With the meet pinned as the greatest lower bound by
     /// the never-widens case, this ties <c>IsAtMost</c> to the same order, so neither member can drift from the
@@ -224,7 +219,6 @@ internal static class MeetClaims {
 
         return null;
     }
-
     /// <summary>The composition law: the product carrier's every operation projects componentwise onto the component
     /// carriers' own operations — meet, top, bottom, and the order as the conjunction of component orders — and the
     /// construction stacks, a nested product projecting the same way. This is what makes "a product of meets is a
@@ -261,7 +255,6 @@ internal static class MeetClaims {
             ? null
             : $"a nested MeetProduct did not project componentwise at outer masks ({nestedA.Second.Bits:x}, {nestedB.Second.Bits:x})");
     }
-
     /// <summary>Meet has <c>Top</c> as a two-sided identity on every carrier: an unrestricted link in a delegation
     /// chain attenuates nothing.</summary>
     /// <param name="left">The first lane vector (width 2).</param>
@@ -304,15 +297,12 @@ internal static class MeetClaims {
 
         return true;
     }
-
     private static MeetProduct<MeetMask64, MeetQuantity64> Envelope(long maskLane, long amountLane) =>
         new(First: Mask(lane: maskLane), Second: Quantity(lane: amountLane));
-
     // Domain lanes are signed raws; the carriers are unsigned. A plain bit reinterpretation keeps the committed edge
     // battery meaningful: 0 stays Bottom, −1 becomes Top, and every power-of-two off-by-one lands beside its seam.
     private static MeetMask64 Mask(long lane) =>
         new(Bits: unchecked((ulong)lane));
-
     private static MeetQuantity64 Quantity(long lane) =>
         new(Amount: unchecked((ulong)lane));
 }

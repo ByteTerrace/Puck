@@ -13,7 +13,6 @@ public interface IHidDeviceSource {
     /// </summary>
     /// <returns>The present HID device interfaces.</returns>
     IEnumerable<HidDeviceInfo> EnumerateInterfaces();
-
     /// <summary>Opens a specific device interface by path.</summary>
     /// <param name="devicePath">The device interface path (from <see cref="EnumerateInterfaces"/>).</param>
     /// <returns>An opened device, or <see langword="null"/> if it could not be opened.</returns>

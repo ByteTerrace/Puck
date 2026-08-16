@@ -102,12 +102,14 @@
   {
     "Id": "symmetric-solve.invert2-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TryInvertSymmetric2" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TryInvertSymmetric2 (internal) — the refuse/succeed outcome and all three distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric2 — the refuse/succeed outcome and all three distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
         "Against": "Oracles.TryInvertSymmetric2 — the exact BigInteger adjugate-over-determinant, with no intermediate rounding, no wrapping, and no preconditioning of any kind",
         "Shared": "",
         "Citation": "",
@@ -152,12 +154,14 @@
   {
     "Id": "symmetric-solve.invert2-vs-bareiss",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TryInvertSymmetric2" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TryInvertSymmetric2 (internal) — the refuse/succeed outcome and all three distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
+        "Subject": "FixedSymmetricSolve.TryInvertSymmetric2 — the refuse/succeed outcome and all three distinct inverse entries, at a caller-chosen output fraction shift, over SymmetricSolveClaims.FoldModerate's roughly-31-bit-magnitude band",
         "Against": "Oracles.TryBareissInvertSymmetric2 — fraction-free (Bareiss) Gaussian elimination on [K | I] with partial pivoting in BigInteger, sharing no formula with the subject's adjugate path or with Oracles.TryInvertSymmetric2's own adjugate transcription. Added for the same reason as solve2-vs-bareiss: Invert returns the cofactors themselves (scaled by 1/det), so a shared cofactor sign error is at least as invisible to the adjugate oracle here as it is to Solve's",
         "Shared": "",
         "Citation": "",
@@ -300,12 +304,14 @@
   {
     "Id": "symmetric-solve.divide-magnitude-rounded-full-width-agrees",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FusedArithmetic", "Name": "TryDivideMagnitudeRounded" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FusedArithmetic.TryDivideMagnitudeRounded (internal) at five hand-picked contract witnesses: fractionBitCount -1 and int.MinValue must both refuse with zero output in under one second, directly pinning the pre-loop guard that prevents masked shifts and a 2,147,483,648-iteration restoring loop; fractionBitCount 129 over a numerator smaller than its denominator (zero starting integer quotient) must refuse; the SAME operands at fractionBitCount 127 (one bit inside the documented margin) must still answer exactly; and numeratorMagnitude = 2^127 with denominatorMagnitude = 2^128-1 at fractionBitCount 1 exercises the restoring-division loop's own remainder reaching exactly half of UInt128's ceiling",
+        "Subject": "FusedArithmetic.TryDivideMagnitudeRounded at five hand-picked contract witnesses: fractionBitCount -1 and int.MinValue must both refuse with zero output in under one second, directly pinning the pre-loop guard that prevents masked shifts and a 2,147,483,648-iteration restoring loop; fractionBitCount 129 over a numerator smaller than its denominator (zero starting integer quotient) must refuse; the SAME operands at fractionBitCount 127 (one bit inside the documented margin) must still answer exactly; and numeratorMagnitude = 2^127 with denominatorMagnitude = 2^128-1 at fractionBitCount 1 exercises the restoring-division loop's own remainder reaching exactly half of UInt128's ceiling",
         "Against": "Oracles.RoundRationalTiesToEven — the exact BigInteger rational rounding, comparing 2r against d rather than the subject's own d-r against r, a DIFFERENT tie formulation so a shared rounding-compare defect cannot pass both",
         "Shared": "",
         "Citation": "",
@@ -421,12 +427,14 @@
   {
     "Id": "symmetric-solve.apply2-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TryApplySymmetric2" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TryApplySymmetric2 (internal) — the refuse/succeed outcome and both result components of a symmetric matrix times a vector, at THREE independently swept fraction bit counts (matrix, vector, result) over the FULL signed range of every entry. No fold: unlike Solve and Invert, Apply has no preconditioning envelope to stay inside, because each component is a sum of two raw products bounded by 2^127 and therefore exact in the sign-plus-UInt128 accumulator at any operand",
+        "Subject": "FixedSymmetricSolve.TryApplySymmetric2 — the refuse/succeed outcome and both result components of a symmetric matrix times a vector, at THREE independently swept fraction bit counts (matrix, vector, result) over the FULL signed range of every entry. No fold: unlike Solve and Invert, Apply has no preconditioning envelope to stay inside, because each component is a sum of two raw products bounded by 2^127 and therefore exact in the sign-plus-UInt128 accumulator at any operand",
         "Against": "Oracles.TryApplySymmetric2 — the exact BigInteger sum rounded once against an explicit power-of-two denominator, with no accumulator width anywhere and the tie decided by 2r against d rather than by the subject's own discarded-bit split",
         "Shared": "",
         "Citation": "",
@@ -446,12 +454,14 @@
   {
     "Id": "symmetric-solve.apply3-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedSymmetricSolve", "Name": "TryApplySymmetric3" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedSymmetricSolve.TryApplySymmetric3 (internal) — the inverse-inertia-times-angular-impulse kernel itself: the outcome and all three result components, at three independently swept scales over the full signed range. Each component is a sum of THREE raw products, bounded by 3*2^126, still inside UInt128",
+        "Subject": "FixedSymmetricSolve.TryApplySymmetric3 — the inverse-inertia-times-angular-impulse kernel itself: the outcome and all three result components, at three independently swept scales over the full signed range. Each component is a sum of THREE raw products, bounded by 3*2^126, still inside UInt128",
         "Against": "Oracles.TryApplySymmetric3 — the same exact BigInteger route as symmetric-solve.apply2-vs-oracle's reference, one degree up",
         "Shared": "",
         "Citation": "",

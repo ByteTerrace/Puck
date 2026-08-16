@@ -16,12 +16,10 @@ public unsafe interface IAllocator {
     /// the <c>NativeMemory</c>-backed implementation aligns to 16 bytes.</param>
     /// <returns>A pointer to the allocated block, or <see langword="null"/> if the allocation failed.</returns>
     void* Allocate(nuint size, nuint alignment = 0);
-
     /// <summary>Frees a block previously returned by <see cref="Allocate"/> or <see cref="Reallocate"/>. Passing
     /// <see langword="null"/> is safe — every engine implementation treats it as a no-op.</summary>
     /// <param name="ptr">The block to free, or <see langword="null"/> to do nothing.</param>
     void Free(void* ptr);
-
     /// <summary>Resizes a previously allocated block, preserving its contents up to the smaller of the two sizes.</summary>
     /// <param name="ptr">The block to resize.</param>
     /// <param name="newSize">The new size in bytes.</param>

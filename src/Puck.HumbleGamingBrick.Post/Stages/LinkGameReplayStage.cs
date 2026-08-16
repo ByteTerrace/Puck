@@ -25,11 +25,9 @@ internal sealed class LinkGameReplayStage : IPostStage {
     // sides. Authored with --link-explore; see the HGB Post README's "link-game-replay" section for the ROM/env-var contract.
     private const string RomEnvironmentVariable = "PUCK_GB_LINKROM";
     private const string RomFallbackPath = @"D:\Source\ByteTerrace\Silo\ROMS\Mario Tennis (USA).gbc";
-
     // The frozen menu walk reaches the handshake by ~frame 700; 1200 frames leaves the pair deep in the live
     // "LINKING… Waiting for other player" exchange with hundreds of transfers each way — ample, robust traffic.
     private const int Frames = 1200;
-
     // The traffic floor, captured from the verified-good run (the captured link-session cart, cgb↔agb, 1200 frames): the exact
     // byte-stream fingerprint each console shifted in over the handshake. The replay-identical check already proves the
     // two runs agree with each other; this pinned floor additionally catches a serial-behavior regression that stays
@@ -42,7 +40,6 @@ internal sealed class LinkGameReplayStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "link-game-replay";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -106,7 +103,6 @@ internal sealed class LinkGameReplayStage : IPostStage {
             frames: Frames
         );
     }
-
     // Judges the traffic evidence of the first run; null means the handshake produced real, non-idle serial traffic on
     // both sides.
     private static string? Verify(LinkReplayResult result, string title) {
@@ -139,7 +135,6 @@ internal sealed class LinkGameReplayStage : IPostStage {
 
         return null;
     }
-
     // The all-0xFF stream an unplugged port would shift in has a fixed FNV fingerprint per length; a real exchange never
     // matches it. Compares against the FNV of `completions` copies of 0xFF.
     private static bool IsIdle(ulong hash, int completions) {
@@ -151,7 +146,6 @@ internal sealed class LinkGameReplayStage : IPostStage {
 
         return (hash == idle.Value);
     }
-
     // The single menu-walk script both consoles follow (identical inputs on each side to reach the shared handshake).
     // Authored with --link-explore against the captured link-session cart: five Start taps blow through the attract/title screens
     // to the MAIN MENU (cursor on EXHIBITION, top-left), Right·Right walks to the LINKED PLAY icon (top-right), and A
@@ -203,7 +197,7 @@ internal sealed class LinkGameReplayStage : IPostStage {
                 break;
             }
 
-            _ = builder.Append(value: (char)character);
+            _ = builder.Append(value: ((char)character));
         }
 
         return builder.ToString().Trim();

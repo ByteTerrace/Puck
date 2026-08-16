@@ -34,10 +34,21 @@ internal sealed class WorldStorageSyncHandle {
         ArgumentNullException.ThrowIfNull(argument: worlds);
 
         if (settings.Endpoint is not { Length: > 0 } endpoint) {
-            return new WorldStorageSyncHandle(disposition: "cloud unwired — no endpoint (local-only)", engine: null, neighbours: null);
+            return new WorldStorageSyncHandle(
+                disposition: "cloud unwired — no endpoint (local-only)",
+                engine: null,
+                neighbours: null
+            );
         }
-        if (!identity.TryResolve(containerId: out var containerId, reason: out var reason)) {
-            return new WorldStorageSyncHandle(disposition: $"cloud unwired — {reason}", engine: null, neighbours: null);
+        if (!identity.TryResolve(
+            containerId: out var containerId,
+            reason: out var reason
+        )) {
+            return new WorldStorageSyncHandle(
+                disposition: $"cloud unwired — {reason}",
+                engine: null,
+                neighbours: null
+            );
         }
 
         // A service URI is the platform edge (credentialed, the /private namespace); a connection string is a
@@ -57,18 +68,30 @@ internal sealed class WorldStorageSyncHandle {
 
         var discoveryDisposition = ((target.EdgeNamespace is null)
             ? "direct (raw account shape)"
-            : ((target.DirectEndpoint is null) ? "REFUSES — no discovery endpoint authored" : "direct discovery endpoint"));
+            : ((target.DirectEndpoint is null)
+                ? "REFUSES — no discovery endpoint authored"
+                : "direct discovery endpoint"
+        ));
 
         return new WorldStorageSyncHandle(
-            disposition: $"cloud wired — container {containerId:D} via {((target.EdgeNamespace is null) ? "connection string (raw account shape)" : "the platform edge")}, discovery {discoveryDisposition} (identity: {reason})",
+            disposition: $"cloud wired — container {containerId:D} via {((target.EdgeNamespace is null)
+            ? "connection string (raw account shape)"
+            : "the platform edge")}, discovery {discoveryDisposition} (identity: {reason})",
             engine: new WorldOwnedWorldSync(
                 containerId: containerId,
-                stateFilePath: Path.Combine(path1: worlds.FilePath, path2: "sync-state.json"),
+                stateFilePath: Path.Combine(
+                    path1: worlds.FilePath,
+                    path2: "sync-state.json"
+                ),
                 store: store,
                 target: target,
                 worlds: worlds
             ),
-            neighbours: new WorldStorageNeighbourResolver(store: store, target: target, containerId: containerId)
+            neighbours: new WorldStorageNeighbourResolver(
+                containerId: containerId,
+                store: store,
+                target: target
+            )
         );
     }
 
@@ -78,6 +101,8 @@ internal sealed class WorldStorageSyncHandle {
         Neighbours = neighbours;
     }
 
+    /// <summary>One line of truth about the wiring for <c>storage.status</c>.</summary>
+    public string Disposition { get; }
     /// <summary>The sync engine, or <see langword="null"/> when the cloud is unwired.</summary>
     public WorldOwnedWorldSync? Engine { get; }
     /// <summary>The cloud-backed neighbour resolver an adjacency proof reads, or
@@ -85,6 +110,4 @@ internal sealed class WorldStorageSyncHandle {
     /// only at document-load moments (see <c>WorldServer.Neighbours</c>' own remarks), never on a live per-mutation
     /// path.</summary>
     public IWorldNeighbourResolver? Neighbours { get; }
-    /// <summary>One line of truth about the wiring for <c>storage.status</c>.</summary>
-    public string Disposition { get; }
 }

@@ -28,14 +28,15 @@ namespace Puck.Maths;
 /// </para>
 /// </remarks>
 public static class DigitalNetSampler {
-    /// <summary>The number of direction numbers one dimension carries, which is the coordinate's bit count.</summary>
-    public const int DirectionNumberCount = 32;
-    /// <summary>The number of direction numbers the two-dimensional net carries, dimension zero first.</summary>
-    public const int PlaneDirectionNumberCount = (2 * DirectionNumberCount);
     /// <summary>Separates the two coordinates' digital shifts when both are derived from one key.</summary>
     private const uint ScrambleSeparation = 0xA5A5A5A5U;
     /// <summary>The odd stride that separates streams before they are mixed; odd, so stream indexing stays injective.</summary>
     private const uint StreamStride = 0x9E3779B9U;
+
+    /// <summary>The number of direction numbers one dimension carries, which is the coordinate's bit count.</summary>
+    public const int DirectionNumberCount = 32;
+    /// <summary>The number of direction numbers the two-dimensional net carries, dimension zero first.</summary>
+    public const int PlaneDirectionNumberCount = (2 * DirectionNumberCount);
 
     /// <summary>Gets the generator of the net's second dimension, the primitive polynomial <c>t + 1</c>.</summary>
     /// <remarks>Degree one is the smallest generator there is, and it is exactly what a <c>(0, 2)</c>-sequence needs; its direction matrix is Pascal's triangle modulo two.</remarks>
@@ -47,7 +48,10 @@ public static class DigitalNetSampler {
     /// <exception cref="ArgumentException"><paramref name="destination"/> is not <see cref="DirectionNumberCount"/> long.</exception>
     public static void BuildBitReversalDirectionNumbers(Span<uint> destination) {
         if (DirectionNumberCount != destination.Length) {
-            throw new ArgumentException(message: $"A dimension's direction numbers occupy exactly {DirectionNumberCount} words.", paramName: nameof(destination));
+            throw new ArgumentException(
+                message: $"A dimension's direction numbers occupy exactly {DirectionNumberCount} words.",
+                paramName: nameof(destination)
+            );
         }
 
         for (var index = 0; (index < DirectionNumberCount); ++index) {
@@ -71,7 +75,10 @@ public static class DigitalNetSampler {
 
         // Thrown by hand rather than through the ArgumentOutOfRangeException helpers: those capture the caller
         // expression, and the caller expression here is the derived local, not the argument the caller supplied.
-        if ((order < 1) || (order > DirectionNumberCount)) {
+        if (
+            (order < 1) ||
+            (order > DirectionNumberCount)
+        ) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(generator),
                 actualValue: order,
@@ -80,15 +87,24 @@ public static class DigitalNetSampler {
         }
 
         if (DirectionNumberCount != destination.Length) {
-            throw new ArgumentException(message: $"A dimension's direction numbers occupy exactly {DirectionNumberCount} words.", paramName: nameof(destination));
+            throw new ArgumentException(
+                message: $"A dimension's direction numbers occupy exactly {DirectionNumberCount} words.",
+                paramName: nameof(destination)
+            );
         }
 
         if (order != initialNumbers.Length) {
-            throw new ArgumentException(message: "The recurrence needs exactly one initial numerator per degree of the generator.", paramName: nameof(initialNumbers));
+            throw new ArgumentException(
+                message: "The recurrence needs exactly one initial numerator per degree of the generator.",
+                paramName: nameof(initialNumbers)
+            );
         }
 
         if (!generator.IsPrimitive()) {
-            throw new ArgumentException(message: $"The generator {generator} is not primitive, so its recurrence does not have full period.", paramName: nameof(generator));
+            throw new ArgumentException(
+                message: $"The generator {generator} is not primitive, so its recurrence does not have full period.",
+                paramName: nameof(generator)
+            );
         }
 
         Span<uint> numerators = stackalloc uint[DirectionNumberCount];
@@ -97,8 +113,14 @@ public static class DigitalNetSampler {
             var initial = initialNumbers[index];
 
             // The bound is taken in the wider type because at the top degree the exclusive upper bound is 2^32 itself.
-            if ((0U == (initial & 1U)) || (((ulong)initial) >= (1UL << (index + 1)))) {
-                throw new ArgumentException(message: $"Initial numerator {index} must be odd and below 2^{(index + 1)}.", paramName: nameof(initialNumbers));
+            if (
+                (0U == (initial & 1U)) ||
+                (((ulong)initial) >= (1UL << (index + 1)))
+            ) {
+                throw new ArgumentException(
+                    message: $"Initial numerator {index} must be odd and below 2^{(index + 1)}.",
+                    paramName: nameof(initialNumbers)
+                );
             }
 
             numerators[index] = initial;
@@ -127,18 +149,19 @@ public static class DigitalNetSampler {
     /// <exception cref="ArgumentException"><paramref name="destination"/> is not <see cref="PlaneDirectionNumberCount"/> long.</exception>
     public static void BuildPlaneDirectionNumbers(Span<uint> destination) {
         if (PlaneDirectionNumberCount != destination.Length) {
-            throw new ArgumentException(message: $"The two-dimensional net's direction numbers occupy exactly {PlaneDirectionNumberCount} words.", paramName: nameof(destination));
+            throw new ArgumentException(
+                message: $"The two-dimensional net's direction numbers occupy exactly {PlaneDirectionNumberCount} words.",
+                paramName: nameof(destination)
+            );
         }
 
         BuildBitReversalDirectionNumbers(destination: destination[..DirectionNumberCount]);
-        BuildDirectionNumbers(generator: PlaneGenerator, initialNumbers: [1U], destination: destination[DirectionNumberCount..]);
+        BuildDirectionNumbers(
+            generator: PlaneGenerator,
+            initialNumbers: [1U],
+            destination: destination[DirectionNumberCount..]
+        );
     }
-    /// <summary>Derives the two coordinates' digital shifts from one key.</summary>
-    /// <param name="key">The key, which should already be mixed — <see cref="DeriveKey(uint, uint, uint)"/> produces one.</param>
-    /// <returns>The digital shift for each coordinate.</returns>
-    /// <remarks>The second shift is a mix of the key against a fixed separator rather than the key itself, so the two coordinates are not shifted by correlated vectors.</remarks>
-    public static (uint X, uint Y) DeriveScramble(uint key) =>
-        (X: key, Y: InvertibleBitMix.Mix(value: key ^ ScrambleSeparation));
     /// <summary>Derives a per-lattice-site key from a two-dimensional site and a stream index.</summary>
     /// <param name="x">The site's first coordinate, which must fit sixteen bits.</param>
     /// <param name="y">The site's second coordinate, which must fit sixteen bits.</param>
@@ -149,13 +172,21 @@ public static class DigitalNetSampler {
     public static uint DeriveKey(uint x, uint y, uint stream) {
         if (0xFFFFU < (x | y)) {
             throw new ArgumentOutOfRangeException(
-                paramName: ((0xFFFFU < x) ? nameof(x) : nameof(y)),
+                paramName: ((0xFFFFU < x)
+                ? nameof(x)
+                : nameof(y)),
                 message: "Each site coordinate must fit sixteen bits; a wider coordinate overlaps the packing and collides with another site's key."
             );
         }
 
         return InvertibleBitMix.Mix(value: (x | (y << 16)) ^ unchecked((stream * StreamStride)));
     }
+    /// <summary>Derives the two coordinates' digital shifts from one key.</summary>
+    /// <param name="key">The key, which should already be mixed — <see cref="DeriveKey(uint, uint, uint)"/> produces one.</param>
+    /// <returns>The digital shift for each coordinate.</returns>
+    /// <remarks>The second shift is a mix of the key against a fixed separator rather than the key itself, so the two coordinates are not shifted by correlated vectors.</remarks>
+    public static (uint X, uint Y) DeriveScramble(uint key) =>
+        (X: key, Y: InvertibleBitMix.Mix(value: key ^ ScrambleSeparation));
     /// <summary>Returns one coordinate of the digitally shifted net point at an index.</summary>
     /// <param name="index">The point index; the sequence is seekable, so no preceding index need be visited.</param>
     /// <param name="directionNumbers">One dimension's <see cref="DirectionNumberCount"/> direction numbers.</param>
@@ -164,7 +195,10 @@ public static class DigitalNetSampler {
     /// <exception cref="ArgumentException"><paramref name="directionNumbers"/> is not <see cref="DirectionNumberCount"/> long.</exception>
     public static uint Sample(uint index, ReadOnlySpan<uint> directionNumbers, uint scramble) {
         if (DirectionNumberCount != directionNumbers.Length) {
-            throw new ArgumentException(message: $"A dimension's direction numbers occupy exactly {DirectionNumberCount} words.", paramName: nameof(directionNumbers));
+            throw new ArgumentException(
+                message: $"A dimension's direction numbers occupy exactly {DirectionNumberCount} words.",
+                paramName: nameof(directionNumbers)
+            );
         }
 
         var remaining = index;
@@ -185,12 +219,23 @@ public static class DigitalNetSampler {
     /// <exception cref="ArgumentException"><paramref name="directionNumbers"/> is not <see cref="PlaneDirectionNumberCount"/> long.</exception>
     public static (uint X, uint Y) SamplePlane(uint index, ReadOnlySpan<uint> directionNumbers, (uint X, uint Y) scramble) {
         if (PlaneDirectionNumberCount != directionNumbers.Length) {
-            throw new ArgumentException(message: $"The two-dimensional net's direction numbers occupy exactly {PlaneDirectionNumberCount} words.", paramName: nameof(directionNumbers));
+            throw new ArgumentException(
+                message: $"The two-dimensional net's direction numbers occupy exactly {PlaneDirectionNumberCount} words.",
+                paramName: nameof(directionNumbers)
+            );
         }
 
         return (
-            X: Sample(index: index, directionNumbers: directionNumbers[..DirectionNumberCount], scramble: scramble.X),
-            Y: Sample(index: index, directionNumbers: directionNumbers[DirectionNumberCount..], scramble: scramble.Y)
+            X: Sample(
+            index: index,
+            directionNumbers: directionNumbers[..DirectionNumberCount],
+            scramble: scramble.X
+        ),
+            Y: Sample(
+            index: index,
+            directionNumbers: directionNumbers[DirectionNumberCount..],
+            scramble: scramble.Y
+        )
         );
     }
     /// <summary>Permutes the index a consumer draws, so that neighbouring lattice sites walk the same net in different orders.</summary>
@@ -204,5 +249,8 @@ public static class DigitalNetSampler {
     /// an aligned dyadic block, and every such block of a <c>(0, 2)</c>-sequence is itself a <c>(0, m, 2)</c>-net.
     /// </remarks>
     public static uint ShuffleIndex(uint index, uint salt) =>
-        StratifiedShuffle.Permute(index: index, seed: salt);
+        StratifiedShuffle.Permute(
+            index: index,
+            seed: salt
+        );
 }

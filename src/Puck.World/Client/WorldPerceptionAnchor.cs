@@ -33,20 +33,23 @@ internal sealed class WorldPerceptionAnchor {
         }
     }
 
-    /// <summary>The body index seat <paramref name="slot"/> perceives from.</summary>
-    /// <param name="slot">The 0-based local seat slot.</param>
-    /// <returns>The 0-based body index that seat's presentation derives from — the seat's bound body, or a
-    /// possessed body while a body-targeted, captured Control route is active.</returns>
-    public int PerceivedBody(int slot) => (((uint)slot < (uint)m_perceivedBody.Length) ? m_perceivedBody[slot] : slot);
-
     /// <summary>Publishes seat <paramref name="slot"/>'s resolved anchor. Called only from
     /// <see cref="WorldSeatContextSync.Publish"/>, the one per-tick (and boot-seed) loopback read of the grant
     /// table's Control route.</summary>
     /// <param name="slot">The 0-based local seat slot.</param>
     /// <param name="bodyIndex">The 0-based body index the slot now perceives from.</param>
     internal void Publish(int slot, int bodyIndex) {
-        if ((uint)slot < (uint)m_perceivedBody.Length) {
+        if (((uint)slot) < ((uint)m_perceivedBody.Length)) {
             m_perceivedBody[slot] = bodyIndex;
         }
     }
+
+    /// <summary>The body index seat <paramref name="slot"/> perceives from.</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <returns>The 0-based body index that seat's presentation derives from — the seat's bound body, or a
+    /// possessed body while a body-targeted, captured Control route is active.</returns>
+    public int PerceivedBody(int slot) => ((((uint)slot) < ((uint)m_perceivedBody.Length))
+        ? m_perceivedBody[slot]
+        : slot
+    );
 }

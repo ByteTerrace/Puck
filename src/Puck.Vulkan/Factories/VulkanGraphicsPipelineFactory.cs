@@ -98,7 +98,6 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
             width: swapchain.ImageExtentWidth
         );
     }
-
     /// <inheritdoc/>
     public VulkanGraphicsPipeline Create(
         VulkanLogicalDevice logicalDevice,
@@ -185,8 +184,8 @@ public sealed class VulkanGraphicsPipelineFactory : IVulkanGraphicsPipelineFacto
         );
         var result = m_graphicsPipelineApi.CreateGraphicsPipeline(
             descriptorSetLayoutHandle: out var descriptorSetLayoutHandle,
-            pipelineLayoutHandle: out var pipelineLayoutHandle,
             pipelineHandle: out var pipelineHandle,
+            pipelineLayoutHandle: out var pipelineLayoutHandle,
             request: request
         );
 

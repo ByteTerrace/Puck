@@ -8,15 +8,15 @@ public interface ITextCommandSink {
     /// <param name="line">The line to queue.</param>
     void Enqueue(string line);
 }
-
 /// <summary>
 /// One host-issued text ingress, permanently bound to an acting principal and logical slot. A caller can submit text
 /// through the session but cannot change the identity the host stamped on it.
 /// </summary>
 public sealed class TextCommandSession : ITextCommandSink {
     private readonly TextSubmissionBarrier m_barrier = new();
-    private readonly Action<string, CommandResult>? m_onResult;
     private readonly ConcurrentQueue<string> m_pending = new();
+
+    private readonly Action<string, CommandResult>? m_onResult;
     private readonly TextCommandSource m_source;
 
     internal TextCommandSession(
@@ -33,30 +33,32 @@ public sealed class TextCommandSession : ITextCommandSink {
         Slot = slot;
     }
 
-    /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>
-    public CommandPrincipal Principal { get; }
-
-    /// <summary>Gets the logical player slot this ingress targets.</summary>
-    public int Slot { get; }
-
     internal TextSubmissionBarrier Barrier => m_barrier;
     internal bool HasPendingSimulationSubmission => m_barrier.HasPending;
     internal CommandInjectionSink? SimulationSink { get; }
 
+    /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>
+    public CommandPrincipal Principal { get; }
+    /// <summary>Gets the logical player slot this ingress targets.</summary>
+    public int Slot { get; }
+
     internal void EnqueuePending(string line) => m_pending.Enqueue(item: line);
-
+    internal void PublishResult(string line, CommandResult result) => m_onResult?.Invoke(
+        line,
+        result
+    );
     internal bool TryDequeuePending(out string? line) => m_pending.TryDequeue(result: out line);
-
     internal bool TryPeekPending(out string? line) => m_pending.TryPeek(result: out line);
 
     /// <inheritdoc/>
     public void Enqueue(string line) {
         ArgumentNullException.ThrowIfNull(line);
 
-        m_source.EnqueueSession(session: this, line: line);
+        m_source.EnqueueSession(
+            line: line,
+            session: this
+        );
     }
-
-    internal void PublishResult(string line, CommandResult result) => m_onResult?.Invoke(line, result);
 }
 
 // Process-local coordination only: the reference rides a live snapshot entry so applying that exact submission
@@ -67,7 +69,6 @@ internal sealed class TextSubmissionBarrier {
     public bool HasPending => (m_pending != 0);
 
     public void Begin() => m_pending++;
-
     public void Complete() {
         if (m_pending != 0) {
             m_pending--;

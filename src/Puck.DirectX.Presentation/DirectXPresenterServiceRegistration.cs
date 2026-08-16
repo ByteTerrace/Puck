@@ -65,7 +65,8 @@ public static class DirectXPresenterServiceRegistration {
         ));
         services.TryAddSingleton(implementationFactory: static sp => new DirectXSurfacePresenter(
             compositor: sp.GetRequiredService<DirectXSurfaceCompositor>(),
-            deviceContext: sp.GetRequiredService<DirectXDeviceContext>()
+            deviceContext: sp.GetRequiredService<DirectXDeviceContext>(),
+            surfaceTransferFactory: sp.GetRequiredService<IGpuSurfaceTransferFactory>()
         ));
         services.TryAddSingleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<DirectXSurfacePresenter>());
 

@@ -8,6 +8,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanCommandResources : IDisposable {
     private readonly IVulkanCommandResourcesApi m_commandResourcesApi;
+
     private bool m_disposed;
 
     /// <summary>Gets the native <c>VkCommandBuffer</c> handles allocated from the pool. Empty once disposed.</summary>

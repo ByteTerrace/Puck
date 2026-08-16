@@ -34,7 +34,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
 
     /// <summary>The <see cref="Diagnostic.Properties"/> key carrying a mismatch's brand id, so the code fix never parses display text.</summary>
     public const string BrandIdProperty = "VerifiedCodeId";
-
     /// <summary>The <see cref="Diagnostic.Properties"/> key carrying a mismatch's recomputed fingerprint.</summary>
     public const string RecomputedHashProperty = "VerifiedCodeHash";
 
@@ -48,7 +47,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         isEnabledByDefault: true,
         description: "A [VerifiedCode] declaration's tokens changed since its fingerprint was last recorded. Re-verify the change and update the manifest entry's sha256 (the code fix does this), or remove the [VerifiedCode] attribute and its manifest entry together."
     );
-
     /// <summary>VER002: a manifest entry whose id no branded symbol in this compilation ever carried.</summary>
     public static readonly DiagnosticDescriptor Ver002UnclaimedManifestEntry = new(
         id: "VER002",
@@ -60,7 +58,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         description: "Every VerifiedCode.json entry must be claimed by exactly one branded declaration each build, so a brand can never silently disappear.",
         customTags: WellKnownDiagnosticTags.CompilationEnd
     );
-
     /// <summary>VER003: a branded declaration shape <c>csharp-tokens-v1</c> refuses to fingerprint.</summary>
     public static readonly DiagnosticDescriptor Ver003UnfingerprintableDeclaration = new(
         id: "VER003",
@@ -71,7 +68,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         isEnabledByDefault: true,
         description: "csharp-tokens-v1 walks a declaration's own tokens, with the brand's own attribute syntax excluded. A shape that defeats either half — a partial declaration this walk cannot see whole, a preprocessor directive that makes the compiled tokens depend on symbols the walk does not read, or a brand whose syntax does not sit inside the declaration it brands — is refused rather than risk under-covering an edit."
     );
-
     /// <summary>VER004: a branded declaration's <c>[VerifiedCode(Basis = ...)]</c> disagrees with its manifest entry's recorded <c>basis</c>.</summary>
     public static readonly DiagnosticDescriptor Ver004BasisMismatch = new(
         id: "VER004",
@@ -82,7 +78,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         isEnabledByDefault: true,
         description: "A [VerifiedCode] attribute's optional Basis property and its manifest entry's basis array both assert why a brand is trusted, and can drift independently — one edited without the other. When the attribute carries a Basis, it and the manifest entry's basis array must name the same set (comma-separated vs. JSON array, order and whitespace ignored). Omitting Basis from the attribute entirely is not itself a problem; only a recorded disagreement is."
     );
-
     /// <summary>VER005: an unclaimed manifest entry this assembly owns, in an assembly that declares no namespace matching its own name.</summary>
     public static readonly DiagnosticDescriptor Ver005AssemblyConventionViolated = new(
         id: "VER005",
@@ -94,7 +89,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         description: "A manifest entry names its owning compilation, and its recorded symbol must name a member of that assembly under the repository's namespace-equals-assembly-name convention. That convention is silently wrong when an assembly does not declare a namespace matching its own name — a symbol recorded under such an assembly names a member no namespace tree can back up. This diagnostic makes the broken assumption loud instead of asserting a deletion it cannot stand behind.",
         customTags: WellKnownDiagnosticTags.CompilationEnd
     );
-
     /// <summary>VER006: <c>VerifiedCode.json</c> is missing, unreadable, off-schema, ambiguous, or carries an entry that cannot be trusted.</summary>
     public static readonly DiagnosticDescriptor Ver006ManifestUnusable = new(
         id: "VER006",
@@ -106,7 +100,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         description: "VerifiedCode.json is the only record that a brand ever existed, so a manifest that cannot be read must fail the build on the manifest rather than degrade to an empty ledger — an empty ledger sweeps nothing, and a compilation that deleted its brands and its manifest reference together would then pass in silence. Document-level failures (unreadable text, a root that is not an object, a schema version this analyzer does not implement, a repeated member, an ambiguous file name) discard every entry; an entry-level failure discards only that entry, so the rest of the sweep stays honest.",
         customTags: WellKnownDiagnosticTags.CompilationEnd
     );
-
     /// <summary>VER007: the brand sits somewhere this analyzer cannot fingerprint or record.</summary>
     public static readonly DiagnosticDescriptor Ver007UnsupportedBrandPlacement = new(
         id: "VER007",
@@ -117,7 +110,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         isEnabledByDefault: true,
         description: "A brand that is present and unenforced is worse than no brand at all: it asserts a proof that nothing checks. Every placement the attribute is legal on is therefore either analyzed or refused here. A local function or lambda has no documentation-comment id, so no manifest entry can name it and no sweep can notice its deletion."
     );
-
     /// <summary>VER008: a declaration claims a manifest entry recorded for a different symbol.</summary>
     public static readonly DiagnosticDescriptor Ver008EntrySymbolMismatch = new(
         id: "VER008",
@@ -128,7 +120,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         isEnabledByDefault: true,
         description: "An entry records the proof of one named member. Matching on the brand id alone lets the identical declaration move to another type, or another declaration take the id over, while the recorded fingerprint still matches — so the entry's recorded symbol is compared with the claiming declaration's documentation-comment id."
     );
-
     /// <summary>VER009: more than one declaration claims one manifest entry.</summary>
     public static readonly DiagnosticDescriptor Ver009DuplicateEntryClaim = new(
         id: "VER009",
@@ -140,7 +131,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         description: "Counting claims is what makes an entry the record of one proof rather than of a shape anything may match: an entry satisfied by mere set membership would be satisfied by any number of declarations, so a second one could take an id over while the recorded fingerprint still matched.",
         customTags: WellKnownDiagnosticTags.CompilationEnd
     );
-
     /// <summary>VER010: a manifest entry names a dependency this compilation cannot resolve to one walkable declaration.</summary>
     public static readonly DiagnosticDescriptor Ver010UnresolvableDependency = new(
         id: "VER010",
@@ -190,10 +180,10 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
 
         context.RegisterSymbolAction(
             action: symbolContext => AnalyzeSymbol(
-                symbolContext: symbolContext,
                 attributeType: attributeType,
+                claims: claims,
                 manifest: manifest,
-                claims: claims
+                symbolContext: symbolContext
             ),
             symbolKinds: ImmutableArray.Create(
                 item1: SymbolKind.Method,
@@ -203,8 +193,8 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
 
         context.RegisterSyntaxNodeAction(
             action: nodeContext => AnalyzeUnrecordableDeclaration(
-                nodeContext: nodeContext,
-                attributeType: attributeType
+                attributeType: attributeType,
+                nodeContext: nodeContext
             ),
             // A simple (unparenthesized) lambda cannot carry an attribute at all — CS8916 — so only the
             // parenthesized form needs watching.
@@ -214,9 +204,9 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
             ));
 
         context.RegisterCompilationEndAction(action: endContext => AnalyzeCompilationEnd(
+            claims: claims,
             endContext: endContext,
-            manifest: manifest,
-            claims: claims
+            manifest: manifest
         ));
     }
 
@@ -265,8 +255,8 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         if (text is null) {
             return new ManifestState(
                 Location: FileLocation(
-                    file: additionalFile,
-                    cancellationToken: cancellationToken
+                    cancellationToken: cancellationToken,
+                    file: additionalFile
                 ),
                 Reading: VerifiedCodeManifest.Unusable(message: $"{ManifestFileName} was supplied to this compilation but its text could not be read, so no brand can be checked and no deleted brand can be reported.")
             );
@@ -274,24 +264,24 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
 
         return new ManifestState(
             Location: FileLocation(
-                file: additionalFile,
-                cancellationToken: cancellationToken
+                cancellationToken: cancellationToken,
+                file: additionalFile
             ),
             Reading: VerifiedCodeManifest.Read(json: text.ToString())
         );
     }
-
     /// <summary>A location on the manifest file itself, so a manifest failure is reported where the manifest is, not on some brand site.</summary>
     private static Location FileLocation(AdditionalText file, CancellationToken cancellationToken) {
         var text = file.GetText(cancellationToken: cancellationToken);
         var span = new TextSpan(
-            start: 0,
-            length: 0
+            length: 0,
+            start: 0
         );
 
         var lineSpan = ((text is null)
             ? new Microsoft.CodeAnalysis.Text.LinePositionSpan()
-            : text.Lines.GetLinePositionSpan(span: span));
+            : text.Lines.GetLinePositionSpan(span: span)
+        );
 
         return Location.Create(
             filePath: file.Path,
@@ -357,7 +347,8 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
             value: out var recorded
         ))
             ? recorded
-            : null);
+            : null
+        );
 
         var fingerprint = TokenFingerprint.Compute(
             symbol: symbol,
@@ -370,11 +361,13 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         if (fingerprint.Refusal is not null) {
             var descriptor = ((fingerprint.DependencyId is null)
                 ? Ver003UnfingerprintableDeclaration
-                : Ver010UnresolvableDependency);
+                : Ver010UnresolvableDependency
+            );
 
             object[] messageArgs = ((fingerprint.DependencyId is null)
                 ? [symbolDisplay, id, fingerprint.Refusal]
-                : [symbolDisplay, id, fingerprint.DependencyId, fingerprint.Refusal]);
+                : [symbolDisplay, id, fingerprint.DependencyId, fingerprint.Refusal]
+            );
 
             symbolContext.ReportDiagnostic(diagnostic: Diagnostic.Create(
                 descriptor: descriptor,
@@ -436,35 +429,33 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
         }
 
         CheckBasisAgreement(
-            symbolContext: symbolContext,
             attributeData: attributeData,
             entry: entry,
-            symbolDisplay: symbolDisplay,
             id: id,
-            location: location
+            location: location,
+            symbolContext: symbolContext,
+            symbolDisplay: symbolDisplay
         );
     }
-
     /// <summary>
     /// Builds VER001 with the brand id and recomputed hash carried as diagnostic properties. The code fix reads
     /// those; the message is for people, and an id containing an apostrophe must not be able to break the repair.
     /// </summary>
     private static Diagnostic CreateMismatch(Location location, string symbolDisplay, string id, string hash) =>
         Diagnostic.Create(
-        descriptor: Ver001FingerprintMismatch,
-        location: location,
-        properties: ImmutableDictionary<string, string?>.Empty
+            descriptor: Ver001FingerprintMismatch,
+            location: location,
+            properties: ImmutableDictionary<string, string?>.Empty
                 .Add(
-            key: BrandIdProperty,
-            value: id
-        )
+                key: BrandIdProperty,
+                value: id
+            )
                 .Add(
-            key: RecomputedHashProperty,
-            value: hash
-        ),
-        messageArgs: [symbolDisplay, id, hash]
-    );
-
+                key: RecomputedHashProperty,
+                value: hash
+            ),
+            messageArgs: [symbolDisplay, id, hash]
+        );
     /// <summary>Refuses a brand on a local function or lambda: legal C#, but nothing the manifest can name or the sweep can miss.</summary>
     private static void AnalyzeUnrecordableDeclaration(SyntaxNodeAnalysisContext nodeContext, INamedTypeSymbol? attributeType) {
         if (attributeType is null) {
@@ -499,8 +490,8 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
                     descriptor: Ver007UnsupportedBrandPlacement,
                     location: attribute.GetLocation(),
                     BrandId(
-                        nodeContext: nodeContext,
-                        attribute: attribute
+                        attribute: attribute,
+                        nodeContext: nodeContext
                     ),
                     description
                 ));
@@ -509,7 +500,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
             }
         }
     }
-
     /// <summary>The id a brand names, read off its first argument; the display text falls back to the argument's source when it is not a constant.</summary>
     private static string BrandId(SyntaxNodeAnalysisContext nodeContext, AttributeSyntax attribute) {
         var argument = attribute.ArgumentList?.Arguments.FirstOrDefault();
@@ -566,7 +556,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
             manifestBasisText
         ));
     }
-
     /// <summary>
     /// Compares the attribute's comma-separated <c>Basis</c> against the manifest's JSON <c>basis</c> array as
     /// sets: order must not matter (an author may reorder either side), and whitespace around each comma-separated
@@ -672,7 +661,6 @@ public sealed class VerifiedCodeAnalyzer : DiagnosticAnalyzer {
             ));
         }
     }
-
     /// <summary>
     /// Walks <paramref name="dottedName"/> (an assembly name, dot-segmented like a namespace path) down from
     /// <paramref name="assembly"/>'s own global namespace, scoped to namespaces <paramref name="assembly"/> itself

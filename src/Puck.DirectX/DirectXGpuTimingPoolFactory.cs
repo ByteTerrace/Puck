@@ -16,7 +16,7 @@ public sealed unsafe class DirectXGpuTimingPoolFactory : IGpuTimingPoolFactory {
     public IGpuTimingPool CreateTimestampPool(IGpuDeviceContext deviceContext, uint queryCapacity) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
-        var device = (ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle;
+        var device = ((ID3D12Device*)((IDirectXDeviceContext)deviceContext).Device.Handle);
         var queryHeapDesc = new D3D12_QUERY_HEAP_DESC {
             Count = queryCapacity,
             NodeMask = 0,
@@ -43,7 +43,7 @@ public sealed unsafe class DirectXGpuTimingPoolFactory : IGpuTimingPoolFactory {
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
             MipLevels = 1,
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1, },
-            Width = ((ulong)queryCapacity * sizeof(ulong)),
+            Width = (((ulong)queryCapacity) * sizeof(ulong)),
         };
 
         void* readbackBuffer;
@@ -54,23 +54,22 @@ public sealed unsafe class DirectXGpuTimingPoolFactory : IGpuTimingPoolFactory {
             InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
             pDesc: in bufferDesc,
             pHeapProperties: in heapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &readbackBuffer,
             riidResource: in resourceIid
         );
 
         return new DirectXGpuTimingPool(
             capacity: queryCapacity,
-            queryHeapHandle: (nint)queryHeap,
-            readbackBufferHandle: (nint)readbackBuffer
+            queryHeapHandle: ((nint)queryHeap),
+            readbackBufferHandle: ((nint)readbackBuffer)
         );
     }
-
     /// <inheritdoc/>
     public GpuTimestampCapabilities GetCapabilities(IGpuDeviceContext deviceContext) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
-        var queue = (ID3D12CommandQueue*)((IDirectXDeviceContext)deviceContext).CommandQueueHandle;
+        var queue = ((ID3D12CommandQueue*)((IDirectXDeviceContext)deviceContext).CommandQueueHandle);
 
         queue->GetTimestampFrequency(pFrequency: out var frequency);
 

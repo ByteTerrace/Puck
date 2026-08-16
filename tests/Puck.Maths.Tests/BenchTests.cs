@@ -53,7 +53,7 @@ public sealed class BenchTests {
             var baselineMedian = Bench.Median(values: baselineRatios);
 
             if (machine is null) {
-                machine = new MachineBaseline { Fingerprint = fingerprint, CalibrationNs = calibration };
+                machine = new MachineBaseline { CalibrationNs = calibration, Fingerprint = fingerprint };
 
                 model.Machines.Add(item: machine);
                 model.Machines.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.Fingerprint, strB: right.Fingerprint));
@@ -63,7 +63,7 @@ public sealed class BenchTests {
             machine.Benches.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.Id, strB: right.Id));
 
             _ = ArtifactJson.WriteIfChanged(path: path, content: ArtifactJson.Serialize(value: model));
-            BenchState.Record(id: RatioBenchId, median: baselineMedian, baselineMedian: baselineMedian, band: 0.0, status: "baseline-recorded");
+            BenchState.Record(band: 0.0, baselineMedian: baselineMedian, id: RatioBenchId, median: baselineMedian, status: "baseline-recorded");
 
             return;
         }
@@ -93,7 +93,6 @@ public sealed class BenchTests {
 
     private static bool Breach(double value, double baseline, double band) =>
         (Math.Abs(value: (value - baseline)) > band);
-
     private static List<double> MeasureRatios(int samples) {
         var seed = FixedComplex.FromAngle(angle: FixedQ4816.FromDouble(value: 0.3));
         var rotation = FixedComplex.FromAngle(angle: FixedQ4816.FromDouble(value: 0.017));
@@ -103,8 +102,8 @@ public sealed class BenchTests {
         var ratios = new List<double>();
 
         for (var sample = 0; (sample < samples); ++sample) {
-            var hand = Bench.BestNsPerOp(ops: Iterations, runs: 9, loop: () => BenchLoops.ComplexHand(seed: seed, rotation: rotation, iterations: Iterations));
-            var generic = Bench.BestNsPerOp(ops: Iterations, runs: 9, loop: () => BenchLoops.ComplexGeneric(algebra: algebra, seed: elementSeed, step: elementStep, iterations: Iterations));
+            var hand = Bench.BestNsPerOp(ops: Iterations, runs: 9, loop: () => BenchLoops.ComplexHand(iterations: Iterations, rotation: rotation, seed: seed));
+            var generic = Bench.BestNsPerOp(ops: Iterations, runs: 9, loop: () => BenchLoops.ComplexGeneric(algebra: algebra, iterations: Iterations, seed: elementSeed, step: elementStep));
 
             ratios.Add(item: (generic / hand));
         }

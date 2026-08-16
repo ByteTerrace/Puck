@@ -10,8 +10,8 @@ public sealed class VulkanGpuDescriptorAllocator(VulkanDescriptorAllocator alloc
     /// <inheritdoc/>
     public nint AllocateSet(nint deviceHandle, nint poolHandle, nint descriptorSetLayoutHandle) =>
         allocator.AllocateSet(
-            deviceHandle: deviceHandle,
             descriptorSetLayoutHandle: descriptorSetLayoutHandle,
+            deviceHandle: deviceHandle,
             poolHandle: poolHandle
         );
     /// <inheritdoc/>

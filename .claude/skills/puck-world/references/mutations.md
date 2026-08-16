@@ -1,7 +1,7 @@
 # The mutation substrate
 
 One pipeline for ALL durable change. A `WorldMutation`
-(`src/Puck.World.Data/Protocol/WorldMutation.cs`) is a closed union of nested
+(`src/Puck.World.Protocol/Protocol/WorldMutation.cs`) is a closed union of nested
 sealed records — one coarse record per `WorldDefinition` section, addressed by
 stable id, whole-row upsert, never a field poke. A genre world arrives as
 different DATA through these same messages, never a new message shape.
@@ -156,7 +156,7 @@ is DECLARED, unique, `0..WorldMutationKindCatalog.MaxOrdinal` (= 127, one bit of
 the `MutationKindMask` lane). An ordinal past the lane is refused at boot rather
 than left to wrap: .NET masks a shift count by the operand's width, so an
 out-of-lane bit aliases a REAL kind and would admit the wrong door silently.
-`WorldMutationKindCatalog` (`src/Puck.World.Data/Protocol/WorldMutationKindCatalog.cs`)
+`WorldMutationKindCatalog` (`src/Puck.World.Protocol/Protocol/WorldMutationKindCatalog.cs`)
 discovers the set by reflection and `Validate()` fails BOOT loudly on a
 missing attribute, an out-of-range ordinal, or a collision.
 
@@ -247,7 +247,7 @@ Rules the catalog encodes:
   subject; the cursor advance is engine bookkeeping intrinsic to drawing, while
   re-authoring the site's facet, or the `generators` row it references, is an
   `UpsertStateRow` against that row, gated there. Sampling itself lives in
-  `Puck.World.Data/WorldGeneratorEngine.cs` because the BOOT resolver — which
+  `Puck.World.Schema/WorldGeneratorEngine.cs` because the BOOT resolver — which
   runs before any server exists — must reach the identical code.
 
 ## Adding a mutation kind, end to end
@@ -297,7 +297,7 @@ past the consolidation gate do the steps below apply.
 
 A kind's CONSOLE reachability (steps above) is independent of its ADDON
 reachability: a guest submits a mutation through a Mutate handle's own
-hand-walked JSON door, `Server.WorldAddonMutationDecoder`, which wires only a
+hand-walked JSON door, `Addons.WorldAddonMutationDecoder`, which wires only a
 NAMED SUBSET of the 64 declared kinds today (10, as of this writing — the 5 HUD
 kinds plus the 2 placement kinds, the 2 state kinds, and `SetInputHold`; the
 Properties/Interactions/Groups kinds are console-only, not addon-reachable; see

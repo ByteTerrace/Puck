@@ -24,7 +24,6 @@ public sealed class GradientUpContactLawTests {
     // is a wide margin against numerical noise while still discriminating that from a pole landing (near-zero
     // horizontal offset). A coarse floor, not a pinned position (README.md red-line 1).
     private const float OffAxisFloor = (Fixtures.BallSurfaceRadius * 0.5f);
-
     // Chosen by observation (README.md's own instruction): free fall from the fixture's ~0.3-unit spawn clearance
     // under FallGravity 23 settles well inside 100 ticks; this leaves generous headroom for the iterative contact
     // solver's own settle time without materially slowing the suite.
@@ -69,6 +68,6 @@ public sealed class GradientUpContactLawTests {
         var body = fixture.Server.Body(index: actor.Index)!;
         var position = body.Position;
 
-        return (body.Grounded, MathF.Sqrt((position.X * position.X) + (position.Z * position.Z)));
+        return (body.Grounded, MathF.Sqrt(x: ((position.X * position.X) + (position.Z * position.Z))));
     }
 }

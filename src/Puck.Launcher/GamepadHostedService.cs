@@ -26,7 +26,6 @@ public sealed class GamepadHostedService : IHostedService {
 
         return Task.CompletedTask;
     }
-
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) {
         m_manager.Dispose();

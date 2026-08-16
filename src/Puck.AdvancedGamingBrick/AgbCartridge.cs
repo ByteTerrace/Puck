@@ -29,11 +29,12 @@ public sealed partial class AgbCartridge {
     // (512 B / 64 blocks) or 14 (8 KiB / 1024 blocks) — is auto-detected from the first command's length, the
     // same way real carts behave. Each block is 64 bits (8 bytes), shifted MSB-first.
     private int m_eepromAddressBits;            // 0 = not yet detected
+
     private readonly byte[] m_eepromCommand = new byte[128];
+
     private int m_eepromCommandLength;
     private ulong m_eepromReadData;
     private int m_eepromReadBitsRemaining;       // >0 while shifting a read reply out (68 bits: 4 dummy + 64 data)
-
     // Flash command state machine: the unlock phase (0 raw / 1 started / 2 continue), the pending command byte
     // (0x80 erase, 0x90 id, 0xA0 program, 0xB0 bank-switch; 0 when idle), and the selected 64&#160;KiB bank.
     private int m_flashPhase;
@@ -49,8 +50,11 @@ public sealed partial class AgbCartridge {
     // The Seiko S-3511A real-time clock: pin bit 0 = SCK, 1 = SIO, 2 = CS. Present only when the ROM embeds the
     // SIIRTC_V library or the game code is keyed HasRtc.
     private static readonly int[] RtcBytes = { 0, 0, 7, 0, 1, 0, 3, 0 };
+
     private readonly bool m_hasRtc;
+
     private readonly byte[] m_rtcTime = new byte[7];
+
     private int m_gpioPins;
     private int m_gpioDirection;
     private bool m_gpioReadable;
@@ -68,6 +72,7 @@ public sealed partial class AgbCartridge {
     // protocol, just a raw sample of pin-state bit 3 with no edge detection. Present only when the game code is keyed
     // HasRumble.
     private readonly bool m_hasRumble;
+
     private bool m_rumbleMotorOn;
 
     // The light sensor: pin bit 0 = CLK, bit 1 = RESET, bit 2 = chip-select (active LOW — the sensor is silent while
@@ -76,8 +81,10 @@ public sealed partial class AgbCartridge {
     // reading (so a brighter reading — a LOWER threshold — trips sooner). Present only when the game code is keyed
     // HasSolar (solar-sensor carts).
     private readonly bool m_hasSolar;
+
     private int m_lightCounter;
     private bool m_lightEdge;
+
     // The current reading, 0 (brightest — trips on the very first CLK edge) to 255 (darkest — needs a full 255-edge
     // count). Recorded per-segment host input (AdvancedGamingBrickCore.ApplyInput → SetLightLevel), never a live
     // sample: holding it constant for a whole segment keeps a GPIO poll mid-segment replay-deterministic.
@@ -91,7 +98,9 @@ public sealed partial class AgbCartridge {
     private const int TiltRange = 0x1A0;    // the raw swing one full-deflection host sample maps to
 
     private readonly bool m_hasTilt;
+
     private int m_tiltState;                // 0 idle, 1 armed (0x55 written to 0x8000, awaiting 0xAA at 0x8100)
+
     private int m_tiltLiveX = TiltCenter;    // the current recorded host sample (SetTilt), not yet latched
     private int m_tiltLiveY = TiltCenter;
     private int m_tiltX = TiltCenter;        // the latched reading the 0x8200-0x8500 registers expose
@@ -117,7 +126,7 @@ public sealed partial class AgbCartridge {
         // Flash and (uninitialised) SRAM read as 0xFF on real hardware.
         Array.Fill(
             array: m_save,
-            value: (byte)0xFF
+            value: ((byte)0xFF)
         );
 
         // RTC presence: the override wins, else the SIIRTC_V string scan. Diagnostic override (PUCK_AGB_NO_RTC=1)
@@ -146,19 +155,15 @@ public sealed partial class AgbCartridge {
     /// <summary>Gets a value indicating whether the cartridge exposes a GPIO real-time clock (as some commercial
     /// games do). When set, the bus routes ROM accesses at 0x0C4–0x0C8 to <see cref="ReadGpio"/>/<see cref="WriteGpio"/>.</summary>
     public bool HasRtc => m_hasRtc;
-
     /// <summary>Gets a value indicating whether the cartridge overlays any GPIO device (RTC, rumble, or solar) on ROM
     /// at 0x0C4–0x0C8 — the bus's single overlay-routing gate, since several devices can share the overlay on one
     /// cartridge (a solar-sensor cart wires both RTC and the light sensor).</summary>
     public bool HasGpio => m_hasGpio;
-
     /// <summary>Gets a value indicating whether the cartridge exposes the GPIO light sensor.</summary>
     public bool HasSolar => m_hasSolar;
-
     /// <summary>Gets a value indicating whether the cartridge exposes the address-mapped tilt sensor at ROM offsets
     /// <c>0x8000</c>-<c>0x8500</c>.</summary>
     public bool HasTilt => m_hasTilt;
-
     /// <summary>Gets the cartridge's current rumble motor level, 0..1 — the neutral host-facing feedback surface's
     /// source. The GPIO rumble line is on/off only (no PWM), so this is always exactly 0 or 1; 0 on a cartridge with
     /// no rumble hardware.</summary>
@@ -174,10 +179,9 @@ public sealed partial class AgbCartridge {
     /// trips it within one 8-bit counter sweep (darkness).</param>
     public void SetLightLevel(byte level) {
         if (m_hasSolar) {
-            m_lightThreshold = (byte)(255 - level);
+            m_lightThreshold = ((byte)(255 - level));
         }
     }
-
     /// <summary>Sets the current tilt reading for the address-mapped tilt sensor, each axis -1..1 — recorded
     /// per-segment host input (the core adapter's ApplyInput), never a live read from inside the core. Only takes
     /// effect once the game's own arm-then-latch sequence (0x55 at ROM offset 0x8000, then 0xAA at 0x8100) captures
@@ -186,19 +190,18 @@ public sealed partial class AgbCartridge {
     /// <param name="y">The vertical tilt, -1..1.</param>
     public void SetTilt(float x, float y) {
         if (m_hasTilt) {
-            m_tiltLiveX = (TiltCenter - (int)(Math.Clamp(
-                value: x,
+            m_tiltLiveX = (TiltCenter - ((int)(Math.Clamp(
+                max: 1f,
                 min: -1f,
-                max: 1f
-            ) * TiltRange));
-            m_tiltLiveY = (TiltCenter - (int)(Math.Clamp(
-                value: y,
+                value: x
+            ) * TiltRange)));
+            m_tiltLiveY = (TiltCenter - ((int)(Math.Clamp(
+                max: 1f,
                 min: -1f,
-                max: 1f
-            ) * TiltRange));
+                value: y
+            ) * TiltRange)));
         }
     }
-
     /// <summary>Writes the tilt sensor's arm/latch handshake at ROM offset <c>0x8000</c> (arm, expects <c>0x55</c>) or
     /// <c>0x8100</c> (latch, expects <c>0xAA</c> while armed) — the ROM-overlaid write half of the address-mapped
     /// protocol. A no-op for any other offset or on a cartridge with no tilt sensor.</summary>
@@ -228,31 +231,26 @@ public sealed partial class AgbCartridge {
     // Reads the tilt sensor's latched X/Y at ROM offsets 0x8200-0x8500 (byte-split, high byte OR 0x80 for X), or the
     // underlying ROM byte for any other offset in [0x8000, 0x8600).
     private byte ReadTilt(uint offset) => offset switch {
-        0x8200u => (byte)m_tiltX,
-        0x8300u => (byte)(((m_tiltX >> 8) & 0xF) | 0x80),
-        0x8400u => (byte)m_tiltY,
-        0x8500u => (byte)((m_tiltY >> 8) & 0xF),
-        _ => (byte)((offset < (uint)m_rom.Length)
+        0x8200u => ((byte)m_tiltX),
+        0x8300u => ((byte)(((m_tiltX >> 8) & 0xF) | 0x80)),
+        0x8400u => ((byte)m_tiltY),
+        0x8500u => ((byte)((m_tiltY >> 8) & 0xF)),
+        _ => ((byte)((offset < ((uint)m_rom.Length))
         ? m_rom[offset]
-        : 0xFFu),
+        : 0xFFu)),
     };
 
     /// <summary>Gets the detected save backup type.</summary>
     public CartridgeBackup Backup { get; }
-
     /// <summary>Gets the ROM image.</summary>
     public ReadOnlySpan<byte> Rom => m_rom;
-
     /// <summary>Gets the ROM image length in bytes.</summary>
     public int RomLength => m_rom.Length;
-
     /// <summary>Gets a value indicating whether the cartridge has a writable save backup (SRAM/Flash/EEPROM).</summary>
     public bool HasSave => (m_save.Length > 0);
-
     /// <summary>Gets a value indicating whether the save backup has been written since it was last loaded or
     /// persisted. A host watches this to decide when to flush the save to disk, then calls <see cref="MarkSaveClean"/>.</summary>
     public bool SaveDirty { get; private set; }
-
     /// <summary>Exports the raw save backup (SRAM/Flash/EEPROM contents) for persistence to a <c>.sav</c> file.</summary>
     public ReadOnlySpan<byte> SaveData => m_save;
 
@@ -276,7 +274,6 @@ public sealed partial class AgbCartridge {
 
         return true;
     }
-
     /// <summary>Clears <see cref="SaveDirty"/> after a host has persisted the save to disk.</summary>
     public void MarkSaveClean() => SaveDirty = false;
 
@@ -307,9 +304,8 @@ public sealed partial class AgbCartridge {
 
         ++m_romBurstPage;
 
-        return (ushort)(ReadRom(offset: romAddr) | (ReadRom(offset: (romAddr + 1u)) << 8));
+        return ((ushort)(ReadRom(offset: romAddr) | (ReadRom(offset: (romAddr + 1u)) << 8)));
     }
-
     /// <summary>Reads a ROM byte at <paramref name="offset"/>, or the open-bus pattern beyond the image.</summary>
     /// <param name="offset">The byte offset into the cartridge ROM address space (0–0x01FFFFFF).</param>
     /// <returns>The ROM byte, or the open-bus value for out-of-range offsets.</returns>
@@ -322,9 +318,9 @@ public sealed partial class AgbCartridge {
         ) {
             var value = ReadGpio(register: offset & ~1u);
 
-            return (byte)(((offset & 1u) == 0u)
+            return ((byte)(((offset & 1u) == 0u)
                 ? value
-                : (value >> 8));
+                : (value >> 8)));
         }
 
         // The tilt sensor's latched X/Y overlay ROM at 0x8200-0x8500 (the write half, 0x8000/0x8100, has no read
@@ -337,18 +333,17 @@ public sealed partial class AgbCartridge {
             return ReadTilt(offset: offset);
         }
 
-        if (offset < (uint)m_rom.Length) {
+        if (offset < ((uint)m_rom.Length)) {
             return m_rom[offset];
         }
 
         // Out-of-range game-pak reads return the low byte of (address / 2) — the open-bus pattern.
         var halfword = (offset >> 1) & 0xFFFFu;
 
-        return (byte)(((offset & 1u) == 0u)
+        return ((byte)(((offset & 1u) == 0u)
             ? halfword
-            : (halfword >> 8));
+            : (halfword >> 8)));
     }
-
     /// <summary>Reads a byte from the SRAM/flash save region.</summary>
     /// <param name="address">The address within the save region.</param>
     /// <returns>The stored byte, or 0xFF when the cartridge has no save backup.</returns>
@@ -370,15 +365,14 @@ public sealed partial class AgbCartridge {
                     ? FlashIdSanyo1M
                     : FlashIdPanasonic512);
 
-                return (byte)(id >> ((int)offset * 8));
+                return ((byte)(id >> (((int)offset) * 8)));
             }
 
             return m_save[FlashOffset(offset: offset)];
         }
 
-        return m_save[address & (uint)(m_save.Length - 1)];
+        return m_save[address & ((uint)(m_save.Length - 1))];
     }
-
     /// <summary>Writes a byte to the SRAM/flash save region.</summary>
     /// <param name="address">The address within the save region.</param>
     /// <param name="value">The byte to store.</param>
@@ -396,7 +390,7 @@ public sealed partial class AgbCartridge {
             return;
         }
 
-        m_save[address & (uint)(m_save.Length - 1)] = value;
+        m_save[address & ((uint)(m_save.Length - 1))] = value;
         SaveDirty = true;
     }
 
@@ -425,12 +419,11 @@ public sealed partial class AgbCartridge {
 
             var dataBit = (63 - (position - 4));
 
-            return (ushort)((m_eepromReadData >> dataBit) & 1u);
+            return ((ushort)((m_eepromReadData >> dataBit) & 1u));
         }
 
         return 1; // ready
     }
-
     /// <summary>Shifts one command bit into the serial EEPROM (bit 0 of a DMA write to the EEPROM region).</summary>
     public void WriteEeprom(ushort value) {
         // While a read reply is being shifted out, further writes are ignored. Otherwise accumulate the command
@@ -440,7 +433,7 @@ public sealed partial class AgbCartridge {
         }
 
         if (m_eepromCommandLength < m_eepromCommand.Length) {
-            m_eepromCommand[m_eepromCommandLength++] = (byte)(value & 1u);
+            m_eepromCommand[m_eepromCommandLength++] = ((byte)(value & 1u));
         }
     }
 
@@ -497,17 +490,16 @@ public sealed partial class AgbCartridge {
                     ? m_eepromCommand[(dataStart + i)]
                     : 0);
 
-                data = (data << 1) | (uint)bit;
+                data = (data << 1) | ((uint)bit);
             }
 
             for (var i = 0; (i < 8); ++i) {
-                m_save[(blockOffset + i)] = (byte)(data >> (56 - (i * 8)));
+                m_save[(blockOffset + i)] = ((byte)(data >> (56 - (i * 8))));
             }
 
             SaveDirty = true;
         }
     }
-
     // Drives the flash command/unlock state machine for a byte write. Commands are issued as a three-write
     // sequence — 0xAA to 0x5555, 0x55 to 0x2AAA, then the command byte to 0x5555 — except the byte-program and
     // bank-switch payloads, which land in the raw state immediately after their command is latched.
@@ -561,7 +553,7 @@ public sealed partial class AgbCartridge {
                         if (value == 0x10) {
                             Array.Fill(
                                 array: m_save,
-                                value: (byte)0xFF
+                                value: ((byte)0xFF)
                             ); // chip erase
                             m_flashCommand = 0;
                             SaveDirty = true;
@@ -580,9 +572,9 @@ public sealed partial class AgbCartridge {
 
                     Array.Fill(
                         array: m_save,
-                        value: (byte)0xFF,
-                        startIndex: (int)sector,
-                        count: 0x1000
+                        count: 0x1000,
+                        startIndex: ((int)sector),
+                        value: ((byte)0xFF)
                     );
                     m_flashCommand = 0;
                     SaveDirty = true;
@@ -591,9 +583,8 @@ public sealed partial class AgbCartridge {
                 return;
         }
     }
-
     // Maps a 16-bit flash address into the backing store through the currently selected bank (128 KiB parts only).
-    private int FlashOffset(uint offset) => (m_flashBank << 16) | (int)offset;
+    private int FlashOffset(uint offset) => (m_flashBank << 16) | ((int)offset);
 
     /// <summary>Reads a GPIO register (0x0C4 data, 0x0C6 direction, 0x0C8 control). Returns 0 when the control
     /// register has reads disabled, the same as real hardware (the ROM underneath reads back as written zero).</summary>
@@ -605,15 +596,14 @@ public sealed partial class AgbCartridge {
         }
 
         return register switch {
-            0xC4u => (ushort)(m_gpioPins & 0xF),
-            0xC6u => (ushort)(m_gpioDirection & 0xF),
-            0xC8u => (ushort)(m_gpioReadable
+            0xC4u => ((ushort)(m_gpioPins & 0xF)),
+            0xC6u => ((ushort)(m_gpioDirection & 0xF)),
+            0xC8u => ((ushort)(m_gpioReadable
             ? 1u
-            : 0u),
+            : 0u)),
             _ => 0,
         };
     }
-
     /// <summary>Writes a GPIO register, driving whichever devices are present (RTC, rumble, solar) when the data
     /// register changes.</summary>
     /// <param name="register">The aligned register offset (0x0C4, 0x0C6, or 0x0C8).</param>
@@ -656,7 +646,6 @@ public sealed partial class AgbCartridge {
     private void DriveGpioOutput(int pins) {
         m_gpioPins = (m_gpioPins & m_gpioDirection) | pins & ~m_gpioDirection & 0xF;
     }
-
     // The light sensor, evaluated on every data-register write while present. Chip-select (bit 2) high silences the
     // sensor; RESET (bit 1) high resamples the reading and zeroes the counter; each CLK (bit 0) rising edge while not
     // held in reset advances the counter; the output bit (bit 3) goes high once the counter reaches the threshold.
@@ -689,7 +678,6 @@ public sealed partial class AgbCartridge {
             ? 0x08
             : 0x00) | (m_gpioPins & 0x07));
     }
-
     // The S-3511A serial clock, evaluated on every data-register write. Follows the hardware edge model exactly: command
     // bytes shift in on SCK rising edges (LSB first), read replies shift out on SCK falling edges.
     private void StepRtc() {
@@ -800,7 +788,7 @@ public sealed partial class AgbCartridge {
     private void ProcessRtcByte() {
         // The only writable register is control; the rest accept and ignore their parameter bytes.
         if (((m_rtcCommand >> 4) & 0x7) == 4) {
-            m_rtcControl = (byte)m_rtcBits;
+            m_rtcControl = ((byte)m_rtcBits);
         }
 
         m_rtcBits = 0;
@@ -815,24 +803,23 @@ public sealed partial class AgbCartridge {
         var output = ((m_rtcCommand >> 4) & 0x7) switch {
             4 => m_rtcControl,                       // control register
             2 or 6 => m_rtcTime[(7 - m_rtcBytesRemaining)], // date+time / time bytes
-            _ => (byte)0xFF,
+            _ => ((byte)0xFF),
         };
 
         return (((output >> m_rtcBitsRead) & 1) != 0);
     }
-    private static byte ToBcd(int value) => (byte)(((value / 10) << 4) | (value % 10));
-
+    private static byte ToBcd(int value) => ((byte)(((value / 10) << 4) | (value % 10)));
     // Computes the current RTC time from a fixed epoch plus elapsed emulated cycles. The AGB master clock is
     // 16,777,216 Hz (2^24), so seconds = cycles / 16_777_216. A fixed epoch keeps the conformance harness
     // reproducible while still advancing the clock at the correct emulated rate.
     private void InitRtcTime() {
         var epoch = new DateTime(
-            year: 2026,
-            month: 6,
             day: 23,
             hour: 12,
             minute: 0,
-            second: 0
+            month: 6,
+            second: 0,
+            year: 2026
         );
 
         if (m_cycleProvider is not null) {
@@ -844,7 +831,7 @@ public sealed partial class AgbCartridge {
         m_rtcTime[0] = ToBcd(value: (epoch.Year - 2000));
         m_rtcTime[1] = ToBcd(value: epoch.Month);
         m_rtcTime[2] = ToBcd(value: epoch.Day);
-        m_rtcTime[3] = ToBcd(value: (int)epoch.DayOfWeek);
+        m_rtcTime[3] = ToBcd(value: ((int)epoch.DayOfWeek));
         m_rtcTime[4] = ToBcd(value: epoch.Hour);
         m_rtcTime[5] = ToBcd(value: epoch.Minute);
         m_rtcTime[6] = ToBcd(value: epoch.Second);

@@ -13,17 +13,28 @@ internal static class FiniteGuard {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite.</exception>
     public static void ThrowIfNonFinite(float value, [CallerArgumentExpression(parameterName: nameof(value))] string? name = null) {
         if (!float.IsFinite(f: value)) {
-            throw new ArgumentOutOfRangeException(paramName: name, actualValue: value, message: "The value must be finite.");
+            throw new ArgumentOutOfRangeException(
+                actualValue: value,
+                message: "The value must be finite.",
+                paramName: name
+            );
         }
     }
-
     /// <summary>Throws when any component of <paramref name="value"/> is NaN or infinite.</summary>
     /// <param name="value">The vector to check.</param>
     /// <param name="name">The caller argument expression (auto-captured).</param>
     /// <exception cref="ArgumentOutOfRangeException">A component is not finite.</exception>
     public static void ThrowIfNonFinite(Vector3 value, [CallerArgumentExpression(parameterName: nameof(value))] string? name = null) {
-        if (!float.IsFinite(f: value.X) || !float.IsFinite(f: value.Y) || !float.IsFinite(f: value.Z)) {
-            throw new ArgumentOutOfRangeException(paramName: name, actualValue: value, message: "Every component must be finite.");
+        if (
+            !float.IsFinite(f: value.X) ||
+            !float.IsFinite(f: value.Y) ||
+            !float.IsFinite(f: value.Z)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: value,
+                message: "Every component must be finite.",
+                paramName: name
+            );
         }
     }
 }

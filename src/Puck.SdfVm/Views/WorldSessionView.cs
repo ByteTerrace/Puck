@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm.Views;
 
@@ -31,40 +32,41 @@ namespace Puck.SdfVm.Views;
 /// refresh" — nothing here duplicates that.</para>
 /// </remarks>
 public sealed class WorldSessionView : IViewContent, IDisposable {
-    /// <summary>The view's fixed render width — the native brick panel size (matches <see cref="SdfCameraView.DefaultWidth"/>).</summary>
-    public const uint DefaultWidth = 160;
     /// <summary>The view's fixed render height.</summary>
     public const uint DefaultHeight = 144;
+    /// <summary>The view's fixed render width — the native brick panel size (matches <see cref="SdfCameraView.DefaultWidth"/>).</summary>
+    public const uint DefaultWidth = 160;
 
-    private readonly SdfViewGpuServices m_services;
-    private readonly bool m_hostsOnDirectX;
     private readonly ISdfFrameSource m_frameSource;
-    private readonly Func<int, nint>? m_resolveScreenSource;
-    private readonly uint m_width;
     private readonly uint m_height;
+    private readonly bool m_hostsOnDirectX;
     private readonly bool m_isBudgeted;
+    private readonly Func<int, nint>? m_resolveScreenSource;
+    private readonly SdfViewGpuServices m_services;
+    private readonly uint m_width;
+
+    // H3: suppresses re-narrating an upload/capacity fault every produced frame while it keeps recurring (the
+    // rebuilt engine re-probes the SAME frame source, so it fails again immediately until the emitter-side re-probe
+    // gap this type's own remarks name is closed) — cleared the moment a Resolve actually completes, so a NEW,
+    // distinct fault after a period of success narrates again rather than staying silenced forever.
+    private bool m_capacityFaultNarrated;
     private SdfWorldEngine? m_engine;
+    private bool m_hasProduced;
     private SdfWorldKernels? m_kernels;
     // H3: the last successfully produced frame's output handle — served while m_engine is torn down and awaiting
     // rebuild (see Resolve's catch below), and while no frame has ever completed (0, the ordinary "no signal" value).
     private nint m_lastGoodHandle;
+    // This view's own produced-frame clock (see the type remarks' "fix over NestedWorldView"): the wall-clock
+    // timestamp of this view's own last Resolve, and whether one has happened yet — never the host's per-frame
+    // clock, and never advanced on a frame this view's own round-robin turn skipped (Resolve simply is not called
+    // on those).
+    private long m_lastProduceTimestamp;
     // H3: the faulted engine whose storage image BACKS m_lastGoodHandle — kept alive (not disposed) while that
     // handle is the served result, because SdfWorldEngine.Dispose destroys the image behind it and the ViewStack
     // keeps compositing the handle until a replacement completes. Disposed the moment a replacement engine finishes
     // a frame (the served result moves), on device loss (the handle is dead either way), and on this view's own
     // disposal.
     private SdfWorldEngine? m_retiredEngine;
-    // H3: suppresses re-narrating an upload/capacity fault every produced frame while it keeps recurring (the
-    // rebuilt engine re-probes the SAME frame source, so it fails again immediately until the emitter-side re-probe
-    // gap this type's own remarks name is closed) — cleared the moment a Resolve actually completes, so a NEW,
-    // distinct fault after a period of success narrates again rather than staying silenced forever.
-    private bool m_capacityFaultNarrated;
-    // This view's own produced-frame clock (see the type remarks' "fix over NestedWorldView"): the wall-clock
-    // timestamp of this view's own last Resolve, and whether one has happened yet — never the host's per-frame
-    // clock, and never advanced on a frame this view's own round-robin turn skipped (Resolve simply is not called
-    // on those).
-    private long m_lastProduceTimestamp;
-    private bool m_hasProduced;
 
     /// <summary>Wraps a session-observed world's own frame source as view content.</summary>
     /// <param name="services">The concrete GPU-services closure this view forwards to its offscreen engine.</param>
@@ -96,15 +98,99 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     }
 
     /// <inheritdoc/>
+    /// <remarks>See the <c>isBudgeted</c> constructor parameter — <see langword="false"/> for a window projection,
+    /// <see langword="true"/> (the constructor default, today's unchanged behavior) for every other session.</remarks>
+    public bool IsBudgeted => m_isBudgeted;
+    /// <inheritdoc/>
     /// <remarks>Always zero — a session view films its OWN already-lit content; it contributes no light to the host
     /// room beyond whatever the host's own screen-surface glow accounting already does for a bound image.</remarks>
     public Vector3 RoomGlow => Vector3.Zero;
 
-    /// <inheritdoc/>
-    /// <remarks>See the <c>isBudgeted</c> constructor parameter — <see langword="false"/> for a window projection,
-    /// <see langword="true"/> (the constructor default, today's unchanged behavior) for every other session.</remarks>
-    public bool IsBudgeted => m_isBudgeted;
+    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) {
+        if (m_engine is not null) {
+            return;
+        }
 
+        m_kernels ??= SdfWorldKernels.Load(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_hostsOnDirectX));
+
+        var wordCapacity = ((m_frameSource is SdfCompositionFrameSource composed)
+            ? composed.WorstCaseProgramWordCapacity
+            : frame.Program.Words.Length
+        );
+        var instanceCapacity = ((m_frameSource is SdfCompositionFrameSource composedInstances)
+            ? composedInstances.WorstCaseInstanceCapacity
+            : frame.Program.Instances.Count
+        );
+        var dynamicCapacity = ((m_frameSource is SdfCompositionFrameSource composedTransforms)
+            ? composedTransforms.WorstCaseDynamicTransformCapacity
+            : frame.DynamicTransforms.Count
+        );
+
+        var timingFactory = (ViewTiming.Enabled
+            ? m_services.TimingFactory
+            : null
+        );
+        var timingRecorder = (ViewTiming.Enabled
+            ? m_services.TimingRecorder
+            : null
+        );
+
+        m_engine = new SdfWorldEngine(
+            device: device,
+            gpu: gpu,
+            height: m_height,
+            kernels: m_kernels.Value,
+            options: new SdfWorldEngineOptions(
+                // A session view never bakes carves — a filming view with an allocated pool it never bakes into
+                // wastes real memory (the historical filmed-carve defect NestedWorldView's own sync pairs entry in
+                // the sdf-world skill documents), so capacity 0 gives a 1-float filler and the shader's conservative
+                // uncarved-hull fallback.
+                BrickPoolVoxelCapacity: 0,
+                DynamicTransformCapacity: dynamicCapacity,
+                InstanceCapacity: instanceCapacity,
+                Program: frame.Program,
+                ProgramWordCapacity: wordCapacity,
+                TimingFactory: timingFactory,
+                TimingRecorder: timingRecorder,
+                ViewportCapacity: ((uint)Math.Max(
+                    val1: 1,
+                    val2: frame.Views.Count
+                ))
+            ),
+            width: m_width
+        );
+
+        if (
+            (timingFactory is not null) &&
+            (timingRecorder is not null)
+        ) {
+            Console.Error.WriteLine(value: (m_engine.TimingEnabled
+                ? $"[view-timing] session view enabled | period {m_engine.TimingCapabilities.PeriodNanoseconds:0.###}ns"
+                : "[view-timing] session view — the device reports no usable GPU timestamps; running untimed."));
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        m_engine?.Dispose();
+        m_engine = null;
+        m_retiredEngine?.Dispose();
+        m_retiredEngine = null;
+    }
+    /// <inheritdoc/>
+    public void NotifyDeviceLost() {
+        m_frameSource.NotifyDeviceLost();
+        m_engine?.Dispose();
+        m_engine = null;
+        m_retiredEngine?.Dispose();
+        m_retiredEngine = null;
+        // The cached handle belonged to the now-lost device — never re-served (mirrors ViewStack.NotifyDeviceLost's
+        // own LastHandle reset for every entry).
+        m_lastGoodHandle = 0;
+        // The real wall-clock gap a device-lost rebuild takes must not land as one giant smoothing delta on the
+        // first frame after recovery — reseed exactly like a fresh view's first produce.
+        m_hasProduced = false;
+    }
     /// <inheritdoc/>
     /// <remarks><para><b>Live re-upload (closed).</b> This type's own <see cref="Resolve"/> now re-uploads
     /// <c>frame.Program</c> whenever <see cref="SdfFrame.ProgramChanged"/> reports it changed — the same
@@ -142,22 +228,38 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
         // would need an injected clock here instead of Stopwatch.
         var produceTimestamp = Stopwatch.GetTimestamp();
         var deltaSeconds = (m_hasProduced
-            ? (float)Stopwatch.GetElapsedTime(startingTimestamp: m_lastProduceTimestamp, endingTimestamp: produceTimestamp).TotalSeconds
-            : 0f);
+            ? (float)Stopwatch.GetElapsedTime(
+                endingTimestamp: produceTimestamp,
+                startingTimestamp: m_lastProduceTimestamp
+            ).TotalSeconds
+            : 0f
+        );
 
         m_lastProduceTimestamp = produceTimestamp;
         m_hasProduced = true;
 
-        var frame = m_frameSource.CaptureFrame(width: m_width, height: m_height, deltaSeconds: deltaSeconds, interpolationAlpha: 0f);
+        var frame = m_frameSource.CaptureFrame(
+            deltaSeconds: deltaSeconds,
+            height: m_height,
+            interpolationAlpha: 0f,
+            width: m_width
+        );
 
-        EnsureEngine(device: device, gpu: m_services.Gpu, frame: frame);
+        EnsureEngine(
+            device: device,
+            gpu: m_services.Gpu,
+            frame: frame
+        );
 
         // Matches SdfCameraView.Resolve's own per-frame contract: every screen-surface slot is bound explicitly.
         // Most session projections deliberately carry no nested sources; traveler-follow may supply a resolver for
         // the followed world's first-level session screens while its child projections keep this null, making the
         // depth-1 recursion boundary structural rather than recursive registration.
         for (var screenIndex = 0; (screenIndex < SdfProgramBuilder.MaxScreenSurfaces); screenIndex++) {
-            m_engine!.SetScreenSource(screenIndex: screenIndex, imageViewHandle: m_resolveScreenSource?.Invoke(arg: screenIndex) ?? 0);
+            m_engine!.SetScreenSource(
+                screenIndex: screenIndex,
+                imageViewHandle: (m_resolveScreenSource?.Invoke(arg: screenIndex) ?? 0)
+            );
         }
 
         try {
@@ -175,7 +277,10 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
                 m_capacityFaultNarrated = true;
             }
 
-            if ((0 != m_lastGoodHandle) && (m_engine!.OutputImageViewHandle == m_lastGoodHandle)) {
+            if (
+                (0 != m_lastGoodHandle) &&
+                (m_engine!.OutputImageViewHandle == m_lastGoodHandle)
+            ) {
                 // The served image lives in THIS engine — disposing it here would destroy the storage image the
                 // ViewStack keeps compositing (see m_retiredEngine). Retire it instead; the replacement's first
                 // completed frame below is what finally releases it.
@@ -201,71 +306,5 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
         m_retiredEngine = null;
 
         return m_lastGoodHandle;
-    }
-
-    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) {
-        if (m_engine is not null) {
-            return;
-        }
-
-        m_kernels ??= SdfWorldKernels.Load(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_hostsOnDirectX));
-
-        var wordCapacity = ((m_frameSource is SdfCompositionFrameSource composed) ? composed.WorstCaseProgramWordCapacity : frame.Program.Words.Length);
-        var instanceCapacity = ((m_frameSource is SdfCompositionFrameSource composedInstances) ? composedInstances.WorstCaseInstanceCapacity : frame.Program.Instances.Count);
-        var dynamicCapacity = ((m_frameSource is SdfCompositionFrameSource composedTransforms) ? composedTransforms.WorstCaseDynamicTransformCapacity : frame.DynamicTransforms.Count);
-
-        var timingFactory = (ViewTiming.Enabled ? m_services.TimingFactory : null);
-        var timingRecorder = (ViewTiming.Enabled ? m_services.TimingRecorder : null);
-
-        m_engine = new SdfWorldEngine(
-            device: device,
-            gpu: gpu,
-            height: m_height,
-            kernels: m_kernels.Value,
-            options: new SdfWorldEngineOptions(
-                // A session view never bakes carves — a filming view with an allocated pool it never bakes into
-                // wastes real memory (the historical filmed-carve defect NestedWorldView's own sync pairs entry in
-                // the sdf-world skill documents), so capacity 0 gives a 1-float filler and the shader's conservative
-                // uncarved-hull fallback.
-                BrickPoolVoxelCapacity: 0,
-                DynamicTransformCapacity: dynamicCapacity,
-                InstanceCapacity: instanceCapacity,
-                Program: frame.Program,
-                ProgramWordCapacity: wordCapacity,
-                TimingFactory: timingFactory,
-                TimingRecorder: timingRecorder,
-                ViewportCapacity: (uint)Math.Max(val1: 1, val2: frame.Views.Count)
-            ),
-            width: m_width
-        );
-
-        if ((timingFactory is not null) && (timingRecorder is not null)) {
-            Console.Error.WriteLine(value: (m_engine.TimingEnabled
-                ? $"[view-timing] session view enabled | period {m_engine.TimingCapabilities.PeriodNanoseconds:0.###}ns"
-                : "[view-timing] session view — the device reports no usable GPU timestamps; running untimed."));
-        }
-    }
-
-    /// <inheritdoc/>
-    public void NotifyDeviceLost() {
-        m_frameSource.NotifyDeviceLost();
-        m_engine?.Dispose();
-        m_engine = null;
-        m_retiredEngine?.Dispose();
-        m_retiredEngine = null;
-        // The cached handle belonged to the now-lost device — never re-served (mirrors ViewStack.NotifyDeviceLost's
-        // own LastHandle reset for every entry).
-        m_lastGoodHandle = 0;
-        // The real wall-clock gap a device-lost rebuild takes must not land as one giant smoothing delta on the
-        // first frame after recovery — reseed exactly like a fresh view's first produce.
-        m_hasProduced = false;
-    }
-
-    /// <inheritdoc/>
-    public void Dispose() {
-        m_engine?.Dispose();
-        m_engine = null;
-        m_retiredEngine?.Dispose();
-        m_retiredEngine = null;
     }
 }

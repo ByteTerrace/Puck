@@ -5,7 +5,6 @@ namespace Puck.Cli.Source;
 // One parsed source file: its scan-root- or working-directory-relative display path, its syntax root,
 // and the text it was parsed from.
 internal readonly record struct ParsedFile(string Relative, SyntaxNode Root, string Text);
-
 // Resolves a scan root and enumerates its *.cs files (artifact directories pruned, ordinal-ignore-case
 // sorted) — the single source of the file list every scan and format phase walks. A relative root
 // argument resolves against the working directory, the one rule every verb shares. Pruning tests directory
@@ -13,7 +12,6 @@ internal readonly record struct ParsedFile(string Relative, SyntaxNode Root, str
 // same override FileWalk gives a named root.
 internal static class SourceFiles {
     private static readonly char[] SegmentSeparators = ['\\', '/'];
-
     // Span lookups into FileWalk's set — the predicate runs once per enumerated file over large trees,
     // so a segment test allocates nothing.
     private static readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> SkipLookup =
@@ -44,13 +42,12 @@ internal static class SourceFiles {
 
         var prefixLength = scanRoot.Length;
 
-        files = [.. Directory.EnumerateFiles(path: scanRoot, searchPattern: "*.cs", searchOption: SearchOption.AllDirectories)
+        files = [.. Directory.EnumerateFiles(path: scanRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*.cs")
             .Where(predicate: path => AdmitsBelowRoot(belowRoot: path.AsSpan(start: prefixLength)))
             .OrderBy(keySelector: static path => path, comparer: StringComparer.OrdinalIgnoreCase)];
 
         return true;
     }
-
     // The nearest ancestor directory (from `start` up) that holds a .csproj — the owning project whose
     // build closure the semantic phase compiles against and whose whitespace phase 0 formats.
     public static string? FindOwningProjectDirectory(string start) {

@@ -959,6 +959,51 @@
     ]
   },
   {
+    "Id": "vector.orthonormal-basis-is-orthogonal-and-deterministic",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedVector3", "Name": "OrthonormalBasis" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedVector3.OrthonormalBasis is a deterministic function of its input raws — a second call on the same normal returns the identical tangent1 and tangent2, checked bit-for-bit",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "tangent1 is perpendicular to normal, tangent2 is perpendicular to normal, and tangent1 is perpendicular to tangent2 — checked as an exact BigInteger dot product of NORMALIZED copies of all three (tangent2's own magnitude tracks the input normal's, so an un-normalized dot would conflate a real angular defect with an expected magnitude scaling), no FixedVector3.Dot call anywhere in the check. ENVELOPE: agreement to within 2^20 raw Q32 units — four orders of magnitude below the full unit-dot scale 2^32 a genuine directional defect would read at, and still comfortably above a few raw units of Normalize's own rounding error on either operand times the other's near-unit magnitude — not a claim of exactness. ENVELOPE: the two tangent2 checks are skipped for an operand whose normal magnitude sits below one raw Q16 unit or above three-quarters of the FixedQ4816 carrier's own magnitude. Below: Cross(tangent1, normal)'s fused-rounding error is bounded in ABSOLUTE raw units, but a small normal has few significant bits to begin with, so that fixed absolute error becomes a much larger ANGULAR error once tangent2 is normalized back to unit length — tangent1 carries no such dependency, which is why only the tangent2 checks are gated. Above: Cross, which has no refusing face, is left no headroom to narrow its own rounded result back into range. Determinism is unconditional and still runs",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.orthonormal-basis-tracks-non-unit-magnitude",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedVector3", "Name": "OrthonormalBasis" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FixedVector3.OrthonormalBasis's documented contract for a non-unit normal, at magnitude 0.4 and 2.5: tangent1 stays unit length (the branch selection reads only which component is smallest, not the normal's scale) while tangent2's own squared length tracks the normal's squared magnitude, both checked as an exact BigInteger self-dot",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "vector.normalize-with-magnitude-full-unsigned-width",
     "Tier": "Default",
     "Members": [],

@@ -9,7 +9,10 @@ internal sealed class SimulationCommandOutputObserver(BufferedConsoleOutput outp
 
     /// <inheritdoc/>
     public void OnCommand(in CommandActivation activation) {
-        if ((activation.Text is null) || string.IsNullOrEmpty(value: activation.Result.Output)) {
+        if (
+            (activation.Text is null) ||
+            string.IsNullOrEmpty(value: activation.Result.Output)
+        ) {
             return;
         }
 

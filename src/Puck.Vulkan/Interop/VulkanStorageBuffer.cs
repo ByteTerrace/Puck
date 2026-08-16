@@ -14,6 +14,7 @@ namespace Puck.Vulkan.Interop;
 public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
     private bool m_disposed;
     private nint m_mappedPointer;
+
     private readonly IVulkanStorageBufferApi m_storageBufferApi;
 
     /// <summary>Gets the native <c>VkBuffer</c> handle, or zero once disposed.</summary>
@@ -154,7 +155,7 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
     /// <exception cref="ArgumentOutOfRangeException">The data plus destination offset exceeds the buffer.</exception>
     /// <exception cref="ObjectDisposedException">The buffer has been disposed.</exception>
     public unsafe void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged {
-        var size = ((ulong)data.Length * (ulong)sizeof(T));
+        var size = (((ulong)data.Length) * ((ulong)sizeof(T)));
 
         if ((destinationOffsetBytes > SizeBytes) || (size > (SizeBytes - destinationOffsetBytes))) {
             throw new ArgumentOutOfRangeException(
@@ -167,7 +168,7 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
 
         fixed (T* source = data) {
             Buffer.MemoryCopy(
-                destination: (void*)((byte*)pointer + destinationOffsetBytes),
+                destination: ((void*)(((byte*)pointer) + destinationOffsetBytes)),
                 destinationSizeInBytes: (SizeBytes - destinationOffsetBytes),
                 source: source,
                 sourceBytesToCopy: size
@@ -175,18 +176,18 @@ public sealed class VulkanStorageBuffer : IGpuStorageBuffer {
         }
     }
 }
-
 /// <summary>Owns a Vulkan device-local storage buffer without exposing mapping or host writes.</summary>
 public sealed class VulkanDeviceStorageBuffer : IGpuBuffer {
     private readonly IVulkanStorageBufferApi m_storageBufferApi;
+
     private bool m_disposed;
 
     /// <summary>Initializes an owner for existing Vulkan buffer and memory handles.</summary>
     public VulkanDeviceStorageBuffer(nint bufferHandle, nint deviceHandle, nint memoryHandle, ulong sizeBytes, IVulkanStorageBufferApi storageBufferApi) {
         ArgumentNullException.ThrowIfNull(storageBufferApi);
-        VulkanArgument.RequireHandle(bufferHandle, "storage-buffer", nameof(bufferHandle));
-        VulkanArgument.RequireHandle(deviceHandle, "logical-device", nameof(deviceHandle));
-        VulkanArgument.RequireHandle(memoryHandle, "device-memory", nameof(memoryHandle));
+        VulkanArgument.RequireHandle(handle: bufferHandle, handleDescription: "storage-buffer", paramName: nameof(bufferHandle));
+        VulkanArgument.RequireHandle(handle: deviceHandle, handleDescription: "logical-device", paramName: nameof(deviceHandle));
+        VulkanArgument.RequireHandle(handle: memoryHandle, handleDescription: "device-memory", paramName: nameof(memoryHandle));
         BufferHandle = bufferHandle;
         DeviceHandle = deviceHandle;
         MemoryHandle = memoryHandle;
@@ -209,7 +210,7 @@ public sealed class VulkanDeviceStorageBuffer : IGpuBuffer {
             return;
         }
 
-        m_storageBufferApi.DestroyStorageBuffer(new(
+        m_storageBufferApi.DestroyStorageBuffer(request: new(
             BufferHandle: BufferHandle,
             DeviceHandle: DeviceHandle,
             MemoryHandle: MemoryHandle

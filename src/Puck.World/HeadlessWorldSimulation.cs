@@ -18,14 +18,12 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
     private readonly WorldTcpHost m_tcpHost = tcpHost;
     private readonly WorldInstanceHost m_instances = instances;
 
-    /// <summary>The number of fixed ticks completed.</summary>
-    public ulong Tick { get; private set; }
-
     /// <summary>The exact engine time completed by the authoritative simulation.</summary>
     public ulong ElapsedTicks { get; private set; }
-
     /// <inheritdoc/>
-    public uint RatePerSecond => (uint)m_server.Definition.SimulationRateHz;
+    public uint RatePerSecond => ((uint)m_server.Definition.SimulationRateHz);
+    /// <summary>The number of fixed ticks completed.</summary>
+    public ulong Tick { get; private set; }
 
     /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
@@ -33,7 +31,11 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
 
         // View-relative controls are client-side simulation composition, not rendering. The shared host lifecycle
         // keeps a headless authority equivalent to the presented shape for the same command snapshot.
-        m_instances.PrepareBootSeatIntents(stepsBoot: stepsBoot, tick: (Tick + 1UL), stepTicks: context.StepTicks);
+        m_instances.PrepareBootSeatIntents(
+            stepsBoot: stepsBoot,
+            tick: (Tick + 1UL),
+            stepTicks: context.StepTicks
+        );
 
         // Same fixed point as the windowed shape (WorldSimulation.Step) — see its own remarks: drain BEFORE any
         // instance steps this tick (a transfer drained here was enqueued by a per-step portal scan during the
@@ -62,7 +64,13 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
                 Tick: Tick
             );
 
-            stepTick = WorldServerStepShell.Step(server: m_server, tape: m_replayTape, waitGate: m_waitGate, context: in bootContext, tcpHost: m_tcpHost);
+            stepTick = WorldServerStepShell.Step(
+                context: in bootContext,
+                server: m_server,
+                tape: m_replayTape,
+                tcpHost: m_tcpHost,
+                waitGate: m_waitGate
+            );
             m_instances.ScanBootBoundaryTriggers();
             // Frozen — not merely unchanged — while boot did not step; see WorldSimulation.Step's identical remark.
             // Written HERE, from bootContext's own values, never from the raw pump context.

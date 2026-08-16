@@ -10,7 +10,7 @@ namespace Puck.Text;
 /// already hold font bytes can build one directly.
 /// </remarks>
 public sealed class FontAtlasGenerationRequest {
-    /// <summary>Gets or sets the raw bytes of the source font file (for example a TrueType or OpenType file).</summary>
+    /// <summary>Gets or sets the raw bytes of a TrueType-, CFF-, or CFF2-outline OpenType font file or collection.</summary>
     public required ReadOnlyMemory<byte> FontBytes { get; init; }
     /// <summary>Gets or sets a stable identifier for the source font, used to attribute the generated atlas to its origin.</summary>
     public required string FontIdentifier { get; init; }

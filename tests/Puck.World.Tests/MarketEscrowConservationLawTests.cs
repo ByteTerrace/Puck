@@ -63,25 +63,23 @@ public sealed class MarketEscrowConservationLawTests {
 
     private static long TotalGold(WorldFixture fixture) {
         var definition = fixture.Server.Definition;
-        var holders = MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: Seller)
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: OutbidBidder)
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: Winner);
+        var holders = ((MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: Seller)
+            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: OutbidBidder))
+            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: Winner));
         var feeReserve = (definition.Market?.FeeReserve ?? 0L);
         var escrowedInActiveListings = SumActiveListingBids(definition: definition);
 
-        return (holders + feeReserve + escrowedInActiveListings);
+        return ((holders + feeReserve) + escrowedInActiveListings);
     }
-
     private static long TotalApples(WorldFixture fixture) {
         var definition = fixture.Server.Definition;
-        var holders = MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: Seller)
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: OutbidBidder)
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: Winner);
+        var holders = ((MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: Seller)
+            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: OutbidBidder))
+            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: Winner));
         var escrowedInActiveListings = SumActiveListingQuantities(definition: definition);
 
         return (holders + escrowedInActiveListings);
     }
-
     private static long SumActiveListingBids(WorldDefinition definition) {
         var total = 0L;
 
@@ -93,7 +91,6 @@ public sealed class MarketEscrowConservationLawTests {
 
         return total;
     }
-
     private static long SumActiveListingQuantities(WorldDefinition definition) {
         var total = 0L;
 

@@ -18,10 +18,8 @@ public sealed class RecordingSessionClock {
 
     /// <summary>Re-anchors the epoch to the current instant — the recording session calls this at capture start.</summary>
     public void ResetEpochToNow() => Volatile.Write(location: ref m_epochHectonanoseconds, value: NowHectonanoseconds());
-
     /// <summary>The nanoseconds elapsed on this clock since its epoch.</summary>
     public long NowNanoseconds() => NanosecondsFromHectonanoseconds(hectonanoseconds: NowHectonanoseconds());
-
     /// <summary>Maps a QPC position in 100-nanosecond units (as WASAPI reports) to session nanoseconds.</summary>
     /// <param name="hectonanoseconds">A timestamp in 100-ns units on the same QPC domain as the epoch.</param>
     public long NanosecondsFromHectonanoseconds(long hectonanoseconds) {
@@ -29,7 +27,6 @@ public sealed class RecordingSessionClock {
 
         return ((delta < 0) ? 0 : (delta * 100));
     }
-
     /// <summary>The current QPC timestamp normalized to 100-nanosecond units.</summary>
-    public static long NowHectonanoseconds() => (long)((((Int128)Stopwatch.GetTimestamp()) * 10_000_000) / Stopwatch.Frequency);
+    public static long NowHectonanoseconds() => ((long)((((Int128)Stopwatch.GetTimestamp()) * 10_000_000) / Stopwatch.Frequency));
 }

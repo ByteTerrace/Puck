@@ -31,7 +31,7 @@ public sealed class StrictEnumAnalyzerTests {
 
     private static AnalysisResult Run(string source) =>
         Harness.Analyze(
-            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: new SourceFile(Name: "Subject.cs", Text: source.Replace(oldValue: "JsonSerializerContext { }", newValue: ("JsonSerializerContext {" + ContextBoilerplate + "}")))),
+            compilation: Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: new SourceFile(Name: "Subject.cs", Text: source.Replace(newValue: (("JsonSerializerContext {" + ContextBoilerplate) + "}"), oldValue: "JsonSerializerContext { }"))),
             analyzer: new StrictEnumAnalyzer());
 
     [Fact]
@@ -55,7 +55,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.Contains(expectedSubstring: "Root", actualString: result.Single(id: "ENUM001").GetMessage());
         Assert.Contains(expectedSubstring: "Plain", actualString: result.Single(id: "ENUM001").GetMessage());
     }
-
     [Fact]
     public void EnumConvertedAtItsOwnDeclarationIsNotReported() {
         var result = Run(source: """
@@ -75,7 +74,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EnumRegisteredAsAClosedJsonStringEnumConverterFactoryOnTheContextIsNotReported() {
         // The CommandPhase shape: an enum that cannot carry [JsonConverter] at its own declaration is
@@ -99,7 +97,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EnumRegisteredAsAClosedBespokeJsonConverterOnTheContextIsNotReported() {
         // The SurfaceFormat/WorldBackendPreference shape: a hand-written JsonConverter<TEnum> (not
@@ -128,7 +125,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EnumBehindAWholeTypeConverterIsNeverReached() {
         // The GrantSubjectKind/PrincipalKind shape: Wrapped carries its own converter, so System.Text.Json never
@@ -159,7 +155,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EnumBehindAnAlwaysIgnoredPropertyIsNeverReached() {
         // The CommandValueKind shape: a bare [JsonIgnore] removes the member from serialization entirely.
@@ -179,7 +174,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EnumBehindAConditionallyIgnoredPropertyIsStillReached() {
         // JsonIgnoreCondition.WhenWritingNull still lets the member reach the wire when non-null, so the walk must
@@ -201,7 +195,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "ConditionallyReachedEnum", actualString: result.Single(id: "ENUM001").GetMessage());
     }
-
     [Fact]
     public void EnumInsideANullableWrapperIsUnwrappedAndReached() {
         var result = Run(source: """
@@ -221,7 +214,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "NullableEnum", actualString: result.Single(id: "ENUM001").GetMessage());
     }
-
     [Fact]
     public void EnumInsideACollectionElementIsReached() {
         var result = Run(source: """
@@ -244,7 +236,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "ElementEnum", actualString: result.Single(id: "ENUM001").GetMessage());
     }
-
     [Fact]
     public void EnumOnOnePolymorphicDerivedTypeIsReached() {
         var result = Run(source: """
@@ -272,7 +263,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "DerivedEnum", actualString: result.Single(id: "ENUM001").GetMessage());
     }
-
     [Fact]
     public void ObjectTypedMemberIsRefusedAsUnclassifiable() {
         var result = Run(source: """
@@ -291,7 +281,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.Contains(expectedSubstring: "Anything", actualString: result.Single(id: "ENUM002").GetMessage());
         Assert.Contains(expectedSubstring: "System.Object", actualString: result.Single(id: "ENUM002").GetMessage());
     }
-
     [Fact]
     public void InterfaceWithNoPolymorphicFamilyIsRefusedAsUnclassifiable() {
         var result = Run(source: """
@@ -311,7 +300,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.Equal(expected: new[] { "ENUM002" }, actual: result.Ids);
         Assert.Contains(expectedSubstring: "IUnconstrained", actualString: result.Single(id: "ENUM002").GetMessage());
     }
-
     [Fact]
     public void ARecordsSynthesizedEqualityContractNeverTriggersAReflectionWalk() {
         // Regression coverage for the bug this gate's own falsification pass caught: every C# record synthesizes a
@@ -338,7 +326,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void TheSameEnumReachedFromTwoPropertiesIsReportedOnlyOnce() {
         var result = Run(source: """
@@ -357,7 +344,6 @@ public sealed class StrictEnumAnalyzerTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Equal(expected: new[] { "ENUM001" }, actual: result.Ids);
     }
-
     [Fact]
     public void ACompilationWithNoJsonSerializerContextIsNotAnalyzedAtAll() {
         var result = Run(source: """

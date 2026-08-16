@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 
 namespace Puck.AdvancedGamingBrick;
 
@@ -23,7 +22,6 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
     /// <inheritdoc/>
     public long NativeFrameIndex =>
         (m_machine.Cycles / AdvancedGamingBrickMachine.CyclesPerFrame);
-
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_machine.Framebuffer;
@@ -32,10 +30,9 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
     public void RestoreState(byte[] buffer, int length) =>
         m_machine.RestoreState(reader: new StateReader(
         buffer: buffer,
-        start: 0,
-        length: length
+        length: length,
+        start: 0
     ));
-
     /// <inheritdoc/>
     public void ApplyInput(in MachinePadState input) {
         m_machine.SetKeyInput(keys: AdvancedPad.ToKeyInput(pad: in input));
@@ -49,11 +46,9 @@ internal sealed class AdvancedGamingBrickLookahead : ITimeTravelLookahead<Machin
             y: input.Tilt.Y
         );
     }
-
     /// <inheritdoc/>
     public void RunFrame() =>
         _ = m_machine.RunFrame();
-
     /// <inheritdoc/>
     public void Dispose() =>
         m_instance.Dispose();

@@ -27,7 +27,6 @@ internal sealed class ConformanceRomStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         $"conformance-{m_group}";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.B;

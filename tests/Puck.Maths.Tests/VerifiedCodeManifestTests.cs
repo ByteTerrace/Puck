@@ -19,7 +19,7 @@ public sealed class VerifiedCodeManifestTests {
     [Fact]
     [Trait(name: "tier", value: "Default")]
     public void EveryCitedLawIdResolves() {
-        var manifestPath = Path.GetFullPath(path: Path.Combine(TestPaths.ProjectDirectory, "..", "..", "VerifiedCode.json"));
+        var manifestPath = Path.GetFullPath(path: Path.Combine(path1: TestPaths.ProjectDirectory, path2: "..", path3: "..", path4: "VerifiedCode.json"));
         var manifest = JsonSerializer.Deserialize<Manifest>(json: File.ReadAllText(path: manifestPath), options: Options)!;
         var declaredLawIds = LawDeclarations.All.Keys.ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -32,7 +32,6 @@ public sealed class VerifiedCodeManifestTests {
     }
 
     private sealed record Manifest([property: JsonPropertyName("format")] int Format, [property: JsonPropertyName("entries")] Dictionary<string, ManifestEntry> Entries);
-
     private sealed record ManifestEntry(
         [property: JsonPropertyName("symbol")] string Symbol,
         [property: JsonPropertyName("algorithm")] string Algorithm,

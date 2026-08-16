@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <!--
+        Puck.World.Addons — the addon guest host, physically split out of Puck.World.Server so the authoritative
+        server carries no WASM/Wasmtime surface of its own. Owns WorldAddonRuntime (mounts every enabled row of the
+        boot document, pumps guests at WorldServer.Step's three pinned points through the IWorldAddonHost seam),
+        WorldAddonMutationDecoder (the addon mutation seam's stage 6 decode), WorldAddonWire (the World-side ABI
+        vocabulary mappings), AddonMutateRefusal (the addon.mutate door's cataloged refusal reasons), and
+        AddonSimulationPump (the crossing from a guest's decoded output cells to typed, vocabulary-validated
+        submissions). Puck.World.Server owns the seam interface (IWorldAddonHost) and the wire-format record it
+        persists (WorldAddonReceipt) — this project references Server rather than the other way around.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
+        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
+    </ItemGroup>
+</Project>

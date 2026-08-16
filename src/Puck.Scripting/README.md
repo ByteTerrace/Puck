@@ -25,8 +25,8 @@ verdict, subject-kind, channel-kind, cell-kind, and channel-value-shape sets, an
 capability-mask bits, all frozen independently of any consumer enum. There is no phase any more: a
 channel act is per-tick and declarative, so the two low verb bits that used to carry one are now
 required-zero. The World-lane vocabulary seam (`WorldAddonChannelResolver`'s world-document channel
-table) lives in `Puck.World`, which is also where authority decisions live; `Puck.Scripting.Simulation`, the
-Simulation adapter, still owns the vocabulary layer between the core's structural decode and the
+table) lives in `Puck.World`, which is also where authority decisions live; `Puck.World.Addons`'
+`AddonSimulationPump` still owns the vocabulary layer between the core's structural decode and the
 World's authority checks.
 
 The `Wasmtime` package version **is** the native engine version, and fuel accounting is
@@ -40,9 +40,49 @@ native-runtime-bearing NuGet dependency; the verified path is framework-dependen
 ([`wasm/README.md`](../../wasm/README.md)) covers authoring a module in Rust and links here for the
 wire; it does not restate any of the tables below.
 
+## ✨ Key features
+
+- *No ambient authority:* an addon cannot enumerate the world or name a subject it was not told
+  about; every action crosses through a handle the host mints for it.
+- *A fixed-size two-ring cell ABI:* every host↔guest exchange is 32-byte cells in the guest's own
+  linear memory — no framing, no variable-length messages, one structural decoder for every module.
+- *Bit-identical replay:* every Wasmtime determinism knob is pinned explicit; no floating point
+  crosses the boundary; a runaway module halts at a fuel-deterministic point, never a wall-clock one.
+- *Runnable outside this host:* a module declares zero imports, so the same `.wasm` bytes compile,
+  run, and can be tested in any wasm runtime.
+- *Resolution failure is data, not a fault:* an unrecognized declared channel name decodes to a
+  sentinel and crosses as a reported, inert entry — never a mount refusal.
+
+## 🚀 Quick start
+
+```csharp
+using Puck.Assets;
+using Puck.Scripting;
+
+using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+var loader = new WasmModuleLoader(engine: engine, assetSource: new FileSystemAssetSource());
+
+using var host = new AddonHost(engine: engine, loader: loader, channelResolver: channelResolver);
+
+host.Add(descriptor: new AddonDescriptor(
+    Name: "ghost",
+    ModulePath: "addons/ghost.wasm",
+    ModuleHash: null,      // or a pinned content hash to refuse a silent module change
+    FuelPerTick: null,     // or an override; null uses the engine's DefaultFuelPerTick
+    Enabled: true
+));
+
+// Each sim tick, the consumer's pump writes the input ring (Tick, then Observations, then
+// Answers), calls the addon forward, and decodes the returned output-cell count. See "One tick"
+// below for the exact ordering.
+```
+
+`channelResolver` is the caller's `IAddonChannelResolver` — in this repository, `Puck.World`'s
+`WorldAddonChannelResolver` constructed over the boot world document's compiled channel table.
+
 ---
 
-## At a glance
+## 📋 Core types
 
 | Type | Kind | Role |
 |------|------|------|
@@ -444,7 +484,7 @@ a module declaring fewer verbs (built against an older ABI) mounts unchanged.
 
 `SubmitMutation` is decoded and dispatch-gated at DECODE time (the same `TickAddons` call the pump
 just validated the batch in — never at the drain point `BodyPose`/`Ask` use), through the
-six-stage addon mutation dispatch door (`Server.WorldAddonRuntime.ResolveMutations`): manifest,
+six-stage addon mutation dispatch door (`Addons.WorldAddonRuntime.ResolveMutations`): manifest,
 grant ∧ the deciding row's verb mask (`Puck.World.Protocol.WorldGrant.KindMask`), the per-`(addon,
 section)` dispatch budget (spent BEFORE decode — a malformed payload still costs it), the reserved
 answer cell (bookkeeping only — the handshake's `outCap <= inCap-1` relation proves it cannot
@@ -468,7 +508,7 @@ fields zero. `A`/`C` are shaped PER SUBJECT KIND, never uniformly:
 **`Section` is NAME-KEYED, never ordinal-keyed.** A guest names its section by TEXT (a
 `Puck.World.Protocol.WorldSection` member, matched case-insensitively — `Outputs::ask_section` in
 `puck-stdlib`, never a sibling ordinal-taking method), and the host resolves the name against the
-live `WorldSection` vocabulary at `Server.WorldAddonRuntime.ResolveAsks` — the pointer/length copy
+live `WorldSection` vocabulary at `Addons.WorldAddonRuntime.ResolveAsks` — the pointer/length copy
 mirrors `SubmitMutation`'s own pointer-safety stage (a length ceiling before any byte is read, then
 an immediate `AddonInstance.TryCopyMemory` copy). This closes a drift class a prior generation of
 addons hit: a guest that baked `WorldSection`'s declaration-order ORDINAL as a literal constant kept
@@ -546,7 +586,7 @@ consumer-agnostic:
 | Layer | Validates | Where |
 |---|---|---|
 | Core | **Structure** — cell kinds, channel bounds, reserved-must-be-zero, descriptor shape, table pairing, channel-name table shape | `Puck.Scripting` (`AddonOutCellReader`, `AddonChannelTableReader`, `AddonChannelNameTableReader`) |
-| Adapter | **Vocabulary** — verb ranges, payload domains, `Ask` rules — through one sealed writer | `Puck.Scripting.Simulation` |
+| Adapter | **Vocabulary** — verb ranges, payload domains, `Ask` rules — through one sealed writer | `Puck.World.Addons` (`AddonSimulationPump`) |
 | World | **Authority and the channel table** — grants, wildcards, reservations, attenuation, quota, and what a channel name resolves to | `Puck.World` |
 
 The wire enums live in the core. The `GrantVerdict`/`GrantSubjectKind`/`WorldCapability` mappings,
@@ -618,7 +658,7 @@ straight into a sticky `HashMismatch` fault instead of refusing in place.
 
 ---
 
-## Notes for agents
+## Constraints and invariants
 
 - **No floats cross the boundary, ever.** The host pre-quantizes analog values through the exact
   `FixedQ4816.FromDouble` path the sim already uses and ships raw `i64` bits; the guest returns raw
@@ -648,3 +688,22 @@ straight into a sticky `HashMismatch` fault instead of refusing in place.
   the pin is now held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
+
+## 🧪 Verification
+
+There is no dedicated `Puck.Scripting.Tests` project: the ABI is exercised through its consumers,
+`tests/Puck.World.Tests` in particular (addon attach/replay/admission law tests). The guest-side
+Rust workspace ([`wasm/README.md`](../../wasm/README.md)) carries its own build and test story for
+authored modules.
+
+```powershell
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj
+```
+
+## 📦 Packaging
+
+`ByteTerrace.Puck.Scripting` depends on `Puck.Assets` (module bytes through `IAssetSource`),
+`Puck.Maths` (`FixedQ4816` for every quantized payload lane), and the third-party `Wasmtime`
+`[44.0.0]` exact pin (a real, flowing runtime dependency — not a build-only generator). It carries
+no `Puck.Commands`, `Puck.Input`, or `Puck.World` dependency; `Puck.World.Addons` and `Puck.World`
+depend on it for the addon host and reference the wire vocabulary this file defines.

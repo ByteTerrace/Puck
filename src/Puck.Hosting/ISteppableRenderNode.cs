@@ -15,7 +15,6 @@ public interface ISteppableRenderNode : IRenderNode {
     /// <param name="context">The frame context (tick budget + input sampling key).</param>
     /// <returns><see langword="true"/> when the node has pending work for <see cref="ExecuteStep"/>.</returns>
     bool PrepareStep(in FrameContext context);
-
     /// <summary>The parallel half: consumes the inputs staged by <see cref="PrepareStep"/> and advances the node's
     /// simulation. Touches ONLY this node's private state (steppable siblings share nothing).</summary>
     void ExecuteStep();

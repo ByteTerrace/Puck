@@ -88,7 +88,7 @@ public sealed class VulkanGpuCommandRecorder(IVulkanCommandBufferRecordingApi co
             deviceHandle: deviceHandle,
             offset: offset,
             pipelineLayoutHandle: pipelineLayoutHandle,
-            stageFlags: (uint)stageFlags
+            stageFlags: ((uint)stageFlags)
         );
     }
     /// <inheritdoc/>

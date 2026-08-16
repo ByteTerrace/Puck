@@ -43,7 +43,6 @@ public sealed class BindingChordTracker {
             signal: in signal
         );
     }
-
     /// <summary>Releases every modifier (focus loss, device disconnect, or a profile reload).</summary>
     public void Reset() => m_tracker.Reset();
 }

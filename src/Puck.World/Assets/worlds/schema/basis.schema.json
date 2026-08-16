@@ -1,0 +1,7 @@
+{
+  "description": "Gets the basis document this file layers over, as a file path resolved against this document\u0027s own directory \u2014 the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator\u0027s geometry speaks of.",
+  "type": [
+    "string",
+    "null"
+  ]
+}

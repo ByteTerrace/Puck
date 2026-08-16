@@ -13,7 +13,7 @@ public sealed partial class Arm7Tdmi {
         for (var idx = 0; (idx < 256); ++idx) {
             // Reconstruct a representative opcode with the low byte zeroed (only the top byte matters for class
             // selection; operands are decoded from the full opcode at runtime).
-            var op = (ushort)(idx << 8);
+            var op = ((ushort)(idx << 8));
 
             table[idx] = PickThumbHandler(op: op);
         }
@@ -21,7 +21,7 @@ public sealed partial class Arm7Tdmi {
         return table;
     }
     private static unsafe delegate*<Arm7Tdmi, ushort, void> PickThumbHandler(ushort op) {
-        var top3 = ((uint)op >> 13);
+        var top3 = (((uint)op) >> 13);
 
         switch (top3) {
             case 0b000u:
@@ -85,14 +85,13 @@ public sealed partial class Arm7Tdmi {
                     : &ThumbLongBranchWithLink);
         }
     }
-
     // --- Thumb instruction implementations (static, cpu passed explicitly) ---
 
     private static void ThumbMoveShifted(Arm7Tdmi cpu, ushort opcode) {
-        var type = (ShiftType)((opcode >> 11) & 0x3u);
-        var amount = (int)((opcode >> 6) & 0x1Fu);
-        var rs = (int)((opcode >> 3) & 0x7u);
-        var rd = (int)(opcode & 0x7u);
+        var type = ((ShiftType)((opcode >> 11) & 0x3u));
+        var amount = ((int)((opcode >> 6) & 0x1Fu));
+        var rs = ((int)((opcode >> 3) & 0x7u));
+        var rd = ((int)(opcode & 0x7u));
         var carry = ((cpu.m_cpsr & FlagC) != 0u);
 
         var result = BarrelShift(
@@ -111,18 +110,18 @@ public sealed partial class Arm7Tdmi {
             result: result
         );
         SetCarry(
-            cpu: cpu,
-            carry: carry
+            carry: carry,
+            cpu: cpu
         );
     }
     private static void ThumbAddSubtract(Arm7Tdmi cpu, ushort opcode) {
         var immediate = ((opcode & (1u << 10)) != 0u);
         var subtract = ((opcode & (1u << 9)) != 0u);
         var operand = (immediate
-            ? ((uint)opcode >> 6) & 0x7u
-            : cpu.m_gpr[(int)((opcode >> 6) & 0x7u)]);
-        var rs = (int)((opcode >> 3) & 0x7u);
-        var rd = (int)(opcode & 0x7u);
+            ? (((uint)opcode) >> 6) & 0x7u
+            : cpu.m_gpr[((int)((opcode >> 6) & 0x7u))]);
+        var rs = ((int)((opcode >> 3) & 0x7u));
+        var rd = ((int)(opcode & 0x7u));
 
         cpu.m_gpr[rd] = (subtract
             ? Subtract(
@@ -140,8 +139,8 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ThumbMoveCompareAddSubImmediate(Arm7Tdmi cpu, ushort opcode) {
         var operation = (opcode >> 11) & 0x3u;
-        var rd = (int)((opcode >> 8) & 0x7u);
-        var immediate = (uint)(opcode & 0xFFu);
+        var rd = ((int)((opcode >> 8) & 0x7u));
+        var immediate = ((uint)(opcode & 0xFFu));
 
         switch (operation) {
             case 0u: // MOV
@@ -179,8 +178,8 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ThumbAluOperations(Arm7Tdmi cpu, ushort opcode) {
         var operation = (opcode >> 6) & 0xFu;
-        var rs = (int)((opcode >> 3) & 0x7u);
-        var rd = (int)(opcode & 0x7u);
+        var rs = ((int)((opcode >> 3) & 0x7u));
+        var rd = ((int)(opcode & 0x7u));
         var source = cpu.m_gpr[rs];
         var destination = cpu.m_gpr[rd];
 
@@ -201,54 +200,54 @@ public sealed partial class Arm7Tdmi {
                 break;
             case 0x2u: // LSL
                 ThumbShiftByRegister(
+                    amount: source,
                     cpu: cpu,
                     rd: rd,
-                    value: destination,
                     type: ShiftType.LogicalLeft,
-                    amount: source
+                    value: destination
                 );
                 break;
             case 0x3u: // LSR
                 ThumbShiftByRegister(
+                    amount: source,
                     cpu: cpu,
                     rd: rd,
-                    value: destination,
                     type: ShiftType.LogicalRight,
-                    amount: source
+                    value: destination
                 );
                 break;
             case 0x4u: // ASR
                 ThumbShiftByRegister(
+                    amount: source,
                     cpu: cpu,
                     rd: rd,
-                    value: destination,
                     type: ShiftType.ArithmeticRight,
-                    amount: source
+                    value: destination
                 );
                 break;
             case 0x5u: // ADC
                 cpu.m_gpr[rd] = AddWithCarry(
-                    cpu: cpu,
                     a: destination,
                     b: source,
+                    cpu: cpu,
                     setFlags: true
                 );
                 break;
             case 0x6u: // SBC
                 cpu.m_gpr[rd] = SubtractWithCarry(
-                    cpu: cpu,
                     a: destination,
                     b: source,
+                    cpu: cpu,
                     setFlags: true
                 );
                 break;
             case 0x7u: // ROR
                 ThumbShiftByRegister(
+                    amount: source,
                     cpu: cpu,
                     rd: rd,
-                    value: destination,
                     type: ShiftType.RotateRight,
-                    amount: source
+                    value: destination
                 );
                 break;
             case 0x8u: // TST
@@ -259,25 +258,25 @@ public sealed partial class Arm7Tdmi {
                 break;
             case 0x9u: // NEG
                 cpu.m_gpr[rd] = Subtract(
-                    cpu: cpu,
                     a: 0u,
                     b: source,
+                    cpu: cpu,
                     setFlags: true
                 );
                 break;
             case 0xAu: // CMP
                 _ = Subtract(
-                    cpu: cpu,
                     a: destination,
                     b: source,
+                    cpu: cpu,
                     setFlags: true
                 );
                 break;
             case 0xBu: // CMN
                 _ = Add(
-                    cpu: cpu,
                     a: destination,
                     b: source,
+                    cpu: cpu,
                     setFlags: true
                 );
                 break;
@@ -322,12 +321,12 @@ public sealed partial class Arm7Tdmi {
     private static void ThumbShiftByRegister(Arm7Tdmi cpu, int rd, uint value, ShiftType type, uint amount) {
         var carry = ((cpu.m_cpsr & FlagC) != 0u);
         var result = BarrelShift(
-            cpu: cpu,
-            value: value,
-            type: type,
-            amount: (int)(amount & 0xFFu),
+            amount: ((int)(amount & 0xFFu)),
             byRegister: true,
-            carryOut: ref carry
+            carryOut: ref carry,
+            cpu: cpu,
+            type: type,
+            value: value
         );
 
         cpu.m_gpr[rd] = result;
@@ -337,15 +336,15 @@ public sealed partial class Arm7Tdmi {
             result: result
         );
         SetCarry(
-            cpu: cpu,
-            carry: carry
+            carry: carry,
+            cpu: cpu
         );
         cpu.m_bus.Idle(cycles: 1);
     }
     private static void ThumbHiRegisterOperations(Arm7Tdmi cpu, ushort opcode) {
         var operation = (opcode >> 8) & 0x3u;
-        var rs = (int)(((opcode >> 3) & 0x7u) | ((opcode >> 3) & 0x8u));
-        var rd = (int)((opcode & 0x7u) | ((opcode >> 4) & 0x8u));
+        var rs = ((int)(((opcode >> 3) & 0x7u) | ((opcode >> 3) & 0x8u)));
+        var rd = ((int)((opcode & 0x7u) | ((opcode >> 4) & 0x8u)));
 
         switch (operation) {
             case 0u: // ADD (no flags)
@@ -391,13 +390,13 @@ public sealed partial class Arm7Tdmi {
         }
     }
     private static void ThumbPcRelativeLoad(Arm7Tdmi cpu, ushort opcode) {
-        var rd = (int)((opcode >> 8) & 0x7u);
-        var offset = ((uint)(opcode & 0xFFu) * 4u);
+        var rd = ((int)((opcode >> 8) & 0x7u));
+        var offset = (((uint)(opcode & 0xFFu)) * 4u);
         var address = ((cpu.m_gpr[15] & ~2u) + offset);
 
         cpu.m_gpr[rd] = cpu.m_bus.Read32(
-            address: address,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: address
         );
 
         cpu.m_bus.Idle(cycles: 1);
@@ -406,27 +405,27 @@ public sealed partial class Arm7Tdmi {
     private static void ThumbLoadStoreRegisterOffset(Arm7Tdmi cpu, ushort opcode) {
         var load = ((opcode & (1u << 11)) != 0u);
         var byteAccess = ((opcode & (1u << 10)) != 0u);
-        var offsetRegister = (int)((opcode >> 6) & 0x7u);
-        var baseRegister = (int)((opcode >> 3) & 0x7u);
-        var rd = (int)(opcode & 0x7u);
+        var offsetRegister = ((int)((opcode >> 6) & 0x7u));
+        var baseRegister = ((int)((opcode >> 3) & 0x7u));
+        var rd = ((int)(opcode & 0x7u));
         var address = (cpu.m_gpr[baseRegister] + cpu.m_gpr[offsetRegister]);
 
         if (load) {
             cpu.m_gpr[rd] = (byteAccess
                 ? cpu.m_bus.Read8(
-                address: address,
-                access: BusAccessType.NonSequential
+                access: BusAccessType.NonSequential,
+                address: address
             )
                 : ReadWordRotated(
-                cpu: cpu,
-                address: address
+                address: address,
+                cpu: cpu
             ));
 
             cpu.m_bus.Idle(cycles: 1);
         } else if (byteAccess) {
             cpu.m_bus.Write8(
                 address: address,
-                value: (byte)cpu.m_gpr[rd],
+                value: ((byte)cpu.m_gpr[rd]),
                 access: BusAccessType.NonSequential
             );
         } else {
@@ -442,16 +441,16 @@ public sealed partial class Arm7Tdmi {
     private static void ThumbLoadStoreSignExtended(Arm7Tdmi cpu, ushort opcode) {
         // operation = (S << 1) | H: 0=STRH, 1=LDRH, 2=LDRSB, 3=LDRSH.
         var operation = ((opcode >> 9) & 0x2u) | ((opcode >> 11) & 0x1u);
-        var offsetRegister = (int)((opcode >> 6) & 0x7u);
-        var baseRegister = (int)((opcode >> 3) & 0x7u);
-        var rd = (int)(opcode & 0x7u);
+        var offsetRegister = ((int)((opcode >> 6) & 0x7u));
+        var baseRegister = ((int)((opcode >> 3) & 0x7u));
+        var rd = ((int)(opcode & 0x7u));
         var address = (cpu.m_gpr[baseRegister] + cpu.m_gpr[offsetRegister]);
 
         switch (operation) {
             case 0u: // STRH
                 cpu.m_bus.Write16(
                     address: address,
-                    value: (ushort)cpu.m_gpr[rd],
+                    value: ((ushort)cpu.m_gpr[rd]),
                     access: BusAccessType.NonSequential
                 );
                 break;
@@ -459,8 +458,8 @@ public sealed partial class Arm7Tdmi {
                 {
                     // Raw (unaligned) address forwarded to the bus — see ReadWordRotated in Arm7Tdmi.Arm.cs.
                     uint data = cpu.m_bus.Read16(
-                        address: address,
-                        access: BusAccessType.NonSequential
+                        access: BusAccessType.NonSequential,
+                        address: address
                     );
 
                     if ((address & 1u) != 0u) {
@@ -472,23 +471,23 @@ public sealed partial class Arm7Tdmi {
                 }
                 break;
             case 2u: // LDRSB
-                cpu.m_gpr[rd] = (uint)(sbyte)cpu.m_bus.Read8(
-                    address: address,
-                    access: BusAccessType.NonSequential
-                );
+                cpu.m_gpr[rd] = ((uint)((sbyte)cpu.m_bus.Read8(
+                    access: BusAccessType.NonSequential,
+                    address: address
+                )));
                 cpu.m_bus.Idle(cycles: 1);
                 break;
             default: // LDRSH (odd address degrades to signed byte)
                 if ((address & 1u) != 0u) {
-                    cpu.m_gpr[rd] = (uint)(sbyte)cpu.m_bus.Read8(
-                        address: address,
-                        access: BusAccessType.NonSequential
-                    );
+                    cpu.m_gpr[rd] = ((uint)((sbyte)cpu.m_bus.Read8(
+                        access: BusAccessType.NonSequential,
+                        address: address
+                    )));
                 } else {
-                    cpu.m_gpr[rd] = (uint)(short)cpu.m_bus.Read16(
-                        address: address,
-                        access: BusAccessType.NonSequential
-                    );
+                    cpu.m_gpr[rd] = ((uint)((short)cpu.m_bus.Read16(
+                        access: BusAccessType.NonSequential,
+                        address: address
+                    )));
                 }
 
                 cpu.m_bus.Idle(cycles: 1);
@@ -500,9 +499,9 @@ public sealed partial class Arm7Tdmi {
     private static void ThumbLoadStoreImmediateOffset(Arm7Tdmi cpu, ushort opcode) {
         var byteAccess = ((opcode & (1u << 12)) != 0u);
         var load = ((opcode & (1u << 11)) != 0u);
-        var offset = ((uint)opcode >> 6) & 0x1Fu;
-        var baseRegister = (int)((opcode >> 3) & 0x7u);
-        var rd = (int)(opcode & 0x7u);
+        var offset = (((uint)opcode) >> 6) & 0x1Fu;
+        var baseRegister = ((int)((opcode >> 3) & 0x7u));
+        var rd = ((int)(opcode & 0x7u));
         var address = (byteAccess
             ? (cpu.m_gpr[baseRegister] + offset)
             : (cpu.m_gpr[baseRegister] + (offset * 4u)));
@@ -510,19 +509,19 @@ public sealed partial class Arm7Tdmi {
         if (load) {
             cpu.m_gpr[rd] = (byteAccess
                 ? cpu.m_bus.Read8(
-                address: address,
-                access: BusAccessType.NonSequential
+                access: BusAccessType.NonSequential,
+                address: address
             )
                 : ReadWordRotated(
-                cpu: cpu,
-                address: address
+                address: address,
+                cpu: cpu
             ));
 
             cpu.m_bus.Idle(cycles: 1);
         } else if (byteAccess) {
             cpu.m_bus.Write8(
                 address: address,
-                value: (byte)cpu.m_gpr[rd],
+                value: ((byte)cpu.m_gpr[rd]),
                 access: BusAccessType.NonSequential
             );
         } else {
@@ -537,16 +536,16 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ThumbLoadStoreHalfword(Arm7Tdmi cpu, ushort opcode) {
         var load = ((opcode & (1u << 11)) != 0u);
-        var offset = ((((uint)opcode >> 6) & 0x1Fu) * 2u);
-        var baseRegister = (int)((opcode >> 3) & 0x7u);
-        var rd = (int)(opcode & 0x7u);
+        var offset = (((((uint)opcode) >> 6) & 0x1Fu) * 2u);
+        var baseRegister = ((int)((opcode >> 3) & 0x7u));
+        var rd = ((int)(opcode & 0x7u));
         var address = (cpu.m_gpr[baseRegister] + offset);
 
         if (load) {
             // Raw (unaligned) address forwarded to the bus — see ReadWordRotated in Arm7Tdmi.Arm.cs.
             uint data = cpu.m_bus.Read16(
-                address: address,
-                access: BusAccessType.NonSequential
+                access: BusAccessType.NonSequential,
+                address: address
             );
 
             if ((address & 1u) != 0u) {
@@ -558,7 +557,7 @@ public sealed partial class Arm7Tdmi {
         } else {
             cpu.m_bus.Write16(
                 address: address,
-                value: (ushort)cpu.m_gpr[rd],
+                value: ((ushort)cpu.m_gpr[rd]),
                 access: BusAccessType.NonSequential
             );
         }
@@ -567,13 +566,13 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ThumbStackPointerRelativeLoadStore(Arm7Tdmi cpu, ushort opcode) {
         var load = ((opcode & (1u << 11)) != 0u);
-        var rd = (int)((opcode >> 8) & 0x7u);
-        var address = (cpu.m_gpr[13] + ((uint)(opcode & 0xFFu) * 4u));
+        var rd = ((int)((opcode >> 8) & 0x7u));
+        var address = (cpu.m_gpr[13] + (((uint)(opcode & 0xFFu)) * 4u));
 
         if (load) {
             cpu.m_gpr[rd] = ReadWordRotated(
-                cpu: cpu,
-                address: address
+                address: address,
+                cpu: cpu
             );
             cpu.m_bus.Idle(cycles: 1);
         } else {
@@ -588,15 +587,15 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ThumbLoadAddress(Arm7Tdmi cpu, ushort opcode) {
         var useStackPointer = ((opcode & (1u << 11)) != 0u);
-        var rd = (int)((opcode >> 8) & 0x7u);
-        var offset = ((uint)(opcode & 0xFFu) * 4u);
+        var rd = ((int)((opcode >> 8) & 0x7u));
+        var offset = (((uint)(opcode & 0xFFu)) * 4u);
 
         cpu.m_gpr[rd] = (useStackPointer
             ? (cpu.m_gpr[13] + offset)
             : ((cpu.m_gpr[15] & ~2u) + offset));
     }
     private static void ThumbAddOffsetToStackPointer(Arm7Tdmi cpu, ushort opcode) {
-        var offset = ((uint)(opcode & 0x7Fu) * 4u);
+        var offset = (((uint)(opcode & 0x7Fu)) * 4u);
 
         cpu.m_gpr[13] = (((opcode & (1u << 7)) != 0u)
             ? (cpu.m_gpr[13] - offset)
@@ -605,7 +604,7 @@ public sealed partial class Arm7Tdmi {
     private static void ThumbPushPop(Arm7Tdmi cpu, ushort opcode) {
         var load = ((opcode & (1u << 11)) != 0u);
         var includePcLr = ((opcode & (1u << 8)) != 0u);
-        var list = (uint)(opcode & 0xFFu);
+        var list = ((uint)(opcode & 0xFFu));
         var count = (BitOperations.PopCount(value: list) + (includePcLr
             ? 1
             : 0));
@@ -617,8 +616,8 @@ public sealed partial class Arm7Tdmi {
             for (var register = 0; (register < 8); ++register) {
                 if (((list >> register) & 1u) != 0u) {
                     cpu.m_gpr[register] = cpu.m_bus.Read32(
-                        address: address,
-                        access: access
+                        access: access,
+                        address: address
                     );
                     address += 4u;
                     access = BusAccessType.Sequential;
@@ -629,8 +628,8 @@ public sealed partial class Arm7Tdmi {
 
             if (includePcLr) {
                 branchTarget = cpu.m_bus.Read32(
-                    address: address,
-                    access: access
+                    access: access,
+                    address: address
                 );
                 address += 4u;
             }
@@ -642,7 +641,7 @@ public sealed partial class Arm7Tdmi {
                 cpu.BranchTo(address: branchTarget & ~1u);
             }
         } else {
-            var address = (cpu.m_gpr[13] - ((uint)count * 4u));
+            var address = (cpu.m_gpr[13] - (((uint)count) * 4u));
 
             cpu.m_gpr[13] = address;
 
@@ -675,16 +674,16 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ThumbMultipleLoadStore(Arm7Tdmi cpu, ushort opcode) {
         var load = ((opcode & (1u << 11)) != 0u);
-        var baseRegister = (int)((opcode >> 8) & 0x7u);
-        var list = (uint)(opcode & 0xFFu);
+        var baseRegister = ((int)((opcode >> 8) & 0x7u));
+        var list = ((uint)(opcode & 0xFFu));
 
         if (list == 0u) {
             var emptyAddress = cpu.m_gpr[baseRegister];
 
             if (load) {
                 var data = cpu.m_bus.Read32(
-                    address: emptyAddress,
-                    access: BusAccessType.NonSequential
+                    access: BusAccessType.NonSequential,
+                    address: emptyAddress
                 );
 
                 cpu.m_gpr[baseRegister] = (emptyAddress + 0x40u);
@@ -707,7 +706,7 @@ public sealed partial class Arm7Tdmi {
 
         var address = cpu.m_gpr[baseRegister];
         var firstRegister = BitOperations.TrailingZeroCount(value: list);
-        var finalBase = (address + ((uint)BitOperations.PopCount(value: list) * 4u));
+        var finalBase = (address + (((uint)BitOperations.PopCount(value: list)) * 4u));
         var access = BusAccessType.NonSequential;
 
         for (var register = 0; (register < 8); ++register) {
@@ -717,8 +716,8 @@ public sealed partial class Arm7Tdmi {
 
             if (load) {
                 cpu.m_gpr[register] = cpu.m_bus.Read32(
-                    address: address,
-                    access: access
+                    access: access,
+                    address: address
                 );
             } else {
                 var data = (((register == baseRegister) && (register != firstRegister))
@@ -726,9 +725,9 @@ public sealed partial class Arm7Tdmi {
                     : cpu.m_gpr[register]);
 
                 cpu.m_bus.Write32(
+                    access: access,
                     address: address,
-                    value: data,
-                    access: access
+                    value: data
                 );
             }
 
@@ -749,28 +748,28 @@ public sealed partial class Arm7Tdmi {
     }
     private static void ThumbConditionalBranch(Arm7Tdmi cpu, ushort opcode) {
         if (!CheckCondition(
-            cpu: cpu,
-            condition: ((uint)opcode >> 8) & 0xFu
+            condition: (((uint)opcode) >> 8) & 0xFu,
+            cpu: cpu
         )) {
             return;
         }
 
-        var offset = (((int)(sbyte)(opcode & 0xFFu)) << 1);
+        var offset = (((int)((sbyte)(opcode & 0xFFu))) << 1);
 
-        cpu.BranchTo(address: (cpu.m_gpr[15] + (uint)offset));
+        cpu.BranchTo(address: (cpu.m_gpr[15] + ((uint)offset)));
     }
     private static void ThumbUnconditionalBranch(Arm7Tdmi cpu, ushort opcode) {
         var offset = ((((opcode & 0x7FF) << 21) >> 21) << 1);
 
-        cpu.BranchTo(address: (cpu.m_gpr[15] + (uint)offset));
+        cpu.BranchTo(address: (cpu.m_gpr[15] + ((uint)offset)));
     }
     private static void ThumbLongBranchWithLink(Arm7Tdmi cpu, ushort opcode) {
         if ((opcode & (1u << 11)) == 0u) {
             var high = ((((opcode & 0x7FF) << 21) >> 21) << 12);
 
-            cpu.m_gpr[14] = (cpu.m_gpr[15] + (uint)high);
+            cpu.m_gpr[14] = (cpu.m_gpr[15] + ((uint)high));
         } else {
-            var target = (cpu.m_gpr[14] + ((uint)(opcode & 0x7FFu) << 1));
+            var target = (cpu.m_gpr[14] + (((uint)(opcode & 0x7FFu)) << 1));
             var returnAddress = (cpu.m_gpr[15] - 2u) | 1u;
 
             cpu.m_gpr[14] = returnAddress;

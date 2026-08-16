@@ -8,7 +8,9 @@ namespace Puck.AdvancedGamingBrick;
 /// </summary>
 public sealed partial class ApuPulseChannel {
     private static readonly byte[] DutyPatterns = { 0b00000001, 0b00000011, 0b00001111, 0b11111100 };
+
     private readonly bool m_hasSweep;
+
     private int m_dutyPattern;
     private int m_dutyStep;
     private int m_frequency;
@@ -37,7 +39,6 @@ public sealed partial class ApuPulseChannel {
 
     /// <summary>Gets a value indicating whether the channel is currently producing sound.</summary>
     public bool Active => (m_enabled && m_dacEnabled);
-
     /// <summary>Gets the current output amplitude, 0–15.</summary>
     public int Output {
         get {
@@ -61,38 +62,31 @@ public sealed partial class ApuPulseChannel {
             m_dutyStep = (m_dutyStep + 1) & 7;
         }
     }
-
     /// <summary>Sets the sweep parameters (channel 1, NR10 / 0x60).</summary>
     public void WriteSweep(ushort value) {
         m_sweepPeriod = (value >> 4) & 0x7;
         m_sweepDecrease = ((value & 0x8) != 0);
         m_sweepShift = value & 0x7;
     }
-
     /// <summary>Reads back the sweep register (NR10): shift, direction, and period (all bits readable).</summary>
-    public byte ReadSweep() => (byte)((m_sweepPeriod << 4) | (m_sweepDecrease
+    public byte ReadSweep() => ((byte)((m_sweepPeriod << 4) | (m_sweepDecrease
         ? 0x8
-        : 0) | m_sweepShift);
-
+        : 0) | m_sweepShift));
     /// <summary>Reads back the duty field of NRx1 (the length sub-field is write-only and reads as zero).</summary>
-    public byte ReadDutyLength() => (byte)(m_dutyPattern << 6);
-
+    public byte ReadDutyLength() => ((byte)(m_dutyPattern << 6));
     /// <summary>Reads back the envelope register (NRx2): initial volume, direction, and period.</summary>
-    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
+    public byte ReadEnvelope() => ((byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
         ? 0x8
-        : 0) | m_envelopePeriod);
-
+        : 0) | m_envelopePeriod));
     /// <summary>Reads back NRx4's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => (byte)(m_lengthEnabled
+    public byte ReadControl() => ((byte)(m_lengthEnabled
         ? 0x40
-        : 0);
-
+        : 0));
     /// <summary>Sets duty and reloads the length counter (NRx1).</summary>
     public void WriteDutyLength(byte value) {
         m_dutyPattern = (value >> 6) & 0x3;
         m_lengthCounter = (64 - (value & 0x3F));
     }
-
     /// <summary>Sets the envelope (NRx2); clearing the upper five bits disables the channel's DAC.</summary>
     public void WriteEnvelope(byte value) {
         m_envelopeInitial = (value >> 4) & 0xF;
@@ -104,12 +98,10 @@ public sealed partial class ApuPulseChannel {
             m_enabled = false;
         }
     }
-
     /// <summary>Sets the low byte of the frequency (NRx3).</summary>
     public void WriteFrequencyLow(byte value) {
         m_frequency = (m_frequency & 0x700) | value;
     }
-
     /// <summary>Sets the high frequency bits and control (NRx4); bit 7 triggers (restarts) the channel.</summary>
     public void WriteControl(byte value) {
         m_frequency = (m_frequency & 0xFF) | ((value & 0x7) << 8);
@@ -119,7 +111,6 @@ public sealed partial class ApuPulseChannel {
             Trigger();
         }
     }
-
     /// <summary>Clocks the length counter (256&#160;Hz), disabling the channel when it reaches zero.</summary>
     public void ClockLength() {
         if (
@@ -130,7 +121,6 @@ public sealed partial class ApuPulseChannel {
             m_enabled = false;
         }
     }
-
     /// <summary>Clocks the volume envelope (64&#160;Hz).</summary>
     public void ClockEnvelope() {
         if (m_envelopePeriod == 0) {
@@ -153,7 +143,6 @@ public sealed partial class ApuPulseChannel {
             }
         }
     }
-
     /// <summary>Clocks the frequency sweep (128&#160;Hz, channel 1 only).</summary>
     public void ClockSweep() {
         if (

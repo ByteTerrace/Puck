@@ -22,16 +22,16 @@ public readonly record struct CommandLane {
     /// <summary>The slot's active command entries in semantic application order: carried state first, then this tick's
     /// captured edges and injections in FIFO order. Repeated command ids are allowed and significant.</summary>
     public CommandBuffer<CommandEntry> Entries { get; internal init; }
-
     /// <summary>The logical player slot this lane belongs to.</summary>
     public int Slot { get; internal init; }
 
     /// <summary>Compares deterministic lane content structurally.</summary>
-    public bool Equals(CommandLane other) => (Slot == other.Slot) && Entries.Equals(other: other.Entries);
-
+    public bool Equals(CommandLane other) => ((Slot == other.Slot) && Entries.Equals(other: other.Entries));
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Slot, Entries);
-
+    public override int GetHashCode() => HashCode.Combine(
+        value1: Slot,
+        value2: Entries
+    );
     /// <summary>Finds the final entry for a command id, if the slot has one active this tick.</summary>
     /// <param name="commandId">The interned command id to look up.</param>
     /// <param name="entry">The matching entry when found.</param>

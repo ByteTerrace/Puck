@@ -29,35 +29,52 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var q = Parameters.Constant;
         var r = Parameters.NumeratorQuadratic;
 
-        if ((p < BigInteger.One) || (r < BigInteger.One)) { return false; }
+        if (
+            (p < BigInteger.One) ||
+            (r < BigInteger.One)
+        ) { return false; }
 
         var characteristicDiscriminant = ((p * p) + (4 * r));
         var characteristicRoot = BigIntegerFunctions.SquareRoot(value: characteristicDiscriminant);
 
         if ((characteristicRoot * characteristicRoot) != characteristicDiscriminant) { return false; }
         var cNumerator = (characteristicRoot - p);
-        var c = BigInteger.DivRem(dividend: cNumerator, divisor: 2, remainder: out var cRemainder);
+        var c = BigInteger.DivRem(
+            dividend: cNumerator,
+            divisor: 2,
+            remainder: out var cRemainder
+        );
 
-        if (!cRemainder.IsZero || (c < BigInteger.One) || (r != (c * (c + p)))) { return false; }
+        if (
+            !cRemainder.IsZero ||
+            (c < BigInteger.One) ||
+            (r != (c * (c + p)))
+        ) { return false; }
 
-        var shiftMinusOne = BigInteger.DivRem(dividend: q, divisor: p, remainder: out var shiftRemainder);
+        var shiftMinusOne = BigInteger.DivRem(
+            dividend: q,
+            divisor: p,
+            remainder: out var shiftRemainder
+        );
         var k = (shiftMinusOne + 1);
 
-        if (!shiftRemainder.IsZero || (k < BigInteger.One)) { return false; }
+        if (
+            !shiftRemainder.IsZero ||
+            (k < BigInteger.One)
+        ) { return false; }
         var h = (Parameters.NumeratorConstant - ((r * k) * (k - 1)));
         var candidate = new PolynomialTailPairedForcingExclusionCertificate(
-            LinearScale: p,
             FactorialScale: c,
-            Shift: k,
+            IntegerBoundary: integerBoundary,
+            LinearScale: p,
             PositiveForcing: h,
-            IntegerBoundary: integerBoundary
+            Shift: k
         );
 
         if (!VerifyPairedForcingIntegerExclusionCertificate(certificate: candidate)) { return false; }
         certificate = candidate;
         return true;
     }
-
     /// <summary>Rechecks the complete parameter identity of a paired-forcing exclusion certificate.</summary>
     public bool VerifyPairedForcingIntegerExclusionCertificate(
         PolynomialTailPairedForcingExclusionCertificate certificate) {
@@ -66,17 +83,24 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var k = certificate.Shift;
         var h = certificate.PositiveForcing;
 
-        if ((p < BigInteger.One) || (c < BigInteger.One) || (k < BigInteger.One) || (h < BigInteger.One)) {
+        if (
+            (p < BigInteger.One) ||
+            (c < BigInteger.One) ||
+            (k < BigInteger.One) ||
+            (h < BigInteger.One)
+        ) {
             return false;
         }
         var r = (c * (c + p));
 
         return
-            ((Parameters.Linear == p) &&
+            (
+            (Parameters.Linear == p) &&
             (Parameters.Constant == (p * (k - 1))) &&
             (Parameters.NumeratorQuadratic == r) &&
             (Parameters.NumeratorLinear == (r * ((2 * k) - 1))) &&
             (Parameters.NumeratorConstant == (((r * k) * (k - 1)) + h)) &&
-            (certificate.IntegerBoundary == (k * (p + c))));
+            (certificate.IntegerBoundary == (k * (p + c)))
+        );
     }
 }

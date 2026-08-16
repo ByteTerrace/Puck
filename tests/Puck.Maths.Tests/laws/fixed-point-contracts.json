@@ -3,23 +3,74 @@
     "Id": "core.layer-sequence-walker-and-bounded-horizon",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.LayerSequence", "Name": "LayerOf" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "LayerSize" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Count" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Seed" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Triangular" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Pronic" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Square" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "CenteredSquare" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "CenteredHexagonal" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Linear" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Create" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "MaxLayer" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Capacity" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Locate" },
-      { "Type": "Puck.Maths.LayerSequence", "Name": "Project" },
-      { "Type": "Puck.Maths.LayerLocation", "Name": ".ctor" },
-      { "Type": "Puck.Maths.LayerProjection", "Name": ".ctor" }
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "LayerOf"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "LayerSize"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Count"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Seed"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Triangular"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Pronic"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Square"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "CenteredSquare"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "CenteredHexagonal"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Linear"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "MaxLayer"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Capacity"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Locate"
+      },
+      {
+        "Type": "Puck.Maths.LayerSequence",
+        "Name": "Project"
+      },
+      {
+        "Type": "Puck.Maths.LayerLocation",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.LayerProjection",
+        "Name": ".ctor"
+      }
     ],
     "Legs": [
       {
@@ -91,8 +142,14 @@
     "Id": "core.bitwise-pair-signed-narrow-and-wide-carriers",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.BinaryIntegerFunctions", "Name": "BitwisePair" },
-      { "Type": "Puck.Maths.BinaryIntegerFunctions", "Name": "BitwiseUnpair" }
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwisePair"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "BitwiseUnpair"
+      }
     ],
     "Legs": [
       {
@@ -137,9 +194,18 @@
     "Id": "sampling.field-noise-wide-position-alias-and-rebase",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.FieldNoise", "Name": "Sample" },
-      { "Type": "Puck.Maths.FixedPosition", "Name": ".ctor" },
-      { "Type": "Puck.Maths.FixedPosition", "Name": "CellSizeLog2" }
+      {
+        "Type": "Puck.Maths.FieldNoise",
+        "Name": "Sample"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedPosition",
+        "Name": "CellSizeLog2"
+      }
     ],
     "Legs": [
       {
@@ -175,7 +241,10 @@
     "Id": "core.unsigned-square-root-uint128-carrier-boundary",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.UnsignedNumberFunctions", "Name": "SquareRoot" }
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "SquareRoot"
+      }
     ],
     "Legs": [
       {
@@ -211,8 +280,14 @@
     "Id": "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.FixedTickConversion", "Name": "DurationEngineTicks" },
-      { "Type": "Puck.Maths.FixedTickConversion", "Name": "TicksPerSecond" }
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "DurationEngineTicks"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "TicksPerSecond"
+      }
     ],
     "Legs": [
       {
@@ -239,7 +314,10 @@
     "Id": "core.fixed-tick-conversion-exact-refuses-inexact-decimals",
     "Tier": "Default",
     "Members": [
-      { "Type": "Puck.Maths.FixedTickConversion", "Name": "TryDurationEngineTicksExact" }
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "TryDurationEngineTicksExact"
+      }
     ],
     "Legs": [
       {
@@ -256,6 +334,27 @@
         "Flavor": "None",
         "Subject": "this is the exactness seam owner ruling 2026-08-08 (authored-duration engine-tick storage) added: Puck.World.Data's WorldRuleCompiler.ResolveWrite calls this member for every world-rule 'valueSeconds' countdown/cooldown, refusing (WorldRuleRefusal.DurationNotExactEngineTicks) rather than silently rounding when it returns false — the law's coverage of the member is what keeps that refusal decision, and the nearest-exact-bounds arithmetic the refusal message itself performs with the SAME TicksPerSecond constant, honest as the member changes",
         "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.round-rational-scales-ties-and-refuses",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPointRounding",
+        "Name": "TryRoundRational"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedPointRounding.TryRoundRational (public) — the SCALE SHIFT, the ties-to-even decision, the sign, and every refusal, over a cross product of numerators, denominators and fraction bit counts in [0, 63], plus the signed-64-bit boundary, negative and zero refusals, and an int.MaxValue shift that must refuse an obviously overflowing nonzero value without attempting an enormous allocation while still accepting exact zero. The scaling branch is reached only from here: mass-properties.volumes-vs-oracle calls the helper exclusively at a zero fraction bit count, and Physics's nonzero-shift caller has no law of its own.",
+        "Against": "Oracles.RoundedRational — the same rational taken independently, scaling by a BigInteger.Pow multiply rather than a shift and deciding the tie by doubling the remainder against the divisor rather than comparing it with the distance to the next multiple",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

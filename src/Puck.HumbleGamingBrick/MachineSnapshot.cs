@@ -8,7 +8,7 @@ namespace Puck.HumbleGamingBrick;
 /// prevents a documented top cause of desync (loading a snapshot against the wrong model or cartridge). It fingerprints
 /// the format version, the emulated console model, and the immutable ROM images (the cartridge ROM and, when present,
 /// the boot ROM); a restore compares this against the live machine's identity and faults on any difference rather than
-/// silently corrupting state. The GB/GBC machine has no user BIOS image the way the Advanced machine does — its boot
+/// silently corrupting state. The DMG/CGB machine has no user BIOS image the way the Advanced machine does — its boot
 /// behaviour is either a seeded post-boot handoff or an optional boot ROM — so the boot-ROM fingerprint stands in for
 /// the Advanced machine's BIOS fingerprint (the empty-span fingerprint when no boot ROM was configured).
 /// </summary>
@@ -31,13 +31,12 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
     public static MachineIdentity Compute(ConsoleModel model, ReadOnlySpan<byte> bootRom, ReadOnlySpan<byte> rom) =>
         new(
         Version: CurrentVersion,
-        Model: (int)model,
+        Model: ((int)model),
         BootRomHash: Fnv1aHash.Compute(values: bootRom),
         RomHash: Fnv1aHash.Compute(values: rom),
         RomLength: rom.Length
     );
 }
-
 /// <summary>
 /// An immutable, self-contained capture of a machine's entire mutable state at one instant. It owns its bytes (through a
 /// shared <see cref="SnapshotImage"/>) and aliases nothing in the live machine, so it can be held indefinitely, restored
@@ -45,7 +44,7 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
 /// machine identity travel with it: a restore repositions the clock exactly and refuses a machine whose model/ROM
 /// identity differs.
 /// </summary>
-public sealed class MachineSnapshot : Puck.Snapshots.MachineSnapshot<MachineSnapshot, MachineIdentity, Tick> {
+public sealed class MachineSnapshot : Puck.GamingBricks.MachineSnapshot<MachineSnapshot, MachineIdentity, Tick> {
     internal MachineSnapshot(MachineIdentity identity, Tick takenAt, SnapshotImage image)
         : base(
         identity: identity,
@@ -57,7 +56,7 @@ public sealed class MachineSnapshot : Puck.Snapshots.MachineSnapshot<MachineSnap
     protected override MachineSnapshot Create(MachineIdentity identity, Tick takenAt, SnapshotImage image) =>
         new(
         identity: identity,
-        takenAt: takenAt,
-        image: image
+        image: image,
+        takenAt: takenAt
     );
 }

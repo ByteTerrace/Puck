@@ -55,7 +55,6 @@ internal static class BinaryFieldWideDegreeClaims {
     /// <summary>The three wide degrees and the catalog tail at each, built over the 128-bit carrier at every
     /// degree.</summary>
     private static readonly (int Degree, UInt128 Tail)[] WideCatalog = [(32, ((UInt128)0x8D)), (64, ((UInt128)0x1B)), (128, ((UInt128)0x87))];
-
     /// <summary>The published prime factorizations of <c>2^d − 1</c> at the three wide degrees, from the Fermat-number
     /// factorizations <c>2^32 + 1 = 641 · 6700417</c> and <c>2^64 + 1 = 274177 · 67280421310721</c>. Neither the
     /// products nor the primality of any factor is taken on its word — see
@@ -65,7 +64,6 @@ internal static class BinaryFieldWideDegreeClaims {
         (64, [3UL, 5UL, 17UL, 257UL, 641UL, 65_537UL, 6_700_417UL]),
         (128, [3UL, 5UL, 17UL, 257UL, 641UL, 65_537UL, 274_177UL, 6_700_417UL, 67_280_421_310_721UL]),
     ];
-
     /// <summary>The factor degrees the reducible-by-construction moduli are split at, as a fraction of the whole. Each
     /// row is a distinct shape: a linear factor against everything else, a near-balanced split, the perfect square, and
     /// two off-centre splits — the arrangements a distinct-degree criterion that stopped one exponent early, or that
@@ -84,15 +82,14 @@ internal static class BinaryFieldWideDegreeClaims {
     /// 128-bit carrier at every degree.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? WideDegreeIrreducibilityCertificatesSurface() =>
-        WideDegreeIrreducibilityFailure(scannedTails: 512, certifyCeiling: 1, acceptedFloor: 1, reducibleRows: 5);
-
+        WideDegreeIrreducibilityFailure(acceptedFloor: 1, certifyCeiling: 1, reducibleRows: 5, scannedTails: 512);
     /// <summary>The scale sibling of <see cref="WideDegreeIrreducibilityCertificatesSurface"/>: sixteen thousand moduli
     /// scanned at each wide degree with EVERY accepted one certified, and sixty reducible constructions per degree
     /// rejected. Written inline rather than through a <c>Domain</c>, because an Exhaustive case that consumed one would
     /// advance the frontier counter its Default sibling reads.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? WideDegreeIrreducibilitySweepSurface() =>
-        WideDegreeIrreducibilityFailure(scannedTails: 16_384, certifyCeiling: int.MaxValue, acceptedFloor: 8, reducibleRows: 60);
+        WideDegreeIrreducibilityFailure(acceptedFloor: 8, certifyCeiling: int.MaxValue, reducibleRows: 60, scannedTails: 16_384);
 
     /// <summary>The shared body of both wide-degree laws.</summary>
     /// <param name="scannedTails">How many odd tails are offered to the subject at each degree.</param>
@@ -142,14 +139,12 @@ internal static class BinaryFieldWideDegreeClaims {
 
         return null;
     }
-
     /// <summary>The subject's decision at a wide degree, taken on the 128-bit carrier.</summary>
     /// <param name="degree">The extension degree.</param>
     /// <param name="tail">The modulus below its leading term.</param>
     /// <returns>Whether the subject calls the modulus irreducible.</returns>
     private static bool WideDecision(int degree, UInt128 tail) =>
         BinaryField<UInt128>.Create(degree: degree, reductionTail: tail).IsIrreducible();
-
     /// <summary>The same decision read back on the degree's NATURAL carrier, where the degree equals the carrier's
     /// width. Degree 128 has only the one carrier and is skipped.</summary>
     /// <param name="degree">The extension degree.</param>
@@ -167,7 +162,6 @@ internal static class BinaryFieldWideDegreeClaims {
             ? null
             : $"t^{degree} + 0x{tail:X} is called {wide} on the 128-bit carrier and {natural} on its own {degree}-bit one");
     }
-
     /// <summary>Certifies that a modulus the subject called irreducible really is, by exhibiting an element of the
     /// quotient ring whose multiplicative order is exactly <c>2^degree − 1</c>.</summary>
     /// <param name="degree">The extension degree.</param>
@@ -185,7 +179,7 @@ internal static class BinaryFieldWideDegreeClaims {
             // The proper-divisor tests come first: they are what discriminates, and a candidate that is not a generator
             // usually fails the smallest of them, which keeps the search from paying for a full-order power per miss.
             foreach (var prime in primes) {
-                if (!Power(value: element, exponent: (groupOrder / prime), degree: degree, reductionTail: reductionTail).IsOne) { continue; }
+                if (!Power(degree: degree, exponent: (groupOrder / prime), reductionTail: reductionTail, value: element).IsOne) { continue; }
 
                 maximal = false;
 
@@ -195,12 +189,11 @@ internal static class BinaryFieldWideDegreeClaims {
             if (!maximal) { continue; }
 
             // Order divides the group order AND no proper divisor of it: the order is the group order exactly.
-            if (Power(value: element, exponent: groupOrder, degree: degree, reductionTail: reductionTail).IsOne) { return null; }
+            if (Power(degree: degree, exponent: groupOrder, reductionTail: reductionTail, value: element).IsOne) { return null; }
         }
 
         return $"t^{degree} + 0x{tail:X} is called irreducible, but no element of order 2^{degree} − 1 exists among the first {(GeneratorCandidateCeiling - 1)} candidates, so the quotient's non-zero elements do not all invert and it is not a field";
     }
-
     /// <summary>Requires the subject to reject moduli that are reducible BY CONSTRUCTION — the carryless product of two
     /// non-constant polynomials, formed in <see cref="BigInteger"/> without consulting the subject.</summary>
     /// <param name="degree">The extension degree the products are built to.</param>
@@ -208,7 +201,7 @@ internal static class BinaryFieldWideDegreeClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when every product is rejected.</returns>
     private static string? ReducibleConstructionFailure(int degree, int rows) {
         for (var row = 0; (row < rows); ++row) {
-            var (numerator, denominator) = ReducibleSplits[row % ReducibleSplits.Length];
+            var (numerator, denominator) = ReducibleSplits[(row % ReducibleSplits.Length)];
             var lowDegree = ((0 == denominator) ? 1 : ((degree * numerator) / denominator));
             var highDegree = (degree - lowDegree);
 
@@ -237,13 +230,12 @@ internal static class BinaryFieldWideDegreeClaims {
 
         return null;
     }
-
     /// <summary>A deterministic monic polynomial of the requested degree with a non-zero constant term.</summary>
     /// <param name="degree">The factor's degree, at least one.</param>
     /// <param name="salt">Varies the interior coefficients between rows.</param>
     /// <returns>The packed coefficient vector.</returns>
     private static BigInteger Factor(int degree, int salt) {
-        var value = ((BigInteger.One << degree) | BigInteger.One);
+        var value = (BigInteger.One << degree) | BigInteger.One;
 
         for (var exponent = 1; (exponent < degree); ++exponent) {
             if (0 != (((exponent * salt) + (salt / 2)) % 3)) { continue; }
@@ -253,7 +245,6 @@ internal static class BinaryFieldWideDegreeClaims {
 
         return value;
     }
-
     /// <summary>Re-proves every published factorization this file's certificates rest on: each list multiplies back to
     /// <c>2^d − 1</c> and every factor is prime by trial division. A composite listed as prime would let an element of
     /// SMALLER order pass the certificate, so the certificates are only as good as this check.</summary>
@@ -275,7 +266,6 @@ internal static class BinaryFieldWideDegreeClaims {
 
         return null;
     }
-
     /// <summary>The distinct prime divisors of <c>2^degree − 1</c>.</summary>
     /// <param name="degree">The extension degree.</param>
     /// <returns>The prime divisors.</returns>
@@ -284,9 +274,8 @@ internal static class BinaryFieldWideDegreeClaims {
             if (candidate == degree) { return primes; }
         }
 
-        throw new InvalidOperationException($"no published factorization of 2^{degree} − 1 is declared.");
+        throw new InvalidOperationException(message: $"no published factorization of 2^{degree} − 1 is declared.");
     }
-
     /// <summary>Primality by trial division — the definition, over a carrier wide enough for the largest listed
     /// factor.</summary>
     /// <param name="value">The candidate.</param>
@@ -301,7 +290,6 @@ internal static class BinaryFieldWideDegreeClaims {
 
         return true;
     }
-
     /// <summary>A power in <c>GF(2)[t]/(t^degree + reductionTail)</c>, by square-and-multiply over
     /// <see cref="Oracles.BinaryFieldProduct"/> — the shared-nothing BigInteger product the catalog-field laws already
     /// answer to.</summary>
@@ -317,11 +305,11 @@ internal static class BinaryFieldWideDegreeClaims {
 
         for (var bit = 0; (bit < bits); ++bit) {
             if (!((exponent >> bit) & BigInteger.One).IsZero) {
-                result = Oracles.BinaryFieldProduct(left: result, right: square, degree: degree, reductionTail: reductionTail);
+                result = Oracles.BinaryFieldProduct(degree: degree, left: result, reductionTail: reductionTail, right: square);
             }
 
             if ((bit + 1) < bits) {
-                square = Oracles.BinaryFieldProduct(left: square, right: square, degree: degree, reductionTail: reductionTail);
+                square = Oracles.BinaryFieldProduct(degree: degree, left: square, reductionTail: reductionTail, right: square);
             }
         }
 

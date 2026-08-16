@@ -29,17 +29,18 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     private readonly IOamDma m_oamDma;
     private readonly IPpu m_ppu;
     private readonly ISerial m_serial;
+
     // Mutable so a LIVE device swap re-gates the Color I/O page: with this false, every color register write (palette
     // RAM, KEY1, HDMA, VRAM/WRAM bank selects, PCM ports) is already dropped by the existing `if (m_supportsColor)`
     // guards and reads return 0xFF — sealing off Color hardware after a demote with no per-register change.
     private bool m_supportsColor;
+
     private readonly ITimer m_timer;
 
     // The FF50 latch: the boot ROM overlay is readable until the first nonzero write, which unmaps it for the life of
     // the machine (only a reset — a fresh machine — brings it back). A machine configured without a boot ROM starts
     // with the latch already tripped, so the seeded post-boot path reads FF50 exactly as hardware does after boot.
     private bool m_bootRomMapped;
-
     // The derived cartridge-window cache (F2): ROM fetch — the dominant bus traffic — and the pure-array-access
     // mappers' RAM window are resolved once per control write instead of chasing the slot property + mapper virtual
     // dispatch on every byte. NEVER serialized: RefreshCartridgeWindowCache rebuilds it from the just-loaded mapper
@@ -102,7 +103,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
         Array.Fill(
             array: m_ioRegisters,
-            value: (byte)0xFF
+            value: ((byte)0xFF)
         );
 
         RefreshCartridgeWindowCache();
@@ -126,9 +127,9 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             return (forceOpenBus
                 ? (byte)0xFF
                 : DmaSource.Read(
+                address: redirect,
                 cartridgeSlot: m_cartridgeSlot,
-                memory: m_memory,
-                address: redirect
+                memory: m_memory
             ));
         }
 
@@ -177,7 +178,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         }
 
         if (address <= MemoryMap.EchoRamEnd) {
-            return m_memory.ReadWorkRam(address: (ushort)(address - MemoryMap.EchoRamMirrorOffset));
+            return m_memory.ReadWorkRam(address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)));
         }
 
         if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
@@ -214,7 +215,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             return m_memory.ReadHighRam(address: address);
         }
 
-        return (byte)m_interrupts.Enabled;
+        return ((byte)m_interrupts.Enabled);
     }
     /// <inheritdoc/>
     public void WriteByte(ushort address, byte value) {
@@ -291,7 +292,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             );
         } else if (address <= MemoryMap.EchoRamEnd) {
             m_memory.WriteWorkRam(
-                address: (ushort)(address - MemoryMap.EchoRamMirrorOffset),
+                address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)),
                 value: value
             );
         } else if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
@@ -326,7 +327,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 value: value
             );
         } else {
-            m_interrupts.Enabled = (InterruptKind)value;
+            m_interrupts.Enabled = ((InterruptKind)value);
         }
     }
     /// <inheritdoc/>
@@ -339,7 +340,6 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         // trying to catch every such call site individually — keeps the cache correct by construction.
         RefreshCartridgeWindowCache();
     }
-
     /// <summary>Reads one byte from anywhere in the bus address space WITHOUT the side effects of a live fetch — no
     /// clock advance, no OAM-DMA conflict tracking, and none of the PPU/DMA lock masking that returns open bus during a
     /// live access: it shows the true byte a region holds (RAM/ROM/OAM/HRAM as stored, I/O through the register getters).
@@ -378,7 +378,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         }
 
         if (address <= MemoryMap.EchoRamEnd) {
-            return m_memory.ReadWorkRam(address: (ushort)(address - MemoryMap.EchoRamMirrorOffset));
+            return m_memory.ReadWorkRam(address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)));
         }
 
         if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
@@ -410,9 +410,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             return m_memory.ReadHighRam(address: address);
         }
 
-        return (byte)m_interrupts.Enabled;
+        return ((byte)m_interrupts.Enabled);
     }
-
     /// <summary>Forces one byte into a WRITABLE bus region — the debug MUTATION behind <c>hgb.poke</c>, outside the
     /// replay-determinism contract. RAM regions (VRAM, external RAM, work RAM + echo, OAM, high RAM) and the IE latch
     /// take the value; the ROM-region mapper-control window and the I/O page are refused (a memory poke must not drive
@@ -448,7 +447,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             );
         } else if (address <= MemoryMap.EchoRamEnd) {
             m_memory.WriteWorkRam(
-                address: (ushort)(address - MemoryMap.EchoRamMirrorOffset),
+                address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)),
                 value: value
             );
         } else if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
@@ -466,7 +465,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 value: value
             );
         } else {
-            m_interrupts.Enabled = (InterruptKind)value;
+            m_interrupts.Enabled = ((InterruptKind)value);
         }
     }
 
@@ -477,7 +476,9 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     // watch machinery is untouched. A hit latches ONE pending record (first hit wins until drained) so the host can
     // report PC + access + value and pause the cabinet.
     private bool m_watchArmed;
+
     private readonly List<(ushort Address, bool Read, bool Write)> m_watches = [];
+
     private bool m_watchHit;
     private ushort m_watchHitAddress;
     private byte m_watchHitValue;
@@ -491,7 +492,6 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     /// <inheritdoc/>
     public void NoteInstructionStart(ushort pc) =>
         m_currentInstructionPc = pc;
-
     /// <summary>Arms (or re-arms, replacing the same address's kinds) a read/write watchpoint. Dormant until the first
     /// arm flips the hot-path guard on.</summary>
     /// <param name="address">The watched bus address.</param>
@@ -510,7 +510,6 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         m_watches.Add(item: (address, read, write));
         m_watchArmed = true;
     }
-
     /// <summary>Clears every watchpoint and returns the hot path to its dormant (zero-cost) state.</summary>
     public void ClearWatches() {
         m_watches.Clear();
@@ -545,7 +544,6 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             values: parts
         );
     }
-
     /// <summary>Takes the one pending watch hit (if any), reporting its address, the byte, whether it was a write, and
     /// the accessing instruction's PC. Clears the pending slot so a subsequent access can latch the next hit.</summary>
     /// <param name="address">The hit address.</param>
@@ -639,7 +637,6 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             (m_supportsColor && (address >= CgbBootRomHighStart) && (address <= CgbBootRomHighEnd))
         );
     }
-
     // Land a conflict-redirected store directly on the DMA's bus: the mapper for the ROM region, then VRAM (still
     // subject to the PPU's drawing lock), external RAM, and work RAM with its echo fold.
     private void WriteConflictTarget(ushort address, byte value) {
@@ -675,7 +672,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             );
         } else {
             m_memory.WriteWorkRam(
-                address: (ushort)(address - MemoryMap.EchoRamMirrorOffset),
+                address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)),
                 value: value
             );
         }
@@ -706,8 +703,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         m_ramImage = cartridge.RamImage;
 
         if (cartridge.TryComputeRamWindow(
-            offset: out var ramOffset,
-            length: out var ramLength
+            length: out var ramLength,
+            offset: out var ramOffset
         )) {
             m_ramWindowOffset = ramOffset;
             m_ramWindowLength = ramLength;
@@ -716,7 +713,6 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             m_ramWindowLength = 0;
         }
     }
-
     // The audio registers and wave RAM form one contiguous block the APU owns end to end.
     private static bool IsAudioBlock(ushort address) =>
         ((address >= MemoryMap.AudioStart) && (address <= MemoryMap.WaveRamEnd));
@@ -747,12 +743,12 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.WindowX:
                 return m_ppu.ReadRegister(address: address);
             case MemoryMap.InterruptFlag:
-                return (byte)(0xE0 | (byte)m_interrupts.Requested);
+                return ((byte)(0xE0 | ((byte)m_interrupts.Requested)));
             case MemoryMap.BootRomDisable:
                 // Bit 0 is the latch (set once the overlay is gone); the undecoded bits read high.
-                return (byte)(0xFE | (m_bootRomMapped
+                return ((byte)(0xFE | (m_bootRomMapped
                     ? 0x00
-                    : 0x01));
+                    : 0x01)));
             default:
                 return ReadColorIoRegister(address: address);
         }
@@ -781,9 +777,9 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.InfraredPort:
                 return m_infrared.ReadRegister();
             case MemoryMap.VramBankSelect:
-                return (byte)(0xFE | m_memory.VideoRamBank);
+                return ((byte)(0xFE | m_memory.VideoRamBank));
             case MemoryMap.WorkRamBankSelect:
-                return (byte)(0xF8 | m_memory.WorkRamBank);
+                return ((byte)(0xF8 | m_memory.WorkRamBank));
             case 0xFF72:
             case 0xFF73:
             case 0xFF74:
@@ -791,7 +787,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 return m_ioRegisters[(address - MemoryMap.IoRegistersStart)];
             case 0xFF75:
                 // Only bits 4-6 are backed; the rest read as ones.
-                return (byte)(0x8F | m_ioRegisters[(address - MemoryMap.IoRegistersStart)]);
+                return ((byte)(0x8F | m_ioRegisters[(address - MemoryMap.IoRegistersStart)]));
             default:
                 return 0xFF;
         }
@@ -842,7 +838,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
                 break;
             case MemoryMap.InterruptFlag:
-                m_interrupts.Requested = (InterruptKind)value;
+                m_interrupts.Requested = ((InterruptKind)value);
 
                 break;
             case MemoryMap.BootRomDisable:

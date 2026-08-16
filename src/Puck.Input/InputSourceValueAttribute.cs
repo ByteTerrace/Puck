@@ -9,11 +9,12 @@ namespace Puck.Input;
 /// the classification by reflection instead of re-transcribing its own per-id copy that can fall behind.
 /// </summary>
 /// <remarks>
-/// Today's only reader is <c>Puck.Scripting.Simulation.AddonSourceCatalog</c>, which narrows this attribute's full range —
-/// <see cref="CommandValueKind"/> also covers three-/four-component motion — down to the
-/// <see cref="CommandValueKind.Digital"/>/<see cref="CommandValueKind.Axis1D"/>/<see cref="CommandValueKind.Axis2D"/>
-/// subset an addon input act's two payload value lanes can hold (see <c>Puck.Scripting.AddonSourceShape</c>). A control whose declared
-/// <see cref="Kind"/> falls outside that subset is a real, recognized control the addon ABI cannot carry, not an
+/// <see cref="InputSourceVocabulary.TryResolveDeclaredKind"/> reads this attribute and reports the FULL declared
+/// range unnarrowed; a downstream caller that can only carry a subset (<see cref="CommandValueKind"/> also covers
+/// three-/four-component motion) — the <see cref="CommandValueKind.Digital"/>/<see cref="CommandValueKind.Axis1D"/>/
+/// <see cref="CommandValueKind.Axis2D"/> subset an addon input act's two payload value lanes can hold, for example
+/// (see <c>Puck.Scripting.AddonSourceShape</c>) — applies that narrowing itself. A control whose declared
+/// <see cref="Kind"/> falls outside such a subset is a real, recognized control that caller cannot carry, not an
 /// unrecognized one.
 /// </remarks>
 [AttributeUsage(validOn: AttributeTargets.Field, Inherited = false, AllowMultiple = false)]

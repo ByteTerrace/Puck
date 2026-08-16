@@ -5,7 +5,6 @@ namespace Puck.Commands.Tests;
 /// <summary>Pins the single console argument-parse rule: invariant culture, finite floats, plain integers, with the
 /// <see cref="string"/> and <see cref="System.ReadOnlySpan{T}"/> overloads answering identically.</summary>
 public sealed class CommandArgsTests {
-    [Theory]
     [InlineData("1.5", true, 1.5f)]
     [InlineData("-2", true, -2f)]
     [InlineData("0", true, 0f)]
@@ -16,44 +15,42 @@ public sealed class CommandArgsTests {
     [InlineData("NaN", false, 0f)]
     [InlineData("Infinity", false, 0f)]
     [InlineData("1,5", false, 0f)]
+    [Theory]
     public void TryParseFloatFollowsTheInvariantFiniteRule(string text, bool expected, float value) {
         Assert.Equal(expected: expected, actual: CommandArgs.TryParseFloat(text: text, value: out var parsed));
 
         if (expected) {
-            Assert.Equal(expected: value, actual: parsed);
+            Assert.Equal(actual: parsed, expected: value);
         }
     }
-
-    [Theory]
     [InlineData("42", true, 42)]
     [InlineData("-3", true, -3)]
     [InlineData("1.5", false, 0)]
     [InlineData("abc", false, 0)]
+    [Theory]
     public void TryParseIntFollowsTheInvariantIntegerRule(string text, bool expected, int value) {
         Assert.Equal(expected: expected, actual: CommandArgs.TryParseInt(text: text, value: out var parsed));
 
         if (expected) {
-            Assert.Equal(expected: value, actual: parsed);
+            Assert.Equal(actual: parsed, expected: value);
         }
     }
-
-    [Theory]
     [InlineData("1.5")]
     [InlineData("NaN")]
     [InlineData("-2")]
     [InlineData("nonsense")]
+    [Theory]
     public void SpanAndStringOverloadsAgree(string text) {
         var stringOk = CommandArgs.TryParseFloat(text: text, value: out var fromString);
         var spanOk = CommandArgs.TryParseFloat(text: text.AsSpan(), value: out var fromSpan);
 
-        Assert.Equal(expected: stringOk, actual: spanOk);
-        Assert.Equal(expected: fromString, actual: fromSpan);
+        Assert.Equal(actual: spanOk, expected: stringOk);
+        Assert.Equal(actual: fromSpan, expected: fromString);
     }
-
     [Fact]
     public void TryParseFloatsParsesAConsecutiveRunOrFailsAsAUnit() {
         Assert.True(condition: CommandArgs.TryParseFloats(args: ["9", "1", "2", "3"], count: 3, start: 1, out var values));
-        Assert.Equal(expected: new[] { 1f, 2f, 3f }, actual: values);
+        Assert.Equal(actual: values, expected: new[] { 1f, 2f, 3f });
 
         // A missing final token fails the whole run rather than partially parsing.
         Assert.False(condition: CommandArgs.TryParseFloats(args: ["1", "2"], count: 3, start: 0, out _));

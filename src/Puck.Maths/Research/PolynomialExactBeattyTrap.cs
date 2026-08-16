@@ -14,7 +14,6 @@ public enum PolynomialExactBeattyTrapFamily {
     /// <summary><c>q=-p</c> and <c>1&lt;=r&lt;=p</c>.</summary>
     ScaledNumeratorWedge = 4,
 }
-
 /// <summary>The integral quadratic-norm data associated with one integer boundary.</summary>
 /// <param name="TailIndex">The positive recurrence index <c>n</c>.</param>
 /// <param name="Boundary">The integer boundary <c>m</c>.</param>
@@ -30,7 +29,6 @@ public readonly record struct PolynomialExactBeattyNormWitness(
     BigInteger RationalCoefficient,
     BigInteger NormQuotient
 );
-
 /// <summary>
 /// A finite exact proof certificate for all-index Beatty equality in a quadratic-numerator polynomial tail.
 /// </summary>
@@ -61,18 +59,6 @@ public readonly record struct PolynomialExactBeattyTrapCertificate(
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
         return ((Slope * QuadraticSurd.Rational(value: tailIndex)) + Offset);
     }
-
-    /// <summary>Returns the strict trapping interval endpoints <c>(x_n,x_n+C/n)</c>.</summary>
-    public (QuadraticSurd Lower, QuadraticSurd Upper) Trap(BigInteger tailIndex) {
-        var lower = Center(tailIndex: tailIndex);
-        var width = (TrapWidth / QuadraticSurd.Rational(value: tailIndex));
-
-        return (lower, (lower + width));
-    }
-
-    /// <summary>Returns the certified floor of the unique positive tail at <paramref name="tailIndex"/>.</summary>
-    public BigInteger TailFloor(BigInteger tailIndex) => Center(tailIndex: tailIndex).Floor();
-
     /// <summary>Constructs the exact integral norm witness for an integer boundary.</summary>
     public PolynomialExactBeattyNormWitness NormWitness(BigInteger tailIndex, BigInteger boundary) {
         PolynomialTailIndex.RequirePositive(tailIndex: tailIndex);
@@ -91,16 +77,24 @@ public readonly record struct PolynomialExactBeattyTrapCertificate(
         ) + NormResidue);
 
         return new PolynomialExactBeattyNormWitness(
-            TailIndex: tailIndex,
             Boundary: boundary,
-            SlopeCoefficient: slopeCoefficient,
+            NormQuotient: normQuotient,
             RationalCoefficient: rationalCoefficient,
-            NormQuotient: normQuotient
+            SlopeCoefficient: slopeCoefficient,
+            TailIndex: tailIndex
         );
+    }
+    /// <summary>Returns the certified floor of the unique positive tail at <paramref name="tailIndex"/>.</summary>
+    public BigInteger TailFloor(BigInteger tailIndex) => Center(tailIndex: tailIndex).Floor();
+    /// <summary>Returns the strict trapping interval endpoints <c>(x_n,x_n+C/n)</c>.</summary>
+    public (QuadraticSurd Lower, QuadraticSurd Upper) Trap(BigInteger tailIndex) {
+        var lower = Center(tailIndex: tailIndex);
+        var width = (TrapWidth / QuadraticSurd.Rational(value: tailIndex));
+
+        return (lower, (lower + width));
     }
 
 }
-
 /// <summary>
 /// An exact trap for <c>B_n=r(n+1)^2</c> obtained by reindexing to the native
 /// <c>r*n^2</c> norm-gap family.
@@ -126,9 +120,39 @@ public readonly record struct PolynomialShiftedExactBeattyTrapCertificate(
         return ShiftedCertificate.TailFloor(tailIndex: (tailIndex + BigInteger.One));
     }
 }
-
 /// <summary>Constructs and independently verifies exact quadratic Beatty-trap certificates without search.</summary>
 public static class PolynomialExactBeattyTrap {
+    private static bool VerifyNormPolynomialIdentity(
+        BigInteger p,
+        BigInteger q,
+        BigInteger r,
+        BigInteger modulus,
+        BigInteger residue) {
+        // Q=K*n+(p*q-2*r), T=K*m-r*(p+2*q), and
+        // F=K*(m^2-p*m*n-r*n^2-q*m+r*n)+residue.
+        // Compare coefficients of 1,n,m,n^2,n*m,m^2 in T^2-p*T*Q-r*Q^2 and K*F.
+        var q0 = ((p * q) - (2 * r));
+        var t0 = -(r * (p + (2 * q)));
+        var left = new BigInteger[] {
+            (((t0 * t0) - ((p * t0) * q0)) - ((r * q0) * q0)),
+            (-((p * t0) * modulus) - (((2 * r) * q0) * modulus)),
+            (((2 * t0) * modulus) - ((p * modulus) * q0)),
+            -((r * modulus) * modulus),
+            -((p * modulus) * modulus),
+            (modulus * modulus),
+        };
+        var right = new BigInteger[] {
+            (modulus * residue),
+            ((modulus * modulus) * r),
+            -((modulus * modulus) * q),
+            -((modulus * modulus) * r),
+            -((modulus * modulus) * p),
+            (modulus * modulus),
+        };
+
+        return left.AsSpan().SequenceEqual(other: right);
+    }
+
     /// <summary>Tries to construct a certificate directly from five recurrence coefficients.</summary>
     public static bool TryCreate(
         BigInteger linear,
@@ -139,15 +163,14 @@ public static class PolynomialExactBeattyTrap {
         out PolynomialExactBeattyTrapCertificate certificate) =>
         TryCreate(
             parameters: new PolynomialContinuedFractionParameters(
-                Linear: linear,
                 Constant: constant,
-                NumeratorQuadratic: numeratorQuadratic,
+                Linear: linear,
+                NumeratorConstant: numeratorConstant,
                 NumeratorLinear: numeratorLinear,
-                NumeratorConstant: numeratorConstant
+                NumeratorQuadratic: numeratorQuadratic
             ),
             certificate: out certificate
         );
-
     /// <summary>Tries to construct a certificate directly from recurrence parameters.</summary>
     public static bool TryCreate(
         PolynomialContinuedFractionParameters parameters,
@@ -158,10 +181,14 @@ public static class PolynomialExactBeattyTrap {
         var q = parameters.Constant;
         var r = parameters.NumeratorQuadratic;
 
-        if ((parameters.NumeratorLinear != BigInteger.Zero) ||
+        if (
+            (parameters.NumeratorLinear != BigInteger.Zero) ||
             (parameters.NumeratorConstant != BigInteger.Zero) ||
-            (p < BigInteger.One) || (r < BigInteger.One) ||
-            (q < -p) || (q > BigInteger.Zero)) {
+            (p < BigInteger.One) ||
+            (r < BigInteger.One) ||
+            (q < -p) ||
+            (q > BigInteger.Zero)
+        ) {
             return false;
         }
 
@@ -193,23 +220,26 @@ public static class PolynomialExactBeattyTrap {
         if (r == BigInteger.One) {
             family |= PolynomialExactBeattyTrapFamily.UnitQuadraticOffsetStrip;
         }
-        if ((q == -p) && (r <= p)) {
+        if (
+            (q == -p) &&
+            (r <= p)
+        ) {
             family |= PolynomialExactBeattyTrapFamily.ScaledNumeratorWedge;
         }
 
         var candidate = new PolynomialExactBeattyTrapCertificate(
-            Family: family,
-            Parameters: parameters,
-            Slope: slope,
-            Offset: offset,
-            TrapWidth: trapWidth,
             CharacteristicDiscriminant: discriminant,
-            NormResidue: normResidue,
+            ContractionFactor: contractionFactor,
+            Family: family,
             MinimumPositiveNorm: minimumPositiveNorm,
-            SuccessorDeficit: successorDeficit,
             MinimumSlopeCoefficient: minimumSlopeCoefficient,
             NormImageBound: normImageBound,
-            ContractionFactor: contractionFactor
+            NormResidue: normResidue,
+            Offset: offset,
+            Parameters: parameters,
+            Slope: slope,
+            SuccessorDeficit: successorDeficit,
+            TrapWidth: trapWidth
         );
 
         if (!Verify(certificate: candidate)) { return false; }
@@ -217,7 +247,6 @@ public static class PolynomialExactBeattyTrap {
         certificate = candidate;
         return true;
     }
-
     /// <summary>Rechecks every exact algebraic and order obligation without constructing a tail analysis.</summary>
     public static bool Verify(PolynomialExactBeattyTrapCertificate certificate) {
         var parameters = certificate.Parameters;
@@ -225,10 +254,14 @@ public static class PolynomialExactBeattyTrap {
         var q = parameters.Constant;
         var r = parameters.NumeratorQuadratic;
 
-        if ((parameters.NumeratorLinear != BigInteger.Zero) ||
+        if (
+            (parameters.NumeratorLinear != BigInteger.Zero) ||
             (parameters.NumeratorConstant != BigInteger.Zero) ||
-            (p < BigInteger.One) || (r < BigInteger.One) ||
-            (q < -p) || (q > BigInteger.Zero)) {
+            (p < BigInteger.One) ||
+            (r < BigInteger.One) ||
+            (q < -p) ||
+            (q > BigInteger.Zero)
+        ) {
             return false;
         }
 
@@ -237,7 +270,10 @@ public static class PolynomialExactBeattyTrap {
         if (r == BigInteger.One) {
             expectedFamily |= PolynomialExactBeattyTrapFamily.UnitQuadraticOffsetStrip;
         }
-        if ((q == -p) && (r <= p)) {
+        if (
+            (q == -p) &&
+            (r <= p)
+        ) {
             expectedFamily |= PolynomialExactBeattyTrapFamily.ScaledNumeratorWedge;
         }
         if (certificate.Family != expectedFamily) { return false; }
@@ -246,7 +282,12 @@ public static class PolynomialExactBeattyTrap {
         var qSurd = QuadraticSurd.Rational(value: q);
         var rSurd = QuadraticSurd.Rational(value: r);
         var discriminant = ((p * p) + (4 * r));
-        var expectedSlope = QuadraticSurd.Create(denominator: 2, radicand: discriminant, rationalNumerator: p, surdNumerator: BigInteger.One);
+        var expectedSlope = QuadraticSurd.Create(
+            denominator: 2,
+            radicand: discriminant,
+            rationalNumerator: p,
+            surdNumerator: BigInteger.One
+        );
         var discriminantRoot = ((QuadraticSurd.Rational(value: 2) * expectedSlope) - pSurd);
         var slopeSquared = (expectedSlope * expectedSlope);
         var expectedOffset = ((
@@ -265,7 +306,8 @@ public static class PolynomialExactBeattyTrap {
         );
         var expectedContractionFactor = (rSurd / (pSurd * expectedSlope));
 
-        if ((certificate.Slope != expectedSlope) ||
+        if (
+            (certificate.Slope != expectedSlope) ||
             (certificate.Offset != expectedOffset) ||
             (certificate.CharacteristicDiscriminant != discriminant) ||
             (certificate.NormResidue != normResidue) ||
@@ -274,15 +316,19 @@ public static class PolynomialExactBeattyTrap {
             (certificate.MinimumSlopeCoefficient != minimumSlopeCoefficient) ||
             (certificate.TrapWidth != expectedTrapWidth) ||
             (certificate.NormImageBound != expectedNormImageBound) ||
-            (certificate.ContractionFactor != expectedContractionFactor)) {
+            (certificate.ContractionFactor != expectedContractionFactor)
+        ) {
             return false;
         }
 
-        if ((slopeSquared != ((pSurd * expectedSlope) + rSurd)) ||
+        if (
+            (slopeSquared != ((pSurd * expectedSlope) + rSurd)) ||
             ((c * (slopeSquared + rSurd)) != (slopeSquared * (expectedSlope + qSurd))) ||
             ((qSurd - expectedOffset) != ((rSurd * c) / slopeSquared)) ||
-            (expectedSlope <= pSurd) || (discriminantRoot.Sign <= 0) ||
-            (c.Sign <= 0) || (c >= expectedSlope) ||
+            (expectedSlope <= pSurd) ||
+            (discriminantRoot.Sign <= 0) ||
+            (c.Sign <= 0) ||
+            (c >= expectedSlope) ||
             (expectedTrapWidth.Sign <= 0) ||
             (normResidue >= BigInteger.Zero) ||
             (minimumPositiveNorm <= BigInteger.Zero) ||
@@ -294,51 +340,20 @@ public static class PolynomialExactBeattyTrap {
             (expectedContractionFactor.Sign <= 0) ||
             (expectedContractionFactor >= QuadraticSurd.One) ||
             ((pSurd * slopeSquared).Sign <= 0) ||
-            (((expectedSlope * slopeSquared) + (rSurd * c)).Sign <= 0)) {
+            (((expectedSlope * slopeSquared) + (rSurd * c)).Sign <= 0)
+        ) {
             return false;
         }
 
         return VerifyNormPolynomialIdentity(
+            modulus: discriminant,
             p: p,
             q: q,
             r: r,
-            modulus: discriminant,
             residue: normResidue
         );
     }
-
-    private static bool VerifyNormPolynomialIdentity(
-        BigInteger p,
-        BigInteger q,
-        BigInteger r,
-        BigInteger modulus,
-        BigInteger residue) {
-        // Q=K*n+(p*q-2*r), T=K*m-r*(p+2*q), and
-        // F=K*(m^2-p*m*n-r*n^2-q*m+r*n)+residue.
-        // Compare coefficients of 1,n,m,n^2,n*m,m^2 in T^2-p*T*Q-r*Q^2 and K*F.
-        var q0 = ((p * q) - (2 * r));
-        var t0 = -(r * (p + (2 * q)));
-        var left = new BigInteger[] {
-            (((t0 * t0) - ((p * t0) * q0)) - ((r * q0) * q0)),
-            (-((p * t0) * modulus) - (((2 * r) * q0) * modulus)),
-            (((2 * t0) * modulus) - ((p * modulus) * q0)),
-            -((r * modulus) * modulus),
-            -((p * modulus) * modulus),
-            (modulus * modulus),
-        };
-        var right = new BigInteger[] {
-            (modulus * residue),
-            ((modulus * modulus) * r),
-            -((modulus * modulus) * q),
-            -((modulus * modulus) * r),
-            -((modulus * modulus) * p),
-            (modulus * modulus),
-        };
-
-        return left.AsSpan().SequenceEqual(other: right);
-    }
 }
-
 /// <summary>Constructs and verifies the one-index shift of an exact norm-gap trap.</summary>
 public static class PolynomialShiftedExactBeattyTrap {
     public static bool TryCreate(
@@ -349,10 +364,13 @@ public static class PolynomialShiftedExactBeattyTrap {
         var q = parameters.Constant;
         var r = parameters.NumeratorQuadratic;
 
-        if ((p < BigInteger.One) || (r < BigInteger.One) ||
+        if (
+            (p < BigInteger.One) ||
+            (r < BigInteger.One) ||
             (q < BigInteger.Zero) ||
             (parameters.NumeratorLinear != (2 * r)) ||
-            (parameters.NumeratorConstant != r)) {
+            (parameters.NumeratorConstant != r)
+        ) {
             return false;
         }
 
@@ -365,8 +383,9 @@ public static class PolynomialShiftedExactBeattyTrap {
         );
 
         if (!PolynomialExactBeattyTrap.TryCreate(
-                parameters: shiftedParameters,
-                certificate: out var shiftedCertificate)) {
+            certificate: out var shiftedCertificate,
+            parameters: shiftedParameters
+        )) {
             return false;
         }
 
@@ -385,28 +404,34 @@ public static class PolynomialShiftedExactBeattyTrap {
         var q = parameters.Constant;
         var r = parameters.NumeratorQuadratic;
 
-        if ((p < BigInteger.One) || (r < BigInteger.One) ||
+        if (
+            (p < BigInteger.One) ||
+            (r < BigInteger.One) ||
             (q < BigInteger.Zero) ||
             (parameters.NumeratorLinear != (2 * r)) ||
             (parameters.NumeratorConstant != r) ||
-            !PolynomialExactBeattyTrap.Verify(certificate: certificate.ShiftedCertificate)) {
+            !PolynomialExactBeattyTrap.Verify(certificate: certificate.ShiftedCertificate)
+        ) {
             return false;
         }
 
         return (certificate.ShiftedCertificate.Parameters ==
             new PolynomialContinuedFractionParameters(
-                Linear: p,
-                Constant: (q - p),
-                NumeratorQuadratic: r,
-                NumeratorLinear: BigInteger.Zero,
-                NumeratorConstant: BigInteger.Zero
-            ));
+            Linear: p,
+            Constant: (q - p),
+            NumeratorQuadratic: r,
+            NumeratorLinear: BigInteger.Zero,
+            NumeratorConstant: BigInteger.Zero
+        ));
     }
 }
 public sealed partial class PolynomialContinuedFractionAnalysis {
     /// <summary>Tries to certify exact Beatty equality for this already-constructed analysis.</summary>
     public bool TryExactBeattyTrapCertificate(out PolynomialExactBeattyTrapCertificate certificate) {
-        if (!PolynomialExactBeattyTrap.TryCreate(parameters: Parameters, certificate: out certificate)) {
+        if (!PolynomialExactBeattyTrap.TryCreate(
+            parameters: Parameters,
+            certificate: out certificate
+        )) {
             return false;
         }
         if (VerifyExactBeattyTrapCertificate(certificate: certificate)) { return true; }
@@ -414,13 +439,14 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         certificate = default;
         return false;
     }
-
     /// <summary>Rechecks a standalone exact Beatty certificate against this analysis.</summary>
     public bool VerifyExactBeattyTrapCertificate(PolynomialExactBeattyTrapCertificate certificate) {
-        if ((certificate.Parameters != Parameters) ||
+        if (
+            (certificate.Parameters != Parameters) ||
             (certificate.Slope != Slope) ||
             (certificate.Offset != Offset) ||
-            !PolynomialExactBeattyTrap.Verify(certificate: certificate)) {
+            !PolynomialExactBeattyTrap.Verify(certificate: certificate)
+        ) {
             return false;
         }
 
@@ -429,20 +455,21 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         return (AffineResidual == (((r * c) * c) / (Slope * Slope)));
     }
-
     /// <summary>Tries the one-index reindexing of the exact norm-gap trap.</summary>
     public bool TryShiftedExactBeattyTrapCertificate(
         out PolynomialShiftedExactBeattyTrapCertificate certificate) {
-        if (!PolynomialShiftedExactBeattyTrap.TryCreate(
-                parameters: Parameters,
-                certificate: out certificate) ||
-            !VerifyShiftedExactBeattyTrapCertificate(certificate: certificate)) {
+        if (
+            !PolynomialShiftedExactBeattyTrap.TryCreate(
+            parameters: Parameters,
+            certificate: out certificate
+        ) ||
+            !VerifyShiftedExactBeattyTrapCertificate(certificate: certificate)
+        ) {
             certificate = default;
             return false;
         }
         return true;
     }
-
     /// <summary>Rechecks a shifted exact trap against this analysis.</summary>
     public bool VerifyShiftedExactBeattyTrapCertificate(
         PolynomialShiftedExactBeattyTrapCertificate certificate) =>

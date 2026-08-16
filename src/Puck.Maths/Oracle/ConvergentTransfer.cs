@@ -43,30 +43,45 @@ public sealed class ConvergentTransfer<TValue, TOps>
     /// <summary>Gets the presented algebra of the codiscrete quiver on two objects — the two-by-two matrices.</summary>
     public PresentedAlgebra<TValue, TOps> Algebra { get; }
 
+    // The quiver key of a two-by-two cell, and the one place the coordinate range is decided.
+    private static long CellKey(int row, int column) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: row);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: row,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfNegative(value: column);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: column,
+            other: 1
+        );
+
+        return ((row * 2L) + column);
+    }
+
     /// <summary>Creates the transfer functor over a material.</summary>
     /// <param name="material">The material.</param>
     /// <returns>The described functor.</returns>
     public static ConvergentTransfer<TValue, TOps> Create(TOps material) {
         var one = material.One;
 
-        return new(algebra: PresentedAlgebra<TValue, TOps>.Create(
-            presentation: Presentations.Quiver<TValue, TOps>(
-                objectCount: 2,
-                arrows: [(0, 0, one), (0, 1, one), (1, 0, one), (1, 1, one)],
-                material: material
-            )
-        ));
+        return new(algebra: PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Quiver<TValue, TOps>(
+            arrows: [(0, 0, one), (0, 1, one), (1, 0, one), (1, 1, one)],
+            material: material,
+            objectCount: 2
+        )));
     }
-
     /// <summary>Returns the digit element <c>[[a, 1], [1, 0]]</c> of one partial quotient.</summary>
     /// <param name="partialQuotient">The partial quotient.</param>
     /// <returns>The element.</returns>
     public PresentedAlgebra<TValue, TOps>.Element Digit(TValue partialQuotient) {
         var one = Algebra.Presentation.Material.One;
 
-        return Algebra.FromSupport(keys: [0L, 1L, 2L], coefficients: [partialQuotient, one, one]);
+        return Algebra.FromSupport(
+            coefficients: [partialQuotient, one, one],
+            keys: [0L, 1L, 2L]
+        );
     }
-
     /// <summary>Returns one entry of a transfer element.</summary>
     /// <param name="value">The element.</param>
     /// <param name="row">The row, zero or one.</param>
@@ -75,15 +90,21 @@ public sealed class ConvergentTransfer<TValue, TOps>
     /// <exception cref="ArgumentException">The element belongs to another transfer algebra.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A coordinate is outside zero through one.</exception>
     public TValue Entry(in PresentedAlgebra<TValue, TOps>.Element value, int row, int column) {
-        Algebra.RequireOwned(value: value, paramName: nameof(value));
+        Algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
-        var key = CellKey(row: row, column: column);
+        var key = CellKey(
+            column: column,
+            row: row
+        );
 
         return ((0 == value.SupportCount)
             ? Algebra.Presentation.Material.Zero
-            : value[key]);
+            : value[key]
+        );
     }
-
     /// <summary>Evaluates a word of partial quotients into its transfer element.</summary>
     /// <param name="partialQuotients">The partial quotients, in the order they are composed.</param>
     /// <returns>The ordered product of the digit elements, left to right, starting from the unit.</returns>
@@ -91,12 +112,14 @@ public sealed class ConvergentTransfer<TValue, TOps>
         var result = Algebra.Identity;
 
         foreach (var quotient in partialQuotients) {
-            result = Algebra.Multiply(left: result, right: Digit(partialQuotient: quotient));
+            result = Algebra.Multiply(
+                left: result,
+                right: Digit(partialQuotient: quotient)
+            );
         }
 
         return result;
     }
-
     /// <summary>Runs a word of partial quotients as a module over this algebra and reads one entry out.</summary>
     /// <param name="partialQuotients">The partial quotients, in the order they are applied.</param>
     /// <param name="row">The readout row, zero or one.</param>
@@ -107,7 +130,10 @@ public sealed class ConvergentTransfer<TValue, TOps>
     /// requested cell, so the value equals <see cref="Entry"/> of <see cref="Evaluate"/> at every word. That equality is
     /// the point: the machine adds nothing, it only names what the product already was.</remarks>
     public TValue Run(ReadOnlySpan<TValue> partialQuotients, int row, int column) {
-        var readoutKey = CellKey(row: row, column: column);
+        var readoutKey = CellKey(
+            column: column,
+            row: row
+        );
         var steps = new PresentedAlgebra<TValue, TOps>.Element[partialQuotients.Length];
         var word = new int[partialQuotients.Length];
 
@@ -120,17 +146,10 @@ public sealed class ConvergentTransfer<TValue, TOps>
             algebra: Algebra,
             initial: Algebra.Identity,
             steps: steps,
-            readout: Algebra.FromSupport(keys: [readoutKey], coefficients: [Algebra.Presentation.Material.One])
+            readout: Algebra.FromSupport(
+                keys: [readoutKey],
+                coefficients: [Algebra.Presentation.Material.One]
+            )
         ).Run(word: word);
-    }
-
-    // The quiver key of a two-by-two cell, and the one place the coordinate range is decided.
-    private static long CellKey(int row, int column) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: row);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: row, other: 1);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: column);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: column, other: 1);
-
-        return ((row * 2L) + column);
     }
 }

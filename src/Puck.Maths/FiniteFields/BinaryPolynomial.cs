@@ -29,6 +29,7 @@ public readonly record struct BinaryPolynomial :
     private const int MaximumDegree = 63;
     /// <summary>The most distinct primes that can divide a value below <c>2^32</c>; the product of the first ten primes already exceeds it.</summary>
     private const int MaximumDistinctPrimeDivisorCount = 9;
+
     /// <summary>The largest degree <see cref="IsPrimitive"/> decides, bounded by what trial-dividing <c>2^degree - 1</c> costs.</summary>
     public const int MaximumPrimitiveDegree = 32;
 
@@ -38,23 +39,22 @@ public readonly record struct BinaryPolynomial :
 
     /// <summary>Gets the zero polynomial, which is the identity for addition.</summary>
     public static BinaryPolynomial AdditiveIdentity => default;
+    /// <summary>Gets the packed coefficients.</summary>
+    public ulong Bits { get; }
+    /// <summary>Gets the largest exponent carrying a non-zero coefficient, or minus one for the zero polynomial.</summary>
+    public int Degree => (MaximumDegree - BitOperations.LeadingZeroCount(value: Bits));
     /// <summary>Gets the indeterminate <c>t</c>.</summary>
     public static BinaryPolynomial Indeterminate => new(bits: 2UL);
+    /// <summary>Gets a value indicating whether this is the constant polynomial one.</summary>
+    public bool IsOne => (1UL == Bits);
+    /// <summary>Gets a value indicating whether this is the zero polynomial.</summary>
+    public bool IsZero => (0UL == Bits);
     /// <summary>Gets the constant polynomial one, which is the identity for multiplication.</summary>
     public static BinaryPolynomial MultiplicativeIdentity => new(bits: 1UL);
     /// <summary>Gets the constant polynomial one.</summary>
     public static BinaryPolynomial One => new(bits: 1UL);
     /// <summary>Gets the zero polynomial.</summary>
     public static BinaryPolynomial Zero => default;
-
-    /// <summary>Gets the packed coefficients.</summary>
-    public ulong Bits { get; }
-    /// <summary>Gets the largest exponent carrying a non-zero coefficient, or minus one for the zero polynomial.</summary>
-    public int Degree => (MaximumDegree - BitOperations.LeadingZeroCount(value: Bits));
-    /// <summary>Gets a value indicating whether this is the constant polynomial one.</summary>
-    public bool IsOne => (1UL == Bits);
-    /// <summary>Gets a value indicating whether this is the zero polynomial.</summary>
-    public bool IsZero => (0UL == Bits);
 
     /// <summary>Adds two binary polynomials; subtraction is the same operation.</summary>
     /// <param name="left">The first addend.</param>
@@ -79,14 +79,20 @@ public readonly record struct BinaryPolynomial :
     /// <returns>The product's coefficients of exponents 0 through 63.</returns>
     /// <remarks>Truncation matches the library's other fixed-width operators. Use the checked operator to have the loss reported.</remarks>
     public static BinaryPolynomial operator *(BinaryPolynomial left, BinaryPolynomial right) =>
-        new(bits: BinaryFieldKernels.CarrylessMultiply64(left: left.Bits, right: right.Bits).Low);
+        new(bits: BinaryFieldKernels.CarrylessMultiply64(
+            left: left.Bits,
+            right: right.Bits
+        ).Low);
     /// <summary>Multiplies two binary polynomials, reporting any coefficient above degree 63.</summary>
     /// <param name="left">The first factor.</param>
     /// <param name="right">The second factor.</param>
     /// <returns>The exact product.</returns>
     /// <exception cref="OverflowException">The product has a non-zero coefficient above degree 63.</exception>
     public static BinaryPolynomial operator checked *(BinaryPolynomial left, BinaryPolynomial right) {
-        var product = BinaryFieldKernels.CarrylessMultiply64(left: left.Bits, right: right.Bits);
+        var product = BinaryFieldKernels.CarrylessMultiply64(
+            left: left.Bits,
+            right: right.Bits
+        );
 
         if (0UL != product.High) { throw new OverflowException(message: "The binary-polynomial product exceeds degree 63."); }
 
@@ -139,6 +145,29 @@ public readonly record struct BinaryPolynomial :
 
         return new(bits: (value.Bits >>> count));
     }
+
+    /// <summary>Divides this polynomial by <paramref name="divisor"/>, returning the quotient and the remainder together.</summary>
+    /// <param name="divisor">The polynomial to divide by.</param>
+    /// <returns>The Euclidean quotient and remainder, which satisfy <c>(quotient * divisor) + remainder == this</c> exactly.</returns>
+    /// <exception cref="DivideByZeroException"><paramref name="divisor"/> is zero.</exception>
+    public (BinaryPolynomial Quotient, BinaryPolynomial Remainder) DivRem(BinaryPolynomial divisor) {
+        if (divisor.IsZero) { throw new DivideByZeroException(); }
+
+        var divisorDegree = divisor.Degree;
+        var quotient = 0UL;
+        var remainder = Bits;
+        var remainderDegree = Degree;
+
+        while (remainderDegree >= divisorDegree) {
+            var shift = (remainderDegree - divisorDegree);
+
+            quotient |= (1UL << shift);
+            remainder ^= (divisor.Bits << shift);
+            remainderDegree = (MaximumDegree - BitOperations.LeadingZeroCount(value: remainder));
+        }
+
+        return (Quotient: new BinaryPolynomial(bits: quotient), Remainder: new BinaryPolynomial(bits: remainder));
+    }
     /// <summary>
     /// Factors <c>t^n + 1</c> over the two-element field for an odd positive <paramref name="cycleOrder"/>. In
     /// characteristic two this is also <c>t^n - 1</c>, the group polynomial of a cyclic action. Automatic trial
@@ -150,7 +179,11 @@ public readonly record struct BinaryPolynomial :
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="cycleOrder"/> is even or outside <c>[1, 31]</c>.</exception>
     /// <exception cref="InvalidOperationException">The factorization did not finish on an irreducible factor. Unreachable for the admitted orders — <c>t^n + 1</c> is squarefree for odd <c>n</c>, and at most one irreducible factor can exceed degree <c>n / 2</c> — and kept as a fail-closed guard rather than an assertion.</exception>
     public static BinaryPolynomial[] FactorOddCycle(int cycleOrder) {
-        if ((cycleOrder <= 0) || (cycleOrder > 31) || ((cycleOrder & 1) == 0)) {
+        if (
+            (cycleOrder <= 0) ||
+            (cycleOrder > 31) ||
+            ((cycleOrder & 1) == 0)
+        ) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(cycleOrder),
                 actualValue: cycleOrder,
@@ -187,29 +220,6 @@ public readonly record struct BinaryPolynomial :
         }
 
         return [.. factors.OrderBy(keySelector: factor => factor.Degree).ThenBy(keySelector: factor => factor.Bits)];
-    }
-
-    /// <summary>Divides this polynomial by <paramref name="divisor"/>, returning the quotient and the remainder together.</summary>
-    /// <param name="divisor">The polynomial to divide by.</param>
-    /// <returns>The Euclidean quotient and remainder, which satisfy <c>(quotient * divisor) + remainder == this</c> exactly.</returns>
-    /// <exception cref="DivideByZeroException"><paramref name="divisor"/> is zero.</exception>
-    public (BinaryPolynomial Quotient, BinaryPolynomial Remainder) DivRem(BinaryPolynomial divisor) {
-        if (divisor.IsZero) { throw new DivideByZeroException(); }
-
-        var divisorDegree = divisor.Degree;
-        var quotient = 0UL;
-        var remainder = Bits;
-        var remainderDegree = Degree;
-
-        while (remainderDegree >= divisorDegree) {
-            var shift = (remainderDegree - divisorDegree);
-
-            quotient |= (1UL << shift);
-            remainder ^= (divisor.Bits << shift);
-            remainderDegree = (MaximumDegree - BitOperations.LeadingZeroCount(value: remainder));
-        }
-
-        return (Quotient: new BinaryPolynomial(bits: quotient), Remainder: new BinaryPolynomial(bits: remainder));
     }
     /// <summary>Returns the monic greatest common divisor.</summary>
     /// <param name="other">The polynomial to take the common divisor with.</param>
@@ -284,13 +294,19 @@ public readonly record struct BinaryPolynomial :
         var divisorCount = 0;
 
         foreach (var factor in groupOrder.EnumeratePrimeFactors()) {
-            if ((0 < divisorCount) && (primeDivisors[(divisorCount - 1)] == factor)) { continue; }
+            if (
+                (0 < divisorCount) &&
+                (primeDivisors[(divisorCount - 1)] == factor)
+            ) { continue; }
 
             primeDivisors[divisorCount++] = factor;
         }
 
         for (var index = 0; (index < divisorCount); ++index) {
-            if (1UL == field.Exponentiate(value: root, exponent: (groupOrder / primeDivisors[index]))) { return false; }
+            if (1UL == field.Exponentiate(
+                value: root,
+                exponent: (groupOrder / primeDivisors[index])
+            )) { return false; }
         }
 
         return true;

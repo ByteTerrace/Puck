@@ -5,7 +5,6 @@ namespace Puck.Maths;
 /// <param name="BlockedSymbol">The generator whose residual would have exceeded the budget, or <c>-1</c> when the
 /// budget itself was never the obstacle.</param>
 public readonly record struct ClosureObstruction(long StatesExplored, int BlockedSymbol);
-
 /// <summary>
 /// The eager determinization of one element by its residuals: the finitely many distinct residuals of a seed, numbered
 /// canonically, together with the quiver-presented machine whose transition elements are those residuals' arrows.
@@ -62,11 +61,13 @@ public sealed class ResidualClosure<TValue, TOps>
     /// <exception cref="ArgumentOutOfRangeException">The state number is outside <see cref="StateCount"/>.</exception>
     public PresentedAlgebra<TValue, TOps>.Element State(int state) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: state, other: StateCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: state,
+            other: StateCount
+        );
 
         return m_states[state];
     }
-
     /// <summary>Returns the state one generator moves a state to.</summary>
     /// <param name="state">The state number.</param>
     /// <param name="symbol">The generator's symbol.</param>
@@ -74,9 +75,15 @@ public sealed class ResidualClosure<TValue, TOps>
     /// <exception cref="ArgumentOutOfRangeException">The state number or the symbol is outside its range.</exception>
     public long Transition(int state, int symbol) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: state);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: state, other: StateCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: state,
+            other: StateCount
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: symbol, other: m_generatorCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: symbol,
+            other: m_generatorCount
+        );
 
         return m_transition[((state * m_generatorCount) + symbol)];
     }
@@ -124,10 +131,19 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         out ResidualClosure<TValue, TOps> closure,
         out ClosureObstruction obstruction
     ) {
-        RequireOwned(value: seed, paramName: nameof(seed));
+        RequireOwned(
+            value: seed,
+            paramName: nameof(seed)
+        );
 
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: stateLimit, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: stateLimit, other: MaximumClosureStates);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: stateLimit,
+            other: 1
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            value: stateLimit,
+            other: MaximumClosureStates
+        );
 
         var generatorCount = Presentation.GeneratorCount;
         var material = m_material;
@@ -139,7 +155,12 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
 
         for (var state = 0; (state < states.Count); ++state) {
             for (var symbol = 0; (symbol < generatorCount); ++symbol) {
-                var residual = Residual(symbol: symbol, value: states[state], twist: twist, shiftSymbol: shiftSymbol);
+                var residual = Residual(
+                    symbol: symbol,
+                    value: states[state],
+                    twist: twist,
+                    shiftSymbol: shiftSymbol
+                );
 
                 if (0 == residual.SupportCount) {
                     transition.Add(item: -1);
@@ -150,7 +171,10 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
                 var target = -1;
 
                 for (var probe = 0; (probe < states.Count); ++probe) {
-                    if (AreEqual(left: states[probe], right: residual)) {
+                    if (AreEqual(
+                        left: states[probe],
+                        right: residual
+                    )) {
                         target = probe;
 
                         break;
@@ -159,7 +183,10 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
 
                 if (target < 0) {
                     if (states.Count >= stateLimit) {
-                        obstruction = new(StatesExplored: states.Count, BlockedSymbol: symbol);
+                        obstruction = new(
+                            StatesExplored: states.Count,
+                            BlockedSymbol: symbol
+                        );
 
                         return false;
                     }
@@ -175,7 +202,11 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
 
         var stateCount = states.Count;
         var arrows = transition.ToArray();
-        var quiver = PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Quiver<TValue, TOps>(objectCount: stateCount, arrows: [], material: material));
+        var quiver = PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Quiver<TValue, TOps>(
+            arrows: [],
+            material: material,
+            objectCount: stateCount
+        ));
         var stepKeys = new List<long>();
         var stepValues = new List<TValue>();
         var steps = new Element[generatorCount];
@@ -189,11 +220,14 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
 
                 if (target < 0) { continue; }
 
-                stepKeys.Add(item: ((state * (long)stateCount) + target));
+                stepKeys.Add(item: ((state * ((long)stateCount)) + target));
                 stepValues.Add(item: material.One);
             }
 
-            steps[symbol] = quiver.FromSupport(keys: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: stepKeys), coefficients: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: stepValues));
+            steps[symbol] = quiver.FromSupport(
+                keys: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: stepKeys),
+                coefficients: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: stepValues)
+            );
         }
 
         var readoutKeys = new long[stateCount];
@@ -207,9 +241,15 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         closure = new ResidualClosure<TValue, TOps>(
             machine: PresentedMachine<TValue, TOps>.Create(
                 algebra: quiver,
-                initial: quiver.FromSupport(keys: [0L], coefficients: [material.One]),
+                initial: quiver.FromSupport(
+                    keys: [0L],
+                    coefficients: [material.One]
+                ),
                 steps: steps,
-                readout: quiver.FromSupport(keys: readoutKeys, coefficients: readoutValues)
+                readout: quiver.FromSupport(
+                    coefficients: readoutValues,
+                    keys: readoutKeys
+                )
             ),
             states: [.. states],
             transition: arrows,

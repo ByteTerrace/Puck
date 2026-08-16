@@ -21,7 +21,6 @@ public interface IMachineMemoryPeek {
     /// <param name="address">A machine-defined bus address.</param>
     /// <returns>The byte at that address, or 0.</returns>
     byte PeekByte(int address);
-
     /// <summary>Forces one byte into the machine's bus address space — a debug mutation outside the replay-determinism
     /// contract. The write lands only on writable regions (RAM); an address outside the machine's writable space, or an
     /// unassigned machine, is a no-op. Because the poked byte is an unrecorded input, the caller must treat any captured

@@ -41,7 +41,7 @@ param(
         'src/Puck.World/README.md',
         'src/Puck.World/Client/README.md',
         'src/Puck.World/Audio/README.md',
-        'src/Puck.World.Data/README.md',
+        'src/Puck.World.Schema/README.md',
         'src/Puck.World.Server/README.md',
         'src/Puck.Attestation/README.md',
         'README.md',

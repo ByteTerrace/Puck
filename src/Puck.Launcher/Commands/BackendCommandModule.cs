@@ -21,7 +21,11 @@ internal sealed class BackendCommandModule(BackendSwitcher backendSwitcher) : IC
 
                 var to = backendSwitcher.ActiveBackendName;
 
-                return new CommandResult((string.Equals(a: from, b: to, comparisonType: StringComparison.OrdinalIgnoreCase)
+                return new CommandResult((string.Equals(
+                    a: from,
+                    b: to,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
                     ? $"[backend: {from} — no alternative available]"
                     : $"[backend: {from} → {to}]"));
             },

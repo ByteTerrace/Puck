@@ -14,8 +14,16 @@
         "resolved": "44.0.0",
         "contentHash": "Mo93hPzT2wzxQlntv0yqWChspMCp9KlT4rTYseriz/WZ1wKjRCE5WBwrN2ljBeqBitKINPMwupN4Ar1jnaS7Vw=="
       },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
+      },
       "ByteTerrace.Puck.Assets": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "System.IO.Hashing": "[10.*, )"
+        }
       },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"

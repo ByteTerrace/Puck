@@ -156,7 +156,7 @@
       "default": null
     },
     "nextListingId": {
-      "description": "The next Id a CreateMarketListing mints \u2014 engine bookkeeping, monotonically increasing, never reused.",
+      "description": "The next Id a WorldMutation.CreateMarketListing mints \u2014 engine bookkeeping, monotonically increasing, never reused.",
       "type": "integer",
       "default": 1
     },

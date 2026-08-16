@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Windowing;
 using Puck.Demo.Configuration;
+using Puck.Hosting;
 using Puck.Launcher;
 using Puck.Scene;
 using Puck.SdfVm;

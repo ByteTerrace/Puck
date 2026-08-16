@@ -1480,7 +1480,7 @@
     "portalDefaults": {
       "travel": "party",
       "holdSeconds": 2,
-      "full": "retry",
+      "full": "Retry",
       "partyAllOrNothing": true
     }
   },
@@ -1514,7 +1514,7 @@
     }
   ],
   "market": {
-    "formats": ["english", "buyout"],
+    "formats": ["English", "Buyout"],
     "feeBasisPoints": 250,
     "minDurationSeconds": 10,
     "maxDurationSeconds": 3600,
@@ -1525,6 +1525,12 @@
     "nextListingId": 1,
     "feeReserve": 0,
     "retentionSeconds": 604800
+  },
+  "metadata": {
+    "title": "Play",
+    "description": "The overworld hub — the game's first main city.",
+    "authors": [{ "name": "Puck", "oid": "11111111-1111-1111-1111-111111111111" }],
+    "tags": ["overworld", "hub"]
   },
   "documentId": "play",
   "schema": "puck.world.def.v1",

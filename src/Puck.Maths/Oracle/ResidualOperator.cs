@@ -71,13 +71,22 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         var presentation = Presentation;
         var generatorCount = presentation.GeneratorCount;
 
-        RequireOwned(value: value, paramName: nameof(value));
+        RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: symbol, other: generatorCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: symbol,
+            other: generatorCount
+        );
 
         if (ResidualTwist.ShiftGenerator == twist) {
             ArgumentOutOfRangeException.ThrowIfNegative(value: shiftSymbol);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: shiftSymbol, other: generatorCount);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+                value: shiftSymbol,
+                other: generatorCount
+            );
         }
 
         var material = m_material;
@@ -90,7 +99,11 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         var words = new ChargedPresentation<TValue, TOps>.Combination();
 
         for (var index = 0; (index < value.SupportCount); ++index) {
-            if (!TryWordOf(key: value.Keys[index], word: source, length: out var length)) {
+            if (!TryWordOf(
+                key: value.Keys[index],
+                word: source,
+                length: out var length
+            )) {
                 throw new InvalidOperationException(message: "A support key of this element does not name a word of the presentation.");
             }
 
@@ -101,12 +114,18 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
 
                 // The twisted prefix, then the untouched suffix. The counit kills every non-empty prefix, which is what
                 // collapses the sum to its leading occurrence.
-                if ((ResidualTwist.Counit == twist) && (0 != position)) { break; }
+                if (
+                    (ResidualTwist.Counit == twist) &&
+                    (0 != position)
+                ) { break; }
 
                 var written = 0;
 
                 if (ResidualTwist.Identity == twist) {
-                    source.AsSpan(start: 0, length: position).CopyTo(destination: staged);
+                    source.AsSpan(
+                        length: position,
+                        start: 0
+                    ).CopyTo(destination: staged);
                     written = position;
                 } else if (ResidualTwist.ShiftGenerator == twist) {
                     for (var prefix = 0; (prefix < position); ++prefix) {
@@ -125,10 +144,26 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
                     throw new InvalidOperationException(message: "A residual term outgrew the word cap of this presentation.");
                 }
 
-                source.AsSpan(start: (position + 1), length: suffix).CopyTo(destination: staged.AsSpan(start: written, length: suffix));
+                source.AsSpan(
+                    length: suffix,
+                    start: (position + 1)
+                ).CopyTo(destination: staged.AsSpan(
+                    length: suffix,
+                    start: written
+                ));
                 written += suffix;
 
-                if (!presentation.TryRewriteToKeys(word: staged.AsSpan(start: 0, length: written), charge: material.One, stepLimit: ResidualBudget, result: combination, combination: words, stepsTaken: out _)) {
+                if (!presentation.TryRewriteToKeys(
+                    word: staged.AsSpan(
+                        length: written,
+                        start: 0
+                    ),
+                    charge: material.One,
+                    stepLimit: ResidualBudget,
+                    result: combination,
+                    combination: words,
+                    stepsTaken: out _
+                )) {
                     throw new InvalidOperationException(message: "A residual term exceeded the normalization budget of this presentation.");
                 }
 
@@ -140,7 +175,11 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
             }
         }
 
-        return FoldByTarget(targets: targets, charges: charges, values: coefficients);
+        return FoldByTarget(
+            charges: charges,
+            targets: targets,
+            values: coefficients
+        );
     }
 
     // The normalization budget the residual and closure paths run under; the same order as the kernel's own.
@@ -148,7 +187,13 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
 
     // The generator word one key names, under whichever key scheme the presentation uses.
     private bool TryWordOf(long key, Span<int> word, out int length) {
-        if (!m_isDense) { return Presentation.TryUnpackWord(key: key, word: word, length: out length); }
+        if (!m_isDense) {
+            return Presentation.TryUnpackWord(
+                key: key,
+                length: out length,
+                word: word
+            );
+        }
 
         var normalForm = Presentation.NormalFormWord(key: key);
 

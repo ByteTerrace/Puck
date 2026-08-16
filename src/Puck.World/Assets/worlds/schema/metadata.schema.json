@@ -1,0 +1,82 @@
+{
+  "description": "The optional metadata section \u2014 free-form author-facing facts (title, description, authors, tags, a custom bag). Nothing here is read by the engine; see WorldMetadataSection.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "title": {
+      "description": "The world\u0027s author-facing display name, distinct from its filename.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "description": {
+      "description": "A free-form author description.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "authors": {
+      "description": "The credited authors.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One credited author on a WorldMetadataSection.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The author\u0027s display name.",
+            "type": "string"
+          },
+          "oid": {
+            "description": "The author\u0027s Entra object id, when the author chooses to attach one \u2014 see WorldEntraObjectId. Authored, not authenticated: nothing here proves the name behind the id.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    },
+    "tags": {
+      "description": "Free author vocabulary (genre, theme, whatever an author wants) \u2014 no built-in enum, the same posture Names already carries for a property name.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "default": null
+    },
+    "custom": {
+      "description": "A free-form author bag \u2014 see the type remarks for its two compose-time carve-outs.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null
+}

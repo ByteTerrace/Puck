@@ -35,7 +35,6 @@ internal sealed class BessImportGuardStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "bess-import-guard";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -52,8 +51,8 @@ internal sealed class BessImportGuardStage : IPostStage {
         );
 
         PostMachine.RunFrames(
-            instance: source,
-            frames: ExportFrames
+            frames: ExportFrames,
+            instance: source
         );
 
         var (goodFile, _) = BessExporter.Export(
@@ -76,8 +75,8 @@ internal sealed class BessImportGuardStage : IPostStage {
 
             try {
                 BessImporter.Import(
-                    instance: probe,
-                    file: malformed
+                    file: malformed,
+                    instance: probe
                 );
             } catch (InvalidDataException exception) {
                 rejection = exception;
@@ -110,7 +109,7 @@ internal sealed class BessImportGuardStage : IPostStage {
             // where the spec instead requires 0.
             for (var index = 0; (index < shapeCase.DestinationCapacity); ++index) {
                 fillBus.WriteByte(
-                    address: (ushort)(shapeCase.DestinationStart + index),
+                    address: ((ushort)(shapeCase.DestinationStart + index)),
                     value: 0xAA
                 );
             }
@@ -127,7 +126,7 @@ internal sealed class BessImportGuardStage : IPostStage {
             }
 
             for (var index = 0; (index < shapeCase.DestinationCapacity); ++index) {
-                var actual = fillBus.ReadByte(address: (ushort)(shapeCase.DestinationStart + index));
+                var actual = fillBus.ReadByte(address: ((ushort)(shapeCase.DestinationStart + index)));
                 var expected = ((index < shapeCase.ImportedBytes.Length)
                     ? shapeCase.ImportedBytes[index]
                     : (byte)0);
@@ -160,12 +159,12 @@ internal sealed class BessImportGuardStage : IPostStage {
             );
 
             var unextendedReport = BessImporter.Import(
-                instance: unextendedProbe,
-                file: goodFile
+                file: goodFile,
+                instance: unextendedProbe
             );
             var extendedReport = BessImporter.Import(
-                instance: extendedProbe,
-                file: extendedCoreFile
+                file: extendedCoreFile,
+                instance: extendedProbe
             );
 
             if (unextendedReport != extendedReport) {

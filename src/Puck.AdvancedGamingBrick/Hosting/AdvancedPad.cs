@@ -60,7 +60,7 @@ internal static class AdvancedPad {
             bit: 9
         );
 
-        return (ushort)keys;
+        return ((ushort)keys);
     }
 
     private static int Press(int keys, bool pressed, int bit) => (pressed

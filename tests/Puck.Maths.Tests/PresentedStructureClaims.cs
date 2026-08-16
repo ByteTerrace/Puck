@@ -47,10 +47,10 @@ internal static class PresentedStructureClaims {
         const int DegenerateCount = 0;
 
         var presentation = Presentations.Clifford<BigInteger, IntegerMaterial>(
-            positiveCount: PositiveCount,
-            negativeCount: NegativeCount,
             degenerateCount: DegenerateCount,
-            material: default
+            material: default,
+            negativeCount: NegativeCount,
+            positiveCount: PositiveCount
         );
         var algebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: presentation);
         var compiled = algebra.Compile();
@@ -77,7 +77,7 @@ internal static class PresentedStructureClaims {
                 }
 
                 var targetBlade = keyToBlade[((int)compiled.Target(leftKey: leftKey, rightKey: rightKey))];
-                var expectedBlade = (keyToBlade[leftKey] ^ keyToBlade[rightKey]);
+                var expectedBlade = keyToBlade[leftKey] ^ keyToBlade[rightKey];
 
                 if (targetBlade != expectedBlade) {
                     return $"conformal cell ({leftKey},{rightKey}) targets blade {targetBlade}, expected {expectedBlade}";
@@ -96,34 +96,26 @@ internal static class PresentedStructureClaims {
 
     private static FixedScalarRing UnitScalarAt(int index, int offset) =>
         new(Value: ((offset == index) ? FixedQ4816.One : FixedQ4816.Zero));
-
     private static DoublingAlgebra<FixedScalarRing> UnitComplexAt(int index, int offset) =>
         new(Left: UnitScalarAt(index: index, offset: offset), Right: UnitScalarAt(index: index, offset: (offset + 1)));
-
     private static DoublingAlgebra<DoublingAlgebra<FixedScalarRing>> UnitQuaternionAt(int index, int offset) =>
         new(Left: UnitComplexAt(index: index, offset: offset), Right: UnitComplexAt(index: index, offset: (offset + 2)));
-
     private static LeafOctonion UnitOctonionAt(int index, int offset) =>
         new(Left: UnitQuaternionAt(index: index, offset: offset), Right: UnitQuaternionAt(index: index, offset: (offset + 4)));
-
     private static LeafSedenion UnitSedenion(int index) =>
         new(Left: UnitOctonionAt(index: index, offset: 0), Right: UnitOctonionAt(index: index, offset: 8));
-
     private static void WriteComplexLanes(DoublingAlgebra<FixedScalarRing> value, Span<long> lanes, int offset) {
         lanes[offset] = value.Left.Value.Value;
         lanes[(offset + 1)] = value.Right.Value.Value;
     }
-
     private static void WriteQuaternionLanes(DoublingAlgebra<DoublingAlgebra<FixedScalarRing>> value, Span<long> lanes, int offset) {
         WriteComplexLanes(value: value.Left, lanes: lanes, offset: offset);
         WriteComplexLanes(value: value.Right, lanes: lanes, offset: (offset + 2));
     }
-
     private static void WriteOctonionLanesAt(LeafOctonion value, Span<long> lanes, int offset) {
         WriteQuaternionLanes(value: value.Left, lanes: lanes, offset: offset);
         WriteQuaternionLanes(value: value.Right, lanes: lanes, offset: (offset + 4));
     }
-
     private static void WriteSedenionLanes(LeafSedenion value, Span<long> lanes) {
         WriteOctonionLanesAt(value: value.Left, lanes: lanes, offset: 0);
         WriteOctonionLanesAt(value: value.Right, lanes: lanes, offset: 8);
@@ -171,7 +163,7 @@ internal static class PresentedStructureClaims {
 
                 var rightInteger = integerAlgebra.FromSupport(keys: [((long)right)], coefficients: [BigInteger.One]);
                 var charged = integerAlgebra.Multiply(left: leftInteger, right: rightInteger);
-                var oracle = Oracles.CayleyDicksonCharge(leftIndex: left, rightIndex: right, floors: 4);
+                var oracle = Oracles.CayleyDicksonCharge(floors: 4, leftIndex: left, rightIndex: right);
 
                 if ((1 != charged.SupportCount) || (charged.Keys[0] != (left ^ right)) || (charged.Coefficients[0] != oracle)) {
                     return $"the sedenion basis charge of ({left},{right}) differs from the doubling recursion, expected {oracle} at key {(left ^ right)}";
@@ -214,7 +206,6 @@ internal static class PresentedStructureClaims {
 
         return arrows;
     }
-
     private static PresentedAlgebra<BigInteger, CountingMaterial>.Element CountingAdjacency(
         PresentedAlgebra<BigInteger, CountingMaterial> algebra,
         int order,
@@ -234,9 +225,8 @@ internal static class PresentedStructureClaims {
             ++support;
         }
 
-        return algebra.FromSupport(keys: keys.AsSpan(start: 0, length: support), coefficients: coefficients.AsSpan(start: 0, length: support));
+        return algebra.FromSupport(keys: keys.AsSpan(length: support, start: 0), coefficients: coefficients.AsSpan(length: support, start: 0));
     }
-
     private static BigInteger[] DenseAdjacency(int order, (int Source, int Target)[] arcs) {
         var dense = new BigInteger[(order * order)];
 
@@ -244,7 +234,6 @@ internal static class PresentedStructureClaims {
 
         return dense;
     }
-
     private static void Scatter(PresentedAlgebra<BigInteger, CountingMaterial>.Element element, Span<BigInteger> dense) {
         dense.Clear();
 
@@ -268,17 +257,17 @@ internal static class PresentedStructureClaims {
                 material: default
             )
         );
-        var element = CountingAdjacency(algebra: algebra, order: Order, arcs: arcs);
-        var dense = DenseAdjacency(order: Order, arcs: arcs);
+        var element = CountingAdjacency(algebra: algebra, arcs: arcs, order: Order);
+        var dense = DenseAdjacency(arcs: arcs, order: Order);
         var expected = new BigInteger[(Order * Order)];
         var actual = new BigInteger[(Order * Order)];
         var runningTotal = new BigInteger[(Order * Order)];
 
         for (var length = 0; (length <= Order); ++length) {
-            var power = algebra.Power(value: element, exponent: ((ulong)length));
+            var power = algebra.Power(exponent: ((ulong)length), value: element);
 
-            Scatter(element: power, dense: actual);
-            Oracles.WalkCount(adjacency: dense, order: Order, length: length, result: expected);
+            Scatter(dense: actual, element: power);
+            Oracles.WalkCount(adjacency: dense, length: length, order: Order, result: expected);
 
             for (var entry = 0; (entry < (Order * Order)); ++entry) {
                 if (actual[entry] != expected[entry]) {
@@ -289,11 +278,11 @@ internal static class PresentedStructureClaims {
             }
         }
 
-        if (!algebra.TrySumOverAllLengths(value: element, total: out var total, obstruction: out var obstruction)) {
+        if (!algebra.TrySumOverAllLengths(obstruction: out var obstruction, total: out var total, value: element)) {
             return $"the counting star refused on an acyclic digraph, attempting {obstruction.Attempted} after {obstruction.StepsTaken} step(s)";
         }
 
-        Scatter(element: total, dense: actual);
+        Scatter(dense: actual, element: total);
 
         for (var entry = 0; (entry < (Order * Order)); ++entry) {
             if (actual[entry] != runningTotal[entry]) {
@@ -313,7 +302,7 @@ internal static class PresentedStructureClaims {
     public static string? DirichletDivisorCubeSurface() {
         const long Window = 48L;
         ReadOnlySpan<ulong> primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47];
-        var divisibility = DivisibilityAlgebra<BigInteger, IntegerMaterial>.Create(primes: primes, window: Window, material: default);
+        var divisibility = DivisibilityAlgebra<BigInteger, IntegerMaterial>.Create(material: default, primes: primes, window: Window);
 
         if (divisibility.NormalFormCount != Window) {
             return $"a window generated by every prime through {Window} holds {divisibility.NormalFormCount} integer(s), expected {Window}";
@@ -326,7 +315,7 @@ internal static class PresentedStructureClaims {
                 return $"{value} is not in a window generated by every prime through {Window}";
             }
 
-            var expected = CubeDivisorCountOracle(value: (uint)value);
+            var expected = CubeDivisorCountOracle(value: ((uint)value));
 
             if (triples[key] != expected) {
                 return $"d3({value}) = {triples[key]}, the ordered-triple-factorization count says {expected}";
@@ -370,7 +359,7 @@ internal static class PresentedStructureClaims {
     // TokenPattern<ulong, PrimeFieldMaterial> case exists anywhere in the suite.
     public static string? WeightedDualityEquivalenceSurface() {
         var material = PrimeFieldMaterial.Create(modulus: 65_521UL);
-        var pattern = TokenPattern<ulong, PrimeFieldMaterial>.Create(letterCount: 2, window: 4, material: material);
+        var pattern = TokenPattern<ulong, PrimeFieldMaterial>.Create(letterCount: 2, material: material, window: 4);
         var a = pattern.Predicate(letters: 0b01UL);
         var b = pattern.Predicate(letters: 0b10UL);
         var cases = new (string Name, PresentedAlgebra<ulong, PrimeFieldMaterial>.Element Left, PresentedAlgebra<ulong, PrimeFieldMaterial>.Element Right, bool Equal)[] {
@@ -395,8 +384,8 @@ internal static class PresentedStructureClaims {
         };
 
         foreach (var (name, leftValue, rightValue, equal) in cases) {
-            if (!PatternMatcher<ulong, PrimeFieldMaterial>.TryCompile(pattern: pattern, value: leftValue, stateLimit: 8, matcher: out var left, obstruction: out _)
-                || !PatternMatcher<ulong, PrimeFieldMaterial>.TryCompile(pattern: pattern, value: rightValue, stateLimit: 8, matcher: out var right, obstruction: out _)) {
+            if (!PatternMatcher<ulong, PrimeFieldMaterial>.TryCompile(matcher: out var left, obstruction: out _, pattern: pattern, stateLimit: 8, value: leftValue)
+                || !PatternMatcher<ulong, PrimeFieldMaterial>.TryCompile(matcher: out var right, obstruction: out _, pattern: pattern, stateLimit: 8, value: rightValue)) {
                 return $"{name}: a matcher did not compile";
             }
 
@@ -409,8 +398,8 @@ internal static class PresentedStructureClaims {
             int[]? shortest = null;
 
             foreach (var word in EnumerateWords(letterCount: 2, maximumLength: pattern.Window)) {
-                _ = left.TryMatch(letters: word, weight: out var leftWeight, obstruction: out _);
-                _ = right.TryMatch(letters: word, weight: out var rightWeight, obstruction: out _);
+                _ = left.TryMatch(letters: word, obstruction: out _, weight: out var leftWeight);
+                _ = right.TryMatch(letters: word, obstruction: out _, weight: out var rightWeight);
 
                 if (leftWeight == rightWeight) { continue; }
 
@@ -437,7 +426,7 @@ internal static class PresentedStructureClaims {
             var word = new int[length];
 
             while (true) {
-                yield return (int[])word.Clone();
+                yield return ((int[])word.Clone());
 
                 var position = (length - 1);
 
@@ -463,7 +452,7 @@ internal static class PresentedStructureClaims {
     // in the suite exercises at all.
     public static string? NonMetricComplementBeyondEuclideanSurface() {
         foreach (var (positiveCount, negativeCount, degenerateCount) in new (int P, int Q, int R)[] { (3, 0, 1), (4, 1, 0) }) {
-            var presentation = Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: positiveCount, negativeCount: negativeCount, degenerateCount: degenerateCount, material: default);
+            var presentation = Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: degenerateCount, material: default, negativeCount: negativeCount, positiveCount: positiveCount);
             var algebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: presentation);
             var complement = GradedComplement<BigInteger, IntegerMaterial>.Create(algebra: algebra);
             var count = presentation.NormalFormCount;
@@ -490,7 +479,7 @@ internal static class PresentedStructureClaims {
                     if (0 == sign) {
                         if (0 != joined.SupportCount) { return $"{name}: blades {bladeOfKey[left]} and {bladeOfKey[right]} share a generator but joined to {joined.SupportCount} term(s)"; }
                     } else {
-                        var target = (bladeOfKey[left] | bladeOfKey[right]);
+                        var target = bladeOfKey[left] | bladeOfKey[right];
 
                         if ((1 != joined.SupportCount) || (bladeOfKey[((int)joined.Keys[0])] != target) || (joined.Coefficients[0] != sign)) {
                             return $"{name}: blades {bladeOfKey[left]} ^ {bladeOfKey[right]} joined to {joined.SupportCount} term(s), expected {sign} times blade {target}";
@@ -514,7 +503,7 @@ internal static class PresentedStructureClaims {
         // The rich case: PGA (3,0,1). Two planes sharing a generator meet in the shared line, and a generator joined
         // to a blade already containing it vanishes rather than surviving as a spurious higher meet.
         {
-            var presentation = Presentations.Clifford<BigInteger, IntegerMaterial>(positiveCount: 3, negativeCount: 0, degenerateCount: 1, material: default);
+            var presentation = Presentations.Clifford<BigInteger, IntegerMaterial>(degenerateCount: 1, material: default, negativeCount: 0, positiveCount: 3);
             var algebra = PresentedAlgebra<BigInteger, IntegerMaterial>.Create(presentation: presentation);
             var complement = GradedComplement<BigInteger, IntegerMaterial>.Create(algebra: algebra);
             var count = presentation.NormalFormCount;
@@ -535,22 +524,22 @@ internal static class PresentedStructureClaims {
                 );
 
                 if (0 == expectedBlade) {
-                    return (0 != met.SupportCount) ? $"pga: blades {leftBlade} v {rightBlade} met in {met.SupportCount} term(s), expected nothing" : null;
+                    return ((0 != met.SupportCount) ? $"pga: blades {leftBlade} v {rightBlade} met in {met.SupportCount} term(s), expected nothing" : null);
                 }
 
                 var metMask = 0;
 
-                foreach (var symbol in presentation.NormalFormWord(key: (int)met.Keys[0])) { metMask |= (1 << symbol); }
+                foreach (var symbol in presentation.NormalFormWord(key: ((int)met.Keys[0]))) { metMask |= (1 << symbol); }
 
-                return ((1 != met.SupportCount) || (metMask != expectedBlade) || (BigInteger.Abs(value: met.Coefficients[0]) != BigInteger.One))
+                return (((1 != met.SupportCount) || (metMask != expectedBlade) || (BigInteger.Abs(value: met.Coefficients[0]) != BigInteger.One))
                     ? $"pga: blades {leftBlade} v {rightBlade} met in blade {metMask}, expected plus-or-minus blade {expectedBlade}"
-                    : null;
+                    : null);
             }
 
             // e012 v e013 share e01; e012 v e023 share e02; e012 v e123 share e12.
-            var failure = Meet(leftBlade: 0b0111, rightBlade: 0b1011, expectedBlade: 0b0011)
-                ?? Meet(leftBlade: 0b0111, rightBlade: 0b1101, expectedBlade: 0b0101)
-                ?? Meet(leftBlade: 0b0111, rightBlade: 0b1110, expectedBlade: 0b0110);
+            var failure = (Meet(expectedBlade: 0b0011, leftBlade: 0b0111, rightBlade: 0b1011)
+                ?? (Meet(expectedBlade: 0b0101, leftBlade: 0b0111, rightBlade: 0b1101)
+                ?? Meet(expectedBlade: 0b0110, leftBlade: 0b0111, rightBlade: 0b1110)));
 
             if (failure is not null) { return failure; }
 
@@ -605,28 +594,28 @@ internal static class PresentedStructureClaims {
         var terms = new long[128];
 
         foreach (var (p, q, d, r) in irrationals) {
-            _ = ContinuedFraction.Expand(p: p, q: q, d: d, r: r, terms: terms, periodStart: out var periodStart, periodLength: out var periodLength);
+            _ = ContinuedFraction.Expand(d: d, p: p, periodLength: out var periodLength, periodStart: out var periodStart, q: q, r: r, terms: terms);
 
             var period = new BigInteger[periodLength];
 
             for (var offset = 0; (offset < periodLength); ++offset) { period[offset] = terms[(periodStart + offset)]; }
 
             var evaluated = transfer.Evaluate(partialQuotients: period);
-            var inflation = QuadraticInflation.FromQuadraticIrrational(p: p, q: q, d: d, r: r);
+            var inflation = QuadraticInflation.FromQuadraticIrrational(d: d, p: p, q: q, r: r);
 
-            if ((transfer.Entry(value: evaluated, row: 0, column: 0) != inflation.A)
-                || (transfer.Entry(value: evaluated, row: 0, column: 1) != inflation.B)
-                || (transfer.Entry(value: evaluated, row: 1, column: 0) != inflation.C)
-                || (transfer.Entry(value: evaluated, row: 1, column: 1) != inflation.D)) {
+            if ((transfer.Entry(column: 0, row: 0, value: evaluated) != inflation.A)
+                || (transfer.Entry(column: 1, row: 0, value: evaluated) != inflation.B)
+                || (transfer.Entry(column: 0, row: 1, value: evaluated) != inflation.C)
+                || (transfer.Entry(column: 1, row: 1, value: evaluated) != inflation.D)) {
                 return $"the transfer product over the period of ({p}+{q}rt{d})/{r} is not QuadraticInflation's substitution matrix";
             }
 
-            var index = QuadraticQuasicrystal.Compile(p: p, q: q, d: d, r: r);
+            var index = QuadraticQuasicrystal.Compile(d: d, p: p, q: q, r: r);
 
-            if ((transfer.Entry(value: evaluated, row: 0, column: 0) != index.A)
-                || (transfer.Entry(value: evaluated, row: 0, column: 1) != index.B)
-                || (transfer.Entry(value: evaluated, row: 1, column: 0) != index.C)
-                || (transfer.Entry(value: evaluated, row: 1, column: 1) != index.D)) {
+            if ((transfer.Entry(column: 0, row: 0, value: evaluated) != index.A)
+                || (transfer.Entry(column: 1, row: 0, value: evaluated) != index.B)
+                || (transfer.Entry(column: 0, row: 1, value: evaluated) != index.C)
+                || (transfer.Entry(column: 1, row: 1, value: evaluated) != index.D)) {
                 return $"the transfer product is not QuadraticQuasicrystalIndex's substitution matrix at ({p}+{q}rt{d})/{r}";
             }
         }
@@ -634,7 +623,7 @@ internal static class PresentedStructureClaims {
         // The Ostrowski copy folds the SAME recurrence into its convergent denominators, so the transfer's first
         // entry over a_1..a_k is the denominator q_k the shipped evaluator reports for the representation 1.q_k.
         foreach (var (p, q, d, r) in new (long P, long Q, long D, long R)[] { (0, 1, 2, 1), (1, 1, 5, 2) }) {
-            var system = QuadraticOstrowskiSystem.Create(basis: QuadraticSurd.Create(rationalNumerator: p, surdNumerator: q, radicand: d, denominator: r));
+            var system = QuadraticOstrowskiSystem.Create(basis: QuadraticSurd.Create(denominator: r, radicand: d, rationalNumerator: p, surdNumerator: q));
 
             for (var length = 1; (length <= 8); ++length) {
                 var quotients = new BigInteger[length];
@@ -663,14 +652,14 @@ internal static class PresentedStructureClaims {
 
                     for (var index = 0; (index < period.Length); ++index) {
                         quotients[index] = period[phase];
-                        phase = (((phase + step) % period.Length) + period.Length) % period.Length;
+                        phase = ((((phase + step) % period.Length) + period.Length) % period.Length);
                     }
 
                     var product = transfer.Evaluate(partialQuotients: quotients);
-                    var entryA = transfer.Entry(value: product, row: 0, column: 0);
-                    var entryB = transfer.Entry(value: product, row: 0, column: 1);
-                    var entryC = transfer.Entry(value: product, row: 1, column: 0);
-                    var entryD = transfer.Entry(value: product, row: 1, column: 1);
+                    var entryA = transfer.Entry(column: 0, row: 0, value: product);
+                    var entryB = transfer.Entry(column: 1, row: 0, value: product);
+                    var entryC = transfer.Entry(column: 0, row: 1, value: product);
+                    var entryD = transfer.Entry(column: 1, row: 1, value: product);
                     var discriminant = (((entryD - entryA) * (entryD - entryA)) + ((4 * entryB) * entryC));
                     var tail = QuadraticSurd.Create(rationalNumerator: (entryA - entryD), surdNumerator: BigInteger.One, radicand: discriminant, denominator: (2 * entryC));
 
@@ -683,7 +672,6 @@ internal static class PresentedStructureClaims {
 
         return null;
     }
-
     // ---- motors: GeometricAlgebra.Reverse and GeometricAlgebra.SandwichTransform are cited nowhere ----
     //
     // Every existing GeometricAlgebra law exercises Create, GeometricProduct, Square and BladeCount; none reaches
@@ -697,8 +685,8 @@ internal static class PresentedStructureClaims {
     // ANY scale — so no transcendental or Random enters anywhere, and the whole catalogue is composed from a fixed
     // deterministic set by ordinary indices.
     public static string? MotorSandwichVsGeometricAlgebraSurface() {
-        var geometric = GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 1);
-        var presentation = Presentations.Clifford<FixedQ4816, FixedMaterial>(positiveCount: 3, negativeCount: 0, degenerateCount: 1, material: default);
+        var geometric = GeometricAlgebra.Create(degenerateCount: 1, negativeCount: 0, positiveCount: 3);
+        var presentation = Presentations.Clifford<FixedQ4816, FixedMaterial>(degenerateCount: 1, material: default, negativeCount: 0, positiveCount: 3);
         var algebra = PresentedAlgebra<FixedQ4816, FixedMaterial>.Create(presentation: presentation);
         var keyToBlade = new int[presentation.NormalFormCount];
         var reverseSign = new long[presentation.NormalFormCount];
@@ -742,7 +730,7 @@ internal static class PresentedStructureClaims {
             foreach (var right in catalogue) {
                 var motor = geometric.GeometricProduct(left: ToMultivector(lanes: left), right: ToMultivector(lanes: right));
 
-                MultivectorToLanes(value: motor, lanes: motorLanes);
+                MultivectorToLanes(lanes: motorLanes, value: motor);
 
                 var motorElement = FromLanes(algebra: algebra, keyToBlade: keyToBlade, lanes: motorLanes);
                 var derivedReverse = algebra.FromSupport(keys: motorElement.Keys, coefficients: SignedCoefficients(element: motorElement, signs: reverseSign));
@@ -782,7 +770,6 @@ internal static class PresentedStructureClaims {
 
         return lanes;
     }
-
     private static Multivector ToMultivector(long[] lanes) {
         var coefficients = new FixedQ4816[16];
 
@@ -790,11 +777,9 @@ internal static class PresentedStructureClaims {
 
         return Multivector.FromCoefficients(coefficients: coefficients);
     }
-
     private static void MultivectorToLanes(Multivector value, long[] lanes) {
         for (var blade = 0; (blade < 16); ++blade) { lanes[blade] = value[blade].Value; }
     }
-
     private static PresentedAlgebra<FixedQ4816, FixedMaterial>.Element FromLanes(PresentedAlgebra<FixedQ4816, FixedMaterial> algebra, int[] keyToBlade, long[] lanes) {
         var keys = new List<long>();
         var coefficients = new List<FixedQ4816>();
@@ -810,7 +795,6 @@ internal static class PresentedStructureClaims {
 
         return algebra.FromSupport(keys: keys.ToArray(), coefficients: coefficients.ToArray());
     }
-
     private static void ToLanes(in PresentedAlgebra<FixedQ4816, FixedMaterial>.Element element, int[] keyToBlade, long[] lanes) {
         Array.Clear(array: lanes);
 
@@ -818,7 +802,6 @@ internal static class PresentedStructureClaims {
             lanes[keyToBlade[((int)element.Keys[index])]] = element.Coefficients[index].Value;
         }
     }
-
     private static FixedQ4816[] SignedCoefficients(in PresentedAlgebra<FixedQ4816, FixedMaterial>.Element element, long[] signs) {
         var coefficients = new FixedQ4816[element.SupportCount];
 
@@ -830,6 +813,7 @@ internal static class PresentedStructureClaims {
 
         return coefficients;
     }
+
     /// <summary>Proves the integral homology of the minimal seven-vertex triangulation of the torus: Betti numbers
     /// [1, 2, 1], no torsion in any degree, and an Euler characteristic of zero — the suite's first complex whose
     /// free homology rank exceeds one, closing the gap next to <c>presented.homology-torsion-and-betti</c>'s
@@ -856,7 +840,7 @@ internal static class PresentedStructureClaims {
         Assert.Equal(expected: 21, actual: calculus.CellsOfDegree(degree: 1).Length);
         Assert.Equal(expected: 14, actual: calculus.CellsOfDegree(degree: 2).Length);
 
-        Assert.True(condition: IntegerHomology.TryCompute(calculus: calculus, magnitudeBits: 65_536, homology: out var homology, obstruction: out _));
+        Assert.True(condition: IntegerHomology.TryCompute(calculus: calculus, homology: out var homology, magnitudeBits: 65_536, obstruction: out _));
 
         int[] betti = [1, 2, 1];
 
@@ -869,7 +853,6 @@ internal static class PresentedStructureClaims {
 
         return null;
     }
-
     /// <summary>Proves the shuffle presentation's derived cap is REACHABLE, not merely refused past: at each of the
     /// three near-cap argument tuples — (1, 511), (2, 8) and (511, 1), at 512, 511 and 512 words — the presentation
     /// admits exactly the words the closed form counts, and every normal form is the one-letter word naming its own
@@ -890,17 +873,17 @@ internal static class PresentedStructureClaims {
     /// </para>
     /// </remarks>
     public static string? ShuffleNearCapBasisSurface() {
-        foreach (var (letters, window, words) in ((int Letters, int Window, int Words)[])[
+        foreach (var (letters, window, words) in (((int Letters, int Window, int Words)[])[
             (0, 4, 1), (1, 0, 1), (1, 10, 11), (1, 511, 512), (2, 1, 3), (2, 4, 31), (2, 6, 127), (2, 8, 511),
             (3, 3, 40), (3, 4, 121), (4, 3, 85), (5, 3, 156), (511, 1, 512),
-        ]) {
+        ])) {
             // The closed form is summed here rather than transcribed, so the row's own expected count is checked
             // against arithmetic that shares nothing with the presentation: the words of length at most `window`
             // over `letters` letters number the sum of letters^length, and BigInteger keeps that exact at (511, 1).
             var closed = BigInteger.Zero;
 
             for (var length = 0; (length <= window); ++length) {
-                closed += BigInteger.Pow(value: letters, exponent: length);
+                closed += BigInteger.Pow(exponent: length, value: letters);
             }
 
             if (closed != words) {
@@ -942,11 +925,11 @@ internal static class PresentedStructureClaims {
 
             if (face.Length < 2) { return; }
 
-            for (var drop = 0; (drop < face.Length); ++drop) { Collect(face: DropAt(face: face, drop: drop)); }
+            for (var drop = 0; (drop < face.Length); ++drop) { Collect(face: DropAt(drop: drop, face: face)); }
         }
 
         foreach (var face in topFaces) {
-            var sorted = (int[])face.Clone();
+            var sorted = ((int[])face.Clone());
 
             Array.Sort(array: sorted);
             Collect(face: sorted);
@@ -971,16 +954,14 @@ internal static class PresentedStructureClaims {
             if (vertices.Length < 2) { continue; }
 
             for (var drop = 0; (drop < vertices.Length); ++drop) {
-                incidences.Add(item: (IndexOfCell(cells: cells, face: DropAt(face: vertices, drop: drop)), coface, ((0 == (drop & 1)) ? 1 : -1)));
+                incidences.Add(item: (IndexOfCell(cells: cells, face: DropAt(drop: drop, face: vertices)), coface, ((0 == (drop & 1)) ? 1 : -1)));
             }
         }
 
         return (dimensions, [.. incidences]);
     }
-
     private static int CompareCells(int[] left, int[] right) =>
-        (left.Length != right.Length) ? left.Length.CompareTo(value: right.Length) : left.AsSpan().SequenceCompareTo(other: right.AsSpan());
-
+        ((left.Length != right.Length) ? left.Length.CompareTo(value: right.Length) : left.AsSpan().SequenceCompareTo(other: right.AsSpan()));
     private static int[] DropAt(int[] face, int drop) {
         var smaller = new int[(face.Length - 1)];
         var cursor = 0;
@@ -991,7 +972,6 @@ internal static class PresentedStructureClaims {
 
         return smaller;
     }
-
     private static int IndexOfCell(List<int[]> cells, int[] face) {
         for (var index = 0; (index < cells.Count); ++index) {
             if (0 == CompareCells(left: cells[index], right: face)) { return index; }

@@ -15,7 +15,6 @@ internal sealed class ThroughputStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "throughput";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

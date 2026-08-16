@@ -35,7 +35,6 @@ public sealed partial class AgbApu : ISnapshotable {
         writer.WriteBoolean(value: m_fifoBRefill);
         writer.WriteInt64(value: m_samplePhase);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

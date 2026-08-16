@@ -66,7 +66,7 @@ internal static class PrinterRom {
     //   0x012B  18 FE      jr   0x012B
     private static readonly byte[] Driver = [
         0x31, 0xFE, 0xFF,
-        0x21, (byte)(PacketStreamBase & 0xFF), (byte)(PacketStreamBase >> 8),
+        0x21, ((byte)(PacketStreamBase & 0xFF)), ((byte)(PacketStreamBase >> 8)),
         0x2A,
         0x4F,
         0x2A,
@@ -89,7 +89,7 @@ internal static class PrinterRom {
         0x20, 0xFD,
         0x18, 0xE0,
         0x3E, CompletionMarker,
-        0xEA, (byte)(CompletionMarkerAddress & 0xFF), (byte)(CompletionMarkerAddress >> 8),
+        0xEA, ((byte)(CompletionMarkerAddress & 0xFF)), ((byte)(CompletionMarkerAddress >> 8)),
         0x18, 0xFE,
     ];
 
@@ -101,18 +101,18 @@ internal static class PrinterRom {
 
         // INIT clears the printer and image.
         AppendPacket(
-            stream: stream,
             command: CommandInit,
             compressed: false,
-            payload: []
+            payload: [],
+            stream: stream
         );
         // Two DATA bands carrying the IDENTICAL image content — one raw, one RLE-compressed — so the emitted print's two
         // halves must match byte-for-byte, proving the decompressor against the raw path.
         AppendPacket(
-            stream: stream,
             command: CommandData,
             compressed: false,
-            payload: band
+            payload: band,
+            stream: stream
         );
         AppendPacket(
             stream: stream,
@@ -122,19 +122,19 @@ internal static class PrinterRom {
         );
         // PRINT: one sheet, no margins, identity palette (0xE4 maps each 2-bit dot to itself), mid exposure.
         AppendPacket(
-            stream: stream,
             command: CommandPrint,
             compressed: false,
-            payload: [0x01, 0x00, 0xE4, 0x40]
+            payload: [0x01, 0x00, 0xE4, 0x40],
+            stream: stream
         );
 
         // STATUS polls (NUL command) so the driver keeps the link live across the busy → ready transition.
         for (var poll = 0; (poll < StatusPollCount); ++poll) {
             AppendPacket(
-                stream: stream,
                 command: CommandNul,
                 compressed: false,
-                payload: []
+                payload: [],
+                stream: stream
             );
         }
 
@@ -157,7 +157,6 @@ internal static class PrinterRom {
 
         return rom;
     }
-
     /// <summary>Builds the reference 640-byte band content the ROM prints — the deterministic source the stage decodes to
     /// its expected image (both DATA bands carry it). Mixed on purpose: the first half is 8-byte runs (compressible) and
     /// the second half is a non-repeating ramp (raw), so the RLE-compressed band exercises both run kinds.</summary>
@@ -173,7 +172,6 @@ internal static class PrinterRom {
 
         return band;
     }
-
     /// <summary>Creates a synthetic ROM (the H-05 overflow probe) that drives <paramref name="bandCount"/> consecutive
     /// raw DATA bands — built from <see cref="BuildOverflowBand"/>, so every band decodes to the same two-value pattern —
     /// into the printer with no intervening PRINT, then a PRINT and a run of STATUS polls. Used to drive the image
@@ -186,34 +184,34 @@ internal static class PrinterRom {
         var stream = new List<byte>();
 
         AppendPacket(
-            stream: stream,
             command: CommandInit,
             compressed: false,
-            payload: []
+            payload: [],
+            stream: stream
         );
 
         for (var index = 0; (index < bandCount); ++index) {
             AppendPacket(
-                stream: stream,
                 command: CommandData,
                 compressed: false,
-                payload: band
+                payload: band,
+                stream: stream
             );
         }
 
         AppendPacket(
-            stream: stream,
             command: CommandPrint,
             compressed: false,
-            payload: [0x01, 0x00, 0xE4, 0x40]
+            payload: [0x01, 0x00, 0xE4, 0x40],
+            stream: stream
         );
 
         for (var poll = 0; (poll < StatusPollCount); ++poll) {
             AppendPacket(
-                stream: stream,
                 command: CommandNul,
                 compressed: false,
-                payload: []
+                payload: [],
+                stream: stream
             );
         }
 
@@ -233,7 +231,6 @@ internal static class PrinterRom {
 
         return rom;
     }
-
     /// <summary>Builds the 640-byte band the overflow probe repeats: the identity palette maps a decoded 2bpp dot to
     /// itself, so setting the first tile-row half's low plane to 0xFF/high plane to 0x00 decodes every dot in that half
     /// to shade 1, and the second half's low/high planes swapped decodes every dot to shade 2. Every overflow band
@@ -276,27 +273,26 @@ internal static class PrinterRom {
             0x88,
             0x33,
             command,
-            (byte)(compressed
+            ((byte)(compressed
             ? 1
-            : 0),
-            (byte)(length & 0xFF),
-            (byte)((length >> 8) & 0xFF),
+            : 0)),
+            ((byte)(length & 0xFF)),
+            ((byte)((length >> 8) & 0xFF)),
         };
 
         foreach (var value in payload) {
             packet.Add(item: value);
         }
 
-        packet.Add(item: (byte)(checksum & 0xFF));
-        packet.Add(item: (byte)((checksum >> 8) & 0xFF));
+        packet.Add(item: ((byte)(checksum & 0xFF)));
+        packet.Add(item: ((byte)((checksum >> 8) & 0xFF)));
         packet.Add(item: 0x00);
         packet.Add(item: 0x00);
 
-        stream.Add(item: (byte)(packet.Count & 0xFF));
-        stream.Add(item: (byte)((packet.Count >> 8) & 0xFF));
+        stream.Add(item: ((byte)(packet.Count & 0xFF)));
+        stream.Add(item: ((byte)((packet.Count >> 8) & 0xFF)));
         stream.AddRange(collection: packet);
     }
-
     // Encodes a byte run with the printer RLE the compressed decoder expects: a run of 2..129 identical bytes
     // becomes a control byte 0x80|(run-2) plus the value; otherwise 1..128 literal bytes become a control byte (count-1)
     // plus the literals. Decodes back to the exact input.
@@ -316,7 +312,7 @@ internal static class PrinterRom {
             }
 
             if (run >= 2) {
-                output.Add(item: (byte)(0x80 | (run - 2)));
+                output.Add(item: ((byte)(0x80 | (run - 2))));
                 output.Add(item: data[index]);
                 index += run;
             } else {
@@ -334,7 +330,7 @@ internal static class PrinterRom {
 
                 var count = (index - start);
 
-                output.Add(item: (byte)((count - 1) & 0x7F));
+                output.Add(item: ((byte)((count - 1) & 0x7F)));
 
                 for (var offset = 0; (offset < count); ++offset) {
                     output.Add(item: data[(start + offset)]);

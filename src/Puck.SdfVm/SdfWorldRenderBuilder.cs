@@ -35,7 +35,6 @@ public sealed record SdfWorldRender(
         }
     }
 }
-
 /// <summary>
 /// The ONE assembly path from an <see cref="SdfWorldRenderSpec"/> to a runnable SDF world render host. Every
 /// backend-specific choice lives here: kernel bytecode selection (SPIR-V vs DXIL) derives from the spec's resolved
@@ -47,7 +46,6 @@ public static class SdfWorldRenderBuilder {
     /// <c>directX</c> flag (the GamingBrick child node), kept beside it so the two can never drift.</summary>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>
     public static string BytecodeExtension(bool hostsOnDirectX) => (hostsOnDirectX ? ".dxil" : ".spv");
-
     /// <summary>Assembles the SDF world render host a spec describes.</summary>
     /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) forwarded
     /// unchanged into the built <see cref="SdfEngineNode"/> — resolved once at the composition root; this factory
@@ -87,7 +85,7 @@ public static class SdfWorldRenderBuilder {
             viewportCapacity: spec.ViewportCapacity,
             width: spec.Width
         );
-        var root = (IRenderNode)producer;
+        var root = ((IRenderNode)producer);
 
         if (spec.Decorate is { } decorate) {
             root = decorate(producer);
@@ -96,7 +94,7 @@ public static class SdfWorldRenderBuilder {
         // Captured BEFORE root is wrapped in SdfWorldRenderRoot below: `root` here is the actual decorated chain
         // (the console overlay wrapping the binding bar wrapping the producer, or a subset/none of that), so this
         // is the true outermost node — the debug-view wrapper adds no capture capability of its own.
-        return new SdfWorldRender(Producer: producer, Root: new SdfWorldRenderRoot(producer: producer, inner: root)) {
+        return new SdfWorldRender(Producer: producer, Root: new SdfWorldRenderRoot(inner: root, producer: producer)) {
             CaptureTarget = (root as ICaptureRequestTarget),
         };
     }

@@ -8,7 +8,6 @@ public enum AxisComponent : byte {
     /// <summary>The control's Y component.</summary>
     Y,
 }
-
 /// <summary>
 /// Parses a <see cref="BindingPageEntryDefinition.Source"/>'s optional axis-component suffix — <c>leftStick.x</c>
 /// naming the X component of the two-dimensional <c>gamepad.leftStick</c> control, feeding a channel destination

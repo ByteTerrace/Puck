@@ -6,11 +6,10 @@ public sealed class BindingProfileValidationTests {
     [Fact]
     public void NullPageEntriesAreRefusedByTheStructuralGate() {
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
-            modifiers: [],
-            entry: null!
+            entry: null!,
+            modifiers: []
         )));
     }
-
     [Fact]
     public void NonFiniteModifierThresholdsAreRefused() {
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
@@ -22,7 +21,6 @@ public sealed class BindingProfileValidationTests {
             entry: new BindingPageEntryDefinition(Source: "key.a", Command: "action")
         )));
     }
-
     [Fact]
     public void UndefinedBindingModesAndPhasesAreRefused() {
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
@@ -30,7 +28,7 @@ public sealed class BindingProfileValidationTests {
             entry: new BindingPageEntryDefinition(
                 Source: "key.a",
                 Command: "action",
-                Mode: (BindingEntryMode)42
+                Mode: ((BindingEntryMode)42)
             )
         )));
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
@@ -38,7 +36,7 @@ public sealed class BindingProfileValidationTests {
             entry: new BindingPageEntryDefinition(
                 Source: "key.a",
                 Command: "action",
-                ActivateOn: (CommandPhase)42
+                ActivateOn: ((CommandPhase)42)
             )
         )));
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
@@ -48,12 +46,11 @@ public sealed class BindingProfileValidationTests {
                 Command: "action",
                 Activator: new BindingActivatorDefinition(
                     Sequence: ["key.a"],
-                    Mode: (BindingActivatorMode)42
+                    Mode: ((BindingActivatorMode)42)
                 )
             )
         )));
     }
-
     [Fact]
     public void ThresholdConsumersRejectNaNAndInvertedPairs() {
         _ = Assert.Throws<ArgumentException>(testCode: static () => new HeldOrderTracker(

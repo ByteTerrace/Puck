@@ -26,11 +26,9 @@ internal static class LedgerState {
     /// and so nothing to gate.</remarks>
     public static bool LawsPassed =>
         !LawFailureObserved;
-
     /// <summary>Gets whether the coverage ratchet gate ran this session.</summary>
     public static bool RatchetRan =>
         RatchetExecuted;
-
     /// <summary>Gets whether the leg gate ran this session. A run that did not execute it must leave the artifact alone
     /// rather than publish it from nothing.</summary>
     public static bool LegGatesRan =>
@@ -39,21 +37,17 @@ internal static class LedgerState {
     /// <summary>Records that a law case of the given tier ran.</summary>
     /// <param name="tier">The case tier.</param>
     public static void RecordLaw(Tier tier) =>
-        Executed.AddOrUpdate(key: tier, addValue: 1, updateValueFactory: static (_, current) => (current + 1));
-
+        Executed.AddOrUpdate(addValue: 1, key: tier, updateValueFactory: static (_, current) => (current + 1));
     /// <summary>Records that a law case failed this session, so the ledger persists NO frontier advance for ANY
     /// key.</summary>
     public static void RecordLawFailure() =>
         LawFailureObserved = true;
-
     /// <summary>Records that the coverage ratchet gate ran.</summary>
     public static void RecordRatchet() =>
         RatchetExecuted = true;
-
     /// <summary>Records that the law-side leg gate ran.</summary>
     public static void RecordLawLegGate() =>
         LawLegGateExecuted = true;
-
     /// <summary>The number of law cases executed for a tier this session.</summary>
     /// <param name="tier">The tier.</param>
     /// <returns>The count.</returns>
@@ -85,8 +79,8 @@ internal static class LedgerState {
 /// </remarks>
 public sealed class LedgerFixture : IDisposable {
     private const string NotRecorded = "No run has recorded this block.";
-    private const string StampPrefix = "- last run: ";
     private const int StampDateLength = 10;
+    private const string StampPrefix = "- last run: ";
 
     private static readonly Tier[] ReportedTiers = [Tier.Smoke, Tier.Default, Tier.Deep, Tier.Exhaustive];
     private static readonly string[] SectionOrder = ["Invocations", "Smoke", "Default", "Deep", "Exhaustive", "Bench", "Coverage", "Legs", "Frontier"];
@@ -97,7 +91,7 @@ public sealed class LedgerFixture : IDisposable {
         var coverage = PersistManifest();
         var legs = PersistLegLedger();
 
-        WriteResults(frontier: frontier, coverage: coverage, legs: legs);
+        WriteResults(coverage: coverage, frontier: frontier, legs: legs);
     }
 
     // Regenerates and persists the leg ledger, but only when the leg gate ran: a run that never read the declarations
@@ -113,7 +107,6 @@ public sealed class LedgerFixture : IDisposable {
 
         return lawRows;
     }
-
     // Regenerates and persists the coverage manifest, but only when the ratchet gate ran: the manifest is that gate's
     // artifact, so a run that never executed it must not restate the coverage surface.
     private static (int Covered, int Waived, int Uncovered)? PersistManifest() {
@@ -128,7 +121,6 @@ public sealed class LedgerFixture : IDisposable {
 
         return Coverage.Counts(manifest: manifest);
     }
-
     private static void WriteResults(IReadOnlyList<(string Key, int Block, long Index)>? frontier, (int Covered, int Waived, int Uncovered)? coverage, IReadOnlyList<LegRow>? legs) {
         var path = TestPaths.Artifact(fileName: "RESULTS.md");
         var existing = (File.Exists(path: path) ? File.ReadAllText(path: path) : "");
@@ -143,9 +135,8 @@ public sealed class LedgerFixture : IDisposable {
             return;
         }
 
-        _ = ArtifactJson.WriteIfChanged(path: path, content: content);
+        _ = ArtifactJson.WriteIfChanged(content: content, path: path);
     }
-
     // The blocks this session owns. Each ownership test is the execution signal of the check that produced the block.
     private static Dictionary<string, string> OwnedSections(IReadOnlyList<(string Key, int Block, long Index)>? frontier, (int Covered, int Waived, int Uncovered)? coverage, IReadOnlyList<LegRow>? legs, string stamp) {
         var sections = new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["Invocations"] = Invocations() };
@@ -163,7 +154,7 @@ public sealed class LedgerFixture : IDisposable {
         }
 
         if (coverage is { } counts) {
-            sections["Coverage"] = $"- covered: {counts.Covered}\n- waived: {counts.Waived}\n- uncovered: {counts.Uncovered}\n- total public members: {(counts.Covered + counts.Waived + counts.Uncovered)}\n{stamp}";
+            sections["Coverage"] = $"- covered: {counts.Covered}\n- waived: {counts.Waived}\n- uncovered: {counts.Uncovered}\n- total public members: {((counts.Covered + counts.Waived) + counts.Uncovered)}\n{stamp}";
         }
 
         if (legs is not null) {
@@ -176,7 +167,6 @@ public sealed class LedgerFixture : IDisposable {
 
         return sections;
     }
-
     private static string LegTable(IReadOnlyList<LegRow> legs) {
         var builder = new StringBuilder();
         var all = legs.SelectMany(selector: static row => row.Legs).ToList();
@@ -194,12 +184,10 @@ public sealed class LedgerFixture : IDisposable {
 
         return builder.ToString();
     }
-
     // The date alone — the block's staleness, and nothing that a different machine would render differently. See this
     // type's remarks for why no duration rides along.
     private static string Stamp() =>
         $"{StampPrefix}{DateOnly.FromDateTime(dateTime: DateTime.UtcNow):yyyy-MM-dd}\n";
-
     private static string Invocations() {
         var builder = new StringBuilder();
 
@@ -212,7 +200,6 @@ public sealed class LedgerFixture : IDisposable {
 
         return builder.ToString();
     }
-
     private static string BenchTable() {
         var builder = new StringBuilder();
 
@@ -231,7 +218,6 @@ public sealed class LedgerFixture : IDisposable {
 
         return (builder.ToString() + "\n");
     }
-
     private static string FrontierTable(IReadOnlyList<(string Key, int Block, long Index)> frontier) {
         var builder = new StringBuilder();
 
@@ -244,7 +230,6 @@ public sealed class LedgerFixture : IDisposable {
 
         return (builder.ToString() + "\n");
     }
-
     // A block this run does NOT own, brought forward from the previous file — with its last-run line normalized to the
     // date alone. A carried block keeps whatever text its own last run wrote, which is the whole point of the merge,
     // but the file must never render a line shape this ledger does not produce, or a rarely-run tier could publish one
@@ -260,14 +245,13 @@ public sealed class LedgerFixture : IDisposable {
         for (var index = 0; (index < lines.Length); ++index) {
             var line = lines[index];
 
-            if (line.StartsWith(value: StampPrefix, comparisonType: StringComparison.Ordinal) && (line.Length > (StampPrefix.Length + StampDateLength))) {
+            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: StampPrefix) && (line.Length > (StampPrefix.Length + StampDateLength))) {
                 lines[index] = line[..(StampPrefix.Length + StampDateLength)];
             }
         }
 
         return string.Join(separator: "\n", values: lines);
     }
-
     // Rebuilds the ledger from the blocks this run owns, falling back to the previous file's text for every other
     // block; a block neither owned nor previously recorded says so.
     private static string Merge(IReadOnlyDictionary<string, string> existing, IReadOnlyDictionary<string, string> fresh) {
@@ -287,14 +271,13 @@ public sealed class LedgerFixture : IDisposable {
 
         foreach (var name in SectionOrder) {
             var owned = fresh.GetValueOrDefault(key: name);
-            var body = (owned ?? CarryForward(body: existing.GetValueOrDefault(key: name)) ?? NotRecorded);
+            var body = (owned ?? (CarryForward(body: existing.GetValueOrDefault(key: name)) ?? NotRecorded));
 
             _ = builder.Append(value: $"## {name}\n\n{body.Trim()}\n\n");
         }
 
         return (builder.ToString().TrimEnd() + "\n");
     }
-
     // Splits a previously written ledger into its `## ` blocks; anything before the first heading is the preamble,
     // which is regenerated rather than retained.
     private static Dictionary<string, string> ParseSections(string text) {
@@ -303,8 +286,8 @@ public sealed class LedgerFixture : IDisposable {
         var name = "";
 
         foreach (var line in text.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n')) {
-            if (line.StartsWith(value: "## ", comparisonType: StringComparison.Ordinal)) {
-                Flush(sections: sections, name: name, body: body);
+            if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "## ")) {
+                Flush(body: body, name: name, sections: sections);
 
                 name = line[3..].Trim();
 
@@ -314,22 +297,20 @@ public sealed class LedgerFixture : IDisposable {
             }
         }
 
-        Flush(sections: sections, name: name, body: body);
+        Flush(body: body, name: name, sections: sections);
 
         return sections;
     }
-
     private static void Flush(Dictionary<string, string> sections, string name, StringBuilder body) {
         if (name.Length > 0) {
             sections[name] = body.ToString();
         }
     }
-
     private static string StripVolatile(string text) =>
         string.Join(
             separator: "\n",
             values: text
                 .ReplaceLineEndings(replacementText: "\n")
                 .Split(separator: '\n')
-                .Where(predicate: static line => !line.StartsWith(value: "- last run:", comparisonType: StringComparison.Ordinal)));
+                .Where(predicate: static line => !line.StartsWith(comparisonType: StringComparison.Ordinal, value: "- last run:")));
 }

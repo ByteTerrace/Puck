@@ -10,15 +10,16 @@ namespace Puck.Input.Devices;
 /// access is guarded so the two threads never tear a read.
 /// </summary>
 public sealed class GamepadCoalescer {
-    private readonly object m_gate = new();
+    private readonly Lock m_gate = new();
+    private GamepadState m_latest = GamepadState.Neutral;
+
     private Vector3 m_gyro;
     private int m_gyroSamples;
     private bool m_hasSample;
-    private GamepadState m_latest = GamepadState.Neutral;
-    private GamepadButtons m_pressed;
     private GamepadButtonEdges m_pressEdges;
-    private GamepadButtons m_released;
+    private GamepadButtons m_pressed;
     private GamepadButtons m_previousButtons;
+    private GamepadButtons m_released;
 
     /// <summary>Clears every retained sample before a receiver slot begins carrying another controller,
     /// converting any still-held button into a pending release edge.</summary>
@@ -27,7 +28,7 @@ public sealed class GamepadCoalescer {
             // A button still down when the stream ends can never report its own let-go; without the converted
             // edge, a command dispatched from its press stays held downstream. A release for a button the
             // consumer never saw pressed is inert at the binding.
-            m_released |= (m_previousButtons | m_pressed);
+            m_released |= m_previousButtons | m_pressed;
             m_gyro = Vector3.Zero;
             m_gyroSamples = 0;
             m_hasSample = false;
@@ -35,42 +36,6 @@ public sealed class GamepadCoalescer {
             m_pressed = GamepadButtons.None;
             m_pressEdges = default;
             m_previousButtons = GamepadButtons.None;
-        }
-    }
-
-    /// <summary>Records a freshly parsed report (called on the device I/O loop).</summary>
-    /// <param name="state">The normalized state decoded from the report.</param>
-    public void Update(in GamepadState state) {
-        lock (m_gate) {
-            // Prime the button baseline on the very first report so buttons already held at connect time do not
-            // register as spurious edges; only diff against a real prior state thereafter. Both press and
-            // release edges are accumulated — a release is inert by default at the binding
-            // (CommandBinding.ActivateOn ignores Completed), so it updates held state without re-firing a
-            // press-driven handler.
-            if (m_hasSample) {
-                var newlyPressed = state.Buttons & ~m_previousButtons;
-
-                // Stamp each button's FIRST press in this window with the report's arrival time, so a snapshot
-                // capture gives every press its true sub-frame edge time. Bits already pressed this window keep
-                // their first stamp.
-                var fresh = (uint)(newlyPressed & ~m_pressed);
-
-                while (fresh != 0u) {
-                    var index = BitOperations.TrailingZeroCount(value: fresh);
-
-                    m_pressEdges[index] = state.ArrivalTicks;
-                    fresh &= (fresh - 1u);
-                }
-
-                m_pressed |= newlyPressed;
-                m_released |= ~state.Buttons & m_previousButtons;
-            }
-
-            m_previousButtons = state.Buttons;
-            m_gyro += state.Gyro;
-            ++m_gyroSamples;
-            m_latest = state;
-            m_hasSample = true;
         }
     }
 
@@ -103,7 +68,8 @@ public sealed class GamepadCoalescer {
             pressEdges = m_pressEdges;
             gyro = ((m_gyroSamples > 0)
                 ? (m_gyro / m_gyroSamples)
-                : Vector3.Zero);
+                : Vector3.Zero
+            );
 
             m_gyro = Vector3.Zero;
             m_gyroSamples = 0;
@@ -112,6 +78,41 @@ public sealed class GamepadCoalescer {
             m_released = GamepadButtons.None;
 
             return m_hasSample;
+        }
+    }
+    /// <summary>Records a freshly parsed report (called on the device I/O loop).</summary>
+    /// <param name="state">The normalized state decoded from the report.</param>
+    public void Update(in GamepadState state) {
+        lock (m_gate) {
+            // Prime the button baseline on the very first report so buttons already held at connect time do not
+            // register as spurious edges; only diff against a real prior state thereafter. Both press and
+            // release edges are accumulated — a release is inert by default at the binding
+            // (CommandBinding.ActivateOn ignores Completed), so it updates held state without re-firing a
+            // press-driven handler.
+            if (m_hasSample) {
+                var newlyPressed = state.Buttons & ~m_previousButtons;
+
+                // Stamp each button's FIRST press in this window with the report's arrival time, so a snapshot
+                // capture gives every press its true sub-frame edge time. Bits already pressed this window keep
+                // their first stamp.
+                var fresh = ((uint)(newlyPressed & ~m_pressed));
+
+                while (fresh != 0u) {
+                    var index = BitOperations.TrailingZeroCount(value: fresh);
+
+                    m_pressEdges[index] = state.ArrivalTicks;
+                    fresh &= (fresh - 1u);
+                }
+
+                m_pressed |= newlyPressed;
+                m_released |= ~state.Buttons & m_previousButtons;
+            }
+
+            m_previousButtons = state.Buttons;
+            m_gyro += state.Gyro;
+            ++m_gyroSamples;
+            m_latest = state;
+            m_hasSample = true;
         }
     }
 }

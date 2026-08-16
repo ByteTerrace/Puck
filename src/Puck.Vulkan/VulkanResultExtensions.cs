@@ -30,7 +30,7 @@ public static class VulkanResultExtensions {
         ) {
             throw new DeviceLostException(
                 message: $"{operation} failed: {result} (graphics device lost).",
-                reasonCode: (long)result
+                reasonCode: ((long)result)
             );
         }
 

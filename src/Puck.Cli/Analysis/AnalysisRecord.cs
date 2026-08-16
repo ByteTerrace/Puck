@@ -11,7 +11,6 @@ namespace Puck.Cli.Analysis;
 // reference. Kind is the symbol or declaration kind, empty where the relation already says it. Name is
 // the fully qualified symbol; Detail carries a base list where there is one.
 internal readonly record struct AnalysisRecord(string Path, int Line, int Column, string Relation, string Kind, string Name, string? Detail);
-
 // Renders analysis records and reports the process exit code. Records are printed in the order the verb
 // produced them — each verb owns its own ordering, and both orderings are total — so the emitter never
 // reorders and never adds a summary line: stdout carries records and nothing else.
@@ -51,7 +50,6 @@ internal static class AnalysisEmitter {
 
         return builder.ToString();
     }
-
     // One JSON object per line, keys in a fixed order; `detail` is present only when there is one.
     private static string ToJson(AnalysisRecord record) {
         var builder = new StringBuilder(value: "{")

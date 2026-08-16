@@ -73,7 +73,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the emitted text carries the LIVE values it claims to read: FixedQ4816.Atan2HalfPiQ61 and Atan2PiQ61 appear in the generated source as the invariant decimals the type currently holds, and the emitted vector file carries the raw value the live FixedQ4816.Sin returns for one. That is the whole design claim this file makes for itself — every table and coefficient read from the live type by NAME rather than transcribed — so a constant referenced by the wrong name, or a vector file that emitted its inputs without the host's answers, stops satisfying it.",
+        "Subject": "the emitted text carries the LIVE values it claims to read: FixedQ4816.Atan2HalfPiQ61 and PiQ61 appear in the generated source as the invariant decimals the type currently holds, and the emitted vector file carries the raw value the live FixedQ4816.Sin returns for one. That is the whole design claim this file makes for itself — every table and coefficient read from the live type by NAME rather than transcribed — so a constant referenced by the wrong name, or a vector file that emitted its inputs without the host's answers, stops satisfying it.",
         "Against": "",
         "Shared": "",
         "Citation": "",

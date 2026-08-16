@@ -57,7 +57,6 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "link-lock";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -86,9 +85,9 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
         );
 
         if (Judge(
-            result: reference,
             craftedLeadA: craftedLeadA,
-            craftedLeadB: craftedLeadB
+            craftedLeadB: craftedLeadB,
+            result: reference
         ) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
         }
@@ -97,8 +96,8 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
         var replay = ScriptedTradeDriver.Run(rom: rom);
 
         if (Difference(
-            expected: reference,
             actual: replay,
+            expected: reference,
             leg: "replay"
         ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
@@ -117,15 +116,14 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
         );
 
         if (Difference(
-            expected: reference,
             actual: churned,
+            expected: reference,
             leg: "churn"
         ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return PostStageOutcome.Pass(detail: ((($"{CartridgeTitle(rom: rom)} cgb↔cgb Cable Club trade COMPLETED: rendezvous roles $01/$02 resolved (A=0x{reference.RoleA:X2} B=0x{reference.RoleB:X2}), TRADE_CENTER warp + seat walk + console + mon-selection menu drive, "
-                + $"leads swapped and auto-saved (A 0x{craftedLeadA:X2}→0x{reference.LeadA:X2}, B 0x{craftedLeadB:X2}→0x{reference.LeadB:X2}, checksums valid), CANCEL handshake back to the overworld, ")
+        return PostStageOutcome.Pass(detail: ((((string)$"{CartridgeTitle(rom: rom)} cgb↔cgb Cable Club trade COMPLETED: rendezvous roles $01/$02 resolved (A=0x{reference.RoleA:X2} B=0x{reference.RoleB:X2}), TRADE_CENTER warp + seat walk + console + mon-selection menu drive, leads swapped and auto-saved (A 0x{craftedLeadA:X2}→0x{reference.LeadA:X2}, B 0x{craftedLeadB:X2}→0x{reference.LeadB:X2}, checksums valid), CANCEL handshake back to the overworld, ")
                 + $"A sent {reference.TrafficA.MasterSends}/completed {reference.TrafficA.Completions} B sent {reference.TrafficB.MasterSends}/completed {reference.TrafficB.Completions} transfers (traffic 0x{reference.TrafficA.TrafficHash:X16}/0x{reference.TrafficB.TrafficHash:X16}), ")
                 + $"replay- and churn-identical (severed transfer-idle at budget step {churnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes)."));
     }
@@ -176,7 +174,6 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
 
         return null;
     }
-
     // Compares a later run against the reference: roles, both traffic fingerprints, both final snapshots, and both
     // exported SRAMs must match. Snapshot equality also checks Identity (free rigor: refuses a model/ROM mismatch).
     private static string? Difference(TradeResult expected, TradeResult actual, string leg) {
@@ -223,13 +220,12 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
 
         return null;
     }
-
     // A mid-trade transfer-idle budget boundary: idle on both ports while the trade UI's menu drive is running (real
     // traffic long since begun), 60% of the way through that phase so the sever lands solidly inside the mon-selection
     // exchange rather than at its first or last byte. Falls back to a mid-rendezvous boundary if the TradeMenu phase
     // offered none.
     private static int PickChurnStep(List<TradeProbe> probes) {
-        foreach (var phase in (ReadOnlySpan<string>)["TradeMenu", "Receptionist"]) {
+        foreach (var phase in ((ReadOnlySpan<string>)["TradeMenu", "Receptionist"])) {
             var first = probes.FindIndex(match: p => string.Equals(
                 a: p.Phase.ToString(),
                 b: phase,
@@ -259,7 +255,6 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
 
         return -1;
     }
-
     // The all-0xFF stream an unplugged port shifts in has a fixed FNV fingerprint per length; a real exchange never
     // matches it.
     private static bool IsIdle(LinkSideTraffic traffic) {
@@ -299,7 +294,7 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
                 break;
             }
 
-            _ = builder.Append(value: (char)character);
+            _ = builder.Append(value: ((char)character));
         }
 
         return builder.ToString().Trim();

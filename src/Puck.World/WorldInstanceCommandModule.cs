@@ -36,6 +36,92 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
     private readonly WorldInstanceHost m_instances = instances;
     private readonly Client.WorldSeatAuthorityRouter m_seatRouter = seatRouter;
 
+    // world.instance.seats' per-instance row: one token per local seat, ordinal 1..LocalSeatCount.
+    private static string DescribeSeats(WorldServer server) {
+        var population = server.Population;
+        var parts = new string[WorldPopulation.LocalSeatCount];
+
+        for (var slot = 0; (slot < WorldPopulation.LocalSeatCount); slot++) {
+            parts[slot] = (population.IsActive(index: slot)
+                ? $"{(slot + 1)}={(population.EntryBody(index: slot)?.Profile?.Id ?? "pending")}"
+                : $"{(slot + 1)}=-"
+            );
+        }
+
+        return string.Join(
+            separator: " ",
+            value: parts
+        );
+    }
+    // world.transfer's ephemeral/persisted destination clause, starting at token <start>: 'ephemeral <site> <path>'
+    // or 'persisted <name> <path>' — the bare '<target-instance>' form is parsed directly by the handler above
+    // instead (never through here), because it alone accepts trailing verification-only modifiers that a Tail-
+    // consumed document path here must never be asked to share tokens with.
+    private static bool TryParseDestination(in WireArgs args, int start, string verb, out WorldInstanceHost.TransferDestination destination, out string? error) {
+        destination = default;
+
+        if (args.Is(
+            index: start,
+            value: "ephemeral"
+        )) {
+            if (args.Count < (start + 3)) {
+                error = $"[{verb}: expected 'ephemeral <site> <path>']";
+
+                return false;
+            }
+
+            destination = WorldInstanceHost.TransferDestination.Fresh(
+                site: args[(start + 1)].ToString(),
+                documentPath: args.Tail(start: (start + 2))
+            );
+            error = null;
+
+            return true;
+        }
+
+        if (args.Is(
+            index: start,
+            value: "persisted"
+        )) {
+            if (args.Count < (start + 3)) {
+                error = $"[{verb}: expected 'persisted <name> <path>']";
+
+                return false;
+            }
+
+            destination = WorldInstanceHost.TransferDestination.Persistent(
+                name: args[(start + 1)].ToString(),
+                documentPath: args.Tail(start: (start + 2))
+            );
+            error = null;
+
+            return true;
+        }
+
+        error = $"[{verb}: expected 'ephemeral <site> <path>' or 'persisted <name> <path>']";
+
+        return false;
+    }
+    // The 1-based seat display index world.transfer shares with the instance-targeted player.* verbs (see
+    // PlayerCommandModule's own TryStripInstanceToken/ResolveInstanceSlot) — translated to the 0-based slot
+    // SessionRequest/WorldCommand carry by the caller.
+    private static bool TrySlot(in WireArgs args, int index, string verb, out int slot) {
+        if (
+            !args.TryInt(
+            index: index,
+            value: out slot
+        ) ||
+            (slot < 1) ||
+            (slot > WorldPopulation.LocalSeatCount)
+        ) {
+            slot = 0;
+
+            return false;
+        }
+
+        return true;
+    }
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Simulation(
@@ -48,7 +134,15 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 var name = args[0].ToString();
 
-                if (!m_instances.TryStart(name: name, path: args.Tail(start: 1), instance: out var started, reason: out var reason) || (started is null)) {
+                if (
+                    !m_instances.TryStart(
+                    name: name,
+                    path: args.Tail(start: 1),
+                    instance: out var started,
+                    reason: out var reason
+                ) ||
+                    (started is null)
+                ) {
                     return CommandResult.Error(output: $"[world.instance.start: refused ({reason})]");
                 }
 
@@ -58,7 +152,10 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 // that declares them starts with them dark and that has to be READ BACK, not inferred from a silence.
                 var dark = started.Server.Definition.Screens.Count(predicate: screen => (screen.Source is WorldScreenSource.Machine));
 
-                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.instance.start: '{name}' running from {started.SourcePath} — document {started.Server.Definition.DocumentId} schema {started.Server.Definition.Schema} capacity {started.Server.Population.Capacity} machine-screens {dark} (dark — an instance has no machine host) owned-worlds {m_instances.OwnedWorldsDirectory(name: name)}]"));
+                return new CommandResult(Output: string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"[world.instance.start: '{name}' running from {started.SourcePath} — document {started.Server.Definition.DocumentId} schema {started.Server.Definition.Schema} capacity {started.Server.Population.Capacity} machine-screens {dark} (dark — an instance has no machine host) owned-worlds {m_instances.OwnedWorldsDirectory(name: name)}]"
+                ));
             }
         );
         yield return Simulation(
@@ -71,9 +168,13 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 var name = args[0].ToString();
 
-                return (m_instances.TryStop(name: name, reason: out var reason)
+                return (m_instances.TryStop(
+                    name: name,
+                    reason: out var reason
+                )
                     ? new CommandResult(Output: $"[world.instance.stop: '{name}' retired]")
-                    : CommandResult.Error(output: $"[world.instance.stop: refused ({reason})]"));
+                    : CommandResult.Error(output: $"[world.instance.stop: refused ({reason})]")
+                );
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -84,7 +185,10 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 if (args.Count == 0) {
                     var names = m_instances.Names;
 
-                    return new CommandResult(Output: $"[world.instance.status: {names.Count} running: {string.Join(separator: ", ", values: names)}]");
+                    return new CommandResult(Output: $"[world.instance.status: {names.Count} running: {string.Join(
+                        separator: ", ",
+                        values: names
+                    )}]");
                 }
 
                 if (args.Count > 1) {
@@ -93,13 +197,22 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 var name = args[0].ToString();
 
-                if (!m_instances.TryGet(name: name, instance: out var instance) || (instance is null)) {
+                if (
+                    !m_instances.TryGet(
+                    instance: out var instance,
+                    name: name
+                ) ||
+                    (instance is null)
+                ) {
                     return CommandResult.Error(output: $"[world.instance.status: no instance named '{name}']");
                 }
 
                 var definition = instance.Server.Definition;
 
-                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.instance.status {name}: source {instance.SourcePath} document {definition.DocumentId} schema {definition.Schema} tick {instance.CompletedTicks} capacity {instance.Server.Population.Capacity} simulated {instance.Server.Population.SimulatedCount} dirty {instance.Server.JournalLength} owned-worlds {m_instances.OwnedWorldsDirectory(name: name)}]"));
+                return new CommandResult(Output: string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"[world.instance.status {name}: source {instance.SourcePath} document {definition.DocumentId} schema {definition.Schema} tick {instance.CompletedTicks} capacity {instance.Server.Population.Capacity} simulated {instance.Server.Population.SimulatedCount} dirty {instance.Server.JournalLength} owned-worlds {m_instances.OwnedWorldsDirectory(name: name)}]"
+                ));
             },
             routing: CommandRouting.Immediate
         );
@@ -114,23 +227,40 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
                         var location = m_seatRouter.Route(slot: slot);
 
-                        parts[slot] = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{(slot + 1)}={location.Endpoint.Identity}:{(location.EntityIndex + 1)}@{location.Epoch}");
+                        parts[slot] = string.Create(
+                            provider: CultureInfo.InvariantCulture,
+                            handler: $"{(slot + 1)}={location.Endpoint.Identity}:{(location.EntityIndex + 1)}@{location.Epoch}"
+                        );
                     }
 
-                    return new CommandResult(Output: $"[world.view: {string.Join(separator: " ", values: parts)}]");
+                    return new CommandResult(Output: $"[world.view: {string.Join(
+                        separator: " ",
+                        values: parts
+                    )}]");
                 }
 
                 if (args.Count > 1) {
                     return CommandResult.Error(output: $"[world.view: too many arguments — expected [<seat>], seat an integer 1..{WorldSeatBindings.SeatCount}]");
                 }
 
-                if (!int.TryParse(s: args[0].ToString(), provider: CultureInfo.InvariantCulture, result: out var seat) || (seat < 1) || (seat > WorldSeatBindings.SeatCount)) {
+                if (
+                    !int.TryParse(
+                    s: args[0].ToString(),
+                    provider: CultureInfo.InvariantCulture,
+                    result: out var seat
+                ) ||
+                    (seat < 1) ||
+                    (seat > WorldSeatBindings.SeatCount)
+                ) {
                     return CommandResult.Error(output: $"[world.view: expected a seat number 1..{WorldSeatBindings.SeatCount}]");
                 }
 
                 var seatLocation = m_seatRouter.Route(slot: (seat - 1));
 
-                return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.view {seat}: {seatLocation.Endpoint.Identity}:{(seatLocation.EntityIndex + 1)}@{seatLocation.Epoch}]"));
+                return new CommandResult(Output: string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"[world.view {seat}: {seatLocation.Endpoint.Identity}:{(seatLocation.EntityIndex + 1)}@{seatLocation.Epoch}]"
+                ));
             },
             routing: CommandRouting.Immediate
         );
@@ -143,18 +273,30 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     return CommandResult.Error(output: "[world.instance.seats: expected an optional instance name]");
                 }
 
-                var names = ((args.Count == 1) ? ([args[0].ToString()]) : m_instances.Names);
+                var names = ((args.Count == 1)
+                    ? ([args[0].ToString()])
+                    : m_instances.Names
+                );
                 var segments = new List<string>(capacity: names.Count);
 
                 foreach (var name in names) {
-                    if (!m_instances.TryGet(name: name, instance: out var instance) || (instance is null)) {
+                    if (
+                        !m_instances.TryGet(
+                        instance: out var instance,
+                        name: name
+                    ) ||
+                        (instance is null)
+                    ) {
                         return CommandResult.Error(output: $"[world.instance.seats: no instance named '{name}']");
                     }
 
                     segments.Add(item: $"{name}: {DescribeSeats(server: instance.Server)}");
                 }
 
-                return new CommandResult(Output: $"[world.instance.seats: {string.Join(separator: " | ", values: segments)}]");
+                return new CommandResult(Output: $"[world.instance.seats: {string.Join(
+                    separator: " | ",
+                    values: segments
+                )}]");
             },
             routing: CommandRouting.Immediate
         );
@@ -167,10 +309,21 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 }
 
                 var sourceName = args[0].ToString();
-                var party = args.Is(index: 1, value: "party");
+                var party = args.Is(
+                    index: 1,
+                    value: "party"
+                );
                 var slot = 0;
 
-                if (!party && !TrySlot(args: in args, index: 1, verb: "world.transfer", slot: out slot)) {
+                if (
+                    !party &&
+                    !TrySlot(
+                    args: in args,
+                    index: 1,
+                    slot: out slot,
+                    verb: "world.transfer"
+                )
+                ) {
                     return CommandResult.Error(output: $"[world.transfer: slot must be an integer 1..{WorldPopulation.LocalSeatCount}, or 'party']");
                 }
 
@@ -178,8 +331,23 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 ulong? explicitTransferId = null;
                 int? forceJoinRefusalOrdinal = null;
 
-                if (args.Is(index: 2, value: "ephemeral") || args.Is(index: 2, value: "persisted")) {
-                    if (!TryParseDestination(args: in args, start: 2, verb: "world.transfer", destination: out destination, error: out var destinationError)) {
+                if (
+                    args.Is(
+                    index: 2,
+                    value: "ephemeral"
+                ) ||
+                    args.Is(
+                    index: 2,
+                    value: "persisted"
+                )
+                ) {
+                    if (!TryParseDestination(
+                        args: in args,
+                        destination: out destination,
+                        error: out var destinationError,
+                        start: 2,
+                        verb: "world.transfer"
+                    )) {
                         return CommandResult.Error(output: destinationError!);
                     }
                 } else {
@@ -190,16 +358,38 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     var end = args.Count;
 
                     while (end > 3) {
-                        var token = args[end - 1];
+                        var token = args[(end - 1)];
 
-                        if (token.StartsWith(value: "transfer:", comparisonType: StringComparison.Ordinal) && ulong.TryParse(s: token[9..], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out var parsedTransferId)) {
+                        if (
+                            token.StartsWith(
+                            comparisonType: StringComparison.Ordinal,
+                            value: "transfer:"
+                        ) &&
+                            ulong.TryParse(
+                            s: token[9..],
+                            style: NumberStyles.Integer,
+                            provider: CultureInfo.InvariantCulture,
+                            result: out var parsedTransferId
+                        )
+                        ) {
                             explicitTransferId = parsedTransferId;
                             end--;
 
                             continue;
                         }
 
-                        if (token.StartsWith(value: "forcejoinrefusal:", comparisonType: StringComparison.Ordinal) && int.TryParse(s: token[17..], style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out var parsedOrdinal)) {
+                        if (
+                            token.StartsWith(
+                            comparisonType: StringComparison.Ordinal,
+                            value: "forcejoinrefusal:"
+                        ) &&
+                            int.TryParse(
+                            s: token[17..],
+                            style: NumberStyles.Integer,
+                            provider: CultureInfo.InvariantCulture,
+                            result: out var parsedOrdinal
+                        )
+                        ) {
                             forceJoinRefusalOrdinal = parsedOrdinal;
                             end--;
 
@@ -218,7 +408,9 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 m_instances.EnqueueTransfer(
                     sourceInstance: sourceName,
-                    scope: (party ? WorldInstanceHost.TransferScope.Party : WorldInstanceHost.TransferScope.Body),
+                    scope: (party
+                    ? WorldInstanceHost.TransferScope.Party
+                    : WorldInstanceHost.TransferScope.Body),
                     sourceSlot: (slot - 1),
                     destination: destination,
                     actingPrincipal: context.ActingPrincipal(),
@@ -229,70 +421,5 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 return CommandResult.None;
             }
         );
-    }
-
-    // world.transfer's ephemeral/persisted destination clause, starting at token <start>: 'ephemeral <site> <path>'
-    // or 'persisted <name> <path>' — the bare '<target-instance>' form is parsed directly by the handler above
-    // instead (never through here), because it alone accepts trailing verification-only modifiers that a Tail-
-    // consumed document path here must never be asked to share tokens with.
-    private static bool TryParseDestination(in WireArgs args, int start, string verb, out WorldInstanceHost.TransferDestination destination, out string? error) {
-        destination = default;
-
-        if (args.Is(index: start, value: "ephemeral")) {
-            if (args.Count < (start + 3)) {
-                error = $"[{verb}: expected 'ephemeral <site> <path>']";
-
-                return false;
-            }
-
-            destination = WorldInstanceHost.TransferDestination.Fresh(site: args[(start + 1)].ToString(), documentPath: args.Tail(start: (start + 2)));
-            error = null;
-
-            return true;
-        }
-
-        if (args.Is(index: start, value: "persisted")) {
-            if (args.Count < (start + 3)) {
-                error = $"[{verb}: expected 'persisted <name> <path>']";
-
-                return false;
-            }
-
-            destination = WorldInstanceHost.TransferDestination.Persistent(name: args[(start + 1)].ToString(), documentPath: args.Tail(start: (start + 2)));
-            error = null;
-
-            return true;
-        }
-
-        error = $"[{verb}: expected 'ephemeral <site> <path>' or 'persisted <name> <path>']";
-
-        return false;
-    }
-
-    // The 1-based seat display index world.transfer shares with the instance-targeted player.* verbs (see
-    // PlayerCommandModule's own TryStripInstanceToken/ResolveInstanceSlot) — translated to the 0-based slot
-    // SessionRequest/WorldCommand carry by the caller.
-    private static bool TrySlot(in WireArgs args, int index, string verb, out int slot) {
-        if (!args.TryInt(index: index, value: out slot) || (slot < 1) || (slot > WorldPopulation.LocalSeatCount)) {
-            slot = 0;
-
-            return false;
-        }
-
-        return true;
-    }
-
-    // world.instance.seats' per-instance row: one token per local seat, ordinal 1..LocalSeatCount.
-    private static string DescribeSeats(WorldServer server) {
-        var population = server.Population;
-        var parts = new string[WorldPopulation.LocalSeatCount];
-
-        for (var slot = 0; (slot < WorldPopulation.LocalSeatCount); slot++) {
-            parts[slot] = (population.IsActive(index: slot)
-                ? $"{(slot + 1)}={(population.EntryBody(index: slot)?.Profile?.Id ?? "pending")}"
-                : $"{(slot + 1)}=-");
-        }
-
-        return string.Join(separator: " ", value: parts);
     }
 }

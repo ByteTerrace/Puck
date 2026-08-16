@@ -1,5 +1,5 @@
+using Puck.GamingBricks;
 using Puck.Maths;
-using Puck.Snapshots;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -23,7 +23,6 @@ internal static class HashDivergenceProbe {
     // product). The fine mode compares at each scanline boundary; the coarse mode at each frame boundary.
     private const int ScanlineCycles = 456;
     private const int ScanlinesPerFrame = 154;
-
     // SystemMemory's fixed save order (SystemMemory.SaveState): the two 4-byte bank selects, then video RAM
     // (2 * 0x2000), then work RAM (8 * 0x1000), then OAM, then high RAM. The deliberate perturbation targets a work-RAM
     // byte in a high bank the synthetic ROM's WRAM-fill loop (which touches only bank 0, 0xC000-0xC0FF) never rewrites,
@@ -81,16 +80,15 @@ internal static class HashDivergenceProbe {
         }
 
         return Run(
+            fine: fine,
+            frames: frames,
+            perturbAtFrame: perturbAtFrame,
             romA: romA,
             romALabel: romALabel,
             romB: romB,
-            romBLabel: romBLabel,
-            frames: frames,
-            fine: fine,
-            perturbAtFrame: perturbAtFrame
+            romBLabel: romBLabel
         );
     }
-
     /// <summary>The in-memory counterpart of <see cref="Run(string, string, int, bool, int?)"/>, for callers that
     /// already hold ROM bytes rather than a disk path. Both machines emulate the model the ROM A header asks for, so a
     /// Color ROM self-checks in color.</summary>
@@ -152,9 +150,9 @@ internal static class HashDivergenceProbe {
                     );
 
                     if (!TryCompare(
+                        frame: frame,
                         machineA: machineA,
                         machineB: machineB,
-                        frame: frame,
                         scanline: scanline
                     )) {
                         return 1;
@@ -176,9 +174,9 @@ internal static class HashDivergenceProbe {
                 );
 
                 if (!TryCompare(
+                    frame: frame,
                     machineA: machineA,
                     machineB: machineB,
-                    frame: frame,
                     scanline: null
                 )) {
                     return 1;
@@ -190,7 +188,6 @@ internal static class HashDivergenceProbe {
 
         return 0;
     }
-
     /// <summary>
     /// Describes the first byte-level difference between two snapshots as a one-line, component-localized detail —
     /// "component 'SystemMemory', byte offset 32776 within component (absolute 32784)" rather than a bare "mismatch".
@@ -241,7 +238,6 @@ internal static class HashDivergenceProbe {
 
         return false;
     }
-
     // The fine localizer's console form: prints the one-line component/offset detail, then a short hex window of both
     // sides around the first differing byte.
     private static void PrintDivergenceReport(MachineSnapshot a, MachineSnapshot b) {
@@ -273,7 +269,6 @@ internal static class HashDivergenceProbe {
             offset: absoluteOffset
         ));
     }
-
     // Corrupts one work-RAM byte in `machine` without spending any bus cycle: snapshot it, flip a byte inside the
     // SystemMemory section's high work-RAM banks (which the synthetic ROM never touches), then restore the poked
     // snapshot into the same machine. Restore repositions every component to exactly this instant, so the only
@@ -288,7 +283,7 @@ internal static class HashDivergenceProbe {
         var current = snapshot.Data[absoluteOffset];
         var poked = snapshot.WithPokedByte(
             offset: absoluteOffset,
-            value: (byte)(current ^ 0xFF)
+            value: ((byte)(current ^ 0xFF))
         );
 
         machine.Restore(snapshot: poked);
@@ -302,7 +297,6 @@ internal static class HashDivergenceProbe {
 
         throw new InvalidOperationException(message: $"snapshot has no '{name}' section");
     }
-
     // Advances a machine until its master clock reaches an absolute cumulative cycle target (a no-op when already past
     // it). It steps atomic instructions (or bare T-cycles with no bus master) rather than Machine.Run, because Run's
     // pacing accumulator is reanchored by a snapshot restore — so an absolute target reached through Run would desync a
@@ -310,11 +304,11 @@ internal static class HashDivergenceProbe {
     // bit-for-bit cycle-aligned even after one is perturbed via snapshot/restore.
     private static void RunTo(Machine machine, long target) {
         if (machine.HasBusMaster) {
-            while (machine.Clock.CycleCount < (ulong)target) {
+            while (machine.Clock.CycleCount < ((ulong)target)) {
                 machine.StepInstruction();
             }
         } else {
-            while (machine.Clock.CycleCount < (ulong)target) {
+            while (machine.Clock.CycleCount < ((ulong)target)) {
                 machine.StepTick();
             }
         }

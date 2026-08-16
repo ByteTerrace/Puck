@@ -18,7 +18,6 @@ public interface IVulkanStorageBufferFactory {
         ulong sizeBytes,
         bool indirectArgs = false
     );
-
     /// <summary>Creates a device-local storage buffer with no host-write surface.</summary>
     VulkanDeviceStorageBuffer CreateDeviceLocal(
         VulkanInstance vulkanInstance,

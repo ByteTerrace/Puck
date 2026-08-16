@@ -30,7 +30,6 @@ public sealed class ChannelRefJsonConverter : JsonConverter<ChannelRef> {
 
         return new ChannelRef.Name(Value: reader.GetString()!);
     }
-
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, ChannelRef value, JsonSerializerOptions options) {
         switch (value) {

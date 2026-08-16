@@ -19,25 +19,28 @@ namespace Puck.World.Audio;
 /// bounded, then the mixer detaches) → join.
 /// </summary>
 internal sealed class WorldAudioRenderService : IHostedService {
-    /// <summary>The default-endpoint rebind cadence (~1 s) — a contract invariant, not a tunable: fast
-    /// enough that plugging headphones in feels immediate, slow enough that a machine with no endpoint idles cheap.</summary>
-    public const int RebindPeriodMilliseconds = 1000;
     /// <summary>How often the governor polls a healthy device for a parked fault — comfortably inside the rebind
     /// cadence; the pump itself never waits on this (faults park device-side immediately).</summary>
     private const int FaultPollMilliseconds = 250;
 
+    /// <summary>The default-endpoint rebind cadence (~1 s) — a contract invariant, not a tunable: fast
+    /// enough that plugging headphones in feels immediate, slow enough that a machine with no endpoint idles cheap.</summary>
+    public const int RebindPeriodMilliseconds = 1000;
+
     private readonly WorldAudioDirector m_director;
     private readonly IAudioRenderDeviceFactory? m_factory;
-    private readonly WorldAudioMixer m_mixer = new();
     private readonly int m_rebindPeriodMilliseconds;
-    private readonly ManualResetEventSlim m_stop = new(initialState: false);
+
     private IAudioRenderDevice? m_device;
     private string? m_fault;
     private long m_fillFaults;
     private long m_framesDelivered;
     private int m_rebindAttempts;
-    private string m_state = "stopped";
     private Thread? m_thread;
+
+    private readonly WorldAudioMixer m_mixer = new();
+    private readonly ManualResetEventSlim m_stop = new(initialState: false);
+    private string m_state = "stopped";
 
     /// <summary>Initializes the service over the director and the platform factory seam.</summary>
     /// <param name="director">The audio director the mixer attaches to.</param>
@@ -53,29 +56,121 @@ internal sealed class WorldAudioRenderService : IHostedService {
         m_rebindPeriodMilliseconds = rebindPeriodMilliseconds;
     }
 
+    /// <summary>Gets the most recent open/stream fault, or <see langword="null"/> while healthy.</summary>
+    public string? Fault => Volatile.Read(location: ref m_fault);
+    /// <summary>Gets the count of fill callbacks that faulted (each rendered its quantum silent).</summary>
+    public long FillFaults => (Interlocked.Read(location: ref m_fillFaults) + (Volatile.Read(location: ref m_device)?.FillFaults ?? 0));
+    /// <summary>Gets the total frames delivered to the endpoint across every device generation.</summary>
+    public long FramesDelivered => (Interlocked.Read(location: ref m_framesDelivered) + (Volatile.Read(location: ref m_device)?.FramesDelivered ?? 0));
     /// <summary>Gets the mixer this service owns (the <c>audio.state</c> verb's meter source).</summary>
     public WorldAudioMixer Mixer => m_mixer;
-
+    /// <summary>Gets how many times the service scheduled a device retry (a declined open or a mid-stream loss).</summary>
+    public int RebindAttempts => Volatile.Read(location: ref m_rebindAttempts);
     /// <summary>Gets the device state token: <c>playing</c>, <c>silent</c> (no endpoint), <c>rebinding</c> (lost
     /// mid-stream), <c>unsupported</c> (no platform backend), or <c>stopped</c>.</summary>
     public string StateToken => Volatile.Read(location: ref m_state);
 
-    /// <summary>Gets the most recent open/stream fault, or <see langword="null"/> while healthy.</summary>
-    public string? Fault => Volatile.Read(location: ref m_fault);
+    // The per-quantum fill, on the DEVICE's pump thread: latest-snapshot hold + MixBlock under the director's gate;
+    // silence while nothing is published or the mixer is between attaches. The platform pump catches any escaped
+    // exception (silent quantum + a counted fill fault), so a mixer defect can never kill the stream.
+    private void Fill(Span<short> interleavedStereo) {
+        if (!m_director.TryMixBlock(stereoInterleaved: interleavedStereo)) {
+            interleavedStereo.Clear();
+        }
+    }
+    // The governor: open → attach → watch → (fault) detach → rebind, until stop. Runs on its own thread so a slow
+    // endpoint open (or a wedged driver's bounded join) never touches the window pump.
+    private void Govern() {
+        while (!m_stop.IsSet) {
+            var device = m_factory!.TryOpen(
+                fill: Fill,
+                maxQuantumFrames: WorldAudioMixer.MaxBlockFrames,
+                reason: out var reason,
+                sampleRate: WorldAudioMixer.SampleRate
+            );
 
-    /// <summary>Gets the total frames delivered to the endpoint across every device generation.</summary>
-    public long FramesDelivered => (Interlocked.Read(location: ref m_framesDelivered) + (Volatile.Read(location: ref m_device)?.FramesDelivered ?? 0));
+            if (device is null) {
+                Volatile.Write(
+                    location: ref m_fault,
+                    value: reason
+                );
+                Volatile.Write(
+                    location: ref m_state,
+                    value: "silent"
+                );
+                _ = Interlocked.Increment(location: ref m_rebindAttempts);
 
-    /// <summary>Gets the count of fill callbacks that faulted (each rendered its quantum silent).</summary>
-    public long FillFaults => (Interlocked.Read(location: ref m_fillFaults) + (Volatile.Read(location: ref m_device)?.FillFaults ?? 0));
+                if (m_stop.Wait(millisecondsTimeout: m_rebindPeriodMilliseconds)) {
+                    break;
+                }
 
-    /// <summary>Gets how many times the service scheduled a device retry (a declined open or a mid-stream loss).</summary>
-    public int RebindAttempts => Volatile.Read(location: ref m_rebindAttempts);
+                continue;
+            }
+
+            Volatile.Write(
+                location: ref m_device,
+                value: device
+            );
+            Volatile.Write(
+                location: ref m_fault,
+                value: null
+            );
+            Volatile.Write(
+                location: ref m_state,
+                value: "playing"
+            );
+            m_director.AttachMixer(mixer: m_mixer);
+
+            while (!m_stop.Wait(millisecondsTimeout: FaultPollMilliseconds)) {
+                if (device.Fault is not null) {
+                    break;
+                }
+            }
+
+            // This generation ends (stop or stream fault): detach FIRST so the dying pump renders silence, fold the
+            // device's counters into the accumulated totals, then dispose (a bounded join of the pump thread).
+            m_director.DetachMixer();
+            Volatile.Write(
+                location: ref m_fault,
+                value: device.Fault
+            );
+            _ = Interlocked.Add(
+                location1: ref m_framesDelivered,
+                value: device.FramesDelivered
+            );
+            _ = Interlocked.Add(
+                location1: ref m_fillFaults,
+                value: device.FillFaults
+            );
+            Volatile.Write(
+                location: ref m_device,
+                value: null
+            );
+            device.Dispose();
+
+            if (m_stop.IsSet) {
+                break;
+            }
+
+            Volatile.Write(
+                location: ref m_state,
+                value: "rebinding"
+            );
+            _ = Interlocked.Increment(location: ref m_rebindAttempts);
+
+            if (m_stop.Wait(millisecondsTimeout: m_rebindPeriodMilliseconds)) {
+                break;
+            }
+        }
+    }
 
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken) {
         if (m_factory is null) {
-            Volatile.Write(location: ref m_state, value: "unsupported");
+            Volatile.Write(
+                location: ref m_state,
+                value: "unsupported"
+            );
 
             return Task.CompletedTask;
         }
@@ -88,74 +183,16 @@ internal sealed class WorldAudioRenderService : IHostedService {
 
         return Task.CompletedTask;
     }
-
     /// <inheritdoc/>
     public Task StopAsync(CancellationToken cancellationToken) {
         m_stop.Set();
         m_thread?.Join(millisecondsTimeout: 5000);
         m_stop.Dispose();
-        Volatile.Write(location: ref m_state, value: "stopped");
+        Volatile.Write(
+            location: ref m_state,
+            value: "stopped"
+        );
 
         return Task.CompletedTask;
-    }
-
-    // The governor: open → attach → watch → (fault) detach → rebind, until stop. Runs on its own thread so a slow
-    // endpoint open (or a wedged driver's bounded join) never touches the window pump.
-    private void Govern() {
-        while (!m_stop.IsSet) {
-            var device = m_factory!.TryOpen(sampleRate: WorldAudioMixer.SampleRate, maxQuantumFrames: WorldAudioMixer.MaxBlockFrames, fill: Fill, reason: out var reason);
-
-            if (device is null) {
-                Volatile.Write(location: ref m_fault, value: reason);
-                Volatile.Write(location: ref m_state, value: "silent");
-                _ = Interlocked.Increment(location: ref m_rebindAttempts);
-
-                if (m_stop.Wait(millisecondsTimeout: m_rebindPeriodMilliseconds)) {
-                    break;
-                }
-
-                continue;
-            }
-
-            Volatile.Write(location: ref m_device, value: device);
-            Volatile.Write(location: ref m_fault, value: null);
-            Volatile.Write(location: ref m_state, value: "playing");
-            m_director.AttachMixer(mixer: m_mixer);
-
-            while (!m_stop.Wait(millisecondsTimeout: FaultPollMilliseconds)) {
-                if (device.Fault is not null) {
-                    break;
-                }
-            }
-
-            // This generation ends (stop or stream fault): detach FIRST so the dying pump renders silence, fold the
-            // device's counters into the accumulated totals, then dispose (a bounded join of the pump thread).
-            m_director.DetachMixer();
-            Volatile.Write(location: ref m_fault, value: device.Fault);
-            _ = Interlocked.Add(location1: ref m_framesDelivered, value: device.FramesDelivered);
-            _ = Interlocked.Add(location1: ref m_fillFaults, value: device.FillFaults);
-            Volatile.Write(location: ref m_device, value: null);
-            device.Dispose();
-
-            if (m_stop.IsSet) {
-                break;
-            }
-
-            Volatile.Write(location: ref m_state, value: "rebinding");
-            _ = Interlocked.Increment(location: ref m_rebindAttempts);
-
-            if (m_stop.Wait(millisecondsTimeout: m_rebindPeriodMilliseconds)) {
-                break;
-            }
-        }
-    }
-
-    // The per-quantum fill, on the DEVICE's pump thread: latest-snapshot hold + MixBlock under the director's gate;
-    // silence while nothing is published or the mixer is between attaches. The platform pump catches any escaped
-    // exception (silent quantum + a counted fill fault), so a mixer defect can never kill the stream.
-    private void Fill(Span<short> interleavedStereo) {
-        if (!m_director.TryMixBlock(stereoInterleaved: interleavedStereo)) {
-            interleavedStereo.Clear();
-        }
     }
 }

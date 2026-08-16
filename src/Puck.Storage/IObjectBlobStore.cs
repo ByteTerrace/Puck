@@ -13,7 +13,6 @@ public interface IObjectBlobStore {
         ObjectBlobAddress address,
         CancellationToken cancellationToken = default
     );
-
     /// <summary>Writes a blob, optionally guarded by an if-match version token, returning whether it landed, whether a
     /// precondition refused it, and the new token.</summary>
     /// <param name="target">The storage target the address resolves against.</param>
@@ -32,7 +31,6 @@ public interface IObjectBlobStore {
         string? ifMatchVersion = null,
         CancellationToken cancellationToken = default
     );
-
     /// <summary>Lists the keys of every blob under an object beneath <paramref name="keyPrefix"/> — the
     /// cloud-discovery half of the store: a caller that only knows its local and previously-tracked ids uses this to
     /// find objects it has never seen before. Matching is by whole path SEGMENT, not by raw characters: a prefix

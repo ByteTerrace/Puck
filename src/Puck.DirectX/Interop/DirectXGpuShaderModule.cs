@@ -10,6 +10,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXGpuShaderModule : IGpuShaderModule, IDisposable {
     private readonly byte[] m_bytecode;
+
     private GCHandle m_pin;
 
     /// <summary>Initializes a new instance pinning a copy of the given bytecode.</summary>
@@ -19,7 +20,7 @@ public sealed class DirectXGpuShaderModule : IGpuShaderModule, IDisposable {
     }
 
     /// <summary>Gets the size, in bytes, of the DXIL blob.</summary>
-    public nuint BytecodeLength => (nuint)m_bytecode.Length;
+    public nuint BytecodeLength => ((nuint)m_bytecode.Length);
     /// <inheritdoc/>
     public nint Handle => m_pin.AddrOfPinnedObject();
 

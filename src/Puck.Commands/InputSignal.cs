@@ -36,6 +36,17 @@ public readonly record struct InputSignal(
     ulong CaptureTick = 0UL,
     bool Transient = false
 ) {
+    /// <summary>A two-dimensional axis activation (for example, a pointer delta), as a continuous update.</summary>
+    public static InputSignal Axis(string source, Vector2 value, InputDeviceId deviceId = default, ulong captureTick = 0UL, bool transient = false) {
+        return new InputSignal(
+            CaptureTick: captureTick,
+            DeviceId: deviceId,
+            Phase: CommandPhase.Active,
+            Source: source,
+            Value: CommandValue.Axis(value: value),
+            Transient: transient
+        );
+    }
     /// <summary>A digital press of a control (<see cref="CommandPhase.Started"/>, digital value).</summary>
     public static InputSignal Press(string source, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         return new InputSignal(
@@ -44,16 +55,6 @@ public readonly record struct InputSignal(
             Phase: CommandPhase.Started,
             Source: source,
             Value: CommandValue.Digital(active: true)
-        );
-    }
-    /// <summary>A digital release of a control (<see cref="CommandPhase.Completed"/>, inactive digital value).</summary>
-    public static InputSignal Release(string source, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
-        return new InputSignal(
-            CaptureTick: captureTick,
-            DeviceId: deviceId,
-            Phase: CommandPhase.Completed,
-            Source: source,
-            Value: CommandValue.Digital(active: false)
         );
     }
     /// <summary>Creates a digital held-state reassertion (<see cref="CommandPhase.Active"/>). This may recover
@@ -67,15 +68,14 @@ public readonly record struct InputSignal(
             Value: CommandValue.Digital(active: true)
         );
     }
-    /// <summary>A two-dimensional axis activation (for example, a pointer delta), as a continuous update.</summary>
-    public static InputSignal Axis(string source, Vector2 value, InputDeviceId deviceId = default, ulong captureTick = 0UL, bool transient = false) {
+    /// <summary>A digital release of a control (<see cref="CommandPhase.Completed"/>, inactive digital value).</summary>
+    public static InputSignal Release(string source, InputDeviceId deviceId = default, ulong captureTick = 0UL) {
         return new InputSignal(
             CaptureTick: captureTick,
             DeviceId: deviceId,
-            Phase: CommandPhase.Active,
+            Phase: CommandPhase.Completed,
             Source: source,
-            Value: CommandValue.Axis(value: value),
-            Transient: transient
+            Value: CommandValue.Digital(active: false)
         );
     }
     /// <summary>A text activation carrying typed characters.</summary>

@@ -16,9 +16,12 @@ public interface IDisplayTimingInfo {
     /// </summary>
     ulong DisplayConfigurationVersion { get; }
 }
-
 /// <summary>The active display path's presentation cadence.</summary>
 public readonly record struct DisplaySignalTiming {
+    /// <summary>The active physical vertical scan frequency, in Hz; zero only for <see cref="Unknown"/>.</summary>
+    public double Hertz { get; }
+    /// <summary>Whether the active presentation cadence is known.</summary>
+    public bool IsKnown => (Hertz > 0.0);
     /// <summary>An unavailable signal timing.</summary>
     public static DisplaySignalTiming Unknown => default;
 
@@ -38,14 +41,7 @@ public readonly record struct DisplaySignalTiming {
 
         Hertz = hertz;
     }
-
-    /// <summary>The active physical vertical scan frequency, in Hz; zero only for <see cref="Unknown"/>.</summary>
-    public double Hertz { get; }
-
-    /// <summary>Whether the active presentation cadence is known.</summary>
-    public bool IsKnown => (Hertz > 0.0);
 }
-
 /// <summary>Whether variable refresh is positively known to be supported by the display.</summary>
 public enum VariableRefreshSupport {
     /// <summary>The platform cannot establish support. This is not evidence of non-support.</summary>
@@ -57,7 +53,6 @@ public enum VariableRefreshSupport {
     /// <summary>The display explicitly advertises a recognized variable-refresh protocol.</summary>
     Supported,
 }
-
 /// <summary>The display-identification declaration from which a variable-refresh range was obtained.</summary>
 [Flags]
 public enum VariableRefreshSource {
@@ -73,7 +68,6 @@ public enum VariableRefreshSource {
     /// <summary>An AMD vendor-specific data block carrying FreeSync bounds.</summary>
     AmdFreeSync = (1 << 2),
 }
-
 /// <summary>An explicitly advertised variable-refresh interval.</summary>
 public readonly record struct VariableRefreshRange {
     /// <summary>Creates a validated variable-refresh interval.</summary>
@@ -109,13 +103,11 @@ public readonly record struct VariableRefreshRange {
         MaximumHertz = maximumHertz;
     }
 
-    /// <summary>The advertised minimum refresh rate, in Hz.</summary>
-    public double MinimumHertz { get; }
-
     /// <summary>The advertised maximum, or null when the active video mode supplies that bound.</summary>
     public double? MaximumHertz { get; }
+    /// <summary>The advertised minimum refresh rate, in Hz.</summary>
+    public double MinimumHertz { get; }
 }
-
 /// <summary>Variable-refresh support, its advertised interval, and the declaration that established it.</summary>
 public readonly record struct VariableRefreshCapabilities {
     private VariableRefreshCapabilities(VariableRefreshSupport support, VariableRefreshRange? range, VariableRefreshSource source) {
@@ -124,14 +116,19 @@ public readonly record struct VariableRefreshCapabilities {
         Source = source;
     }
 
+    /// <summary>The explicit advertised range when <see cref="Support"/> is <see cref="VariableRefreshSupport.Supported"/>.</summary>
+    public VariableRefreshRange? Range { get; }
+    /// <summary>The declaration or declarations that established support.</summary>
+    public VariableRefreshSource Source { get; }
+    /// <summary>The support state. Unknown and unsupported are deliberately distinct.</summary>
+    public VariableRefreshSupport Support { get; }
     /// <summary>No reliable variable-refresh capability information.</summary>
     public static VariableRefreshCapabilities Unknown => default;
-
     /// <summary>A positive platform report that variable refresh is unsupported.</summary>
     public static VariableRefreshCapabilities Unsupported => new(
-        support: VariableRefreshSupport.Unsupported,
         range: null,
-        source: VariableRefreshSource.None
+        source: VariableRefreshSource.None,
+        support: VariableRefreshSupport.Unsupported
     );
 
     /// <summary>Creates capabilities from one or more explicit display-identification declarations.</summary>
@@ -167,29 +164,18 @@ public readonly record struct VariableRefreshCapabilities {
         }
 
         return new VariableRefreshCapabilities(
-            support: VariableRefreshSupport.Supported,
             range: range,
-            source: source
+            source: source,
+            support: VariableRefreshSupport.Supported
         );
     }
-
-    /// <summary>The support state. Unknown and unsupported are deliberately distinct.</summary>
-    public VariableRefreshSupport Support { get; }
-
-    /// <summary>The explicit advertised range when <see cref="Support"/> is <see cref="VariableRefreshSupport.Supported"/>.</summary>
-    public VariableRefreshRange? Range { get; }
-
-    /// <summary>The declaration or declarations that established support.</summary>
-    public VariableRefreshSource Source { get; }
 }
-
 /// <summary>A display path's independent physical-signal and variable-refresh facts.</summary>
 /// <param name="Signal">The active presentation cadence.</param>
 /// <param name="VariableRefresh">Explicit variable-refresh capabilities, if discoverable.</param>
 public readonly record struct DisplayTimingSnapshot(DisplaySignalTiming Signal, VariableRefreshCapabilities VariableRefresh) {
-    /// <summary>A snapshot in which neither signal timing nor VRR capability is available.</summary>
-    public static DisplayTimingSnapshot Unknown => default;
-
     /// <summary>Whether at least one display fact was discovered.</summary>
     public bool IsKnown => (Signal.IsKnown || (VariableRefresh.Support != VariableRefreshSupport.Unknown));
+    /// <summary>A snapshot in which neither signal timing nor VRR capability is available.</summary>
+    public static DisplayTimingSnapshot Unknown => default;
 }

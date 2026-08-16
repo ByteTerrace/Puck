@@ -27,12 +27,14 @@
   {
     "Id": "mixed-scale.checked-product-matches-representability",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FusedArithmetic", "Name": "TryMixedScaleProduct" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FusedArithmetic.TryMixedScaleProduct (internal, two factors) — the refuse/succeed verdict AND the returned raw, over the same swept operands as mixed-scale.product-vs-oracle",
+        "Subject": "FusedArithmetic.TryMixedScaleProduct (two factors) — the refuse/succeed verdict AND the returned raw, over the same swept operands as mixed-scale.product-vs-oracle",
         "Against": "Oracles.MixedScaleProduct's unwrapped representability verdict: the exact rounded product is compared against the signed 64-bit bounds in arbitrary width, where the subject decides the same question from an overflow flag its own left shift raises plus a magnitude-against-limit test. Agreement pins that the checked face declines EXACTLY where the value leaves the carrier — never earlier (a conservative refusal) and never later (a silent wrap)",
         "Shared": "",
         "Citation": "",
@@ -52,12 +54,14 @@
   {
     "Id": "mixed-scale.triple-product-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FusedArithmetic", "Name": "TryMixedScaleProduct" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FusedArithmetic.TryMixedScaleProduct (internal, THREE factors) — the refuse/succeed verdict and the returned raw for a product of three raws at three independent scales, rounded once",
+        "Subject": "FusedArithmetic.TryMixedScaleProduct (THREE factors) — the refuse/succeed verdict and the returned raw for a product of three raws at three independent scales, rounded once",
         "Against": "Oracles.MixedScaleTripleProduct — the triple product formed in BigInteger and rounded once, reporting separately whether the exact product's magnitude stays inside 2^128 and whether the rounded value fits the raw. The subject decides the width question by testing the third factor against UInt128.MaxValue divided by the running pair, an exact test rather than a bit-length estimate; the oracle decides it by comparing the exact magnitude against 2^128 directly",
         "Shared": "",
         "Citation": "",
@@ -67,6 +71,76 @@
         "Kind": "Structural",
         "Flavor": "None",
         "Subject": "ENVELOPE: the subject REFUSES whenever the exact triple product needs more than 128 bits, even where the scaled result would have fitted the raw — three 64-bit factors reach 2^189 and the accumulator is 128 bits wide. That is a declined answer, never a wrong one, and the law models it exactly rather than tolerating it: the expected verdict is (width fits AND value fits), so a subject that widened its refusal or narrowed it would both fail",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mixed-scale.dot-product-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FusedArithmetic", "Name": "TryMixedScaleDotProduct" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.TryMixedScaleDotProduct — the refuse/succeed verdict and returned raw for the dot product of two three-component raw vectors at independent fixed-point scales, with all three products accumulated before one rounding",
+        "Against": "Oracles.MixedScaleDotProduct — all three products and their sum formed in BigInteger, then rounded once by RoundRationalTiesToEven against an explicit power-of-two denominator. The subject accumulates sign-plus-UInt128 terms and decides the tie by inspecting discarded bits against a half-unit; no accumulation width or rounding comparison is shared",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The refusal contract is false with a zero output, asserted directly. ENVELOPE: fraction bit counts are folded onto [0, 64], so this swept law reaches shifts in [-128, 64]; the full three-product magnitude is always below 2^128 because three signed-64 products total at most 3·2^126",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mixed-scale.scaled-reciprocal-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FusedArithmetic", "Name": "TryScaledReciprocal" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.TryScaledReciprocal — the refuse/succeed verdict and returned raw for the reciprocal of a positive raw at one fixed-point scale, rounded once onto another",
+        "Against": "Oracles.ScaledReciprocal — the exact numerator 2^(fractionBitsIn + fractionBitsOut) formed in BigInteger and divided by the positive raw through RoundRationalTiesToEven, which compares 2r against d. The subject uses UInt128 restoring division and compares r against d-r, then narrows separately",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The refusal contract is false with a zero output, asserted directly. ENVELOPE: both swept fraction bit counts are folded onto [0, 62], so their sum stays inside the restoring divider's 127-bit starting-width limit; invalid values and fraction-count extremes answer at mixed-scale.scaled-reciprocal-invalid-inputs-refuse",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "mixed-scale.scaled-reciprocal-invalid-inputs-refuse",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "FusedArithmetic.TryScaledReciprocal refuses with zero output for zero and negative raws, a negative combined fraction count, a combined count above int.MaxValue, and a count whose exact starting quotient would exceed the UInt128 restoring divider's documented 127-bit margin",
         "Against": "",
         "Shared": "",
         "Citation": "",

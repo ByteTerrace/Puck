@@ -6,10 +6,26 @@ namespace Puck.Input.Output;
 /// </summary>
 public static class GamepadPlayerColors {
     private static readonly LedColor[] Palette = [
-        new(Red: 0x00, Green: 0x00, Blue: 0x40), // player 1 — blue
-        new(Red: 0x40, Green: 0x00, Blue: 0x00), // player 2 — red
-        new(Red: 0x00, Green: 0x40, Blue: 0x00), // player 3 — green
-        new(Red: 0x20, Green: 0x00, Blue: 0x20), // player 4 — purple
+        new(
+            Blue: 0x40,
+            Green: 0x00,
+            Red: 0x00
+        ), // player 1 — blue
+        new(
+            Blue: 0x00,
+            Green: 0x00,
+            Red: 0x40
+        ), // player 2 — red
+        new(
+            Blue: 0x00,
+            Green: 0x40,
+            Red: 0x00
+        ), // player 3 — green
+        new(
+            Blue: 0x20,
+            Green: 0x00,
+            Red: 0x20
+        ), // player 4 — purple
     ];
 
     /// <summary>Gets the indicator color for a player slot (wrapping every four players).</summary>

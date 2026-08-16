@@ -8,6 +8,7 @@ namespace Puck.Vulkan.Interop;
 /// </summary>
 public sealed class VulkanSwapchain : IDisposable {
     private bool m_disposed;
+
     private readonly IVulkanSwapchainApi m_swapchainApi;
 
     /// <summary>Gets the native <c>VkDevice</c> handle that owns the swapchain.</summary>

@@ -24,7 +24,6 @@ public sealed record AttestationHeader(
     string? Audience,
     ulong? Sequence
 );
-
 /// <summary>Reserved attestation purposes. Every other purpose string is game-defined and opaque to the engine.</summary>
 public static class AttestationPurposes {
     /// <summary>
@@ -35,7 +34,6 @@ public static class AttestationPurposes {
     /// </summary>
     public const string KeyBinding = "key-binding";
 }
-
 /// <summary>Which shape <see cref="SignedAttestation.PayloadBytes"/> decodes as.</summary>
 public enum AttestationPayloadKind : byte {
     /// <summary>Caller-defined claim bytes; the engine does not interpret them.</summary>
@@ -47,7 +45,6 @@ public enum AttestationPayloadKind : byte {
     /// <summary>A <see cref="SealedPayload"/> — the same attestation shape with the payload AEAD-encrypted.</summary>
     Sealed = 3,
 }
-
 /// <summary>
 /// A key binding's payload: the id of the key being vouched for, self-certified by carrying the actual
 /// public key bytes alongside it. A hash alone cannot carry the next hop's verification key, so the
@@ -61,12 +58,11 @@ public sealed record KeyBindingPayload(KeyId TargetId, ReadOnlyMemory<byte> Publ
     /// <summary>Whether <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="TargetId"/>'s <see cref="KeyId.KeyHash"/>.</summary>
     public bool IsSelfCertifying =>
         string.Equals(
-        a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
-        b: TargetId.KeyHash,
-        comparisonType: StringComparison.Ordinal
-    );
+            a: KeyId.ComputeKeyHash(subjectPublicKeyInfo: PublicKeySubjectPublicKeyInfo.Span),
+            b: TargetId.KeyHash,
+            comparisonType: StringComparison.Ordinal
+        );
 }
-
 /// <summary>
 /// A sealed attestation payload: an AEAD ciphertext produced by ECDH P-256 key agreement to an AES-256-GCM
 /// key, with both the attestation's serialized context header and the recipient sealing-key identity as
@@ -86,7 +82,6 @@ public sealed record SealedPayload(
     ReadOnlyMemory<byte> Tag,
     ReadOnlyMemory<byte> Ciphertext
 );
-
 /// <summary>
 /// One signed attestation: header, payload, the signature, and — decisively —
 /// <see cref="SignedPortion"/>, the exact bytes that signature covers
@@ -111,6 +106,7 @@ public sealed record SealedPayload(
 public sealed record SignedAttestation {
     private readonly byte[] m_payloadBytes;
     private readonly byte[] m_signedPortion;
+
     private byte[] m_signature;
 
     private SignedAttestation(
@@ -148,12 +144,12 @@ public sealed record SignedAttestation {
         ReadOnlyMemory<byte> signedPortion
     ) =>
         new(
-        header: header,
-        payloadKind: payloadKind,
-        payloadBytes: payloadBytes,
-        signature: signature,
-        signedPortion: signedPortion
-    );
+            header: header,
+            payloadBytes: payloadBytes,
+            payloadKind: payloadKind,
+            signature: signature,
+            signedPortion: signedPortion
+        );
 
     /// <summary>
     /// Builds an attestation by encoding the given fields under <paramref name="codec"/> — the wire form a
@@ -174,51 +170,42 @@ public sealed record SignedAttestation {
         ReadOnlyMemory<byte> signature
     ) =>
         new(
-        header: header,
-        payloadKind: payloadKind,
-        payloadBytes: payloadBytes,
-        signature: signature,
-        signedPortion: codec.EncodeSignedPortion(
             header: header,
             payloadKind: payloadKind,
-            payloadBytes: payloadBytes.Span
-        )
-    );
+            payloadBytes: payloadBytes,
+            signature: signature,
+            signedPortion: codec.EncodeSignedPortion(
+                header: header,
+                payloadKind: payloadKind,
+                payloadBytes: payloadBytes.Span
+            )
+        );
+
+    internal int PayloadLength => m_payloadBytes.Length;
+    /// <summary>Assembly-internal zero-copy access after the attestation boundary has taken its defensive copy.</summary>
+    internal ReadOnlySpan<byte> PayloadSpan => m_payloadBytes;
+    internal int SignatureLength => m_signature.Length;
+    /// <summary>Assembly-internal zero-copy access after the attestation boundary has taken its defensive copy.</summary>
+    internal ReadOnlySpan<byte> SignatureSpan => m_signature;
+    internal int SignedPortionLength => m_signedPortion.Length;
+    /// <summary>Assembly-internal zero-copy access to the authoritative signed bytes.</summary>
+    internal ReadOnlySpan<byte> SignedPortionSpan => m_signedPortion;
 
     /// <summary>Gets the canonical context header, always part of the signing input.</summary>
     public AttestationHeader Header { get; }
-
     /// <summary>Gets a defensive copy of the payload encoded by whichever <see cref="IAttestationCodec"/> produced this attestation.</summary>
     public ReadOnlyMemory<byte> PayloadBytes => m_payloadBytes.ToArray();
-
-    /// <summary>Assembly-internal zero-copy access after the attestation boundary has taken its defensive copy.</summary>
-    internal ReadOnlySpan<byte> PayloadSpan => m_payloadBytes;
-
-    internal int PayloadLength => m_payloadBytes.Length;
-
     /// <summary>Gets the shape <see cref="PayloadBytes"/> decodes as.</summary>
     public AttestationPayloadKind PayloadKind { get; }
-
     /// <summary>Gets a defensive copy of the ECDSA signature (IEEE P1363 fixed-field r‖s) over <see cref="SignedPortion"/>.</summary>
     public ReadOnlyMemory<byte> Signature {
         get => m_signature.ToArray();
         init => m_signature = value.ToArray();
     }
-
-    /// <summary>Assembly-internal zero-copy access after the attestation boundary has taken its defensive copy.</summary>
-    internal ReadOnlySpan<byte> SignatureSpan => m_signature;
-
-    internal int SignatureLength => m_signature.Length;
-
     /// <summary>
     /// Gets a defensive copy of the exact bytes the signature covers — the codec's signed-portion encoding of <see cref="Header"/>,
     /// <see cref="PayloadKind"/>, and <see cref="PayloadBytes"/>, as they arrived rather than as they would
     /// re-encode. This is what <see cref="AttestationVerifier"/> verifies against.
     /// </summary>
     public ReadOnlyMemory<byte> SignedPortion => m_signedPortion.ToArray();
-
-    /// <summary>Assembly-internal zero-copy access to the authoritative signed bytes.</summary>
-    internal ReadOnlySpan<byte> SignedPortionSpan => m_signedPortion;
-
-    internal int SignedPortionLength => m_signedPortion.Length;
 }

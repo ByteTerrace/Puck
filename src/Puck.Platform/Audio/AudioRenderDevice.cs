@@ -1,5 +1,3 @@
-using Puck.Platform.Windows.Audio;
-
 namespace Puck.Platform.Audio;
 
 /// <summary>Fills one render quantum with interleaved left/right s16 frames. Invoked on the device's own pump
@@ -21,20 +19,15 @@ public delegate void AudioRenderFill(Span<short> interleavedStereo);
 public interface IAudioRenderDevice : IDisposable {
     /// <summary>Gets the stream rate in frames per second (the rate the device was opened with).</summary>
     int SampleRate { get; }
-
     /// <summary>Gets the endpoint buffer's total capacity in frames — the stream's latency ceiling.</summary>
     int BufferFrames { get; }
-
     /// <summary>Gets the total frames delivered to the endpoint since the stream opened.</summary>
     long FramesDelivered { get; }
-
     /// <summary>Gets the count of fill callbacks that threw (each rendered its quantum silent).</summary>
     long FillFaults { get; }
-
     /// <summary>Gets the failure that parked the pump, or <see langword="null"/> while the stream is healthy.</summary>
     string? Fault { get; }
 }
-
 /// <summary>
 /// Opens <see cref="IAudioRenderDevice"/>s on the platform's default render endpoint — the mockable seam the world
 /// speaker service (and its failure-path smoke) drives. A missing endpoint or an initialization failure returns
@@ -48,14 +41,4 @@ public interface IAudioRenderDeviceFactory {
     /// <param name="reason">On decline, why the endpoint could not be opened; empty on success.</param>
     /// <returns>The opened device, or <see langword="null"/>.</returns>
     IAudioRenderDevice? TryOpen(int sampleRate, int maxQuantumFrames, AudioRenderFill fill, out string reason);
-}
-
-/// <summary>The platform dispatch for audio rendering: Windows gets the WASAPI factory; a platform with no render
-/// backend gets <see langword="null"/> (the consumer's device service simply never starts — the non-Windows posture
-/// is a null factory seam, not a stub device).</summary>
-public static class AudioRenderPlatform {
-    /// <summary>Creates the platform's render-device factory, or <see langword="null"/> when the platform has no
-    /// render backend.</summary>
-    public static IAudioRenderDeviceFactory? CreateFactory() =>
-        (OperatingSystem.IsWindows() ? new WasapiAudioRenderDeviceFactory() : null);
 }

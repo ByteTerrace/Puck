@@ -27,7 +27,6 @@ internal sealed class AcceptanceRomStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         $"acceptance-{m_group}";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.B;

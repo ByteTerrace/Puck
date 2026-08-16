@@ -10,7 +10,6 @@ internal sealed class SaveRoundTripStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "save-round-trip";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

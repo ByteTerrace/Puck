@@ -11,10 +11,9 @@ namespace Puck.AdvancedGamingBrick;
 /// beyond the component references, which is what lets a snapshot capture the machine completely.
 /// </para>
 /// </summary>
-public sealed class AdvancedGamingBrickMachine {
+public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     /// <summary>The address a cartridge begins executing from on the Advanced GamingBrick.</summary>
     public const uint CartridgeEntryPoint = 0x08000000u;
-
     /// <summary>Master cycles per frame (228 scanlines × 1232 dots/scanline).</summary>
     public const int CyclesPerFrame = (228 * 1232);
 
@@ -31,6 +30,7 @@ public sealed class AdvancedGamingBrickMachine {
     private readonly AgbCartridge m_cartridge;
     private readonly AgbMachineIdentity m_identity;
     private readonly StateWriter m_stateWriter = new(capacity: 4096);
+
     private ISnapshotable[]? m_snapshotables;
 
     /// <summary>Creates the machine from its subsystems (all injected from the per-machine scope).</summary>
@@ -93,25 +93,18 @@ public sealed class AdvancedGamingBrickMachine {
     /// and co-simulation callers gate on <see cref="AgbBiosIdentity.IsCycleParityTrustworthy"/>; the demo surfaces
     /// <see cref="AgbBiosIdentity.Description"/> in its status line.</summary>
     public AgbBiosIdentity BiosIdentity { get; }
-
     /// <summary>Gets the CPU core.</summary>
     public IArmCpu Cpu => m_cpu;
-
     /// <summary>Gets the system bus.</summary>
     public IAgbBus Bus => m_bus;
-
     /// <summary>Gets the picture-processing unit.</summary>
     public IAgbPpu Ppu => m_ppu;
-
     /// <summary>Gets the audio-processing unit.</summary>
     public IAgbApu Apu => m_apu;
-
     /// <summary>Gets the identity a snapshot of this machine is stamped with (format version + BIOS/ROM fingerprint).</summary>
     public AgbMachineIdentity Identity => m_identity;
-
     /// <summary>Gets the current master-clock cycle counter.</summary>
     public long Cycles => m_scheduler.Now;
-
     /// <summary>Gets the most recent 240×160 frame as packed 0xAARRGGBB pixels.</summary>
     public ReadOnlySpan<uint> Framebuffer => m_ppu.Framebuffer;
 
@@ -119,24 +112,20 @@ public sealed class AdvancedGamingBrickMachine {
     public void DirectBoot() {
         m_cpu.SetupDirectBoot(entryPoint: CartridgeEntryPoint);
     }
-
     /// <summary>Sets the KEYINPUT register (active-low: clear bit = pressed). Bit layout: 0=A, 1=B, 2=Select,
     /// 3=Start, 4=Right, 5=Left, 6=Up, 7=Down, 8=R, 9=L.</summary>
     public void SetKeyInput(ushort keys) {
         m_concreteBus?.SetKeyInput(keys: keys);
     }
-
     /// <summary>Executes one instruction (or a pending exception entry).</summary>
     public void Step() {
         m_cpu.Step();
     }
-
     /// <summary>Runs the machine for one full frame (~280,896 master cycles). Returns the number of
     /// instructions executed.</summary>
     public int RunFrame() {
         return RunCycles(cycles: CyclesPerFrame);
     }
-
     /// <summary>Advances the machine by an exact master-cycle budget — the seam a host engine drives, handing in the
     /// precise cycle count its frame's tick budget bought so emulated time tracks the deterministic tick accumulator
     /// rather than the produced-frame cadence (the Advanced GamingBrick analogue of HumbleGamingBrick's
@@ -164,7 +153,6 @@ public sealed class AdvancedGamingBrickMachine {
 
         return steps;
     }
-
     /// <summary>Captures the machine's entire mutable state at the current instant into a self-contained snapshot that
     /// aliases nothing live. Restore it into this machine to rewind. A component's own <see cref="ISnapshotable"/>
     /// serializes its state; the scheduler's master clock is written first, so a restore repositions the clock before
@@ -210,7 +198,6 @@ public sealed class AdvancedGamingBrickMachine {
             )
         );
     }
-
     /// <summary>Serializes the machine's entire mutable state into a writer, scheduler first, then each component in the
     /// fixed order — but without the section table or a materialized snapshot image. The zero-copy producer half of a
     /// pooled fork: the sibling reads it straight back through <see cref="RestoreState"/>.</summary>
@@ -225,7 +212,6 @@ public sealed class AdvancedGamingBrickMachine {
             component.SaveState(writer: writer);
         }
     }
-
     /// <summary>Reads the machine's entire mutable state back from a reader positioned at the start of a serialized
     /// image, repositioning the master clock (scheduler first, so peripherals re-arm onto a clean event queue) and every
     /// component — the shared body of both <see cref="Restore"/> and a pooled fork. It performs no identity check
@@ -242,7 +228,6 @@ public sealed class AdvancedGamingBrickMachine {
             component.LoadState(reader: reader);
         }
     }
-
     /// <summary>Replaces this machine's entire state with a snapshot's, repositioning the master clock and every
     /// component. Rejects a snapshot whose machine identity (format version / BIOS / ROM) does not match this
     /// machine, and faults if the restore does not consume the snapshot exactly — either signals a save/load field

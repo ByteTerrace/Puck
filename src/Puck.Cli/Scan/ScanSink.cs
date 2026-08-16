@@ -14,13 +14,13 @@ internal static class ScanSink {
 
         var jsonlPath = Path.Combine(path1: options.OutDirectory, path2: $"{name}.jsonl");
 
-        File.WriteAllText(path: jsonlPath, contents: jsonl);
+        File.WriteAllText(contents: jsonl, path: jsonlPath);
         Console.Error.WriteLine(value: $"scan: wrote {jsonlPath}");
 
         if (options.Grouped) {
             var groupedPath = Path.Combine(path1: options.OutDirectory, path2: $"{name}.grouped.json");
 
-            File.WriteAllText(path: groupedPath, contents: grouped);
+            File.WriteAllText(contents: grouped, path: groupedPath);
             Console.Error.WriteLine(value: $"scan: wrote {groupedPath}");
         }
     }

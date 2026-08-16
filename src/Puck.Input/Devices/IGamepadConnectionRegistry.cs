@@ -16,7 +16,6 @@ public interface IGamepadConnectionRegistry {
     /// <param name="connectionFactory">Builds the connection from its allocated zero-based player index.</param>
     /// <returns>The registered connection.</returns>
     IGamepadConnection Register(Func<int, IGamepadConnection> connectionFactory);
-
     /// <summary>Removes a previously registered connection from the tracked set (the caller disposes it).</summary>
     /// <param name="connection">The connection to stop tracking.</param>
     void Unregister(IGamepadConnection connection);

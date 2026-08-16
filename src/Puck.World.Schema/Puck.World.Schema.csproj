@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <PropertyGroup>
+        <!-- Document JSON uses reflection-based source-generated metadata, and inline creation/audio/synth payloads
+             select runtime types. -->
+        <IsAotCompatible>false</IsAotCompatible>
+    </PropertyGroup>
+    <!--
+        Puck.World.Schema — what a world IS: the document model, physically split out of Puck.World (headless P1) so
+        the shape the sim runs on cannot itself reach presentation: this project cannot see a GPU backend, a
+        renderer, Puck.SdfVm, Puck.Overlays, Puck.Input, Puck.World.Server, or Puck.World.Protocol, so nothing built
+        on it can accidentally couple document parsing to a window or to the wire (it DOES reach the field-as-data
+        half of the SDF engine, Puck.SignedDistance, transitively through Puck.World.Forge — the compiled program model and
+        its capacity constants, never the GPU renderer). It carries WorldDefinition and
+        every section record nested under it (including the admission section's entries/grants/disclosure-tier
+        vocabulary and the channel/intent vector a document's motion/kit rows compile against — both of which the
+        document embeds directly, so they live here rather than in the wire-vocabulary project even though their
+        namespace stays Puck.World.Protocol), WorldDefinitionValidator, WorldDefinitionSerialization/WorldJsonPayload
+        (the JSON seams document and payload parsing shares), WorldDocumentBasis (the basis-chain composer),
+        WorldDefinitionFileSource/WorldDefinitionLoader (the load/resolve boundary), the neighbour resolvers, and the
+        deterministic-hash/schema/QR support a document field validates against. A member that would need Puck.Input
+        (the engine-default binding document, the live command/channel vocabulary check) or the mutation-kind name
+        catalog (Puck.World.Protocol's own reflection over WorldMutation) crosses through an injection seam
+        (BindingVocabularyHook, MutationKindVocabularyHook) the composition root wires with a module initializer,
+        rather than a direct reference. Authored body colliders compile here into Puck.Physics' fixed collider
+        vocabulary; generic collision geometry stays in Physics. Puck.World.Protocol references this project for the
+        document shapes a submission carries or a grant addresses; Puck.World.Server and Puck.World reference it
+        directly too.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <!-- The signed-attestation/trust-list/verifier machinery (docs/vision.md, "Signed attestation") —
+             the admission section's WorldAdmissionDoor verifies a connecting peer's claim against the document's
+             own admission trust list through this, off the tick thread, at the TCP hello boundary. Leaf contracts
+             and data, so this edge introduces no new layer dependency. -->
+        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
+        <!-- Shared font catalog and Unicode-range authoring contracts. Puck.Text also owns the in-process generator,
+             but this document assembly consumes only its data contracts; rasterization is invoked by presentation. -->
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+        <!-- The puck.creation.v1/puck.audio.v1/puck.synth.v1 document families WorldDefinition embeds (creations,
+             speakers, tunes) and their canonicalize boundary. -->
+        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
+    </ItemGroup>
+</Project>

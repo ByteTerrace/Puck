@@ -19,13 +19,13 @@ namespace Puck.DirectX;
 public sealed class DirectXGpuSurfaceTransferFactory : IGpuSurfaceTransferFactory {
     /// <inheritdoc/>
     public IGpuSurfaceReadback CreateReadback(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSurfaceReadback(deviceContext: (IDirectXDeviceContext)deviceContext);
+        new DirectXGpuSurfaceReadback(deviceContext: ((IDirectXDeviceContext)deviceContext));
     /// <inheritdoc/>
     public IGpuSurfaceUpload CreateUpload(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSurfaceUpload(upload: new DirectXSurfaceUpload(deviceContext: (IDirectXDeviceContext)deviceContext));
+        new DirectXGpuSurfaceUpload(upload: new DirectXSurfaceUpload(deviceContext: ((IDirectXDeviceContext)deviceContext)));
     /// <inheritdoc/>
     public IGpuSurfaceImport CreateImport(IGpuDeviceContext deviceContext) =>
-        new DirectXGpuSurfaceImport(deviceContext: (IDirectXDeviceContext)deviceContext);
+        new DirectXGpuSurfaceImport(deviceContext: ((IDirectXDeviceContext)deviceContext));
 }
 
 [SupportedOSPlatform("windows10.0.10240")]
@@ -55,12 +55,12 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     ) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         EnsureReadbackBuffer(bytesPerPixel: bytesPerPixel, device: device, height: height, width: width);
         RecordCopyCommandList(commandAllocator: out var commandAllocator, commandList: out var commandList, device: device, format: format, height: height, sourceImageHandle: sourceImageHandle, width: width);
 
-        var executable = (ID3D12CommandList*)commandList;
+        var executable = ((ID3D12CommandList*)commandList);
 
         ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
         ((IGpuDeviceContext)deviceContext).WaitIdle();
@@ -84,14 +84,14 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             throw new InvalidOperationException(message: "A readback is already in flight; map it with MapPixels before submitting another.");
         }
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         EnsureReadbackBuffer(bytesPerPixel: bytesPerPixel, device: device, height: height, width: width);
         EnsureFence(device: device);
         RecordCopyCommandList(commandAllocator: out var commandAllocator, commandList: out var commandList, device: device, format: format, height: height, sourceImageHandle: sourceImageHandle, width: width);
 
-        var executable = (ID3D12CommandList*)commandList;
-        var queue = (ID3D12CommandQueue*)deviceContext.CommandQueueHandle;
+        var executable = ((ID3D12CommandList*)commandList);
+        var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
 
         queue->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
 
@@ -101,7 +101,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_deferredCommandList = commandList;
         m_pendingFenceValue = ++m_fenceValue;
 
-        queue->Signal(Value: m_pendingFenceValue, pFence: (ID3D12Fence*)m_fence);
+        queue->Signal(Value: m_pendingFenceValue, pFence: ((ID3D12Fence*)m_fence));
 
         m_readInFlight = true;
     }
@@ -145,7 +145,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         // first (mirrors the Vulkan readback's TryWaitIdle). GetCompletedValue never throws, and a removed device
         // returns UINT64_MAX (>= pending) so this exits immediately rather than hanging teardown.
         if (m_readInFlight && (0 != m_fence)) {
-            var fence = (ID3D12Fence*)m_fence;
+            var fence = ((ID3D12Fence*)m_fence);
 
             while (fence->GetCompletedValue() < m_pendingFenceValue) {
                 // Spin out the already-submitted copy; this waits only the GPU, never the sim clock.
@@ -171,7 +171,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         var packedRowBytes = (width * bytesPerPixel);
         var paddedRowPitch = ((packedRowBytes + TextureRowPitchAlignment) - 1) & ~(TextureRowPitchAlignment - 1);
-        var readbackByteLength = ((ulong)paddedRowPitch * height);
+        var readbackByteLength = (((ulong)paddedRowPitch) * height);
         var heapProperties = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK };
         var bufferDesc = new D3D12_RESOURCE_DESC {
             DepthOrArraySize = 1,
@@ -192,12 +192,12 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
             InitialResourceState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
             pDesc: in bufferDesc,
             pHeapProperties: in heapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &buf,
             riidResource: in resourceIid
         );
 
-        m_readbackBuffer = (nint)buf;
+        m_readbackBuffer = ((nint)buf);
         m_readbackSize = readbackByteLength;
         m_paddedRowPitch = paddedRowPitch;
         m_currentWidth = width;
@@ -205,31 +205,30 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         m_currentBytesPerPixel = bytesPerPixel;
         m_outputBuffer = new byte[(packedRowBytes * height)];
     }
-
     // Creates a per-copy allocator + list and records barrier → CopyTextureRegion → barrier → Close: the source image
     // (left in its pixel-shader-resource state) is copied into the readback buffer's placed footprint.
     private void RecordCopyCommandList(ID3D12Device* device, nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, out nint commandAllocator, out nint commandList) {
         var dxgiFormat = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format);
 
         device->CreateCommandAllocator(
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
+            ppCommandAllocator: out var ca,
             riid: ID3D12CommandAllocator.IID_Guid,
-            ppCommandAllocator: out var ca
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
-        commandAllocator = (nint)ca;
+        commandAllocator = ((nint)ca);
 
         device->CreateCommandList(
             nodeMask: 0,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
-            pCommandAllocator: (ID3D12CommandAllocator*)commandAllocator,
+            pCommandAllocator: ((ID3D12CommandAllocator*)commandAllocator),
             pInitialState: null,
+            ppCommandList: out var cl,
             riid: ID3D12GraphicsCommandList.IID_Guid,
-            ppCommandList: out var cl
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
         );
-        commandList = (nint)cl;
+        commandList = ((nint)cl);
 
-        var cmdList = (ID3D12GraphicsCommandList*)commandList;
-        var sourceResource = (ID3D12Resource*)sourceImageHandle;
+        var cmdList = ((ID3D12GraphicsCommandList*)commandList);
+        var sourceResource = ((ID3D12Resource*)sourceImageHandle);
 
         var toCopySource = new D3D12_RESOURCE_BARRIER {
             Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
@@ -246,7 +245,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         var destLocation = new D3D12_TEXTURE_COPY_LOCATION {
             Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-            pResource = (ID3D12Resource*)m_readbackBuffer,
+            pResource = ((ID3D12Resource*)m_readbackBuffer),
         };
 
         destLocation.Anonymous.PlacedFootprint = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT {
@@ -266,7 +265,7 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         srcLocation.Anonymous.SubresourceIndex = 0;
 
-        cmdList->CopyTextureRegion(DstX: 0, DstY: 0, DstZ: 0, pDst: in destLocation, pSrc: in srcLocation, pSrcBox: (D3D12_BOX?)null);
+        cmdList->CopyTextureRegion(DstX: 0, DstY: 0, DstZ: 0, pDst: in destLocation, pSrc: in srcLocation, pSrcBox: ((D3D12_BOX?)null));
 
         var toShaderResource = new D3D12_RESOURCE_BARRIER {
             Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
@@ -282,7 +281,6 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         cmdList->ResourceBarrier(NumBarriers: 1, pBarriers: &toShaderResource);
         cmdList->Close();
     }
-
     // Maps the readback buffer, un-pads each row into the tightly packed output buffer, and unmaps. Shared by the
     // blocking Read (immediately after the wait) and the pipelined MapPixels (after the fence poll reports complete).
     private ReadOnlyMemory<byte> MapAndUnpackRows() {
@@ -291,16 +289,16 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         void* mapped;
 
-        ((ID3D12Resource*)m_readbackBuffer)->Map(Subresource: 0, pReadRange: (D3D12_RANGE*)null, ppData: &mapped);
+        ((ID3D12Resource*)m_readbackBuffer)->Map(Subresource: 0, pReadRange: ((D3D12_RANGE*)null), ppData: &mapped);
 
         try {
-            var source = new ReadOnlySpan<byte>(pointer: mapped, length: checked((int)m_readbackSize));
+            var source = new ReadOnlySpan<byte>(length: checked((int)m_readbackSize), pointer: mapped);
             var output = m_outputBuffer!.AsSpan();
 
             for (var row = 0u; (row < height); row++) {
                 source
-                    .Slice(start: (int)(row * m_paddedRowPitch), length: (int)packedRowBytes)
-                    .CopyTo(destination: output.Slice(start: (int)(row * packedRowBytes), length: (int)packedRowBytes));
+                    .Slice(length: ((int)packedRowBytes), start: ((int)(row * m_paddedRowPitch)))
+                    .CopyTo(destination: output.Slice(length: ((int)packedRowBytes), start: ((int)(row * packedRowBytes))));
             }
         } finally {
             var writtenRange = new D3D12_RANGE { Begin = 0, End = 0, };
@@ -310,7 +308,6 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
 
         return m_outputBuffer!;
     }
-
     // Lazily creates the completion fence for the pipelined SubmitRead path (mirrors DirectXDeviceContext's idle
     // fence, minus the event — the poll reads GetCompletedValue directly). A no-op once created; released in ReleaseBuffer.
     private void EnsureFence(ID3D12Device* device) {
@@ -322,12 +319,12 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
         // as an exception here — caught by BakePreviewService.Tick and degraded to the last image — rather than leaving
         // m_fence at 0 for a later null Signal.
         device->CreateFence(
-            InitialValue: 0,
             Flags: default,
-            riid: ID3D12Fence.IID_Guid,
-            ppFence: out var fence
+            InitialValue: 0,
+            ppFence: out var fence,
+            riid: ID3D12Fence.IID_Guid
         );
-        m_fence = (nint)fence;
+        m_fence = ((nint)fence);
         m_fenceValue = 0;
     }
     private void ReleaseBuffer() {
@@ -405,9 +402,10 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
     // (the exportable texture is stable), so without this each call would OpenSharedHandle again and leak an
     // ID3D12Resource per frame. Mirrors VulkanSurfaceImport's idempotent caching.
     private readonly Dictionary<nint, (nint Resource, GCHandle Token)> m_imports = [];
+
     private bool m_disposed;
 
-    public nint Import(
+    public GpuImportedSurface Import(
         IGpuDeviceContext deviceContextArg,
         nint sharedHandle,
         GpuPixelFormat format,
@@ -417,30 +415,36 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
         if (m_imports.TryGetValue(key: sharedHandle, value: out var cached)) {
-            return GCHandle.ToIntPtr(value: cached.Token);
+            return new GpuImportedSurface(
+                ImageHandle: cached.Resource,
+                ImageViewHandle: GCHandle.ToIntPtr(value: cached.Token)
+            );
         }
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
 
         void* resource;
         var resourceIid = ID3D12Resource.IID_Guid;
 
         device->OpenSharedHandle(
-            NTHandle: new Windows.Win32.Foundation.HANDLE(value: (void*)sharedHandle),
+            NTHandle: new Windows.Win32.Foundation.HANDLE(value: ((void*)sharedHandle)),
             riid: &resourceIid,
             ppvObj: &resource
         );
 
         var imageView = new DirectXImageView {
             Format = DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
-            ResourceHandle = (nint)resource,
+            ResourceHandle = ((nint)resource),
         };
 
         var token = GCHandle.Alloc(value: imageView);
 
-        m_imports[sharedHandle] = ((nint)resource, token);
+        m_imports[sharedHandle] = (((nint)resource), token);
 
-        return GCHandle.ToIntPtr(value: token);
+        return new GpuImportedSurface(
+            ImageHandle: ((nint)resource),
+            ImageViewHandle: GCHandle.ToIntPtr(value: token)
+        );
     }
     public void Dispose() {
         if (m_disposed) {

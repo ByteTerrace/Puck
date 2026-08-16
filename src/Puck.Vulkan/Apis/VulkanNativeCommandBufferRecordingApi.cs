@@ -90,7 +90,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         var byteCount = Encoding.UTF8.GetByteCount(s: label);
         Span<byte> nameBytes = stackalloc byte[(byteCount + 1)];
 
-        Encoding.UTF8.GetBytes(chars: label, bytes: nameBytes);
+        Encoding.UTF8.GetBytes(bytes: nameBytes, chars: label);
         nameBytes[byteCount] = 0;
 
         fixed (byte* labelName = nameBytes) {
@@ -167,8 +167,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             commandBufferHandle,
             0,
             1,
-            (nint)bufferHandles,
-            (nint)offsets
+            ((nint)bufferHandles),
+            ((nint)offsets)
         );
     }
     /// <inheritdoc/>
@@ -207,7 +207,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             pipelineLayoutHandle,
             0,
             1,
-            (nint)descriptorSetHandles,
+            ((nint)descriptorSetHandles),
             0,
             0
         );
@@ -255,8 +255,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 GraphicsPipelineBindPoint,
                 pipelineLayoutHandle,
                 0,
-                (uint)descriptorSetHandles.Length,
-                (nint)descriptorSetHandlesPointer,
+                ((uint)descriptorSetHandles.Length),
+                ((nint)descriptorSetHandlesPointer),
                 0,
                 0
             );
@@ -282,8 +282,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 ComputePipelineBindPoint,
                 pipelineLayoutHandle,
                 0,
-                (uint)descriptorSetHandles.Length,
-                (nint)descriptorSetHandlesPointer,
+                ((uint)descriptorSetHandles.Length),
+                ((nint)descriptorSetHandlesPointer),
                 0,
                 0
             );
@@ -413,7 +413,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             destinationStageMask,
             0,
             1,
-            (nint)(&barrier),
+            ((nint)(&barrier)),
             0,
             0,
             0,
@@ -451,9 +451,9 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             commandBufferHandle,
             imageHandle,
             imageLayout,
-            (nint)(&clearColor),
+            ((nint)(&clearColor)),
             1,
-            (nint)(&range)
+            ((nint)(&range))
         );
     }
     /// <inheritdoc/>
@@ -648,8 +648,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 z: 0
             ),
             DstOffset1 = new VkOffset3D(
-                x: (int)destinationWidth,
-                y: (int)destinationHeight,
+                x: ((int)destinationWidth),
+                y: ((int)destinationHeight),
                 z: 1
             ),
             DstSubresource = new VkImageSubresourceLayers {
@@ -664,8 +664,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 z: 0
             ),
             SrcOffset1 = new VkOffset3D(
-                x: (int)sourceWidth,
-                y: (int)sourceHeight,
+                x: ((int)sourceWidth),
+                y: ((int)sourceHeight),
                 z: 1
             ),
             SrcSubresource = new VkImageSubresourceLayers {
@@ -752,7 +752,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 stageFlags,
                 offset,
                 checked((uint)data.Length),
-                (nint)dataPointer
+                ((nint)dataPointer)
             );
         }
     }
@@ -797,7 +797,7 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
             commandBufferHandle,
             0,
             1,
-            (nint)scissors
+            ((nint)scissors)
         );
     }
     /// <inheritdoc/>
@@ -917,29 +917,29 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                BeginCommandBuffer = (delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBeginCommandBuffer"u8),
-                CmdBindPipeline = (delegate* unmanaged[Cdecl]<nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindPipeline"u8),
-                CmdBindVertexBuffers = (delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindVertexBuffers"u8),
-                CmdBindDescriptorSets = (delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindDescriptorSets"u8),
-                CmdBeginRenderPass = (delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBeginRenderPass"u8),
-                CmdDraw = (delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDraw"u8),
-                CmdDispatch = (delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDispatch"u8),
-                CmdDispatchIndirect = (delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDispatchIndirect"u8),
-                CmdSetScissor = (delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdSetScissor"u8),
-                CmdPipelineBarrier = (delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPipelineBarrier"u8),
-                CmdClearColorImage = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdClearColorImage"u8),
-                CmdCopyImageToBuffer = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImageToBuffer"u8),
-                CmdCopyBufferToImage = (delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyBufferToImage"u8),
-                CmdCopyImage = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImage"u8),
-                CmdBlitImage = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBlitImage"u8),
-                CmdPushConstants = (delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPushConstants"u8),
-                CmdEndRenderPass = (delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdEndRenderPass"u8),
-                EndCommandBuffer = (delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkEndCommandBuffer"u8),
+                BeginCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferBeginInfo, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBeginCommandBuffer"u8)),
+                CmdBindPipeline = ((delegate* unmanaged[Cdecl]<nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindPipeline"u8)),
+                CmdBindVertexBuffers = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindVertexBuffers"u8)),
+                CmdBindDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBindDescriptorSets"u8)),
+                CmdBeginRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassBeginInfo, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBeginRenderPass"u8)),
+                CmdDraw = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDraw"u8)),
+                CmdDispatch = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDispatch"u8)),
+                CmdDispatchIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdDispatchIndirect"u8)),
+                CmdSetScissor = ((delegate* unmanaged[Cdecl]<nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdSetScissor"u8)),
+                CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPipelineBarrier"u8)),
+                CmdClearColorImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdClearColorImage"u8)),
+                CmdCopyImageToBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImageToBuffer"u8)),
+                CmdCopyBufferToImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyBufferToImage"u8)),
+                CmdCopyImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdCopyImage"u8)),
+                CmdBlitImage = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, uint, uint, nint, uint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdBlitImage"u8)),
+                CmdPushConstants = ((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPushConstants"u8)),
+                CmdEndRenderPass = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdEndRenderPass"u8)),
+                EndCommandBuffer = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkEndCommandBuffer"u8)),
                 // Optional (VK_EXT_debug_utils): resolves to null when the extension is not enabled, leaving the label
                 // methods as no-ops. The command-buffer label commands are device-child, so vkGetDeviceProcAddr resolves
                 // them once the instance extension is on.
-                CmdBeginDebugUtilsLabel = (delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdBeginDebugUtilsLabelEXT"u8),
-                CmdEndDebugUtilsLabel = (delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdEndDebugUtilsLabelEXT"u8),
+                CmdBeginDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, in VkDebugUtilsLabelExt, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdBeginDebugUtilsLabelEXT"u8)),
+                CmdEndDebugUtilsLabel = ((delegate* unmanaged[Cdecl]<nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdEndDebugUtilsLabelEXT"u8)),
             }
         );
     }

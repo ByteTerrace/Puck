@@ -13,14 +13,13 @@ namespace Puck.AdvancedGamingBrick;
 /// <param name="HasTilt">Whether the cartridge exposes the address-mapped tilt sensor at ROM offsets
 /// <c>0x8000</c>-<c>0x8500</c>. Defaults to <see langword="false"/> when absent.</param>
 public readonly record struct AgbGameOverride(CartridgeBackup? Backup, bool? HasRtc, bool HasRumble = false, bool HasSolar = false, bool HasTilt = false);
-
 /// <summary>
 /// A small hand-authored table keyed by the 4-character cartridge game code (ROM header offset 0xAC) that corrects
 /// save-type / RTC detection <b>before</b> the <see cref="AgbCartridge"/> string-scan fallback. Every mainstream
 /// emulator keeps one — the string scan has a known-broken minority (anti-piracy carts that embed decoy save strings,
 /// the retro-classics series that baits with SRAM strings but is EEPROM-backed) that only an exact-code override
 /// resolves. The facts are public documentation (game codes are printed in the cartridge header; the behaviours are
-/// widely documented); no external emulator's data file was copied. See docs/ACKNOWLEDGMENTS.md for citations.
+/// widely documented); no external emulator's data file was copied. See ACKNOWLEDGMENTS.md for citations.
 /// <para>
 /// GPIO sensor presence (solar/tilt/gyro/rumble) keys off the same 4-character code. Game codes are public
 /// cartridge-header data; only the mapping from code to modeled hardware is encoded here. Any curated fixed-address
@@ -153,7 +152,7 @@ public static class AgbGameOverrides {
     private static void Add(Dictionary<uint, AgbGameOverride> table, string code, AgbGameOverride entry) =>
         table[Key(code: code)] = entry;
     private static uint Key(string code) =>
-        ((uint)(byte)code[0] << 24) | ((uint)(byte)code[1] << 16) | ((uint)(byte)code[2] << 8) | (byte)code[3];
+        (((uint)((byte)code[0])) << 24) | (((uint)((byte)code[1])) << 16) | (((uint)((byte)code[2])) << 8) | ((byte)code[3]);
 
     /// <summary>Looks up the override for a ROM by its header game code. Returns the exact-code entry when present,
     /// then the Classic NES / Famicom Mini family rule (game code beginning with <c>'F'</c>), else <see
@@ -166,7 +165,7 @@ public static class AgbGameOverrides {
             return null;
         }
 
-        var code = ((uint)rom[0xAC] << 24) | ((uint)rom[0xAD] << 16) | ((uint)rom[0xAE] << 8) | rom[0xAF];
+        var code = (((uint)rom[0xAC]) << 24) | (((uint)rom[0xAD]) << 16) | (((uint)rom[0xAE]) << 8) | rom[0xAF];
 
         if (OverrideTable.TryGetValue(
             key: code,
@@ -178,7 +177,7 @@ public static class AgbGameOverrides {
         // Classic NES Series / Famicom Mini: this whole cartridge family was assigned the 'F' first game-code letter,
         // and the carts bait save detection with an SRAM probe while actually being EEPROM-backed (a mis-detect throws
         // "Game Pak Error"). Force EEPROM for the family. This is documented behaviour, not a per-title guess.
-        if (rom[0xAC] == (byte)'F') {
+        if (rom[0xAC] == ((byte)'F')) {
             return new AgbGameOverride(
                 Backup: CartridgeBackup.Eeprom,
                 HasRtc: false

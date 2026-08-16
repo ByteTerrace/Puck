@@ -32,15 +32,26 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
     /// complemented pattern match outside every named predicate rather than silently stopping at the named ones.</remarks>
     public static MintermAlphabet<TPredicate, TRefinement> Create(TRefinement refinement, ReadOnlySpan<TPredicate> predicates) {
         var minterms = new TPredicate[AlphabetRefinement.MaximumMintermCount];
-        var count = refinement.Minterms(predicates: predicates, minterms: minterms);
+        var count = refinement.Minterms(
+            minterms: minterms,
+            predicates: predicates
+        );
 
         if (count < 0) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(predicates), message: "The minterm partition of that predicate set exceeds the letter cap.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(predicates),
+                message: "The minterm partition of that predicate set exceeds the letter cap."
+            );
         }
 
-        return new(refinement: refinement, minterms: minterms.AsSpan(start: 0, length: count).ToArray());
+        return new(
+            refinement: refinement,
+            minterms: minterms.AsSpan(
+                length: count,
+                start: 0
+            ).ToArray()
+        );
     }
-
     /// <summary>Returns the letters a predicate accepts, as a mask over letter numbers.</summary>
     /// <param name="predicate">The predicate; it must be one this alphabet was refined against, or a union of blocks
     /// of the partition, since only those are exactly covered.</param>
@@ -58,9 +69,15 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
         for (var letter = 0; (letter < LetterCount); ++letter) {
             var block = m_minterms[letter];
 
-            if (!m_refinement.IsSatisfiable(predicate: m_refinement.Conjoin(left: block, right: predicate))) { continue; }
+            if (!m_refinement.IsSatisfiable(predicate: m_refinement.Conjoin(
+                left: block,
+                right: predicate
+            ))) { continue; }
 
-            if (m_refinement.IsSatisfiable(predicate: m_refinement.Conjoin(left: block, right: rejected))) {
+            if (m_refinement.IsSatisfiable(predicate: m_refinement.Conjoin(
+                left: block,
+                right: rejected
+            ))) {
                 throw new ArgumentException(
                     message: $"Letter {letter} is split by the predicate {predicate}: the block accepts tokens the predicate rejects, so no letter mask names that predicate. A predicate must be a union of whole letters.",
                     paramName: nameof(predicate)
@@ -78,7 +95,10 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
     /// <exception cref="ArgumentOutOfRangeException">The letter number is outside <see cref="LetterCount"/>.</exception>
     public TPredicate Minterm(int letter) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: letter);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: letter, other: LetterCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: letter,
+            other: LetterCount
+        );
 
         return m_minterms[letter];
     }
@@ -90,7 +110,10 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
     /// which are disjoint, so the first accepting block is the answer.</remarks>
     public bool TryLetterOf(ulong token, out int letter) {
         for (var index = 0; (index < LetterCount); ++index) {
-            if (m_refinement.Contains(predicate: m_minterms[index], token: token)) {
+            if (m_refinement.Contains(
+                predicate: m_minterms[index],
+                token: token
+            )) {
                 letter = index;
 
                 return true;
@@ -102,7 +125,6 @@ public sealed class MintermAlphabet<TPredicate, TRefinement>
         return false;
     }
 }
-
 /// <summary>
 /// The pattern surface: a language IS an element of the free monoid on the alphabet's letters, so union is the
 /// algebra's sum, concatenation is its product, and iteration is its guarded sum over all lengths. There is no pattern
@@ -157,6 +179,27 @@ public sealed class TokenPattern<TValue, TOps>
     /// <summary>Gets the longest token span the patterns represent, or zero when the monoid is left free.</summary>
     public int Window { get; }
 
+    /// <summary>Concatenates two patterns.</summary>
+    /// <param name="left">The pattern matched first.</param>
+    /// <param name="right">The pattern matched after it.</param>
+    /// <returns>The pattern matching a span split into a left match followed by a right match — the algebra's product,
+    /// which over a counting material sums the ways to split and over a tropical one takes the best split.</returns>
+    /// <exception cref="ArgumentException">An operand belongs to another pattern algebra.</exception>
+    public PresentedAlgebra<TValue, TOps>.Element Concatenate(in PresentedAlgebra<TValue, TOps>.Element left, in PresentedAlgebra<TValue, TOps>.Element right) {
+        Algebra.RequireOwned(
+            value: left,
+            paramName: nameof(left)
+        );
+        Algebra.RequireOwned(
+            value: right,
+            paramName: nameof(right)
+        );
+
+        return Algebra.Multiply(
+            left: left,
+            right: right
+        );
+    }
     /// <summary>Creates the pattern surface of a letter alphabet.</summary>
     /// <param name="letterCount">The number of letters, at most sixty-four.</param>
     /// <param name="window">The longest token span to represent, or zero to leave the monoid free.</param>
@@ -171,23 +214,14 @@ public sealed class TokenPattern<TValue, TOps>
         ArgumentOutOfRangeException.ThrowIfNegative(value: window);
 
         return new(
-            algebra: PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.FreeMonoid<TValue, TOps>(letterCount: letterCount, material: material, windowDegree: window)),
+            algebra: PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.FreeMonoid<TValue, TOps>(
+                letterCount: letterCount,
+                material: material,
+                windowDegree: window
+            )),
             letterCount: letterCount,
             window: window
         );
-    }
-
-    /// <summary>Concatenates two patterns.</summary>
-    /// <param name="left">The pattern matched first.</param>
-    /// <param name="right">The pattern matched after it.</param>
-    /// <returns>The pattern matching a span split into a left match followed by a right match — the algebra's product,
-    /// which over a counting material sums the ways to split and over a tropical one takes the best split.</returns>
-    /// <exception cref="ArgumentException">An operand belongs to another pattern algebra.</exception>
-    public PresentedAlgebra<TValue, TOps>.Element Concatenate(in PresentedAlgebra<TValue, TOps>.Element left, in PresentedAlgebra<TValue, TOps>.Element right) {
-        Algebra.RequireOwned(value: left, paramName: nameof(left));
-        Algebra.RequireOwned(value: right, paramName: nameof(right));
-
-        return Algebra.Multiply(left: left, right: right);
     }
     /// <summary>Differentiates a pattern by one letter.</summary>
     /// <param name="letter">The letter to differentiate by.</param>
@@ -199,9 +233,16 @@ public sealed class TokenPattern<TValue, TOps>
     /// prefix, which is exactly what collapses the twisted Leibniz sum to the leading occurrence and makes the residual
     /// the left quotient.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element Derivative(int letter, in PresentedAlgebra<TValue, TOps>.Element value) {
-        Algebra.RequireOwned(value: value, paramName: nameof(value));
+        Algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
-        return Algebra.Residual(symbol: letter, value: value, twist: ResidualTwist.Counit);
+        return Algebra.Residual(
+            symbol: letter,
+            value: value,
+            twist: ResidualTwist.Counit
+        );
     }
     /// <summary>Intersects two patterns.</summary>
     /// <param name="left">The first pattern.</param>
@@ -218,8 +259,14 @@ public sealed class TokenPattern<TValue, TOps>
     /// counts are small enough for the genuine pair-up.
     /// </remarks>
     public PresentedAlgebra<TValue, TOps>.Element Intersect(in PresentedAlgebra<TValue, TOps>.Element left, in PresentedAlgebra<TValue, TOps>.Element right) {
-        Algebra.RequireOwned(value: left, paramName: nameof(left));
-        Algebra.RequireOwned(value: right, paramName: nameof(right));
+        Algebra.RequireOwned(
+            value: left,
+            paramName: nameof(left)
+        );
+        Algebra.RequireOwned(
+            value: right,
+            paramName: nameof(right)
+        );
 
         var leftKeys = left.Keys;
         var material = m_material;
@@ -229,7 +276,10 @@ public sealed class TokenPattern<TValue, TOps>
         var leftIndex = 0;
         var rightIndex = 0;
 
-        while ((leftIndex < leftKeys.Length) && (rightIndex < rightKeys.Length)) {
+        while (
+            (leftIndex < leftKeys.Length) &&
+            (rightIndex < rightKeys.Length)
+        ) {
             var leftKey = leftKeys[leftIndex];
             var rightKey = rightKeys[rightIndex];
 
@@ -238,7 +288,10 @@ public sealed class TokenPattern<TValue, TOps>
             } else if (rightKey < leftKey) {
                 ++rightIndex;
             } else {
-                var value = material.Multiply(left: left.Coefficients[leftIndex++], right: right.Coefficients[rightIndex++]);
+                var value = material.Multiply(
+                    left: left.Coefficients[leftIndex++],
+                    right: right.Coefficients[rightIndex++]
+                );
 
                 if (material.IsZero(value: value)) { continue; }
 
@@ -260,8 +313,14 @@ public sealed class TokenPattern<TValue, TOps>
     /// <remarks>The predicate leaf, and the only constructor the refinement axis reaches: the kernel receives a mask of
     /// letter numbers and never sees a predicate.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element Predicate(ulong letters) {
-        if ((64 != LetterCount) && (0UL != (letters >>> LetterCount))) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(letters), message: "The mask names a letter this alphabet does not carry.");
+        if (
+            (64 != LetterCount) &&
+            (0UL != (letters >>> LetterCount))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(letters),
+                message: "The mask names a letter this alphabet does not carry."
+            );
         }
 
         var value = Algebra.Zero;
@@ -269,7 +328,10 @@ public sealed class TokenPattern<TValue, TOps>
         for (var letter = 0; (letter < LetterCount); ++letter) {
             if (0UL == (letters & (1UL << letter))) { continue; }
 
-            value = Algebra.Add(left: value, right: Algebra.Generator(symbol: letter));
+            value = Algebra.Add(
+                left: value,
+                right: Algebra.Generator(symbol: letter)
+            );
         }
 
         return value;
@@ -283,14 +345,28 @@ public sealed class TokenPattern<TValue, TOps>
     /// <remarks>It is the product with the weighted unit, so it runs through the same kernel and rounds once per
     /// returned coefficient exactly as every other product does.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element Scale(in PresentedAlgebra<TValue, TOps>.Element value, TValue weight) {
-        Algebra.RequireOwned(value: value, paramName: nameof(value));
+        Algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         var unit = Algebra.Identity;
         var charges = new TValue[unit.SupportCount];
 
-        for (var index = 0; (index < charges.Length); ++index) { charges[index] = m_material.Multiply(left: unit.Coefficients[index], right: weight); }
+        for (var index = 0; (index < charges.Length); ++index) {
+            charges[index] = m_material.Multiply(
+                left: unit.Coefficients[index],
+                right: weight
+            );
+        }
 
-        return Algebra.Multiply(left: Algebra.FromSupport(keys: unit.Keys, coefficients: charges), right: value);
+        return Algebra.Multiply(
+            left: Algebra.FromSupport(
+                keys: unit.Keys,
+                coefficients: charges
+            ),
+            right: value
+        );
     }
     /// <summary>Attempts to iterate a pattern — the sum of every number of repetitions, the empty span included.</summary>
     /// <param name="value">The pattern to iterate.</param>
@@ -316,9 +392,16 @@ public sealed class TokenPattern<TValue, TOps>
     /// </para>
     /// </remarks>
     public bool TryIterate(in PresentedAlgebra<TValue, TOps>.Element value, out PresentedAlgebra<TValue, TOps>.Element iterated, out SumClosureObstruction obstruction) {
-        Algebra.RequireOwned(value: value, paramName: nameof(value));
+        Algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
-        return Algebra.TrySumOverAllLengths(value: value, total: out iterated, obstruction: out obstruction);
+        return Algebra.TrySumOverAllLengths(
+            obstruction: out obstruction,
+            total: out iterated,
+            value: value
+        );
     }
     /// <summary>Attempts to read the weight a pattern gives one token span.</summary>
     /// <param name="value">The pattern.</param>
@@ -331,19 +414,31 @@ public sealed class TokenPattern<TValue, TOps>
     /// not a table lookup; it is the slow, structural readout, and <see cref="PatternMatcher{TValue, TOps}"/> is the
     /// one built for running.</remarks>
     public bool TryWeigh(in PresentedAlgebra<TValue, TOps>.Element value, ReadOnlySpan<int> letters, out TValue weight) {
-        Algebra.RequireOwned(value: value, paramName: nameof(value));
+        Algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         weight = m_material.Zero;
 
-        if ((0 != Window) && (letters.Length > Window)) { return false; }
+        if (
+            (0 != Window) &&
+            (letters.Length > Window)
+        ) { return false; }
 
         var word = Algebra.Identity;
 
         for (var index = 0; (index < letters.Length); ++index) {
-            word = Algebra.Multiply(left: word, right: Algebra.Generator(symbol: letters[index]));
+            word = Algebra.Multiply(
+                left: word,
+                right: Algebra.Generator(symbol: letters[index])
+            );
         }
 
-        weight = Algebra.Pair(covector: word, value: value);
+        weight = Algebra.Pair(
+            covector: word,
+            value: value
+        );
 
         return true;
     }
@@ -354,13 +449,21 @@ public sealed class TokenPattern<TValue, TOps>
     /// material adds the ways and over a tropical one takes the cheaper.</returns>
     /// <exception cref="ArgumentException">An operand belongs to another pattern algebra.</exception>
     public PresentedAlgebra<TValue, TOps>.Element Union(in PresentedAlgebra<TValue, TOps>.Element left, in PresentedAlgebra<TValue, TOps>.Element right) {
-        Algebra.RequireOwned(value: left, paramName: nameof(left));
-        Algebra.RequireOwned(value: right, paramName: nameof(right));
+        Algebra.RequireOwned(
+            value: left,
+            paramName: nameof(left)
+        );
+        Algebra.RequireOwned(
+            value: right,
+            paramName: nameof(right)
+        );
 
-        return Algebra.Add(left: left, right: right);
+        return Algebra.Add(
+            left: left,
+            right: right
+        );
     }
 }
-
 /// <summary>Complementation, which exists only where the material has a De Morgan complement.</summary>
 /// <remarks>
 /// It is a separate surface because that is what makes the gate a compile error rather than a documented footgun: the
@@ -393,7 +496,10 @@ public static class PatternComplement {
         var algebra = pattern.Algebra;
         var presentation = algebra.Presentation;
 
-        algebra.RequireOwned(value: value, paramName: nameof(value));
+        algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         if (!presentation.HasCompiledNormalFormBasis) {
             throw new InvalidOperationException(message: "A complement is taken against a finite basis, which a free monoid does not have.");
@@ -407,10 +513,15 @@ public static class PatternComplement {
         for (var key = 0; (key < count); ++key) {
             // An owner-less default has no material with which its indexer could manufacture zero. Once this operation
             // receives it, however, this pattern's material supplies the universal-zero interpretation.
-            coefficients[key] = material.Complement(value: ((0 == value.SupportCount) ? material.Zero : value[key]));
+            coefficients[key] = material.Complement(value: ((0 == value.SupportCount)
+                ? material.Zero
+                : value[key]));
             keys[key] = key;
         }
 
-        return algebra.FromSupport(keys: keys, coefficients: coefficients);
+        return algebra.FromSupport(
+            coefficients: coefficients,
+            keys: keys
+        );
     }
 }

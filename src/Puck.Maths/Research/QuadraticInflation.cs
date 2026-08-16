@@ -36,19 +36,29 @@ public readonly record struct QuadraticInflation {
 
     /// <summary>Gets the top-left entry of the substitution matrix.</summary>
     public long A { get; }
+    /// <summary>Gets the orientation-preserving modular element whose axis is the closed geodesic: the matrix itself for an even period, its square for an odd one, so the determinant is one either way.</summary>
+    /// <exception cref="OverflowException">A squared entry exceeds <see cref="long"/>.</exception>
+    public ModularTransform Axis =>
+        ((Determinant == 1L)
+            ? ModularTransform.Create(
+                a: A,
+                b: B,
+                c: C,
+                d: D
+            )
+            : ModularTransform.Create(
+                a: checked(((A * A) + (B * C))),
+                b: checked(((A * B) + (B * D))),
+                c: checked(((C * A) + (D * C))),
+                d: checked(((C * B) + (D * D)))
+            )
+        );
     /// <summary>Gets the top-right entry of the substitution matrix.</summary>
     public long B { get; }
     /// <summary>Gets the bottom-left entry of the substitution matrix.</summary>
     public long C { get; }
     /// <summary>Gets the bottom-right entry of the substitution matrix.</summary>
     public long D { get; }
-    /// <summary>Gets the length of the continued-fraction period — the number of factors composed into the matrix.</summary>
-    public int PeriodLength { get; }
-
-    /// <summary>Gets the trace <c>A + D</c> — the conjugacy invariant that fixes the inflation factor and, above two, marks the hyperbolic motion.</summary>
-    /// <exception cref="OverflowException">The sum of the diagonal exceeds <see cref="long"/>.</exception>
-    public long Trace =>
-        checked((A + D));
     /// <summary>Gets the determinant <c>A·D − B·C</c>, which is <c>(−1)</c> raised to <see cref="PeriodLength"/>: one for an even period, minus one for an odd period.</summary>
     /// <exception cref="OverflowException">A determinant intermediate exceeds <see cref="long"/>.</exception>
     public long Determinant =>
@@ -57,20 +67,15 @@ public readonly record struct QuadraticInflation {
     /// <exception cref="OverflowException">A radicand intermediate exceeds <see cref="long"/>.</exception>
     public long Discriminant =>
         checked(((Trace * Trace) - (4L * Determinant)));
-    /// <summary>Gets the orientation-preserving modular element whose axis is the closed geodesic: the matrix itself for an even period, its square for an odd one, so the determinant is one either way.</summary>
-    /// <exception cref="OverflowException">A squared entry exceeds <see cref="long"/>.</exception>
-    public ModularTransform Axis =>
-        ((Determinant == 1L)
-            ? ModularTransform.Create(a: A, b: B, c: C, d: D)
-            : ModularTransform.Create(
-                a: checked(((A * A) + (B * C))),
-                b: checked(((A * B) + (B * D))),
-                c: checked(((C * A) + (D * C))),
-                d: checked(((C * B) + (D * D)))
-            ));
     /// <summary>Gets the geodesic's conjugacy class, read from <see cref="Axis"/> — always <see cref="ModularClass.Hyperbolic"/> for a genuine quadratic irrational, whose period drives a translation along its axis.</summary>
     public ModularClass GeodesicClass =>
         Axis.Classify();
+    /// <summary>Gets the length of the continued-fraction period — the number of factors composed into the matrix.</summary>
+    public int PeriodLength { get; }
+    /// <summary>Gets the trace <c>A + D</c> — the conjugacy invariant that fixes the inflation factor and, above two, marks the hyperbolic motion.</summary>
+    /// <exception cref="OverflowException">The sum of the diagonal exceeds <see cref="long"/>.</exception>
+    public long Trace =>
+        checked((A + D));
 
     /// <summary>Builds the inflation lens of the quadratic irrational <c>(p + q·√d) / r</c> from its continued-fraction period.</summary>
     /// <param name="p">The rational part of the numerator.</param>
@@ -88,18 +93,21 @@ public readonly record struct QuadraticInflation {
         while (true) {
             try {
                 _ = ContinuedFraction.Expand(
-                    p: p,
-                    q: q,
                     d: d,
-                    r: r,
-                    terms: terms,
+                    p: p,
+                    periodLength: out periodLength,
                     periodStart: out periodStart,
-                    periodLength: out periodLength
+                    q: q,
+                    r: r,
+                    terms: terms
                 );
 
                 break;
             } catch (ArgumentException exception) when (((exception.ParamName == nameof(terms)) && (terms.Length < int.MaxValue))) {
-                var nextLength = ((terms.Length <= (int.MaxValue / 2)) ? (terms.Length * 2) : int.MaxValue);
+                var nextLength = ((terms.Length <= (int.MaxValue / 2))
+                    ? (terms.Length * 2)
+                    : int.MaxValue
+                );
 
                 terms = new long[nextLength];
             }
@@ -127,7 +135,6 @@ public readonly record struct QuadraticInflation {
             periodLength: periodLength
         );
     }
-
     /// <summary>Returns the inflation factor <c>(Trace + √Discriminant) / 2</c> — the Perron eigenvalue and self-similarity scale of the substitution matrix. For a multi-term period, it is generally not the length ratio of the chain's two tiles.</summary>
     /// <returns>The factor as a fixed-point value; this is the one approximate operation — the trace, determinant, and discriminant above it are exact.</returns>
     public FixedQ4816 InflationFactor() {
@@ -138,7 +145,10 @@ public readonly record struct QuadraticInflation {
         // squared discriminant exceeds Q48.16's range.
         var trace = Trace;
 
-        if ((trace > (1L << 17)) || ((trace == (1L << 17)) && (Determinant == -1L))) {
+        if (
+            (trace > (1L << 17)) ||
+            ((trace == (1L << 17)) && (Determinant == -1L))
+        ) {
             return FixedQ4816.FromInteger(value: trace);
         }
 

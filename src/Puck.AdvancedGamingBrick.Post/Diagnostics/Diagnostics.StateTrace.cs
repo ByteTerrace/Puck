@@ -18,7 +18,7 @@ internal static partial class Diagnostics {
         using (instance) {
             var machine = instance.Machine;
             var cpu = machine.Cpu;
-            var bus = (AgbBus)machine.Bus;
+            var bus = ((AgbBus)machine.Bus);
             using var output = new StreamWriter(
                 stream: Console.OpenStandardOutput(),
                 bufferSize: (1 << 20)

@@ -25,29 +25,25 @@ namespace Puck.Maths.Tests;
 /// </remarks>
 internal static class TransformKernelClaims {
     private const long RawOne = 65536L;
-
     // The guard bits every enclosure below carries under the Q48.16 grid, so a sub-ULP envelope is an integer
     // comparison rather than a rounding argument.
     private const int GuardBitCount = Oracles.GuardBitCount;
-
     // The flat part of the envelope, in raw Q16 units: the Q60 polynomial's own 0.51 ULP plus the half ULP the Q60→Q16
     // narrowing costs, rounded up to one raw, plus one raw for the two interval multiplies the angle-addition
     // reference performs above the seam. Everything else in the envelope is PROPORTIONAL to the angle and is derived
     // in SinCosRawEnvelope.
     private const int SinCosRawFlatBudget = 2;
-
     // The mixed draws each sweep takes past its hand-listed ladder. Every draw is a pure function of a running
     // counter (SplitMix64), never System.Random and never the wall clock, so the operand stream is a fact of the
     // source rather than of the run.
     private const int SinCosRawDrawCount = 224;
     private const int NormalizeDrawCount = 512;
-
     // The Exhaustive siblings' own volume, written out inline because an Exhaustive case must take its own basis
     // rather than consume a Domain. 411775 raw is one whole turn (2π·2¹⁶), swept densely; the draw counts then carry
     // the same statements across the rest of the carrier.
     private const ulong DenseTurnLimit = 411775UL;
-    private const int SinCosRawSweepDrawCount = 250_000;
     private const int NormalizeSweepDrawCount = 200_000;
+    private const int SinCosRawSweepDrawCount = 250_000;
 
     // The unsigned angle ladder: the exact pole, the single-raw quanta, one raw either side of every gate the turn
     // reduction and the polynomial fold branch on, the SIGNED/UNSIGNED SEAM at 2^63 — which is the whole reason this
@@ -64,7 +60,6 @@ internal static class TransformKernelClaims {
         ((1UL << 63) + (1UL << 62)),
         (ulong.MaxValue - 1UL), ulong.MaxValue,
     ];
-
     // The direction ladder. Rows 0-4 are the quanta and the unit axes; row 5 is the 3-4-5 triple, whose norm is EXACT
     // (25·2^32 is a perfect square) so the nearest-root statement runs with no rounding anywhere; rows 9-11 straddle
     // the narrow/wide branch gate at a 2^48 norm; row 12 is the hand-derived witness that lands INSIDE the 2^32-wide
@@ -162,7 +157,6 @@ internal static class TransformKernelClaims {
 
         return null;
     }
-
     /// <summary>
     /// <c>FixedVectorMath.TryNormalizeWithMagnitude</c> against exact integer references, over the full signed carrier.
     /// </summary>
@@ -273,7 +267,6 @@ internal static class TransformKernelClaims {
 
         return null;
     }
-
     /// <summary>
     /// The same statement as <see cref="SinCosRawFullUnsignedWidthSurface"/>, at full volume: every raw of one whole
     /// turn, then a quarter-million draws across the entire unsigned width.
@@ -301,7 +294,6 @@ internal static class TransformKernelClaims {
 
         return null;
     }
-
     /// <summary>
     /// The unit-direction bound over the full signed carrier, at full volume, for BOTH
     /// normalizers: the public <see cref="FixedVector3.Normalize"/> and the internal one-pass
@@ -333,8 +325,8 @@ internal static class TransformKernelClaims {
                 Z: FixedQ4816.FromRawBits(value: raws[2])
             ).Normalize();
             var stagedDeviation = Math.Max(
-                Math.Abs(value: (staged.X.Value - ideal[0])),
-                Math.Max(Math.Abs(value: (staged.Y.Value - ideal[1])), Math.Abs(value: (staged.Z.Value - ideal[2])))
+                val1: Math.Abs(value: (staged.X.Value - ideal[0])),
+                val2: Math.Max(val1: Math.Abs(value: (staged.Y.Value - ideal[1])), val2: Math.Abs(value: (staged.Z.Value - ideal[2])))
             );
 
             if (stagedDeviation > 1L) {
@@ -390,7 +382,6 @@ internal static class TransformKernelClaims {
 
         return null;
     }
-
     /// <summary>The envelope, in raw Q16 units, the turn-domain reduction's own arithmetic implies at a given angle.
     /// DERIVED, never fitted to an observation.</summary>
     /// <param name="rawAngle">The unsigned raw angle.</param>
@@ -409,21 +400,19 @@ internal static class TransformKernelClaims {
 
         return (SinCosRawFlatBudget + ((numerator + (denominator - BigInteger.One)) / denominator));
     }
-
     // ---- the angle-addition carriage of Oracles.EncloseSinCos past the signed carrier ----
 
     private static (Oracles.Enclosure Sin, Oracles.Enclosure Cos) EncloseUnsignedAngle(ulong rawAngle) {
         // Below the seam the oracle takes the angle unchanged; the split exists only for the half no long can name.
         var enclosed = ((rawAngle <= ((ulong)long.MaxValue))
-            ? Oracles.EncloseSinCos(raw: ((long)rawAngle), guardBitCount: GuardBitCount)
+            ? Oracles.EncloseSinCos(guardBitCount: GuardBitCount, raw: ((long)rawAngle))
             : SplitEnclosure(rawAngle: rawAngle));
 
         return (
-            Narrow(value: enclosed.Sin, shift: GuardBitCount),
-            Narrow(value: enclosed.Cos, shift: GuardBitCount)
+            Narrow(shift: GuardBitCount, value: enclosed.Sin),
+            Narrow(shift: GuardBitCount, value: enclosed.Cos)
         );
     }
-
     // The angle above the seam is written as a sum of representable halves — plus, at the single word 2^64 − 1 where
     // no two halves suffice, one further raw — and the enclosures are combined by the angle-addition identity. Every
     // part is exact: the split adds no rounding, only the interval arithmetic does.
@@ -438,15 +427,14 @@ internal static class TransformKernelClaims {
         }
 
         var combined = Combine(
-            left: Oracles.EncloseSinCos(raw: ((long)lower), guardBitCount: GuardBitCount),
-            right: Oracles.EncloseSinCos(raw: ((long)upper), guardBitCount: GuardBitCount)
+            left: Oracles.EncloseSinCos(guardBitCount: GuardBitCount, raw: ((long)lower)),
+            right: Oracles.EncloseSinCos(guardBitCount: GuardBitCount, raw: ((long)upper))
         );
 
         return ((carried == 0UL)
             ? combined
-            : Combine(left: combined, right: Oracles.EncloseSinCos(raw: ((long)carried), guardBitCount: GuardBitCount)));
+            : Combine(left: combined, right: Oracles.EncloseSinCos(guardBitCount: GuardBitCount, raw: ((long)carried))));
     }
-
     // sin(a+b) = sin a·cos b + cos a·sin b and cos(a+b) = cos a·cos b − sin a·sin b, in interval arithmetic, with the
     // doubled scale narrowed straight back so the result composes with a further part.
     private static (Oracles.Enclosure Sin, Oracles.Enclosure Cos) Combine(
@@ -472,13 +460,10 @@ internal static class TransformKernelClaims {
             )
         );
     }
-
     private static Oracles.Enclosure Add(Oracles.Enclosure left, Oracles.Enclosure right) =>
         new(Low: (left.Low + right.Low), High: (left.High + right.High));
-
     private static Oracles.Enclosure Subtract(Oracles.Enclosure left, Oracles.Enclosure right) =>
         new(Low: (left.Low - right.High), High: (left.High - right.Low));
-
     private static Oracles.Enclosure Multiply(Oracles.Enclosure left, Oracles.Enclosure right) {
         var lowLow = (left.Low * right.Low);
         var lowHigh = (left.Low * right.High);
@@ -490,12 +475,10 @@ internal static class TransformKernelClaims {
             High: BigInteger.Max(left: BigInteger.Max(left: lowLow, right: lowHigh), right: BigInteger.Max(left: highLow, right: highHigh))
         );
     }
-
     // BigInteger's right shift floors, which is what a lower bound wants; the upper bound negates around it so the
     // narrowed pair still brackets the same real value.
     private static Oracles.Enclosure Narrow(Oracles.Enclosure value, int shift) =>
         new(Low: (value.Low >> shift), High: (-((-value.High) >> shift)));
-
     private static BigInteger Deviation(Oracles.Enclosure enclosure, long raw) {
         var exact = new BigInteger(value: raw);
 
@@ -505,7 +488,6 @@ internal static class TransformKernelClaims {
 
         return BigInteger.Zero;
     }
-
     // ---- SplitMix64 index mixer: a pure function of a running counter, never System.Random and never wall-clock ----
 
     private static ulong MixIndex(ulong index) {
@@ -514,9 +496,8 @@ internal static class TransformKernelClaims {
         mixed = ((mixed ^ (mixed >> 30)) * 0xBF58476D1CE4E5B9UL);
         mixed = ((mixed ^ (mixed >> 27)) * 0x94D049BB133111EBUL);
 
-        return (mixed ^ (mixed >> 31));
+        return mixed ^ (mixed >> 31);
     }
-
     // A draw whose MAGNITUDE sweeps every scale: the mixed word is shifted right arithmetically by a count taken from
     // its own low bits, so the stream spans single raws through the carrier's extremes rather than clustering at the
     // top of the range where only the wide branch runs.

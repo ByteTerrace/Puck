@@ -35,18 +35,18 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         uint width,
         uint height
     ) {
-        var device = (ID3D12Device*)deviceContext.DeviceHandle;
-        var vs = (DirectXGpuShaderModule)vertexShaderModule;
-        var ps = (DirectXGpuShaderModule)fragmentShaderModule;
+        var device = ((ID3D12Device*)deviceContext.DeviceHandle);
+        var vs = ((DirectXGpuShaderModule)vertexShaderModule);
+        var ps = ((DirectXGpuShaderModule)fragmentShaderModule);
         // Derive the PSO render-target format from the bound target (the DirectXImageView it exposes via
         // ImageViewHandle) so the PSO format always matches the RTV — mirroring how the Vulkan factory derives
         // the format from the render pass. A hardcoded format would mismatch a B8G8R8A8Unorm target.
-        var renderTargetView = (DirectXImageView)GCHandle.FromIntPtr(value: renderTarget.ImageViewHandle).Target!;
+        var renderTargetView = ((DirectXImageView)GCHandle.FromIntPtr(value: renderTarget.ImageViewHandle).Target!);
         var layout = BuildLayout(
             device: device,
-            textureSamplerCount: textureSamplerCount,
             enableStorageBuffer: enableStorageBuffer,
-            pushConstantBinding: pushConstantBinding
+            pushConstantBinding: pushConstantBinding,
+            textureSamplerCount: textureSamplerCount
         );
 
         fixed (byte* positionSemantic = "POSITION\0"u8) {
@@ -103,11 +103,11 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
 
         layout.RootSignatureHandle = CreateRootSignature(
             device: device,
-            textureSamplerCount: textureSamplerCount,
             enableStorageBuffer: enableStorageBuffer,
             hasDescriptorTable: hasDescriptorTable,
             hasRootConstants: hasRootConstants,
-            rootConstantsCount: layout.RootConstantsCount
+            rootConstantsCount: layout.RootConstantsCount,
+            textureSamplerCount: textureSamplerCount
         );
 
         return layout;
@@ -157,7 +157,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             };
 
             tableParam.Anonymous.DescriptorTable = new D3D12_ROOT_DESCRIPTOR_TABLE {
-                NumDescriptorRanges = (uint)rangeCount,
+                NumDescriptorRanges = ((uint)rangeCount),
                 pDescriptorRanges = ranges,
             };
 
@@ -197,13 +197,13 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
 
         var desc = new D3D12_ROOT_SIGNATURE_DESC {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
-            NumParameters = (uint)paramCount,
+            NumParameters = ((uint)paramCount),
             NumStaticSamplers = 1,
             pParameters = ((0 < paramCount) ? parameters : null),
             pStaticSamplers = &staticSampler,
         };
 
-        return DirectXRootSignatures.Create(device: device, description: in desc);
+        return DirectXRootSignatures.Create(description: in desc, device: device);
     }
     private static nint BuildPso(
         ID3D12Device* device,
@@ -231,7 +231,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             NumRenderTargets = 1,
             PS = new D3D12_SHADER_BYTECODE {
                 BytecodeLength = psLength,
-                pShaderBytecode = (void*)psHandle,
+                pShaderBytecode = ((void*)psHandle),
             },
             PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
             RasterizerState = new D3D12_RASTERIZER_DESC {
@@ -251,9 +251,9 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             SampleMask = uint.MaxValue,
             VS = new D3D12_SHADER_BYTECODE {
                 BytecodeLength = vsLength,
-                pShaderBytecode = (void*)vsHandle,
+                pShaderBytecode = ((void*)vsHandle),
             },
-            pRootSignature = (ID3D12RootSignature*)rootSignature,
+            pRootSignature = ((ID3D12RootSignature*)rootSignature),
         };
 
         psoDesc.BlendState.RenderTarget._0 = new D3D12_RENDER_TARGET_BLEND_DESC {
@@ -275,6 +275,6 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
 
         device->CreateGraphicsPipelineState(pDesc: in psoDesc, ppPipelineState: out pso, riid: in psoIid);
 
-        return (nint)pso;
+        return ((nint)pso);
     }
 }

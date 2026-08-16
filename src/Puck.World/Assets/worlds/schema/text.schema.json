@@ -1,0 +1,96 @@
+{
+  "description": "The optional named, hash-pinned font catalog shared by creation text runs and screen text decals.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "defaultFont": {
+      "type": "string"
+    },
+    "fonts": {
+      "type": "array",
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "codePointRanges": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "characters": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "pixelSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "distanceRange": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "faceIndex": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "padding": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "columns": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "source",
+          "hash",
+          "codePointRanges"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "defaultFont",
+    "fonts"
+  ],
+  "additionalProperties": false,
+  "default": null
+}

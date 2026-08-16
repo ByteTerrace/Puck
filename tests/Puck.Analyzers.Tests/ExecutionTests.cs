@@ -30,7 +30,7 @@ public sealed class ExecutionTests {
 
             builder.Append(value: "}\r\n");
 
-            files[file] = new SourceFile(Name: ("Subject" + file.ToString(provider: CultureInfo.InvariantCulture) + ".cs"), Text: builder.ToString());
+            files[file] = new SourceFile(Name: (("Subject" + file.ToString(provider: CultureInfo.InvariantCulture)) + ".cs"), Text: builder.ToString());
         }
 
         return files;
@@ -47,14 +47,13 @@ public sealed class ExecutionTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Equal(expected: BrandCount, actual: result.WithId(id: "VER001").Length);
     }
-
     [Fact]
     public void ConcurrentAndSequentialExecutionReportTheSameThing() {
         var files = ManyBrandedFiles();
 
         var manifest = Manifest.Of(
             Enumerable
-                .Range(start: 0, count: BrandCount)
+                .Range(count: BrandCount, start: 0)
                 .Select(selector: index => new ManifestEntry {
                     Id = ("brand-" + index.ToString(provider: CultureInfo.InvariantCulture)),
                     Sha256 = new string(c: '0', count: 64),
@@ -76,14 +75,13 @@ public sealed class ExecutionTests {
 
         Assert.Equal(expected: sequential.Ids, actual: concurrent.Ids);
     }
-
     [Fact]
     public void ConcurrentExecutionLosesNoClaimSoNoEntryIsSweptAsUnclaimed() {
         var files = ManyBrandedFiles();
 
         var manifest = Manifest.Of(
             Enumerable
-                .Range(start: 0, count: BrandCount)
+                .Range(count: BrandCount, start: 0)
                 .Select(selector: index => new ManifestEntry {
                     Id = ("brand-" + index.ToString(provider: CultureInfo.InvariantCulture)),
                     Sha256 = new string(c: '0', count: 64),
@@ -99,13 +97,12 @@ public sealed class ExecutionTests {
 
         Assert.Empty(collection: result.WithId(id: "VER002"));
     }
-
     [Fact]
     public void RepeatedRunsOfOneCompilationAgreeWithEachOther() {
         var compilation = Harness.Compile(assemblyName: Harness.DefaultAssemblyName, sources: ManyBrandedFiles());
 
         var runs = Enumerable
-            .Range(start: 0, count: 8)
+            .Range(count: 8, start: 0)
             .AsParallel()
             .Select(selector: _ => string.Join(
                 separator: ",",
@@ -123,7 +120,6 @@ public sealed class ExecutionTests {
 
         Assert.Single(collection: runs);
     }
-
     [Fact]
     public void AnalysisRefusesToRunOnAnAlreadyCancelledToken() {
         using var cancellation = new CancellationTokenSource();

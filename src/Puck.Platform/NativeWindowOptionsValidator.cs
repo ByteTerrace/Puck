@@ -25,7 +25,7 @@ public sealed class NativeWindowOptionsValidator : IValidateOptions<NativeWindow
             (options.Mode == NativeWindowMode.PlatformWindow) &&
             !m_platformSupport.SupportsWindowFor(requested: options.DisplayKind)
         ) {
-            failures.Add(item: $"{nameof(NativeWindowOptions.Mode)} value '{NativeWindowMode.PlatformWindow}' is not supported for display kind '{m_platformSupport.ResolveDisplayKind(requested: options.DisplayKind)}'. Supported platform window kinds are Win32, Wayland, Xcb, and Vi.");
+            failures.Add(item: $"{nameof(NativeWindowOptions.Mode)} value '{NativeWindowMode.PlatformWindow}' is not supported for display kind '{m_platformSupport.ResolveDisplayKind(requested: options.DisplayKind)}'. Supported platform window kinds are Win32, Wayland, and Xcb.");
         }
 
         return ((failures.Count == 0)

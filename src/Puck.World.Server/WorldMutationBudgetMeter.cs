@@ -17,13 +17,16 @@ internal sealed class WorldMutationBudgetMeter {
     // Drop every count. O(capacity) over a dictionary whose live set is the number of (untrusted principal, section)
     // pairs that dispatched last tick — a handful, never a per-body or per-instance quantity.
     public void BeginTick() => m_charged.Clear();
-
     // Charge one dispatch against this row's per-tick allowance, or refuse when it is already spent. The charge lands
     // ONLY on success: a refused dispatch must not consume the allowance it was refused by, or a single over-budget
     // burst would silently extend the exhaustion past the tick that caused it.
     public bool TryCharge(WorldPrincipal principal, WorldSection section, ushort budget) {
         var key = (principal, section);
-        ref var count = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_charged, key: key, exists: out _);
+        ref var count = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
+            dictionary: m_charged,
+            exists: out _,
+            key: key
+        );
 
         if (count >= budget) {
             return false;

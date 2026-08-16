@@ -23,7 +23,6 @@ public sealed partial class AgbScheduler {
 
     /// <summary>The master clock: the current absolute time, advanced one cycle at a time by the bus.</summary>
     public long Now { get; set; }
-
     /// <summary>The absolute time of the next scheduled event, or <see cref="long.MaxValue"/> if none is queued.</summary>
     public long NextWhen => (m_root?.When ?? long.MaxValue);
 
@@ -32,7 +31,6 @@ public sealed partial class AgbScheduler {
         e: e,
         when: (Now + cyclesFromNow)
     );
-
     /// <summary>Schedules <paramref name="e"/> to fire at the absolute time <paramref name="when"/>.</summary>
     public void ScheduleAbsolute(Event e, long when) {
         Deschedule(e: e);
@@ -61,7 +59,6 @@ public sealed partial class AgbScheduler {
             node.Next = e;
         }
     }
-
     /// <summary>Removes <paramref name="e"/> from the queue if present.</summary>
     public void Deschedule(Event e) {
         if (!e.Scheduled) {
@@ -94,7 +91,6 @@ public sealed partial class AgbScheduler {
         e.Scheduled = false;
         e.Next = null;
     }
-
     /// <summary>Advances the clock by <paramref name="cycles"/>, firing each scheduled event at its exact time along
     /// the way (so callbacks see the clock at their <see cref="Event.When"/>). The cycle-accurate way to drive the
     /// scheduler standalone — the bus normally interleaves this with per-cycle CPU/timer work via its own loop.</summary>
@@ -108,7 +104,6 @@ public sealed partial class AgbScheduler {
 
         Now = target;
     }
-
     /// <summary>Fires every event whose time has arrived (<see cref="Event.When"/> &lt;= <see cref="Now"/>), each
     /// with how many cycles late it fired. Called from the bus's per-cycle loop the instant the clock reaches the
     /// event, so events take effect at their exact cycle.</summary>
@@ -123,7 +118,7 @@ public sealed partial class AgbScheduler {
             e.Scheduled = false;
             e.Next = null;
 
-            e.Callback((int)(Now - e.When));
+            e.Callback(((int)(Now - e.When)));
         }
     }
 }

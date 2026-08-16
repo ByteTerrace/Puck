@@ -19,7 +19,6 @@ public sealed record RecordingVideo(
     int FrameRate = 60,
     int BitrateKbps = 12000
 );
-
 /// <summary>
 /// One audio capture row: which source to open, its gain, and whether it mixes into the default stereo track or
 /// lands on its own isolated track.
@@ -36,9 +35,8 @@ public sealed record RecordingAudioRow(
     float Gain = 1.0f,
     RecordingAudioTrackMode Track = RecordingAudioTrackMode.Mix
 );
-
 /// <summary>
-/// One capture-only overlay row composited onto the recorded frame after the capture tap — it exists in the
+/// One capture-only overlay row composited onto the recorded frame after frame capture — it exists in the
 /// recording and never in the game window. The fields relevant to a row depend on its <see cref="Kind"/>; the
 /// document validator enforces the per-kind requirements. Positions are normalized (0..1) and measured from
 /// <see cref="Anchor"/>.
@@ -67,7 +65,6 @@ public sealed record OverlayRow(
     OverlayAnchor Anchor = OverlayAnchor.TopLeft,
     OverlayClock Clock = OverlayClock.Session
 );
-
 /// <summary>
 /// The recording graph document (<c>puck.recording.v1</c>): a versioned, data-defined description of one capture
 /// — the output path, the clock model, the video lane, the audio rows, and the capture-only overlays. It is the
@@ -101,8 +98,14 @@ public sealed record RecordingDocument(
     public static RecordingDocument CreateDefault() {
         return new RecordingDocument(
             Audio: [
-                new RecordingAudioRow(Id: "microphone", Kind: RecordingAudioKind.Microphone),
-                new RecordingAudioRow(Id: "loopback", Kind: RecordingAudioKind.Loopback),
+                new RecordingAudioRow(
+                    Id: "microphone",
+                    Kind: RecordingAudioKind.Microphone
+                ),
+                new RecordingAudioRow(
+                    Id: "loopback",
+                    Kind: RecordingAudioKind.Loopback
+                ),
             ],
             Video: new RecordingVideo(CodecLadder: ["av1", "h264"])
         );

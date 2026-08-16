@@ -1,12 +1,13 @@
 using Puck.Maths;
+using Puck.Physics;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 /// <summary>The closed world-events vocabulary — four event families; the fifth, machine-memory watches, is
 /// addon-scoped — each mounted guest declares its own watch rows, so it is computed inside
-/// <see cref="WorldAddonRuntime"/> directly rather than here; see that type's remarks. Mirrors
-/// <see cref="Scripting.AddonAbi.ObservationVerbs"/>'s event verbs one-for-one.</summary>
+/// <see cref="IWorldAddonHost"/>'s implementation directly rather than here; see <c>Addons.WorldAddonRuntime</c>'s
+/// remarks. Mirrors <c>Puck.Scripting.AddonAbi.ObservationVerbs</c>'s event verbs one-for-one.</summary>
 public enum WorldEventFamily : byte {
     /// <summary>A body entered a named region.</summary>
     RegionEnter,
@@ -26,7 +27,6 @@ public enum WorldEventFamily : byte {
     /// <summary>A route was dissolved.</summary>
     RouteDisengaged,
 }
-
 /// <summary>One world-scoped event edge for this tick, in pinned iteration order. <see cref="GateA"/> (and,
 /// for the two-body families, <see cref="GateB"/>) name the <see cref="GrantSubject"/>(s) an addon must hold an
 /// event-budgeted <see cref="WorldCapability.Observe"/> grant over to receive it — either gate suffices when both
@@ -38,11 +38,10 @@ public enum WorldEventFamily : byte {
 /// <param name="A">The wire payload's first lane (a body/seat index, or an encoded route target).</param>
 /// <param name="B">The wire payload's second lane (a region ordinal, or an encoded route target); zero when unused.</param>
 public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubject GateA, GrantSubject? GateB, long A, long B);
-
 /// <summary>
 /// Computes the four world-scoped event families once per tick — collision pairs, region enter/exit, seat
-/// join/leave, and route/engagement transitions — as a flat, pinned-order edge list every mounted addon's
-/// <see cref="WorldAddonRuntime"/> filters by its own grants. Deterministic by construction: every input (body
+/// join/leave, and route/engagement transitions — as a flat, pinned-order edge list every mounted addon's host
+/// filters by its own grants. Deterministic by construction: every input (body
 /// positions, seat occupancy, the document's region rows, route commands) is already sim-lane state, so replay
 /// covers this feed by re-execution — nothing here is taped.
 /// </summary>
@@ -80,165 +79,88 @@ public sealed class WorldEventFeed {
     /// Valid only between one <see cref="Collect"/> call and the next.</summary>
     public IReadOnlyList<WorldEventEdge> Edges => m_edges;
 
-    /// <summary>Returns the live occupant count of the placement region named <paramref name="placementId"/> as of the most
-    /// recent <see cref="Collect"/> — the same per-(region, body) occupancy the region pass already tracks for the
-    /// addon events feed, read directly for a world rule's <c>$region:&lt;id&gt;</c> reserved channel (see
-    /// <see cref="WorldRuleFacts"/>) rather than duplicated.</summary>
-    /// <param name="placementId">The region-carrying placement's stable id.</param>
-    /// <returns>The occupant count, or zero for a placement this tick has never seen carry a region.</returns>
-    public int OccupantCount(string placementId) {
-        if (!m_regionOccupancy.TryGetValue(key: placementId, value: out var occupancy)) {
-            return 0;
+    private static (FixedVector3 Center, FixedVector3 Extent) Bounds(FixedVector3 position, FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume) {
+        if (volume.Kind == FixedBodyColliderKind.Sphere) {
+            var radius = new FixedVector3(
+                X: volume.Radius,
+                Y: volume.Radius,
+                Z: volume.Radius
+            );
+
+            return (Center: (position + orientation.Rotate(vector: volume.Center)), Extent: radius);
         }
 
-        var count = 0;
+        if (volume.Kind == FixedBodyColliderKind.Capsule) {
+            var (start, end) = Segment(
+                orientation: orientation,
+                position: position,
+                volume: in volume
+            );
+            var delta = (end - start);
+            var radius = new FixedVector3(
+                X: volume.Radius,
+                Y: volume.Radius,
+                Z: volume.Radius
+            );
+            var extent = new FixedVector3(
+                X: (FixedQ4816.Abs(value: delta.X) / FixedQ4816.FromInteger(value: 2L)),
+                Y: (FixedQ4816.Abs(value: delta.Y) / FixedQ4816.FromInteger(value: 2L)),
+                Z: (FixedQ4816.Abs(value: delta.Z) / FixedQ4816.FromInteger(value: 2L))
+            );
 
-        foreach (var occupied in occupancy) {
-            if (occupied) {
-                count++;
-            }
+            return (Center: ((start + end) / FixedQ4816.FromInteger(value: 2L)), Extent: (extent + radius));
         }
 
-        return count;
+        var center = (position + orientation.Rotate(vector: volume.Center));
+        var rotation = (orientation * volume.Rotation).Normalize();
+        var unitX = new FixedVector3(
+            X: FixedQ4816.One,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero
+        );
+        var unitY = new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.One,
+            Z: FixedQ4816.Zero
+        );
+        var unitZ = new FixedVector3(
+            X: FixedQ4816.Zero,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.One
+        );
+        var axisX = rotation.Rotate(vector: unitX);
+        var axisY = rotation.Rotate(vector: unitY);
+        var axisZ = rotation.Rotate(vector: unitZ);
+        var boxExtent = new FixedVector3(
+            X: (((FixedQ4816.Abs(value: axisX.X) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.X) * volume.HalfExtents.Z)),
+            Y: (((FixedQ4816.Abs(value: axisX.Y) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * volume.HalfExtents.Z)),
+            Z: (((FixedQ4816.Abs(value: axisX.Z) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * volume.HalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * volume.HalfExtents.Z))
+        );
+
+        return (Center: center, Extent: boxExtent);
     }
-
-    /// <summary>Queues a route-engaged edge after <see cref="WorldGrants"/> reports an effective route change.
-    /// Drained by the next <see cref="Collect"/> call.</summary>
-    /// <param name="sourceBody">The routed body's entity index.</param>
-    /// <param name="target">The route target (a screen or a body).</param>
-    public void QueueRouteEngaged(int sourceBody, GrantSubject target) {
-        QueueRoute(family: WorldEventFamily.RouteEngaged, sourceBody: sourceBody, target: target);
-    }
-
-    /// <summary>Queues a route-disengaged edge after <see cref="WorldGrants"/> reports an effective route change.</summary>
-    /// <param name="sourceBody">The routed body's entity index.</param>
-    /// <param name="target">The route target that was cleared.</param>
-    public void QueueRouteDisengaged(int sourceBody, GrantSubject target) {
-        QueueRoute(family: WorldEventFamily.RouteDisengaged, sourceBody: sourceBody, target: target);
-    }
-
-    private void QueueRoute(WorldEventFamily family, int sourceBody, GrantSubject target) {
-        // Encoding (see AddonAbi.ObservationVerbs.EventRouteEngaged's own doc): B >= 0 is a screen index; B < 0 is
-        // -(bodyIndex + 1). A screen index is always >= 0 and a body index is always >= 0, so the sign alone
-        // disambiguates without a third payload lane.
-        var encodedTarget = ((target.Kind == GrantSubjectKind.Body) ? -(target.Value + 1) : target.Value);
-        var targetGate = ((target.Kind is GrantSubjectKind.Body or GrantSubjectKind.Screen) ? (GrantSubject?)target : null);
-
-        m_pendingRoutes.Add(item: new WorldEventEdge(
-            Family: family,
-            GateA: GrantSubject.Body(index: sourceBody),
-            GateB: targetGate,
-            A: sourceBody,
-            B: encodedTarget
-        ));
-    }
-
-    /// <summary>Computes this tick's edge list — the one call site, from <see cref="WorldServer.Step"/> after the
-    /// population advances (so positions/occupancy reflect this tick's settled state) and before the addon runtime's
-    /// read pump stages them for delivery.</summary>
-    /// <param name="definition">The live world definition (its placements, for region rows).</param>
-    /// <param name="population">The live population (positions, activity, seat occupancy).</param>
-    public void Collect(WorldDefinition definition, WorldPopulation population) {
-        m_edges.Clear();
-
-        CollectSeats(population: population);
-        CollectRegions(definition: definition, population: population);
-        CollectCollisions(population: population);
-
-        m_edges.AddRange(collection: m_pendingRoutes);
-        m_pendingRoutes.Clear();
-    }
-
-    private void CollectSeats(WorldPopulation population) {
-        for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
-            var occupied = population.IsHumanOccupied(bodyIndex: seat);
-
-            if (occupied == m_seatOccupied[seat]) {
-                continue;
-            }
-
-            m_seatOccupied[seat] = occupied;
-            m_edges.Add(item: new WorldEventEdge(
-                Family: (occupied ? WorldEventFamily.SeatJoin : WorldEventFamily.SeatLeave),
-                GateA: GrantSubject.Seat(index: seat),
-                GateB: null,
-                A: seat,
-                B: 0L
-            ));
-        }
-    }
-
-    private void CollectRegions(WorldDefinition definition, WorldPopulation population) {
-        var ordinal = 0;
-
-        foreach (var placement in definition.Placements) {
-            if ((placement is null) || (placement.Region is not { } region)) {
-                continue;
-            }
-
-            var thisOrdinal = ordinal++;
-
-            if (!m_regionOccupancy.TryGetValue(key: placement.Id, value: out var occupancy)) {
-                occupancy = new bool[population.Capacity];
-                m_regionOccupancy[placement.Id] = occupancy;
-            }
-
-            // An ATTACHED region's sensing sphere centers on the resolved live pose (the SAME fixed-point resolve
-            // world.attachments answers), never the row's inert static Position — an inactive target body resolves
-            // no center, so the region contributes nothing this tick (every occupant exits, mirroring the row's
-            // established "contributes nothing" verdict) rather than sensing at a stale last-known point.
-            var hasCenter = true;
-            var center = default(FixedVector3);
-
-            if (placement.Attach is { } attach) {
-                hasCenter = WorldPlacementAttachment.TryResolve(attach: attach, population: population, position: out center, yawRadians: out _, reason: out _);
-            } else {
-                center = FixedVector3.FromVector3(value: placement.Position);
-            }
-
-            var radius = FixedQ4816.FromDouble(value: region.Radius);
-
-            for (var body = 0; (body < population.Capacity); body++) {
-                if (!hasCenter || !population.IsActive(index: body) || (population.EntryBody(index: body) is not { } entry)) {
-                    if (occupancy[body]) {
-                        occupancy[body] = false;
-                        m_edges.Add(item: new WorldEventEdge(Family: WorldEventFamily.RegionExit, GateA: GrantSubject.Region(name: placement.Id), GateB: null, A: body, B: thisOrdinal));
-                    }
-
-                    continue;
-                }
-
-                var delta = (entry.FixedPosition - center);
-                var inside = (delta.Length <= radius);
-
-                if (inside == occupancy[body]) {
-                    continue;
-                }
-
-                occupancy[body] = inside;
-                m_edges.Add(item: new WorldEventEdge(
-                    Family: (inside ? WorldEventFamily.RegionEnter : WorldEventFamily.RegionExit),
-                    GateA: GrantSubject.Region(name: placement.Id),
-                    GateB: null,
-                    A: body,
-                    B: thisOrdinal
-                ));
-            }
-        }
-    }
-
     private void CollectCollisions(WorldPopulation population) {
         for (var a = 0; (a < population.Capacity); a++) {
-            if (!population.IsActive(index: a) || (population.EntryBody(index: a) is not { } bodyA)) {
+            if (
+                !population.IsActive(index: a) ||
+                (population.EntryBody(index: a) is not { } bodyA)
+            ) {
                 continue;
             }
 
             for (var b = (a + 1); (b < population.Capacity); b++) {
-                if (!population.IsActive(index: b) || (population.EntryBody(index: b) is not { } bodyB)) {
+                if (
+                    !population.IsActive(index: b) ||
+                    (population.EntryBody(index: b) is not { } bodyB)
+                ) {
                     continue;
                 }
 
-                var overlapping = Overlaps(a: bodyA, b: bodyB);
+                var overlapping = Overlaps(
+                    a: bodyA,
+                    b: bodyB
+                );
                 var key = (a, b);
                 var was = m_overlapping.Contains(item: key);
 
@@ -253,7 +175,9 @@ public sealed class WorldEventFeed {
                 }
 
                 m_edges.Add(item: new WorldEventEdge(
-                    Family: (overlapping ? WorldEventFamily.CollisionBegin : WorldEventFamily.CollisionEnd),
+                    Family: (overlapping
+                    ? WorldEventFamily.CollisionBegin
+                    : WorldEventFamily.CollisionEnd),
                     GateA: GrantSubject.Body(index: a),
                     GateB: GrantSubject.Body(index: b),
                     A: a,
@@ -262,11 +186,116 @@ public sealed class WorldEventFeed {
             }
         }
     }
+    private void CollectRegions(WorldDefinition definition, WorldPopulation population) {
+        var ordinal = 0;
 
+        foreach (var placement in definition.Placements) {
+            if (
+                (placement is null) ||
+                (placement.Region is not { } region)
+            ) {
+                continue;
+            }
+
+            var thisOrdinal = ordinal++;
+
+            if (!m_regionOccupancy.TryGetValue(
+                key: placement.Id,
+                value: out var occupancy
+            )) {
+                occupancy = new bool[population.Capacity];
+                m_regionOccupancy[placement.Id] = occupancy;
+            }
+
+            // An ATTACHED region's sensing sphere centers on the resolved live pose (the SAME fixed-point resolve
+            // world.attachments answers), never the row's inert static Position — an inactive target body resolves
+            // no center, so the region contributes nothing this tick (every occupant exits, mirroring the row's
+            // established "contributes nothing" verdict) rather than sensing at a stale last-known point.
+            var hasCenter = true;
+            var center = default(FixedVector3);
+
+            if (placement.Attach is { } attach) {
+                hasCenter = WorldPlacementAttachment.TryResolve(
+                    attach: attach,
+                    population: population,
+                    position: out center,
+                    reason: out _,
+                    yawRadians: out _
+                );
+            } else {
+                center = FixedVector3.FromVector3(value: placement.Position);
+            }
+
+            var radius = FixedQ4816.FromDouble(value: region.Radius);
+
+            for (var body = 0; (body < population.Capacity); body++) {
+                if (
+                    !hasCenter ||
+                    !population.IsActive(index: body) ||
+                    (population.EntryBody(index: body) is not { } entry)
+                ) {
+                    if (occupancy[body]) {
+                        occupancy[body] = false;
+                        m_edges.Add(item: new WorldEventEdge(
+                            Family: WorldEventFamily.RegionExit,
+                            GateA: GrantSubject.Region(name: placement.Id),
+                            GateB: null,
+                            A: body,
+                            B: thisOrdinal
+                        ));
+                    }
+
+                    continue;
+                }
+
+                var delta = (entry.FixedPosition - center);
+                var inside = (delta.Length <= radius);
+
+                if (inside == occupancy[body]) {
+                    continue;
+                }
+
+                occupancy[body] = inside;
+                m_edges.Add(item: new WorldEventEdge(
+                    Family: (inside
+                    ? WorldEventFamily.RegionEnter
+                    : WorldEventFamily.RegionExit),
+                    GateA: GrantSubject.Region(name: placement.Id),
+                    GateB: null,
+                    A: body,
+                    B: thisOrdinal
+                ));
+            }
+        }
+    }
+    private void CollectSeats(WorldPopulation population) {
+        for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
+            var occupied = population.IsHumanOccupied(bodyIndex: seat);
+
+            if (occupied == m_seatOccupied[seat]) {
+                continue;
+            }
+
+            m_seatOccupied[seat] = occupied;
+            m_edges.Add(item: new WorldEventEdge(
+                Family: (occupied
+                ? WorldEventFamily.SeatJoin
+                : WorldEventFamily.SeatLeave),
+                GateA: GrantSubject.Seat(index: seat),
+                GateB: null,
+                A: seat,
+                B: 0L
+            ));
+        }
+    }
     private static bool Overlaps(WorldBody a, WorldBody b) {
         var aCollider = a.Collider;
         var bCollider = b.Collider;
-        if ((aCollider is not { } aVolume) || (bCollider is not { } bVolume)) {
+
+        if (
+            (aCollider is not { } aVolume) ||
+            (bCollider is not { } bVolume)
+        ) {
             return false;
         }
 
@@ -287,112 +316,233 @@ public sealed class WorldEventFeed {
 
         return false;
     }
-
     private static bool Overlaps(FixedVector3 leftPosition, FixedQuaternion leftOrientation, in FixedBodyColliderVolume left,
         FixedVector3 rightPosition, FixedQuaternion rightOrientation, in FixedBodyColliderVolume right) {
-        if ((left.Kind != FixedBodyColliderKind.Box) && (right.Kind != FixedBodyColliderKind.Box)) {
-            var (leftStart, leftEnd) = Segment(position: leftPosition, orientation: leftOrientation, volume: in left);
-            var (rightStart, rightEnd) = Segment(position: rightPosition, orientation: rightOrientation, volume: in right);
+        if (
+            (left.Kind != FixedBodyColliderKind.Box) &&
+            (right.Kind != FixedBodyColliderKind.Box)
+        ) {
+            var (leftStart, leftEnd) = Segment(
+                orientation: leftOrientation,
+                position: leftPosition,
+                volume: in left
+            );
+            var (rightStart, rightEnd) = Segment(
+                orientation: rightOrientation,
+                position: rightPosition,
+                volume: in right
+            );
             var radius = (left.Radius + right.Radius);
 
-            return (SegmentDistanceSquared(p1: leftStart, q1: leftEnd, p2: rightStart, q2: rightEnd) < (radius * radius));
+            return (SegmentDistanceSquared(
+                p1: leftStart,
+                p2: rightStart,
+                q1: leftEnd,
+                q2: rightEnd
+            ) < (radius * radius));
         }
 
-        var (leftCenter, leftExtent) = Bounds(position: leftPosition, orientation: leftOrientation, volume: in left);
-        var (rightCenter, rightExtent) = Bounds(position: rightPosition, orientation: rightOrientation, volume: in right);
+        var (leftCenter, leftExtent) = Bounds(
+            orientation: leftOrientation,
+            position: leftPosition,
+            volume: in left
+        );
+        var (rightCenter, rightExtent) = Bounds(
+            orientation: rightOrientation,
+            position: rightPosition,
+            volume: in right
+        );
         var delta = (leftCenter - rightCenter);
 
-        return ((FixedQ4816.Abs(value: delta.X) < (leftExtent.X + rightExtent.X)) &&
-                (FixedQ4816.Abs(value: delta.Y) < (leftExtent.Y + rightExtent.Y)) &&
-                (FixedQ4816.Abs(value: delta.Z) < (leftExtent.Z + rightExtent.Z)));
+        return (
+            (FixedQ4816.Abs(value: delta.X) < (leftExtent.X + rightExtent.X)) &&
+            (FixedQ4816.Abs(value: delta.Y) < (leftExtent.Y + rightExtent.Y)) &&
+            (FixedQ4816.Abs(value: delta.Z) < (leftExtent.Z + rightExtent.Z))
+        );
     }
+    private void QueueRoute(WorldEventFamily family, int sourceBody, GrantSubject target) {
+        // Encoding (see AddonAbi.ObservationVerbs.EventRouteEngaged's own doc): B >= 0 is a screen index; B < 0 is
+        // -(bodyIndex + 1). A screen index is always >= 0 and a body index is always >= 0, so the sign alone
+        // disambiguates without a third payload lane.
+        var encodedTarget = ((target.Kind == GrantSubjectKind.Body)
+            ? -(target.Value + 1)
+            : target.Value
+        );
+        var targetGate = ((target.Kind is GrantSubjectKind.Body or GrantSubjectKind.Screen)
+            ? (GrantSubject?)target
+            : null
+        );
 
+        m_pendingRoutes.Add(item: new WorldEventEdge(
+            Family: family,
+            GateA: GrantSubject.Body(index: sourceBody),
+            GateB: targetGate,
+            A: sourceBody,
+            B: encodedTarget
+        ));
+    }
     private static (FixedVector3 Start, FixedVector3 End) Segment(FixedVector3 position, FixedQuaternion orientation,
         in FixedBodyColliderVolume volume) {
         var start = (position + orientation.Rotate(vector: volume.Center));
-        var end = (volume.Kind == FixedBodyColliderKind.Capsule)
+        var end = ((volume.Kind == FixedBodyColliderKind.Capsule)
             ? (position + orientation.Rotate(vector: volume.Endpoint))
-            : start;
+            : start
+        );
 
         return (Start: start, End: end);
     }
-
     private static FixedQ4816 SegmentDistanceSquared(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) {
         var d1 = (q1 - p1);
         var d2 = (q2 - p2);
         var r = (p1 - p2);
-        var a = FixedVector3.Dot(left: d1, right: d1);
-        var e = FixedVector3.Dot(left: d2, right: d2);
-        var f = FixedVector3.Dot(left: d2, right: r);
+        var a = FixedVector3.Dot(
+            left: d1,
+            right: d1
+        );
+        var e = FixedVector3.Dot(
+            left: d2,
+            right: d2
+        );
+        var f = FixedVector3.Dot(
+            left: d2,
+            right: r
+        );
         FixedQ4816 s;
         FixedQ4816 t;
 
-        if ((a <= FixedQ4816.Zero) && (e <= FixedQ4816.Zero)) {
-            return FixedVector3.Dot(left: r, right: r);
+        if (
+            (a <= FixedQ4816.Zero) &&
+            (e <= FixedQ4816.Zero)
+        ) {
+            return FixedVector3.Dot(
+                left: r,
+                right: r
+            );
         }
 
         if (a <= FixedQ4816.Zero) {
             s = FixedQ4816.Zero;
-            t = FixedQ4816.Clamp(value: (f / e), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
+            t = FixedQ4816.Clamp(
+                value: (f / e),
+                minimum: FixedQ4816.Zero,
+                maximum: FixedQ4816.One
+            );
         } else {
-            var c = FixedVector3.Dot(left: d1, right: r);
+            var c = FixedVector3.Dot(
+                left: d1,
+                right: r
+            );
+
             if (e <= FixedQ4816.Zero) {
                 t = FixedQ4816.Zero;
-                s = FixedQ4816.Clamp(value: (-c / a), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
+                s = FixedQ4816.Clamp(
+                    value: (-c / a),
+                    minimum: FixedQ4816.Zero,
+                    maximum: FixedQ4816.One
+                );
             } else {
-                var b = FixedVector3.Dot(left: d1, right: d2);
+                var b = FixedVector3.Dot(
+                    left: d1,
+                    right: d2
+                );
                 var denominator = ((a * e) - (b * b));
-                s = (denominator > FixedQ4816.Zero)
-                    ? FixedQ4816.Clamp(value: (((b * f) - (c * e)) / denominator), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One)
-                    : FixedQ4816.Zero;
+
+                s = ((denominator > FixedQ4816.Zero)
+                    ? FixedQ4816.Clamp(
+                        value: (((b * f) - (c * e)) / denominator),
+                        minimum: FixedQ4816.Zero,
+                        maximum: FixedQ4816.One
+                    )
+                    : FixedQ4816.Zero
+                );
                 t = (((b * s) + f) / e);
                 if (t < FixedQ4816.Zero) {
                     t = FixedQ4816.Zero;
-                    s = FixedQ4816.Clamp(value: (-c / a), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
+                    s = FixedQ4816.Clamp(
+                        value: (-c / a),
+                        minimum: FixedQ4816.Zero,
+                        maximum: FixedQ4816.One
+                    );
                 } else if (t > FixedQ4816.One) {
                     t = FixedQ4816.One;
-                    s = FixedQ4816.Clamp(value: ((b - c) / a), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
+                    s = FixedQ4816.Clamp(
+                        value: ((b - c) / a),
+                        minimum: FixedQ4816.Zero,
+                        maximum: FixedQ4816.One
+                    );
                 }
             }
         }
 
         var closest = ((p1 + (d1 * s)) - (p2 + (d2 * t)));
-        return FixedVector3.Dot(left: closest, right: closest);
+
+        return FixedVector3.Dot(
+            left: closest,
+            right: closest
+        );
     }
 
-    private static (FixedVector3 Center, FixedVector3 Extent) Bounds(FixedVector3 position, FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume) {
-        if (volume.Kind == FixedBodyColliderKind.Sphere) {
-            var radius = new FixedVector3(X: volume.Radius, Y: volume.Radius, Z: volume.Radius);
-            return (Center: (position + orientation.Rotate(vector: volume.Center)), Extent: radius);
-        }
+    /// <summary>Computes this tick's edge list — the one call site, from <see cref="WorldServer.Step"/> after the
+    /// population advances (so positions/occupancy reflect this tick's settled state) and before the addon runtime's
+    /// read pump stages them for delivery.</summary>
+    /// <param name="definition">The live world definition (its placements, for region rows).</param>
+    /// <param name="population">The live population (positions, activity, seat occupancy).</param>
+    public void Collect(WorldDefinition definition, WorldPopulation population) {
+        m_edges.Clear();
 
-        if (volume.Kind == FixedBodyColliderKind.Capsule) {
-            var (start, end) = Segment(position: position, orientation: orientation, volume: in volume);
-            var delta = (end - start);
-            var radius = new FixedVector3(X: volume.Radius, Y: volume.Radius, Z: volume.Radius);
-            var extent = new FixedVector3(
-                X: (FixedQ4816.Abs(value: delta.X) / FixedQ4816.FromInteger(value: 2L)),
-                Y: (FixedQ4816.Abs(value: delta.Y) / FixedQ4816.FromInteger(value: 2L)),
-                Z: (FixedQ4816.Abs(value: delta.Z) / FixedQ4816.FromInteger(value: 2L))
-            );
-            return (Center: ((start + end) / FixedQ4816.FromInteger(value: 2L)), Extent: (extent + radius));
-        }
-
-        var center = (position + orientation.Rotate(vector: volume.Center));
-        var rotation = (orientation * volume.Rotation).Normalize();
-        var unitX = new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
-        var unitY = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
-        var unitZ = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One);
-        var axisX = rotation.Rotate(vector: unitX);
-        var axisY = rotation.Rotate(vector: unitY);
-        var axisZ = rotation.Rotate(vector: unitZ);
-        var boxExtent = new FixedVector3(
-            X: ((FixedQ4816.Abs(value: axisX.X) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * volume.HalfExtents.Y) + (FixedQ4816.Abs(value: axisZ.X) * volume.HalfExtents.Z)),
-            Y: ((FixedQ4816.Abs(value: axisX.Y) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * volume.HalfExtents.Y) + (FixedQ4816.Abs(value: axisZ.Y) * volume.HalfExtents.Z)),
-            Z: ((FixedQ4816.Abs(value: axisX.Z) * volume.HalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * volume.HalfExtents.Y) + (FixedQ4816.Abs(value: axisZ.Z) * volume.HalfExtents.Z))
+        CollectSeats(population: population);
+        CollectRegions(
+            definition: definition,
+            population: population
         );
+        CollectCollisions(population: population);
 
-        return (Center: center, Extent: boxExtent);
+        m_edges.AddRange(collection: m_pendingRoutes);
+        m_pendingRoutes.Clear();
+    }
+    /// <summary>Returns the live occupant count of the placement region named <paramref name="placementId"/> as of the most
+    /// recent <see cref="Collect"/> — the same per-(region, body) occupancy the region pass already tracks for the
+    /// addon events feed, read directly for a world rule's <c>$region:&lt;id&gt;</c> reserved channel (see
+    /// <see cref="WorldRuleFacts"/>) rather than duplicated.</summary>
+    /// <param name="placementId">The region-carrying placement's stable id.</param>
+    /// <returns>The occupant count, or zero for a placement this tick has never seen carry a region.</returns>
+    public int OccupantCount(string placementId) {
+        if (!m_regionOccupancy.TryGetValue(
+            key: placementId,
+            value: out var occupancy
+        )) {
+            return 0;
+        }
+
+        var count = 0;
+
+        foreach (var occupied in occupancy) {
+            if (occupied) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+    /// <summary>Queues a route-disengaged edge after <see cref="WorldGrants"/> reports an effective route change.</summary>
+    /// <param name="sourceBody">The routed body's entity index.</param>
+    /// <param name="target">The route target that was cleared.</param>
+    public void QueueRouteDisengaged(int sourceBody, GrantSubject target) {
+        QueueRoute(
+            family: WorldEventFamily.RouteDisengaged,
+            sourceBody: sourceBody,
+            target: target
+        );
+    }
+    /// <summary>Queues a route-engaged edge after <see cref="WorldGrants"/> reports an effective route change.
+    /// Drained by the next <see cref="Collect"/> call.</summary>
+    /// <param name="sourceBody">The routed body's entity index.</param>
+    /// <param name="target">The route target (a screen or a body).</param>
+    public void QueueRouteEngaged(int sourceBody, GrantSubject target) {
+        QueueRoute(
+            family: WorldEventFamily.RouteEngaged,
+            sourceBody: sourceBody,
+            target: target
+        );
     }
 }

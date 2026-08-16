@@ -39,14 +39,12 @@ public interface IMeetSemilattice<TSelf>
     /// <param name="right">The second envelope.</param>
     /// <returns>The widest envelope that is at most <paramref name="left"/> and at most <paramref name="right"/>.</returns>
     static abstract TSelf Meet(TSelf left, TSelf right);
-
     /// <summary>Decides the carrier's order: whether this envelope allows no more than <paramref name="other"/>.</summary>
     /// <param name="other">The envelope compared against.</param>
     /// <returns><see langword="true"/> when this envelope is at most <paramref name="other"/>; equivalently, when
     /// <c>Meet(this, other)</c> equals this envelope.</returns>
     bool IsAtMost(TSelf other);
 }
-
 /// <summary>A 64-bit bit-mask envelope: an element per bit, meet is bitwise AND, and the order is bit-subset. The
 /// carrier for capability masks and small subject sets — every attenuation step clears bits or leaves them, and can
 /// never set one.</summary>
@@ -59,20 +57,18 @@ public readonly record struct MeetMask64(ulong Bits) : IMeetSemilattice<MeetMask
     /// <summary>Gets the full mask — every bit set: the identity, restricting nothing.</summary>
     public static MeetMask64 Top => new(Bits: ulong.MaxValue);
 
+    /// <summary>Decides bit-subset order: whether every bit set here is also set in <paramref name="other"/>.</summary>
+    /// <param name="other">The mask compared against.</param>
+    /// <returns><see langword="true"/> when this mask allows no bit <paramref name="other"/> refuses.</returns>
+    public bool IsAtMost(MeetMask64 other) =>
+        ((Bits & ~other.Bits) == 0UL);
     /// <summary>Returns the bitwise AND of the two masks — the bits both allow.</summary>
     /// <param name="left">The first mask.</param>
     /// <param name="right">The second mask.</param>
     /// <returns>The intersection mask.</returns>
     public static MeetMask64 Meet(MeetMask64 left, MeetMask64 right) =>
         new(Bits: left.Bits & right.Bits);
-
-    /// <summary>Decides bit-subset order: whether every bit set here is also set in <paramref name="other"/>.</summary>
-    /// <param name="other">The mask compared against.</param>
-    /// <returns><see langword="true"/> when this mask allows no bit <paramref name="other"/> refuses.</returns>
-    public bool IsAtMost(MeetMask64 other) =>
-        ((Bits & ~other.Bits) == 0UL);
 }
-
 /// <summary>A non-negative 64-bit quantity envelope: meet is the minimum, and the order is numeric. The carrier for
 /// quantitative bounds — budgets, ceilings, fuel shares, structural caps — where every attenuation step can lower a
 /// limit and never raise it. Every integral bound in use embeds into the unsigned 64-bit carrier, so one width serves
@@ -86,20 +82,21 @@ public readonly record struct MeetQuantity64(ulong Amount) : IMeetSemilattice<Me
     /// <summary>Gets the maximum quantity — the identity, bounding nothing the carrier can express.</summary>
     public static MeetQuantity64 Top => new(Amount: ulong.MaxValue);
 
-    /// <summary>Returns the smaller of the two quantities.</summary>
-    /// <param name="left">The first quantity.</param>
-    /// <param name="right">The second quantity.</param>
-    /// <returns>The minimum.</returns>
-    public static MeetQuantity64 Meet(MeetQuantity64 left, MeetQuantity64 right) =>
-        new(Amount: Math.Min(val1: left.Amount, val2: right.Amount));
-
     /// <summary>Decides numeric order: whether this quantity is no larger than <paramref name="other"/>.</summary>
     /// <param name="other">The quantity compared against.</param>
     /// <returns><see langword="true"/> when this quantity does not exceed <paramref name="other"/>.</returns>
     public bool IsAtMost(MeetQuantity64 other) =>
         (Amount <= other.Amount);
+    /// <summary>Returns the smaller of the two quantities.</summary>
+    /// <param name="left">The first quantity.</param>
+    /// <param name="right">The second quantity.</param>
+    /// <returns>The minimum.</returns>
+    public static MeetQuantity64 Meet(MeetQuantity64 left, MeetQuantity64 right) =>
+        new(Amount: Math.Min(
+            val1: left.Amount,
+            val2: right.Amount
+        ));
 }
-
 /// <summary>The product of two meet-semilattices, which is itself a meet-semilattice: meet, top, bottom and order are
 /// all componentwise, so a compound envelope — a capability mask beside a budget, say — attenuates as one value under
 /// the same laws each component obeys alone. The construction stacks: either component may itself be a
@@ -125,19 +122,24 @@ public readonly record struct MeetProduct<TFirst, TSecond>(TFirst First, TSecond
         Second: TSecond.Top
     );
 
+    /// <summary>Decides the componentwise order: at most in BOTH components.</summary>
+    /// <param name="other">The envelope compared against.</param>
+    /// <returns><see langword="true"/> when both components are at most <paramref name="other"/>'s.</returns>
+    public bool IsAtMost(MeetProduct<TFirst, TSecond> other) =>
+        (First.IsAtMost(other: other.First) && Second.IsAtMost(other: other.Second));
     /// <summary>Returns the componentwise meet.</summary>
     /// <param name="left">The first envelope.</param>
     /// <param name="right">The second envelope.</param>
     /// <returns>The pair of component meets.</returns>
     public static MeetProduct<TFirst, TSecond> Meet(MeetProduct<TFirst, TSecond> left, MeetProduct<TFirst, TSecond> right) =>
         new(
-        First: TFirst.Meet(left: left.First, right: right.First),
-        Second: TSecond.Meet(left: left.Second, right: right.Second)
-    );
-
-    /// <summary>Decides the componentwise order: at most in BOTH components.</summary>
-    /// <param name="other">The envelope compared against.</param>
-    /// <returns><see langword="true"/> when both components are at most <paramref name="other"/>'s.</returns>
-    public bool IsAtMost(MeetProduct<TFirst, TSecond> other) =>
-        (First.IsAtMost(other: other.First) && Second.IsAtMost(other: other.Second));
+            First: TFirst.Meet(
+                left: left.First,
+                right: right.First
+            ),
+            Second: TSecond.Meet(
+                left: left.Second,
+                right: right.Second
+            )
+        );
 }

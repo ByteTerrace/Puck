@@ -59,7 +59,7 @@ internal static class SamplingDistributionClaims {
                 thirdMoment += (square * sample);
                 fourthMoment += (square * square);
 
-                var magnitude = Math.Abs(sample);
+                var magnitude = Math.Abs(value: sample);
 
                 if (magnitude > 3.0) { ++beyondThreeSigma; }
 
@@ -81,15 +81,15 @@ internal static class SamplingDistributionClaims {
         // The standard errors of the first four sample moments of a standard normal over n draws are 1/sqrt(n),
         // sqrt(2/n), sqrt(6/n) and sqrt(24/n). Each gate below takes the SMALLER of its fixed threshold and eight of
         // these, so raising the volume can only tighten the gate.
-        var meanGate = Math.Min(1e-3, (StandardErrorBand / Math.Sqrt(SampleCount)));
-        var varianceGate = Math.Min(3e-3, (StandardErrorBand * Math.Sqrt((2.0 / SampleCount))));
-        var skewGate = Math.Min(5e-3, (StandardErrorBand * Math.Sqrt((6.0 / SampleCount))));
-        var kurtosisGate = Math.Min(2e-2, (StandardErrorBand * Math.Sqrt((24.0 / SampleCount))));
+        var meanGate = Math.Min(val1: 1e-3, val2: (StandardErrorBand / Math.Sqrt(d: SampleCount)));
+        var varianceGate = Math.Min(val1: 3e-3, val2: (StandardErrorBand * Math.Sqrt(d: (2.0 / SampleCount))));
+        var skewGate = Math.Min(val1: 5e-3, val2: (StandardErrorBand * Math.Sqrt(d: (6.0 / SampleCount))));
+        var kurtosisGate = Math.Min(val1: 2e-2, val2: (StandardErrorBand * Math.Sqrt(d: (24.0 / SampleCount))));
 
-        if (Math.Abs(mean) > meanGate) { return $"mean {mean:E4} exceeds {meanGate:E4} over {SampleCount:F0} samples"; }
-        if (Math.Abs(variance - 1.0) > varianceGate) { return $"variance {variance:F7} departs from 1 by more than {varianceGate:E4}"; }
-        if (Math.Abs(thirdMoment) > skewGate) { return $"third moment (skew) {thirdMoment:E4} exceeds {skewGate:E4}"; }
-        if (Math.Abs(kurtosis - 3.0) > kurtosisGate) { return $"kurtosis {kurtosis:F7} departs from 3 by more than {kurtosisGate:E4}"; }
+        if (Math.Abs(value: mean) > meanGate) { return $"mean {mean:E4} exceeds {meanGate:E4} over {SampleCount:F0} samples"; }
+        if (Math.Abs(value: (variance - 1.0)) > varianceGate) { return $"variance {variance:F7} departs from 1 by more than {varianceGate:E4}"; }
+        if (Math.Abs(value: thirdMoment) > skewGate) { return $"third moment (skew) {thirdMoment:E4} exceeds {skewGate:E4}"; }
+        if (Math.Abs(value: (kurtosis - 3.0)) > kurtosisGate) { return $"kurtosis {kurtosis:F7} departs from 3 by more than {kurtosisGate:E4}"; }
 
         // Two-sided Phi at the six bin edges, hand-tabulated outside this tree.
         double[] twoSidedPhi = [0.3829249, 0.6826895, 0.8663856, 0.9544997, 0.9875807, 0.9973002];
@@ -97,9 +97,9 @@ internal static class SamplingDistributionClaims {
         for (var bin = 0; (bin < binEdges.Length); ++bin) {
             var empirical = (binCounts[bin] / SampleCount);
             var target = twoSidedPhi[bin];
-            var binGate = Math.Min(1.5e-3, (StandardErrorBand * Math.Sqrt(((target * (1.0 - target)) / SampleCount))));
+            var binGate = Math.Min(val1: 1.5e-3, val2: (StandardErrorBand * Math.Sqrt(d: ((target * (1.0 - target)) / SampleCount))));
 
-            if (Math.Abs(empirical - target) > binGate) {
+            if (Math.Abs(value: (empirical - target)) > binGate) {
                 return $"CDF bin |z|<={binEdges[bin]} empirical {empirical:F7} vs target {target:F7}, over the {binGate:E4} band";
             }
         }
@@ -113,7 +113,7 @@ internal static class SamplingDistributionClaims {
         var tailLow = (((double)tailEnclosure.Low) / enclosureScale);
         var tailHigh = (((double)tailEnclosure.High) / enclosureScale);
         var tail = (beyondThreeSigma / SampleCount);
-        var tailGate = Math.Min(3e-4, (StandardErrorBand * Math.Sqrt(((tailHigh * (1.0 - tailHigh)) / SampleCount))));
+        var tailGate = Math.Min(val1: 3e-4, val2: (StandardErrorBand * Math.Sqrt(d: ((tailHigh * (1.0 - tailHigh)) / SampleCount))));
 
         if ((tail < (tailLow - tailGate)) || (tail > (tailHigh + tailGate))) {
             return $"tail P(|z|>3) {tail:E5} is outside [{(tailLow - tailGate):E5}, {(tailHigh + tailGate):E5}] (Gordon enclosure [{tailLow:E5}, {tailHigh:E5}], margin {tailGate:E4})";
@@ -129,7 +129,6 @@ internal static class SamplingDistributionClaims {
 
         return null;
     }
-
     // ---- the shuffle ----
 
     /// <summary>
@@ -150,7 +149,7 @@ internal static class SamplingDistributionClaims {
 
             generator.Shuffle(values: deck);
 
-            ++counts[((((deck[0] << 6) | (deck[1] << 4)) | (deck[2] << 2)) | deck[3])];
+            ++counts[(((deck[0] << 6) | (deck[1] << 4)) | (deck[2] << 2)) | deck[3]];
         }
 
         var distinct = 0;
@@ -160,7 +159,7 @@ internal static class SamplingDistributionClaims {
 
             ++distinct;
 
-            if (Math.Abs(counts[key] - Expected) > 700) {
+            if (Math.Abs(value: (counts[key] - Expected)) > 700) {
                 return $"permutation {(key >> 6) & 3}{(key >> 4) & 3}{(key >> 2) & 3}{key & 3} occurred {counts[key]} times over {Trials} trials, expected {Expected} +/- 700";
             }
         }
@@ -195,7 +194,6 @@ internal static class SamplingDistributionClaims {
 
         return null;
     }
-
     // ---- the alias table ----
 
     /// <summary>
@@ -263,9 +261,9 @@ internal static class SamplingDistributionClaims {
                 // Eight binomial standard errors, floored at 2e-9 so a vanishing probability still has a band. Only
                 // the band is floating point; the departure it gates is exact.
                 var probability = (((double)weights[i]) / ((double)total));
-                var band = Math.Max((StandardErrorBand * Math.Sqrt(((probability * (1.0 - probability)) / draws))), 2e-9);
-                var allowed = new BigInteger(Math.Ceiling(((band * draws) * ((double)total))));
-                var departure = BigInteger.Abs((counts[i] * total) - (((BigInteger)draws) * weights[i]));
+                var band = Math.Max(val1: (StandardErrorBand * Math.Sqrt(d: ((probability * (1.0 - probability)) / draws))), val2: 2e-9);
+                var allowed = new BigInteger(value: Math.Ceiling(a: ((band * draws) * ((double)total))));
+                var departure = BigInteger.Abs(value: ((counts[i] * total) - (((BigInteger)draws) * weights[i])));
 
                 if (departure > allowed) {
                     return $"{label}[{i}]: weight {weights[i]} of {total} drew {counts[i]} of {draws}, departing by {departure} against the {StandardErrorBand:F0}-sigma allowance {allowed}";
@@ -285,7 +283,6 @@ internal static class SamplingDistributionClaims {
 
         return null;
     }
-
     // ---- certified low discrepancy: badly-approximable equidistribution, certified by the continued fraction ----
 
     /// <summary>
@@ -310,14 +307,14 @@ internal static class SamplingDistributionClaims {
         int[] scales = [64, 256, 1024, 4096, 16384];
 
         foreach (var certifiedCase in cases) {
-            var sequence = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: certifiedCase.P, q: certifiedCase.Q, d: certifiedCase.D, r: certifiedCase.R);
+            var sequence = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: certifiedCase.D, p: certifiedCase.P, q: certifiedCase.Q, r: certifiedCase.R);
 
             if (sequence.Certificate != certifiedCase.Certificate) {
                 return $"{certifiedCase.Name} certifies at {sequence.Certificate}, expected {certifiedCase.Certificate}";
             }
 
             foreach (var pointCount in scales) {
-                var (numerator, denominator) = ExactStarDiscrepancy(sequence: sequence, pointCount: pointCount);
+                var (numerator, denominator) = ExactStarDiscrepancy(pointCount: pointCount, sequence: sequence);
                 var bound = sequence.DiscrepancyBound(pointCount: pointCount);
 
                 // measured = numerator/denominator, bound = bound.Value/2^16; cross-multiplied, so no rounding enters.
@@ -333,16 +330,16 @@ internal static class SamplingDistributionClaims {
         // Teeth across the same five scales rather than the sibling's three: a certificate of 100 measures markedly
         // worse than one of 1, and the three certificates 1 < 2 < 14 measure strictly monotone. Every side shares the
         // point count and therefore the denominator, so the comparison is on numerators alone.
-        var golden = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L);
-        var silver = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 1L, q: 1L, d: 2L, r: 1L);
-        var sqrt50 = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 0L, q: 1L, d: 50L, r: 1L);
-        var badK = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 0L, q: 1L, d: 2501L, r: 1L);
+        var golden = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 5L, p: 1L, q: 1L, r: 2L);
+        var silver = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 2L, p: 1L, q: 1L, r: 1L);
+        var sqrt50 = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 50L, p: 0L, q: 1L, r: 1L);
+        var badK = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 2501L, p: 0L, q: 1L, r: 1L);
 
         foreach (var pointCount in new[] { 1024, 4096, 16384 }) {
-            var (goldenNumerator, _) = ExactStarDiscrepancy(sequence: golden, pointCount: pointCount);
-            var (silverNumerator, _) = ExactStarDiscrepancy(sequence: silver, pointCount: pointCount);
-            var (sqrt50Numerator, _) = ExactStarDiscrepancy(sequence: sqrt50, pointCount: pointCount);
-            var (badKNumerator, _) = ExactStarDiscrepancy(sequence: badK, pointCount: pointCount);
+            var (goldenNumerator, _) = ExactStarDiscrepancy(pointCount: pointCount, sequence: golden);
+            var (silverNumerator, _) = ExactStarDiscrepancy(pointCount: pointCount, sequence: silver);
+            var (sqrt50Numerator, _) = ExactStarDiscrepancy(pointCount: pointCount, sequence: sqrt50);
+            var (badKNumerator, _) = ExactStarDiscrepancy(pointCount: pointCount, sequence: badK);
 
             if (badKNumerator <= (2 * goldenNumerator)) {
                 return $"K=100 discrepancy {badKNumerator} is not more than twice K=1's {goldenNumerator} at N={pointCount}";
@@ -355,7 +352,7 @@ internal static class SamplingDistributionClaims {
         // Coverage: no sequence leaves an empty circular gap wider than a twentieth of the unit interval over its
         // first 4096 points, computed exactly on the raw UQ0.32 values.
         foreach (var certifiedCase in cases) {
-            var sequence = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: certifiedCase.P, q: certifiedCase.Q, d: certifiedCase.D, r: certifiedCase.R);
+            var sequence = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: certifiedCase.D, p: certifiedCase.P, q: certifiedCase.Q, r: certifiedCase.R);
             var points = new uint[4096];
 
             for (var i = 0; (i < points.Length); ++i) { points[i] = sequence.Point(index: ((ulong)(i + 1))).Value; }
@@ -365,7 +362,7 @@ internal static class SamplingDistributionClaims {
             var gap = ((((ulong)points[0]) + (uint.MaxValue - points[^1])) + 1UL);
 
             for (var i = 1; (i < points.Length); ++i) {
-                var step = ((ulong)(points[i] - points[i - 1]));
+                var step = ((ulong)(points[i] - points[(i - 1)]));
 
                 if (step > gap) { gap = step; }
             }
@@ -377,7 +374,7 @@ internal static class SamplingDistributionClaims {
 
         // Determinism over 200000 points: two independently constructed instances of one generator
         // agree bit for bit, which is what lets a certificate be rebuilt from its four integers rather than persisted.
-        var goldenAgain = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L);
+        var goldenAgain = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 5L, p: 1L, q: 1L, r: 2L);
 
         for (var index = 0UL; (index < 200_000UL); ++index) {
             if (golden.Point(index: index) != goldenAgain.Point(index: index)) {

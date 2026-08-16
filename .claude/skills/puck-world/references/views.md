@@ -7,10 +7,10 @@ unmapped and refuse at parse time.
 
 Primary code:
 
-- `Puck.World.Data/WorldViews.cs` — `WorldViewDefaults`,
+- `Puck.World.Schema/WorldViews.cs` — `WorldViewDefaults`,
   `WorldSeatViewControl`, layouts and slots.
-- `Puck.World.Data/WorldCameraRig.cs` — motion/aim/lens unions.
-- `Puck.World.Data/WorldSeatLook.cs` — portable input preference.
+- `Puck.World.Schema/WorldCameraRig.cs` — motion/aim/lens unions.
+- `Puck.World.Schema/WorldSeatLook.cs` — portable input preference.
 - `Puck.World/Client/WorldSeatViewState.cs` — the one live state per occupied
   seat, including yaw/pitch, live rig cache, and smoothing.
 - `Puck.World/WorldSeatViewInput.cs` — stateless pointer adapter.

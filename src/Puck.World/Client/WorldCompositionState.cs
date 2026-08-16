@@ -10,7 +10,6 @@ namespace Puck.World.Client;
 internal sealed class WorldCompositionState {
     /// <summary>The forced active-layout name, or <see langword="null"/> (auto) for the composer's own selection.</summary>
     public string? ActiveLayout { get; set; }
-
     /// <summary>The forced camera for every camera-bearing slot, or <see langword="null"/> to use each slot's own
     /// authored assignment.</summary>
     public string? SelectedCamera { get; set; }

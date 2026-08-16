@@ -9,6 +9,7 @@ internal sealed class HeldCapabilityLease : ICapabilityTakeBack {
     private readonly object? m_capability;
     private readonly HeldCapabilityLease? m_parent;
     private readonly bool m_revocable;
+
     private int m_revoked;
 
     public HeldCapabilityLease(object capability, bool revocable) {
@@ -17,7 +18,6 @@ internal sealed class HeldCapabilityLease : ICapabilityTakeBack {
         m_capability = capability;
         m_revocable = revocable;
     }
-
     public HeldCapabilityLease(HeldCapabilityLease parent, bool revocable) {
         ArgumentNullException.ThrowIfNull(parent);
 
@@ -42,6 +42,9 @@ internal sealed class HeldCapabilityLease : ICapabilityTakeBack {
             throw new InvalidOperationException(message: "This capability was granted irrevocably (\"no take backsies\") and cannot be reclaimed.");
         }
 
-        _ = Interlocked.Exchange(location1: ref m_revoked, value: 1);
+        _ = Interlocked.Exchange(
+            location1: ref m_revoked,
+            value: 1
+        );
     }
 }

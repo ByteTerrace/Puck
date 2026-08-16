@@ -37,7 +37,6 @@ internal sealed class LinkChurnStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "link-churn";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -62,8 +61,8 @@ internal sealed class LinkChurnStage : IPostStage {
         var replay = RunScenario(churnAtStep: -1);
 
         if (Difference(
-            expected: reference,
             actual: replay,
+            expected: reference,
             leg: "replay"
         ) is { } replayFailure) {
             return PostStageOutcome.Fail(detail: replayFailure);
@@ -73,8 +72,8 @@ internal sealed class LinkChurnStage : IPostStage {
         var churned = RunScenario(churnAtStep: churnStep);
 
         if (Difference(
-            expected: reference,
             actual: churned,
+            expected: reference,
             leg: "churn"
         ) is { } churnFailure) {
             return PostStageOutcome.Fail(detail: churnFailure);
@@ -89,16 +88,16 @@ internal sealed class LinkChurnStage : IPostStage {
     // survive the machine swap by being re-attached to the fresh ports around the same accumulators.
     private static ChurnScenarioResult RunScenario(int churnAtStep) {
         var masterRom = SerialLinkRom.CreateChurn(
+            idleDelay: IdleDelay,
             internalClock: true,
             sendBase: MasterSendBase,
-            transferCount: TransferCount,
-            idleDelay: IdleDelay
+            transferCount: TransferCount
         );
         var slaveRom = SerialLinkRom.CreateChurn(
+            idleDelay: IdleDelay,
             internalClock: false,
             sendBase: SlaveSendBase,
-            transferCount: TransferCount,
-            idleDelay: IdleDelay
+            transferCount: TransferCount
         );
 
         var master = PostMachine.Build(
@@ -182,8 +181,8 @@ internal sealed class LinkChurnStage : IPostStage {
 
                         session = new SerialLinkSession(
                             first: master,
-                            second: slave,
-                            resumeToken: token
+                            resumeToken: token,
+                            second: slave
                         );
                     }
 
@@ -208,7 +207,6 @@ internal sealed class LinkChurnStage : IPostStage {
             slave.Dispose();
         }
     }
-
     // Wire a port's completed-transfer and internal-send observers to a host-side tally. Host wiring — never serialized,
     // so it survives a snapshot/restore only by being re-attached to the fresh port here.
     private static void Observe(MachineInstance instance, TrafficTally tally) {
@@ -217,7 +215,6 @@ internal sealed class LinkChurnStage : IPostStage {
         port.ByteTransmitted = tally.OnSend;
         port.TransferCompleted = tally.OnComplete;
     }
-
     // The cable touches DIV on neither machine, so "the phase at connect" is each machine's own post-boot DIV/serial
     // phase; recording both pins the no-resync decision into the gate.
     private static ConnectPhase ReadPhase(MachineInstance master, MachineInstance slave) =>
@@ -238,7 +235,6 @@ internal sealed class LinkChurnStage : IPostStage {
             InterruptCount: bus.ReadByte(address: SerialLinkRom.InterruptCountAddress)
         );
     }
-
     // The first budget boundary that is transfer-idle with at least one transfer done but not all — a genuine
     // mid-exchange severable instant.
     private static int PickChurnStep(List<BoundaryProbe> probes) {
@@ -256,7 +252,6 @@ internal sealed class LinkChurnStage : IPostStage {
 
         return -1;
     }
-
     // Judges the reference run: both sides completed every transfer with the right interrupt count, and each side's
     // traffic tally shows the full transfer count (a non-idle fingerprint that actually carried bytes across the cable).
     private static string? Judge(ChurnScenarioResult result) {
@@ -298,7 +293,6 @@ internal sealed class LinkChurnStage : IPostStage {
 
         return null;
     }
-
     // Compares a later run against the reference: connect phase, both traffic fingerprints, and both final snapshots must
     // match. Snapshot equality also checks Identity (free rigor). Probes are the schedule's own instrument, not compared.
     private static string? Difference(ChurnScenarioResult expected, ChurnScenarioResult actual, string leg) {

@@ -21,34 +21,209 @@ namespace Puck.Attestation;
 /// is what stops one domain having several encodings (README.md, §2 and §15 row 3).
 /// </summary>
 public sealed class CborAttestationCodec : IAttestationCodec {
-    /// <summary>The only format version this codec currently emits or accepts.</summary>
-    public const ulong FormatVersion = 1;
-
     /// <summary>The byte width of a SHA-256 fingerprint — the exact width every domain and key-hash field must be.</summary>
     private const int FingerprintLength = 32;
+
+    /// <summary>The only format version this codec currently emits or accepts.</summary>
+    public const ulong FormatVersion = 1;
 
     /// <inheritdoc/>
     public string Name => "cbor-v1";
 
-    /// <inheritdoc/>
-    public byte[] EncodeSignedPortion(AttestationHeader header, AttestationPayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
+    /// <summary>
+    /// Computes the exact length <see cref="EncodeAttestation"/> would produce, from the attestation's carried
+    /// byte lengths alone: a definite-length 2-element array of two definite-length byte strings has framing
+    /// that depends only on those lengths.
+    /// </summary>
+    internal static long EncodedAttestationLength(SignedAttestation attestation) =>
+        ((((1 +
+        ((long)ByteStringPrefixLength(contentLength: attestation.SignedPortionLength))) + attestation.SignedPortionLength) +
+        ByteStringPrefixLength(contentLength: attestation.SignatureLength)) + attestation.SignatureLength);
+
+    /// <summary>The byte count of a CBOR definite-length byte-string head (major type 2) for the given content length.</summary>
+    private static int ByteStringPrefixLength(int contentLength) => contentLength switch {
+        < 0x18 => 1,
+        <= 0xFF => 2,
+        <= 0xFFFF => 3,
+        _ => 5,
+    };
+    /// <summary>
+    /// Runs a decode and normalises every way malformed input can surface into <see cref="FormatException"/>.
+    /// <see cref="CborReader"/> raises <see cref="CborContentException"/> for ill-formed data,
+    /// <see cref="InvalidOperationException"/> for a data item of the wrong major type, and
+    /// <see cref="OverflowException"/> for an integer too wide for the requested width — three unrelated
+    /// types for one situation, and a caller that catches only one of them treats the other two as a crash.
+    /// The <see cref="IAttestationCodec"/> contract says malformed bytes are a <see cref="FormatException"/>,
+    /// so this is where that becomes true.
+    /// </summary>
+    private static T Decode<T>(Func<T> body, string what) {
+        try {
+            return body();
+        } catch (FormatException) {
+            throw;
+        } catch (Exception exception) when (((exception is CborContentException) || (exception is InvalidOperationException) || (exception is OverflowException) || (exception is ArgumentException))) {
+            throw new FormatException(
+                message: $"The attestation {what} is not well-formed CBOR of the expected shape: {exception.Message}",
+                innerException: exception
+            );
+        }
+    }
+    private static (AttestationHeader Header, AttestationPayloadKind PayloadKind, byte[] PayloadBytes) DecodeSignedPortion(byte[] bytes) {
+        var reader = new CborReader(
+            data: bytes,
+            conformanceMode: CborConformanceMode.Strict
+        );
+
+        ExpectArrayLength(
+            expected: 11,
+            reader: reader
+        );
+
+        var version = reader.ReadUInt64();
+
+        if (version != FormatVersion) {
+            throw new FormatException(message: $"The attestation declares format version {version}, but this codec only understands version {FormatVersion}.");
+        }
+
+        var domain = ReadFingerprint(
+            reader: reader,
+            what: "attestation's domain"
+        );
+        var subject = ReadOptionalText(reader: reader);
+        var algorithm = reader.ReadTextString();
+        var purpose = reader.ReadTextString();
+        var notBefore = reader.ReadInt64();
+        var notAfter = reader.ReadInt64();
+        var audience = ReadOptionalText(reader: reader);
+        var sequence = ReadOptionalUInt(reader: reader);
+        var payloadKindValue = reader.ReadUInt64();
+
+        // Refused at the DECODER, not left to the verifier: the model's underlying type is a byte, so an
+        // out-of-range wire value would silently truncate into a legitimate kind (258 becomes 2). The
+        // canonicality rule would still catch that, but only as a second line — a kind outside the closed
+        // set is not a canonicality problem, it is not a kind.
+        if (
+            (payloadKindValue < ((ulong)AttestationPayloadKind.Opaque)) ||
+            (payloadKindValue > ((ulong)AttestationPayloadKind.Sealed))
+        ) {
+            throw new FormatException(message: $"The attestation declares payload kind {payloadKindValue}, which is outside the closed set {{1, 2, 3}}.");
+        }
+
+        var payloadKind = ((AttestationPayloadKind)payloadKindValue);
+        var payloadBytes = reader.ReadByteString();
+
+        reader.ReadEndArray();
+
+        var header = new AttestationHeader(
+            Algorithm: algorithm,
+            Audience: audience,
+            Domain: domain,
+            NotAfter: notAfter,
+            NotBefore: notBefore,
+            Purpose: purpose,
+            Sequence: sequence,
+            Subject: subject
+        );
+
+        return (header, payloadKind, payloadBytes);
+    }
+    private static byte[] EncodeSealedPayloadCore(SealedPayload payload) {
         var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
-        WriteSignedPortion(
+        writer.WriteStartArray(definiteLength: 8);
+        writer.WriteByteString(value: Convert.FromHexString(s: payload.RecipientId.Domain));
+        WriteOptionalText(
             writer: writer,
-            header: header,
-            payloadKind: payloadKind,
-            payloadBytes: payloadBytes
+            value: payload.RecipientId.Subject
         );
+        writer.WriteTextString(value: payload.RecipientId.Algorithm);
+        writer.WriteByteString(value: Convert.FromHexString(s: payload.RecipientId.KeyHash));
+        writer.WriteByteString(value: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span);
+        writer.WriteByteString(value: payload.Nonce.Span);
+        writer.WriteByteString(value: payload.Tag.Span);
+        writer.WriteByteString(value: payload.Ciphertext.Span);
+        writer.WriteEndArray();
 
         return writer.Encode();
     }
+    private static void ExpectArrayLength(CborReader reader, int expected) {
+        var length = reader.ReadStartArray();
 
-    /// <inheritdoc/>
-    public byte[] EncodeHeader(AttestationHeader header) {
-        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
+        if (length != expected) {
+            throw new FormatException(message: $"Expected a {expected}-element attestation array, but found {(length?.ToString() ?? "an indefinite-length")} element(s).");
+        }
+    }
+    /// <summary>
+    /// Reads a fingerprint field and refuses any width but 32 bytes. Without this a domain is whatever
+    /// length arrived, two implementations disagree about what a domain even is, and the hex rendering the
+    /// model carries stops round-tripping to one wire form.
+    /// </summary>
+    private static string ReadFingerprint(CborReader reader, string what) {
+        var bytes = reader.ReadByteString();
 
-        writer.WriteStartArray(definiteLength: 9);
+        if (bytes.Length != FingerprintLength) {
+            throw new FormatException(message: $"The attestation {what} is {bytes.Length} byte(s); a fingerprint field is exactly {FingerprintLength}.");
+        }
+
+        return Convert.ToHexStringLower(bytes: bytes);
+    }
+    private static string? ReadOptionalText(CborReader reader) {
+        if (reader.PeekState() == CborReaderState.Null) {
+            reader.ReadNull();
+
+            return null;
+        }
+
+        return reader.ReadTextString();
+    }
+    private static ulong? ReadOptionalUInt(CborReader reader) {
+        if (reader.PeekState() == CborReaderState.Null) {
+            reader.ReadNull();
+
+            return null;
+        }
+
+        return reader.ReadUInt64();
+    }
+    /// <summary>
+    /// Enforces this codec's canonicality rule: what decoded must re-encode to EXACTLY what arrived.
+    /// <see cref="CborConformanceMode.Strict"/> deliberately tolerates indefinite-length strings and
+    /// non-minimal integer encodings, so without this rule one model has many valid wire forms — and a
+    /// verifier that re-derives the signing input from a decoded model would then refuse honest bytes for
+    /// the wrong reason while a receiver deduplicating on wire bytes would see one claim as many. One
+    /// encoding per model, or refused.
+    /// </summary>
+    private static void RequireCanonical(ReadOnlySpan<byte> received, byte[] reencoded, string what) {
+        if (!received.SequenceEqual(other: reencoded)) {
+            throw new FormatException(message: $"The attestation {what} is not canonically encoded: it decodes, but re-encoding what it decoded to produces different bytes ({reencoded.Length} vs the {received.Length} that arrived).");
+        }
+    }
+    /// <summary>
+    /// Refuses trailing bytes after the outer data item. <see cref="CborConformanceMode.Strict"/> checks
+    /// well-formedness of what it reads and says nothing about what follows, so without this a valid
+    /// attestation with arbitrary bytes appended decodes exactly as the original.
+    /// </summary>
+    private static void RequireFullyConsumed(CborReader reader, string what) {
+        if (reader.BytesRemaining != 0) {
+            throw new FormatException(message: $"The attestation {what} carries {reader.BytesRemaining} trailing byte(s) beyond its outer CBOR item — a decoded attestation must account for every byte that arrived.");
+        }
+    }
+    private static void WriteOptionalText(CborWriter writer, string? value) {
+        if (value is null) {
+            writer.WriteNull();
+        } else {
+            writer.WriteTextString(value: value);
+        }
+    }
+    private static void WriteOptionalUInt(CborWriter writer, ulong? value) {
+        if (value is null) {
+            writer.WriteNull();
+        } else {
+            writer.WriteUInt64(value: value.Value);
+        }
+    }
+    private static void WriteSignedPortion(CborWriter writer, AttestationHeader header, AttestationPayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
+        writer.WriteStartArray(definiteLength: 11);
         writer.WriteUInt64(value: FormatVersion);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
         WriteOptionalText(
@@ -67,26 +242,9 @@ public sealed class CborAttestationCodec : IAttestationCodec {
             writer: writer,
             value: header.Sequence
         );
+        writer.WriteUInt64(value: ((ulong)payloadKind));
+        writer.WriteByteString(value: payloadBytes);
         writer.WriteEndArray();
-
-        return writer.Encode();
-    }
-
-    /// <inheritdoc/>
-    public byte[] EncodeAttestation(SignedAttestation attestation) {
-        var signedPortion = EncodeSignedPortion(
-            header: attestation.Header,
-            payloadKind: attestation.PayloadKind,
-            payloadBytes: attestation.PayloadSpan
-        );
-        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
-
-        writer.WriteStartArray(definiteLength: 2);
-        writer.WriteByteString(value: signedPortion);
-        writer.WriteByteString(value: attestation.SignatureSpan);
-        writer.WriteEndArray();
-
-        return writer.Encode();
     }
 
     /// <inheritdoc/>
@@ -106,8 +264,8 @@ public sealed class CborAttestationCodec : IAttestationCodec {
                 );
 
                 ExpectArrayLength(
-                    reader: reader,
-                    expected: 2
+                    expected: 2,
+                    reader: reader
                 );
 
                 var signedPortion = reader.ReadByteString();
@@ -126,8 +284,8 @@ public sealed class CborAttestationCodec : IAttestationCodec {
                 // (README.md §2).
                 var attestation = SignedAttestation.FromSignedPortion(
                     header: header,
-                    payloadKind: payloadKind,
                     payloadBytes: payloadBytes,
+                    payloadKind: payloadKind,
                     signature: signature,
                     signedPortion: signedPortion
                 );
@@ -142,25 +300,6 @@ public sealed class CborAttestationCodec : IAttestationCodec {
             }
         );
     }
-
-    /// <inheritdoc/>
-    public byte[] EncodeKeyBindingPayload(KeyBindingPayload payload) {
-        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
-
-        writer.WriteStartArray(definiteLength: 5);
-        writer.WriteByteString(value: Convert.FromHexString(s: payload.TargetId.Domain));
-        WriteOptionalText(
-            writer: writer,
-            value: payload.TargetId.Subject
-        );
-        writer.WriteTextString(value: payload.TargetId.Algorithm);
-        writer.WriteByteString(value: Convert.FromHexString(s: payload.TargetId.KeyHash));
-        writer.WriteByteString(value: payload.PublicKeySubjectPublicKeyInfo.Span);
-        writer.WriteEndArray();
-
-        return writer.Encode();
-    }
-
     /// <inheritdoc/>
     public KeyBindingPayload DecodeKeyBindingPayload(ReadOnlySpan<byte> bytes) {
         var source = bytes.ToArray();
@@ -174,8 +313,8 @@ public sealed class CborAttestationCodec : IAttestationCodec {
                 );
 
                 ExpectArrayLength(
-                    reader: reader,
-                    expected: 5
+                    expected: 5,
+                    reader: reader
                 );
 
                 var domain = ReadFingerprint(
@@ -204,8 +343,8 @@ public sealed class CborAttestationCodec : IAttestationCodec {
                 };
 
                 var payload = new KeyBindingPayload(
-                    TargetId: targetId,
-                    PublicKeySubjectPublicKeyInfo: spki
+                    PublicKeySubjectPublicKeyInfo: spki,
+                    TargetId: targetId
                 );
 
                 RequireCanonical(
@@ -218,34 +357,6 @@ public sealed class CborAttestationCodec : IAttestationCodec {
             }
         );
     }
-
-    /// <inheritdoc/>
-    public byte[] EncodeSealedPayload(SealedPayload payload) {
-        SealedAttestation.ValidatePayloadStructure(payload: payload);
-
-        return EncodeSealedPayloadCore(payload: payload);
-    }
-
-    private static byte[] EncodeSealedPayloadCore(SealedPayload payload) {
-        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
-
-        writer.WriteStartArray(definiteLength: 8);
-        writer.WriteByteString(value: Convert.FromHexString(s: payload.RecipientId.Domain));
-        WriteOptionalText(
-            writer: writer,
-            value: payload.RecipientId.Subject
-        );
-        writer.WriteTextString(value: payload.RecipientId.Algorithm);
-        writer.WriteByteString(value: Convert.FromHexString(s: payload.RecipientId.KeyHash));
-        writer.WriteByteString(value: payload.EphemeralPublicKeySubjectPublicKeyInfo.Span);
-        writer.WriteByteString(value: payload.Nonce.Span);
-        writer.WriteByteString(value: payload.Tag.Span);
-        writer.WriteByteString(value: payload.Ciphertext.Span);
-        writer.WriteEndArray();
-
-        return writer.Encode();
-    }
-
     /// <inheritdoc/>
     public SealedPayload DecodeSealedPayload(ReadOnlySpan<byte> bytes) {
         var source = bytes.ToArray();
@@ -259,21 +370,21 @@ public sealed class CborAttestationCodec : IAttestationCodec {
                 );
 
                 ExpectArrayLength(
-                    reader: reader,
-                    expected: 8
+                    expected: 8,
+                    reader: reader
                 );
 
                 var recipientId = new KeyId {
                     Domain = ReadFingerprint(
-                        reader: reader,
-                        what: "sealed payload's recipient domain"
-                    ),
+                    reader: reader,
+                    what: "sealed payload's recipient domain"
+                ),
                     Subject = ReadOptionalText(reader: reader),
                     Algorithm = reader.ReadTextString(),
                     KeyHash = ReadFingerprint(
-                        reader: reader,
-                        what: "sealed payload's recipient key hash"
-                    ),
+                    reader: reader,
+                    what: "sealed payload's recipient key hash"
+                ),
                 };
                 var ephemeralSpki = reader.ReadByteString();
                 var nonce = reader.ReadByteString();
@@ -308,27 +419,27 @@ public sealed class CborAttestationCodec : IAttestationCodec {
             }
         );
     }
+    /// <inheritdoc/>
+    public byte[] EncodeAttestation(SignedAttestation attestation) {
+        var signedPortion = EncodeSignedPortion(
+            header: attestation.Header,
+            payloadKind: attestation.PayloadKind,
+            payloadBytes: attestation.PayloadSpan
+        );
+        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
-    /// <summary>
-    /// Computes the exact length <see cref="EncodeAttestation"/> would produce, from the attestation's carried
-    /// byte lengths alone: a definite-length 2-element array of two definite-length byte strings has framing
-    /// that depends only on those lengths.
-    /// </summary>
-    internal static long EncodedAttestationLength(SignedAttestation attestation) =>
-        (1 +
-        (long)ByteStringPrefixLength(contentLength: attestation.SignedPortionLength) + attestation.SignedPortionLength +
-        ByteStringPrefixLength(contentLength: attestation.SignatureLength) + attestation.SignatureLength);
+        writer.WriteStartArray(definiteLength: 2);
+        writer.WriteByteString(value: signedPortion);
+        writer.WriteByteString(value: attestation.SignatureSpan);
+        writer.WriteEndArray();
 
-    /// <summary>The byte count of a CBOR definite-length byte-string head (major type 2) for the given content length.</summary>
-    private static int ByteStringPrefixLength(int contentLength) => contentLength switch {
-        < 0x18 => 1,
-        <= 0xFF => 2,
-        <= 0xFFFF => 3,
-        _ => 5,
-    };
+        return writer.Encode();
+    }
+    /// <inheritdoc/>
+    public byte[] EncodeHeader(AttestationHeader header) {
+        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
 
-    private static void WriteSignedPortion(CborWriter writer, AttestationHeader header, AttestationPayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
-        writer.WriteStartArray(definiteLength: 11);
+        writer.WriteStartArray(definiteLength: 9);
         writer.WriteUInt64(value: FormatVersion);
         writer.WriteByteString(value: Convert.FromHexString(s: header.Domain));
         WriteOptionalText(
@@ -347,168 +458,44 @@ public sealed class CborAttestationCodec : IAttestationCodec {
             writer: writer,
             value: header.Sequence
         );
-        writer.WriteUInt64(value: (ulong)payloadKind);
-        writer.WriteByteString(value: payloadBytes);
         writer.WriteEndArray();
+
+        return writer.Encode();
     }
-    private static (AttestationHeader Header, AttestationPayloadKind PayloadKind, byte[] PayloadBytes) DecodeSignedPortion(byte[] bytes) {
-        var reader = new CborReader(
-            data: bytes,
-            conformanceMode: CborConformanceMode.Strict
+    /// <inheritdoc/>
+    public byte[] EncodeKeyBindingPayload(KeyBindingPayload payload) {
+        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
+
+        writer.WriteStartArray(definiteLength: 5);
+        writer.WriteByteString(value: Convert.FromHexString(s: payload.TargetId.Domain));
+        WriteOptionalText(
+            writer: writer,
+            value: payload.TargetId.Subject
+        );
+        writer.WriteTextString(value: payload.TargetId.Algorithm);
+        writer.WriteByteString(value: Convert.FromHexString(s: payload.TargetId.KeyHash));
+        writer.WriteByteString(value: payload.PublicKeySubjectPublicKeyInfo.Span);
+        writer.WriteEndArray();
+
+        return writer.Encode();
+    }
+    /// <inheritdoc/>
+    public byte[] EncodeSealedPayload(SealedPayload payload) {
+        SealedAttestation.ValidatePayloadStructure(payload: payload);
+
+        return EncodeSealedPayloadCore(payload: payload);
+    }
+    /// <inheritdoc/>
+    public byte[] EncodeSignedPortion(AttestationHeader header, AttestationPayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes) {
+        var writer = new CborWriter(conformanceMode: CborConformanceMode.Strict);
+
+        WriteSignedPortion(
+            header: header,
+            payloadBytes: payloadBytes,
+            payloadKind: payloadKind,
+            writer: writer
         );
 
-        ExpectArrayLength(
-            reader: reader,
-            expected: 11
-        );
-
-        var version = reader.ReadUInt64();
-
-        if (version != FormatVersion) {
-            throw new FormatException(message: $"The attestation declares format version {version}, but this codec only understands version {FormatVersion}.");
-        }
-
-        var domain = ReadFingerprint(
-            reader: reader,
-            what: "attestation's domain"
-        );
-        var subject = ReadOptionalText(reader: reader);
-        var algorithm = reader.ReadTextString();
-        var purpose = reader.ReadTextString();
-        var notBefore = reader.ReadInt64();
-        var notAfter = reader.ReadInt64();
-        var audience = ReadOptionalText(reader: reader);
-        var sequence = ReadOptionalUInt(reader: reader);
-        var payloadKindValue = reader.ReadUInt64();
-
-        // Refused at the DECODER, not left to the verifier: the model's underlying type is a byte, so an
-        // out-of-range wire value would silently truncate into a legitimate kind (258 becomes 2). The
-        // canonicality rule would still catch that, but only as a second line — a kind outside the closed
-        // set is not a canonicality problem, it is not a kind.
-        if (
-            (payloadKindValue < (ulong)AttestationPayloadKind.Opaque) ||
-            (payloadKindValue > (ulong)AttestationPayloadKind.Sealed)
-        ) {
-            throw new FormatException(message: $"The attestation declares payload kind {payloadKindValue}, which is outside the closed set {{1, 2, 3}}.");
-        }
-
-        var payloadKind = (AttestationPayloadKind)payloadKindValue;
-        var payloadBytes = reader.ReadByteString();
-
-        reader.ReadEndArray();
-
-        var header = new AttestationHeader(
-            Domain: domain,
-            Subject: subject,
-            Algorithm: algorithm,
-            Purpose: purpose,
-            NotBefore: notBefore,
-            NotAfter: notAfter,
-            Audience: audience,
-            Sequence: sequence
-        );
-
-        return (header, payloadKind, payloadBytes);
-    }
-
-    /// <summary>
-    /// Runs a decode and normalises every way malformed input can surface into <see cref="FormatException"/>.
-    /// <see cref="CborReader"/> raises <see cref="CborContentException"/> for ill-formed data,
-    /// <see cref="InvalidOperationException"/> for a data item of the wrong major type, and
-    /// <see cref="OverflowException"/> for an integer too wide for the requested width — three unrelated
-    /// types for one situation, and a caller that catches only one of them treats the other two as a crash.
-    /// The <see cref="IAttestationCodec"/> contract says malformed bytes are a <see cref="FormatException"/>,
-    /// so this is where that becomes true.
-    /// </summary>
-    private static T Decode<T>(Func<T> body, string what) {
-        try {
-            return body();
-        } catch (FormatException) {
-            throw;
-        } catch (Exception exception) when (((exception is CborContentException) || (exception is InvalidOperationException) || (exception is OverflowException) || (exception is ArgumentException))) {
-            throw new FormatException(
-                message: $"The attestation {what} is not well-formed CBOR of the expected shape: {exception.Message}",
-                innerException: exception
-            );
-        }
-    }
-
-    /// <summary>
-    /// Refuses trailing bytes after the outer data item. <see cref="CborConformanceMode.Strict"/> checks
-    /// well-formedness of what it reads and says nothing about what follows, so without this a valid
-    /// attestation with arbitrary bytes appended decodes exactly as the original.
-    /// </summary>
-    private static void RequireFullyConsumed(CborReader reader, string what) {
-        if (reader.BytesRemaining != 0) {
-            throw new FormatException(message: $"The attestation {what} carries {reader.BytesRemaining} trailing byte(s) beyond its outer CBOR item — a decoded attestation must account for every byte that arrived.");
-        }
-    }
-
-    /// <summary>
-    /// Enforces this codec's canonicality rule: what decoded must re-encode to EXACTLY what arrived.
-    /// <see cref="CborConformanceMode.Strict"/> deliberately tolerates indefinite-length strings and
-    /// non-minimal integer encodings, so without this rule one model has many valid wire forms — and a
-    /// verifier that re-derives the signing input from a decoded model would then refuse honest bytes for
-    /// the wrong reason while a receiver deduplicating on wire bytes would see one claim as many. One
-    /// encoding per model, or refused.
-    /// </summary>
-    private static void RequireCanonical(ReadOnlySpan<byte> received, byte[] reencoded, string what) {
-        if (!received.SequenceEqual(other: reencoded)) {
-            throw new FormatException(message: $"The attestation {what} is not canonically encoded: it decodes, but re-encoding what it decoded to produces different bytes ({reencoded.Length} vs the {received.Length} that arrived).");
-        }
-    }
-
-    /// <summary>
-    /// Reads a fingerprint field and refuses any width but 32 bytes. Without this a domain is whatever
-    /// length arrived, two implementations disagree about what a domain even is, and the hex rendering the
-    /// model carries stops round-tripping to one wire form.
-    /// </summary>
-    private static string ReadFingerprint(CborReader reader, string what) {
-        var bytes = reader.ReadByteString();
-
-        if (bytes.Length != FingerprintLength) {
-            throw new FormatException(message: $"The attestation {what} is {bytes.Length} byte(s); a fingerprint field is exactly {FingerprintLength}.");
-        }
-
-        return Convert.ToHexStringLower(bytes: bytes);
-    }
-    private static void ExpectArrayLength(CborReader reader, int expected) {
-        var length = reader.ReadStartArray();
-
-        if (length != expected) {
-            throw new FormatException(message: $"Expected a {expected}-element attestation array, but found {(length?.ToString() ?? "an indefinite-length")} element(s).");
-        }
-    }
-    private static void WriteOptionalText(CborWriter writer, string? value) {
-        if (value is null) {
-            writer.WriteNull();
-        } else {
-            writer.WriteTextString(value: value);
-        }
-    }
-    private static string? ReadOptionalText(CborReader reader) {
-        if (reader.PeekState() == CborReaderState.Null) {
-            reader.ReadNull();
-
-            return null;
-        }
-
-        return reader.ReadTextString();
-    }
-    private static void WriteOptionalUInt(CborWriter writer, ulong? value) {
-        if (value is null) {
-            writer.WriteNull();
-        } else {
-            writer.WriteUInt64(value: value.Value);
-        }
-    }
-    private static ulong? ReadOptionalUInt(CborReader reader) {
-        if (reader.PeekState() == CborReaderState.Null) {
-            reader.ReadNull();
-
-            return null;
-        }
-
-        return reader.ReadUInt64();
+        return writer.Encode();
     }
 }

@@ -49,37 +49,6 @@ public sealed class TextCommandSource : ITextCommandSink {
         );
     }
 
-    /// <summary>Creates a seat-authenticated text session over this source's shared queue and registry.</summary>
-    /// <param name="router">The input router that mints the session's fixed simulation ingress.</param>
-    /// <param name="slot">The local seat slot.</param>
-    /// <param name="onResult">An optional callback for synchronous results produced by this session.</param>
-    /// <returns>A text sink permanently stamped as <see cref="CommandPrincipal.Seat"/> for <paramref name="slot"/>.</returns>
-    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null) {
-        ArgumentNullException.ThrowIfNull(router);
-        ArgumentOutOfRangeException.ThrowIfNegative(slot);
-
-        if (!ReferenceEquals(objA: router.Registry, objB: m_registry)) {
-            throw new ArgumentException(message: "The router and text source must use the same command registry.", paramName: nameof(router));
-        }
-
-        return new TextCommandSession(
-            source: this,
-            principal: CommandPrincipal.Seat(slot: slot),
-            slot: slot,
-            simulationSink: router.CreateSeatTextSink(slot: slot),
-            onResult: onResult
-        );
-    }
-
-    /// <summary>Queues a command line to be submitted on the next <see cref="Collect"/>.</summary>
-    /// <param name="line">The command line to queue. Blank lines are skipped when collected.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
-    public void Enqueue(string line) {
-        ArgumentNullException.ThrowIfNull(line);
-
-        m_administrativeSession.Enqueue(line: line);
-    }
-
     internal void EnqueueSession(TextCommandSession session, string line) {
         session.EnqueuePending(line: line);
         m_pending.Enqueue(item: session);
@@ -107,7 +76,10 @@ public sealed class TextCommandSource : ITextCommandSink {
             !(HoldGate?.Invoke() ?? false) &&
             m_pending.TryDequeue(result: out var session)
         ) {
-            if (!session.TryPeekPending(line: out var line) || (line is null)) {
+            if (
+                !session.TryPeekPending(line: out var line) ||
+                (line is null)
+            ) {
                 continue;
             }
 
@@ -136,7 +108,10 @@ public sealed class TextCommandSource : ITextCommandSink {
                 continue;
             }
 
-            if (!session.TryDequeuePending(line: out line) || (line is null)) {
+            if (
+                !session.TryDequeuePending(line: out line) ||
+                (line is null)
+            ) {
                 continue;
             }
 
@@ -150,5 +125,40 @@ public sealed class TextCommandSource : ITextCommandSink {
                 result: result
             );
         }
+    }
+    /// <summary>Creates a seat-authenticated text session over this source's shared queue and registry.</summary>
+    /// <param name="router">The input router that mints the session's fixed simulation ingress.</param>
+    /// <param name="slot">The local seat slot.</param>
+    /// <param name="onResult">An optional callback for synchronous results produced by this session.</param>
+    /// <returns>A text sink permanently stamped as <see cref="CommandPrincipal.Seat"/> for <paramref name="slot"/>.</returns>
+    public TextCommandSession CreateSeatSession(InputRouter router, int slot, Action<string, CommandResult>? onResult = null) {
+        ArgumentNullException.ThrowIfNull(router);
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+
+        if (!ReferenceEquals(
+            objA: router.Registry,
+            objB: m_registry
+        )) {
+            throw new ArgumentException(
+                message: "The router and text source must use the same command registry.",
+                paramName: nameof(router)
+            );
+        }
+
+        return new TextCommandSession(
+            source: this,
+            principal: CommandPrincipal.Seat(slot: slot),
+            slot: slot,
+            simulationSink: router.CreateSeatTextSink(slot: slot),
+            onResult: onResult
+        );
+    }
+    /// <summary>Queues a command line to be submitted on the next <see cref="Collect"/>.</summary>
+    /// <param name="line">The command line to queue. Blank lines are skipped when collected.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
+    public void Enqueue(string line) {
+        ArgumentNullException.ThrowIfNull(line);
+
+        m_administrativeSession.Enqueue(line: line);
     }
 }

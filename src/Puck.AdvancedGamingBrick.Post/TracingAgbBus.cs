@@ -38,13 +38,13 @@ internal sealed class TracingAgbBus : IAgbBus {
     public bool IrqPending => m_inner.IrqPending;
 
     public byte Read8(uint address, BusAccessType access) => m_inner.Read8(
-        address: address,
-        access: access
+        access: access,
+        address: address
     );
     public ushort Read16(uint address, BusAccessType access) {
         var value = m_inner.Read16(
-            address: address,
-            access: access
+            access: access,
+            address: address
         );
         var aligned = address & ~1u;
 
@@ -79,16 +79,16 @@ internal sealed class TracingAgbBus : IAgbBus {
         return value;
     }
     public uint Read32(uint address, BusAccessType access) => m_inner.Read32(
-        address: address,
-        access: access
+        access: access,
+        address: address
     );
     public ushort ReadCode16(uint address, BusAccessType access) => m_inner.ReadCode16(
-        address: address,
-        access: access
+        access: access,
+        address: address
     );
     public uint ReadCode32(uint address, BusAccessType access) => m_inner.ReadCode32(
-        address: address,
-        access: access
+        access: access,
+        address: address
     );
     public void Write8(uint address, byte value, BusAccessType access) {
         Watch(
@@ -96,9 +96,9 @@ internal sealed class TracingAgbBus : IAgbBus {
             value: value
         );
         m_inner.Write8(
+            access: access,
             address: address,
-            value: value,
-            access: access
+            value: value
         );
     }
     public void Write16(uint address, ushort value, BusAccessType access) {
@@ -111,9 +111,9 @@ internal sealed class TracingAgbBus : IAgbBus {
             value: value
         );
         m_inner.Write16(
+            access: access,
             address: address,
-            value: value,
-            access: access
+            value: value
         );
     }
     public void Write32(uint address, uint value, BusAccessType access) {
@@ -126,9 +126,9 @@ internal sealed class TracingAgbBus : IAgbBus {
             value: value
         );
         m_inner.Write32(
+            access: access,
             address: address,
-            value: value,
-            access: access
+            value: value
         );
     }
     public void Idle(int cycles) => m_inner.Idle(cycles: cycles);

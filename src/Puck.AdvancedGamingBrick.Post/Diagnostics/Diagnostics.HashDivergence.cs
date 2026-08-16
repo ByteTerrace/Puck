@@ -28,8 +28,8 @@ internal static partial class Diagnostics {
         }
 
         var romAPath = ((((hashDivergenceIndex + 1) < args.Length) && !args[(hashDivergenceIndex + 1)].StartsWith(
-            value: "--",
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            value: "--"
         ))
             ? args[(hashDivergenceIndex + 1)]
             : null);
@@ -42,8 +42,8 @@ internal static partial class Diagnostics {
         }
 
         var romBPath = ((((hashDivergenceIndex + 2) < args.Length) && !args[(hashDivergenceIndex + 2)].StartsWith(
-            value: "--",
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            value: "--"
         ))
             ? args[(hashDivergenceIndex + 2)]
             : null);

@@ -12,7 +12,6 @@ internal enum ConformanceRomResult {
     /// <summary>The ROM produced no result within its frame cap.</summary>
     Inconclusive,
 }
-
 /// <summary>
 /// Runs a conformance test ROM and reads its verdict. The primary channel is the serial text the ROM prints (captured through
 /// <see cref="SerialComponent.ByteTransmitted"/>), which ends in "Passed" or "Failed"; the fallback is the <c>0xA000</c>
@@ -45,28 +44,28 @@ internal static class ConformanceRomProbe {
         var bus = machine.GetRequiredService<ISystemBus>();
         var serialText = new StringBuilder();
 
-        machine.GetRequiredService<SerialComponent>().ByteTransmitted = value => serialText.Append(value: (char)value);
+        machine.GetRequiredService<SerialComponent>().ByteTransmitted = value => serialText.Append(value: ((char)value));
 
         var sawRunning = false;
 
         for (var frame = 0; (frame < romCase.FrameCap); ++frame) {
             PostMachine.RunFrames(
-                instance: machine,
-                frames: 1
+                frames: 1,
+                instance: machine
             );
 
             var rendered = serialText.ToString();
 
             if (rendered.Contains(
-                value: "Passed",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "Passed"
             )) {
                 return (ConformanceRomResult.Pass, Clean(text: rendered));
             }
 
             if (rendered.Contains(
-                value: "Failed",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "Failed"
             )) {
                 return (ConformanceRomResult.Fail, Clean(text: rendered));
             }
@@ -91,15 +90,15 @@ internal static class ConformanceRomProbe {
         var final = serialText.ToString();
 
         if (final.Contains(
-            value: "Passed",
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            value: "Passed"
         )) {
             return (ConformanceRomResult.Pass, Clean(text: final));
         }
 
         if (final.Contains(
-            value: "Failed",
-            comparisonType: StringComparison.Ordinal
+            comparisonType: StringComparison.Ordinal,
+            value: "Failed"
         )) {
             return (ConformanceRomResult.Fail, Clean(text: final));
         }
@@ -120,8 +119,8 @@ internal static class ConformanceRomProbe {
         return string.Join(
             separator: ' ',
             values: builder.ToString().Split(
-                separator: (char[]?)null,
-                options: StringSplitOptions.RemoveEmptyEntries
+                options: StringSplitOptions.RemoveEmptyEntries,
+                separator: ((char[]?)null)
             )
         );
     }

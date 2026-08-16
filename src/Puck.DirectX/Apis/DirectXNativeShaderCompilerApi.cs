@@ -25,9 +25,9 @@ public sealed unsafe class DirectXNativeShaderCompilerApi : IDirectXShaderCompil
         fixed (byte* source = sourceBytes) {
             var result = PInvoke.D3DCompile(
                 pSrcData: source,
-                SrcDataSize: (nuint)sourceBytes.Length,
+                SrcDataSize: ((nuint)sourceBytes.Length),
                 pSourceName: request.SourceName,
-                pDefines: (D3D_SHADER_MACRO?)null,
+                pDefines: ((D3D_SHADER_MACRO?)null),
                 pInclude: null,
                 pEntrypoint: request.EntryPoint,
                 pTarget: request.Target,
@@ -55,7 +55,7 @@ public sealed unsafe class DirectXNativeShaderCompilerApi : IDirectXShaderCompil
             }
         }
 
-        return new DirectXShaderBytecode(blobHandle: (nint)code);
+        return new DirectXShaderBytecode(blobHandle: ((nint)code));
     }
 
     private static string? ReadBlobString(ID3DBlob* blob) {
@@ -64,7 +64,7 @@ public sealed unsafe class DirectXNativeShaderCompilerApi : IDirectXShaderCompil
         }
 
         var pointer = blob->GetBufferPointer();
-        var length = (int)blob->GetBufferSize();
+        var length = ((int)blob->GetBufferSize());
 
         if (
             (pointer is null) ||
@@ -74,8 +74,8 @@ public sealed unsafe class DirectXNativeShaderCompilerApi : IDirectXShaderCompil
         }
 
         return Encoding.ASCII.GetString(
-            bytes: (byte*)pointer,
-            byteCount: length
+            byteCount: length,
+            bytes: ((byte*)pointer)
         ).TrimEnd(
             '\0',
             '\n',

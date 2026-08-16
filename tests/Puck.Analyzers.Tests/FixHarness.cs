@@ -19,14 +19,11 @@ internal sealed class FixedDiagnosticProvider : FixAllContext.DiagnosticProvider
 
     public override Task<IEnumerable<Diagnostic>> GetAllDiagnosticsAsync(Project project, CancellationToken cancellationToken) =>
         Task.FromResult<IEnumerable<Diagnostic>>(result: m_diagnostics);
-
     public override Task<IEnumerable<Diagnostic>> GetDocumentDiagnosticsAsync(Document document, CancellationToken cancellationToken) =>
         Task.FromResult<IEnumerable<Diagnostic>>(result: m_diagnostics.Where(predicate: diagnostic => string.Equals(a: diagnostic.Location.SourceTree?.FilePath, b: document.FilePath, comparisonType: StringComparison.Ordinal)));
-
     public override Task<IEnumerable<Diagnostic>> GetProjectDiagnosticsAsync(Project project, CancellationToken cancellationToken) =>
         Task.FromResult<IEnumerable<Diagnostic>>(result: []);
 }
-
 /// <summary>A workspace holding one project's branded source and its ledger, ready to be diagnosed and repaired.</summary>
 internal sealed class FixSubject : IDisposable {
     private readonly AdhocWorkspace m_workspace;
@@ -39,17 +36,14 @@ internal sealed class FixSubject : IDisposable {
 
     /// <summary>The ledger document the code fix is expected to rewrite.</summary>
     public DocumentId ManifestId { get; }
-
     /// <summary>The branded source document a diagnostic is reported on.</summary>
     public DocumentId SourceId { get; }
-
     /// <summary>The solution as it stands now.</summary>
     public Solution Solution =>
         m_workspace.CurrentSolution;
 
     public void Dispose() =>
         m_workspace.Dispose();
-
     /// <summary>Adds a second project sharing the same physical ledger path, for the linked-file case.</summary>
     public DocumentId AddLinkedProject(string assemblyName, string source, string manifestJson) {
         var projectId = ProjectId.CreateNewId();
@@ -74,7 +68,6 @@ internal sealed class FixSubject : IDisposable {
         return manifestId;
     }
 }
-
 /// <summary>Drives <see cref="VerifiedCodeCodeFixProvider"/> the way an IDE would: real documents, real solution edits.</summary>
 internal static class FixHarness {
     /// <summary>Builds a one-project workspace from branded source and a ledger.</summary>
@@ -100,9 +93,8 @@ internal static class FixHarness {
             throw new InvalidOperationException(message: "The harness workspace rejected its initial solution.");
         }
 
-        return new FixSubject(workspace: workspace, sourceId: sourceId, manifestId: manifestId);
+        return new FixSubject(manifestId: manifestId, sourceId: sourceId, workspace: workspace);
     }
-
     /// <summary>Adds a second additional document with the same file name, for the ambiguous-ledger case.</summary>
     public static Solution AddSecondManifest(Solution solution, DocumentId manifestId, string manifestJson, string path) =>
         solution.AddAdditionalDocument(
@@ -152,7 +144,6 @@ internal static class FixHarness {
 
         return await withAnalyzers.GetAnalyzerDiagnosticsAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
     }
-
     /// <summary>The code actions the provider offers for <paramref name="diagnostic"/>.</summary>
     public static async Task<ImmutableArray<CodeAction>> ActionsAsync(Solution solution, DocumentId documentId, Diagnostic diagnostic, CancellationToken cancellationToken) {
         var actions = ImmutableArray.CreateBuilder<CodeAction>();
@@ -167,14 +158,12 @@ internal static class FixHarness {
 
         return actions.ToImmutable();
     }
-
     /// <summary>The solution <paramref name="action"/> would produce, or <see langword="null"/> when it changes nothing.</summary>
     public static async Task<Solution?> ApplyAsync(CodeAction action, CancellationToken cancellationToken) {
         var operations = await action.GetOperationsAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         return operations.OfType<ApplyChangesOperation>().FirstOrDefault()?.ChangedSolution;
     }
-
     /// <summary>Runs Fix All over <paramref name="diagnostics"/> at project scope.</summary>
     public static async Task<Solution?> FixAllAsync(Solution solution, DocumentId documentId, ImmutableArray<Diagnostic> diagnostics, string equivalenceKey, CancellationToken cancellationToken) {
         var provider = new VerifiedCodeCodeFixProvider();
@@ -192,7 +181,6 @@ internal static class FixHarness {
 
         return ((action is null) ? null : await ApplyAsync(action: action, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
     }
-
     /// <summary>The text of an additional document in <paramref name="solution"/>.</summary>
     public static async Task<SourceText> ManifestTextAsync(Solution solution, DocumentId manifestId, CancellationToken cancellationToken) =>
         await solution.GetAdditionalDocument(documentId: manifestId)!.GetTextAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);

@@ -48,13 +48,13 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
             SType = StructureTypePhysicalDeviceAccelerationStructurePropertiesKhr,
         };
         var properties2 = new VkPhysicalDeviceProperties2 {
-            PNext = (nint)(&accelerationProperties),
+            PNext = ((nint)(&accelerationProperties)),
             SType = StructureTypePhysicalDeviceProperties2,
         };
 
         instancePointers.GetPhysicalDeviceProperties2(
             physicalDeviceHandle,
-            (nint)(&properties2)
+            ((nint)(&properties2))
         );
         return Math.Max(
             val1: accelerationProperties.MinAccelerationStructureScratchOffsetAlignment,
@@ -108,7 +108,7 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
             var allocateInfo = new VkMemoryAllocateInfo {
                 AllocationSize = memoryRequirements.Size,
                 MemoryTypeIndex = memoryTypeIndex,
-                PNext = (nint)(&allocateFlags),
+                PNext = ((nint)(&allocateFlags)),
                 SType = StructureTypeMemoryAllocateInfo,
             };
 
@@ -170,7 +170,7 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
             deviceHandle,
             memoryHandle,
             0,
-            (nuint)sizeBytes,
+            ((nuint)sizeBytes),
             0,
             out var mappedPointer
         ).ThrowIfFailed(operation: "vkMapMemory");
@@ -256,7 +256,7 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
                 Flags = buildFlags,
                 GeometryCount = 1,
                 Mode = BuildAccelerationStructureModeBuild,
-                PGeometries = (nint)geometryPointer,
+                PGeometries = ((nint)geometryPointer),
                 SType = StructureTypeAccelerationStructureBuildGeometryInfoKhr,
                 Type = accelerationStructureType,
             };
@@ -267,9 +267,9 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
             pointers.GetAccelerationStructureBuildSizes(
                 deviceHandle,
                 AccelerationStructureBuildTypeDevice,
-                (nint)(&buildInfo),
-                (nint)(&maxPrimitiveCount),
-                (nint)(&sizes)
+                ((nint)(&buildInfo)),
+                ((nint)(&maxPrimitiveCount)),
+                ((nint)(&sizes))
             );
             return sizes;
         }
@@ -293,7 +293,7 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
                 Flags = buildFlags,
                 GeometryCount = 1,
                 Mode = BuildAccelerationStructureModeBuild,
-                PGeometries = (nint)geometryPointer,
+                PGeometries = ((nint)geometryPointer),
                 SType = StructureTypeAccelerationStructureBuildGeometryInfoKhr,
                 ScratchDataDeviceAddress = scratchDeviceAddress,
                 Type = accelerationStructureType,
@@ -306,8 +306,8 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
             pointers.CmdBuildAccelerationStructures(
                 commandBufferHandle,
                 1,
-                (nint)(&buildInfo),
-                (nint)(&rangePointer)
+                ((nint)(&buildInfo)),
+                ((nint)(&rangePointer))
             );
         }
     }
@@ -332,7 +332,7 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
             destinationStageMask,
             0,
             1,
-            (nint)(&barrier),
+            ((nint)(&barrier)),
             0,
             0,
             0,
@@ -380,21 +380,21 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
                 // possibly-unsupported devices, where they resolve to null. The core buffer/memory commands are
                 // required. GetBufferDeviceAddress carries whichever of its two names resolved above.
                 return new DevicePointers {
-                    CreateAccelerationStructure = (delegate* unmanaged[Cdecl]<nint, in VkAccelerationStructureCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCreateAccelerationStructureKHR"u8),
-                    DestroyAccelerationStructure = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkDestroyAccelerationStructureKHR"u8),
-                    GetAccelerationStructureBuildSizes = (delegate* unmanaged[Cdecl]<nint, uint, nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetAccelerationStructureBuildSizesKHR"u8),
-                    GetAccelerationStructureDeviceAddress = (delegate* unmanaged[Cdecl]<nint, in VkAccelerationStructureDeviceAddressInfoKhr, ulong>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetAccelerationStructureDeviceAddressKHR"u8),
-                    CmdBuildAccelerationStructures = (delegate* unmanaged[Cdecl]<nint, uint, nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdBuildAccelerationStructuresKHR"u8),
-                    GetBufferDeviceAddress = (delegate* unmanaged[Cdecl]<nint, in VkBufferDeviceAddressInfo, ulong>)getBufferDeviceAddress,
-                    CmdPipelineBarrier = (delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPipelineBarrier"u8),
-                    CreateBuffer = (delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8),
-                    DestroyBuffer = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8),
-                    GetBufferMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8),
-                    AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8),
-                    FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8),
-                    BindBufferMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8),
-                    MapMemory = (delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8),
-                    UnmapMemory = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8),
+                    CreateAccelerationStructure = ((delegate* unmanaged[Cdecl]<nint, in VkAccelerationStructureCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCreateAccelerationStructureKHR"u8)),
+                    DestroyAccelerationStructure = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkDestroyAccelerationStructureKHR"u8)),
+                    GetAccelerationStructureBuildSizes = ((delegate* unmanaged[Cdecl]<nint, uint, nint, nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetAccelerationStructureBuildSizesKHR"u8)),
+                    GetAccelerationStructureDeviceAddress = ((delegate* unmanaged[Cdecl]<nint, in VkAccelerationStructureDeviceAddressInfoKhr, ulong>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkGetAccelerationStructureDeviceAddressKHR"u8)),
+                    CmdBuildAccelerationStructures = ((delegate* unmanaged[Cdecl]<nint, uint, nint, nint, void>)VulkanProcResolver.ResolveOptionalDeviceProc(deviceHandle: handle, functionName: "vkCmdBuildAccelerationStructuresKHR"u8)),
+                    GetBufferDeviceAddress = ((delegate* unmanaged[Cdecl]<nint, in VkBufferDeviceAddressInfo, ulong>)getBufferDeviceAddress),
+                    CmdPipelineBarrier = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCmdPipelineBarrier"u8)),
+                    CreateBuffer = ((delegate* unmanaged[Cdecl]<nint, in VkBufferCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateBuffer"u8)),
+                    DestroyBuffer = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyBuffer"u8)),
+                    GetBufferMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetBufferMemoryRequirements"u8)),
+                    AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
+                    FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
+                    BindBufferMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindBufferMemory"u8)),
+                    MapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nuint, uint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkMapMemory"u8)),
+                    UnmapMemory = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUnmapMemory"u8)),
                 };
             }
         );
@@ -403,8 +403,8 @@ public unsafe sealed class VulkanNativeAccelerationStructureApi : IVulkanAcceler
         return m_instancePointers.GetOrAdd(
             key: instanceHandle,
             valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceMemoryProperties"u8),
-                GetPhysicalDeviceProperties2 = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceProperties2"u8),
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
+                GetPhysicalDeviceProperties2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkGetPhysicalDeviceProperties2"u8, instanceHandle: handle)),
             }
         );
     }

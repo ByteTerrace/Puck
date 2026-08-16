@@ -8,7 +8,7 @@ namespace Puck.Cli.Schema;
 // small root (src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json) plus one file per top-level document
 // section and a common.schema.json for shapes shared by more than one section, both under
 // src/Puck.World/Assets/worlds/schema/. All generation and the dedup/split logic live in Puck.World.WorldSchema
-// (src/Puck.World.Data); this verb only decides where the text goes and, under --check, whether every file agrees
+// (src/Puck.World.Schema); this verb only decides where the text goes and, under --check, whether every file agrees
 // with what is on disk — the same drift-detection shape `puck architecture --map` establishes for
 // docs/project-map.md's layering block.
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
@@ -33,10 +33,10 @@ internal static class SchemaCommand {
                             written to [path] if given, else stdout
           -h, --help        this text
 
-        Generated from WorldDefinition (src/Puck.World.Data/WorldDefinition.cs) over the SAME
+        Generated from WorldDefinition (src/Puck.World.Schema/WorldDefinition.cs) over the SAME
         source-generated WorldJsonContext the engine loads a world document through
         (System.Text.Json's JsonSchemaExporter) — never hand-maintained. Descriptions are
-        pulled from Puck.World.Data.xml beside the assembly; when that file is missing the
+        pulled from Puck.World.Schema.xml beside the assembly; when that file is missing the
         schema still writes, with no descriptions, and this verb says so on stderr.
 
         Written to: src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json (root),
@@ -47,8 +47,8 @@ internal static class SchemaCommand {
         Exit codes: 0 wrote or matched, 1 check found drift, 2 usage error or missing
         repository root.
         """;
-    private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
     private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
+    private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
     private const string SectionsRelativeDirectory = "src/Puck.World/Assets/worlds/schema";
 
     private readonly record struct SchemaFile(string FullPath, string Text);
@@ -69,7 +69,7 @@ internal static class SchemaCommand {
         }
 
         if (!WorldSchema.HasXmlDocumentation) {
-            Console.Error.WriteLine(value: "schema: Puck.World.Data.xml not found beside the assembly — the generated schema will carry no descriptions.");
+            Console.Error.WriteLine(value: "schema: Puck.World.Schema.xml not found beside the assembly — the generated schema will carry no descriptions.");
         }
 
         var split = WorldSchema.Export();
@@ -94,8 +94,8 @@ internal static class SchemaCommand {
             Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection()));
 
         return (scanner.Has(name: "check")
-            ? Check(root: root, projection: projection, sections: sections, common: common, sectionsDirectory: sectionsDirectory)
-            : Write(root: root, projection: projection, sections: sections, common: common, sectionsDirectory: sectionsDirectory));
+            ? Check(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory)
+            : Write(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory));
     }
 
     private static int Bundle(WorldSchema.SplitSchema split, string? path) {
@@ -130,7 +130,7 @@ internal static class SchemaCommand {
         return (root, sections, common, sectionsDirectory);
     }
     private static string ToNativePath(string relativePath) =>
-        relativePath.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar);
+        relativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/');
     private static int Write(SchemaFile root, SchemaFile projection, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
         WriteFile(file: root);
         WriteFile(file: projection);
@@ -141,7 +141,7 @@ internal static class SchemaCommand {
 
         WriteFile(file: common);
 
-        var expectedNames = ExpectedFileNames(sections: sections, common: common);
+        var expectedNames = ExpectedFileNames(common: common, sections: sections);
         var removed = new List<string>();
 
         if (Directory.Exists(path: sectionsDirectory)) {
@@ -182,7 +182,7 @@ internal static class SchemaCommand {
 
         CheckFile(file: common, problems: problems);
 
-        var expectedNames = ExpectedFileNames(sections: sections, common: common);
+        var expectedNames = ExpectedFileNames(common: common, sections: sections);
 
         if (Directory.Exists(path: sectionsDirectory)) {
             foreach (var existing in Directory.EnumerateFiles(path: sectionsDirectory, searchPattern: "*.schema.json")) {
@@ -221,7 +221,7 @@ internal static class SchemaCommand {
         // CRLF is checkout noise, never content: git normalizes line endings at commit, so a CRLF working copy of a
         // canonical LF file must compare EQUAL — without this, every file on a Windows checkout reports stale and the
         // one real finding drowns in false positives.
-        var onDisk = File.ReadAllText(path: file.FullPath).Replace(oldValue: "\r\n", newValue: "\n");
+        var onDisk = File.ReadAllText(path: file.FullPath).Replace(newValue: "\n", oldValue: "\r\n");
 
         if (string.Equals(a: onDisk, b: file.Text, comparisonType: StringComparison.Ordinal)) {
             return;
@@ -231,7 +231,6 @@ internal static class SchemaCommand {
 
         problems.Add(item: $"{CliPaths.ToDisplay(fullPath: file.FullPath)} is STALE — first difference at line {lineNumber}: checked-in [{onDiskLine}] vs generated [{generatedLine}].");
     }
-
     // Both texts are LF-only by the time they arrive here (generated text by construction, on-disk text by
     // CheckFile's CRLF normalization), so splitting on '\n' alone lines them up one-for-one.
     private static (int LineNumber, string OnDisk, string Generated) FirstDifference(string onDisk, string generated) {

@@ -15,6 +15,7 @@ public sealed partial class AgbApu : IAgbApu {
     private readonly ApuNoiseChannel m_noise = new();
     private readonly DirectSoundFifo m_fifoA = new();
     private readonly DirectSoundFifo m_fifoB = new();
+
     private ushort m_soundControlLow;
     private ushort m_soundControlHigh;
     private bool m_masterEnable;
@@ -24,12 +25,15 @@ public sealed partial class AgbApu : IAgbApu {
     // init; returning 0 here (as an unimplemented register would) derails real games' boot — e.g. some commercial games.
     private ushort m_soundBias = 0x0200;
     private int m_frameSequencerTimer = FrameSequencerPeriod;
+
     private int m_frameSequencerStep;
     private int m_directSoundA;
     private int m_directSoundB;
     private bool m_fifoARefill;
     private bool m_fifoBRefill;
+
     private short[] m_outputRing = Array.Empty<short>();
+
     private int m_outputWrite;
     private int m_outputRead;
     private int m_sampleRate;
@@ -70,7 +74,6 @@ public sealed partial class AgbApu : IAgbApu {
 
         return written;
     }
-
     /// <inheritdoc/>
     public void Step(int cycles) {
         m_pulse1.Step(cycles: cycles);
@@ -94,7 +97,7 @@ public sealed partial class AgbApu : IAgbApu {
             // is computed in `long` because a single Step span (up to a full frame) times a high sample rate can
             // exceed `int.MaxValue` before the loop below brings the phase back under `MasterClock`. Exact for
             // power-of-two rates: at 32768 Hz the phase crosses MasterClock (2^24) every exactly 512 cycles.
-            m_samplePhase += ((long)cycles * m_sampleRate);
+            m_samplePhase += (((long)cycles) * m_sampleRate);
 
             while (m_samplePhase >= MasterClock) {
                 m_samplePhase -= MasterClock;
@@ -103,7 +106,6 @@ public sealed partial class AgbApu : IAgbApu {
             }
         }
     }
-
     /// <inheritdoc/>
     public void OnTimerOverflow(int timer) {
         // SOUNDCNT_H bit 10 selects timer 0/1 for Direct Sound A; bit 14 for B. The selected timer's overflow is the
@@ -132,7 +134,6 @@ public sealed partial class AgbApu : IAgbApu {
             m_fifoBRefill |= dmaB;
         }
     }
-
     /// <inheritdoc/>
     public bool ConsumeFifoARefill() {
         var requested = m_fifoARefill;
@@ -141,7 +142,6 @@ public sealed partial class AgbApu : IAgbApu {
 
         return requested;
     }
-
     /// <inheritdoc/>
     public bool ConsumeFifoBRefill() {
         var requested = m_fifoBRefill;
@@ -150,22 +150,21 @@ public sealed partial class AgbApu : IAgbApu {
 
         return requested;
     }
-
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) {
         return offset switch {
             0x60u => m_pulse1.ReadSweep(),
-            0x62u => (ushort)(m_pulse1.ReadDutyLength() | (m_pulse1.ReadEnvelope() << 8)),
-            0x64u => (ushort)(m_pulse1.ReadControl() << 8),
-            0x68u => (ushort)(m_pulse2.ReadDutyLength() | (m_pulse2.ReadEnvelope() << 8)),
-            0x6Cu => (ushort)(m_pulse2.ReadControl() << 8),
-            0x78u => (ushort)(m_noise.ReadEnvelope() << 8),
-            0x7Cu => (ushort)(m_noise.ReadPolynomial() | (m_noise.ReadControl() << 8)),
+            0x62u => ((ushort)(m_pulse1.ReadDutyLength() | (m_pulse1.ReadEnvelope() << 8))),
+            0x64u => ((ushort)(m_pulse1.ReadControl() << 8)),
+            0x68u => ((ushort)(m_pulse2.ReadDutyLength() | (m_pulse2.ReadEnvelope() << 8))),
+            0x6Cu => ((ushort)(m_pulse2.ReadControl() << 8)),
+            0x78u => ((ushort)(m_noise.ReadEnvelope() << 8)),
+            0x7Cu => ((ushort)(m_noise.ReadPolynomial() | (m_noise.ReadControl() << 8))),
             // SOUNDCNT_L/H read back with their undecoded bits driven to zero: bits 3/7 of the PSG master-volume
             // pair (mask 0xFF77), and bits 4-7 plus the write-only FIFO reset bits 11/15 of the mixer (mask 0x770F).
-            0x80u => (ushort)(m_soundControlLow & 0xFF77u),
-            0x82u => (ushort)(m_soundControlHigh & 0x770Fu),
-            0x84u => (ushort)((m_masterEnable
+            0x80u => ((ushort)(m_soundControlLow & 0xFF77u)),
+            0x82u => ((ushort)(m_soundControlHigh & 0x770Fu)),
+            0x84u => ((ushort)((m_masterEnable
             ? 0x80u
             : 0u)
                 | (m_pulse1.Active
@@ -179,16 +178,15 @@ public sealed partial class AgbApu : IAgbApu {
             : 0u)
                 | (m_noise.Active
             ? 0x8u
-            : 0u)),
+            : 0u))),
             0x88u => m_soundBias,
             0x70u => m_wave.ReadEnable(),
-            0x72u => (ushort)(m_wave.ReadVolume() << 8),
-            0x74u => (ushort)(m_wave.ReadControl() << 8),
-            >= 0x90u and <= 0x9Fu => (ushort)(m_wave.ReadRam(index: (int)(offset - 0x90u)) | (m_wave.ReadRam(index: ((int)(offset - 0x90u) + 1)) << 8)),
+            0x72u => ((ushort)(m_wave.ReadVolume() << 8)),
+            0x74u => ((ushort)(m_wave.ReadControl() << 8)),
+            >= 0x90u and <= 0x9Fu => ((ushort)(m_wave.ReadRam(index: ((int)(offset - 0x90u))) | (m_wave.ReadRam(index: (((int)(offset - 0x90u)) + 1)) << 8))),
             _ => 0,
         };
     }
-
     /// <inheritdoc/>
     public void WriteRegister(uint offset, ushort value) {
         // Sound is fully writable only while the master enable is set, except for the master enable (0x84) and
@@ -208,47 +206,47 @@ public sealed partial class AgbApu : IAgbApu {
 
                 break;
             case 0x62u:
-                m_pulse1.WriteDutyLength(value: (byte)value);
-                m_pulse1.WriteEnvelope(value: (byte)(value >> 8));
+                m_pulse1.WriteDutyLength(value: ((byte)value));
+                m_pulse1.WriteEnvelope(value: ((byte)(value >> 8)));
 
                 break;
             case 0x64u:
-                m_pulse1.WriteFrequencyLow(value: (byte)value);
-                m_pulse1.WriteControl(value: (byte)(value >> 8));
+                m_pulse1.WriteFrequencyLow(value: ((byte)value));
+                m_pulse1.WriteControl(value: ((byte)(value >> 8)));
 
                 break;
             case 0x68u:
-                m_pulse2.WriteDutyLength(value: (byte)value);
-                m_pulse2.WriteEnvelope(value: (byte)(value >> 8));
+                m_pulse2.WriteDutyLength(value: ((byte)value));
+                m_pulse2.WriteEnvelope(value: ((byte)(value >> 8)));
 
                 break;
             case 0x6Cu:
-                m_pulse2.WriteFrequencyLow(value: (byte)value);
-                m_pulse2.WriteControl(value: (byte)(value >> 8));
+                m_pulse2.WriteFrequencyLow(value: ((byte)value));
+                m_pulse2.WriteControl(value: ((byte)(value >> 8)));
 
                 break;
             case 0x70u:
-                m_wave.WriteEnable(value: (byte)value);
+                m_wave.WriteEnable(value: ((byte)value));
 
                 break;
             case 0x72u:
-                m_wave.WriteLength(value: (byte)value);
-                m_wave.WriteVolume(value: (byte)(value >> 8));
+                m_wave.WriteLength(value: ((byte)value));
+                m_wave.WriteVolume(value: ((byte)(value >> 8)));
 
                 break;
             case 0x74u:
-                m_wave.WriteFrequencyLow(value: (byte)value);
-                m_wave.WriteControl(value: (byte)(value >> 8));
+                m_wave.WriteFrequencyLow(value: ((byte)value));
+                m_wave.WriteControl(value: ((byte)(value >> 8)));
 
                 break;
             case 0x78u:
-                m_noise.WriteLength(value: (byte)value);
-                m_noise.WriteEnvelope(value: (byte)(value >> 8));
+                m_noise.WriteLength(value: ((byte)value));
+                m_noise.WriteEnvelope(value: ((byte)(value >> 8)));
 
                 break;
             case 0x7Cu:
-                m_noise.WritePolynomial(value: (byte)value);
-                m_noise.WriteControl(value: (byte)(value >> 8));
+                m_noise.WritePolynomial(value: ((byte)value));
+                m_noise.WriteControl(value: ((byte)(value >> 8)));
 
                 break;
             case 0x80u:
@@ -278,31 +276,30 @@ public sealed partial class AgbApu : IAgbApu {
                 break;
             case >= 0x90u and <= 0x9Fu:
                 m_wave.WriteRam(
-                    index: (int)(offset - 0x90u),
-                    value: (byte)value
+                    index: ((int)(offset - 0x90u)),
+                    value: ((byte)value)
                 );
                 m_wave.WriteRam(
-                    index: ((int)(offset - 0x90u) + 1),
-                    value: (byte)(value >> 8)
+                    index: (((int)(offset - 0x90u)) + 1),
+                    value: ((byte)(value >> 8))
                 );
 
                 break;
             case >= 0xA0u and <= 0xA3u:
                 // A halfword register write streams two bytes into the fill word in write order.
-                m_fifoA.WriteByte(value: (byte)value);
-                m_fifoA.WriteByte(value: (byte)(value >> 8));
+                m_fifoA.WriteByte(value: ((byte)value));
+                m_fifoA.WriteByte(value: ((byte)(value >> 8)));
 
                 break;
             case >= 0xA4u and <= 0xA7u:
-                m_fifoB.WriteByte(value: (byte)value);
-                m_fifoB.WriteByte(value: (byte)(value >> 8));
+                m_fifoB.WriteByte(value: ((byte)value));
+                m_fifoB.WriteByte(value: ((byte)(value >> 8)));
 
                 break;
             default:
                 break;
         }
     }
-
     /// <inheritdoc/>
     public void WriteFifoByte(int fifo, byte value) {
         // The 0xA0-0xA7 FIFO register windows accept 8/16/32-bit writes; the bus decomposes each to the exact bytes
@@ -419,16 +416,16 @@ public sealed partial class AgbApu : IAgbApu {
 
             // SOUNDBIAS adds a DC offset to the final mix on hardware; it nets out for line-level output, so we
             // clamp around zero. (The bias level field is honoured by games probing it; the audible effect is nil.)
-            right = (short)Math.Clamp(
-                value: mixRight,
+            right = ((short)Math.Clamp(
+                max: 32767,
                 min: -32768,
-                max: 32767
-            );
-            left = (short)Math.Clamp(
-                value: mixLeft,
+                value: mixRight
+            ));
+            left = ((short)Math.Clamp(
+                max: 32767,
                 min: -32768,
-                max: 32767
-            );
+                value: mixLeft
+            ));
         }
 
         m_outputRing[m_outputWrite] = left;
@@ -444,13 +441,11 @@ public sealed partial class AgbApu : IAgbApu {
     public int DebugFifoWordCount(int fifo) => ((fifo == 0)
         ? m_fifoA
         : m_fifoB).WordCount;
-
     /// <summary>The number of bytes remaining in a Direct Sound FIFO's 32-bit playing buffer (0-4) — a diagnostic
     /// peek; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
     public int DebugFifoPlayingBytes(int fifo) => ((fifo == 0)
         ? m_fifoA
         : m_fifoB).PlayingBytes;
-
     /// <summary>The 8-bit signed sample a Direct Sound channel is currently driving to the DAC (the last byte the
     /// playing buffer produced) — a diagnostic peek; <paramref name="fifo"/> is 0 (A) or 1 (B).</summary>
     public int DebugDirectSound(int fifo) => ((fifo == 0)
@@ -468,6 +463,7 @@ public sealed partial class AgbApu : IAgbApu {
         private const int RingWords = 7;
 
         private readonly uint[] m_ring = new uint[RingWords];
+
         private int m_head;     // index of the oldest filled word
         private int m_count;    // filled words in the ring (0..7)
         private uint m_fillWord;
@@ -477,7 +473,6 @@ public sealed partial class AgbApu : IAgbApu {
 
         /// <summary>The number of filled words currently in the ring (0..7).</summary>
         public int WordCount => m_count;
-
         /// <summary>The bytes remaining in the playing buffer (0..4).</summary>
         public int PlayingBytes => m_playingBytes;
 
@@ -492,12 +487,11 @@ public sealed partial class AgbApu : IAgbApu {
             m_playing = 0;
             m_playingBytes = 0;
         }
-
         /// <summary>Streams one byte into the FIFO. Bytes accumulate in write order; every fourth byte completes a
         /// word and pushes it into the ring. Pushing into a full ring auto-resets the FIFO to empty (hardware drops
         /// the buffered samples rather than wrapping).</summary>
         public void WriteByte(byte value) {
-            m_fillWord = (m_fillWord & ~(0xFFu << (m_fillBytes * 8))) | ((uint)value << (m_fillBytes * 8));
+            m_fillWord = (m_fillWord & ~(0xFFu << (m_fillBytes * 8))) | (((uint)value) << (m_fillBytes * 8));
 
             if (++m_fillBytes < 4) {
                 return;
@@ -518,7 +512,6 @@ public sealed partial class AgbApu : IAgbApu {
             m_ring[((m_head + m_count) % RingWords)] = word;
             ++m_count;
         }
-
         /// <summary>A selected-timer overflow. Requests a DMA top-up when the ring has &#8805;4 empty words; refills
         /// the playing buffer from the ring when the buffer is empty; then hands the DAC one byte. Returns whether a
         /// byte was produced (false on underrun — the caller holds the previous sample).</summary>
@@ -541,7 +534,7 @@ public sealed partial class AgbApu : IAgbApu {
             }
 
             if (m_playingBytes > 0) {
-                sample = (sbyte)(m_playing & 0xFFu);
+                sample = ((sbyte)(m_playing & 0xFFu));
                 m_playing >>= 8;
                 --m_playingBytes;
 
@@ -552,7 +545,6 @@ public sealed partial class AgbApu : IAgbApu {
 
             return false;
         }
-
         /// <summary>Captures the whole FIFO — ring contents, cursors, fill accumulator, and playing buffer.</summary>
         public void SaveState(StateWriter writer) {
             for (var i = 0; (i < RingWords); ++i) {
@@ -566,7 +558,6 @@ public sealed partial class AgbApu : IAgbApu {
             writer.WriteUInt32(value: m_playing);
             writer.WriteInt32(value: m_playingBytes);
         }
-
         /// <summary>Restores the whole FIFO from <see cref="SaveState"/>'s image.</summary>
         public void LoadState(StateReader reader) {
             for (var i = 0; (i < RingWords); ++i) {

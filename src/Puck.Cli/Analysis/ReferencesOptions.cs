@@ -20,7 +20,6 @@ internal enum ReferencesMode {
     // Derived types.
     Derived,
 }
-
 // The parsed `puck references` command line. Parse is the sole constructor path.
 internal sealed record ReferencesOptions {
     public required bool AllowPartial { get; init; }

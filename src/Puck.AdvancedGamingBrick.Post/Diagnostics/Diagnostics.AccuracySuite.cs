@@ -35,7 +35,7 @@ internal static partial class Diagnostics {
         );
         var machine = instance.Machine;
         var bus = instance.GetRequiredService<AgbBus>();
-        var debug = (SuiteDebugBus)instance.GetRequiredService<IAgbBus>();
+        var debug = ((SuiteDebugBus)instance.GetRequiredService<IAgbBus>());
 
         machine.DirectBoot();
 
@@ -48,7 +48,7 @@ internal static partial class Diagnostics {
         }
 
         void Press(ushort keyMask) {
-            debug.Keys = (ushort)(0x3FFu & ~keyMask);
+            debug.Keys = ((ushort)(0x3FFu & ~keyMask));
             StepCycles(cycles: (FrameCycles * 3));
             debug.Keys = 0x3FF;
             StepCycles(cycles: (FrameCycles * 5));
@@ -71,15 +71,15 @@ internal static partial class Diagnostics {
             Press(keyMask: KeyA); // run the selected suite
 
             // Wait for the "END: passes/total" line (slow suites take many frames).
-            var endLine = (string?)null;
+            var endLine = ((string?)null);
 
             for (var frame = 0; ((frame < 1200) && (endLine is null)); ++frame) {
                 StepCycles(cycles: FrameCycles);
 
                 for (var l = before; (l < logs.Count); ++l) {
                     if (logs[l].StartsWith(
-                        value: "END:",
-                        comparisonType: StringComparison.Ordinal
+                        comparisonType: StringComparison.Ordinal,
+                        value: "END:"
                     )) {
                         endLine = logs[l];
 
@@ -89,8 +89,8 @@ internal static partial class Diagnostics {
             }
 
             var beginLine = logs.Skip(count: before).FirstOrDefault(predicate: s => s.StartsWith(
-                value: "BEGIN:",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "BEGIN:"
             ));
             var suiteName = (beginLine?.Substring(startIndex: 6).Trim() ?? $"suite #{i}");
 
@@ -101,8 +101,8 @@ internal static partial class Diagnostics {
                 // "END: passes/total"
                 var slash = endLine.IndexOf(value: '/');
                 var passes = int.Parse(endLine.AsSpan(
-                    start: 4,
-                    length: (slash - 4)
+                    length: (slash - 4),
+                    start: 4
                 ).Trim());
                 var total = int.Parse(endLine.AsSpan(start: (slash + 1)).Trim());
                 var ok = ((passes == total) && (total > 0));
@@ -121,8 +121,8 @@ internal static partial class Diagnostics {
                     // than guess from the aggregate score. Capped to keep the output readable.
                     var focus = Environment.GetEnvironmentVariable(variable: "PUCK_AGB_SUITE_FOCUS");
                     var wantDetail = ((focus is null) || suiteName.Contains(
-                        value: focus,
-                        comparisonType: StringComparison.OrdinalIgnoreCase
+                        comparisonType: StringComparison.OrdinalIgnoreCase,
+                        value: focus
                     ));
 
                     if (wantDetail) {
@@ -136,17 +136,17 @@ internal static partial class Diagnostics {
                             // the actual cycle/value error) is reached.
                             if (
                                 text.StartsWith(
-                                value: "BEGIN:",
-                                comparisonType: StringComparison.Ordinal
+                                comparisonType: StringComparison.Ordinal,
+                                value: "BEGIN:"
                             ) ||
                                 text.StartsWith(
-                                value: "END:",
-                                comparisonType: StringComparison.Ordinal
+                                comparisonType: StringComparison.Ordinal,
+                                value: "END:"
                             ) ||
                                 (text.Length == 0) ||
                                 !text.Contains(
-                                value: "FAIL",
-                                comparisonType: StringComparison.Ordinal
+                                comparisonType: StringComparison.Ordinal,
+                                value: "FAIL"
                             )
                             ) {
                                 continue;

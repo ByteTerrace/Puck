@@ -6,13 +6,11 @@ namespace Puck.Maths;
 /// <param name="Layer">The layer containing the index; layer <c>0</c> is the core.</param>
 /// <param name="Offset">The zero-based offset of the index within <paramref name="Layer"/>.</param>
 public readonly record struct LayerLocation(long Layer, long Offset);
-
 /// <summary>The saturating position of an index against a <see cref="LayerSequence"/>: the layer clamps at the sequence's last layer, and indices beyond capacity report how far past the boundary they lie.</summary>
 /// <param name="Layer">The layer containing the index, clamped to <see cref="LayerSequence.MaxLayer"/> for indices beyond capacity.</param>
 /// <param name="Overflow">Zero for an in-range index; otherwise one more than the distance from the last valid index, growing linearly.</param>
 /// <param name="Depth">Zero for an index at or below the sequence's continuous vertex; otherwise the magnitude of the imaginary component of the layer equation's complex root, in layers, growing with the square root of the excess.</param>
 public readonly record struct LayerProjection(long Layer, long Overflow, long Depth);
-
 /// <summary>
 /// Describes a layered index space — a core of <see cref="Seed"/> indices wrapped by layers whose sizes form an
 /// arithmetic progression starting at <see cref="Start"/> and changing by <see cref="Step"/> — and answers
@@ -52,7 +50,8 @@ public readonly record struct LayerSequence {
                 : (1L + ((start - 1L) / (-step))))
             : (((0L == step) && (0L == start))
                 ? 0L
-                : long.MaxValue));
+                : long.MaxValue
+        ));
 
         if (long.MaxValue == m_maxLayer) {
             m_capacity = Int128.MaxValue;
@@ -63,27 +62,27 @@ public readonly record struct LayerSequence {
         }
     }
 
-    /// <summary>Gets the number of indices in layer <c>0</c> — the core the layers wrap.</summary>
-    public long Seed { get; }
-    /// <summary>Gets the number of indices in layer <c>1</c>.</summary>
-    public long Start { get; }
-    /// <summary>Gets the change in layer size from each layer to the next; negative values bound the sequence.</summary>
-    public long Step { get; }
+    private Int128 CapacityLimit =>
+        m_capacity;
 
+    /// <summary>Gets the total number of indices the sequence can contain, saturating at <see cref="long.MaxValue"/> when the true capacity is unbounded or exceeds <see cref="long"/>.</summary>
+    public long Capacity =>
+        ((m_capacity > ((Int128)long.MaxValue))
+            ? long.MaxValue
+            : ((long)m_capacity)
+        );
     /// <summary>Gets a value indicating whether the sequence holds finitely many indices.</summary>
     public bool IsBounded =>
         (long.MaxValue != m_maxLayer);
     /// <summary>Gets the last layer that can contain an index, or <see cref="long.MaxValue"/> when the sequence is unbounded.</summary>
     public long MaxLayer =>
         m_maxLayer;
-    /// <summary>Gets the total number of indices the sequence can contain, saturating at <see cref="long.MaxValue"/> when the true capacity is unbounded or exceeds <see cref="long"/>.</summary>
-    public long Capacity =>
-        ((m_capacity > ((Int128)long.MaxValue))
-        ? long.MaxValue
-        : ((long)m_capacity));
-
-    private Int128 CapacityLimit =>
-        m_capacity;
+    /// <summary>Gets the number of indices in layer <c>0</c> — the core the layers wrap.</summary>
+    public long Seed { get; }
+    /// <summary>Gets the number of indices in layer <c>1</c>.</summary>
+    public long Start { get; }
+    /// <summary>Gets the change in layer size from each layer to the next; negative values bound the sequence.</summary>
+    public long Step { get; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private Int128 CountUnchecked(Int128 layerCount) =>
@@ -145,6 +144,46 @@ public readonly record struct LayerSequence {
         }
     }
 
+    /// <summary>Creates the centered polygonal sequence for a polygon with <paramref name="sides"/> sides: a single-index core wrapped by layers of <c>k, 2k, 3k, …</c>.</summary>
+    /// <param name="sides">The number of polygon sides; it must be at least <c>3</c>.</param>
+    /// <returns>The centered <paramref name="sides"/>-gonal sequence.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sides"/> is less than <c>3</c> or exceeds the <see cref="Create(long, long, long)"/> step range.</exception>
+    public static LayerSequence Centered(long sides) {
+        if (3L > sides) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(sides),
+                message: "a polygon has at least 3 sides"
+            );
+        }
+
+        return Create(
+            seed: 1L,
+            start: sides,
+            step: sides
+        );
+    }
+    /// <summary>Computes the total number of indices in the core and the first <paramref name="layerCount"/> layers.</summary>
+    /// <param name="layerCount">The number of layers to include; it must be non-negative, and at most <see cref="MaxLayer"/> when the sequence is bounded.</param>
+    /// <returns><c>Seed + Start·n + Step·n·(n − 1)/2</c> for <c>n = <paramref name="layerCount"/></c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="layerCount"/> is negative, or exceeds <see cref="MaxLayer"/> on a bounded sequence.</exception>
+    /// <exception cref="OverflowException">The total exceeds <see cref="long.MaxValue"/>.</exception>
+    public long Count(long layerCount) {
+        if (
+            (0L > layerCount) ||
+            (IsBounded && (MaxLayer < layerCount))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(layerCount),
+                message: "layerCount must be non-negative, and at most MaxLayer when the sequence is bounded"
+            );
+        }
+
+        checked {
+            var n = ((Int128)layerCount);
+
+            return ((long)((((Int128)Seed) + (((Int128)Start) * n)) + (((Int128)Step) * ((n * (n - Int128.One)) / 2))));
+        }
+    }
     /// <summary>Creates a validated <see cref="LayerSequence"/> from its three constants.</summary>
     /// <param name="start">The size of layer <c>1</c>; it must lie in <c>[0, 2⁶²)</c>.</param>
     /// <param name="step">The change in size from each layer to the next; its magnitude must not exceed <c>2³²</c>. Negative values bound the sequence.</param>
@@ -184,112 +223,10 @@ public readonly record struct LayerSequence {
         }
 
         return new LayerSequence(
+            seed: seed,
             start: start,
-            step: step,
-            seed: seed
+            step: step
         );
-    }
-
-    /// <summary>Gets the sequence of triangular numbers: layer sizes <c>1, 2, 3, …</c> with no core.</summary>
-    public static LayerSequence Triangular { get; } = new LayerSequence(
-        start: 1L,
-        step: 1L,
-        seed: 0L
-    );
-    /// <summary>Gets the sequence of pronic numbers <c>n·(n + 1)</c>: layer sizes <c>2, 4, 6, …</c> with no core.</summary>
-    public static LayerSequence Pronic { get; } = new LayerSequence(
-        start: 2L,
-        step: 2L,
-        seed: 0L
-    );
-    /// <summary>Gets the sequence of square numbers: layer sizes <c>1, 3, 5, …</c> with no core — the corner-expanding grid.</summary>
-    public static LayerSequence Square { get; } = new LayerSequence(
-        start: 1L,
-        step: 2L,
-        seed: 0L
-    );
-    /// <summary>Gets the sequence of centered square numbers: a single-index core wrapped by layers of <c>4, 8, 12, …</c> — the taxicab rings of a grid.</summary>
-    public static LayerSequence CenteredSquare { get; } = new LayerSequence(
-        start: 4L,
-        step: 4L,
-        seed: 1L
-    );
-    /// <summary>Gets the sequence of centered hexagonal numbers: a single-index core wrapped by layers of <c>6, 12, 18, …</c> — the rings of a honeycomb.</summary>
-    public static LayerSequence CenteredHexagonal { get; } = new LayerSequence(
-        start: 6L,
-        step: 6L,
-        seed: 1L
-    );
-
-    /// <summary>Creates the centered polygonal sequence for a polygon with <paramref name="sides"/> sides: a single-index core wrapped by layers of <c>k, 2k, 3k, …</c>.</summary>
-    /// <param name="sides">The number of polygon sides; it must be at least <c>3</c>.</param>
-    /// <returns>The centered <paramref name="sides"/>-gonal sequence.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sides"/> is less than <c>3</c> or exceeds the <see cref="Create(long, long, long)"/> step range.</exception>
-    public static LayerSequence Centered(long sides) {
-        if (3L > sides) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(sides),
-                message: "a polygon has at least 3 sides"
-            );
-        }
-
-        return Create(
-            start: sides,
-            step: sides,
-            seed: 1L
-        );
-    }
-    /// <summary>Creates a flat sequence: every layer holds exactly <paramref name="size"/> indices around a core of <paramref name="seed"/> — ordinary linear indexing.</summary>
-    /// <param name="size">The size of every layer; it must lie in <c>[0, 2⁶²)</c>.</param>
-    /// <param name="seed">The size of the core (layer <c>0</c>); it must lie in <c>[0, 2⁶²)</c>.</param>
-    /// <returns>The flat sequence with the given layer size and core.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A constant lies outside its documented range.</exception>
-    public static LayerSequence Linear(long size, long seed) =>
-        Create(
-        start: size,
-        step: 0L,
-        seed: seed
-    );
-    /// <summary>Creates the polygonal (corner-expanding) sequence for a polygon with <paramref name="sides"/> sides: layer sizes <c>1, k − 1, 2·(k − 2) + 1, …</c> growing by <c>k − 2</c>.</summary>
-    /// <param name="sides">The number of polygon sides; it must be at least <c>3</c>.</param>
-    /// <returns>The <paramref name="sides"/>-gonal number sequence (triangular for <c>3</c>, square for <c>4</c>).</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sides"/> is less than <c>3</c> or exceeds the <see cref="Create(long, long, long)"/> step range.</exception>
-    public static LayerSequence Polygonal(long sides) {
-        if (3L > sides) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(sides),
-                message: "a polygon has at least 3 sides"
-            );
-        }
-
-        return Create(
-            start: 1L,
-            step: (sides - 2L),
-            seed: 0L
-        );
-    }
-
-    /// <summary>Computes the total number of indices in the core and the first <paramref name="layerCount"/> layers.</summary>
-    /// <param name="layerCount">The number of layers to include; it must be non-negative, and at most <see cref="MaxLayer"/> when the sequence is bounded.</param>
-    /// <returns><c>Seed + Start·n + Step·n·(n − 1)/2</c> for <c>n = <paramref name="layerCount"/></c>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="layerCount"/> is negative, or exceeds <see cref="MaxLayer"/> on a bounded sequence.</exception>
-    /// <exception cref="OverflowException">The total exceeds <see cref="long.MaxValue"/>.</exception>
-    public long Count(long layerCount) {
-        if (
-            (0L > layerCount) ||
-            (IsBounded && (MaxLayer < layerCount))
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(layerCount),
-                message: "layerCount must be non-negative, and at most MaxLayer when the sequence is bounded"
-            );
-        }
-
-        checked {
-            var n = ((Int128)layerCount);
-
-            return ((long)((((Int128)Seed) + (((Int128)Start) * n)) + (((Int128)Step) * ((n * (n - Int128.One)) / 2))));
-        }
     }
     /// <summary>Returns the layer that contains <paramref name="index"/>, in constant time.</summary>
     /// <param name="index">The index to locate; it must be non-negative, and below <see cref="Capacity"/> when the sequence is bounded.</param>
@@ -308,7 +245,8 @@ public readonly record struct LayerSequence {
 
         return ((Seed > index)
             ? 0L
-            : LocateLayer(index: index));
+            : LocateLayer(index: index)
+        );
     }
     /// <summary>Returns the number of indices in <paramref name="layer"/>.</summary>
     /// <param name="layer">The layer to measure; it must be non-negative, and at most <see cref="MaxLayer"/> when the sequence is bounded.</param>
@@ -328,8 +266,20 @@ public readonly record struct LayerSequence {
 
         return ((0L == layer)
             ? Seed
-            : checked((long)(((Int128)Start) + (((Int128)Step) * (layer - 1L)))));
+            : checked((long)(((Int128)Start) + (((Int128)Step) * (layer - 1L))))
+        );
     }
+    /// <summary>Creates a flat sequence: every layer holds exactly <paramref name="size"/> indices around a core of <paramref name="seed"/> — ordinary linear indexing.</summary>
+    /// <param name="size">The size of every layer; it must lie in <c>[0, 2⁶²)</c>.</param>
+    /// <param name="seed">The size of the core (layer <c>0</c>); it must lie in <c>[0, 2⁶²)</c>.</param>
+    /// <returns>The flat sequence with the given layer size and core.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A constant lies outside its documented range.</exception>
+    public static LayerSequence Linear(long size, long seed) =>
+        Create(
+            seed: seed,
+            start: size,
+            step: 0L
+        );
     /// <summary>Returns the layer that contains <paramref name="index"/> and the offset within it, in constant time.</summary>
     /// <param name="index">The index to locate; it must be non-negative, and below <see cref="Capacity"/> when the sequence is bounded.</param>
     /// <returns>The containing layer and the zero-based offset of <paramref name="index"/> from that layer's first index.</returns>
@@ -340,9 +290,9 @@ public readonly record struct LayerSequence {
 
         if (Seed > index) {
             return new LayerLocation(
-            Layer: 0L,
-            Offset: index
-        );
+                Layer: 0L,
+                Offset: index
+            );
         }
 
         var layer = LocateLayer(index: index);
@@ -350,6 +300,24 @@ public readonly record struct LayerSequence {
         return new LayerLocation(
             Layer: layer,
             Offset: (index - ((long)CountUnchecked(layerCount: (layer - 1L))))
+        );
+    }
+    /// <summary>Creates the polygonal (corner-expanding) sequence for a polygon with <paramref name="sides"/> sides: layer sizes <c>1, k − 1, 2·(k − 2) + 1, …</c> growing by <c>k − 2</c>.</summary>
+    /// <param name="sides">The number of polygon sides; it must be at least <c>3</c>.</param>
+    /// <returns>The <paramref name="sides"/>-gonal number sequence (triangular for <c>3</c>, square for <c>4</c>).</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="sides"/> is less than <c>3</c> or exceeds the <see cref="Create(long, long, long)"/> step range.</exception>
+    public static LayerSequence Polygonal(long sides) {
+        if (3L > sides) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(sides),
+                message: "a polygon has at least 3 sides"
+            );
+        }
+
+        return Create(
+            seed: 0L,
+            start: 1L,
+            step: (sides - 2L)
         );
     }
     /// <summary>Locates <paramref name="index"/> without a capacity limit: in-range indices resolve exactly, and indices beyond a bounded sequence's capacity clamp to <see cref="MaxLayer"/> and report their excess.</summary>
@@ -373,20 +341,20 @@ public readonly record struct LayerSequence {
 
         if (Seed > index) {
             return new LayerProjection(
-            Layer: 0L,
-            Overflow: 0L,
-            Depth: 0L
-        );
+                Depth: 0L,
+                Layer: 0L,
+                Overflow: 0L
+            );
         }
 
         var capacity = CapacityLimit;
 
         if (index < capacity) {
             return new LayerProjection(
-            Layer: LocateLayer(index: index),
-            Overflow: 0L,
-            Depth: 0L
-        );
+                Layer: LocateLayer(index: index),
+                Overflow: 0L,
+                Depth: 0L
+            );
         }
 
         var depth = 0L;
@@ -405,9 +373,40 @@ public readonly record struct LayerSequence {
         return new LayerProjection(
             Layer: MaxLayer,
             Overflow: ((overflow > ((Int128)long.MaxValue))
-                ? long.MaxValue
-                : ((long)overflow)),
+            ? long.MaxValue
+            : ((long)overflow)),
             Depth: depth
         );
     }
+
+    /// <summary>Gets the sequence of triangular numbers: layer sizes <c>1, 2, 3, …</c> with no core.</summary>
+    public static LayerSequence Triangular { get; } = new LayerSequence(
+        seed: 0L,
+        start: 1L,
+        step: 1L
+    );
+    /// <summary>Gets the sequence of pronic numbers <c>n·(n + 1)</c>: layer sizes <c>2, 4, 6, …</c> with no core.</summary>
+    public static LayerSequence Pronic { get; } = new LayerSequence(
+        seed: 0L,
+        start: 2L,
+        step: 2L
+    );
+    /// <summary>Gets the sequence of square numbers: layer sizes <c>1, 3, 5, …</c> with no core — the corner-expanding grid.</summary>
+    public static LayerSequence Square { get; } = new LayerSequence(
+        seed: 0L,
+        start: 1L,
+        step: 2L
+    );
+    /// <summary>Gets the sequence of centered square numbers: a single-index core wrapped by layers of <c>4, 8, 12, …</c> — the taxicab rings of a grid.</summary>
+    public static LayerSequence CenteredSquare { get; } = new LayerSequence(
+        seed: 1L,
+        start: 4L,
+        step: 4L
+    );
+    /// <summary>Gets the sequence of centered hexagonal numbers: a single-index core wrapped by layers of <c>6, 12, 18, …</c> — the rings of a honeycomb.</summary>
+    public static LayerSequence CenteredHexagonal { get; } = new LayerSequence(
+        seed: 1L,
+        start: 6L,
+        step: 6L
+    );
 }

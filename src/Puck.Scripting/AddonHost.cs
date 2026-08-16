@@ -24,10 +24,12 @@ namespace Puck.Scripting;
 public sealed class AddonHost : IDisposable {
     private readonly Dictionary<string, AddonInstance> m_byName = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, AddonDescriptor> m_descriptors = new(comparer: StringComparer.Ordinal);
-    private readonly ScriptingEngine m_engine;
     private readonly List<AddonInstance> m_instances = [];
-    private readonly WasmModuleLoader m_loader;
+
     private readonly IAddonChannelResolver m_channelResolver;
+    private readonly ScriptingEngine m_engine;
+    private readonly WasmModuleLoader m_loader;
+
     private bool m_disposed;
 
     /// <summary>Initializes a host over an engine and loader.</summary>
@@ -49,6 +51,61 @@ public sealed class AddonHost : IDisposable {
 
     /// <summary>Gets the loaded addon instances in load order.</summary>
     public IReadOnlyList<AddonInstance> Instances => m_instances;
+
+    private static string DescribeInstance(AddonInstance addon) {
+        var petname = ContentPetname.From(hashHex: $"{addon.Hash.Value:x16}");
+
+        return $"{petname}  {addon.Hash}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
+    }
+    private AddonInstance Load(in AddonDescriptor descriptor) {
+        try {
+            var info = m_loader.Load(path: descriptor.ModulePath);
+
+            // Enforced exactly as Reload enforces it: a declared moduleHash pin is a boot-time integrity check,
+            // not decoration. A mismatch must produce a sticky, attributed load fault naming both hashes — the
+            // addon must never instantiate on unpinned content.
+            if (
+                (descriptor.ModuleHash is { } pin) &&
+                !string.Equals(
+                a: info.ContentHash.ToString(),
+                b: pin,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+            ) {
+                return new AddonInstance(
+                    descriptor: in descriptor,
+                    fault: new AddonFault(
+                        Detail: $"addon {descriptor.Name}: HashMismatch — content {info.ContentHash} does not match the declared moduleHash pin {pin}",
+                        Kind: AddonFaultKind.HashMismatch
+                    ),
+                    hash: info.ContentHash
+                );
+            }
+
+            return new AddonInstance(
+                channelResolver: m_channelResolver,
+                descriptor: in descriptor,
+                engine: m_engine,
+                moduleInfo: info
+            );
+        } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException)) {
+            return new AddonInstance(
+                descriptor: in descriptor,
+                fault: new AddonFault(
+                    Detail: $"addon {descriptor.Name}: BadExport — {error.Message}",
+                    Kind: AddonFaultKind.BadExport
+                ),
+                hash: default
+            );
+        }
+    }
+    private static string StateLabel(AddonInstance addon) {
+        return addon.State switch {
+            AddonState.Enabled => "ENABLED",
+            AddonState.Disabled => "DISABLED",
+            _ => $"FAULTED({addon.Fault.Kind})",
+        };
+    }
 
     /// <summary>Loads an addon from its descriptor and registers it. Load failures produce a faulted instance
     /// rather than throwing, so one bad addon never fails the whole run.</summary>
@@ -73,7 +130,6 @@ public sealed class AddonHost : IDisposable {
         m_descriptors[descriptor.Name] = descriptor;
         m_instances.Add(item: instance);
     }
-
     /// <summary>Renders one line per addon: petname, content hash, fuel budget, and state.</summary>
     /// <returns>A newline-joined description, or <c>"no addons"</c> when none are loaded.</returns>
     public string Describe() {
@@ -93,7 +149,24 @@ public sealed class AddonHost : IDisposable {
 
         return builder.ToString();
     }
+    /// <summary>Disposes every addon store and the owned engine.</summary>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
 
+        m_disposed = true;
+
+        foreach (var instance in m_instances) {
+            instance.Dispose();
+        }
+
+        m_instances.Clear();
+        m_byName.Clear();
+        m_descriptors.Clear();
+        m_engine.Dispose();
+        GC.SuppressFinalize(obj: this);
+    }
     /// <summary>Reloads the named addon from its declared module path — the in-session edit loop: re-reads the
     /// file, recompiles (a changed content hash misses the module cache; an unchanged one reuses it), and swaps
     /// in a fresh store. The reloaded addon runs regardless of its prior state; a load failure swaps in a sticky
@@ -147,7 +220,6 @@ public sealed class AddonHost : IDisposable {
 
         return $"{ContentPetname.From(hashHex: $"{previous.Hash.Value:x16}")} became {petname}";
     }
-
     /// <summary>Enables or disables the named addon.</summary>
     /// <param name="name">The addon name.</param>
     /// <param name="enabled">Whether to enable (re-instantiate) or disable it.</param>
@@ -168,8 +240,6 @@ public sealed class AddonHost : IDisposable {
 
         return true;
     }
-
-
     /// <summary>Looks up an addon by name.</summary>
     /// <param name="name">The addon name.</param>
     /// <param name="instance">When this returns <see langword="true"/>, the matching addon.</param>
@@ -182,79 +252,5 @@ public sealed class AddonHost : IDisposable {
             key: name,
             value: out instance!
         );
-    }
-
-    /// <summary>Disposes every addon store and the owned engine.</summary>
-    public void Dispose() {
-        if (m_disposed) {
-            return;
-        }
-
-        m_disposed = true;
-
-        foreach (var instance in m_instances) {
-            instance.Dispose();
-        }
-
-        m_instances.Clear();
-        m_byName.Clear();
-        m_descriptors.Clear();
-        m_engine.Dispose();
-        GC.SuppressFinalize(obj: this);
-    }
-
-    private static string DescribeInstance(AddonInstance addon) {
-        var petname = ContentPetname.From(hashHex: $"{addon.Hash.Value:x16}");
-
-        return $"{petname}  {addon.Hash}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
-    }
-    private static string StateLabel(AddonInstance addon) {
-        return addon.State switch {
-            AddonState.Enabled => "ENABLED",
-            AddonState.Disabled => "DISABLED",
-            _ => $"FAULTED({addon.Fault.Kind})",
-        };
-    }
-    private AddonInstance Load(in AddonDescriptor descriptor) {
-        try {
-            var info = m_loader.Load(path: descriptor.ModulePath);
-
-            // Enforced exactly as Reload enforces it: a declared moduleHash pin is a boot-time integrity check,
-            // not decoration. A mismatch must produce a sticky, attributed load fault naming both hashes — the
-            // addon must never instantiate on unpinned content.
-            if (
-                (descriptor.ModuleHash is { } pin) &&
-                !string.Equals(
-                a: info.ContentHash.ToString(),
-                b: pin,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )
-            ) {
-                return new AddonInstance(
-                    descriptor: in descriptor,
-                    fault: new AddonFault(
-                        Detail: $"addon {descriptor.Name}: HashMismatch — content {info.ContentHash} does not match the declared moduleHash pin {pin}",
-                        Kind: AddonFaultKind.HashMismatch
-                    ),
-                    hash: info.ContentHash
-                );
-            }
-
-            return new AddonInstance(
-                channelResolver: m_channelResolver,
-                descriptor: in descriptor,
-                engine: m_engine,
-                moduleInfo: info
-            );
-        } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException)) {
-            return new AddonInstance(
-                descriptor: in descriptor,
-                fault: new AddonFault(
-                    Detail: $"addon {descriptor.Name}: BadExport — {error.Message}",
-                    Kind: AddonFaultKind.BadExport
-                ),
-                hash: default
-            );
-        }
     }
 }

@@ -23,7 +23,6 @@ public readonly struct EquivalenceWitness<TValue> {
     /// <summary>Gets the shortest distinguishing word as generator symbols, or an empty span when the machines agree.</summary>
     public ReadOnlySpan<int> Word => m_word;
 }
-
 /// <summary>
 /// A module over a presented algebra, stated as its duality data: an initial vector, one step element per input symbol,
 /// and a readout covector. Its behavior on a word is the pairing of the readout with the initial vector stepped along
@@ -58,30 +57,55 @@ public sealed class PresentedMachine<TValue, TOps>
     /// <summary>Gets the number of input symbols, which is the number of step elements.</summary>
     public int StepCount => m_steps.Length;
 
-    /// <summary>Creates a machine.</summary>
-    /// <param name="algebra">The algebra the steps live in.</param>
-    /// <param name="initial">The initial vector.</param>
-    /// <param name="steps">One step element per input symbol.</param>
-    /// <param name="readout">The readout covector.</param>
-    /// <returns>The described machine.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="algebra"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The initial vector, a step or the readout belongs to another algebra.</exception>
-    /// <remarks>Every part is checked for membership here rather than at the first <see cref="Run"/>: a module is a
-    /// vector, an action and a functional over ONE algebra, and a machine assembled from another's elements would
-    /// answer with values read off the wrong normal forms instead of failing.</remarks>
-    public static PresentedMachine<TValue, TOps> Create(
-        PresentedAlgebra<TValue, TOps> algebra,
-        in PresentedAlgebra<TValue, TOps>.Element initial,
-        ReadOnlySpan<PresentedAlgebra<TValue, TOps>.Element> steps,
-        in PresentedAlgebra<TValue, TOps>.Element readout
-    ) {
-        ArgumentNullException.ThrowIfNull(argument: algebra);
-        algebra.RequireOwned(value: initial, paramName: nameof(initial));
-        algebra.RequireOwned(value: readout, paramName: nameof(readout));
+    private static TValue[] ApplyMatrix(TValue[][] matrix, ReadOnlySpan<TValue> vector, IFieldMaterial<TValue, TOps> field) {
+        var result = new TValue[matrix.Length];
 
-        foreach (var step in steps) { algebra.RequireOwned(value: step, paramName: nameof(steps)); }
+        for (var row = 0; (row < matrix.Length); ++row) {
+            result[row] = Contract(
+                left: matrix[row],
+                right: vector,
+                field: field
+            );
+        }
 
-        return new(algebra: algebra, initial: initial, steps: steps.ToArray(), readout: readout);
+        return result;
+    }
+    private static TValue Contract(ReadOnlySpan<TValue> left, ReadOnlySpan<TValue> right, IFieldMaterial<TValue, TOps> field) {
+        var total = field.Zero;
+
+        for (var index = 0; (index < left.Length); ++index) {
+            total = field.Add(
+                left: total,
+                right: field.Multiply(
+                    left: left[index],
+                    right: right[index]
+                )
+            );
+        }
+
+        return total;
+    }
+    private static IFieldMaterial<TValue, TOps> RequireField(PresentedAlgebra<TValue, TOps> algebra) {
+        if (algebra.Presentation.Material is not IFieldMaterial<TValue, TOps> field) {
+            throw new InvalidOperationException(message: "The duality quotient inverts coefficients, which a material that is not a certified field cannot do.");
+        }
+
+        return field;
+    }
+    private static int RequireFiniteBasis(PresentedAlgebra<TValue, TOps> algebra) {
+        if (!algebra.Presentation.HasCompiledNormalFormBasis) {
+            throw new InvalidOperationException(message: "The duality quotient needs a finite basis to coordinatize, which this presentation does not have.");
+        }
+
+        return algebra.Presentation.NormalFormCount;
+    }
+    private static void Scatter(in PresentedAlgebra<TValue, TOps>.Element value, TValue[] dense, TValue zero) {
+        Array.Fill(
+            array: dense,
+            value: zero
+        );
+
+        for (var index = 0; (index < value.SupportCount); ++index) { dense[((int)value.Keys[index])] = value.Coefficients[index]; }
     }
 
     /// <summary>Decides whether two machines have the same behavior on every word, and returns the shortest word that
@@ -119,11 +143,20 @@ public sealed class PresentedMachine<TValue, TOps>
         ArgumentNullException.ThrowIfNull(argument: right);
 
         if (left.StepCount != right.StepCount) {
-            throw new ArgumentException(message: "Two machines are comparable only when they take the same number of input symbols.", paramName: nameof(right));
+            throw new ArgumentException(
+                message: "Two machines are comparable only when they take the same number of input symbols.",
+                paramName: nameof(right)
+            );
         }
 
-        if (!EqualityComparer<TOps>.Default.Equals(x: left.Algebra.Presentation.Material, y: right.Algebra.Presentation.Material)) {
-            throw new ArgumentException(message: "Two machines are comparable only over one material: the joint rank walk reduces both halves in a single field.", paramName: nameof(right));
+        if (!EqualityComparer<TOps>.Default.Equals(
+            x: left.Algebra.Presentation.Material,
+            y: right.Algebra.Presentation.Material
+        )) {
+            throw new ArgumentException(
+                message: "Two machines are comparable only over one material: the joint rank walk reduces both halves in a single field.",
+                paramName: nameof(right)
+            );
         }
 
         var comparer = EqualityComparer<TValue>.Default;
@@ -132,31 +165,58 @@ public sealed class PresentedMachine<TValue, TOps>
         var rightAlgebra = right.Algebra;
         var rightWidth = RequireFiniteBasis(algebra: rightAlgebra);
         var field = RequireField(algebra: leftAlgebra);
-        var basis = new FieldEchelon<TValue, TOps>(field: field, width: (leftWidth + rightWidth));
+        var basis = new FieldEchelon<TValue, TOps>(
+            field: field,
+            width: (leftWidth + rightWidth)
+        );
         var joint = new TValue[(leftWidth + rightWidth)];
         var reached = new List<(PresentedAlgebra<TValue, TOps>.Element Left, PresentedAlgebra<TValue, TOps>.Element Right, int[] Word)>();
 
         witness = default;
 
         bool Disagrees(in PresentedAlgebra<TValue, TOps>.Element leftState, in PresentedAlgebra<TValue, TOps>.Element rightState, int[] word, out EquivalenceWitness<TValue> found) {
-            var leftValue = leftAlgebra.Pair(covector: left.Readout, value: leftState);
-            var rightValue = rightAlgebra.Pair(covector: right.Readout, value: rightState);
+            var leftValue = leftAlgebra.Pair(
+                covector: left.Readout,
+                value: leftState
+            );
+            var rightValue = rightAlgebra.Pair(
+                covector: right.Readout,
+                value: rightState
+            );
 
-            found = new EquivalenceWitness<TValue>(word: word, leftValue: leftValue, rightValue: rightValue);
+            found = new EquivalenceWitness<TValue>(
+                leftValue: leftValue,
+                rightValue: rightValue,
+                word: word
+            );
 
-            return !comparer.Equals(x: leftValue, y: rightValue);
+            return !comparer.Equals(
+                x: leftValue,
+                y: rightValue
+            );
         }
 
         void Load(in PresentedAlgebra<TValue, TOps>.Element leftState, in PresentedAlgebra<TValue, TOps>.Element rightState) {
-            Array.Fill(array: joint, value: field.Zero);
+            Array.Fill(
+                array: joint,
+                value: field.Zero
+            );
 
             for (var index = 0; (index < leftState.SupportCount); ++index) { joint[((int)leftState.Keys[index])] = leftState.Coefficients[index]; }
-            for (var index = 0; (index < rightState.SupportCount); ++index) { joint[(leftWidth + (int)rightState.Keys[index])] = rightState.Coefficients[index]; }
+            for (var index = 0; (index < rightState.SupportCount); ++index) { joint[(leftWidth + ((int)rightState.Keys[index]))] = rightState.Coefficients[index]; }
         }
 
-        if (Disagrees(leftState: left.Initial, rightState: right.Initial, word: [], found: out witness)) { return false; }
+        if (Disagrees(
+            leftState: left.Initial,
+            rightState: right.Initial,
+            word: [],
+            found: out witness
+        )) { return false; }
 
-        Load(leftState: left.Initial, rightState: right.Initial);
+        Load(
+            leftState: left.Initial,
+            rightState: right.Initial
+        );
 
         if (basis.TryAdmit(vector: joint)) { reached.Add(item: (left.Initial, right.Initial, [])); }
 
@@ -164,16 +224,33 @@ public sealed class PresentedMachine<TValue, TOps>
             var (leftState, rightState, word) = reached[cursor];
 
             for (var symbol = 0; (symbol < left.StepCount); ++symbol) {
-                var leftNext = leftAlgebra.Multiply(left: leftState, right: left.Step(index: symbol));
-                var rightNext = rightAlgebra.Multiply(left: rightState, right: right.Step(index: symbol));
+                var leftNext = leftAlgebra.Multiply(
+                    left: leftState,
+                    right: left.Step(index: symbol)
+                );
+                var rightNext = rightAlgebra.Multiply(
+                    left: rightState,
+                    right: right.Step(index: symbol)
+                );
                 var nextWord = new int[(word.Length + 1)];
 
-                word.CopyTo(array: nextWord, index: 0);
+                word.CopyTo(
+                    array: nextWord,
+                    index: 0
+                );
                 nextWord[word.Length] = symbol;
 
-                if (Disagrees(leftState: leftNext, rightState: rightNext, word: nextWord, found: out witness)) { return false; }
+                if (Disagrees(
+                    found: out witness,
+                    leftState: leftNext,
+                    rightState: rightNext,
+                    word: nextWord
+                )) { return false; }
 
-                Load(leftState: leftNext, rightState: rightNext);
+                Load(
+                    leftState: leftNext,
+                    rightState: rightNext
+                );
 
                 if (basis.TryAdmit(vector: joint)) { reached.Add(item: (leftNext, rightNext, nextWord)); }
             }
@@ -183,7 +260,47 @@ public sealed class PresentedMachine<TValue, TOps>
 
         return true;
     }
+    /// <summary>Creates a machine.</summary>
+    /// <param name="algebra">The algebra the steps live in.</param>
+    /// <param name="initial">The initial vector.</param>
+    /// <param name="steps">One step element per input symbol.</param>
+    /// <param name="readout">The readout covector.</param>
+    /// <returns>The described machine.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="algebra"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The initial vector, a step or the readout belongs to another algebra.</exception>
+    /// <remarks>Every part is checked for membership here rather than at the first <see cref="Run"/>: a module is a
+    /// vector, an action and a functional over ONE algebra, and a machine assembled from another's elements would
+    /// answer with values read off the wrong normal forms instead of failing.</remarks>
+    public static PresentedMachine<TValue, TOps> Create(
+        PresentedAlgebra<TValue, TOps> algebra,
+        in PresentedAlgebra<TValue, TOps>.Element initial,
+        ReadOnlySpan<PresentedAlgebra<TValue, TOps>.Element> steps,
+        in PresentedAlgebra<TValue, TOps>.Element readout
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: algebra);
+        algebra.RequireOwned(
+            value: initial,
+            paramName: nameof(initial)
+        );
+        algebra.RequireOwned(
+            value: readout,
+            paramName: nameof(readout)
+        );
 
+        foreach (var step in steps) {
+            algebra.RequireOwned(
+                value: step,
+                paramName: nameof(steps)
+            );
+        }
+
+        return new(
+            algebra: algebra,
+            initial: initial,
+            steps: steps.ToArray(),
+            readout: readout
+        );
+    }
     /// <summary>Quotients this machine by its pairing radical, returning a minimal machine of the same behavior.</summary>
     /// <returns>A machine at a quiver presentation on the minimal number of states, with the same behavior on every word.</returns>
     /// <exception cref="InvalidOperationException">The material is not a certified field, the algebra has no finite
@@ -216,19 +333,33 @@ public sealed class PresentedMachine<TValue, TOps>
 
         // The reachable subspace: close the initial vector under every step, keeping only the vectors that raise the
         // rank. Its reduced echelon rows are the basis every later coordinate is read against.
-        var reachable = new FieldEchelon<TValue, TOps>(field: field, width: width);
+        var reachable = new FieldEchelon<TValue, TOps>(
+            field: field,
+            width: width
+        );
         var frontier = new List<PresentedAlgebra<TValue, TOps>.Element>();
         var dense = new TValue[width];
 
-        Scatter(value: Initial, dense: dense, zero: field.Zero);
+        Scatter(
+            value: Initial,
+            dense: dense,
+            zero: field.Zero
+        );
 
         if (reachable.TryAdmit(vector: dense)) { frontier.Add(item: Initial); }
 
         for (var cursor = 0; (cursor < frontier.Count); ++cursor) {
             for (var symbol = 0; (symbol < StepCount); ++symbol) {
-                var next = algebra.Multiply(left: frontier[cursor], right: m_steps[symbol]);
+                var next = algebra.Multiply(
+                    left: frontier[cursor],
+                    right: m_steps[symbol]
+                );
 
-                Scatter(value: next, dense: dense, zero: field.Zero);
+                Scatter(
+                    value: next,
+                    dense: dense,
+                    zero: field.Zero
+                );
 
                 if (reachable.TryAdmit(vector: dense)) { frontier.Add(item: next); }
             }
@@ -238,7 +369,10 @@ public sealed class PresentedMachine<TValue, TOps>
         var basis = new PresentedAlgebra<TValue, TOps>.Element[reachableCount];
 
         for (var index = 0; (index < reachableCount); ++index) {
-            basis[index] = algebra.FromSupport(keys: fullKeys, coefficients: reachable.Row(index: index));
+            basis[index] = algebra.FromSupport(
+                keys: fullKeys,
+                coefficients: reachable.Row(index: index)
+            );
         }
 
         // The step matrices in that basis, and the readout as a covector on it.
@@ -246,19 +380,32 @@ public sealed class PresentedMachine<TValue, TOps>
         var observation = new TValue[reachableCount];
 
         for (var index = 0; (index < reachableCount); ++index) {
-            observation[index] = algebra.Pair(covector: Readout, value: basis[index]);
+            observation[index] = algebra.Pair(
+                covector: Readout,
+                value: basis[index]
+            );
         }
 
         for (var symbol = 0; (symbol < StepCount); ++symbol) {
             var rows = new TValue[reachableCount][];
 
             for (var index = 0; (index < reachableCount); ++index) {
-                var moved = algebra.Multiply(left: basis[index], right: m_steps[symbol]);
+                var moved = algebra.Multiply(
+                    left: basis[index],
+                    right: m_steps[symbol]
+                );
 
-                Scatter(value: moved, dense: dense, zero: field.Zero);
+                Scatter(
+                    value: moved,
+                    dense: dense,
+                    zero: field.Zero
+                );
 
                 rows[index] = new TValue[reachableCount];
-                reachable.Coordinates(vector: dense, coordinates: rows[index]);
+                reachable.Coordinates(
+                    vector: dense,
+                    coordinates: rows[index]
+                );
             }
 
             stepMatrix[symbol] = rows;
@@ -266,19 +413,32 @@ public sealed class PresentedMachine<TValue, TOps>
 
         // The observation span: the readout covector closed under the transposed steps. Its rank is the minimal
         // dimension, and its radical — the part of the reachable space it annihilates — is what the quotient removes.
-        var observed = new FieldEchelon<TValue, TOps>(field: field, width: reachableCount);
+        var observed = new FieldEchelon<TValue, TOps>(
+            field: field,
+            width: reachableCount
+        );
         var covectors = new List<TValue[]>();
         var carried = new TValue[reachableCount];
 
-        observation.CopyTo(array: carried, index: 0);
+        observation.CopyTo(
+            array: carried,
+            index: 0
+        );
 
         if (observed.TryAdmit(vector: carried)) { covectors.Add(item: observation); }
 
         for (var cursor = 0; (cursor < covectors.Count); ++cursor) {
             for (var symbol = 0; (symbol < StepCount); ++symbol) {
-                var moved = ApplyMatrix(matrix: stepMatrix[symbol], vector: covectors[cursor], field: field);
+                var moved = ApplyMatrix(
+                    matrix: stepMatrix[symbol],
+                    vector: covectors[cursor],
+                    field: field
+                );
 
-                moved.CopyTo(array: carried, index: 0);
+                moved.CopyTo(
+                    array: carried,
+                    index: 0
+                );
 
                 if (observed.TryAdmit(vector: carried)) { covectors.Add(item: moved); }
             }
@@ -290,12 +450,22 @@ public sealed class PresentedMachine<TValue, TOps>
             throw new InvalidOperationException(message: "The minimal realization needs more states than a quiver presentation of this library carries.");
         }
 
-        var quiver = PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Quiver<TValue, TOps>(objectCount: Math.Max(val1: dimension, val2: 1), arrows: [], material: material));
+        var quiver = PresentedAlgebra<TValue, TOps>.Create(presentation: Presentations.Quiver<TValue, TOps>(
+            objectCount: Math.Max(
+                val1: dimension,
+                val2: 1
+            ),
+            arrows: [],
+            material: material
+        ));
 
         if (0 == dimension) {
             var silent = new PresentedAlgebra<TValue, TOps>.Element[StepCount];
 
-            Array.Fill(array: silent, value: quiver.Zero);
+            Array.Fill(
+                array: silent,
+                value: quiver.Zero
+            );
 
             return new PresentedMachine<TValue, TOps>(
                 algebra: quiver,
@@ -307,18 +477,29 @@ public sealed class PresentedMachine<TValue, TOps>
 
         // The quotient coordinates: state k of the minimal machine is the observation functional o_k evaluated at the
         // reachable state, so the initial vector, the steps and the readout are all read off in that basis.
-        Scatter(value: Initial, dense: dense, zero: field.Zero);
+        Scatter(
+            value: Initial,
+            dense: dense,
+            zero: field.Zero
+        );
 
         var initialCoordinates = new TValue[reachableCount];
 
-        reachable.Coordinates(vector: dense, coordinates: initialCoordinates);
+        reachable.Coordinates(
+            coordinates: initialCoordinates,
+            vector: dense
+        );
 
         var minimalInitialKeys = new long[dimension];
         var minimalInitialValues = new TValue[dimension];
 
         for (var state = 0; (state < dimension); ++state) {
             minimalInitialKeys[state] = state;
-            minimalInitialValues[state] = Contract(left: observed.Row(index: state), right: initialCoordinates, field: field);
+            minimalInitialValues[state] = Contract(
+                left: observed.Row(index: state),
+                right: initialCoordinates,
+                field: field
+            );
         }
 
         var minimalReadoutKeys = new long[dimension];
@@ -338,24 +519,36 @@ public sealed class PresentedMachine<TValue, TOps>
 
         for (var symbol = 0; (symbol < StepCount); ++symbol) {
             for (var state = 0; (state < dimension); ++state) {
-                var moved = ApplyMatrix(matrix: stepMatrix[symbol], vector: observed.Row(index: state), field: field);
+                var moved = ApplyMatrix(
+                    matrix: stepMatrix[symbol],
+                    vector: observed.Row(index: state),
+                    field: field
+                );
 
                 for (var target = 0; (target < dimension); ++target) {
                     cellValues[((target * dimension) + state)] = moved[observed.Pivot(index: target)];
                 }
             }
 
-            minimalSteps[symbol] = quiver.FromSupport(keys: cellKeys, coefficients: cellValues);
+            minimalSteps[symbol] = quiver.FromSupport(
+                coefficients: cellValues,
+                keys: cellKeys
+            );
         }
 
         return new PresentedMachine<TValue, TOps>(
             algebra: quiver,
-            initial: quiver.FromSupport(keys: minimalInitialKeys, coefficients: minimalInitialValues),
+            initial: quiver.FromSupport(
+                coefficients: minimalInitialValues,
+                keys: minimalInitialKeys
+            ),
             steps: minimalSteps,
-            readout: quiver.FromSupport(keys: minimalReadoutKeys, coefficients: minimalReadoutValues)
+            readout: quiver.FromSupport(
+                coefficients: minimalReadoutValues,
+                keys: minimalReadoutKeys
+            )
         );
     }
-
     /// <summary>Returns the behavior of one word: the readout paired with the initial vector stepped along it.</summary>
     /// <param name="word">The input symbols, in the order they are applied.</param>
     /// <returns>The behavior value.</returns>
@@ -364,59 +557,29 @@ public sealed class PresentedMachine<TValue, TOps>
         var state = Initial;
 
         foreach (var symbol in word) {
-            state = Algebra.Multiply(left: state, right: Step(index: symbol));
+            state = Algebra.Multiply(
+                left: state,
+                right: Step(index: symbol)
+            );
         }
 
-        return Algebra.Pair(covector: Readout, value: state);
+        return Algebra.Pair(
+            covector: Readout,
+            value: state
+        );
     }
-
     /// <summary>Returns one step element.</summary>
     /// <param name="index">The input symbol.</param>
     /// <returns>The step element.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The symbol names no step of this machine.</exception>
     public PresentedAlgebra<TValue, TOps>.Element Step(int index) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: m_steps.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: index,
+            other: m_steps.Length
+        );
 
         return m_steps[index];
-    }
-
-    private static TValue[] ApplyMatrix(TValue[][] matrix, ReadOnlySpan<TValue> vector, IFieldMaterial<TValue, TOps> field) {
-        var result = new TValue[matrix.Length];
-
-        for (var row = 0; (row < matrix.Length); ++row) {
-            result[row] = Contract(left: matrix[row], right: vector, field: field);
-        }
-
-        return result;
-    }
-    private static TValue Contract(ReadOnlySpan<TValue> left, ReadOnlySpan<TValue> right, IFieldMaterial<TValue, TOps> field) {
-        var total = field.Zero;
-
-        for (var index = 0; (index < left.Length); ++index) {
-            total = field.Add(left: total, right: field.Multiply(left: left[index], right: right[index]));
-        }
-
-        return total;
-    }
-    private static IFieldMaterial<TValue, TOps> RequireField(PresentedAlgebra<TValue, TOps> algebra) {
-        if (algebra.Presentation.Material is not IFieldMaterial<TValue, TOps> field) {
-            throw new InvalidOperationException(message: "The duality quotient inverts coefficients, which a material that is not a certified field cannot do.");
-        }
-
-        return field;
-    }
-    private static int RequireFiniteBasis(PresentedAlgebra<TValue, TOps> algebra) {
-        if (!algebra.Presentation.HasCompiledNormalFormBasis) {
-            throw new InvalidOperationException(message: "The duality quotient needs a finite basis to coordinatize, which this presentation does not have.");
-        }
-
-        return algebra.Presentation.NormalFormCount;
-    }
-    private static void Scatter(in PresentedAlgebra<TValue, TOps>.Element value, TValue[] dense, TValue zero) {
-        Array.Fill(array: dense, value: zero);
-
-        for (var index = 0; (index < value.SupportCount); ++index) { dense[((int)value.Keys[index])] = value.Coefficients[index]; }
     }
 }
 public sealed partial class PresentedAlgebra<TValue, TOps>
@@ -434,13 +597,27 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// and the pairing rounds once for the returned scalar, which is the same discipline every other operation here
     /// keeps.</remarks>
     public TValue Behavior(in Element initial, in Element value, in Element readout) {
-        RequireOwned(value: initial, paramName: nameof(initial));
-        RequireOwned(value: value, paramName: nameof(value));
-        RequireOwned(value: readout, paramName: nameof(readout));
+        RequireOwned(
+            value: initial,
+            paramName: nameof(initial)
+        );
+        RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
+        RequireOwned(
+            value: readout,
+            paramName: nameof(readout)
+        );
 
-        return Pair(covector: readout, value: Multiply(left: initial, right: value));
+        return Pair(
+            covector: readout,
+            value: Multiply(
+                left: initial,
+                right: value
+            )
+        );
     }
-
     /// <summary>Pairs a covector with an element.</summary>
     /// <param name="covector">The covector, carried as an element whose coefficients are read as functionals on the keys
     /// they sit at.</param>
@@ -451,15 +628,24 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// are found by one merge walk and folded through a single
     /// <see cref="IMaterialOps{TValue, TOps}.FusedChargedLinear"/>.</remarks>
     public TValue Pair(in Element covector, in Element value) {
-        RequireOwned(value: covector, paramName: nameof(covector));
-        RequireOwned(value: value, paramName: nameof(value));
+        RequireOwned(
+            value: covector,
+            paramName: nameof(covector)
+        );
+        RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
         var covectorKeys = covector.Keys;
         var covectorValues = covector.Coefficients;
         var material = m_material;
         var valueKeys = value.Keys;
         var valueValues = value.Coefficients;
-        var needed = Math.Min(val1: covectorKeys.Length, val2: valueKeys.Length);
+        var needed = Math.Min(
+            val1: covectorKeys.Length,
+            val2: valueKeys.Length
+        );
 
         if (m_pairCharges.Length < needed) {
             m_pairCharges = new TValue[needed];
@@ -470,7 +656,10 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         var terms = 0;
         var valueIndex = 0;
 
-        while ((covectorIndex < covectorKeys.Length) && (valueIndex < valueKeys.Length)) {
+        while (
+            (covectorIndex < covectorKeys.Length) &&
+            (valueIndex < valueKeys.Length)
+        ) {
             var covectorKey = covectorKeys[covectorIndex];
             var valueKey = valueKeys[valueIndex];
 
@@ -486,12 +675,17 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
         }
 
         return material.FusedChargedLinear(
-            charges: m_pairCharges.AsSpan(start: 0, length: terms),
-            values: m_pairValues.AsSpan(start: 0, length: terms),
+            charges: m_pairCharges.AsSpan(
+                length: terms,
+                start: 0
+            ),
+            values: m_pairValues.AsSpan(
+                length: terms,
+                start: 0
+            ),
             lane: m_lane
         );
     }
-
     /// <summary>Pairs one element of each factor into this tensor algebra — the Kronecker pair-up.</summary>
     /// <param name="left">The left factor's element.</param>
     /// <param name="right">The right factor's element.</param>
@@ -521,17 +715,31 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// </para>
     /// </remarks>
     public Element PairUp(in Element left, in Element right, int rightKeyCount) {
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: rightKeyCount, other: 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            value: rightKeyCount,
+            other: 1
+        );
 
-        if (!m_isDense || (0 != (m_keyCount % rightKeyCount))) {
+        if (
+            !m_isDense ||
+            (0 != (m_keyCount % rightKeyCount))
+        ) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(rightKeyCount),
                 message: "The right-factor stride must divide this algebra's finite basis width."
             );
         }
 
-        RequireTensorFactor(value: left, keyCount: (m_keyCount / rightKeyCount), paramName: nameof(left));
-        RequireTensorFactor(value: right, keyCount: rightKeyCount, paramName: nameof(right));
+        RequireTensorFactor(
+            value: left,
+            keyCount: (m_keyCount / rightKeyCount),
+            paramName: nameof(left)
+        );
+        RequireTensorFactor(
+            value: right,
+            keyCount: rightKeyCount,
+            paramName: nameof(right)
+        );
 
         var material = m_material;
         var coefficients = new List<TValue>();
@@ -545,10 +753,16 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
                 var rightKey = right.Keys[rightIndex];
 
                 if (rightKey >= rightKeyCount) {
-                    throw new ArgumentOutOfRangeException(paramName: nameof(rightKeyCount), message: "A key of the right factor lies outside the declared stride.");
+                    throw new ArgumentOutOfRangeException(
+                        paramName: nameof(rightKeyCount),
+                        message: "A key of the right factor lies outside the declared stride."
+                    );
                 }
 
-                var value = material.Multiply(left: leftValue, right: right.Coefficients[rightIndex]);
+                var value = material.Multiply(
+                    left: leftValue,
+                    right: right.Coefficients[rightIndex]
+                );
 
                 if (material.IsZero(value: value)) { continue; }
 
@@ -557,7 +771,10 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
             }
         }
 
-        return FromSupport(keys: CollectionsMarshal.AsSpan(list: keys), coefficients: CollectionsMarshal.AsSpan(list: coefficients));
+        return FromSupport(
+            keys: CollectionsMarshal.AsSpan(list: keys),
+            coefficients: CollectionsMarshal.AsSpan(list: coefficients)
+        );
     }
 
     // PairUp alone consumes elements from factor algebras rather than from this one. Its ownership rule is coordinate
@@ -568,14 +785,20 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
 
         if (owner is null) { return; }
 
-        if (!owner.Presentation.HasCompiledNormalFormBasis || (owner.Presentation.NormalFormCount != keyCount)) {
+        if (
+            !owner.Presentation.HasCompiledNormalFormBasis ||
+            (owner.Presentation.NormalFormCount != keyCount)
+        ) {
             throw new ArgumentException(
                 message: "A tensor factor belongs to a finite-basis algebra with the basis width assigned to that factor.",
                 paramName: paramName
             );
         }
 
-        if (!EqualityComparer<TOps>.Default.Equals(x: owner.Presentation.Material, y: m_material)) {
+        if (!EqualityComparer<TOps>.Default.Equals(
+            x: owner.Presentation.Material,
+            y: m_material
+        )) {
             throw new ArgumentException(
                 message: "A tensor factor carries the same material value as the tensor algebra.",
                 paramName: paramName
@@ -591,9 +814,15 @@ public sealed partial class PresentedAlgebra<TValue, TOps>
     /// at a monoid presentation the unit is one basis element, so the trace is the scalar part; at a quiver the unit is
     /// the diagonal sum, so the trace is the matrix trace.</remarks>
     public TValue Trace(in Element value) {
-        RequireOwned(value: value, paramName: nameof(value));
+        RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
 
-        return Pair(covector: Identity, value: value);
+        return Pair(
+            covector: Identity,
+            value: value
+        );
     }
 }
 
@@ -620,15 +849,12 @@ internal sealed class FieldEchelon<TValue, TOps>
     internal void Coordinates(ReadOnlySpan<TValue> vector, Span<TValue> coordinates) {
         for (var index = 0; (index < m_rows.Count); ++index) { coordinates[index] = vector[m_pivots[index]]; }
     }
-
     /// <summary>Gets the pivot column of one admitted row.</summary>
     internal int Pivot(int index) =>
         m_pivots[index];
-
     /// <summary>Gets one admitted row.</summary>
     internal ReadOnlySpan<TValue> Row(int index) =>
         m_rows[index];
-
     /// <summary>Admits a vector when it is independent of the rows already held, reducing it in place either way.</summary>
     internal bool TryAdmit(Span<TValue> vector) {
         for (var index = 0; (index < m_rows.Count); ++index) {
@@ -639,7 +865,13 @@ internal sealed class FieldEchelon<TValue, TOps>
             var row = m_rows[index];
 
             for (var column = 0; (column < m_width); ++column) {
-                vector[column] = m_field.Subtract(left: vector[column], right: m_field.Multiply(left: factor, right: row[column]));
+                vector[column] = m_field.Subtract(
+                    left: vector[column],
+                    right: m_field.Multiply(
+                        left: factor,
+                        right: row[column]
+                    )
+                );
             }
         }
 
@@ -653,11 +885,22 @@ internal sealed class FieldEchelon<TValue, TOps>
             }
         }
 
-        if ((pivot < 0) || !m_field.TryInvert(value: vector[pivot], out var inverse)) { return false; }
+        if (
+            (pivot < 0) ||
+            !m_field.TryInvert(
+            value: vector[pivot],
+            out var inverse
+        )
+        ) { return false; }
 
         var admitted = new TValue[m_width];
 
-        for (var column = 0; (column < m_width); ++column) { admitted[column] = m_field.Multiply(left: inverse, right: vector[column]); }
+        for (var column = 0; (column < m_width); ++column) {
+            admitted[column] = m_field.Multiply(
+                left: inverse,
+                right: vector[column]
+            );
+        }
 
         // Back-substitute so the basis stays reduced: with every other row carrying a zero in this pivot, a coordinate
         // read is a single lookup rather than a solve.
@@ -668,16 +911,31 @@ internal sealed class FieldEchelon<TValue, TOps>
             if (m_field.IsZero(value: factor)) { continue; }
 
             for (var column = 0; (column < m_width); ++column) {
-                existing[column] = m_field.Subtract(left: existing[column], right: m_field.Multiply(left: factor, right: admitted[column]));
+                existing[column] = m_field.Subtract(
+                    left: existing[column],
+                    right: m_field.Multiply(
+                        left: factor,
+                        right: admitted[column]
+                    )
+                );
             }
         }
 
         var slot = 0;
 
-        while ((slot < m_pivots.Count) && (m_pivots[slot] < pivot)) { ++slot; }
+        while (
+            (slot < m_pivots.Count) &&
+            (m_pivots[slot] < pivot)
+        ) { ++slot; }
 
-        m_pivots.Insert(index: slot, item: pivot);
-        m_rows.Insert(index: slot, item: admitted);
+        m_pivots.Insert(
+            index: slot,
+            item: pivot
+        );
+        m_rows.Insert(
+            index: slot,
+            item: admitted
+        );
 
         return true;
     }

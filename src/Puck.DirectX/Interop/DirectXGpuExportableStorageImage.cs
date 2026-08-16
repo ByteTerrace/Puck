@@ -30,6 +30,7 @@ namespace Puck.DirectX.Interop;
 public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStorageImage {
     private readonly IDirectXDeviceContext m_deviceContext;
     private readonly GCHandle m_imageViewToken;
+
     private bool m_disposed;
     private nint m_fence;
     private HANDLE m_fenceEvent;
@@ -63,7 +64,7 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         Height = height;
         Width = width;
 
-        var device = (ID3D12Device*)deviceContext.Device.Handle;
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
@@ -95,20 +96,20 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
             InitialResourceState: (simultaneousAccess ? D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
             pDesc: in textureDesc,
             pHeapProperties: in heapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &resource,
             riidResource: in resourceIid
         );
-        m_resource = (nint)resource;
+        m_resource = ((nint)resource);
 
         var sharedHandle = default(HANDLE);
 
         device->CreateSharedHandle(
-            pObject: (ID3D12DeviceChild*)resource,
-            pAttributes: (SECURITY_ATTRIBUTES*)null,
             Access: GenericAll,
             Name: default(PCWSTR),
-            pHandle: &sharedHandle
+            pAttributes: ((SECURITY_ATTRIBUTES*)null),
+            pHandle: &sharedHandle,
+            pObject: ((ID3D12DeviceChild*)resource)
         );
         m_sharedHandle = sharedHandle;
 
@@ -118,17 +119,17 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         });
 
         device->CreateFence(
-            InitialValue: 0,
             Flags: default,
-            riid: ID3D12Fence.IID_Guid,
-            ppFence: out var fence
+            InitialValue: 0,
+            ppFence: out var fence,
+            riid: ID3D12Fence.IID_Guid
         );
-        m_fence = (nint)fence;
+        m_fence = ((nint)fence);
         m_fenceValue = 1;
         m_fenceEvent = PInvoke.CreateEvent(
-            lpEventAttributes: (SECURITY_ATTRIBUTES*)null,
-            bManualReset: false,
             bInitialState: false,
+            bManualReset: false,
+            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
             lpName: default(PCWSTR)
         );
 
@@ -154,8 +155,8 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
     private void WaitForGpu() {
         DirectXFence.SignalAndWait(
             deviceContext: m_deviceContext,
-            fenceHandle: m_fence,
             fenceEvent: m_fenceEvent,
+            fenceHandle: m_fence,
             fenceValue: ref m_fenceValue
         );
     }
@@ -171,7 +172,6 @@ public sealed unsafe class DirectXGpuExportableStorageImage : IGpuExportableStor
         // importing backend opens the shared handle on completed pixels in the resting state.
         WaitForGpu();
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {

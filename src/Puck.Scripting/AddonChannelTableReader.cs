@@ -38,11 +38,11 @@ public static class AddonChannelTableReader {
 
         for (var index = 0; (index < count); ++index) {
             var entry = source.Slice(
-                start: (index * AddonAbi.ChannelDescriptorBytes),
-                length: AddonAbi.ChannelDescriptorBytes
+                length: AddonAbi.ChannelDescriptorBytes,
+                start: (index * AddonAbi.ChannelDescriptorBytes)
             );
             var kindByte = entry[AddonAbi.ChannelDescriptorOffsets.Kind];
-            var kind = (AddonChannelKind)kindByte;
+            var kind = ((AddonChannelKind)kindByte);
 
             if (!Enum.IsDefined(value: kind)) {
                 error = $"descriptor {index}: channel kind {kindByte} is not defined";

@@ -8,14 +8,14 @@ namespace Puck.Recording.Overlay;
 /// counted from the left. The glyph data is the public-domain font8x8 basic set.
 /// </summary>
 internal static class BitmapFont {
-    /// <summary>The glyph cell size, in font pixels, on each axis.</summary>
-    public const int GlyphSize = 8;
-
     private const int FirstCodePoint = 0x20;
     private const int LastCodePoint = 0x7E;
 
+    /// <summary>The glyph cell size, in font pixels, on each axis.</summary>
+    public const int GlyphSize = 8;
+
     // font8x8 basic, printable ASCII 0x20..0x7E (public domain, Daniel Hepper). Row-major, LSB = leftmost column.
-    private static readonly byte[] s_glyphs = [
+    private static readonly byte[] Glyphs = [
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // space
         0x18, 0x3C, 0x3C, 0x18, 0x18, 0x00, 0x18, 0x00, // !
         0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // "
@@ -113,23 +113,25 @@ internal static class BitmapFont {
         0x6E, 0x3B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ~
     ];
 
-    /// <summary>Returns the integer render scale for a requested cap height in pixels (at least one).</summary>
-    /// <param name="pixelHeight">The requested cap height in pixels.</param>
-    /// <returns>The integer scale factor.</returns>
-    public static int ScaleFor(float pixelHeight) =>
-        Math.Max(val1: 1, val2: (int)MathF.Round(x: (pixelHeight / GlyphSize)));
-
     /// <summary>Gets the eight row bytes of a character's glyph (a blank cell for characters outside the set).</summary>
     /// <param name="value">The character.</param>
     /// <returns>The glyph's eight row bytes.</returns>
     public static ReadOnlySpan<byte> Glyph(char value) {
-        if ((value < FirstCodePoint) || (value > LastCodePoint)) {
-            return s_glyphs.AsSpan(start: 0, length: GlyphSize);
+        if (
+            (value < FirstCodePoint) ||
+            (value > LastCodePoint)
+        ) {
+            return Glyphs.AsSpan(
+                length: GlyphSize,
+                start: 0
+            );
         }
 
-        return s_glyphs.AsSpan(start: ((value - FirstCodePoint) * GlyphSize), length: GlyphSize);
+        return Glyphs.AsSpan(
+            length: GlyphSize,
+            start: ((value - FirstCodePoint) * GlyphSize)
+        );
     }
-
     /// <summary>Tests whether a glyph pixel at the given column and row is set.</summary>
     /// <param name="glyph">The glyph's row bytes.</param>
     /// <param name="column">The column, from the left.</param>
@@ -137,4 +139,12 @@ internal static class BitmapFont {
     /// <returns><see langword="true"/> when the pixel is set.</returns>
     public static bool IsSet(ReadOnlySpan<byte> glyph, int column, int row) =>
         (((glyph[row] >> column) & 1) != 0);
+    /// <summary>Returns the integer render scale for a requested cap height in pixels (at least one).</summary>
+    /// <param name="pixelHeight">The requested cap height in pixels.</param>
+    /// <returns>The integer scale factor.</returns>
+    public static int ScaleFor(float pixelHeight) =>
+        Math.Max(
+            val1: 1,
+            val2: ((int)MathF.Round(x: (pixelHeight / GlyphSize)))
+        );
 }

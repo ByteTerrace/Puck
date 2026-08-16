@@ -11,7 +11,6 @@ namespace Puck.Maths;
 /// <remarks>A successful call returns every field at <c>-1</c> with a default rule, which reads unambiguously as
 /// "nothing blocked": a rule index is never negative and a basis key is never negative.</remarks>
 public readonly record struct FunctorObstruction<TValue>(int RuleIndex, RewriteRule<TValue> Rule, long LeftKey, long RightKey);
-
 /// <summary>
 /// A morphism of presented algebras: one target element per source generator, admitted only after the source's own
 /// relations were evaluated on those images. It adds no arithmetic — every statement it makes is a product and a
@@ -71,10 +70,11 @@ public sealed class PresentedFunctor<TValue, TOps>
     private const int PackedWordCapacity = 63;
 
     private readonly PresentedAlgebra<TValue, TOps>.Element[] m_basisImage;
-    private readonly PresentedAlgebra<TValue, TOps>.Element[] m_images;
     private readonly int[] m_imageStart;
     private readonly int[] m_imageSymbols;
+    private readonly PresentedAlgebra<TValue, TOps>.Element[] m_images;
     private readonly TOps m_material;
+
     private TValue[] m_scale = [];
 
     private PresentedFunctor(
@@ -90,7 +90,12 @@ public sealed class PresentedFunctor<TValue, TOps>
         m_images = images;
         m_material = target.Presentation.Material;
 
-        BuildWordImages(target: target, images: images, start: out m_imageStart, symbols: out m_imageSymbols);
+        BuildWordImages(
+            images: images,
+            start: out m_imageStart,
+            symbols: out m_imageSymbols,
+            target: target
+        );
 
         IsWordMorphism = (0 != m_imageStart.Length);
 
@@ -121,6 +126,328 @@ public sealed class PresentedFunctor<TValue, TOps>
     /// <summary>Gets the algebra the morphism maps into.</summary>
     public PresentedAlgebra<TValue, TOps> Target { get; }
 
+    // The word images of every generator, flat, or two empty arrays when some image names no word. An image names one
+    // exactly when it is a single basis element at the material's one: a two-term image is a sum of words rather than a
+    // word, and a weighted one is a word times a scalar the concatenation cannot carry.
+    private static void BuildWordImages(
+        PresentedAlgebra<TValue, TOps> target,
+        PresentedAlgebra<TValue, TOps>.Element[] images,
+        out int[] start,
+        out int[] symbols
+    ) {
+        var comparer = EqualityComparer<TValue>.Default;
+        var material = target.Presentation.Material;
+        var presentation = target.Presentation;
+        var words = new List<int>();
+        var offsets = new int[(images.Length + 1)];
+
+        Span<int> scratch = stackalloc int[PackedWordCapacity];
+
+        for (var symbol = 0; (symbol < images.Length); ++symbol) {
+            var image = images[symbol];
+
+            offsets[symbol] = words.Count;
+
+            if (
+                (1 != image.SupportCount) ||
+                !comparer.Equals(
+                x: image.Coefficients[0],
+                y: material.One
+            )
+            ) {
+                start = [];
+                symbols = [];
+
+                return;
+            }
+
+            foreach (var letter in WordOf(
+                presentation: presentation,
+                key: image.Keys[0],
+                scratch: scratch
+            )) { words.Add(item: letter); }
+        }
+
+        offsets[images.Length] = words.Count;
+        start = offsets;
+        symbols = [.. words];
+    }
+    // The ordered product of a word's images, seeded at the target's unit, so an empty word maps to that unit.
+    private PresentedAlgebra<TValue, TOps>.Element Fold(ReadOnlySpan<int> word) {
+        var result = Target.Identity;
+
+        for (var index = 0; (index < word.Length); ++index) {
+            result = Target.Multiply(
+                left: result,
+                right: m_images[word[index]]
+            );
+        }
+
+        return result;
+    }
+    // The compiled pass: over a finite basis the images preserve the product exactly when they reproduce every cell,
+    // which with unitality is the whole homomorphism statement, both products being bilinear. It is what sees the
+    // annihilations a degree window states without any rule.
+    private bool PreservesCompiledProduct(out long leftKey, out long rightKey) {
+        leftKey = -1L;
+        rightKey = -1L;
+
+        if (0 == m_basisImage.Length) { return true; }
+
+        var compiled = Source.Compile();
+        var target = Target;
+
+        for (var left = 0; (left < m_basisImage.Length); ++left) {
+            for (var right = 0; (right < m_basisImage.Length); ++right) {
+                var expected = target.Zero;
+                var terms = compiled.TargetCount(
+                    leftKey: left,
+                    rightKey: right
+                );
+
+                for (var term = 0; (term < terms); ++term) {
+                    expected = target.Add(
+                        left: expected,
+                        right: Scale(
+                            value: m_basisImage[((int)compiled.Target(
+                                index: term,
+                                leftKey: left,
+                                rightKey: right
+                            ))],
+                            coefficient: compiled.Charge(
+                                index: term,
+                                leftKey: left,
+                                rightKey: right
+                            )
+                        )
+                    );
+                }
+
+                if (target.AreEqual(
+                    left: target.Multiply(
+                        left: m_basisImage[left],
+                        right: m_basisImage[right]
+                    ),
+                    right: expected
+                )) { continue; }
+
+                leftKey = left;
+                rightKey = right;
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // One source relation evaluated on the images: the pattern's product against the charged combination of the
+    // replacement terms' products. An annihilation carries no term, so its combination is the target's zero.
+    private bool Satisfies(in RewriteRule<TValue> rule) {
+        // A re-association charge is a datum about bracket splices rather than a relation among words, and Map never
+        // sees a bracket — an element is already a combination of normal forms — so it constrains no image.
+        if (RuleKind.Reassociate == rule.Kind) { return true; }
+
+        var pattern = Fold(word: rule.Pattern);
+        var replacement = rule.Replacement;
+        var offset = 0;
+        var total = Target.Zero;
+
+        for (var term = 0; (term < rule.TermCount); ++term) {
+            var length = replacement[offset++];
+
+            total = Target.Add(
+                left: total,
+                right: Scale(
+                    value: Fold(word: replacement.Slice(
+                        length: length,
+                        start: offset
+                    )),
+                    coefficient: rule.Charges[term]
+                )
+            );
+            offset += length;
+        }
+
+        return Target.AreEqual(
+            left: pattern,
+            right: total
+        );
+    }
+    // One element scaled by one coefficient, through the target's own canonicalization. The material's one is passed
+    // through untouched, which keeps the common case free of both a multiply and an allocation.
+    private PresentedAlgebra<TValue, TOps>.Element Scale(in PresentedAlgebra<TValue, TOps>.Element value, TValue coefficient) {
+        if (EqualityComparer<TValue>.Default.Equals(
+            x: coefficient,
+            y: m_material.One
+        )) { return value; }
+
+        var coefficients = value.Coefficients;
+
+        if (m_scale.Length < coefficients.Length) { m_scale = new TValue[coefficients.Length]; }
+
+        for (var index = 0; (index < coefficients.Length); ++index) {
+            m_scale[index] = m_material.Multiply(
+                left: coefficient,
+                right: coefficients[index]
+            );
+        }
+
+        return Target.FromSupport(
+            keys: value.Keys,
+            coefficients: m_scale.AsSpan(
+                start: 0,
+                length: coefficients.Length
+            )
+        );
+    }
+    // The generator word one key names — without a copy where the presentation has a finite basis, and out of the
+    // packed key where it does not.
+    private static ReadOnlySpan<int> WordOf(ChargedPresentation<TValue, TOps> presentation, long key, Span<int> scratch) {
+        if (presentation.HasCompiledNormalFormBasis) { return presentation.NormalFormWord(key: key); }
+
+        if (!presentation.TryUnpackWord(
+            key: key,
+            length: out var length,
+            word: scratch
+        )) {
+            throw new InvalidOperationException(message: "A support key of this element names no word of its presentation.");
+        }
+
+        return scratch.Slice(
+            length: length,
+            start: 0
+        );
+    }
+
+    /// <summary>Returns the image of one source generator.</summary>
+    /// <param name="symbol">The source generator's symbol.</param>
+    /// <returns>The image, an element of <see cref="Target"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The symbol names no source generator.</exception>
+    public PresentedAlgebra<TValue, TOps>.Element Image(int symbol) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: symbol,
+            other: ImageCount
+        );
+
+        return m_images[symbol];
+    }
+    /// <summary>Maps an element of <see cref="Source"/> to an element of <see cref="Target"/>.</summary>
+    /// <param name="value">The element to map; it belongs to <see cref="Source"/>.</param>
+    /// <returns>The image, an element of <see cref="Target"/>.</returns>
+    /// <exception cref="ArgumentException">The element belongs to another algebra.</exception>
+    /// <exception cref="InvalidOperationException">The target has no finite basis and a product exceeded its
+    /// normalization budget or its key scheme.</exception>
+    /// <remarks>The fold is over the basis: each support key's normal form becomes the ordered product of its letters'
+    /// images, scaled by that key's coefficient and summed. Over a rounding carrier it therefore rounds exactly as
+    /// writing that sum of products by hand does, once per component per operation, and no more.</remarks>
+    public PresentedAlgebra<TValue, TOps>.Element Map(in PresentedAlgebra<TValue, TOps>.Element value) {
+        Source.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
+
+        var coefficients = value.Coefficients;
+        var keys = value.Keys;
+        var result = Target.Zero;
+
+        if (0 != m_basisImage.Length) {
+            for (var index = 0; (index < keys.Length); ++index) {
+                result = Target.Add(
+                    left: result,
+                    right: Scale(
+                        value: m_basisImage[((int)keys[index])],
+                        coefficient: coefficients[index]
+                    )
+                );
+            }
+
+            return result;
+        }
+
+        Span<int> word = stackalloc int[PackedWordCapacity];
+
+        for (var index = 0; (index < keys.Length); ++index) {
+            result = Target.Add(
+                left: result,
+                right: Scale(
+                    value: Fold(word: WordOf(
+                        presentation: Source.Presentation,
+                        key: keys[index],
+                        scratch: word
+                    )),
+                    coefficient: coefficients[index]
+                )
+            );
+        }
+
+        return result;
+    }
+    /// <summary>Substitutes a source word letter by letter, writing the concatenated image word.</summary>
+    /// <param name="word">The source word as generator symbols.</param>
+    /// <param name="image">Receives the image word as target generator symbols, truncated to its own length.</param>
+    /// <returns>The full length of the image word, which may exceed the destination.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A letter names no source generator.</exception>
+    /// <exception cref="InvalidOperationException">Some image is not a single basis element at the material's one, so
+    /// it names no word.</exception>
+    /// <exception cref="OverflowException">The image word is longer than an <see cref="int"/> can count.</exception>
+    /// <remarks>
+    /// <para>
+    /// The destination is the bound, and that is the point: a substitution's fixed point grows exponentially, so a
+    /// streamer sizes the prefix it can hold and reads the returned length to learn what it did not receive. Passing an
+    /// empty destination measures an image without writing it.
+    /// </para>
+    /// <para>
+    /// The image is the concatenation the substitution names, not a normal form: over a target with reductions it may
+    /// well be reducible. Over a free target — where every substitution system lives — the two coincide.
+    /// </para>
+    /// </remarks>
+    public int MapWord(ReadOnlySpan<int> word, Span<int> image) {
+        if (!IsWordMorphism) {
+            throw new InvalidOperationException(message: "A word image needs every image to be one basis element at the material's one; a summed or weighted image names no word.");
+        }
+
+        var total = 0L;
+        var written = 0;
+
+        for (var index = 0; (index < word.Length); ++index) {
+            var symbol = word[index];
+
+            ArgumentOutOfRangeException.ThrowIfNegative(
+                value: symbol,
+                paramName: nameof(word)
+            );
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+                value: symbol,
+                other: ImageCount,
+                paramName: nameof(word)
+            );
+
+            var start = m_imageStart[symbol];
+            var length = (m_imageStart[(symbol + 1)] - start);
+            var room = (image.Length - written);
+
+            total += length;
+
+            if (room <= 0) { continue; }
+
+            var taken = Math.Min(
+                val1: room,
+                val2: length
+            );
+
+            m_imageSymbols.AsSpan(
+                length: taken,
+                start: start
+            ).CopyTo(destination: image.Slice(
+                length: taken,
+                start: written
+            ));
+            written += taken;
+        }
+
+        return checked((int)total);
+    }
     /// <summary>Creates a morphism, evaluating the source's own relations on the images before admitting one.</summary>
     /// <param name="source">The algebra to map out of.</param>
     /// <param name="target">The algebra to map into.</param>
@@ -158,7 +485,10 @@ public sealed class PresentedFunctor<TValue, TOps>
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: target);
 
-        if (!EqualityComparer<TOps>.Default.Equals(x: source.Presentation.Material, y: target.Presentation.Material)) {
+        if (!EqualityComparer<TOps>.Default.Equals(
+            x: source.Presentation.Material,
+            y: target.Presentation.Material
+        )) {
             throw new ArgumentException(
                 message: "A functor with no scalar morphism maps coefficients only between equal material values.",
                 paramName: nameof(target)
@@ -168,37 +498,70 @@ public sealed class PresentedFunctor<TValue, TOps>
         var presentation = source.Presentation;
 
         if (images.Length != presentation.GeneratorCount) {
-            throw new ArgumentException(message: "A morphism carries one image per source generator.", paramName: nameof(images));
+            throw new ArgumentException(
+                message: "A morphism carries one image per source generator.",
+                paramName: nameof(images)
+            );
         }
 
         // A degree window annihilates products no rewrite rule names. Where the basis is finite those annihilations are
         // cells and the compiled pass sees them; where it is not, they are infinitely many relations with no rule and
         // no key to enumerate them by, so no morphism out of such a presentation can be verified at all.
-        if (!presentation.HasCompiledNormalFormBasis && (0 != presentation.WindowDegree)) {
+        if (
+            !presentation.HasCompiledNormalFormBasis &&
+            (0 != presentation.WindowDegree)
+        ) {
             throw new ArgumentException(
                 message: "A degree window states annihilations no rewrite rule carries, and without a finite basis they cannot be enumerated, so no morphism out of this presentation can be verified.",
                 paramName: nameof(source)
             );
         }
 
-        foreach (var image in images) { target.RequireOwned(value: image, paramName: nameof(images)); }
+        foreach (var image in images) {
+            target.RequireOwned(
+                value: image,
+                paramName: nameof(images)
+            );
+        }
 
-        var candidate = new PresentedFunctor<TValue, TOps>(source: source, target: target, images: images.ToArray());
+        var candidate = new PresentedFunctor<TValue, TOps>(
+            source: source,
+            target: target,
+            images: images.ToArray()
+        );
         var rules = presentation.Rules;
 
         functor = null;
-        obstruction = new(RuleIndex: -1, Rule: default, LeftKey: -1L, RightKey: -1L);
+        obstruction = new(
+            LeftKey: -1L,
+            RightKey: -1L,
+            Rule: default,
+            RuleIndex: -1
+        );
 
         for (var index = 0; (index < rules.Length); ++index) {
             if (candidate.Satisfies(rule: rules[index])) { continue; }
 
-            obstruction = new(RuleIndex: index, Rule: rules[index], LeftKey: -1L, RightKey: -1L);
+            obstruction = new(
+                RuleIndex: index,
+                Rule: rules[index],
+                LeftKey: -1L,
+                RightKey: -1L
+            );
 
             return false;
         }
 
-        if (!candidate.PreservesCompiledProduct(leftKey: out var leftKey, rightKey: out var rightKey)) {
-            obstruction = new(RuleIndex: -1, Rule: default, LeftKey: leftKey, RightKey: rightKey);
+        if (!candidate.PreservesCompiledProduct(
+            leftKey: out var leftKey,
+            rightKey: out var rightKey
+        )) {
+            obstruction = new(
+                LeftKey: leftKey,
+                RightKey: rightKey,
+                Rule: default,
+                RuleIndex: -1
+            );
 
             return false;
         }
@@ -206,235 +569,5 @@ public sealed class PresentedFunctor<TValue, TOps>
         functor = candidate;
 
         return true;
-    }
-
-    /// <summary>Returns the image of one source generator.</summary>
-    /// <param name="symbol">The source generator's symbol.</param>
-    /// <returns>The image, an element of <see cref="Target"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The symbol names no source generator.</exception>
-    public PresentedAlgebra<TValue, TOps>.Element Image(int symbol) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: symbol);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: symbol, other: ImageCount);
-
-        return m_images[symbol];
-    }
-
-    /// <summary>Maps an element of <see cref="Source"/> to an element of <see cref="Target"/>.</summary>
-    /// <param name="value">The element to map; it belongs to <see cref="Source"/>.</param>
-    /// <returns>The image, an element of <see cref="Target"/>.</returns>
-    /// <exception cref="ArgumentException">The element belongs to another algebra.</exception>
-    /// <exception cref="InvalidOperationException">The target has no finite basis and a product exceeded its
-    /// normalization budget or its key scheme.</exception>
-    /// <remarks>The fold is over the basis: each support key's normal form becomes the ordered product of its letters'
-    /// images, scaled by that key's coefficient and summed. Over a rounding carrier it therefore rounds exactly as
-    /// writing that sum of products by hand does, once per component per operation, and no more.</remarks>
-    public PresentedAlgebra<TValue, TOps>.Element Map(in PresentedAlgebra<TValue, TOps>.Element value) {
-        Source.RequireOwned(value: value, paramName: nameof(value));
-
-        var coefficients = value.Coefficients;
-        var keys = value.Keys;
-        var result = Target.Zero;
-
-        if (0 != m_basisImage.Length) {
-            for (var index = 0; (index < keys.Length); ++index) {
-                result = Target.Add(left: result, right: Scale(value: m_basisImage[((int)keys[index])], coefficient: coefficients[index]));
-            }
-
-            return result;
-        }
-
-        Span<int> word = stackalloc int[PackedWordCapacity];
-
-        for (var index = 0; (index < keys.Length); ++index) {
-            result = Target.Add(
-                left: result,
-                right: Scale(value: Fold(word: WordOf(presentation: Source.Presentation, key: keys[index], scratch: word)), coefficient: coefficients[index])
-            );
-        }
-
-        return result;
-    }
-
-    /// <summary>Substitutes a source word letter by letter, writing the concatenated image word.</summary>
-    /// <param name="word">The source word as generator symbols.</param>
-    /// <param name="image">Receives the image word as target generator symbols, truncated to its own length.</param>
-    /// <returns>The full length of the image word, which may exceed the destination.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A letter names no source generator.</exception>
-    /// <exception cref="InvalidOperationException">Some image is not a single basis element at the material's one, so
-    /// it names no word.</exception>
-    /// <exception cref="OverflowException">The image word is longer than an <see cref="int"/> can count.</exception>
-    /// <remarks>
-    /// <para>
-    /// The destination is the bound, and that is the point: a substitution's fixed point grows exponentially, so a
-    /// streamer sizes the prefix it can hold and reads the returned length to learn what it did not receive. Passing an
-    /// empty destination measures an image without writing it.
-    /// </para>
-    /// <para>
-    /// The image is the concatenation the substitution names, not a normal form: over a target with reductions it may
-    /// well be reducible. Over a free target — where every substitution system lives — the two coincide.
-    /// </para>
-    /// </remarks>
-    public int MapWord(ReadOnlySpan<int> word, Span<int> image) {
-        if (!IsWordMorphism) {
-            throw new InvalidOperationException(message: "A word image needs every image to be one basis element at the material's one; a summed or weighted image names no word.");
-        }
-
-        var total = 0L;
-        var written = 0;
-
-        for (var index = 0; (index < word.Length); ++index) {
-            var symbol = word[index];
-
-            ArgumentOutOfRangeException.ThrowIfNegative(value: symbol, paramName: nameof(word));
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: symbol, other: ImageCount, paramName: nameof(word));
-
-            var start = m_imageStart[symbol];
-            var length = (m_imageStart[(symbol + 1)] - start);
-            var room = (image.Length - written);
-
-            total += length;
-
-            if (room <= 0) { continue; }
-
-            var taken = Math.Min(val1: room, val2: length);
-
-            m_imageSymbols.AsSpan(start: start, length: taken).CopyTo(destination: image.Slice(start: written, length: taken));
-            written += taken;
-        }
-
-        return checked((int)total);
-    }
-
-    // The word images of every generator, flat, or two empty arrays when some image names no word. An image names one
-    // exactly when it is a single basis element at the material's one: a two-term image is a sum of words rather than a
-    // word, and a weighted one is a word times a scalar the concatenation cannot carry.
-    private static void BuildWordImages(
-        PresentedAlgebra<TValue, TOps> target,
-        PresentedAlgebra<TValue, TOps>.Element[] images,
-        out int[] start,
-        out int[] symbols
-    ) {
-        var comparer = EqualityComparer<TValue>.Default;
-        var material = target.Presentation.Material;
-        var presentation = target.Presentation;
-        var words = new List<int>();
-        var offsets = new int[(images.Length + 1)];
-
-        Span<int> scratch = stackalloc int[PackedWordCapacity];
-
-        for (var symbol = 0; (symbol < images.Length); ++symbol) {
-            var image = images[symbol];
-
-            offsets[symbol] = words.Count;
-
-            if ((1 != image.SupportCount) || !comparer.Equals(x: image.Coefficients[0], y: material.One)) {
-                start = [];
-                symbols = [];
-
-                return;
-            }
-
-            foreach (var letter in WordOf(presentation: presentation, key: image.Keys[0], scratch: scratch)) { words.Add(item: letter); }
-        }
-
-        offsets[images.Length] = words.Count;
-        start = offsets;
-        symbols = [.. words];
-    }
-
-    // The generator word one key names — without a copy where the presentation has a finite basis, and out of the
-    // packed key where it does not.
-    private static ReadOnlySpan<int> WordOf(ChargedPresentation<TValue, TOps> presentation, long key, Span<int> scratch) {
-        if (presentation.HasCompiledNormalFormBasis) { return presentation.NormalFormWord(key: key); }
-
-        if (!presentation.TryUnpackWord(key: key, word: scratch, length: out var length)) {
-            throw new InvalidOperationException(message: "A support key of this element names no word of its presentation.");
-        }
-
-        return scratch.Slice(start: 0, length: length);
-    }
-
-    // The ordered product of a word's images, seeded at the target's unit, so an empty word maps to that unit.
-    private PresentedAlgebra<TValue, TOps>.Element Fold(ReadOnlySpan<int> word) {
-        var result = Target.Identity;
-
-        for (var index = 0; (index < word.Length); ++index) { result = Target.Multiply(left: result, right: m_images[word[index]]); }
-
-        return result;
-    }
-
-    // The compiled pass: over a finite basis the images preserve the product exactly when they reproduce every cell,
-    // which with unitality is the whole homomorphism statement, both products being bilinear. It is what sees the
-    // annihilations a degree window states without any rule.
-    private bool PreservesCompiledProduct(out long leftKey, out long rightKey) {
-        leftKey = -1L;
-        rightKey = -1L;
-
-        if (0 == m_basisImage.Length) { return true; }
-
-        var compiled = Source.Compile();
-        var target = Target;
-
-        for (var left = 0; (left < m_basisImage.Length); ++left) {
-            for (var right = 0; (right < m_basisImage.Length); ++right) {
-                var expected = target.Zero;
-                var terms = compiled.TargetCount(leftKey: left, rightKey: right);
-
-                for (var term = 0; (term < terms); ++term) {
-                    expected = target.Add(
-                        left: expected,
-                        right: Scale(
-                            value: m_basisImage[((int)compiled.Target(leftKey: left, rightKey: right, index: term))],
-                            coefficient: compiled.Charge(leftKey: left, rightKey: right, index: term)
-                        )
-                    );
-                }
-
-                if (target.AreEqual(left: target.Multiply(left: m_basisImage[left], right: m_basisImage[right]), right: expected)) { continue; }
-
-                leftKey = left;
-                rightKey = right;
-
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    // One element scaled by one coefficient, through the target's own canonicalization. The material's one is passed
-    // through untouched, which keeps the common case free of both a multiply and an allocation.
-    private PresentedAlgebra<TValue, TOps>.Element Scale(in PresentedAlgebra<TValue, TOps>.Element value, TValue coefficient) {
-        if (EqualityComparer<TValue>.Default.Equals(x: coefficient, y: m_material.One)) { return value; }
-
-        var coefficients = value.Coefficients;
-
-        if (m_scale.Length < coefficients.Length) { m_scale = new TValue[coefficients.Length]; }
-
-        for (var index = 0; (index < coefficients.Length); ++index) { m_scale[index] = m_material.Multiply(left: coefficient, right: coefficients[index]); }
-
-        return Target.FromSupport(keys: value.Keys, coefficients: m_scale.AsSpan(start: 0, length: coefficients.Length));
-    }
-
-    // One source relation evaluated on the images: the pattern's product against the charged combination of the
-    // replacement terms' products. An annihilation carries no term, so its combination is the target's zero.
-    private bool Satisfies(in RewriteRule<TValue> rule) {
-        // A re-association charge is a datum about bracket splices rather than a relation among words, and Map never
-        // sees a bracket — an element is already a combination of normal forms — so it constrains no image.
-        if (RuleKind.Reassociate == rule.Kind) { return true; }
-
-        var pattern = Fold(word: rule.Pattern);
-        var replacement = rule.Replacement;
-        var offset = 0;
-        var total = Target.Zero;
-
-        for (var term = 0; (term < rule.TermCount); ++term) {
-            var length = replacement[offset++];
-
-            total = Target.Add(left: total, right: Scale(value: Fold(word: replacement.Slice(start: offset, length: length)), coefficient: rule.Charges[term]));
-            offset += length;
-        }
-
-        return Target.AreEqual(left: pattern, right: total);
     }
 }

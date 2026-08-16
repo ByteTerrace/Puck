@@ -90,20 +90,20 @@ internal static class BenchDiagnostic {
 
         // Discarded warm-up fleets so JIT tiering settles before anything is measured.
         RunFleet(
-            rom: rom,
-            model: model,
+            choir: false,
             count: 2,
             frames: 30,
-            choir: false,
-            parallel: false
+            model: model,
+            parallel: false,
+            rom: rom
         );
         RunFleet(
-            rom: rom,
-            model: model,
+            choir: false,
             count: 2,
             frames: 30,
-            choir: false,
-            parallel: true
+            model: model,
+            parallel: true,
+            rom: rom
         );
 
         Line(
@@ -130,36 +130,36 @@ internal static class BenchDiagnostic {
             GC.WaitForPendingFinalizers();
 
             var independentSingle = RunFleet(
-                rom: rom,
-                model: model,
+                choir: false,
                 count: count,
                 frames: frames,
-                choir: false,
-                parallel: false
+                model: model,
+                parallel: false,
+                rom: rom
             );
             var independentParallel = RunFleet(
-                rom: rom,
-                model: model,
+                choir: false,
                 count: count,
                 frames: frames,
-                choir: false,
-                parallel: true
+                model: model,
+                parallel: true,
+                rom: rom
             );
             var choirSingle = RunFleet(
-                rom: rom,
-                model: model,
+                choir: true,
                 count: count,
                 frames: frames,
-                choir: true,
-                parallel: false
+                model: model,
+                parallel: false,
+                rom: rom
             );
             var choirParallel = RunFleet(
-                rom: rom,
-                model: model,
+                choir: true,
                 count: count,
                 frames: frames,
-                choir: true,
-                parallel: true
+                model: model,
+                parallel: true,
+                rom: rom
             );
 
             // Every cell consumed stream 0 on machine 0, so all four anchors must be byte-identical — this is the
@@ -180,12 +180,12 @@ internal static class BenchDiagnostic {
         // Burst catch-up: the dormancy model's budget — a frozen machine fast-forwarding its elapsed span. One
         // machine uncapped, and one machine per logical processor all catching up at once.
         var burstSingle = RunFleet(
-            rom: rom,
-            model: model,
+            choir: false,
             count: 1,
             frames: BurstFrames,
-            choir: false,
-            parallel: false
+            model: model,
+            parallel: false,
+            rom: rom
         );
         var burstFleet = RunFleet(
             rom: rom,
@@ -218,28 +218,28 @@ internal static class BenchDiagnostic {
         determinismHeld &= burstFleet.PairMatched;
 
         MeasureLatencies(
-            rom: rom,
             model: model,
-            report: report
+            report: report,
+            rom: rom
         );
         MeasureMailboxCycle(
-            rom: rom,
             model: model,
-            report: report
+            report: report,
+            rom: rom
         );
         MeasureFootprint(
-            rom: rom,
             model: model,
-            report: report
+            report: report,
+            rom: rom
         );
 
         if (romPaths.Length > 1) {
             MeasureMixedMapperFleet(
-                romPaths: romPaths,
-                frameFloor: frameFloor,
+                determinismHeld: ref determinismHeld,
                 fleetSizes: fleetSizes,
+                frameFloor: frameFloor,
                 report: report,
-                determinismHeld: ref determinismHeld
+                romPaths: romPaths
             );
         }
 
@@ -302,17 +302,17 @@ internal static class BenchDiagnostic {
                     var joypad = joypads[index];
                     var machine = machines[index].Machine;
                     var stream = StreamFor(
-                        index: index,
+                        choir: choir,
                         count: count,
-                        choir: choir
+                        index: index
                     );
 
                     for (var frame = 0; (frame < frames); ++frame) {
                         joypad.SetButtons(pressed: ButtonsFor(
-                            stream: stream,
-                            frame: frame
+                            frame: frame,
+                            stream: stream
                         ));
-                        machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                        machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
                     }
                 }
             );
@@ -322,13 +322,13 @@ internal static class BenchDiagnostic {
                 for (var index = 0; (index < count); ++index) {
                     joypads[index].SetButtons(pressed: ButtonsFor(
                         stream: StreamFor(
-                            index: index,
+                            choir: choir,
                             count: count,
-                            choir: choir
+                            index: index
                         ),
                         frame: frame
                     ));
-                    machines[index].Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                    machines[index].Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
                 }
             }
         }
@@ -343,7 +343,7 @@ internal static class BenchDiagnostic {
         }
 
         return new FleetCell(
-            MachineFramesPerSecond: (((double)count * frames) / stopwatch.Elapsed.TotalSeconds),
+            MachineFramesPerSecond: ((((double)count) * frames) / stopwatch.Elapsed.TotalSeconds),
             Anchor: anchor,
             PairMatched: pairMatched
         );
@@ -385,8 +385,8 @@ internal static class BenchDiagnostic {
         );
 
         PostMachine.RunFrames(
-            instance: subject,
-            frames: WarmFrames
+            frames: WarmFrames,
+            instance: subject
         );
 
         // Snapshot: the ghost-echo / bottled-moment / freeze-to-dormant cost.
@@ -449,8 +449,8 @@ internal static class BenchDiagnostic {
         );
 
         PostMachine.RunFrames(
-            instance: subject,
-            frames: WarmFrames
+            frames: WarmFrames,
+            instance: subject
         );
 
         var bus = subject.GetRequiredService<ISystemBus>();
@@ -464,8 +464,8 @@ internal static class BenchDiagnostic {
         for (var rep = 0; (rep < MailboxReps); ++rep) {
             subject.Machine.Restore(snapshot: dormant);
             PostMachine.RunFrames(
-                instance: subject,
-                frames: MailboxFramesPerCheck
+                frames: MailboxFramesPerCheck,
+                instance: subject
             );
             mailbox = bus.ReadByte(address: 0xC000);
             dormant = subject.Machine.Snapshot();
@@ -601,20 +601,20 @@ internal static class BenchDiagnostic {
             GC.WaitForPendingFinalizers();
 
             var serial = RunMixedFleet(
-                roms: roms,
-                models: models,
-                romCount: romCount,
                 count: count,
                 frames: frames,
-                parallel: false
+                models: models,
+                parallel: false,
+                romCount: romCount,
+                roms: roms
             );
             var parallel = RunMixedFleet(
-                roms: roms,
-                models: models,
-                romCount: romCount,
                 count: count,
                 frames: frames,
-                parallel: true
+                models: models,
+                parallel: true,
+                romCount: romCount,
+                roms: roms
             );
             var pairHeld = true;
 
@@ -691,10 +691,10 @@ internal static class BenchDiagnostic {
 
                     for (var frame = 0; (frame < frames); ++frame) {
                         joypad.SetButtons(pressed: ButtonsFor(
-                            stream: index,
-                            frame: frame
+                            frame: frame,
+                            stream: index
                         ));
-                        machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                        machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
                     }
 
                     perMachineTicks[index] = (Stopwatch.GetTimestamp() - start);
@@ -706,10 +706,10 @@ internal static class BenchDiagnostic {
                     var start = Stopwatch.GetTimestamp();
 
                     joypads[index].SetButtons(pressed: ButtonsFor(
-                        stream: index,
-                        frame: frame
+                        frame: frame,
+                        stream: index
                     ));
-                    machines[index].Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                    machines[index].Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
                     perMachineTicks[index] += (Stopwatch.GetTimestamp() - start);
                 }
             }
@@ -726,7 +726,7 @@ internal static class BenchDiagnostic {
 
         for (var index = 0; (index < count); ++index) {
             var romIndex = (index % romCount);
-            var machineFramesPerSecond = (frames / (perMachineTicks[index] / (double)Stopwatch.Frequency));
+            var machineFramesPerSecond = (frames / (perMachineTicks[index] / ((double)Stopwatch.Frequency)));
 
             perRom[romIndex] += machineFramesPerSecond;
             perRomMachineCount[romIndex] += 1;
@@ -743,12 +743,11 @@ internal static class BenchDiagnostic {
         }
 
         return new MixedFleetCell(
-            AggregateMachineFramesPerSecond: (((double)count * frames) / stopwatch.Elapsed.TotalSeconds),
+            AggregateMachineFramesPerSecond: ((((double)count) * frames) / stopwatch.Elapsed.TotalSeconds),
             PerRomMachineFramesPerSecond: perRom,
             Snapshots: snapshots
         );
     }
-
     /// <summary>The input stream a machine consumes: the choir shares stream 0; independent machines get their own
     /// stream, except the LAST machine, which always mirrors stream 0 so every cell carries a same-stream pair for
     /// the determinism guard.</summary>
@@ -756,12 +755,10 @@ internal static class BenchDiagnostic {
         ((choir || (index == (count - 1)))
         ? 0
         : index);
-
     /// <summary>A deterministic, edge-rich joypad script (the trio-lockstep pattern): odd multipliers walk all 256
     /// button patterns, offset per stream so independent machines genuinely diverge.</summary>
     private static JoypadButtons ButtonsFor(int stream, int frame) =>
-        (JoypadButtons)(byte)((frame * 37) + (stream * 11));
-
+        ((JoypadButtons)((byte)((frame * 37) + (stream * 11))));
     /// <summary>Small fleets get more frames so their cells are not stopwatch noise; the emulated span per cell
     /// stays roughly level until the floor takes over.</summary>
     private static int FramesFor(int count, int frameFloor) =>

@@ -5,7 +5,7 @@ using Puck.Commands;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// This project's OWN wiring of <c>Puck.World.Data</c>'s two composition-root injection seams
+/// This project's OWN wiring of <c>Puck.World.Schema</c>'s two composition-root injection seams
 /// (<see cref="BindingVocabularyHook"/>, <see cref="WorldExtensionVocabularyHook"/>) — the same shape
 /// <c>src/Puck.World/WorldDataHookInstaller.cs</c> installs for the real engine, minimal here because this suite
 /// never boots a machine or resolves a live command registry: <see cref="WorldDefinitionValidator"/> still calls
@@ -34,6 +34,8 @@ internal static class TestHookInstaller {
         // machine boot, so every engine id a shipped world names is accepted rather than checked against
         // Puck.HumbleGamingBrick/Puck.AdvancedGamingBrick's real registrations (out of scope; see README.md).
         WorldExtensionVocabularyHook.ScreenMachineEngineCheck = static _ => true;
+        Protocol.MutationKindVocabularyHook.Describe = Protocol.WorldMutationKindCatalog.DescribeMask;
+        Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
     }
 
     // The smallest document BindingProfile.Compile accepts: one chord row, the empty (resting) chord, carrying a

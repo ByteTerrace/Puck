@@ -10,24 +10,26 @@ public sealed class GamepadDeviceTests {
     public async Task Zero_duration_rumble_is_an_immediate_stop() {
         using var hid = new TestHidDevice();
         var parser = new TestParser();
+
         hid.EnqueueReport(1);
         using var device = CreateDevice(hid: hid, parser: parser);
 
         device.Start();
         await TestWait.UntilAsync(condition: () => device.HasStream);
 
-        var effect = new RumbleEffect(LowFrequency: 1f, HighFrequency: 0.5f, DurationMilliseconds: 0u);
+        var effect = new RumbleEffect(DurationMilliseconds: 0u, HighFrequency: 0.5f, LowFrequency: 1f);
+
         Assert.True(condition: device.Output.Rumble(effect: in effect));
-        await TestWait.UntilAsync(condition: () => parser.RumbleWrites.Count != 0);
+        await TestWait.UntilAsync(condition: () => (parser.RumbleWrites.Count != 0));
 
         Assert.Equal(expected: (0f, 0f), actual: parser.RumbleWrites[^1]);
     }
-
     [Fact]
     public async Task Scheduled_trigger_effect_fires_without_another_input_report() {
         using var hid = new TestHidDevice();
         var parser = new TestParser();
         var clock = new ManualInputClock { NowTicks = 1UL, };
+
         hid.EnqueueReport(1);
         using var device = CreateDevice(hid: hid, parser: parser, clock: clock);
 
@@ -35,17 +37,18 @@ public sealed class GamepadDeviceTests {
         await TestWait.UntilAsync(condition: () => device.HasStream);
 
         var effect = TriggerEffectSpec.Feedback(position: 2, strength: 3);
+
         Assert.True(condition: device.Output.SetTriggerEffectAt(left: in effect, right: in effect, fireAtTick: 5UL));
         clock.NowTicks = 5UL;
 
-        await TestWait.UntilAsync(condition: () => parser.TriggerWrites.Count != 0);
+        await TestWait.UntilAsync(condition: () => (parser.TriggerWrites.Count != 0));
         Assert.Equal(expected: effect, actual: parser.TriggerWrites[0].Left);
     }
-
     [Fact]
     public async Task Silent_receiver_releases_stream_and_resets_parser_state() {
         using var hid = new TestHidDevice();
         var parser = new TestParser();
+
         hid.EnqueueReport(1);
         using var device = CreateDevice(
             activateOnStream: true,
@@ -58,15 +61,16 @@ public sealed class GamepadDeviceTests {
         await TestWait.UntilAsync(condition: () => device.HasStream);
         await TestWait.UntilAsync(condition: () => !device.HasStream);
 
-        Assert.True(condition: parser.ResetCount > 0);
-        var effect = new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 100u);
+        Assert.True(condition: (parser.ResetCount > 0));
+        var effect = new RumbleEffect(DurationMilliseconds: 100u, HighFrequency: 1f, LowFrequency: 1f);
+
         Assert.False(condition: device.Output.Rumble(effect: in effect));
     }
-
     [Fact]
     public async Task Silent_park_returns_running_motors_to_rest() {
         using var hid = new TestHidDevice();
         var parser = new TestParser();
+
         hid.EnqueueReport(1);
         using var device = CreateDevice(
             activateOnStream: true,
@@ -80,7 +84,8 @@ public sealed class GamepadDeviceTests {
 
         // A rumble outlasting the silence window would otherwise leave the pad's motors running on the last
         // written speed after the park discards the tracked expiry.
-        var effect = new RumbleEffect(LowFrequency: 1f, HighFrequency: 1f, DurationMilliseconds: 60_000u);
+        var effect = new RumbleEffect(DurationMilliseconds: 60_000u, HighFrequency: 1f, LowFrequency: 1f);
+
         Assert.True(condition: device.Output.Rumble(effect: in effect));
 
         // Feed reports until the write lands so the silence park cannot race the enqueued command; then let
@@ -98,7 +103,6 @@ public sealed class GamepadDeviceTests {
 
         Assert.Equal(expected: (0f, 0f), actual: parser.RumbleWrites[^1]);
     }
-
     [Fact]
     public async Task Dispose_waits_for_the_pending_read_before_closing_the_handle() {
         var hid = new TestHidDevice();
@@ -113,7 +117,6 @@ public sealed class GamepadDeviceTests {
         Assert.False(condition: hid.DisposedWhileReading);
         Assert.Equal(expected: 1, actual: parser.DisposeCount);
     }
-
     [Fact]
     public async Task Dispose_force_closes_an_uncooperative_read_before_releasing_loop_resources() {
         var diagnostics = new ConcurrentQueue<string>();
@@ -134,7 +137,7 @@ public sealed class GamepadDeviceTests {
         Assert.Equal(expected: 0, actual: parser.DisposeCount);
         Assert.Contains(
             collection: diagnostics,
-            filter: static message => message.Contains(value: "forcing HID close", comparisonType: StringComparison.Ordinal)
+            filter: static message => message.Contains(comparisonType: StringComparison.Ordinal, value: "forcing HID close")
         );
     }
 

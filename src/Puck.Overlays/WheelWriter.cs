@@ -10,28 +10,25 @@ namespace Puck.Overlays;
 /// published in the snapshot, so what this draws and what a release commits can never disagree.
 /// </summary>
 public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
-    /// <summary>The most rings a published seat may carry — mirrors the binding substrate's wheel bound (the
-    /// authored document is validated against its own <c>BindingWheelDefinition.MaxRings</c>; this is the
-    /// render-side backstop the reservation is sized from).</summary>
-    public const int MaxRings = 3;
-
-    /// <summary>The most sectors a published ring may carry — <see cref="MaxRings"/>' per-ring twin.</summary>
-    public const int MaxSectorsPerRing = 8;
-
-    /// <summary>The sector-label character clamp — the ONE source <see cref="OverlayChannelLeases"/> reads for this
-    /// channel's per-sector text reservation; every sector <c>WriteText</c> call clamps to it.</summary>
-    public const int MaxSectorLabelChars = 12;
-
-    /// <summary>The active-ring label's character clamp — <see cref="MaxSectorLabelChars"/>' hub-label twin.</summary>
-    public const int MaxRingLabelChars = 16;
-
-    // The same emptied-viewport guard the cursor writer applies before opening a clip scope on the region.
-    private const float MinRegionExtent = 0.05f;
     private const float ActiveRingAlpha = 0.95f;
     private const float HubDotHalf = 3f;
     private const float LabelAlpha = 1f;
     private const float MarkerHalf = 3.5f;
+    // The same emptied-viewport guard the cursor writer applies before opening a clip scope on the region.
+    private const float MinRegionExtent = 0.05f;
     private const float RingAlpha = 0.55f;
+
+    /// <summary>The active-ring label's character clamp — <see cref="MaxSectorLabelChars"/>' hub-label twin.</summary>
+    public const int MaxRingLabelChars = 16;
+    /// <summary>The most rings a published seat may carry — mirrors the binding substrate's wheel bound (the
+    /// authored document is validated against its own <c>BindingWheelDefinition.MaxRings</c>; this is the
+    /// render-side backstop the reservation is sized from).</summary>
+    public const int MaxRings = 3;
+    /// <summary>The sector-label character clamp — the ONE source <see cref="OverlayChannelLeases"/> reads for this
+    /// channel's per-sector text reservation; every sector <c>WriteText</c> call clamps to it.</summary>
+    public const int MaxSectorLabelChars = 12;
+    /// <summary>The most sectors a published ring may carry — <see cref="MaxRings"/>' per-ring twin.</summary>
+    public const int MaxSectorsPerRing = 8;
 
     private readonly IWheelSource m_source;
 
@@ -44,24 +41,11 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         m_source = source;
     }
 
-    /// <summary>Emits this frame's per-seat wheel records, when a snapshot has been published.</summary>
-    /// <param name="builder">The frame builder.</param>
-    /// <exception cref="InvalidOperationException">The published frame carries more seats than
-    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
-    public void Emit(OverlayFrameBuilder builder) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        if (!m_source.TrySnapshot(frame: out var frame)) {
-            return;
-        }
-
-        OverlaySeatLoop.Emit(
+    void IOverlaySeatEmitter<OverlayWheelSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) =>
+        EmitSeat(
             builder: builder,
-            seats: frame.Seats.Span,
-            writerName: nameof(WheelWriter),
-            writer: this
+            seat: in seat
         );
-    }
 
     private static void EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) {
         var region = seat.Viewport;
@@ -219,9 +203,22 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
         builder.EndClip();
     }
 
-    void IOverlaySeatEmitter<OverlayWheelSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayWheelSeat seat) =>
-        EmitSeat(
+    /// <summary>Emits this frame's per-seat wheel records, when a snapshot has been published.</summary>
+    /// <param name="builder">The frame builder.</param>
+    /// <exception cref="InvalidOperationException">The published frame carries more seats than
+    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
+    public void Emit(OverlayFrameBuilder builder) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
+        if (!m_source.TrySnapshot(frame: out var frame)) {
+            return;
+        }
+
+        OverlaySeatLoop.Emit(
             builder: builder,
-            seat: in seat
+            seats: frame.Seats.Span,
+            writerName: nameof(WheelWriter),
+            writer: this
         );
+    }
 }

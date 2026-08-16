@@ -79,13 +79,17 @@
       {
         "Type": "Puck.Maths.FixedQ4816",
         "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedPointRounding",
+        "Name": "RoundToNearestTiesToEven"
       }
     ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.op_Multiply \u2014 the inline sign-magnitude ties-to-even rounder at FixedQ4816.cs:396-421",
+        "Subject": "FixedQ4816.op_Multiply and the shared FixedPointRounding.RoundToNearestTiesToEven correction it reaches through the sign-magnitude narrowing",
         "Against": "Oracles.RoundDyadic at shift 16 over BigInteger, wrapped by Oracles.WrapToRaw; the oracle side calls no Puck.Maths kernel",
         "Shared": "",
         "Citation": "",

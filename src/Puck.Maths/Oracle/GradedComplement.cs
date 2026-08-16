@@ -45,8 +45,8 @@ public sealed class GradedComplement<TValue, TOps>
     private readonly int m_keyCount;
     private readonly TValue[] m_leftCharge;
     private readonly TOps m_material;
-    private readonly int[] m_productKey;
     private readonly TValue[] m_productCharge;
+    private readonly int[] m_productKey;
     private readonly List<TValue> m_rechargeCoefficients;
     private readonly List<long> m_rechargeKeys;
     private readonly TValue[] m_rightCharge;
@@ -84,6 +84,87 @@ public sealed class GradedComplement<TValue, TOps>
     /// <summary>Gets the top-grade basis element — the blade on every generator, which every complement lands against.</summary>
     public PresentedAlgebra<TValue, TOps>.Element Pseudoscalar { get; }
 
+    // The charge that makes the complement's own equation hold. Every real complement charge is a sign, which is its
+    // own inverse; a material that is a certified field serves the rest, and anything else is refused rather than
+    // approximated.
+    private static TValue InverseOf(PresentedAlgebra<TValue, TOps> algebra, TValue value, TValue one, EqualityComparer<TValue> comparer) {
+        var material = algebra.Presentation.Material;
+
+        if (comparer.Equals(
+            x: material.Multiply(
+                left: value,
+                right: value
+            ),
+            y: one
+        )) { return value; }
+
+        if (
+            (material is IFieldMaterial<TValue, TOps> field) &&
+            field.TryInvert(
+            value: value,
+            out var inverse
+        )
+        ) { return inverse; }
+
+        throw new ArgumentException(
+            message: "A complement charge of this presentation is not a sign and has no inverse in its material.",
+            paramName: nameof(algebra)
+        );
+    }
+    private PresentedAlgebra<TValue, TOps>.Element Recharge(in PresentedAlgebra<TValue, TOps>.Element value, TValue[] charges) {
+        m_algebra.RequireOwned(
+            value: value,
+            paramName: nameof(value)
+        );
+
+        var coefficients = m_rechargeCoefficients;
+        var complementKey = m_complementKey;
+        var keys = m_rechargeKeys;
+        var material = m_material;
+        var sourceCoefficients = value.Coefficients;
+        var sourceKeys = value.Keys;
+
+        coefficients.Clear();
+        keys.Clear();
+
+        for (var index = 0; (index < sourceKeys.Length); ++index) {
+            var key = ((int)sourceKeys[index]);
+            var recharged = material.Multiply(
+                left: charges[key],
+                right: sourceCoefficients[index]
+            );
+
+            if (material.IsZero(value: recharged)) { continue; }
+
+            coefficients.Add(item: recharged);
+            keys.Add(item: complementKey[key]);
+        }
+
+        return m_algebra.FromSupport(
+            keys: CollectionsMarshal.AsSpan(list: keys),
+            coefficients: CollectionsMarshal.AsSpan(list: coefficients)
+        );
+    }
+    // The charge one ordered pair of complementary blades carries, insisting it is a single entry at the expected key.
+    // The algebra travels in so a refusal names Create's own parameter rather than a local the caller cannot see.
+    private static TValue SingleCharge(PresentedAlgebra<TValue, TOps> algebra, int keyCount, int leftKey, int rightKey, int expected) {
+        var presentation = algebra.Presentation;
+        var cell = ((leftKey * keyCount) + rightKey);
+        var start = presentation.CellStarts[cell];
+
+        if (
+            (1L != (presentation.CellStarts[(cell + 1)] - start)) ||
+            (expected != presentation.CellTargets[((int)start)])
+        ) {
+            throw new ArgumentException(
+                message: "A graded complement needs every disjoint blade pair to multiply to the single blade on their union.",
+                paramName: nameof(algebra)
+            );
+        }
+
+        return presentation.CellCharges[((int)start)];
+    }
+
     /// <summary>Builds the complement of a graded presentation.</summary>
     /// <param name="algebra">The algebra, whose normal forms must be the ascending subsets of its generators.</param>
     /// <returns>The described complement.</returns>
@@ -104,21 +185,34 @@ public sealed class GradedComplement<TValue, TOps>
             );
         }
 
-        if (!presentation.HasCompiledNormalFormBasis || (generatorCount < 1) || (generatorCount > 30)) {
-            throw new ArgumentException(message: "A graded complement needs a finite presentation on one through thirty generators.", paramName: nameof(algebra));
+        if (
+            !presentation.HasCompiledNormalFormBasis ||
+            (generatorCount < 1) ||
+            (generatorCount > 30)
+        ) {
+            throw new ArgumentException(
+                message: "A graded complement needs a finite presentation on one through thirty generators.",
+                paramName: nameof(algebra)
+            );
         }
 
         var keyCount = presentation.NormalFormCount;
         var maskCount = (1 << generatorCount);
 
         if (keyCount != maskCount) {
-            throw new ArgumentException(message: "A graded complement needs one normal form per generator subset.", paramName: nameof(algebra));
+            throw new ArgumentException(
+                message: "A graded complement needs one normal form per generator subset.",
+                paramName: nameof(algebra)
+            );
         }
 
         var keyOfMask = new int[maskCount];
         var maskOfKey = new int[keyCount];
 
-        Array.Fill(array: keyOfMask, value: -1);
+        Array.Fill(
+            array: keyOfMask,
+            value: -1
+        );
 
         for (var key = 0; (key < keyCount); ++key) {
             var word = presentation.NormalFormWord(key: key);
@@ -127,7 +221,10 @@ public sealed class GradedComplement<TValue, TOps>
 
             foreach (var symbol in word) {
                 if (symbol <= previous) {
-                    throw new ArgumentException(message: "A graded complement needs every normal form to be an ascending generator subset.", paramName: nameof(algebra));
+                    throw new ArgumentException(
+                        message: "A graded complement needs every normal form to be an ascending generator subset.",
+                        paramName: nameof(algebra)
+                    );
                 }
 
                 mask |= (1 << symbol);
@@ -135,7 +232,10 @@ public sealed class GradedComplement<TValue, TOps>
             }
 
             if (-1 != keyOfMask[mask]) {
-                throw new ArgumentException(message: "A graded complement needs every generator subset to name exactly one normal form.", paramName: nameof(algebra));
+                throw new ArgumentException(
+                    message: "A graded complement needs every generator subset to name exactly one normal form.",
+                    paramName: nameof(algebra)
+                );
             }
 
             keyOfMask[mask] = key;
@@ -157,13 +257,25 @@ public sealed class GradedComplement<TValue, TOps>
             complementKey[key] = complement;
             rightCharge[key] = InverseOf(
                 algebra: algebra,
-                value: SingleCharge(algebra: algebra, keyCount: keyCount, leftKey: key, rightKey: complement, expected: pseudoscalarKey),
+                value: SingleCharge(
+                    algebra: algebra,
+                    expected: pseudoscalarKey,
+                    keyCount: keyCount,
+                    leftKey: key,
+                    rightKey: complement
+                ),
                 one: one,
                 comparer: comparer
             );
             leftCharge[key] = InverseOf(
                 algebra: algebra,
-                value: SingleCharge(algebra: algebra, keyCount: keyCount, leftKey: complement, rightKey: key, expected: pseudoscalarKey),
+                value: SingleCharge(
+                    algebra: algebra,
+                    expected: pseudoscalarKey,
+                    keyCount: keyCount,
+                    leftKey: complement,
+                    rightKey: key
+                ),
                 one: one,
                 comparer: comparer
             );
@@ -175,17 +287,29 @@ public sealed class GradedComplement<TValue, TOps>
         // in both orders, before any element can be complemented.
         for (var key = 0; (key < keyCount); ++key) {
             var complement = complementKey[key];
-            var leftAfterRight = material.Multiply(left: leftCharge[complement], right: rightCharge[key]);
-            var rightAfterLeft = material.Multiply(left: rightCharge[complement], right: leftCharge[key]);
+            var leftAfterRight = material.Multiply(
+                left: leftCharge[complement],
+                right: rightCharge[key]
+            );
+            var rightAfterLeft = material.Multiply(
+                left: rightCharge[complement],
+                right: leftCharge[key]
+            );
 
-            if (!comparer.Equals(x: leftAfterRight, y: one)) {
+            if (!comparer.Equals(
+                x: leftAfterRight,
+                y: one
+            )) {
                 throw new ArgumentException(
                     message: $"The graded complement's left-after-right composition scales basis key {key} by {leftAfterRight} rather than the material's one.",
                     paramName: nameof(algebra)
                 );
             }
 
-            if (!comparer.Equals(x: rightAfterLeft, y: one)) {
+            if (!comparer.Equals(
+                x: rightAfterLeft,
+                y: one
+            )) {
                 throw new ArgumentException(
                     message: $"The graded complement's right-after-left composition scales basis key {key} by {rightAfterLeft} rather than the material's one.",
                     paramName: nameof(algebra)
@@ -198,7 +322,10 @@ public sealed class GradedComplement<TValue, TOps>
         var productCharge = new TValue[(keyCount * keyCount)];
         var productKey = new int[(keyCount * keyCount)];
 
-        Array.Fill(array: productKey, value: -1);
+        Array.Fill(
+            array: productKey,
+            value: -1
+        );
 
         // Its own count is the exact bound on what one join can stage, since the walk stages a contribution only where
         // this table has a cell, so the staging buffers below never grow.
@@ -211,7 +338,13 @@ public sealed class GradedComplement<TValue, TOps>
                 var union = keyOfMask[maskOfKey[left] | maskOfKey[right]];
                 var slot = ((left * keyCount) + right);
 
-                productCharge[slot] = SingleCharge(algebra: algebra, keyCount: keyCount, leftKey: left, rightKey: right, expected: union);
+                productCharge[slot] = SingleCharge(
+                    algebra: algebra,
+                    expected: union,
+                    keyCount: keyCount,
+                    leftKey: left,
+                    rightKey: right
+                );
                 productKey[slot] = union;
 
                 ++joinPairCount;
@@ -227,18 +360,22 @@ public sealed class GradedComplement<TValue, TOps>
             leftCharge: leftCharge,
             productKey: productKey,
             productCharge: productCharge,
-            pseudoscalar: algebra.FromSupport(keys: [pseudoscalarKey], coefficients: [one])
+            pseudoscalar: algebra.FromSupport(
+                coefficients: [one],
+                keys: [pseudoscalarKey]
+            )
         );
     }
-
     /// <summary>Returns the left complement of an element.</summary>
     /// <param name="value">The element.</param>
     /// <returns>The element <c>y</c> with <c>y ∧ value = pseudoscalar</c> on each basis blade.</returns>
     /// <exception cref="ArgumentException">The element belongs to another algebra.</exception>
     /// <remarks>The exact inverse of <see cref="RightComplement"/>: composing the two either way returns the argument.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element LeftComplement(in PresentedAlgebra<TValue, TOps>.Element value) =>
-        Recharge(value: value, charges: m_leftCharge);
-
+        Recharge(
+            charges: m_leftCharge,
+            value: value
+        );
     /// <summary>Returns the outer product — the join — of two elements.</summary>
     /// <param name="left">The first factor.</param>
     /// <param name="right">The second factor.</param>
@@ -248,8 +385,14 @@ public sealed class GradedComplement<TValue, TOps>
     /// <remarks>Each returned coefficient is folded through exactly one
     /// <see cref="IMaterialOps{TValue, TOps}.FusedChargedSum"/>, the same rounding discipline the product keeps.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element OuterProduct(in PresentedAlgebra<TValue, TOps>.Element left, in PresentedAlgebra<TValue, TOps>.Element right) {
-        m_algebra.RequireOwned(value: left, paramName: nameof(left));
-        m_algebra.RequireOwned(value: right, paramName: nameof(right));
+        m_algebra.RequireOwned(
+            value: left,
+            paramName: nameof(left)
+        );
+        m_algebra.RequireOwned(
+            value: right,
+            paramName: nameof(right)
+        );
 
         var charges = m_joinCharges;
         var keyCount = m_keyCount;
@@ -284,9 +427,13 @@ public sealed class GradedComplement<TValue, TOps>
             }
         }
 
-        return m_algebra.FoldByTarget(targets: targets, charges: charges, left: leftValues, right: rightValues);
+        return m_algebra.FoldByTarget(
+            charges: charges,
+            left: leftValues,
+            right: rightValues,
+            targets: targets
+        );
     }
-
     /// <summary>Returns the regressive product — the meet — of two elements.</summary>
     /// <param name="left">The first factor.</param>
     /// <param name="right">The second factor.</param>
@@ -296,68 +443,27 @@ public sealed class GradedComplement<TValue, TOps>
     /// non-metric: two planes meet in the line they share, and a point lies on a line exactly when their join is zero,
     /// with no signature anywhere in either statement.</remarks>
     public PresentedAlgebra<TValue, TOps>.Element RegressiveProduct(in PresentedAlgebra<TValue, TOps>.Element left, in PresentedAlgebra<TValue, TOps>.Element right) {
-        m_algebra.RequireOwned(value: left, paramName: nameof(left));
-        m_algebra.RequireOwned(value: right, paramName: nameof(right));
+        m_algebra.RequireOwned(
+            value: left,
+            paramName: nameof(left)
+        );
+        m_algebra.RequireOwned(
+            value: right,
+            paramName: nameof(right)
+        );
 
-        return LeftComplement(value: OuterProduct(left: RightComplement(value: left), right: RightComplement(value: right)));
+        return LeftComplement(value: OuterProduct(
+            left: RightComplement(value: left),
+            right: RightComplement(value: right)
+        ));
     }
-
     /// <summary>Returns the right complement of an element.</summary>
     /// <param name="value">The element.</param>
     /// <returns>The element <c>y</c> with <c>value ∧ y = pseudoscalar</c> on each basis blade.</returns>
     /// <exception cref="ArgumentException">The element belongs to another algebra.</exception>
     public PresentedAlgebra<TValue, TOps>.Element RightComplement(in PresentedAlgebra<TValue, TOps>.Element value) =>
-        Recharge(value: value, charges: m_rightCharge);
-
-    // The charge one ordered pair of complementary blades carries, insisting it is a single entry at the expected key.
-    // The algebra travels in so a refusal names Create's own parameter rather than a local the caller cannot see.
-    private static TValue SingleCharge(PresentedAlgebra<TValue, TOps> algebra, int keyCount, int leftKey, int rightKey, int expected) {
-        var presentation = algebra.Presentation;
-        var cell = ((leftKey * keyCount) + rightKey);
-        var start = presentation.CellStarts[cell];
-
-        if ((1L != (presentation.CellStarts[(cell + 1)] - start)) || (expected != presentation.CellTargets[((int)start)])) {
-            throw new ArgumentException(message: "A graded complement needs every disjoint blade pair to multiply to the single blade on their union.", paramName: nameof(algebra));
-        }
-
-        return presentation.CellCharges[((int)start)];
-    }
-
-    // The charge that makes the complement's own equation hold. Every real complement charge is a sign, which is its
-    // own inverse; a material that is a certified field serves the rest, and anything else is refused rather than
-    // approximated.
-    private static TValue InverseOf(PresentedAlgebra<TValue, TOps> algebra, TValue value, TValue one, EqualityComparer<TValue> comparer) {
-        var material = algebra.Presentation.Material;
-
-        if (comparer.Equals(x: material.Multiply(left: value, right: value), y: one)) { return value; }
-
-        if ((material is IFieldMaterial<TValue, TOps> field) && field.TryInvert(value: value, out var inverse)) { return inverse; }
-
-        throw new ArgumentException(message: "A complement charge of this presentation is not a sign and has no inverse in its material.", paramName: nameof(algebra));
-    }
-    private PresentedAlgebra<TValue, TOps>.Element Recharge(in PresentedAlgebra<TValue, TOps>.Element value, TValue[] charges) {
-        m_algebra.RequireOwned(value: value, paramName: nameof(value));
-
-        var coefficients = m_rechargeCoefficients;
-        var complementKey = m_complementKey;
-        var keys = m_rechargeKeys;
-        var material = m_material;
-        var sourceCoefficients = value.Coefficients;
-        var sourceKeys = value.Keys;
-
-        coefficients.Clear();
-        keys.Clear();
-
-        for (var index = 0; (index < sourceKeys.Length); ++index) {
-            var key = ((int)sourceKeys[index]);
-            var recharged = material.Multiply(left: charges[key], right: sourceCoefficients[index]);
-
-            if (material.IsZero(value: recharged)) { continue; }
-
-            coefficients.Add(item: recharged);
-            keys.Add(item: complementKey[key]);
-        }
-
-        return m_algebra.FromSupport(keys: CollectionsMarshal.AsSpan(list: keys), coefficients: CollectionsMarshal.AsSpan(list: coefficients));
-    }
+        Recharge(
+            charges: m_rightCharge,
+            value: value
+        );
 }

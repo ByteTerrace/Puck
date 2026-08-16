@@ -58,16 +58,26 @@ wrapped yaw delta to the traveler's own unbounded accumulator.
 
 An `IWorldNeighbourResolver` may answer `Resolved` (the whole document),
 `Attested` (a `WorldCounterpartAttestation` — the neighbour's seam edges plus
-its overlap terms, signed through `WorldCounterpartAttestationProtocol` and verified
-against the reading world's own `admission` keys), or `Unavailable`. The
-attested arm proves the same four per-fact refusals the document arm does:
-missing reverse edge, non-reciprocal counterpart, mismatched extents, and a
-frame pair that loses world up. A DERIVED CORNER is a claim about a third
-authority a counterpart cannot make on its behalf, so the corner walk still
-requires resolved documents and simply skips an attested neighbour.
-`WorldStorageNeighbourResolver` reduces the fetched cloud copy to an
-attestation before answering; the local composite resolver still resolves
-documents, which is what keeps the quilt's corner derivation provable.
+its overlap terms, composed but not necessarily verified: `WorldStorageNeighbourResolver`
+produces this arm today from an unsigned fetched copy), `VerifiedAttested` (the
+same attestation shape, reached through `WorldCounterpartAttestationProtocol.TryVerify`,
+which verifies a signed claim against the reading world's own `admission` keys
+and returns both what it attests and the verified chain's own subject — a
+resolver must still bind that subject to the neighbour key it was resolving
+before trusting the result: `WorldApiCounterpartResolver` (`Puck.World.Server`)
+is the production resolver for an owner-named `WorldReference`, and refuses
+unless the verified subject parses as the same `Guid` as the reference's own
+`Owner`), or `Unavailable`. Both attested arms prove the same four per-fact
+refusals the document arm does for an ordinary two-document adjacency: missing
+reverse edge, non-reciprocal counterpart, mismatched extents, and a frame pair
+that loses world up. A derived corner is proven the same way as an ordinary
+adjacency — each of the three documents involved (the two direct neighbours and
+the shared corner) proves only its own edges — but the corner walk accepts only
+`Resolved` or `VerifiedAttested`: a plain `Attested` neighbour names a claim
+about a third authority that nothing has verified, so it never enters a corner
+proof. What a verified diamond proves is authenticated consistency of the
+signed statements within a signed validity window, not real-world truth and not
+equality to any document the reader never saw.
 
 The five quilt documents are the worked stress example: four coloured ground
 worlds meet at one corner and `quilt-island` is vertically adjacent to all
@@ -202,10 +212,10 @@ and focused laws below are the current executable proof.
 
 `WorldFederationCodec` (`Puck.World.Server`) is the one authority-to-authority
 codec. It reuses the framing, bounded reader/writer, and refusal vocabulary in
-`Puck.World.Data/Protocol/WorldWireCodec.cs`: `WorldWireFrame` carries
+`Puck.Networking/WireCodec.cs`: `WireFrame` carries
 `[u32 following][u8 kind][payload]` little-endian — the same grammar
-`WorldFrameCodec` defines for submissions — over `WorldWireReader`,
-`WorldWireWriter`, and `WorldWireRefusal`. Every decoder over peer bytes is
+`WorldFrameCodec` defines for submissions — over `WireReader`,
+`WireWriter`, and `WireRefusal`. Every decoder over peer bytes is
 Try-shaped and bounded before it allocates; a decoder that throws on hostile
 bytes is a defect. Add a message as a leaf there, never as a second dialect.
 
@@ -221,9 +231,10 @@ same vocabulary.
 
 `WorldRemoteAuthority` holds persistent authenticated lanes per source authority
 namespace: a `FederatedIntentPump` for the latest-value intent stream, and a
-`FederatedRequestLane` per `WorldFederationLane` concern — `Transaction` for
-reserve/commit/abort/acknowledge/status, `Routed` for route lookups and
-forwarded submissions. Connect, hello, and challenge are paid once per lane.
+`Puck.Networking.PersistentRequestLane<WorldFederationRequest, WorldFederationResponse>`
+(adapted by `WorldFederationLaneProtocol`) per `WorldFederationLane` concern —
+`Transaction` for reserve/commit/abort/acknowledge/status, `Routed` for route
+lookups and forwarded submissions. Connect, hello, and challenge are paid once per lane.
 A lane is strictly ordered, so everything sharing one queues behind whatever is
 in flight; that is why the two concerns are separate, and why adding a request
 kind means deciding which lane it belongs on.
@@ -250,11 +261,17 @@ Run the focused laws after changing frames, handoff continuity, hysteresis, or
 contact sweeping:
 
 ```text
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~WorldFrameIsometryLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests"
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests"
+dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldFrameIsometryLawTests"
 ```
 
 Run `puck canary seamless-adjacency` for the automatic crossing and stationary
-real-path proof. Run the stronger topology stress proof directly:
+real-path proof, and `puck canary quilt-nw-gap-corner-strip` for the four-way
+corner specifically: quilt-nw-gap drops both of NW's direct adjacencies, so a
+body resting past NW's own east and south edges — where the local field is
+identically absent in both legs — is grounded only when at least one direct
+edge still delivers the corner, isolating that continuity from local geometry.
+Run the stronger topology stress proof directly:
 
 ```text
 pwsh -NoProfile -File docs/verification/four-corners-sharded/run.ps1

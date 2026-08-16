@@ -29,9 +29,9 @@ internal static class LatticeClaims {
     /// <see cref="SymmetryLattice.RayCycleFactor(int)"/> wiring. Does NOT touch the projection geometry — see the type's
     /// remarks.</summary>
     public static string? SymmetryLatticeExactStructureSurface() {
-        Assert.Equal(expected: CyclicRotation.Period, actual: SymmetryLattice.RingSize);
-        Assert.Equal(expected: 120, actual: SymmetryLattice.RayCount);
-        Assert.Equal(expected: 15, actual: SymmetryLattice.RayCycleOrder);
+        Assert.Equal(actual: SymmetryLattice.RingSize, expected: CyclicRotation.Period);
+        Assert.Equal(actual: SymmetryLattice.RayCount, expected: 120);
+        Assert.Equal(actual: SymmetryLattice.RayCycleOrder, expected: 15);
 
         // The ray-cycle factors are the STORED result of one BinaryPolynomial.FactorOddCycle(15) call (SymmetryLattice.cs:56);
         // re-multiplying it here is a WIRING check (did SymmetryLattice thread the right order through and keep the
@@ -41,14 +41,14 @@ internal static class LatticeClaims {
         var rayFactorProduct = new BinaryPolynomial(bits: 1UL);
 
         for (var index = 0; (index < SymmetryLattice.RayCycleFactorCount); ++index) {
-            rayFactorProduct = checked(rayFactorProduct * SymmetryLattice.RayCycleFactor(index: index));
+            rayFactorProduct = checked((rayFactorProduct * SymmetryLattice.RayCycleFactor(index: index)));
         }
 
-        Assert.Equal(expected: ((1UL << rayCycleOrder) | 1UL), actual: rayFactorProduct.Bits);
+        Assert.Equal(expected: (1UL << rayCycleOrder) | 1UL, actual: rayFactorProduct.Bits);
 
         foreach (var invalidNode in new[] { -1, SymmetryLattice.NodeCount, 268_435_456 }) {
-            Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(node: invalidNode, mirror: 0)).ParamName);
-            Assert.Equal(expected: "mirror", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(node: 0, mirror: invalidNode)).ParamName);
+            Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(mirror: 0, node: invalidNode)).ParamName);
+            Assert.Equal(expected: "mirror", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Reflect(mirror: invalidNode, node: 0)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Cycle(node: invalidNode)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Ring(node: invalidNode)).ParamName);
             Assert.Equal(expected: "node", actual: Assert.Throws<ArgumentOutOfRangeException>(testCode: () => SymmetryLattice.Project(node: invalidNode)).ParamName);
@@ -66,8 +66,8 @@ internal static class LatticeClaims {
             ringSizes[SymmetryLattice.Ring(node: node)]++;
 
             for (var mirror = 0; (mirror < SymmetryLattice.NodeCount); ++mirror) {
-                Assert.Equal(expected: node, actual: SymmetryLattice.Reflect(node: SymmetryLattice.Reflect(node: node, mirror: mirror), mirror: mirror));
-                Assert.Equal(expected: (SymmetryLattice.Reflect(node: node, mirror: mirror) == node), actual: SymmetryLattice.AreOrthogonal(first: node, second: mirror));
+                Assert.Equal(expected: node, actual: SymmetryLattice.Reflect(node: SymmetryLattice.Reflect(mirror: mirror, node: node), mirror: mirror));
+                Assert.Equal(expected: (SymmetryLattice.Reflect(mirror: mirror, node: node) == node), actual: SymmetryLattice.AreOrthogonal(first: node, second: mirror));
             }
 
             // Every E8 exponent is odd, so the fifteenth cycle power is the central inversion — reflecting a root
@@ -78,7 +78,7 @@ internal static class LatticeClaims {
 
             for (var step = 0; (step < (SymmetryLattice.RingSize / 2)); ++step) { opposite = SymmetryLattice.Cycle(node: opposite); }
 
-            Assert.Equal(expected: opposite, actual: SymmetryLattice.Reflect(node: node, mirror: node));
+            Assert.Equal(expected: opposite, actual: SymmetryLattice.Reflect(mirror: node, node: node));
             Assert.Equal(expected: opposite, actual: SymmetryLattice.Antipode(node: node));
             Assert.Equal(expected: SymmetryLattice.CanonicalRay(node: opposite), actual: SymmetryLattice.CanonicalRay(node: node));
         }
@@ -110,7 +110,7 @@ internal static class LatticeClaims {
             var node = worklist[--pending];
 
             for (var mirror = 0; (mirror < SymmetryLattice.NodeCount); ++mirror) {
-                var image = SymmetryLattice.Reflect(node: node, mirror: mirror);
+                var image = SymmetryLattice.Reflect(mirror: mirror, node: node);
 
                 if (!reached[image]) {
                     reached[image] = true;
@@ -120,17 +120,17 @@ internal static class LatticeClaims {
             }
         }
 
-        Assert.Equal(expected: SymmetryLattice.NodeCount, actual: reachedCount);
+        Assert.Equal(actual: reachedCount, expected: SymmetryLattice.NodeCount);
 
         // ---- exact projection geometry: the E8/Ising mass spectrum, the golden-ratio pairing, the twelve-degree
         // turn, and ring concentricity — all four derived as EXACT BigInteger brackets, never `double` geometry.
         // Project's basis vectors are FIXED baked constants (SymmetryLattice.cs:47-48), so every
         // Project output is itself an exact integer function of them; nothing here rounds at runtime.
-        var turn = Oracles.EncloseSinCos(raw: PiFractionRaw(numerator: 2, denominator: 30), guardBitCount: Oracles.GuardBitCount);
-        var cosPi30 = Oracles.EncloseSinCos(raw: PiFractionRaw(numerator: 1, denominator: 30), guardBitCount: Oracles.GuardBitCount).Cos;
-        var cos7Pi30 = Oracles.EncloseSinCos(raw: PiFractionRaw(numerator: 7, denominator: 30), guardBitCount: Oracles.GuardBitCount).Cos;
-        var cos2Pi15 = Oracles.EncloseSinCos(raw: PiFractionRaw(numerator: 4, denominator: 30), guardBitCount: Oracles.GuardBitCount).Cos;
-        var cosPi5 = Oracles.EncloseSinCos(raw: PiFractionRaw(numerator: 6, denominator: 30), guardBitCount: Oracles.GuardBitCount).Cos;
+        var turn = Oracles.EncloseSinCos(raw: PiFractionRaw(denominator: 30, numerator: 2), guardBitCount: Oracles.GuardBitCount);
+        var cosPi30 = Oracles.EncloseSinCos(raw: PiFractionRaw(denominator: 30, numerator: 1), guardBitCount: Oracles.GuardBitCount).Cos;
+        var cos7Pi30 = Oracles.EncloseSinCos(raw: PiFractionRaw(denominator: 30, numerator: 7), guardBitCount: Oracles.GuardBitCount).Cos;
+        var cos2Pi15 = Oracles.EncloseSinCos(raw: PiFractionRaw(denominator: 30, numerator: 4), guardBitCount: Oracles.GuardBitCount).Cos;
+        var cosPi5 = Oracles.EncloseSinCos(raw: PiFractionRaw(denominator: 30, numerator: 6), guardBitCount: Oracles.GuardBitCount).Cos;
         var golden = SurdEnclosure(rationalNumerator: BigInteger.One, surdNumerator: BigInteger.One, radicand: 5, denominator: 2);
         var goldenSquared = MultiplyPositive(left: golden, right: golden);
         var identity = new Oracles.Enclosure(Low: (BigInteger.One << GeometryScaleBitCount), High: (BigInteger.One << GeometryScaleBitCount));
@@ -139,7 +139,7 @@ internal static class LatticeClaims {
         Oracles.Enclosure[] massSpectrum = [
             identity,
             golden,
-            ScaleByInteger(value: cosPi30, factor: 2),
+            ScaleByInteger(factor: 2, value: cosPi30),
             ScaleByInteger(value: MultiplyPositive(left: golden, right: cos7Pi30), factor: 2),
             ScaleByInteger(value: MultiplyPositive(left: golden, right: cos2Pi15), factor: 2),
             ScaleByInteger(value: MultiplyPositive(left: golden, right: cosPi30), factor: 2),
@@ -178,8 +178,8 @@ internal static class LatticeClaims {
             // confirmed the single consistent direction over all 240 nodes before this was written, so this pins the
             // SIGN of the turn and not only its magnitude.
             var after = SymmetryLattice.Project(node: SymmetryLattice.Cycle(node: node));
-            var predictedX = AddEnclosures(left: MultiplyByEnclosure(scalar: x, positive: turn.Cos), right: MultiplyByEnclosure(scalar: y, positive: turn.Sin));
-            var predictedY = SubtractEnclosures(left: MultiplyByEnclosure(scalar: y, positive: turn.Cos), right: MultiplyByEnclosure(scalar: x, positive: turn.Sin));
+            var predictedX = AddEnclosures(left: MultiplyByEnclosure(positive: turn.Cos, scalar: x), right: MultiplyByEnclosure(positive: turn.Sin, scalar: y));
+            var predictedY = SubtractEnclosures(left: MultiplyByEnclosure(positive: turn.Cos, scalar: y), right: MultiplyByEnclosure(positive: turn.Sin, scalar: x));
             var actualX = (new BigInteger(value: after.X.Value) << Oracles.GuardBitCount);
             var actualY = (new BigInteger(value: after.Y.Value) << Oracles.GuardBitCount);
             var turnToleranceScaled = (new BigInteger(value: turnToleranceRawTicks) << Oracles.GuardBitCount);
@@ -207,11 +207,11 @@ internal static class LatticeClaims {
             var j = (i - 1);
 
             while ((j >= 0) && (ringMinimumSquaredRadius[ringOrder[j]] > ringMinimumSquaredRadius[key])) {
-                ringOrder[j + 1] = ringOrder[j];
+                ringOrder[(j + 1)] = ringOrder[j];
                 --j;
             }
 
-            ringOrder[j + 1] = key;
+            ringOrder[(j + 1)] = key;
         }
 
         // The closed-form E8/Ising mass spectrum: ring i's squared radius, over the innermost ring's, matches
@@ -239,7 +239,7 @@ internal static class LatticeClaims {
             }
         }
 
-        Assert.Equal(expected: (SymmetryLattice.RingCount / 2), actual: goldenPairs);
+        Assert.Equal(actual: goldenPairs, expected: (SymmetryLattice.RingCount / 2));
 
         return null;
     }
@@ -258,12 +258,11 @@ internal static class LatticeClaims {
         var pi = Oracles.Pi(bitCount: piBitCount);
         var midpoint = ((pi.Low + pi.High) / 2);
 
-        return (long)Oracles.RoundRationalTiesToEven(
+        return ((long)Oracles.RoundRationalTiesToEven(
             numerator: (midpoint * numerator),
             denominator: ((BigInteger.One << (piBitCount - 16)) * denominator)
-        );
+        ));
     }
-
     /// <summary>Brackets <c>(rationalNumerator + surdNumerator·√radicand) / denominator</c> at
     /// <see cref="GeometryScaleBitCount"/>, all non-negative, by an independent Newton-descent integer square root
     /// at sixty-four extra bits — <see cref="Oracles.IntegerSquareRoot"/> directly.</summary>
@@ -279,7 +278,6 @@ internal static class LatticeClaims {
 
         return new Oracles.Enclosure(Low: (lowNumerator / divisor), High: (((highNumerator + divisor) - BigInteger.One) / divisor));
     }
-
     // The product of two NON-NEGATIVE enclosures, both at GeometryScaleBitCount, rescaled back to it.
     private static Oracles.Enclosure MultiplyPositive(Oracles.Enclosure left, Oracles.Enclosure right) =>
         Oracles.Rescale(
@@ -297,13 +295,12 @@ internal static class LatticeClaims {
         var low = ((scalar.Sign >= 0) ? (scalar * positive.Low) : (scalar * positive.High));
         var high = ((scalar.Sign >= 0) ? (scalar * positive.High) : (scalar * positive.Low));
 
-        return Oracles.Rescale(value: new Oracles.Enclosure(Low: low, High: high), fromBitCount: (16 + GeometryScaleBitCount), toBitCount: GeometryScaleBitCount);
+        return Oracles.Rescale(value: new Oracles.Enclosure(High: high, Low: low), fromBitCount: (16 + GeometryScaleBitCount), toBitCount: GeometryScaleBitCount);
     }
     private static Oracles.Enclosure AddEnclosures(Oracles.Enclosure left, Oracles.Enclosure right) =>
         new(Low: (left.Low + right.Low), High: (left.High + right.High));
     private static Oracles.Enclosure SubtractEnclosures(Oracles.Enclosure left, Oracles.Enclosure right) =>
         new(Low: (left.Low - right.High), High: (left.High - right.Low));
-
     /// <summary>Whether the exact rational <c>actualNumerator / actualDenominator</c> lies within <c>expected</c>'s
     /// bracket, widened by a <c>1/toleranceDenominator</c> relative band on each side — a cross-multiplied
     /// comparison, so no division and no floating point anywhere.</summary>
@@ -324,13 +321,13 @@ internal static class LatticeClaims {
     public static string? HilbertCurveExhaustiveBijectionSurface() {
         for (var order = 1; (order <= 9); ++order) {
             var side = (1U << order);
-            var cells = ((ulong)side * side);
+            var cells = (((ulong)side) * side);
             var seen = new bool[cells];
             var previous = (X: 0U, Y: 0U);
 
             for (var distance = 0UL; (distance < cells); ++distance) {
-                var point = HilbertCurve.Decode(order: order, distance: distance);
-                var cell = (((ulong)point.Y * side) + point.X);
+                var point = HilbertCurve.Decode(distance: distance, order: order);
+                var cell = ((((ulong)point.Y) * side) + point.X);
 
                 Assert.False(condition: seen[cell], userMessage: $"order {order}: distance {distance} decodes to cell ({point.X},{point.Y}), already visited — Decode is not a bijection");
 
@@ -339,9 +336,9 @@ internal static class LatticeClaims {
                 Assert.Equal(expected: distance, actual: HilbertCurve.Encode(order: order, x: point.X, y: point.Y));
 
                 if (distance > 0UL) {
-                    var manhattan = (Math.Abs(value: ((int)point.X - (int)previous.X)) + Math.Abs(value: ((int)point.Y - (int)previous.Y)));
+                    var manhattan = (Math.Abs(value: (((int)point.X) - ((int)previous.X))) + Math.Abs(value: (((int)point.Y) - ((int)previous.Y))));
 
-                    Assert.Equal(expected: 1, actual: manhattan);
+                    Assert.Equal(actual: manhattan, expected: 1);
                 }
 
                 previous = point;
@@ -350,7 +347,6 @@ internal static class LatticeClaims {
 
         return null;
     }
-
     /// <summary>The high-order companion, WITHOUT a hand-rolled generator: a fixed, deterministic set
     /// of bit patterns (zero, the full mask, both alternating patterns, the lowest bit, the highest bit, and the half
     /// mask) at every order 10-31, checked as an Encode/Decode round trip. A SAMPLE of each order's grid, not an
@@ -360,9 +356,9 @@ internal static class LatticeClaims {
             foreach (var x in HilbertOrderPatterns(order: order)) {
                 foreach (var y in HilbertOrderPatterns(order: order)) {
                     var distance = HilbertCurve.Encode(order: order, x: x, y: y);
-                    var point = HilbertCurve.Decode(order: order, distance: distance);
+                    var point = HilbertCurve.Decode(distance: distance, order: order);
 
-                    Assert.Equal(expected: (x, y), actual: point);
+                    Assert.Equal(actual: point, expected: (x, y));
                 }
             }
         }
@@ -417,17 +413,16 @@ internal static class LatticeClaims {
 
                 for (var i = 0; (i < 6); ++i) { spun = spun.RotatedLeft(); }
 
-                Assert.Equal(expected: hex, actual: spun);
+                Assert.Equal(actual: spun, expected: hex);
 
                 var scaled = new HexagonalCoordinate(Q: (q % 6), R: (r % 6));
 
-                Assert.Equal(expected: (hex * (omega * scaled)), actual: ((hex * omega) * scaled));
+                Assert.Equal(actual: ((hex * omega) * scaled), expected: (hex * (omega * scaled)));
             }
         }
 
         return null;
     }
-
     /// <summary>The graph-distance statement: <see cref="HexagonalCoordinate.Length"/> equals the true
     /// breadth-first hex-grid distance out to radius 12, computed here as a self-contained array BFS that shares no
     /// line with <see cref="HexagonalCoordinate.Length"/>'s own norm-based formula.</summary>
@@ -436,8 +431,8 @@ internal static class LatticeClaims {
         const int offset = (radius + 1);
         const int span = ((2 * offset) + 1);
 
-        var distance = new int[span * span];
-        var frontier = new int[span * span];
+        var distance = new int[(span * span)];
+        var frontier = new int[(span * span)];
 
         Array.Fill(array: distance, value: -1);
 
@@ -487,7 +482,6 @@ internal static class LatticeClaims {
 
         return null;
     }
-
     /// <summary>Round against a brute-force Euclidean nearest-cell search, stated EXACTLY. The natural Euclidean form
     /// <c>dx = u − 0.5v</c>, <c>dy = (√3/2)v</c> would need a floating-point tolerance, but it collapses
     /// algebraically to <c>dx² + dy² = u² − u·v + v²</c> — the Eisenstein norm form, and exactly rational — so the
@@ -517,7 +511,7 @@ internal static class LatticeClaims {
                 var rounded = HexagonalCoordinate.Round(q: FixedQ4816.FromRawBits(value: qRaw), r: FixedQ4816.FromRawBits(value: rRaw));
                 var roundedDistance = HexagonalNearestCellMetric(candidateQ: rounded.Q, candidateR: rounded.R, qRaw: qRaw, rRaw: rRaw, unit: unit);
 
-                Assert.Equal(expected: best, actual: roundedDistance);
+                Assert.Equal(actual: roundedDistance, expected: best);
             }
         }
 
@@ -528,8 +522,8 @@ internal static class LatticeClaims {
     // qRaw, v = candidate·unit − rRaw, distance = u² − u·v + v². No floating point anywhere — Int128 has ample
     // headroom for these magnitudes (unit = 2^16, |candidate| <= 14, |qRaw|,|rRaw| < 2^20).
     private static Int128 HexagonalNearestCellMetric(int candidateQ, int candidateR, long qRaw, long rRaw, long unit) {
-        var u = checked(((Int128)candidateQ * unit) - qRaw);
-        var v = checked(((Int128)candidateR * unit) - rRaw);
+        var u = checked(((((Int128)candidateQ) * unit) - qRaw));
+        var v = checked(((((Int128)candidateR) * unit) - rRaw));
 
         return checked((((u * u) - (u * v)) + (v * v)));
     }
@@ -549,13 +543,13 @@ internal static class LatticeClaims {
         (string Name, Action Build)[] refusals = [
             ("an order of zero", static () => _ = HilbertCurve.Encode(order: 0, x: 0, y: 0)),
             ("a negative order", static () => _ = HilbertCurve.Encode(order: -1, x: 0, y: 0)),
-            ("an order past thirty-one, where the shift count masks", static () => _ = HilbertCurve.Decode(order: 32, distance: 12345)),
-            ("an order of sixty-four, which masks to zero", static () => _ = HilbertCurve.Decode(order: 64, distance: 1)),
+            ("an order past thirty-one, where the shift count masks", static () => _ = HilbertCurve.Decode(distance: 12345, order: 32)),
+            ("an order of sixty-four, which masks to zero", static () => _ = HilbertCurve.Decode(distance: 1, order: 64)),
             ("an x coordinate at the grid side", static () => _ = HilbertCurve.Encode(order: 1, x: 2, y: 0)),
             ("a y coordinate at the grid side", static () => _ = HilbertCurve.Encode(order: 1, x: 0, y: 2)),
             ("a coordinate far past the grid side", static () => _ = HilbertCurve.Encode(order: 4, x: uint.MaxValue, y: 0)),
-            ("a distance at the curve length", static () => _ = HilbertCurve.Decode(order: 1, distance: 4)),
-            ("a distance far past the curve length", static () => _ = HilbertCurve.Decode(order: 2, distance: ulong.MaxValue)),
+            ("a distance at the curve length", static () => _ = HilbertCurve.Decode(distance: 4, order: 1)),
+            ("a distance far past the curve length", static () => _ = HilbertCurve.Decode(distance: ulong.MaxValue, order: 2)),
         ];
 
         foreach (var (name, build) in refusals) {
@@ -569,13 +563,12 @@ internal static class LatticeClaims {
 
         // The domain is REACHABLE at both edges, so the refusals above bound it rather than shrink it.
         _ = HilbertCurve.Encode(order: 1, x: 1, y: 1);
-        _ = HilbertCurve.Decode(order: 1, distance: 3);
+        _ = HilbertCurve.Decode(distance: 3, order: 1);
         _ = HilbertCurve.Encode(order: 31, x: ((1U << 31) - 1U), y: 0);
-        _ = HilbertCurve.Decode(order: 31, distance: ((1UL << 62) - 1UL));
+        _ = HilbertCurve.Decode(distance: ((1UL << 62) - 1UL), order: 31);
 
         return null;
     }
-
     /// <summary>Proves a consumer cannot reach the verified ray-cycle factors' process-wide storage: the surface hands
     /// out a count and a value per position, and the two published marshal escape hatches find nothing to unwrap.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>

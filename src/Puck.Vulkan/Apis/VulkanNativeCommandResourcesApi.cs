@@ -92,9 +92,9 @@ public unsafe sealed class VulkanNativeCommandResourcesApi : IVulkanCommandResou
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                AllocateCommandBuffers = (delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateCommandBuffers"u8),
-                CreateCommandPool = (delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateCommandPool"u8),
-                DestroyCommandPool = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyCommandPool"u8),
+                AllocateCommandBuffers = ((delegate* unmanaged[Cdecl]<nint, in VkCommandBufferAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateCommandBuffers"u8)),
+                CreateCommandPool = ((delegate* unmanaged[Cdecl]<nint, in VkCommandPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateCommandPool"u8)),
+                DestroyCommandPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyCommandPool"u8)),
             }
         );
     }

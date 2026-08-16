@@ -46,17 +46,16 @@ internal static class Oracles {
     ) {
         var baseline = new BigInteger(value: baselineRaw);
         var rawPooled = (baseline + poolDeltaRaw);
-        var pooled = poolRadiusRaw is { } radius
-            ? BigInteger.Clamp(value: rawPooled, min: (baseline - radius), max: (baseline + radius))
-            : rawPooled;
-        var ranged = BigInteger.Clamp(value: (pooled + outsidePoolDeltaRaw), min: minimumRaw, max: maximumRaw);
-        var result = thresholdRaw is { } threshold
+        var pooled = ((poolRadiusRaw is { } radius)
+            ? BigInteger.Clamp(max: (baseline + radius), min: (baseline - radius), value: rawPooled)
+            : rawPooled);
+        var ranged = BigInteger.Clamp(max: maximumRaw, min: minimumRaw, value: (pooled + outsidePoolDeltaRaw));
+        var result = ((thresholdRaw is { } threshold)
             ? ((ranged >= threshold) ? new BigInteger(value: maximumRaw) : new BigInteger(value: minimumRaw))
-            : ranged;
+            : ranged);
 
         return (ResultRaw: ((long)result), PoolClamped: (pooled != rawPooled));
     }
-
     /// <summary>The direct baseline-zero, no-pool specialization: clamp the exact sum of both raw deltas once, then
     /// optionally quantize it.</summary>
     /// <param name="poolDeltaRaw">The first raw delta sum.</param>
@@ -73,13 +72,12 @@ internal static class Oracles {
             min: minimumRaw,
             max: maximumRaw
         );
-        var result = thresholdRaw is { } threshold
+        var result = ((thresholdRaw is { } threshold)
             ? ((ranged >= threshold) ? new BigInteger(value: maximumRaw) : new BigInteger(value: minimumRaw))
-            : ranged;
+            : ranged);
 
         return ((long)result);
     }
-
     /// <summary>Rounds an exact dyadic value <c>exact / 2^shift</c> to the nearest raw, ties to even, then wraps to the
     /// signed 64-bit carrier. Rounds the magnitude and re-applies the sign (symmetric ties-to-even).</summary>
     /// <param name="exact">The exact numerator.</param>
@@ -89,7 +87,6 @@ internal static class Oracles {
     /// stating the rule twice would let the two spellings drift apart while every law stayed green.</remarks>
     public static long RoundDyadic(BigInteger exact, int shift) =>
         WrapToRaw(value: RoundRationalTiesToEven(numerator: exact, denominator: (BigInteger.One << shift)));
-
     /// <summary>The exact quotient rounded toward negative infinity, in arbitrary width.</summary>
     /// <param name="numerator">The dividend.</param>
     /// <param name="denominator">The divisor, which must be non-zero.</param>
@@ -101,7 +98,6 @@ internal static class Oracles {
 
         return ((!remainder.IsZero && ((remainder.Sign < 0) != (denominator.Sign < 0))) ? (quotient - BigInteger.One) : quotient);
     }
-
     /// <summary>Reduces an exact integer to the signed 64-bit carrier, two's complement.</summary>
     /// <param name="value">The exact value.</param>
     /// <returns>The wrapped raw.</returns>
@@ -110,14 +106,12 @@ internal static class Oracles {
     /// spellings drift.</remarks>
     public static long WrapToRaw(BigInteger value) =>
         unchecked((long)WrapToUnsignedRaw(value: value));
-
     /// <summary>Reduces an exact integer to the UNSIGNED 64-bit carrier — modulo <c>2⁶⁴</c> into <c>[0, 2⁶⁴)</c>, where
     /// the signed reduction lands the same word in <c>[−2⁶³, 2⁶³)</c>.</summary>
     /// <param name="value">The exact value.</param>
     /// <returns>The wrapped raw.</returns>
     public static ulong WrapToUnsignedRaw(BigInteger value) =>
         ((ulong)((((value % TwoTo64) + TwoTo64) % TwoTo64)));
-
     /// <summary>Rounds the exact dyadic value <c>magnitude / 2^shift</c> to the nearest integer, ties to even, and
     /// returns it UNWRAPPED — so a caller can decide representability before reducing to a carrier, which is exactly
     /// what a checked operator's contract needs.</summary>
@@ -127,7 +121,6 @@ internal static class Oracles {
     /// <returns>The rounded integer, unwrapped.</returns>
     public static BigInteger RoundToEvenUnits(BigInteger magnitude, int shift) =>
         RoundRationalTiesToEven(numerator: magnitude, denominator: (BigInteger.One << shift));
-
     /// <summary>Rounds an exact NON-NEGATIVE dyadic value <c>exact / 2^shift</c> to the nearest raw, ties to even, then
     /// wraps to the unsigned 64-bit carrier — the unsigned sibling of <see cref="RoundDyadic"/>. Every caller forms a
     /// non-negative ideal value, because the unsigned family has no negative side.</summary>
@@ -136,7 +129,6 @@ internal static class Oracles {
     /// <returns>The rounded, wrapped raw.</returns>
     public static ulong RoundDyadicUnsigned(BigInteger exact, int shift) =>
         WrapToUnsignedRaw(value: RoundToEvenUnits(magnitude: exact, shift: shift));
-
     /// <summary>The reference UQ48.16 product — ONE ties-to-even rounding of the exact product at the <c>2⁻¹⁶</c> grid,
     /// reduced to the unsigned 64-bit carrier.</summary>
     /// <param name="x">The multiplicand's raw.</param>
@@ -146,8 +138,7 @@ internal static class Oracles {
     /// where the subject truncates a <see cref="UInt128"/> to sixty-four bits and then adds a branchless correction
     /// rebuilt from the discarded low word. No sixty-four-bit boundary is observed here at all.</remarks>
     public static ulong UnsignedFixedProduct(ulong x, ulong y) =>
-        RoundDyadicUnsigned(exact: ((BigInteger)x * y), shift: 16);
-
+        RoundDyadicUnsigned(exact: (((BigInteger)x) * y), shift: 16);
     /// <summary>The reference UQ48.16 quotient — ONE ties-to-even rounding of the exact rational <c>(x·2¹⁶)/y</c>,
     /// reduced to the unsigned 64-bit carrier (the ideal quotient can be eighty bits wide, and the subject wraps).</summary>
     /// <param name="x">The dividend's raw.</param>
@@ -159,7 +150,6 @@ internal static class Oracles {
     /// 128-by-64 hardware divide under a fits-in-64-bits gate.</remarks>
     public static ulong UnsignedFixedQuotient(ulong x, ulong y) =>
         WrapToUnsignedRaw(value: RoundRationalTiesToEven(numerator: (((BigInteger)x) << 16), denominator: new BigInteger(value: y)));
-
     /// <summary>The exact rational <c>numerator / denominator</c> rounded to the nearest integer, ties to even,
     /// SIGN-SYMMETRICALLY (the tie rule is invariant under negation, so rounding the magnitude and re-applying the sign
     /// is the same map), returned UNWRAPPED. The home of the house ties-to-even rule: every dyadic and rational
@@ -183,15 +173,13 @@ internal static class Oracles {
 
         return (negative ? -quotient : quotient);
     }
-
     /// <summary>The reference closed-unit product — one ties-to-even rounding of the exact product at the
     /// <c>2⁻³²</c> grid. Both raws lie in <c>[0, 2³²]</c>, so the rounded result does too and nothing wraps.</summary>
     /// <param name="x">The multiplicand's raw.</param>
     /// <param name="y">The multiplier's raw.</param>
     /// <returns>The product's raw.</returns>
     public static ulong ClosedUnitProduct(ulong x, ulong y) =>
-        ((ulong)RoundDyadic(exact: ((BigInteger)x * y), shift: 32));
-
+        ((ulong)RoundDyadic(exact: (((BigInteger)x) * y), shift: 32));
     /// <summary>The reference closed-unit product of THREE raws — one ties-to-even rounding of the exact triple product
     /// at the <c>2⁻³²</c> grid, taken at the tripled scale so that no intermediate is rounded.</summary>
     /// <param name="x">The first factor's raw.</param>
@@ -199,15 +187,13 @@ internal static class Oracles {
     /// <param name="z">The third factor's raw.</param>
     /// <returns>The product's raw.</returns>
     public static ulong ClosedUnitTripleProduct(ulong x, ulong y, ulong z) =>
-        ((ulong)RoundDyadic(exact: (((BigInteger)x * y) * z), shift: 64));
-
+        ((ulong)RoundDyadic(exact: ((((BigInteger)x) * y) * z), shift: 64));
     /// <summary>The reference narrowing of a closed-unit raw onto <see cref="FixedQ4816"/>'s sixteen fraction bits —
     /// one ties-to-even rounding, sixteen bits discarded.</summary>
     /// <param name="value">The closed-unit raw.</param>
     /// <returns>The Q48.16 raw.</returns>
     public static long ClosedUnitNarrow(ulong value) =>
         RoundDyadic(exact: new BigInteger(value: value), shift: 16);
-
     /// <summary>The exact decimal expansion of the dyadic rational <c>numerator / 2^shift</c>, rendered the way the
     /// fixed-point family renders: the integer part, then a decimal point and the terminating expansion when the
     /// fraction is non-zero.</summary>
@@ -227,11 +213,10 @@ internal static class Oracles {
 
         var digits = (fraction * BigInteger.Pow(value: new BigInteger(value: 5), exponent: shift))
             .ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-            .PadLeft(totalWidth: shift, paddingChar: '0');
+            .PadLeft(paddingChar: '0', totalWidth: shift);
 
         return $"{integerPart.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}.{digits.TrimEnd(trimChar: '0')}";
     }
-
     /// <summary>The reference half-open unit-fraction product — one ties-to-even rounding of the exact product at the
     /// <c>2⁻ᶠ</c> grid, where <c>f</c> is the width's fraction-bit count. Both raws are below <c>2ᶠ</c>, so the rounded
     /// product is below <c>2ᶠ</c> too and neither saturation nor wrapping arises.</summary>
@@ -240,8 +225,7 @@ internal static class Oracles {
     /// <param name="fractionBitCount">The width's fraction-bit count.</param>
     /// <returns>The product's raw.</returns>
     public static ulong UnitFractionProduct(ulong x, ulong y, int fractionBitCount) =>
-        ((ulong)RoundDyadic(exact: ((BigInteger)x * y), shift: fractionBitCount));
-
+        ((ulong)RoundDyadic(exact: (((BigInteger)x) * y), shift: fractionBitCount));
     /// <summary>The reference half-open unit-fraction quotient — one ties-to-even rounding of the exact ratio
     /// <c>(x·2ᶠ) / y</c>, then a clamp onto the largest representable raw. The rounding happens BEFORE the clamp, so a
     /// ratio that rounds up onto <c>2ᶠ</c> reports the endpoint rather than wrapping.</summary>
@@ -266,7 +250,6 @@ internal static class Oracles {
 
         return ((ulong)BigInteger.Min(left: quotient, right: maximum));
     }
-
     /// <summary>The reference IEEE-754 binary64 encoding of the dyadic rational <c>numerator / 2^shift</c>, derived from
     /// the FORMAT rather than from any floating-point arithmetic: sign zero, exponent field
     /// <c>1023 + (bitLength − 1) − shift</c>, and a trailing significand that is the numerator's bits below its leading
@@ -286,7 +269,6 @@ internal static class Oracles {
 
         return ((ulong)((exponentField << 52) + significand));
     }
-
     /// <summary>The reference IEEE-754 binary64 encoding of the SIGNED dyadic rational <c>value / 2^shift</c> under
     /// round-to-nearest-ties-to-even — the general form of <see cref="ExactBinary64Bits"/>, which demands an exactly
     /// representable magnitude. The magnitude is rounded to fifty-three significant bits by exact integer division with
@@ -332,7 +314,7 @@ internal static class Oracles {
         var exponentField = new BigInteger(value: (((1023 + 52) + excess) - shift));
         var bits = ((ulong)((exponentField << 52) + (significand - (BigInteger.One << 52))));
 
-        return (negative ? (bits | (1UL << 63)) : bits);
+        return (negative ? bits | (1UL << 63) : bits);
     }
 
     // The number of bits in a non-negative magnitude's binary expansion; zero has none.
@@ -407,7 +389,6 @@ internal static class Oracles {
 
         return true;
     }
-
     /// <summary>The reference product of two elements of the algebra <c>x² = P·x + Q</c> over the fixed-point carrier,
     /// coefficients as raw Q16 longs. <c>U</c> and <c>V</c> are each one Q48→Q16 rounding of the ideal expression.</summary>
     /// <param name="pRaw">The linear coefficient, raw Q16.</param>
@@ -418,13 +399,12 @@ internal static class Oracles {
     /// <param name="v2">The second element's root coefficient, raw.</param>
     /// <returns>The product components as raws.</returns>
     public static (long U, long V) QuadraticMultiply(long pRaw, long qRaw, long u1, long v1, long u2, long v2) {
-        var rootProduct = ((BigInteger)v1 * v2);
-        var tU = ((((BigInteger)u1 * u2) << 16) + ((BigInteger)qRaw * rootProduct));
-        var tV = (((((BigInteger)u1 * v2) + ((BigInteger)v1 * u2)) << 16) + ((BigInteger)pRaw * rootProduct));
+        var rootProduct = (((BigInteger)v1) * v2);
+        var tU = (((((BigInteger)u1) * u2) << 16) + (((BigInteger)qRaw) * rootProduct));
+        var tV = ((((((BigInteger)u1) * v2) + (((BigInteger)v1) * u2)) << 16) + (((BigInteger)pRaw) * rootProduct));
 
         return (RoundDyadic(exact: tU, shift: 32), RoundDyadic(exact: tV, shift: 32));
     }
-
     /// <summary>The reference algebra norm <c>U² + P·U·V − Q·V²</c>, one Q48→Q16 rounding.</summary>
     /// <param name="pRaw">The linear coefficient, raw Q16.</param>
     /// <param name="qRaw">The constant coefficient, raw Q16.</param>
@@ -432,11 +412,10 @@ internal static class Oracles {
     /// <param name="v">The root coefficient, raw.</param>
     /// <returns>The norm as a raw.</returns>
     public static long QuadraticNorm(long pRaw, long qRaw, long u, long v) {
-        var exact = (((((BigInteger)u * u) << 16) + ((BigInteger)pRaw * ((BigInteger)u * v))) - ((BigInteger)qRaw * ((BigInteger)v * v)));
+        var exact = ((((((BigInteger)u) * u) << 16) + (((BigInteger)pRaw) * (((BigInteger)u) * v))) - (((BigInteger)qRaw) * (((BigInteger)v) * v)));
 
         return RoundDyadic(exact: exact, shift: 32);
     }
-
     /// <summary>The reference Möbius/projective numerator <c>P·n + Q·d</c> at Q32, one Q32→Q16 rounding (exact when the
     /// coefficients are integers — the remainder is then identically zero).</summary>
     /// <param name="pRaw">The linear coefficient, raw Q16.</param>
@@ -445,11 +424,10 @@ internal static class Oracles {
     /// <param name="d">The projective denominator, raw.</param>
     /// <returns>The stepped numerator as a raw.</returns>
     public static long MobiusNumerator(long pRaw, long qRaw, long n, long d) {
-        var exact = (((BigInteger)pRaw * n) + ((BigInteger)qRaw * d));
+        var exact = ((((BigInteger)pRaw) * n) + (((BigInteger)qRaw) * d));
 
         return RoundDyadic(exact: exact, shift: 16);
     }
-
     /// <summary>The exact (unrounded) algebra norm numerator as a <see cref="BigInteger"/> over the fixed denominator
     /// <c>2^32</c> — the value <see cref="QuadraticNorm"/> rounds. No law consumes it: the committed
     /// norm-multiplicativity law runs on the bounded sublattice, where the subject's own rounded raws are already
@@ -460,8 +438,7 @@ internal static class Oracles {
     /// <param name="v">The root coefficient, raw.</param>
     /// <returns>The exact norm numerator over the fixed denominator <c>2^32</c>.</returns>
     public static BigInteger ExactNormNumerator(long pRaw, long qRaw, long u, long v) =>
-        (((((BigInteger)u * u) << 16) + ((BigInteger)pRaw * ((BigInteger)u * v))) - ((BigInteger)qRaw * ((BigInteger)v * v)));
-
+        ((((((BigInteger)u) * u) << 16) + (((BigInteger)pRaw) * (((BigInteger)u) * v))) - (((BigInteger)qRaw) * (((BigInteger)v) * v)));
     /// <summary>The reference power of the adjoined root of <c>x² = P·x + Q</c>, by the pinned ascending-bit
     /// square-and-multiply schedule, every step's two components one Q48→Q16 rounding of the exact product in
     /// <see cref="BigInteger"/>.</summary>
@@ -482,19 +459,18 @@ internal static class Oracles {
 
         while (0UL != exponent) {
             if (0UL != (exponent & 1UL)) {
-                result = QuadraticMultiply(pRaw: pRaw, qRaw: qRaw, u1: result.Item1, v1: result.Item2, u2: power.Item1, v2: power.Item2);
+                result = QuadraticMultiply(pRaw: pRaw, qRaw: qRaw, u1: result.Item1, u2: power.Item1, v1: result.Item2, v2: power.Item2);
             }
 
             exponent >>>= 1;
 
             if (0UL != exponent) {
-                power = QuadraticMultiply(pRaw: pRaw, qRaw: qRaw, u1: power.Item1, v1: power.Item2, u2: power.Item1, v2: power.Item2);
+                power = QuadraticMultiply(pRaw: pRaw, qRaw: qRaw, u1: power.Item1, u2: power.Item1, v1: power.Item2, v2: power.Item2);
             }
         }
 
         return result;
     }
-
     /// <summary>The largest partial quotient of the continued fraction of <c>(p + q·√d) / r</c>, excluding the integer
     /// part — the badly-approximable certificate, walked here in <see cref="BigInteger"/> arithmetic.</summary>
     /// <param name="p">The rational part of the numerator.</param>
@@ -507,7 +483,7 @@ internal static class Oracles {
     /// over the whole infinite expansion.</remarks>
     /// <exception cref="InvalidOperationException">The expansion did not close within the walk ceiling.</exception>
     public static long MaximumPartialQuotient(long p, long q, long d, long r) {
-        var quotients = PartialQuotients(p: p, q: q, d: d, r: r, periodStart: out var periodStart);
+        var quotients = PartialQuotients(d: d, p: p, periodStart: out var periodStart, q: q, r: r);
         var maximum = BigInteger.One;
 
         // Only a₀ is dropped — a large integer part shifts the value without clumping its fractional points — so
@@ -518,7 +494,6 @@ internal static class Oracles {
 
         return ((long)maximum);
     }
-
     /// <summary>The continued-fraction expansion of <c>(p + q·√d) / r</c> through the end of its first repeating block,
     /// walked in <see cref="BigInteger"/> arithmetic.</summary>
     /// <param name="p">The rational part of the numerator.</param>
@@ -535,6 +510,7 @@ internal static class Oracles {
     /// <exception cref="InvalidOperationException">The expansion did not close within the walk ceiling.</exception>
     public static IReadOnlyList<BigInteger> PartialQuotients(long p, long q, long d, long r, out int periodStart) {
         var radicand = new BigInteger(value: d);
+
         var (a, b, c) = Reduce(a: new BigInteger(value: p), b: new BigInteger(value: q), c: new BigInteger(value: r));
         var seen = new Dictionary<(BigInteger A, BigInteger B, BigInteger C), int>();
         var quotients = new List<BigInteger>();
@@ -560,7 +536,6 @@ internal static class Oracles {
 
         throw new InvalidOperationException(message: "the continued fraction did not close within the walk ceiling");
     }
-
     /// <summary>The tiling word of the quadratic irrational <c>(p + q·√d) / r</c>, read as the MECHANICAL word of its
     /// slope: no substitution is applied and no letter image is ever formed.</summary>
     /// <param name="p">The rational part of the numerator.</param>
@@ -580,8 +555,8 @@ internal static class Oracles {
     /// </remarks>
     /// <exception cref="InvalidOperationException">The bracket failed to pin a floor, or the expansion did not close.</exception>
     public static void SturmianMechanicalWord(long p, long q, long d, long r, Span<bool> tiles) {
-        var quotients = PartialQuotients(p: p, q: q, d: d, r: r, periodStart: out var periodStart);
-        var block = new BigInteger[quotients.Count - periodStart];
+        var quotients = PartialQuotients(d: d, p: p, periodStart: out var periodStart, q: q, r: r);
+        var block = new BigInteger[(quotients.Count - periodStart)];
 
         for (var index = 0; (index < block.Length); ++index) { block[index] = quotients[(periodStart + index)]; }
 
@@ -622,7 +597,6 @@ internal static class Oracles {
             previous = floorLow;
         }
     }
-
     /// <summary>The incidence matrix of the substitution a continued-fraction period composes: the continuant product
     /// <c>∏ [[bᵢ, 1], [1, 0]]</c>, formed here in <see cref="BigInteger"/> from the period alone.</summary>
     /// <param name="period">The repeating block, in the order the substitution composes it.</param>
@@ -653,14 +627,13 @@ internal static class Oracles {
 
         return ((a / divisor), (b / divisor), (c / divisor));
     }
-
     // ⌊(A + B√d) / C⌋ for C > 0, by bracketing and bisecting the exact predicate k·C ≤ A + B√d.
     private static BigInteger Floor(BigInteger a, BigInteger b, BigInteger c, BigInteger radicand) {
         var low = BigInteger.Zero;
         var high = BigInteger.One;
 
-        if (AtMost(candidate: low, a: a, b: b, c: c, radicand: radicand)) {
-            while (AtMost(candidate: high, a: a, b: b, c: c, radicand: radicand)) {
+        if (AtMost(a: a, b: b, c: c, candidate: low, radicand: radicand)) {
+            while (AtMost(a: a, b: b, c: c, candidate: high, radicand: radicand)) {
                 low = high;
                 high <<= 1;
             }
@@ -668,7 +641,7 @@ internal static class Oracles {
             high = low;
             low = BigInteger.MinusOne;
 
-            while (!AtMost(candidate: low, a: a, b: b, c: c, radicand: radicand)) {
+            while (!AtMost(a: a, b: b, c: c, candidate: low, radicand: radicand)) {
                 high = low;
                 low <<= 1;
             }
@@ -678,7 +651,7 @@ internal static class Oracles {
         while ((high - low) > BigInteger.One) {
             var middle = ((low + high) >> 1);
 
-            if (AtMost(candidate: middle, a: a, b: b, c: c, radicand: radicand)) {
+            if (AtMost(a: a, b: b, c: c, candidate: middle, radicand: radicand)) {
                 low = middle;
             } else {
                 high = middle;
@@ -687,7 +660,6 @@ internal static class Oracles {
 
         return low;
     }
-
     // candidate·C ≤ A + B√d, exactly: move the rational part across and decide the surd comparison by one squaring, with
     // the sign of each side read off first so squaring never flips the inequality.
     private static bool AtMost(BigInteger candidate, BigInteger a, BigInteger b, BigInteger c, BigInteger radicand) {
@@ -735,7 +707,7 @@ internal static class Oracles {
             }
         }
 
-        for (var position = 0; ((position + 1) < letters.Count); ) {
+        for (var position = 0; ((position + 1) < letters.Count);) {
             if (letters[position] != letters[(position + 1)]) {
                 ++position;
 
@@ -751,13 +723,12 @@ internal static class Oracles {
 
             sign *= square;
 
-            letters.RemoveRange(index: position, count: 2);
+            letters.RemoveRange(count: 2, index: position);
             position = ((position > 0) ? (position - 1) : 0);
         }
 
         return sign;
     }
-
     /// <summary>The reference charge the Cayley–Dickson tower puts on one ordered pair of basis indices, computed by the
     /// doubling recursion <c>(a, b)·(c, d) = (a·c − d̄·b, d·a + b·c̄)</c> applied to basis vectors.</summary>
     /// <param name="leftIndex">The left basis index, below <c>2^floors</c>.</param>
@@ -782,23 +753,22 @@ internal static class Oracles {
 
         var half = (1 << (floors - 1));
         var leftHigh = (leftIndex >= half);
-        var leftLow = (leftIndex & (half - 1));
+        var leftLow = leftIndex & (half - 1);
         var rightHigh = (rightIndex >= half);
-        var rightLow = (rightIndex & (half - 1));
+        var rightLow = rightIndex & (half - 1);
 
         // (a, 0)·(c, 0) = (a·c, 0).
-        if (!leftHigh && !rightHigh) { return CayleyDicksonCharge(leftIndex: leftLow, rightIndex: rightLow, floors: (floors - 1)); }
+        if (!leftHigh && !rightHigh) { return CayleyDicksonCharge(floors: (floors - 1), leftIndex: leftLow, rightIndex: rightLow); }
 
         // (a, 0)·(0, d) = (0, d·a).
-        if (!leftHigh) { return CayleyDicksonCharge(leftIndex: rightLow, rightIndex: leftLow, floors: (floors - 1)); }
+        if (!leftHigh) { return CayleyDicksonCharge(floors: (floors - 1), leftIndex: rightLow, rightIndex: leftLow); }
 
         // (0, b)·(c, 0) = (0, b·c̄).
-        if (!rightHigh) { return (ConjugationSign(index: rightLow) * CayleyDicksonCharge(leftIndex: leftLow, rightIndex: rightLow, floors: (floors - 1))); }
+        if (!rightHigh) { return (ConjugationSign(index: rightLow) * CayleyDicksonCharge(floors: (floors - 1), leftIndex: leftLow, rightIndex: rightLow)); }
 
         // (0, b)·(0, d) = (−d̄·b, 0).
-        return (-ConjugationSign(index: rightLow) * CayleyDicksonCharge(leftIndex: rightLow, rightIndex: leftLow, floors: (floors - 1)));
+        return (-ConjugationSign(index: rightLow) * CayleyDicksonCharge(floors: (floors - 1), leftIndex: rightLow, rightIndex: leftLow));
     }
-
     /// <summary>The reference product of two basis monomials of <c>ℤ[x] / (xᵈ − Σ cᵢ xⁱ)</c>: schoolbook, by carrying
     /// the top coefficient down through the relation until nothing above degree <c>d − 1</c> remains.</summary>
     /// <param name="relation">The relation <c>xᵈ = Σ cᵢ xⁱ</c> as its coefficients <c>c₀ … c_{d−1}</c>, ascending; the
@@ -833,7 +803,6 @@ internal static class Oracles {
 
         return reduced;
     }
-
     /// <summary>The reference product of a twisted group algebra over <c>(ℤ/2)^k</c> — the shape BOTH the Clifford and
     /// the Cayley–Dickson bases take, the target key always being the exclusive-or of the two operand keys. Each returned
     /// lane is exactly ONE ties-to-even rounding of the whole exact charged sum, wrapped to the carrier.</summary>
@@ -849,12 +818,12 @@ internal static class Oracles {
             var exact = BigInteger.Zero;
 
             for (var first = 0; (first < width); ++first) {
-                var second = (first ^ target);
+                var second = first ^ target;
                 var charge = chargeSource(first, second);
 
                 if (0 == charge) { continue; }
 
-                var term = ((BigInteger)left[first] * right[second]);
+                var term = (((BigInteger)left[first]) * right[second]);
 
                 exact += ((charge > 0) ? term : -term);
             }
@@ -862,7 +831,6 @@ internal static class Oracles {
             result[target] = RoundDyadic(exact: exact, shift: shift);
         }
     }
-
     /// <summary>The same twisted group product with the rounding moved: EVERY TERM is rounded on its own and the rounded
     /// terms are then summed. The honest alternative discipline, and the one the fused kernels are claimed to beat.</summary>
     /// <param name="chargeSource">The 2-cochain, as in <see cref="TwistedGroupProduct"/>.</param>
@@ -877,12 +845,12 @@ internal static class Oracles {
             var total = BigInteger.Zero;
 
             for (var first = 0; (first < width); ++first) {
-                var second = (first ^ target);
+                var second = first ^ target;
                 var charge = chargeSource(first, second);
 
                 if (0 == charge) { continue; }
 
-                var term = ((BigInteger)left[first] * right[second]);
+                var term = (((BigInteger)left[first]) * right[second]);
 
                 total += RoundDyadic(exact: ((charge > 0) ? term : -term), shift: shift);
             }
@@ -890,7 +858,6 @@ internal static class Oracles {
             result[target] = WrapToRaw(value: total);
         }
     }
-
     /// <summary>The reference product of <c>GF(2^degree)</c>, by SCHOOLBOOK carryless multiplication into a
     /// double-width polynomial followed by bit-by-bit reduction from the top against the modulus.</summary>
     /// <param name="left">The multiplicand as a coefficient bitmask.</param>
@@ -913,7 +880,6 @@ internal static class Oracles {
 
         return wide;
     }
-
     /// <summary>The reference reduction of an arbitrary packed polynomial modulo <c>t^degree + reductionTail</c>, by
     /// SCHOOLBOOK LONG DIVISION against the modulus MATERIALIZED IN FULL — its implicit leading term included.</summary>
     /// <param name="value">The packed polynomial to reduce, of any degree.</param>
@@ -928,8 +894,7 @@ internal static class Oracles {
     /// value unshifted all diverge on the first operand. Exact on both sides, so the rounding condition does not
     /// arise.</remarks>
     public static BigInteger BinaryFieldReduce(BigInteger value, int degree, BigInteger reductionTail) =>
-        ReduceBinary(value: value, modulus: ((BigInteger.One << degree) | reductionTail));
-
+        ReduceBinary(value: value, modulus: (BigInteger.One << degree) | reductionTail);
     /// <summary>The reference multiplicative inverse in <c>GF(2^degree)</c>, by the EXTENDED EUCLIDEAN algorithm over
     /// the polynomial ring — the almost-inverse loop that tracks one Bezout coefficient — rather than by any power of
     /// the value.</summary>
@@ -947,7 +912,7 @@ internal static class Oracles {
     public static BigInteger BinaryFieldInverse(BigInteger value, int degree, BigInteger reductionTail) {
         if (value.IsZero) { throw new DivideByZeroException(); }
 
-        var modulus = ((BigInteger.One << degree) | reductionTail);
+        var modulus = (BigInteger.One << degree) | reductionTail;
         var first = value;
         var second = modulus;
         var firstCoefficient = BigInteger.One;
@@ -974,9 +939,8 @@ internal static class Oracles {
 
         // The loop maintains first ≡ firstCoefficient · value modulo the modulus, and first is now one, so the
         // coefficient's own remainder is the field's unique inverse — reduced here rather than assumed bounded.
-        return ReduceBinary(value: firstCoefficient, modulus: modulus);
+        return ReduceBinary(modulus: modulus, value: firstCoefficient);
     }
-
     /// <summary>The reference power in <c>GF(2^degree)</c>, by the SEQUENTIAL fold — one ordinary product of a running
     /// accumulator against the value per unit of exponent — rather than by square-and-multiply over the exponent's
     /// binary expansion.</summary>
@@ -994,12 +958,11 @@ internal static class Oracles {
         var result = BigInteger.One;
 
         for (var step = 0; (step < exponent); ++step) {
-            result = BinaryFieldProduct(left: result, right: value, degree: degree, reductionTail: reductionTail);
+            result = BinaryFieldProduct(degree: degree, left: result, reductionTail: reductionTail, right: value);
         }
 
         return result;
     }
-
     /// <summary>The reference value of a polynomial over <c>GF(2^degree)</c> at a point, by the DEFINITION — the sum of
     /// each coefficient times the matching power of the point — rather than by Horner's nested form.</summary>
     /// <param name="coefficients">The coefficients, highest-order first, as reduced field elements.</param>
@@ -1023,12 +986,11 @@ internal static class Oracles {
 
         for (var index = (coefficients.Length - 1); (index >= 0); --index) {
             total ^= BinaryFieldProduct(left: coefficients[index], right: power, degree: degree, reductionTail: reductionTail);
-            power = BinaryFieldProduct(left: power, right: point, degree: degree, reductionTail: reductionTail);
+            power = BinaryFieldProduct(degree: degree, left: power, reductionTail: reductionTail, right: point);
         }
 
         return total;
     }
-
     /// <summary>The exact carryless product of two <c>GF(2)</c> coefficient bit-vectors — the schoolbook
     /// shift-and-exclusive-or over the multiplier's set bits, unbounded in width.</summary>
     /// <param name="left">The multiplicand as a coefficient bitmask.</param>
@@ -1047,7 +1009,6 @@ internal static class Oracles {
 
         return product;
     }
-
     /// <summary>The degree of a <c>GF(2)</c> coefficient bit-vector, by a downward scan for the highest set bit.</summary>
     /// <param name="value">The coefficient bitmask.</param>
     /// <returns>The largest exponent carrying a non-zero coefficient, or minus one for the zero polynomial.</returns>
@@ -1060,7 +1021,6 @@ internal static class Oracles {
 
         return -1;
     }
-
     /// <summary>The coefficient-wise sum over <c>GF(2)</c>, formed one bit position at a time from the definition —
     /// each coefficient is the sum of the two inputs' coefficients modulo two.</summary>
     /// <param name="left">The first addend as a coefficient bitmask.</param>
@@ -1081,7 +1041,6 @@ internal static class Oracles {
 
         return sum;
     }
-
     /// <summary>The Euclidean quotient and remainder over <c>GF(2)[t]</c>, derived from LINEARITY over the monomial
     /// basis rather than by long division: the pair <c>(t^i div d, t^i mod d)</c> is carried forward one exponent at a
     /// time by a shift and a conditional fold, and the answer is the exclusive or of the pairs at the dividend's set
@@ -1124,7 +1083,6 @@ internal static class Oracles {
 
         return (Quotient: quotient, Remainder: remainder);
     }
-
     /// <summary>The monic greatest common divisor over <c>GF(2)[t]</c>, by the BINARY descent: strip the common power
     /// of <c>t</c>, then repeatedly exclusive-or the lower-degree operand into the higher and strip the <c>t</c>s that
     /// exclusive or creates.</summary>
@@ -1157,7 +1115,6 @@ internal static class Oracles {
 
         return (a << common);
     }
-
     /// <summary>Whether a <c>GF(2)[t]</c> polynomial is irreducible, by EXHAUSTIVE TRIAL DIVISION against every monic
     /// polynomial of degree one through half its own — the definition.</summary>
     /// <param name="value">The polynomial as a coefficient bitmask.</param>
@@ -1175,13 +1132,12 @@ internal static class Oracles {
             var leading = (BigInteger.One << divisorDegree);
 
             for (var tail = BigInteger.Zero; (tail < leading); ++tail) {
-                if (ReduceBinary(value: value, modulus: (leading | tail)).IsZero) { return false; }
+                if (ReduceBinary(modulus: leading | tail, value: value).IsZero) { return false; }
             }
         }
 
         return true;
     }
-
     /// <summary>Every divisor of <c>2^degree − 1</c> in ascending order, from an independent trial-division
     /// factorization.</summary>
     /// <param name="degree">The extension degree, in <c>[1, 32]</c>.</param>
@@ -1220,7 +1176,6 @@ internal static class Oracles {
 
         return [.. divisors];
     }
-
     /// <summary>Whether a <c>GF(2)[t]</c> polynomial is primitive, and the multiplicative order of <c>t</c> modulo it:
     /// the least divisor <c>e</c> of <c>2^degree − 1</c> with <c>t^e ≡ 1</c>, or zero when no divisor works.</summary>
     /// <param name="modulus">The polynomial as a coefficient bitmask.</param>
@@ -1252,17 +1207,16 @@ internal static class Oracles {
             throw new ArgumentException(message: "The divisor list does not belong to this modulus's degree.", paramName: nameof(ascendingDivisors));
         }
 
-        var ladder = RootSquarings(modulus: modulus, bound: groupOrder);
+        var ladder = RootSquarings(bound: groupOrder, modulus: modulus);
 
         foreach (var exponent in ascendingDivisors) {
-            if (RootPower(exponent: exponent, modulus: modulus, ladder: ladder).IsOne) {
+            if (RootPower(exponent: exponent, ladder: ladder, modulus: modulus).IsOne) {
                 return (Primitive: (exponent == groupOrder), Order: exponent);
             }
         }
 
         return (Primitive: false, Order: 0UL);
     }
-
     /// <summary>The DEGREES of the distinct monic irreducible factors of <c>t^n + 1</c> over the two-element field,
     /// ascending, from the 2-cyclotomic cosets modulo <paramref name="cycleOrder"/>.</summary>
     /// <param name="cycleOrder">An odd positive order.</param>
@@ -1295,7 +1249,6 @@ internal static class Oracles {
 
         return [.. degrees];
     }
-
     /// <summary>The conventional written form of a <c>GF(2)</c> coefficient bit-vector, such as <c>t^5+t^2+1</c>.</summary>
     /// <param name="value">The coefficient bitmask.</param>
     /// <param name="width">The number of coefficient positions to consider.</param>
@@ -1328,7 +1281,6 @@ internal static class Oracles {
 
         return count;
     }
-
     // Top-down long division against a modulus materialized in full. It backs the irreducibility and order oracles,
     // BinaryFieldReduce and BinaryFieldInverse's final normalization — never the reference for BinaryPolynomial's own
     // division, whose oracle is the bottom-up monomial route above. Two deliberately different reduction routes live
@@ -1344,19 +1296,17 @@ internal static class Oracles {
 
         return remainder;
     }
-
     // The reduced squarings of t: entry k is t^(2^k) modulo the polynomial, up to the highest bit any exponent bounded
     // by `bound` can carry.
     private static BigInteger[] RootSquarings(BigInteger modulus, ulong bound) {
         var ladder = new List<BigInteger> { ReduceBinary(value: (BigInteger.One << 1), modulus: modulus), };
 
         for (var bit = 1; ((bound >> bit) != 0UL); ++bit) {
-            ladder.Add(item: ReduceBinary(value: CarrylessProduct(left: ladder[bit - 1], right: ladder[bit - 1]), modulus: modulus));
+            ladder.Add(item: ReduceBinary(value: CarrylessProduct(left: ladder[(bit - 1)], right: ladder[(bit - 1)]), modulus: modulus));
         }
 
         return [.. ladder];
     }
-
     // t raised to an exponent modulo the polynomial, assembled from the exponent's binary expansion against the
     // squaring ladder.
     private static BigInteger RootPower(ulong exponent, BigInteger modulus, BigInteger[] ladder) {
@@ -1391,7 +1341,6 @@ internal static class Oracles {
             }
         }
     }
-
     /// <summary>The reference all-pairs shortest path over a weighted directed graph, by the Floyd–Warshall triple loop
     /// in exact <see cref="BigInteger"/> arithmetic.</summary>
     /// <param name="weights">The weight matrix, row-major; <see cref="long.MaxValue"/> marks an absent arc.</param>
@@ -1444,7 +1393,6 @@ internal static class Oracles {
             result[entry] = (infinite[entry] ? long.MaxValue : ((long)distance[entry]));
         }
     }
-
     /// <summary>The reference best-likelihood route over a graph whose arc weights are closed-unit raws, by explicit
     /// enumeration of the SIMPLE paths — no matrix, no power, no relaxation — with one ties-to-even rounding per step.</summary>
     /// <param name="weights">The weight matrix, row-major; a zero raw marks an absent arc.</param>
@@ -1481,7 +1429,7 @@ internal static class Oracles {
 
                 var stepped = ClosedUnitProduct(x: value, y: arcs[((vertex * order) + next)]);
 
-                if (0UL != stepped) { Extend(source: source, vertex: next, value: stepped); }
+                if (0UL != stepped) { Extend(source: source, value: stepped, vertex: next); }
             }
 
             visited[vertex] = false;
@@ -1489,12 +1437,11 @@ internal static class Oracles {
 
         for (var source = 0; (source < order); ++source) {
             Array.Clear(array: visited);
-            Extend(source: source, vertex: source, value: ClosedUnitOneRaw);
+            Extend(source: source, value: ClosedUnitOneRaw, vertex: source);
         }
 
         for (var entry = 0; (entry < best.Length); ++entry) { result[entry] = best[entry]; }
     }
-
     /// <summary>The reference widest-bottleneck closure of a graph whose arc weights are closed-unit raws, by the
     /// Floyd–Warshall triple loop with maximum and minimum in place of minimum and plus.</summary>
     /// <param name="weights">The weight matrix, row-major; a zero raw marks an absent arc.</param>
@@ -1523,7 +1470,6 @@ internal static class Oracles {
             }
         }
     }
-
     /// <summary>The reference best route over a graph whose arc weights are closed-unit raws under the bounded sum, by
     /// explicit enumeration of the SIMPLE paths in exact <see cref="BigInteger"/> arithmetic.</summary>
     /// <param name="weights">The weight matrix, row-major; a zero raw marks an absent arc.</param>
@@ -1551,7 +1497,7 @@ internal static class Oracles {
 
                 var excess = ((new BigInteger(value: value) + arcs[((vertex * order) + next)]) - one);
 
-                if (excess.Sign > 0) { Extend(source: source, vertex: next, value: ((ulong)excess)); }
+                if (excess.Sign > 0) { Extend(source: source, value: ((ulong)excess), vertex: next); }
             }
 
             visited[vertex] = false;
@@ -1559,7 +1505,7 @@ internal static class Oracles {
 
         for (var source = 0; (source < order); ++source) {
             Array.Clear(array: visited);
-            Extend(source: source, vertex: source, value: ClosedUnitOneRaw);
+            Extend(source: source, value: ClosedUnitOneRaw, vertex: source);
         }
 
         for (var entry = 0; (entry < best.Length); ++entry) { result[entry] = best[entry]; }
@@ -1607,7 +1553,6 @@ internal static class Oracles {
 
         for (var entry = 0; (entry < (order * order)); ++entry) { result[entry] = accumulator[entry]; }
     }
-
     /// <summary>The reference coefficients of <c>det(I − tA)</c>, by PRINCIPAL-MINOR enumeration: the coefficient of
     /// <c>t^k</c> is <c>(−1)^k</c> times the sum of the matrix's <c>k</c>-by-<c>k</c> principal minors.</summary>
     /// <param name="matrix">The matrix, row-major, <c>order²</c> entries.</param>
@@ -1628,7 +1573,7 @@ internal static class Oracles {
             for (var index = 0; (index < size); ++index) { choice[index] = index; }
 
             while (true) {
-                total += PrincipalMinor(matrix: matrix, order: order, rows: choice.AsSpan(start: 0, length: size));
+                total += PrincipalMinor(matrix: matrix, order: order, rows: choice.AsSpan(length: size, start: 0));
 
                 var cursor = (size - 1);
 
@@ -1689,10 +1634,9 @@ internal static class Oracles {
     /// <remarks>Shares nothing with the top-grade blade coefficient it is the oracle for: no generator ordering, no
     /// permutation sign and no algebra, only three two-by-two minors.</remarks>
     public static BigInteger Determinant3(ReadOnlySpan<BigInteger> rows) =>
-        ((rows[0] * ((rows[4] * rows[8]) - (rows[5] * rows[7])))
-            - (rows[1] * ((rows[3] * rows[8]) - (rows[5] * rows[6])))
+        (((rows[0] * ((rows[4] * rows[8]) - (rows[5] * rows[7])))
+            - (rows[1] * ((rows[3] * rows[8]) - (rows[5] * rows[6]))))
             + (rows[2] * ((rows[3] * rows[7]) - (rows[4] * rows[6]))));
-
     /// <summary>The reference product of two polynomials modulo a monic tail and a prime, by schoolbook multiplication
     /// and top-down reduction.</summary>
     /// <param name="left">The multiplicand's coefficients, low exponent first.</param>
@@ -1711,7 +1655,7 @@ internal static class Oracles {
 
         for (var leftIndex = 0; (leftIndex < degree); ++leftIndex) {
             for (var rightIndex = 0; (rightIndex < degree); ++rightIndex) {
-                wide[(leftIndex + rightIndex)] += ((BigInteger)left[leftIndex] * right[rightIndex]);
+                wide[(leftIndex + rightIndex)] += (((BigInteger)left[leftIndex]) * right[rightIndex]);
             }
         }
 
@@ -1767,7 +1711,6 @@ internal static class Oracles {
     /// 65536: the screen costs one remainder per entry on every candidate that reaches the rounds, and that band is
     /// already well past the region the exhaustive-sieve statements cover directly.</remarks>
     public static ReadOnlySpan<uint> SmallPrimes => SmallPrimeTable;
-
     /// <summary>The first twenty prime bases, a strict SUPERSET of the twelve
     /// <see cref="PrimeField64.IsPrime(ulong)"/> runs.</summary>
     public static ReadOnlySpan<ulong> StrongPrimeWitnessBases => [2UL, 3UL, 5UL, 7UL, 11UL, 13UL, 17UL, 19UL, 23UL, 29UL, 31UL, 37UL, 41UL, 43UL, 47UL, 53UL, 59UL, 61UL, 67UL, 71UL];
@@ -1811,7 +1754,6 @@ internal static class Oracles {
 
         return (lower.IsOne ? sign : 0);
     }
-
     /// <summary>One strong-probable-prime round of <paramref name="value"/> to base <paramref name="witness"/>,
     /// evaluated entirely in <see cref="BigInteger"/> plain residues.</summary>
     /// <param name="value">The candidate.</param>
@@ -1854,7 +1796,6 @@ internal static class Oracles {
 
         return false;
     }
-
     /// <summary>The EXACT primality decision for every <see cref="ulong"/>, in two layers: trial division by
     /// <see cref="SmallPrimes"/>, then twenty strong-probable-prime rounds against
     /// <see cref="StrongPrimeWitnessBases"/>.</summary>
@@ -1895,7 +1836,6 @@ internal static class Oracles {
 
         return true;
     }
-
     /// <summary>The strong Lucas probable-prime test with Selfridge's Method A parameters, computed from
     /// COMPANION-MATRIX powers in <see cref="BigInteger"/>.</summary>
     /// <param name="value">The candidate.</param>
@@ -1929,7 +1869,7 @@ internal static class Oracles {
 
         // Method A: 5, −7, 9, −11, 13, … with the sign carried as a sign, not derived from a magnitude's low bits.
         while (true) {
-            var symbol = JacobiSymbolReciprocity(numerator: discriminant, denominator: wide);
+            var symbol = JacobiSymbolReciprocity(denominator: wide, numerator: discriminant);
 
             if (-1 == symbol) { break; }
             // A vanishing symbol means the candidate shares a factor with the discriminant. That factor is a proper
@@ -1953,12 +1893,12 @@ internal static class Oracles {
             ++twoExponent;
         }
 
-        var (atIndex, atNextIndex) = LucasNumeratorPair(q: q, index: ((ulong)order), modulus: wide);
+        var (atIndex, atNextIndex) = LucasNumeratorPair(index: ((ulong)order), modulus: wide, q: q);
         var v = (((((2 * atNextIndex) - atIndex) % wide) + wide) % wide);
 
         if (atIndex.IsZero || v.IsZero) { return true; }
 
-        var qPower = BigInteger.ModPow(value: q, exponent: order, modulus: wide);
+        var qPower = BigInteger.ModPow(exponent: order, modulus: wide, value: q);
 
         for (var round = 1; (round < twoExponent); ++round) {
             v = (((((v * v) - (2 * qPower)) % wide) + wide) % wide);
@@ -1970,7 +1910,6 @@ internal static class Oracles {
 
         return false;
     }
-
     /// <summary>The reference modular inverse, by the EXTENDED EUCLIDEAN algorithm.</summary>
     /// <param name="value">The value to invert; must be coprime to <paramref name="modulus"/>.</param>
     /// <param name="modulus">The modulus, above one.</param>
@@ -1999,7 +1938,6 @@ internal static class Oracles {
 
         return (((previousCoefficient % modulus) + modulus) % modulus);
     }
-
     /// <summary>The reference quadratic character by EULER'S CRITERION, evaluated with
     /// <see cref="BigInteger"/>'s own modular exponentiation.</summary>
     /// <param name="value">The value whose character is taken, of either sign.</param>
@@ -2030,7 +1968,6 @@ internal static class Oracles {
 
         return (power.IsOne ? 1 : -1);
     }
-
     /// <summary>The least value at or above two whose quadratic character over the modulus is <c>-1</c>.</summary>
     /// <param name="modulus">The odd prime.</param>
     /// <param name="budget">The maximum number of candidates to test; exhausting it is a FAILURE, not an
@@ -2044,14 +1981,13 @@ internal static class Oracles {
         var candidate = new BigInteger(value: 2);
 
         for (var step = 0; (step < budget); ++step) {
-            if (-1 == PrimeFieldCharacter(value: candidate, modulus: modulus)) { return candidate; }
+            if (-1 == PrimeFieldCharacter(modulus: modulus, value: candidate)) { return candidate; }
 
             candidate += BigInteger.One;
         }
 
         throw new InvalidOperationException(message: $"No quadratic non-residue below {candidate} over the modulus {modulus} within a budget of {budget} candidates.");
     }
-
     /// <summary>The reference product of an element of <c>F_p(sqrt(d))</c> with its own conjugate, by
     /// <see cref="PrimeFieldPolynomialProduct"/> against the tail <c>[p − d, 0]</c>. The first coordinate is the field
     /// NORM; the second must vanish, which the caller asserts.</summary>
@@ -2079,11 +2015,10 @@ internal static class Oracles {
         tail[0] = ((modulus - (nonSquare % modulus)) % modulus);
         tail[1] = 0UL;
 
-        PrimeFieldPolynomialProduct(left: left, right: right, tail: tail, modulus: modulus, result: result);
+        PrimeFieldPolynomialProduct(left: left, modulus: modulus, result: result, right: right, tail: tail);
 
         return (result[0], result[1]);
     }
-
     /// <summary>The reference power of an element of <c>F_p(sqrt(d))</c>, by MOST-significant-bit-first binary
     /// exponentiation whose multiplication step is <see cref="PrimeFieldPolynomialProduct"/> against the tail
     /// <c>[p − d, 0]</c>.</summary>
@@ -2115,11 +2050,11 @@ internal static class Oracles {
         if (0UL == exponent) { return (accumulator[0], accumulator[1]); }
 
         for (var bit = BitOperations.Log2(value: exponent); (bit >= 0); --bit) {
-            PrimeFieldPolynomialProduct(left: accumulator, right: accumulator, tail: tail, modulus: modulus, result: scratch);
+            PrimeFieldPolynomialProduct(left: accumulator, modulus: modulus, result: scratch, right: accumulator, tail: tail);
             scratch.CopyTo(destination: accumulator);
 
             if (0UL != ((exponent >>> bit) & 1UL)) {
-                PrimeFieldPolynomialProduct(left: accumulator, right: baseValue, tail: tail, modulus: modulus, result: scratch);
+                PrimeFieldPolynomialProduct(left: accumulator, modulus: modulus, result: scratch, right: baseValue, tail: tail);
                 scratch.CopyTo(destination: accumulator);
             }
         }
@@ -2145,7 +2080,6 @@ internal static class Oracles {
 
         return ((low * low) == value);
     }
-
     // The Lucas numerators U_index and U_(index+1) modulo the value, from the companion matrix M = [[P, −Q], [1, 0]]
     // with P = 1, by square-and-multiply over two-by-two BigInteger matrices. M^n carries (U_(n+1), U_n) in its first
     // column, which is what makes ONE matrix power answer both terms and lets the V terms be derived rather than
@@ -2188,7 +2122,6 @@ internal static class Oracles {
 
         return (AtIndex: resultC, AtNextIndex: resultA);
     }
-
     private static uint[] BuildSmallPrimes() {
         var flags = PrimeSieve(inclusiveMaximum: 8191);
         var primes = new List<uint>();
@@ -2254,14 +2187,13 @@ internal static class Oracles {
 
                     if ((depth != 0) || (openers.Count != 0)) { continue; }
 
-                    diagrams.Add(item: new PlanarDiagram(InputWidth: inputs, OutputWidth: outputs, Code: code, Partner: partner));
+                    diagrams.Add(item: new PlanarDiagram(Code: code, InputWidth: inputs, OutputWidth: outputs, Partner: partner));
                 }
             }
         }
 
         return diagrams;
     }
-
     /// <summary>Indexes a planar basis by boundary shape and code, so a composite diagram can be named.</summary>
     /// <param name="basis">The basis, as <see cref="PlanarDiagrams"/> returns it.</param>
     /// <returns>The map from shape and code to the diagram's index in the basis.</returns>
@@ -2274,7 +2206,6 @@ internal static class Oracles {
 
         return symbols;
     }
-
     /// <summary>Composes two planar diagrams by tracing their arcs, and counts the closed loops the composition strands
     /// off.</summary>
     /// <param name="basis">The basis.</param>
@@ -2340,12 +2271,11 @@ internal static class Oracles {
         var code = 0;
 
         for (var position = 0; (position < composite.Length); ++position) {
-            code = ((code << 1) | ((composite[position] < position) ? 1 : 0));
+            code = (code << 1) | ((composite[position] < position) ? 1 : 0);
         }
 
         return (first.InputWidth, second.OutputWidth, code, new BigInteger(value: (components.Count - openComponents.Count)));
     }
-
     /// <summary>Every distinct interleaving of two words, with the number of ways it is reached — the structure
     /// constants of the shuffle at an empty letter product, and of the quasi-shuffle at a non-empty one.</summary>
     /// <param name="left">The left word.</param>
@@ -2422,7 +2352,6 @@ internal static class Oracles {
 
         return result;
     }
-
     /// <summary>Pascal's triangle down to a given row.</summary>
     /// <param name="rows">The last row.</param>
     /// <returns>The rows, row <c>n</c> carrying <c>n + 1</c> binomial coefficients.</returns>
@@ -2443,7 +2372,6 @@ internal static class Oracles {
 
         return triangle;
     }
-
     /// <summary>The bracket state sum of a plat-closed braid word: every smoothing of every crossing enumerated, each
     /// state's closed curves counted, and the loop charge raised to that count.</summary>
     /// <param name="strandCount">The number of strands, which is even, since the closing cups and caps join adjacent
@@ -2483,7 +2411,7 @@ internal static class Oracles {
             // The closure: the cups below and the caps above, each joining an adjacent pair.
             for (var wire = 0; (wire < strandCount); wire += 2) {
                 Join(left: wire, right: (wire + 1));
-                Join(left: (top + wire), right: (top + wire + 1));
+                Join(left: (top + wire), right: ((top + wire) + 1));
             }
 
             var exponent = 0;
@@ -2503,8 +2431,8 @@ internal static class Oracles {
                 } else {
                     exponent -= ((letter > 0) ? 1 : -1);
 
-                    Join(left: (lower + strand - 1), right: (lower + strand));
-                    Join(left: (upper + strand - 1), right: (upper + strand));
+                    Join(left: ((lower + strand) - 1), right: (lower + strand));
+                    Join(left: ((upper + strand) - 1), right: (upper + strand));
 
                     for (var wire = 0; (wire < strandCount); ++wire) {
                         if ((wire != (strand - 1)) && (wire != strand)) { Join(left: (lower + wire), right: (upper + wire)); }
@@ -2525,7 +2453,6 @@ internal static class Oracles {
 
         return total;
     }
-
     /// <summary>The bracket a published reduced bracket and a kink count give: the loop charge times the kink factor
     /// raised to that count times the reduced bracket.</summary>
     /// <param name="kinkExponent">The number of first-move kinks the diagram carries over the standard one, positive or
@@ -2544,7 +2471,6 @@ internal static class Oracles {
 
         return value;
     }
-
     /// <summary>Evaluates a Laurent polynomial at one point, exactly, by a Horner fold.</summary>
     /// <param name="lowest">The exponent the first coefficient sits at.</param>
     /// <param name="coefficients">The coefficients, ascending from that exponent.</param>
@@ -2559,8 +2485,8 @@ internal static class Oracles {
         for (var index = (coefficients.Length - 1); (index >= 0); --index) { numerator = ((numerator * point) + coefficients[index]); }
 
         return ((lowest >= 0)
-            ? ((numerator * BigInteger.Pow(value: point, exponent: lowest)), BigInteger.One)
-            : (numerator, BigInteger.Pow(value: point, exponent: -lowest)));
+            ? ((numerator * BigInteger.Pow(exponent: lowest, value: point)), BigInteger.One)
+            : (numerator, BigInteger.Pow(exponent: -lowest, value: point)));
     }
 
     // The charge one closed curve carries, as a Laurent polynomial from the exponent minus two: the second move forces
@@ -2572,7 +2498,6 @@ internal static class Oracles {
     // witness is `presented.braid-relation-holds`'s loop-charge negative control: the second Reidemeister move holds at
     // this charge and at no other, which is the statement that pins the value from outside both.
     private static readonly BigInteger[] LoopCharge = [BigInteger.MinusOne, BigInteger.Zero, BigInteger.Zero, BigInteger.Zero, BigInteger.MinusOne];
-
     // The factor one first-move kink multiplies a bracket by, as a Laurent polynomial read at the exponent plus or minus
     // three: minus the crossing charge cubed. Labelled with the loop charge above.
     private static readonly BigInteger[] KinkFactor = [BigInteger.MinusOne];
@@ -2582,19 +2507,18 @@ internal static class Oracles {
         if (0 == right.Coefficients.Length) { return left; }
 
         var lowest = Math.Min(val1: left.Lowest, val2: right.Lowest);
-        var highest = Math.Max(val1: (left.Lowest + left.Coefficients.Length - 1), val2: (right.Lowest + right.Coefficients.Length - 1));
-        var coefficients = new BigInteger[(highest - lowest + 1)];
+        var highest = Math.Max(val1: ((left.Lowest + left.Coefficients.Length) - 1), val2: ((right.Lowest + right.Coefficients.Length) - 1));
+        var coefficients = new BigInteger[((highest - lowest) + 1)];
 
-        for (var index = 0; (index < left.Coefficients.Length); ++index) { coefficients[(left.Lowest + index - lowest)] += left.Coefficients[index]; }
-        for (var index = 0; (index < right.Coefficients.Length); ++index) { coefficients[(right.Lowest + index - lowest)] += right.Coefficients[index]; }
+        for (var index = 0; (index < left.Coefficients.Length); ++index) { coefficients[((left.Lowest + index) - lowest)] += left.Coefficients[index]; }
+        for (var index = 0; (index < right.Coefficients.Length); ++index) { coefficients[((right.Lowest + index) - lowest)] += right.Coefficients[index]; }
 
-        return LaurentTrim(lowest: lowest, coefficients: coefficients);
+        return LaurentTrim(coefficients: coefficients, lowest: lowest);
     }
-
     private static (int Lowest, BigInteger[] Coefficients) LaurentMultiply((int Lowest, BigInteger[] Coefficients) left, (int Lowest, BigInteger[] Coefficients) right) {
         if ((0 == left.Coefficients.Length) || (0 == right.Coefficients.Length)) { return (0, []); }
 
-        var coefficients = new BigInteger[(left.Coefficients.Length + right.Coefficients.Length - 1)];
+        var coefficients = new BigInteger[((left.Coefficients.Length + right.Coefficients.Length) - 1)];
 
         for (var first = 0; (first < left.Coefficients.Length); ++first) {
             for (var second = 0; (second < right.Coefficients.Length); ++second) {
@@ -2602,9 +2526,8 @@ internal static class Oracles {
             }
         }
 
-        return LaurentTrim(lowest: (left.Lowest + right.Lowest), coefficients: coefficients);
+        return LaurentTrim(coefficients: coefficients, lowest: (left.Lowest + right.Lowest));
     }
-
     // A Laurent polynomial is canonical when its first and last coefficients are nonzero, so equality is a span
     // comparison and cancellation is visible in the exponent rather than hidden in a zero.
     private static (int Lowest, BigInteger[] Coefficients) LaurentTrim(int lowest, BigInteger[] coefficients) {
@@ -2616,13 +2539,12 @@ internal static class Oracles {
 
         if (low > high) { return (0, []); }
 
-        var trimmed = new BigInteger[(high - low + 1)];
+        var trimmed = new BigInteger[((high - low) + 1)];
 
         Array.Copy(sourceArray: coefficients, sourceIndex: low, destinationArray: trimmed, destinationIndex: 0, length: trimmed.Length);
 
         return ((lowest + low), trimmed);
     }
-
     // The canonical word order the presented algebra keys by: shorter first, then lexicographically. It is shared
     // because it IS the key scheme, exactly as the planar oracle shares the diagram order.
     private static int CompareWords(int[] left, int[] right) {
@@ -2648,7 +2570,6 @@ internal static class Oracles {
         /// <summary>Any number of repetitions of the branch, the empty one included.</summary>
         Iterate,
     }
-
     /// <summary>A pattern as a syntax TREE, which is what makes it an oracle: the subject has no tree at all — a pattern
     /// there is an element of a presented algebra and matching is a residual — so counting derivations here shares no
     /// construction with it.</summary>
@@ -2658,33 +2579,30 @@ internal static class Oracles {
     /// <param name="Right">The second branch.</param>
     public sealed record WordPattern(WordPatternKind Kind, int Symbol, WordPattern? Left, WordPattern? Right) {
         /// <summary>The empty-span pattern.</summary>
-        public static WordPattern Empty { get; } = new(Kind: WordPatternKind.Empty, Symbol: -1, Left: null, Right: null);
+        public static WordPattern Empty { get; } = new(Kind: WordPatternKind.Empty, Left: null, Right: null, Symbol: -1);
 
         /// <summary>Builds a one-letter pattern.</summary>
         /// <param name="letter">The letter.</param>
         /// <returns>The pattern.</returns>
         public static WordPattern Letter(int letter) =>
-            new(Kind: WordPatternKind.Letter, Symbol: letter, Left: null, Right: null);
-
+            new(Kind: WordPatternKind.Letter, Left: null, Right: null, Symbol: letter);
         /// <summary>Builds a union.</summary>
         /// <param name="left">The first branch.</param>
         /// <param name="right">The second branch.</param>
         /// <returns>The pattern.</returns>
         public static WordPattern Union(WordPattern left, WordPattern right) =>
-            new(Kind: WordPatternKind.Union, Symbol: -1, Left: left, Right: right);
-
+            new(Kind: WordPatternKind.Union, Left: left, Right: right, Symbol: -1);
         /// <summary>Builds a concatenation.</summary>
         /// <param name="left">The first branch.</param>
         /// <param name="right">The second branch.</param>
         /// <returns>The pattern.</returns>
         public static WordPattern Concatenate(WordPattern left, WordPattern right) =>
-            new(Kind: WordPatternKind.Concatenate, Symbol: -1, Left: left, Right: right);
-
+            new(Kind: WordPatternKind.Concatenate, Left: left, Right: right, Symbol: -1);
         /// <summary>Builds an iteration.</summary>
         /// <param name="value">The repeated branch, which must not derive the empty span.</param>
         /// <returns>The pattern.</returns>
         public static WordPattern Iterate(WordPattern value) =>
-            new(Kind: WordPatternKind.Iterate, Symbol: -1, Left: value, Right: null);
+            new(Kind: WordPatternKind.Iterate, Left: value, Right: null, Symbol: -1);
     }
 
     /// <summary>Counts the derivations of one word under a pattern tree, by backtracking over every split.</summary>
@@ -2708,37 +2626,36 @@ internal static class Oracles {
                 return (Derivations(pattern: pattern.Left!, word: word, start: start, end: end)
                     + Derivations(pattern: pattern.Right!, word: word, start: start, end: end));
             case WordPatternKind.Concatenate: {
-                var total = BigInteger.Zero;
+                    var total = BigInteger.Zero;
 
-                for (var split = start; (split <= end); ++split) {
-                    var head = Derivations(pattern: pattern.Left!, word: word, start: start, end: split);
+                    for (var split = start; (split <= end); ++split) {
+                        var head = Derivations(pattern: pattern.Left!, word: word, start: start, end: split);
 
-                    if (head.IsZero) { continue; }
+                        if (head.IsZero) { continue; }
 
-                    total += (head * Derivations(pattern: pattern.Right!, word: word, start: split, end: end));
+                        total += (head * Derivations(pattern: pattern.Right!, word: word, start: split, end: end));
+                    }
+
+                    return total;
                 }
-
-                return total;
-            }
             default: {
-                if (start == end) { return BigInteger.One; }
+                    if (start == end) { return BigInteger.One; }
 
-                var total = BigInteger.Zero;
+                    var total = BigInteger.Zero;
 
-                // Every repetition consumes at least one letter, which is what bounds the recursion.
-                for (var split = (start + 1); (split <= end); ++split) {
-                    var head = Derivations(pattern: pattern.Left!, word: word, start: start, end: split);
+                    // Every repetition consumes at least one letter, which is what bounds the recursion.
+                    for (var split = (start + 1); (split <= end); ++split) {
+                        var head = Derivations(pattern: pattern.Left!, word: word, start: start, end: split);
 
-                    if (head.IsZero) { continue; }
+                        if (head.IsZero) { continue; }
 
-                    total += (head * Derivations(pattern: pattern, word: word, start: split, end: end));
+                        total += (head * Derivations(end: end, pattern: pattern, start: split, word: word));
+                    }
+
+                    return total;
                 }
-
-                return total;
-            }
         }
     }
-
     // The doubling conjugation's sign on a basis vector: the real unit is fixed, every imaginary unit is negated.
     private static int ConjugationSign(int index) =>
         ((0 == index) ? 1 : -1);
@@ -2785,7 +2702,6 @@ internal static class Oracles {
     // construction. Operand-independent, so building them per call would be pure waste.
     private static readonly BigInteger[] LowLadder = BuildLadder(ceiling: false);
     private static readonly BigInteger[] HighLadder = BuildLadder(ceiling: true);
-
     // The circle constant at each working scale, derived once by Machin's formula from this module's own arctangent
     // series. Nothing in the trigonometric oracles rests on a transcribed digit string.
     private static readonly Enclosure ArcTangentPi = MachinPi(bitCount: ArcTangentBitCount);
@@ -2802,7 +2718,6 @@ internal static class Oracles {
         ((bitCount == ArcTangentBitCount)
             ? ArcTangentPi
             : ((bitCount == AngleBitCount) ? AnglePi : MachinPi(bitCount: bitCount)));
-
     /// <summary>Rounds the exact rational <c>numerator·2^shift / denominator</c> to the nearest raw, ties to even, then
     /// wraps to the signed 64-bit carrier — the reference for a fixed-point division.</summary>
     /// <param name="numerator">The dividend.</param>
@@ -2815,8 +2730,7 @@ internal static class Oracles {
     /// against <c>d</c> — the formulation the carrier cannot use, because <c>2r</c> would overflow it — and wraps the
     /// exact signed value once at the end.</remarks>
     public static long RoundDyadicRatio(BigInteger numerator, BigInteger denominator, int shift) =>
-        WrapToRaw(value: RoundRationalTiesToEven(numerator: (numerator << shift), denominator: denominator));
-
+        WrapToRaw(value: RoundRationalTiesToEven(denominator: denominator, numerator: (numerator << shift)));
     /// <summary>The exact rounded fixed-point product as an UNWRAPPED integer — what the checked multiplication must
     /// return, and what its range verdict is decided by.</summary>
     /// <param name="a">The multiplicand's raw.</param>
@@ -2824,7 +2738,6 @@ internal static class Oracles {
     /// <returns>The rounded product, unwrapped.</returns>
     public static BigInteger ExactRoundedProduct(long a, long b) =>
         RoundRationalTiesToEven(numerator: (((BigInteger)a) * b), denominator: (BigInteger.One << 16));
-
     /// <summary>The exact rounded fixed-point quotient as an UNWRAPPED integer — the checked division's counterpart to
     /// <see cref="ExactRoundedProduct"/>.</summary>
     /// <param name="a">The dividend's raw.</param>
@@ -2832,7 +2745,6 @@ internal static class Oracles {
     /// <returns>The rounded quotient, unwrapped.</returns>
     public static BigInteger ExactRoundedRatio(long a, long b) =>
         RoundRationalTiesToEven(numerator: (((BigInteger)a) << 16), denominator: new BigInteger(value: b));
-
     /// <summary>The exact integer square root <c>⌊√value⌋</c>, by a bit-length seed and Newton descent in
     /// <see cref="BigInteger"/>, settled by the exact predicate <c>r² ≤ value &lt; (r+1)²</c>.</summary>
     /// <param name="value">The radicand; a non-positive value roots to zero.</param>
@@ -2862,7 +2774,6 @@ internal static class Oracles {
 
         return root;
     }
-
     /// <summary>The nearest integer to the square root of a non-negative exact value, by a BRACKETED INTEGER SEARCH
     /// whose predicate is one exact squaring — no square root is ever taken.</summary>
     /// <param name="value">The radicand, which must be non-negative.</param>
@@ -2900,7 +2811,6 @@ internal static class Oracles {
 
         return low;
     }
-
     /// <summary>The reference complex quotient over the fixed-point carrier — <c>left·conj(right)/|right|²</c>, each
     /// component ONE ties-to-even rounding of the exact rational at Q16, wrapped to the carrier.</summary>
     /// <param name="ar">The dividend's real raw.</param>
@@ -2913,14 +2823,13 @@ internal static class Oracles {
     /// forms neither, so agreement is also the proof of the source's "exact-equivalent fast path" claim rather than an
     /// assumption of it.</remarks>
     public static (long Real, long Imaginary) ComplexQuotient(long ar, long ai, long br, long bi) {
-        var denominator = (((BigInteger)br * br) + ((BigInteger)bi * bi));
+        var denominator = ((((BigInteger)br) * br) + (((BigInteger)bi) * bi));
 
         return (
-            RoundDyadicRatio(numerator: (((BigInteger)ar * br) + ((BigInteger)ai * bi)), denominator: denominator, shift: 16),
-            RoundDyadicRatio(numerator: (((BigInteger)ai * br) - ((BigInteger)ar * bi)), denominator: denominator, shift: 16)
+            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)ar) * br) + (((BigInteger)ai) * bi)), shift: 16),
+            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)ai) * br) - (((BigInteger)ar) * bi)), shift: 16)
         );
     }
-
     /// <summary>The reference split-complex quotient — <c>left·conj(right)/(c² − d²)</c>, each component ONE
     /// ties-to-even rounding at Q16.</summary>
     /// <param name="au">The dividend's scalar raw.</param>
@@ -2932,14 +2841,13 @@ internal static class Oracles {
     /// which is the statement the subject's signed <c>DivideProductSum</c> overload makes and the definite complex case
     /// never reaches.</remarks>
     public static (long U, long V) SplitQuotient(long au, long av, long bu, long bv) {
-        var denominator = (((BigInteger)bu * bu) - ((BigInteger)bv * bv));
+        var denominator = ((((BigInteger)bu) * bu) - (((BigInteger)bv) * bv));
 
         return (
-            RoundDyadicRatio(numerator: (((BigInteger)au * bu) - ((BigInteger)av * bv)), denominator: denominator, shift: 16),
-            RoundDyadicRatio(numerator: (((BigInteger)av * bu) - ((BigInteger)au * bv)), denominator: denominator, shift: 16)
+            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)au) * bu) - (((BigInteger)av) * bv)), shift: 16),
+            RoundDyadicRatio(denominator: denominator, numerator: ((((BigInteger)av) * bu) - (((BigInteger)au) * bv)), shift: 16)
         );
     }
-
     /// <summary>The first lane at which a returned unit direction is farther than <paramref name="tolerance"/> raws from
     /// the EXACT Q16 unit direction of <paramref name="components"/>, or <c>−1</c> when every lane is within it.</summary>
     /// <param name="components">The exact input components. They are taken at arbitrary width rather than as raws
@@ -2974,13 +2882,12 @@ internal static class Oracles {
             var high = (new BigInteger(value: unit[lane]) + tolerance);
 
             // low·√S ≤ cᵢ·2¹⁶ ≤ high·√S, the second written as (−high)·√S ≤ −cᵢ·2¹⁶ so one comparison shape serves both.
-            if (!SurdAtMost(coefficient: low, radicand: squaredSum, bound: scaled)) { return lane; }
-            if (!SurdAtMost(coefficient: -high, radicand: squaredSum, bound: -scaled)) { return lane; }
+            if (!SurdAtMost(bound: scaled, coefficient: low, radicand: squaredSum)) { return lane; }
+            if (!SurdAtMost(bound: -scaled, coefficient: -high, radicand: squaredSum)) { return lane; }
         }
 
         return -1;
     }
-
     /// <summary>The reference product of the Cayley–Dickson tower at a given number of doublings, as a twisted group
     /// algebra over <c>(ℤ/2)^floors</c>: the target key is the exclusive-or of the operand keys and the charge is
     /// <see cref="CayleyDicksonCharge"/>. Each lane is ONE ties-to-even rounding of the whole exact charged sum.</summary>
@@ -2995,13 +2902,12 @@ internal static class Oracles {
     /// <c>e₁² = e₃² = −e₀</c> and <c>e₂e₃ = +e₁</c>.</remarks>
     public static void CayleyDicksonProduct(ReadOnlySpan<long> left, ReadOnlySpan<long> right, int floors, int shift, Span<long> result) =>
         TwistedGroupProduct(
-            chargeSource: (first, second) => CayleyDicksonCharge(leftIndex: first, rightIndex: second, floors: floors),
+            chargeSource: (first, second) => CayleyDicksonCharge(floors: floors, leftIndex: first, rightIndex: second),
             left: left,
             right: right,
             shift: shift,
             result: result
         );
-
     /// <summary>The reference dual product over a Cayley–Dickson carrier: the real block is the carrier product
     /// <c>a·c</c> and each dual lane is ONE ties-to-even rounding of the WHOLE exact sum <c>a·d + b·c</c> — the two
     /// carrier products fused ACROSS the dual seam rather than rounded separately and added.</summary>
@@ -3018,10 +2924,10 @@ internal static class Oracles {
             var dual = BigInteger.Zero;
 
             for (var first = 0; (first < width); ++first) {
-                var second = (first ^ target);
-                var charge = CayleyDicksonCharge(leftIndex: first, rightIndex: second, floors: floors);
-                var realTerm = ((BigInteger)left[first] * right[second]);
-                var dualTerm = (((BigInteger)left[first] * right[(width + second)]) + ((BigInteger)left[(width + first)] * right[second]));
+                var second = first ^ target;
+                var charge = CayleyDicksonCharge(floors: floors, leftIndex: first, rightIndex: second);
+                var realTerm = (((BigInteger)left[first]) * right[second]);
+                var dualTerm = ((((BigInteger)left[first]) * right[(width + second)]) + (((BigInteger)left[(width + first)]) * right[second]));
 
                 real += ((charge > 0) ? realTerm : -realTerm);
                 dual += ((charge > 0) ? dualTerm : -dualTerm);
@@ -3031,7 +2937,6 @@ internal static class Oracles {
             result[(width + target)] = RoundDyadic(exact: dual, shift: shift);
         }
     }
-
     /// <summary>The reference dual product over a carrier that is NOT a house type: the generic path forms the carrier
     /// product three times and adds, so the dual part carries TWO roundings and one wrapping add — the honest
     /// alternative discipline the fused seams are claimed to beat.</summary>
@@ -3047,10 +2952,9 @@ internal static class Oracles {
 
         result[0] = real.U;
         result[1] = real.V;
-        result[2] = WrapToRaw(value: ((BigInteger)crossed.U + seeded.U));
-        result[3] = WrapToRaw(value: ((BigInteger)crossed.V + seeded.V));
+        result[2] = WrapToRaw(value: (((BigInteger)crossed.U) + seeded.U));
+        result[3] = WrapToRaw(value: (((BigInteger)crossed.V) + seeded.V));
     }
-
     /// <summary>The reference dot product of two lane vectors — ONE ties-to-even rounding of the exact product sum.</summary>
     /// <param name="left">The first vector's lanes, raw.</param>
     /// <param name="right">The second vector's lanes, raw.</param>
@@ -3059,11 +2963,10 @@ internal static class Oracles {
     public static long LaneDotProduct(ReadOnlySpan<long> left, ReadOnlySpan<long> right, int shift) {
         var exact = BigInteger.Zero;
 
-        for (var lane = 0; (lane < left.Length); ++lane) { exact += ((BigInteger)left[lane] * right[lane]); }
+        for (var lane = 0; (lane < left.Length); ++lane) { exact += (((BigInteger)left[lane]) * right[lane]); }
 
         return RoundDyadic(exact: exact, shift: shift);
     }
-
     /// <summary>The reference rotation sandwich <c>v' = v + 2·u×(u×v + w·v)</c> over the fixed-point carrier: each of the
     /// two stages accumulates its exact product sum and rounds ONCE per component, and the final combination wraps.</summary>
     /// <param name="rotation">The rotor lanes <c>(x, y, z, w)</c>, raw.</param>
@@ -3076,8 +2979,8 @@ internal static class Oracles {
     /// exact cross and scaled sums in <see cref="BigInteger"/>, one <see cref="RoundDyadic"/> per component, sharing no
     /// code and no rounding kernel with the subject.</remarks>
     public static void QuaternionSandwich(ReadOnlySpan<long> rotation, ReadOnlySpan<long> vector, int shift, Span<long> result) {
-        var (ux, uy, uz, w) = ((BigInteger)rotation[0], (BigInteger)rotation[1], (BigInteger)rotation[2], (BigInteger)rotation[3]);
-        var (vx, vy, vz) = ((BigInteger)vector[0], (BigInteger)vector[1], (BigInteger)vector[2]);
+        var (ux, uy, uz, w) = (((BigInteger)rotation[0]), ((BigInteger)rotation[1]), ((BigInteger)rotation[2]), ((BigInteger)rotation[3]));
+        var (vx, vy, vz) = (((BigInteger)vector[0]), ((BigInteger)vector[1]), ((BigInteger)vector[2]));
         var tx = new BigInteger(value: RoundDyadic(exact: (((uy * vz) - (uz * vy)) + (w * vx)), shift: shift));
         var ty = new BigInteger(value: RoundDyadic(exact: (((uz * vx) - (ux * vz)) + (w * vy)), shift: shift));
         var tz = new BigInteger(value: RoundDyadic(exact: (((ux * vy) - (uy * vx)) + (w * vz)), shift: shift));
@@ -3089,7 +2992,6 @@ internal static class Oracles {
         result[1] = WrapToRaw(value: (vy + (dy << 1)));
         result[2] = WrapToRaw(value: (vz + (dz << 1)));
     }
-
     /// <summary>The reference canonicalization of one world axis: the exact integer split of a cell index and an offset
     /// into the canonical pair whose offset lies in <c>[−2^(cellRawLog2−1), 2^(cellRawLog2−1))</c>.</summary>
     /// <param name="cell">The initial cell index.</param>
@@ -3103,11 +3005,10 @@ internal static class Oracles {
     /// reference never reproduces the subject's <c>carry &lt;&lt; 36</c> two's-complement congruence; it judges it.</remarks>
     public static (BigInteger Cell, BigInteger LocalRaw) CellSplit(BigInteger cell, BigInteger localRaw, int cellRawLog2) {
         var span = (BigInteger.One << cellRawLog2);
-        var carry = FloorQuotient(numerator: (localRaw + (span >> 1)), denominator: span);
+        var carry = FloorQuotient(denominator: span, numerator: (localRaw + (span >> 1)));
 
         return ((cell + carry), (localRaw - (carry * span)));
     }
-
     /// <summary>The exact displacement between two canonical world axes, in raw units:
     /// <c>(cell − originCell)·2^cellRawLog2 + (localRaw − originLocalRaw)</c>.</summary>
     /// <param name="cell">The target's cell index.</param>
@@ -3122,7 +3023,6 @@ internal static class Oracles {
     /// differing by less than a cell; this knows nothing of either and therefore judges both.</remarks>
     public static BigInteger CellDelta(BigInteger cell, BigInteger localRaw, BigInteger originCell, BigInteger originLocalRaw, int cellRawLog2) =>
         (((cell - originCell) << cellRawLog2) + (localRaw - originLocalRaw));
-
     /// <summary>Replays a fixed schedule of rate steps against an exact rational ledger and returns each step's advanced
     /// quantity together with the remainder retained after it.</summary>
     /// <param name="rateRaws">Each step's per-second rate, raw.</param>
@@ -3161,7 +3061,6 @@ internal static class Oracles {
 
         return steps;
     }
-
     /// <summary>The reference translation of a rigid transform: <c>2·dual·conj(real)</c>, the Hamilton product's lanes
     /// each ONE ties-to-even rounding of its exact four-term sum, then doubled with a wrapping add and no second
     /// rounding — plus the scalar lane, which a unit transform leaves at zero and which the caller inspects.</summary>
@@ -3189,7 +3088,6 @@ internal static class Oracles {
         result[2] = WrapToRaw(value: (new BigInteger(value: product[3]) << 1));
         result[3] = product[0];
     }
-
     /// <summary>The reference point action of a rigid transform: the two-stage rotation sandwich by the real quaternion,
     /// then the componentwise wrapping addition of <see cref="RigidTranslation"/>'s doubled lanes.</summary>
     /// <param name="value">The eight lanes in doubling order.</param>
@@ -3203,8 +3101,8 @@ internal static class Oracles {
         Span<long> rotated = stackalloc long[3];
         Span<long> translation = stackalloc long[4];
 
-        QuaternionSandwich(rotation: rotation, vector: point, shift: shift, result: rotated);
-        RigidTranslation(value: value, shift: shift, result: translation);
+        QuaternionSandwich(result: rotated, rotation: rotation, shift: shift, vector: point);
+        RigidTranslation(result: translation, shift: shift, value: value);
 
         for (var lane = 0; (lane < 3); ++lane) {
             result[lane] = WrapToRaw(value: (new BigInteger(value: rotated[lane]) + translation[lane]));
@@ -3214,9 +3112,9 @@ internal static class Oracles {
     // coefficient·√radicand ≤ bound, exactly: the signs are read off first so the single squaring never flips the
     // inequality. The radicand is non-negative by construction.
     private static bool SurdAtMost(BigInteger coefficient, BigInteger radicand, BigInteger bound) {
-        if (coefficient.Sign <= 0) { return ((bound.Sign >= 0) || ((coefficient * coefficient * radicand) >= (bound * bound))); }
+        if (coefficient.Sign <= 0) { return ((bound.Sign >= 0) || (((coefficient * coefficient) * radicand) >= (bound * bound))); }
 
-        return ((bound.Sign > 0) && ((coefficient * coefficient * radicand) <= (bound * bound)));
+        return ((bound.Sign > 0) && (((coefficient * coefficient) * radicand) <= (bound * bound)));
     }
 
     /// <summary>The exact decimal expansion of the SIGNED dyadic rational <c>value / 2^shift</c>, rendered
@@ -3231,7 +3129,6 @@ internal static class Oracles {
         ((value.Sign < 0)
             ? ("-" + ExactDyadicDecimal(numerator: -value, shift: shift))
             : ExactDyadicDecimal(numerator: value, shift: shift));
-
     /// <summary>Quantizes the exact decimal literal <c>numerator / 10^decimalExponent</c> onto the <c>2^shift</c> grid:
     /// ONE ties-to-even rounding of the exact rational <c>numerator·2^shift / 10^decimalExponent</c>, plus the verdict
     /// of the ASYMMETRIC signed range <c>[−2⁶³, 2⁶³ − 1]</c>.</summary>
@@ -3252,7 +3149,6 @@ internal static class Oracles {
 
         return (inRange, (inRange ? ((long)exact) : 0L));
     }
-
     /// <summary>An enclosure of <c>log₂(raw / 2¹⁶) · 2^(16 + guardBitCount)</c> for a positive raw.</summary>
     /// <param name="raw">The subject's raw, which must be positive.</param>
     /// <param name="guardBitCount">The guard bits below Q48.16 the result carries.</param>
@@ -3276,7 +3172,7 @@ internal static class Oracles {
 
         for (var bit = 1; (bit <= LogFractionBitCount); ++bit) {
             lowState = ((lowState * lowState) >> SeriesBitCount);
-            highState = CeilingShiftRight(value: (highState * highState), shift: SeriesBitCount);
+            highState = CeilingShiftRight(shift: SeriesBitCount, value: (highState * highState));
 
             if (lowState >= two) {
                 lowFraction += (BigInteger.One << (LogFractionBitCount - bit));
@@ -3285,7 +3181,7 @@ internal static class Oracles {
 
             if (highState >= two) {
                 highFraction += (BigInteger.One << (LogFractionBitCount - bit));
-                highState = CeilingShiftRight(value: highState, shift: 1);
+                highState = CeilingShiftRight(shift: 1, value: highState);
             }
         }
 
@@ -3297,7 +3193,6 @@ internal static class Oracles {
             toBitCount: (16 + guardBitCount)
         );
     }
-
     /// <summary>An enclosure of <c>2^(scaledExponent / 2^exponentBitCount) · 2^(16 + guardBitCount)</c>.</summary>
     /// <param name="scaledExponent">The exponent, scaled by <c>2^exponentBitCount</c>.</param>
     /// <param name="exponentBitCount">The exponent's scale; it may not exceed the ladder's depth.</param>
@@ -3321,12 +3216,11 @@ internal static class Oracles {
         }
 
         return Rescale(
-            value: new Enclosure(Low: low, High: high),
+            value: new Enclosure(High: high, Low: low),
             fromBitCount: SeriesBitCount,
-            toBitCount: (((int)wholePart) + 16 + guardBitCount)
+            toBitCount: ((((int)wholePart) + 16) + guardBitCount)
         );
     }
-
     /// <summary>An enclosure of <c>atan2(y, x)·2^(16 + guardBitCount)</c> over raw Q48.16 operands. The ratio is
     /// scale-invariant, so the raw operands go straight in.</summary>
     /// <param name="yRaw">The ordinate's raw.</param>
@@ -3349,11 +3243,11 @@ internal static class Oracles {
         Enclosure principal;
 
         if (xRaw > 0L) {
-            principal = EncloseArcTangent(numerator: ordinate, denominator: abscissa, bitCount: ArcTangentBitCount);
+            principal = EncloseArcTangent(bitCount: ArcTangentBitCount, denominator: abscissa, numerator: ordinate);
         } else if (0L == xRaw) {
             principal = new(Low: (circle.Low >> 1), High: CeilingShiftRight(value: circle.High, shift: 1));
         } else {
-            var inner = EncloseArcTangent(numerator: ordinate, denominator: abscissa, bitCount: ArcTangentBitCount);
+            var inner = EncloseArcTangent(bitCount: ArcTangentBitCount, denominator: abscissa, numerator: ordinate);
 
             principal = new(Low: (circle.Low - inner.High), High: (circle.High - inner.Low));
         }
@@ -3364,7 +3258,6 @@ internal static class Oracles {
             toBitCount: (16 + guardBitCount)
         );
     }
-
     /// <summary>An enclosure of <c>(sin θ, cos θ)·2^(16 + guardBitCount)</c> for <c>θ = raw / 2¹⁶</c> radians.</summary>
     /// <param name="raw">The angle's raw.</param>
     /// <param name="guardBitCount">The guard bits below Q48.16 the result carries.</param>
@@ -3413,11 +3306,10 @@ internal static class Oracles {
         }
 
         return (
-            Rescale(value: new Enclosure(Low: (sine - slack), High: (sine + slack)), fromBitCount: TrigBitCount, toBitCount: (16 + guardBitCount)),
-            Rescale(value: new Enclosure(Low: (cosine - slack), High: (cosine + slack)), fromBitCount: TrigBitCount, toBitCount: (16 + guardBitCount))
+            Rescale(value: new Enclosure(High: (sine + slack), Low: (sine - slack)), fromBitCount: TrigBitCount, toBitCount: (16 + guardBitCount)),
+            Rescale(value: new Enclosure(High: (cosine + slack), Low: (cosine - slack)), fromBitCount: TrigBitCount, toBitCount: (16 + guardBitCount))
         );
     }
-
     /// <summary>Rescales an enclosure between two fixed-point scales with DIRECTED rounding, so the widened or narrowed
     /// pair still brackets the same real value.</summary>
     /// <param name="value">The enclosure.</param>
@@ -3444,15 +3336,13 @@ internal static class Oracles {
     // shifts right.
     private static BigInteger CeilingShiftRight(BigInteger value, int shift) =>
         (-((-value) >> shift));
-
     // The residual θ − n·2π as an enclosure, with the turn product taken in the direction each bound needs.
     private static Enclosure Residual(BigInteger theta, Enclosure turn, BigInteger turns) {
         var productLow = ((turns.Sign >= 0) ? (turns * turn.Low) : (turns * turn.High));
         var productHigh = ((turns.Sign >= 0) ? (turns * turn.High) : (turns * turn.Low));
 
-        return new(Low: (theta - productHigh), High: (theta - productLow));
+        return new(High: (theta - productLow), Low: (theta - productHigh));
     }
-
     // π = 16·atan(1/5) − 4·atan(1/239), evaluated by the series alone: the reduction branch of EncloseArcTangent needs
     // π, and this is where that circularity is cut — both Machin arguments are already below a half.
     private static Enclosure MachinPi(int bitCount) {
@@ -3461,29 +3351,27 @@ internal static class Oracles {
 
         return new(Low: ((16 * first.Low) - (4 * second.High)), High: ((16 * first.High) - (4 * second.Low)));
     }
-
     // atan(numerator/denominator)·2^bitCount, enclosed, for a non-negative numerator and a positive denominator. The
     // two exact reductions atan(z) = π/2 − atan(1/z) and atan(z) = π/4 + atan((z−1)/(z+1)) bring every argument onto
     // [0, ½], where the alternating series converges at one bit per two terms or better. NO table, NO per-interval
     // cubic, NO fixed-width truncation: a different derivation from the subject in every part.
     private static Enclosure EncloseArcTangent(BigInteger numerator, BigInteger denominator, int bitCount) {
         if (numerator > denominator) {
-            var reciprocal = EncloseArcTangent(numerator: denominator, denominator: numerator, bitCount: bitCount);
+            var reciprocal = EncloseArcTangent(bitCount: bitCount, denominator: numerator, numerator: denominator);
             var circle = Pi(bitCount: bitCount);
 
             return new(Low: ((circle.Low >> 1) - reciprocal.High), High: (CeilingShiftRight(value: circle.High, shift: 1) - reciprocal.Low));
         }
 
         if ((numerator << 1) > denominator) {
-            var folded = EncloseArcTangent(numerator: (denominator - numerator), denominator: (denominator + numerator), bitCount: bitCount);
+            var folded = EncloseArcTangent(bitCount: bitCount, denominator: (denominator + numerator), numerator: (denominator - numerator));
             var circle = Pi(bitCount: bitCount);
 
             return new(Low: ((circle.Low >> 2) - folded.High), High: (CeilingShiftRight(value: circle.High, shift: 2) - folded.Low));
         }
 
-        return ArcTangentSeries(numerator: numerator, denominator: denominator, bitCount: bitCount);
+        return ArcTangentSeries(bitCount: bitCount, denominator: denominator, numerator: numerator);
     }
-
     // The alternating series atan(z) = Σ (−1)ᵏ z^(2k+1)/(2k+1) at scale 2^bitCount, for 0 ≤ z ≤ ½. The powers are
     // carried at the working scale rather than as exact rationals, so nothing grows past a few hundred bits; every
     // truncation is bounded by a handful of units and the slack below absorbs the lot along with the tail.
@@ -3492,7 +3380,7 @@ internal static class Oracles {
             return new(Low: BigInteger.Zero, High: BigInteger.Zero);
         }
 
-        var count = ArcTangentTermCount(numerator: numerator, denominator: denominator, bitCount: bitCount);
+        var count = ArcTangentTermCount(bitCount: bitCount, denominator: denominator, numerator: numerator);
         var argument = ((numerator << bitCount) / denominator);
         var square = ((argument * argument) >> bitCount);
         var power = argument;
@@ -3515,9 +3403,8 @@ internal static class Oracles {
 
         var slack = new BigInteger(value: ((8 * count) + 16));
 
-        return new(Low: (low - slack), High: (high + slack));
+        return new(High: (high + slack), Low: (low - slack));
     }
-
     // The terms the series needs for a tail below 2^-(bitCount+8): each term costs at least one guaranteed bit per
     // factor of the argument's reciprocal, bounded below by the operands' bit-length difference.
     private static int ArcTangentTermCount(BigInteger numerator, BigInteger denominator, int bitCount) {
@@ -3529,7 +3416,6 @@ internal static class Oracles {
 
         return (((bitCount + 16) / (2 * ratioBits)) + 2);
     }
-
     // The quotient rounded toward POSITIVE infinity for a non-negative numerator and a positive denominator —
     // the ceiling counterpart BigInteger's own truncating `/` does not give, needed by the Gaussian-tail enclosure
     // below wherever a bound must round away from the true value rather than toward it.
@@ -3589,7 +3475,7 @@ internal static class Oracles {
         // ever carries, since x/k strictly decreases as k grows past N+1. At x=9/2, N=40: r/(1−r) = x/((N+1)−x) =
         // (9/2)/(73/2) = 9/73, an exact rational applied directly to the already-scaled upper term.
         var remainderBound = CeilingDivideNonNegative(numerator: (termHigh * 9), positiveDenominator: 73);
-        var eEnclosure = new Enclosure(Low: sumLow, High: (sumHigh + remainderBound));
+        var eEnclosure = new Enclosure(High: (sumHigh + remainderBound), Low: sumLow);
         var scaleSquared = (BigInteger.One << (2 * GaussianTailWorkingBitCount));
         // e^(−4.5) = 1/e^4.5: reciprocating an enclosure swaps and inverts its bounds, each rounded away from the
         // true value.
@@ -3611,12 +3497,11 @@ internal static class Oracles {
         var tailHigh = CeilingDivideNonNegative(numerator: (2 * densityHigh), positiveDenominator: 3);
 
         return Rescale(
-            value: new Enclosure(Low: tailLow, High: tailHigh),
+            value: new Enclosure(High: tailHigh, Low: tailLow),
             fromBitCount: GaussianTailWorkingBitCount,
             toBitCount: (16 + guardBitCount)
         );
     }
-
     // ---- the fixed-point vectors: the plane and the space ----
     //
     // Every reference below is ONE ties-to-even rounding of the exact expression at the ideal scale, formed in
@@ -3634,12 +3519,11 @@ internal static class Oracles {
         var exact = BigInteger.Zero;
 
         for (var lane = 0; (lane < left.Length); ++lane) {
-            exact += ((BigInteger)left[lane] * right[lane]);
+            exact += (((BigInteger)left[lane]) * right[lane]);
         }
 
         return RoundDyadic(exact: exact, shift: 16);
     }
-
     /// <summary>The reference fused wedge — ONE ties-to-even rounding of the exact <c>x₁·y₂ − y₁·x₂</c> at shift
     /// sixteen, wrapped to the carrier.</summary>
     /// <param name="leftX">The first vector's first raw.</param>
@@ -3648,8 +3532,7 @@ internal static class Oracles {
     /// <param name="rightY">The second vector's second raw.</param>
     /// <returns>The bivector coefficient's raw.</returns>
     public static long FusedWedge(long leftX, long leftY, long rightX, long rightY) =>
-        RoundDyadic(exact: (((BigInteger)leftX * rightY) - ((BigInteger)leftY * rightX)), shift: 16);
-
+        RoundDyadic(exact: ((((BigInteger)leftX) * rightY) - (((BigInteger)leftY) * rightX)), shift: 16);
     /// <summary>The reference fused cross product — each lane ONE ties-to-even rounding of its exact two-product
     /// difference at shift sixteen, wrapped to the carrier.</summary>
     /// <param name="left">The first vector's three raws.</param>
@@ -3658,11 +3541,10 @@ internal static class Oracles {
     /// <remarks>The right-handed cycle is spelled out lane by lane rather than delegated, so a transposed or mis-signed
     /// lane assignment in the subject has an independently authored orientation to fail against.</remarks>
     public static void FusedCross(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        result[0] = RoundDyadic(exact: (((BigInteger)left[1] * right[2]) - ((BigInteger)left[2] * right[1])), shift: 16);
-        result[1] = RoundDyadic(exact: (((BigInteger)left[2] * right[0]) - ((BigInteger)left[0] * right[2])), shift: 16);
-        result[2] = RoundDyadic(exact: (((BigInteger)left[0] * right[1]) - ((BigInteger)left[1] * right[0])), shift: 16);
+        result[0] = RoundDyadic(exact: ((((BigInteger)left[1]) * right[2]) - (((BigInteger)left[2]) * right[1])), shift: 16);
+        result[1] = RoundDyadic(exact: ((((BigInteger)left[2]) * right[0]) - (((BigInteger)left[0]) * right[2])), shift: 16);
+        result[2] = RoundDyadic(exact: ((((BigInteger)left[0]) * right[1]) - (((BigInteger)left[1]) * right[0])), shift: 16);
     }
-
     /// <summary>The per-product-rounding discipline for a dot product: EACH raw Q32 product rounded to Q16 on its own,
     /// then summed exactly and wrapped. The alternative a kernel without a fused accumulator is forced into; it exists
     /// only so a canary can require the fused kernel to differ from it.</summary>
@@ -3673,12 +3555,11 @@ internal static class Oracles {
         var total = BigInteger.Zero;
 
         for (var lane = 0; (lane < left.Length); ++lane) {
-            total += RoundToEvenUnits(magnitude: ((BigInteger)left[lane] * right[lane]), shift: 16);
+            total += RoundToEvenUnits(magnitude: (((BigInteger)left[lane]) * right[lane]), shift: 16);
         }
 
         return WrapToRaw(value: total);
     }
-
     /// <summary>The per-product-rounding discipline for a wedge — both raw Q32 products rounded to Q16 on their own
     /// before the exact difference.</summary>
     /// <param name="leftX">The first vector's first raw.</param>
@@ -3688,10 +3569,56 @@ internal static class Oracles {
     /// <returns>The per-product bivector coefficient's raw.</returns>
     public static long PerProductWedge(long leftX, long leftY, long rightX, long rightY) =>
         WrapToRaw(value: (
-            RoundToEvenUnits(magnitude: ((BigInteger)leftX * rightY), shift: 16) -
-            RoundToEvenUnits(magnitude: ((BigInteger)leftY * rightX), shift: 16)
+            RoundToEvenUnits(magnitude: (((BigInteger)leftX) * rightY), shift: 16) -
+            RoundToEvenUnits(magnitude: (((BigInteger)leftY) * rightX), shift: 16)
         ));
+    /// <summary>The exact rational <c>numerator · 2^fractionBitCount / denominator</c> rounded to a signed 64-bit
+    /// raw, to nearest with ties to even, refusing rather than wrapping.</summary>
+    /// <param name="numerator">The exact numerator.</param>
+    /// <param name="denominator">The exact denominator.</param>
+    /// <param name="fractionBitCount">The result's fraction bit count.</param>
+    /// <param name="result">The rounded raw on success; zero on refusal.</param>
+    /// <returns>Whether the value is representable.</returns>
+    /// <remarks>Independent of the subject in both the scaling and the tie: the scale is a
+    /// <see cref="BigInteger.Pow(BigInteger, int)"/> multiply rather than a shift, and the tie is decided by
+    /// DOUBLING the remainder against the divisor rather than by comparing it with the distance to the next
+    /// multiple.</remarks>
+    public static bool RoundedRational(BigInteger numerator, BigInteger denominator, int fractionBitCount, out long result) {
+        result = 0L;
 
+        if (denominator.IsZero || (fractionBitCount < 0)) {
+            return false;
+        }
+
+        var negative = ((numerator.Sign < 0) != (denominator.Sign < 0));
+        var scaled = (BigInteger.Abs(value: numerator) * BigInteger.Pow(exponent: fractionBitCount, value: 2));
+        var divisor = BigInteger.Abs(value: denominator);
+        var quotient = BigInteger.Divide(dividend: scaled, divisor: divisor);
+        var doubledRemainder = ((scaled - (quotient * divisor)) * 2);
+
+        if (
+            (doubledRemainder > divisor) ||
+            ((doubledRemainder == divisor) && !quotient.IsEven)
+        ) {
+            quotient += BigInteger.One;
+        }
+
+        var signed = (negative
+            ? -quotient
+            : quotient
+        );
+
+        if (
+            (signed < long.MinValue) ||
+            (signed > long.MaxValue)
+        ) {
+            return false;
+        }
+
+        result = ((long)signed);
+
+        return true;
+    }
     /// <summary>The per-square-rounding discipline for a squared norm: EACH raw Q32 square rounded to Q16 on its own,
     /// then summed exactly and returned UNWRAPPED.</summary>
     /// <param name="raws">The vector's raws.</param>
@@ -3707,7 +3634,6 @@ internal static class Oracles {
 
         return total;
     }
-
     /// <summary>The exact raw Q32 sum of squares — the value both norm kernels start from, unrounded and
     /// unwrapped.</summary>
     /// <param name="raws">The vector's raws.</param>
@@ -3723,7 +3649,6 @@ internal static class Oracles {
 
         return total;
     }
-
     /// <summary>The reference squared length — ONE ties-to-even rounding of <see cref="SquaredNorm"/> at shift sixteen,
     /// returned UNWRAPPED so the caller can state the saturation predicate against <see cref="long.MaxValue"/>, which a
     /// wrap would destroy.</summary>
@@ -3731,7 +3656,6 @@ internal static class Oracles {
     /// <returns>The rounded squared length, unwrapped.</returns>
     public static BigInteger RoundedSquaredNorm(ReadOnlySpan<long> raws) =>
         RoundToEvenUnits(magnitude: SquaredNorm(raws: raws), shift: 16);
-
     /// <summary>The reference length — the NEAREST integer square root of the exact raw Q32 sum of squares, returned
     /// unwrapped. Rooting a raw Q32 quantity yields a raw Q16 one, so the only rounding is that final root.</summary>
     /// <param name="raws">The vector's raws.</param>
@@ -3741,7 +3665,6 @@ internal static class Oracles {
     /// repair, so a transcription error in either repair rule fails the law.</remarks>
     public static BigInteger NormRoot(ReadOnlySpan<long> raws) =>
         NearestIntegerRoot(value: SquaredNorm(raws: raws));
-
     /// <summary>The reference linear interpolation over the TRUE mathematical result — the exact rational
     /// <c>from + (to − from)·amount</c>, formed as one arbitrary-width <see cref="BigInteger"/> intermediate with NO
     /// intermediate wrap at any width, and rounded to the Q48.16 grid exactly once.</summary>
@@ -3759,7 +3682,6 @@ internal static class Oracles {
             exact: ((new BigInteger(value: from) << 16) + ((new BigInteger(value: to) - from) * amount)),
             shift: 16
         );
-
     /// <summary>The IDEAL Q16 unit direction: each component ONE ties-to-even rounding of the exact ratio
     /// <c>rawᵢ·2¹⁶ / √(Σ rawⱼ²)</c>, with no preconditioning and no intermediate quantization. A zero vector maps to
     /// the zero vector.</summary>
@@ -3801,7 +3723,6 @@ internal static class Oracles {
             result[lane] = WrapToRaw(value: ((raws[lane] < 0L) ? -rounded : rounded));
         }
     }
-
     /// <summary>The STAGED normalization the shipped pipeline performs, re-derived in <see cref="BigInteger"/>: the
     /// common power-of-two precondition at leading bit forty-five (ties to even on a shrinking shift), the Q16-scaled
     /// nearest root as the single common denominator, and one ties-to-even ratio per component.</summary>
@@ -3847,7 +3768,6 @@ internal static class Oracles {
             result[lane] = WrapToRaw(value: ((scaled[lane].Sign < 0) ? -quotient : quotient));
         }
     }
-
     /// <summary>The exact rational solve of a symmetric 2×2 system by Cramer's rule, direct in <see cref="BigInteger"/>
     /// with NO intermediate rounding, NO wrapping, and — unlike <see cref="FixedSymmetricSolve"/> — no common
     /// power-of-two preconditioning of any kind: every entry is used at its own raw magnitude, so a defect in the
@@ -3877,8 +3797,8 @@ internal static class Oracles {
         // The refusal contract is "false AND every output zero" — computed into locals first and only exposed
         // through the out parameters once EVERY component is known to round successfully, so a later component's
         // overflow can never leave an earlier one's already-computed value behind.
-        var okX = TryRoundRatio(numerator: nx, denominator: det, shift: outputFractionShift, raw: out var rx);
-        var okY = TryRoundRatio(numerator: ny, denominator: det, shift: outputFractionShift, raw: out var ry);
+        var okX = TryRoundRatio(denominator: det, numerator: nx, raw: out var rx, shift: outputFractionShift);
+        var okY = TryRoundRatio(denominator: det, numerator: ny, raw: out var ry, shift: outputFractionShift);
 
         if (!okX || !okY) {
             x = 0L;
@@ -3890,7 +3810,6 @@ internal static class Oracles {
         y = ry;
         return true;
     }
-
     /// <summary>The exact rational solve of a symmetric 3×3 system by Cramer's rule. See
     /// <see cref="TrySolveSymmetric2"/> for the independence argument.</summary>
     /// <param name="a">The (0,0) entry.</param>
@@ -3923,7 +3842,7 @@ internal static class Oracles {
         out long z
     ) {
         BigInteger ba = a, bb = b, bc = c, bd = d, be = e, bf = f, brx = rhsX, bry = rhsY, brz = rhsZ;
-        var det = ((((ba * bd * bf) - (ba * be * be)) - (bb * bb * bf)) + (2 * bb * bc * be) - (bc * bc * bd));
+        var det = ((((((ba * bd) * bf) - ((ba * be) * be)) - ((bb * bb) * bf)) + (((2 * bb) * bc) * be)) - ((bc * bc) * bd));
 
         if (det.IsZero) {
             x = 0L;
@@ -3938,14 +3857,14 @@ internal static class Oracles {
         var c22 = ((ba * bf) - (bc * bc));
         var c23 = ((bb * bc) - (ba * be));
         var c33 = ((ba * bd) - (bb * bb));
-        var nx = ((c11 * brx) + (c12 * bry) + (c13 * brz));
-        var ny = ((c12 * brx) + (c22 * bry) + (c23 * brz));
-        var nz = ((c13 * brx) + (c23 * bry) + (c33 * brz));
+        var nx = (((c11 * brx) + (c12 * bry)) + (c13 * brz));
+        var ny = (((c12 * brx) + (c22 * bry)) + (c23 * brz));
+        var nz = (((c13 * brx) + (c23 * bry)) + (c33 * brz));
 
         // See TrySolveSymmetric2's own note: no output is exposed until every component is known to round.
-        var okX = TryRoundRatio(numerator: nx, denominator: det, shift: outputFractionShift, raw: out var rx);
-        var okY = TryRoundRatio(numerator: ny, denominator: det, shift: outputFractionShift, raw: out var ry);
-        var okZ = TryRoundRatio(numerator: nz, denominator: det, shift: outputFractionShift, raw: out var rz);
+        var okX = TryRoundRatio(denominator: det, numerator: nx, raw: out var rx, shift: outputFractionShift);
+        var okY = TryRoundRatio(denominator: det, numerator: ny, raw: out var ry, shift: outputFractionShift);
+        var okZ = TryRoundRatio(denominator: det, numerator: nz, raw: out var rz, shift: outputFractionShift);
 
         if (!okX || !okY || !okZ) {
             x = 0L;
@@ -3959,7 +3878,6 @@ internal static class Oracles {
         z = rz;
         return true;
     }
-
     /// <summary>The exact rational inverse of a symmetric 2×2 matrix's three distinct entries. See
     /// <see cref="TrySolveSymmetric2"/> for the independence argument.</summary>
     /// <param name="a">The (0,0) entry.</param>
@@ -3982,9 +3900,9 @@ internal static class Oracles {
         }
 
         // See TrySolveSymmetric2's own note: no output is exposed until every component is known to round.
-        var okA = TryRoundRatio(numerator: bd, denominator: det, shift: outputFractionShift, raw: out var ra);
-        var okB = TryRoundRatio(numerator: -bb, denominator: det, shift: outputFractionShift, raw: out var rb);
-        var okD = TryRoundRatio(numerator: ba, denominator: det, shift: outputFractionShift, raw: out var rd);
+        var okA = TryRoundRatio(denominator: det, numerator: bd, raw: out var ra, shift: outputFractionShift);
+        var okB = TryRoundRatio(denominator: det, numerator: -bb, raw: out var rb, shift: outputFractionShift);
+        var okD = TryRoundRatio(denominator: det, numerator: ba, raw: out var rd, shift: outputFractionShift);
 
         if (!okA || !okB || !okD) {
             invA = 0L;
@@ -3998,7 +3916,6 @@ internal static class Oracles {
         invD = rd;
         return true;
     }
-
     /// <summary>The exact rational inverse of a symmetric 3×3 matrix's six distinct entries. See
     /// <see cref="TrySolveSymmetric2"/> for the independence argument.</summary>
     /// <param name="a">The (0,0) entry.</param>
@@ -4031,7 +3948,7 @@ internal static class Oracles {
         out long invF
     ) {
         BigInteger ba = a, bb = b, bc = c, bd = d, be = e, bf = f;
-        var det = ((((ba * bd * bf) - (ba * be * be)) - (bb * bb * bf)) + (2 * bb * bc * be) - (bc * bc * bd));
+        var det = ((((((ba * bd) * bf) - ((ba * be) * be)) - ((bb * bb) * bf)) + (((2 * bb) * bc) * be)) - ((bc * bc) * bd));
 
         if (det.IsZero) {
             invA = 0L;
@@ -4050,12 +3967,12 @@ internal static class Oracles {
         var c23 = ((bb * bc) - (ba * be));
         var c33 = ((ba * bd) - (bb * bb));
         // See TrySolveSymmetric2's own note: no output is exposed until every component is known to round.
-        var okA = TryRoundRatio(numerator: c11, denominator: det, shift: outputFractionShift, raw: out var ra);
-        var okB = TryRoundRatio(numerator: c12, denominator: det, shift: outputFractionShift, raw: out var rb);
-        var okC = TryRoundRatio(numerator: c13, denominator: det, shift: outputFractionShift, raw: out var rc);
-        var okD = TryRoundRatio(numerator: c22, denominator: det, shift: outputFractionShift, raw: out var rd);
-        var okE = TryRoundRatio(numerator: c23, denominator: det, shift: outputFractionShift, raw: out var re);
-        var okF = TryRoundRatio(numerator: c33, denominator: det, shift: outputFractionShift, raw: out var rf);
+        var okA = TryRoundRatio(denominator: det, numerator: c11, raw: out var ra, shift: outputFractionShift);
+        var okB = TryRoundRatio(denominator: det, numerator: c12, raw: out var rb, shift: outputFractionShift);
+        var okC = TryRoundRatio(denominator: det, numerator: c13, raw: out var rc, shift: outputFractionShift);
+        var okD = TryRoundRatio(denominator: det, numerator: c22, raw: out var rd, shift: outputFractionShift);
+        var okE = TryRoundRatio(denominator: det, numerator: c23, raw: out var re, shift: outputFractionShift);
+        var okF = TryRoundRatio(denominator: det, numerator: c33, raw: out var rf, shift: outputFractionShift);
 
         if (!okA || !okB || !okC || !okD || !okE || !okF) {
             invA = 0L;
@@ -4080,14 +3997,14 @@ internal static class Oracles {
     // exact rational quotient at the requested scale, rounded ties to even by RoundRationalTiesToEven (this module's
     // one tie body), reported UNWRAPPED so the caller can refuse before ever reducing to the 64-bit carrier.
     private static bool TryRoundRatio(BigInteger numerator, BigInteger denominator, int shift, out long raw) {
-        var rounded = RoundRationalTiesToEven(numerator: (numerator << shift), denominator: denominator);
+        var rounded = RoundRationalTiesToEven(denominator: denominator, numerator: (numerator << shift));
 
         if ((rounded < long.MinValue) || (rounded > long.MaxValue)) {
             raw = 0L;
             return false;
         }
 
-        raw = (long)rounded;
+        raw = ((long)rounded);
         return true;
     }
 
@@ -4123,7 +4040,7 @@ internal static class Oracles {
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, order: 2, augmentedColumn: 2, numerators: out var numerators, denominators: out var denominators);
+        BareissBackSubstitute(augmented: augmented, augmentedColumn: 2, denominators: out var denominators, numerators: out var numerators, order: 2);
 
         var okX = TryRoundRatio(numerator: numerators[0], denominator: denominators[0], shift: outputFractionShift, raw: out var rx);
         var okY = TryRoundRatio(numerator: numerators[1], denominator: denominators[1], shift: outputFractionShift, raw: out var ry);
@@ -4138,7 +4055,6 @@ internal static class Oracles {
         y = ry;
         return true;
     }
-
     /// <summary>The 3×3 sibling of <see cref="TryBareissSolveSymmetric2"/>. See it for the independence
     /// argument against both the shared-cofactor oracle above and the residual laws.</summary>
     /// <param name="a">The (0,0) entry.</param>
@@ -4183,7 +4099,7 @@ internal static class Oracles {
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, order: 3, augmentedColumn: 3, numerators: out var numerators, denominators: out var denominators);
+        BareissBackSubstitute(augmented: augmented, augmentedColumn: 3, denominators: out var denominators, numerators: out var numerators, order: 3);
 
         var okX = TryRoundRatio(numerator: numerators[0], denominator: denominators[0], shift: outputFractionShift, raw: out var rx);
         var okY = TryRoundRatio(numerator: numerators[1], denominator: denominators[1], shift: outputFractionShift, raw: out var ry);
@@ -4201,7 +4117,6 @@ internal static class Oracles {
         z = rz;
         return true;
     }
-
     /// <summary>The exact rational inverse of a symmetric 2×2 matrix by the same fraction-free elimination as
     /// <see cref="TryBareissSolveSymmetric2"/>, solving <c>K·X = I</c> for both columns of <c>X</c> in one
     /// elimination pass over <c>[K | I]</c>. See <see cref="TryBareissSolveSymmetric2"/> for the independence
@@ -4227,8 +4142,8 @@ internal static class Oracles {
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, order: 2, augmentedColumn: 2, numerators: out var column0Numerators, denominators: out var column0Denominators);
-        BareissBackSubstitute(augmented: augmented, order: 2, augmentedColumn: 3, numerators: out var column1Numerators, denominators: out var column1Denominators);
+        BareissBackSubstitute(augmented: augmented, augmentedColumn: 2, denominators: out var column0Denominators, numerators: out var column0Numerators, order: 2);
+        BareissBackSubstitute(augmented: augmented, augmentedColumn: 3, denominators: out var column1Denominators, numerators: out var column1Numerators, order: 2);
 
         var okA = TryRoundRatio(numerator: column0Numerators[0], denominator: column0Denominators[0], shift: outputFractionShift, raw: out var ra);
         var okB = TryRoundRatio(numerator: column1Numerators[0], denominator: column1Denominators[0], shift: outputFractionShift, raw: out var rb);
@@ -4246,7 +4161,6 @@ internal static class Oracles {
         invD = rd;
         return true;
     }
-
     /// <summary>The 3×3 sibling of <see cref="TryBareissInvertSymmetric2"/>, solving <c>K·X = I</c> for all three
     /// distinct columns of <c>X</c> in one elimination pass over <c>[K | I]</c>. See
     /// <see cref="TryBareissSolveSymmetric2"/> for the independence argument.</summary>
@@ -4295,9 +4209,9 @@ internal static class Oracles {
             return false;
         }
 
-        BareissBackSubstitute(augmented: augmented, order: 3, augmentedColumn: 3, numerators: out var column0Numerators, denominators: out var column0Denominators);
-        BareissBackSubstitute(augmented: augmented, order: 3, augmentedColumn: 4, numerators: out var column1Numerators, denominators: out var column1Denominators);
-        BareissBackSubstitute(augmented: augmented, order: 3, augmentedColumn: 5, numerators: out var column2Numerators, denominators: out var column2Denominators);
+        BareissBackSubstitute(augmented: augmented, augmentedColumn: 3, denominators: out var column0Denominators, numerators: out var column0Numerators, order: 3);
+        BareissBackSubstitute(augmented: augmented, augmentedColumn: 4, denominators: out var column1Denominators, numerators: out var column1Numerators, order: 3);
+        BareissBackSubstitute(augmented: augmented, augmentedColumn: 5, denominators: out var column2Denominators, numerators: out var column2Numerators, order: 3);
 
         var okA = TryRoundRatio(numerator: column0Numerators[0], denominator: column0Denominators[0], shift: outputFractionShift, raw: out var ra);
         var okB = TryRoundRatio(numerator: column1Numerators[0], denominator: column1Denominators[0], shift: outputFractionShift, raw: out var rb);
@@ -4389,7 +4303,6 @@ internal static class Oracles {
 
         return true;
     }
-
     /// <summary>Back-substitutes ONE column of <see cref="TryBareissEliminate"/>'s upper-triangular result into an
     /// exact, UNREDUCED rational component per row. Unlike the forward elimination this step is not fraction-free —
     /// the solution itself is generally not an integer — but every step is still exact <see cref="BigInteger"/>
@@ -4446,11 +4359,10 @@ internal static class Oracles {
     /// bits against a half-unit it forms itself. Callers are expected to keep the three counts inside a sane band; the
     /// power-of-two denominator here is built directly from them.</remarks>
     public static (bool Fits, long Raw) MixedScaleProduct(long a, int fractionBitsA, long b, int fractionBitsB, int fractionBitsOut) {
-        var exact = ExactMixedScale(product: ((BigInteger)a * b), shift: (((long)fractionBitsOut - fractionBitsA) - fractionBitsB));
+        var exact = ExactMixedScale(product: (((BigInteger)a) * b), shift: ((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB));
 
         return (((exact >= long.MinValue) && (exact <= long.MaxValue)), WrapToRaw(value: exact));
     }
-
     /// <summary>The reference mixed-scale product of THREE factors at independent scales — one ties-to-even rounding of
     /// the exact triple product at the requested scale.</summary>
     /// <param name="a">The first factor's raw.</param>
@@ -4471,8 +4383,8 @@ internal static class Oracles {
         int fractionBitsC,
         int fractionBitsOut
     ) {
-        var product = (((BigInteger)a * b) * c);
-        var exact = ExactMixedScale(product: product, shift: ((((long)fractionBitsOut - fractionBitsA) - fractionBitsB) - fractionBitsC));
+        var product = ((((BigInteger)a) * b) * c);
+        var exact = ExactMixedScale(product: product, shift: (((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB) - fractionBitsC));
 
         return (
             (BigInteger.Abs(value: product) < (BigInteger.One << 128)),
@@ -4480,7 +4392,50 @@ internal static class Oracles {
             exact
         );
     }
+    /// <summary>The reference mixed-scale dot product of two three-component raw vectors: the three exact products
+    /// are summed in arbitrary width and rounded once at the requested scale.</summary>
+    /// <param name="ax">The first vector's X raw.</param>
+    /// <param name="ay">The first vector's Y raw.</param>
+    /// <param name="az">The first vector's Z raw.</param>
+    /// <param name="fractionBitsA">The first vector's fraction bit count.</param>
+    /// <param name="bx">The second vector's X raw.</param>
+    /// <param name="by">The second vector's Y raw.</param>
+    /// <param name="bz">The second vector's Z raw.</param>
+    /// <param name="fractionBitsB">The second vector's fraction bit count.</param>
+    /// <param name="fractionBitsOut">The result's fraction bit count.</param>
+    /// <returns>Whether the exact rounded dot product fits the signed 64-bit raw, and that product wrapped to it.</returns>
+    public static (bool Fits, long Raw) MixedScaleDotProduct(
+        long ax,
+        long ay,
+        long az,
+        int fractionBitsA,
+        long bx,
+        long by,
+        long bz,
+        int fractionBitsB,
+        int fractionBitsOut
+    ) {
+        var exact = ExactMixedScale(
+            product: (((((BigInteger)ax) * bx) + (((BigInteger)ay) * by)) + (((BigInteger)az) * bz)),
+            shift: ((((long)fractionBitsOut) - fractionBitsA) - fractionBitsB)
+        );
 
+        return (((exact >= long.MinValue) && (exact <= long.MaxValue)), WrapToRaw(value: exact));
+    }
+    /// <summary>The reference reciprocal of a positive raw carried at one fixed-point scale, rounded once onto a
+    /// second fixed-point scale.</summary>
+    /// <param name="value">The positive raw to invert.</param>
+    /// <param name="fractionBitsIn">The operand's fraction bit count.</param>
+    /// <param name="fractionBitsOut">The result's fraction bit count.</param>
+    /// <returns>Whether the exact rounded reciprocal fits the signed 64-bit raw, and that reciprocal.</returns>
+    public static (bool Fits, BigInteger Exact) ScaledReciprocal(long value, int fractionBitsIn, int fractionBitsOut) {
+        var exact = RoundRationalTiesToEven(
+            numerator: (BigInteger.One << (fractionBitsIn + fractionBitsOut)),
+            denominator: value
+        );
+
+        return (((exact >= long.MinValue) && (exact <= long.MaxValue)), exact);
+    }
     /// <summary>The exact rational <c>numerator / denominator</c> rounded UP — the reference every directed-up law
     /// states its bound against.</summary>
     /// <param name="numerator">The exact numerator.</param>
@@ -4490,11 +4445,10 @@ internal static class Oracles {
     /// fixed-width kernel reaches for and the shape that overflows; the subject instead divides and carries the
     /// quotient up when anything was discarded.</remarks>
     public static BigInteger CeilingRational(BigInteger numerator, BigInteger denominator) {
-        var quotient = FloorQuotient(numerator: numerator, denominator: denominator);
+        var quotient = FloorQuotient(denominator: denominator, numerator: numerator);
 
         return (((quotient * denominator) == numerator) ? quotient : (quotient + BigInteger.One));
     }
-
     /// <summary>The least integer at or above the square root of a non-negative exact value, by a BRACKETED INTEGER
     /// SEARCH whose predicate is one exact squaring — no square root is ever taken.</summary>
     /// <param name="value">The radicand, which must be non-negative.</param>
@@ -4524,7 +4478,6 @@ internal static class Oracles {
 
         return high;
     }
-
     /// <summary>The exact symmetric 2×2 matrix-times-vector product, each component ONE ties-to-even rounding of the
     /// exact value at the requested scale.</summary>
     /// <param name="a">The (0,0) entry.</param>
@@ -4550,9 +4503,9 @@ internal static class Oracles {
         out long x,
         out long y
     ) {
-        var shift = (((long)fractionBitsOut - fractionBitsMatrix) - fractionBitsVector);
-        var okX = TryMixedScaleSum(exact: ExactMixedScale(product: (((BigInteger)a * vX) + ((BigInteger)b * vY)), shift: shift), raw: out var rx);
-        var okY = TryMixedScaleSum(exact: ExactMixedScale(product: (((BigInteger)b * vX) + ((BigInteger)d * vY)), shift: shift), raw: out var ry);
+        var shift = ((((long)fractionBitsOut) - fractionBitsMatrix) - fractionBitsVector);
+        var okX = TryMixedScaleSum(exact: ExactMixedScale(product: ((((BigInteger)a) * vX) + (((BigInteger)b) * vY)), shift: shift), raw: out var rx);
+        var okY = TryMixedScaleSum(exact: ExactMixedScale(product: ((((BigInteger)b) * vX) + (((BigInteger)d) * vY)), shift: shift), raw: out var ry);
 
         if (!okX || !okY) {
             x = 0L;
@@ -4564,7 +4517,6 @@ internal static class Oracles {
         y = ry;
         return true;
     }
-
     /// <summary>The exact symmetric 3×3 matrix-times-vector product. See <see cref="TryApplySymmetric2"/>.</summary>
     /// <param name="a">The (0,0) entry.</param>
     /// <param name="b">The (0,1) = (1,0) entry.</param>
@@ -4599,10 +4551,10 @@ internal static class Oracles {
         out long y,
         out long z
     ) {
-        var shift = (((long)fractionBitsOut - fractionBitsMatrix) - fractionBitsVector);
-        var okX = TryMixedScaleSum(exact: ExactMixedScale(product: ((((BigInteger)a * vX) + ((BigInteger)b * vY)) + ((BigInteger)c * vZ)), shift: shift), raw: out var rx);
-        var okY = TryMixedScaleSum(exact: ExactMixedScale(product: ((((BigInteger)b * vX) + ((BigInteger)d * vY)) + ((BigInteger)e * vZ)), shift: shift), raw: out var ry);
-        var okZ = TryMixedScaleSum(exact: ExactMixedScale(product: ((((BigInteger)c * vX) + ((BigInteger)e * vY)) + ((BigInteger)f * vZ)), shift: shift), raw: out var rz);
+        var shift = ((((long)fractionBitsOut) - fractionBitsMatrix) - fractionBitsVector);
+        var okX = TryMixedScaleSum(exact: ExactMixedScale(product: (((((BigInteger)a) * vX) + (((BigInteger)b) * vY)) + (((BigInteger)c) * vZ)), shift: shift), raw: out var rx);
+        var okY = TryMixedScaleSum(exact: ExactMixedScale(product: (((((BigInteger)b) * vX) + (((BigInteger)d) * vY)) + (((BigInteger)e) * vZ)), shift: shift), raw: out var ry);
+        var okZ = TryMixedScaleSum(exact: ExactMixedScale(product: (((((BigInteger)c) * vX) + (((BigInteger)e) * vY)) + (((BigInteger)f) * vZ)), shift: shift), raw: out var rz);
 
         if (!okX || !okY || !okZ) {
             x = 0L;
@@ -4621,8 +4573,8 @@ internal static class Oracles {
     // declaration rather than transcribed as digits — a transcription would let the two drift while every law stayed
     // green. This is the ONE value the mass-property oracles share with the subject; that the constant IS the
     // correctly rounded π is a separate law, decided against this module's own Machin enclosure.
-    private static readonly BigInteger PiNumerator = FixedMassProperties.PiRaw;
-    private static readonly BigInteger PiDenominator = (BigInteger.One << FixedMassProperties.PiFractionBitCount);
+    private static readonly BigInteger PiNumerator = FixedQ4816.PiQ61;
+    private static readonly BigInteger PiDenominator = (BigInteger.One << FixedQ4816.PiQ61FractionBitCount);
 
     /// <summary>The exact volumes of the four solid primitives, each ONE ties-to-even rounding at the requested
     /// scale.</summary>
@@ -4639,16 +4591,16 @@ internal static class Oracles {
     /// as one collapsed fraction — so a mis-folded constant in the subject cannot be mirrored here.</remarks>
     public static bool TryPrimitiveVolume(int shape, long first, long second, long third, int fractionBitsLength, int fractionBitsVolume, out long volume) {
         var lengthScale = (BigInteger.One << (3 * fractionBitsLength));
+
         var (numerator, denominator) = shape switch {
-            0 => ((4 * PiNumerator * BigInteger.Pow(value: first, exponent: 3)), (3 * PiDenominator * lengthScale)),
-            1 => ((((2 * (BigInteger)first) * (2 * (BigInteger)second)) * (2 * (BigInteger)third)), lengthScale),
-            2 => ((PiNumerator * first * first * second), (PiDenominator * lengthScale)),
-            _ => (((3 * PiNumerator * first * first * second) + (4 * PiNumerator * BigInteger.Pow(value: first, exponent: 3))), (3 * PiDenominator * lengthScale)),
+            0 => (((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: first)), ((3 * PiDenominator) * lengthScale)),
+            1 => ((((2 * ((BigInteger)first)) * (2 * ((BigInteger)second))) * (2 * ((BigInteger)third))), lengthScale),
+            2 => ((((PiNumerator * first) * first) * second), (PiDenominator * lengthScale)),
+            _ => ((((((3 * PiNumerator) * first) * first) * second) + ((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: first))), ((3 * PiDenominator) * lengthScale)),
         };
 
-        return TryRoundRatio(numerator: numerator, denominator: denominator, shift: fractionBitsVolume, raw: out volume);
+        return TryRoundRatio(denominator: denominator, numerator: numerator, raw: out volume, shift: fractionBitsVolume);
     }
-
     /// <summary>The exact mass and inertia of a solid sphere about its centre.</summary>
     /// <param name="density">The density raw.</param>
     /// <param name="fractionBitsDensity">The density's fraction bit count.</param>
@@ -4672,17 +4624,17 @@ internal static class Oracles {
         out long inertia
     ) {
         var (massNumerator, massDenominator) = ScaledMass(
-            volumeNumerator: (4 * PiNumerator * BigInteger.Pow(value: radius, exponent: 3)),
+            volumeNumerator: ((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: radius)),
             volumeDenominator: ((3 * PiDenominator) << (3 * fractionBitsLength)),
             density: density,
             fractionBitsDensity: fractionBitsDensity
         );
-        var okMass = TryRoundRatio(numerator: massNumerator, denominator: massDenominator, shift: fractionBitsMass, raw: out var roundedMass);
+        var okMass = TryRoundRatio(denominator: massDenominator, numerator: massNumerator, raw: out var roundedMass, shift: fractionBitsMass);
         var okInertia = TryRoundRatio(
-            numerator: ((2 * massNumerator * radius) * radius),
             denominator: ((5 * massDenominator) << (2 * fractionBitsLength)),
-            shift: fractionBitsInertia,
-            raw: out var roundedInertia
+            numerator: (((2 * massNumerator) * radius) * radius),
+            raw: out var roundedInertia,
+            shift: fractionBitsInertia
         );
 
         if (!okMass || !okInertia) {
@@ -4695,7 +4647,6 @@ internal static class Oracles {
         inertia = roundedInertia;
         return true;
     }
-
     /// <summary>The exact mass and diagonal inertia of a solid box about its centre, from its half-extents.</summary>
     /// <param name="density">The density raw.</param>
     /// <param name="fractionBitsDensity">The density's fraction bit count.</param>
@@ -4727,7 +4678,8 @@ internal static class Oracles {
         out long iyy,
         out long izz
     ) {
-        BigInteger lx = (2 * (BigInteger)halfX), ly = (2 * (BigInteger)halfY), lz = (2 * (BigInteger)halfZ);
+        BigInteger lx = (2 * ((BigInteger)halfX)), ly = (2 * ((BigInteger)halfY)), lz = (2 * ((BigInteger)halfZ));
+
         var (massNumerator, massDenominator) = ScaledMass(
             volumeNumerator: ((lx * ly) * lz),
             volumeDenominator: (BigInteger.One << (3 * fractionBitsLength)),
@@ -4735,10 +4687,10 @@ internal static class Oracles {
             fractionBitsDensity: fractionBitsDensity
         );
         var inertiaDenominator = ((12 * massDenominator) << (2 * fractionBitsLength));
-        var okMass = TryRoundRatio(numerator: massNumerator, denominator: massDenominator, shift: fractionBitsMass, raw: out var roundedMass);
-        var okXX = TryRoundRatio(numerator: (massNumerator * ((ly * ly) + (lz * lz))), denominator: inertiaDenominator, shift: fractionBitsInertia, raw: out var roundedXX);
-        var okYY = TryRoundRatio(numerator: (massNumerator * ((lx * lx) + (lz * lz))), denominator: inertiaDenominator, shift: fractionBitsInertia, raw: out var roundedYY);
-        var okZZ = TryRoundRatio(numerator: (massNumerator * ((lx * lx) + (ly * ly))), denominator: inertiaDenominator, shift: fractionBitsInertia, raw: out var roundedZZ);
+        var okMass = TryRoundRatio(denominator: massDenominator, numerator: massNumerator, raw: out var roundedMass, shift: fractionBitsMass);
+        var okXX = TryRoundRatio(denominator: inertiaDenominator, numerator: (massNumerator * ((ly * ly) + (lz * lz))), raw: out var roundedXX, shift: fractionBitsInertia);
+        var okYY = TryRoundRatio(denominator: inertiaDenominator, numerator: (massNumerator * ((lx * lx) + (lz * lz))), raw: out var roundedYY, shift: fractionBitsInertia);
+        var okZZ = TryRoundRatio(denominator: inertiaDenominator, numerator: (massNumerator * ((lx * lx) + (ly * ly))), raw: out var roundedZZ, shift: fractionBitsInertia);
 
         if (!okMass || !okXX || !okYY || !okZZ) {
             mass = 0L;
@@ -4754,7 +4706,6 @@ internal static class Oracles {
         izz = roundedZZ;
         return true;
     }
-
     /// <summary>The exact mass and the two distinct inertia moments of a solid cylinder about its centre.</summary>
     /// <param name="density">The density raw.</param>
     /// <param name="fractionBitsDensity">The density's fraction bit count.</param>
@@ -4780,24 +4731,24 @@ internal static class Oracles {
         out long perpendicular
     ) {
         var (massNumerator, massDenominator) = ScaledMass(
-            volumeNumerator: ((PiNumerator * radius * radius) * height),
-            volumeDenominator: (PiDenominator << (3 * fractionBitsLength)),
             density: density,
-            fractionBitsDensity: fractionBitsDensity
+            fractionBitsDensity: fractionBitsDensity,
+            volumeDenominator: (PiDenominator << (3 * fractionBitsLength)),
+            volumeNumerator: (((PiNumerator * radius) * radius) * height)
         );
         var squaredLength = (BigInteger.One << (2 * fractionBitsLength));
-        var okMass = TryRoundRatio(numerator: massNumerator, denominator: massDenominator, shift: fractionBitsMass, raw: out var roundedMass);
+        var okMass = TryRoundRatio(denominator: massDenominator, numerator: massNumerator, raw: out var roundedMass, shift: fractionBitsMass);
         var okAxial = TryRoundRatio(
-            numerator: ((massNumerator * radius) * radius),
             denominator: ((2 * massDenominator) * squaredLength),
-            shift: fractionBitsInertia,
-            raw: out var roundedAxial
+            numerator: ((massNumerator * radius) * radius),
+            raw: out var roundedAxial,
+            shift: fractionBitsInertia
         );
         var okPerpendicular = TryRoundRatio(
-            numerator: (massNumerator * ((3 * (BigInteger)radius * radius) + ((BigInteger)height * height))),
             denominator: ((12 * massDenominator) * squaredLength),
-            shift: fractionBitsInertia,
-            raw: out var roundedPerpendicular
+            numerator: (massNumerator * (((3 * ((BigInteger)radius)) * radius) + (((BigInteger)height) * height))),
+            raw: out var roundedPerpendicular,
+            shift: fractionBitsInertia
         );
 
         if (!okMass || !okAxial || !okPerpendicular) {
@@ -4812,7 +4763,6 @@ internal static class Oracles {
         perpendicular = roundedPerpendicular;
         return true;
     }
-
     /// <summary>The exact mass and the two distinct inertia moments of a solid capsule about its centre, assembled
     /// from its PARTS rather than from a closed form.</summary>
     /// <param name="density">The density raw.</param>
@@ -4851,13 +4801,13 @@ internal static class Oracles {
 
         // The two parts, each as an exact rational mass over its own denominator, then put over a common one.
         var (cylinderMass, cylinderDenominator) = ScaledMass(
-            volumeNumerator: ((PiNumerator * r * r) * h),
-            volumeDenominator: (PiDenominator * lengthCube),
             density: density,
-            fractionBitsDensity: fractionBitsDensity
+            fractionBitsDensity: fractionBitsDensity,
+            volumeDenominator: (PiDenominator * lengthCube),
+            volumeNumerator: (((PiNumerator * r) * r) * h)
         );
         var (sphereMass, sphereDenominator) = ScaledMass(
-            volumeNumerator: (4 * PiNumerator * BigInteger.Pow(value: r, exponent: 3)),
+            volumeNumerator: ((4 * PiNumerator) * BigInteger.Pow(exponent: 3, value: r)),
             volumeDenominator: ((3 * PiDenominator) * lengthCube),
             density: density,
             fractionBitsDensity: fractionBitsDensity
@@ -4866,15 +4816,15 @@ internal static class Oracles {
         var cylinder = (cylinderMass * sphereDenominator);
         var sphere = (sphereMass * cylinderDenominator);
 
-        var okMass = TryRoundRatio(numerator: (cylinder + sphere), denominator: commonDenominator, shift: fractionBitsMass, raw: out var roundedMass);
+        var okMass = TryRoundRatio(denominator: commonDenominator, numerator: (cylinder + sphere), raw: out var roundedMass, shift: fractionBitsMass);
 
         // Axial: the cylinder's ½·m·r² plus BOTH hemispheres' (2/5)·m·r² — a hemisphere carries the whole sphere's
         // axial coefficient because the axis is its own symmetry axis.
         var okAxial = TryRoundRatio(
-            numerator: ((((5 * cylinder) + (4 * sphere)) * r) * r),
             denominator: ((10 * commonDenominator) * squaredLength),
-            shift: fractionBitsInertia,
-            raw: out var roundedAxial
+            numerator: ((((5 * cylinder) + (4 * sphere)) * r) * r),
+            raw: out var roundedAxial,
+            shift: fractionBitsInertia
         );
 
         // Perpendicular: the cylinder's (m/12)(3r² + h²), plus each hemisphere's own centroidal moment
@@ -4883,12 +4833,12 @@ internal static class Oracles {
         // 2/5 is 384/960, (3/8)² is 135/960, and 1/64 is 15/960. The subject never writes any of them — it carries
         // the single folded 83/320, which is exactly what 384 − 135 = 249 reconstructs.
         var offset = ((4 * h) + (3 * r));
-        var hemispherePart = (((384 * r * r) - (135 * r * r)) + (15 * offset * offset));
+        var hemispherePart = ((((384 * r) * r) - ((135 * r) * r)) + ((15 * offset) * offset));
         var okPerpendicular = TryRoundRatio(
-            numerator: (((80 * cylinder) * ((3 * r * r) + (h * h))) + (sphere * hemispherePart)),
             denominator: ((960 * commonDenominator) * squaredLength),
-            shift: fractionBitsInertia,
-            raw: out var roundedPerpendicular
+            numerator: (((80 * cylinder) * (((3 * r) * r) + (h * h))) + (sphere * hemispherePart)),
+            raw: out var roundedPerpendicular,
+            shift: fractionBitsInertia
         );
 
         if (!okMass || !okAxial || !okPerpendicular) {
@@ -4903,7 +4853,6 @@ internal static class Oracles {
         perpendicular = roundedPerpendicular;
         return true;
     }
-
     /// <summary>The exact parallel-axis transfer of a symmetric inertia tensor, each entry one ties-to-even
     /// rounding.</summary>
     /// <param name="entries">The six distinct entries in the order <c>xx, yy, zz, xy, xz, yz</c>.</param>
@@ -4943,7 +4892,7 @@ internal static class Oracles {
 
         for (var index = 0; (index < 6); ++index) {
             complete &= TryRoundRatio(
-                numerator: ((((BigInteger)entries[index]) << transferShift) + (((BigInteger)mass * terms[index]) << fractionBitsInertia)),
+                numerator: ((((BigInteger)entries[index]) << transferShift) + ((((BigInteger)mass) * terms[index]) << fractionBitsInertia)),
                 denominator: denominator,
                 shift: 0,
                 raw: out var entry
@@ -4955,7 +4904,6 @@ internal static class Oracles {
 
         return complete;
     }
-
     /// <summary>The exact compound accumulation: the summed mass, the composite centre of mass, and the inertia tensor
     /// about that centre, each one ties-to-even rounding.</summary>
     /// <param name="parts">The parts.</param>
@@ -4997,12 +4945,12 @@ internal static class Oracles {
 
             // Each entry carried OUT to the shared origin, over the common denominator 2^(fractionBitsMass +
             // 2·fractionBitsLength) at the inertia raw scale.
-            atOrigin[0] += (((BigInteger)part.Ixx * transferScale) + ((partMass * (squared - (cx * cx))) * inertiaScale));
-            atOrigin[1] += (((BigInteger)part.Iyy * transferScale) + ((partMass * (squared - (cy * cy))) * inertiaScale));
-            atOrigin[2] += (((BigInteger)part.Izz * transferScale) + ((partMass * (squared - (cz * cz))) * inertiaScale));
-            atOrigin[3] += (((BigInteger)part.Ixy * transferScale) - ((partMass * cx * cy) * inertiaScale));
-            atOrigin[4] += (((BigInteger)part.Ixz * transferScale) - ((partMass * cx * cz) * inertiaScale));
-            atOrigin[5] += (((BigInteger)part.Iyz * transferScale) - ((partMass * cy * cz) * inertiaScale));
+            atOrigin[0] += ((((BigInteger)part.Ixx) * transferScale) + ((partMass * (squared - (cx * cx))) * inertiaScale));
+            atOrigin[1] += ((((BigInteger)part.Iyy) * transferScale) + ((partMass * (squared - (cy * cy))) * inertiaScale));
+            atOrigin[2] += ((((BigInteger)part.Izz) * transferScale) + ((partMass * (squared - (cz * cz))) * inertiaScale));
+            atOrigin[3] += ((((BigInteger)part.Ixy) * transferScale) - (((partMass * cx) * cy) * inertiaScale));
+            atOrigin[4] += ((((BigInteger)part.Ixz) * transferScale) - (((partMass * cx) * cz) * inertiaScale));
+            atOrigin[5] += ((((BigInteger)part.Iyz) * transferScale) - (((partMass * cy) * cz) * inertiaScale));
         }
 
         var complete = TryRoundRatio(numerator: totalMass, denominator: BigInteger.One, shift: 0, raw: out mass);
@@ -5049,7 +4997,6 @@ internal static class Oracles {
         ((shift >= 0L)
             ? (product << ((int)shift))
             : RoundRationalTiesToEven(numerator: product, denominator: (BigInteger.One << ((int)-shift))));
-
     private static bool TryMixedScaleSum(BigInteger exact, out long raw) {
         if ((exact < long.MinValue) || (exact > long.MaxValue)) {
             raw = 0L;
@@ -5059,12 +5006,10 @@ internal static class Oracles {
         raw = ((long)exact);
         return true;
     }
-
     // A shape's mass as an exact rational: its volume times the density, with the density's own scale folded into the
     // denominator.
     private static (BigInteger Numerator, BigInteger Denominator) ScaledMass(BigInteger volumeNumerator, BigInteger volumeDenominator, long density, int fractionBitsDensity) =>
         ((volumeNumerator * density), (volumeDenominator << fractionBitsDensity));
-
     // The 2^(2^-i) ladder by repeated integer square roots of two, in one direction.
     private static BigInteger[] BuildLadder(bool ceiling) {
         var scale = (BigInteger.One << SeriesBitCount);

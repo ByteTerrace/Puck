@@ -16,10 +16,10 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
         var bios = ResolveBios(options: options);
 
         return new AdvancedMachineHost(
-            cartridgeRom: contentBytes,
-            savePath: savePath,
+            audioSampleRate: audioSampleRate,
             biosImage: bios,
-            audioSampleRate: audioSampleRate
+            cartridgeRom: contentBytes,
+            savePath: savePath
         );
     }
 
@@ -27,8 +27,8 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
         if (
             string.IsNullOrWhiteSpace(value: options) ||
             options.Equals(
-            value: "direct",
-            comparisonType: StringComparison.OrdinalIgnoreCase
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "direct"
         )
         ) {
             return new byte[ReplacementBios.ImageSize];
@@ -37,8 +37,8 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
         const string BiosPrefix = "bios=";
 
         if (!options.StartsWith(
-            value: BiosPrefix,
-            comparisonType: StringComparison.OrdinalIgnoreCase
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: BiosPrefix
         )) {
             throw new ArgumentException(message: $"unknown advanced-gaming-brick option '{options}' — expected direct, bios=<path>, or no option");
         }

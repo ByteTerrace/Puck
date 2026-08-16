@@ -233,7 +233,7 @@ Point a `puck.world.def.v1` document's `addons` entry at the built `.wasm` file:
 ```
 
 `WorldAddonRuntime` mounts every declared row at server construction (see
-`src/Puck.World.Data/WorldDefinition.cs`'s `WorldAddonRow`). `modulePath` is resolved the same way a cartridge's `romPath` is — a plain path
+`src/Puck.World.Schema/WorldDefinition.cs`'s `WorldAddonRow`). `modulePath` is resolved the same way a cartridge's `romPath` is — a plain path
 read through the host's asset source. `hash` pins the module's content hash; a Simulation-lane row
 without a pin is refused, because the pin has to cover everything the mount consumes. `lane` decides
 where untrusted code runs and has no default: an omitted lane is a document error, never a guess.

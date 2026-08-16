@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -26,7 +27,6 @@ namespace Puck.World.Server;
 /// implied simulation guarantee.</para>
 /// </remarks>
 internal sealed class WorldAdjacencyContactField : IEntityContactField {
-
     private readonly IContactField m_inner;
     private readonly IWorldAdjacencySource m_source;
 
@@ -44,66 +44,135 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     /// <inheritdoc/>
     public WorldContactCensus Census => m_inner.Census;
 
-    /// <inheritdoc/>
-    public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(position: in position, up: out up);
+    private static FixedVector3 MapIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
+            var stage = path[stageIndex];
 
-    /// <inheritdoc/>
-    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        return ResolveCore(entityIndex: -1, previousPosition: position, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+            value = WorldFrameIsometry.MapPoint(
+                point: value,
+                source: stage.Source,
+                destination: stage.Neighbour
+            );
+        }
+        return value;
     }
-
-    /// <inheritdoc/>
-    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
-        ResolveCore(entityIndex: -1, previousPosition: previousPosition, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
-
-    /// <inheritdoc/>
-    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        return ResolveCore(entityIndex: entityIndex, previousPosition: position, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+    private static FixedVector3 MapIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        foreach (var stage in path) {
+            value = WorldFrameIsometry.MapPoint(
+                point: value,
+                source: stage.Neighbour,
+                destination: stage.Source
+            );
+        }
+        return value;
     }
+    private static FixedQuaternion MapOrientationIntoNeighbour(FixedQuaternion value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
+            var stage = path[stageIndex];
 
-    /// <inheritdoc/>
-    public ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
-        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
-        ResolveCore(entityIndex: entityIndex, previousPosition: previousPosition, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+            value = (WorldFrameIsometry.Rotation(
+                source: stage.Source,
+                destination: stage.Neighbour
+            ) * value).Normalize();
+        }
+        return value;
+    }
+    private static FixedVector3 MapVectorIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
+            var stage = path[stageIndex];
 
+            value = WorldFrameIsometry.MapVector(
+                value: value,
+                source: stage.Source,
+                destination: stage.Neighbour
+            );
+        }
+        return value;
+    }
+    private static FixedVector3 MapVectorIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+        foreach (var stage in path) {
+            value = WorldFrameIsometry.MapVector(
+                value: value,
+                source: stage.Neighbour,
+                destination: stage.Source
+            );
+        }
+        return value;
+    }
     private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var resolution = m_inner.ResolveSweep(previousPosition: previousPosition, position: ref position, velocity: ref velocity, orientation: in orientation, volumes: volumes);
+        var resolution = m_inner.ResolveSweep(
+            orientation: in orientation,
+            position: ref position,
+            previousPosition: previousPosition,
+            velocity: ref velocity,
+            volumes: volumes
+        );
 
         foreach (var projection in m_source.Visuals()) {
-            if (!TryMapIntoNeighbour(position: position, projection: projection, mapped: out var neighbourPosition)) {
+            if (!TryMapIntoNeighbour(
+                mapped: out var neighbourPosition,
+                position: position,
+                projection: projection
+            )) {
                 continue;
             }
 
             var neighbour = projection.Neighbour;
-            var neighbourPreviousPosition = MapIntoNeighbour(value: previousPosition, path: projection.Path);
-            var neighbourVelocity = MapVectorIntoNeighbour(value: velocity, path: projection.Path);
-            var neighbourOrientation = MapOrientationIntoNeighbour(value: orientation, path: projection.Path);
+            var neighbourPreviousPosition = MapIntoNeighbour(
+                value: previousPosition,
+                path: projection.Path
+            );
+            var neighbourVelocity = MapVectorIntoNeighbour(
+                value: velocity,
+                path: projection.Path
+            );
+            var neighbourOrientation = MapOrientationIntoNeighbour(
+                value: orientation,
+                path: projection.Path
+            );
 
             var dynamicObstruction = FixedVector3.Zero;
-            var localAddress = ((entityIndex >= 0) ? m_source.LocalEntityAddress(index: entityIndex) : default);
+            var localAddress = ((entityIndex >= 0)
+                ? m_source.LocalEntityAddress(index: entityIndex)
+                : default
+            );
             var localIsSolid = ((entityIndex >= 0) && (m_source.LocalBodyContact(index: entityIndex) == WorldBodyContactMode.Solid));
-            for (var entity = 0; localIsSolid && (entity < neighbour.EntityCapacity); entity++) {
-                if (!neighbour.IsEntityActive(index: entity) || (neighbour.Collider(index: entity) is not { } neighbourCollider) ||
+
+            for (var entity = 0; (localIsSolid && (entity < neighbour.EntityCapacity)); entity++) {
+                if (
+                    !neighbour.IsEntityActive(index: entity) ||
+                    (neighbour.Collider(index: entity) is not { } neighbourCollider) ||
                     (neighbour.BodyContact(index: entity) != WorldBodyContactMode.Solid) ||
-                    (entityIndex < 0) || !WorldCrossAuthoritySettlement.LocalResponds(local: in localAddress, remote: neighbour.EntityAddress(index: entity), interaction: "physical-contact")) {
+                    (entityIndex < 0) ||
+                    !WorldCrossAuthoritySettlement.LocalResponds(
+                    local: in localAddress,
+                    remote: neighbour.EntityAddress(index: entity),
+                    interaction: "physical-contact"
+                )
+                ) {
                     continue;
                 }
 
-                if (!WorldDynamicBodyContacts.TryCorrection(
+                if (!FixedDynamicBodyContacts.TryCorrection(
                     leftPosition: neighbourPosition,
                     leftOrientation: neighbourOrientation,
                     leftVolumes: volumes,
                     rightPosition: FixedVector3.FromVector3(value: neighbour.CurrentPosition(index: entity)),
                     rightOrientation: FixedQuaternion.FromQuaternion(value: neighbour.CurrentOrientation(index: entity)).Normalize(),
-                    rightCollider: in neighbourCollider,
+                    rightVolumes: neighbourCollider.Volumes,
                     tieBreaker: entity,
-                    correction: out var correction)) {
+                    correction: out var correction
+                )) {
                     continue;
                 }
 
                 neighbourPosition += correction;
                 var normal = correction.Normalize();
-                var inward = FixedVector3.Dot(left: neighbourVelocity, right: normal);
+                var inward = FixedVector3.Dot(
+                    left: neighbourVelocity,
+                    right: normal
+                );
+
                 if (inward < FixedQ4816.Zero) {
                     neighbourVelocity -= (normal * inward);
                 }
@@ -111,88 +180,143 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             }
 
             var neighbourResolution = default(ContactResolution);
-            if (!resolution.Grounded && neighbour.TryGetSolidField(field: out var neighbourField, reason: out _) && (neighbourField is not null)) {
-                neighbourResolution = neighbourField.ResolveSweep(previousPosition: neighbourPreviousPosition, position: ref neighbourPosition,
-                    velocity: ref neighbourVelocity, orientation: in neighbourOrientation, volumes: volumes);
+
+            if (
+                !resolution.Grounded &&
+                neighbour.TryGetSolidField(
+                field: out var neighbourField,
+                reason: out _
+            ) &&
+                (neighbourField is not null)
+            ) {
+                neighbourResolution = neighbourField.ResolveSweep(
+                    orientation: in neighbourOrientation,
+                    position: ref neighbourPosition,
+                    previousPosition: neighbourPreviousPosition,
+                    velocity: ref neighbourVelocity,
+                    volumes: volumes
+                );
             }
 
-            if ((dynamicObstruction == FixedVector3.Zero) && !neighbourResolution.Grounded && (neighbourResolution.ObstructionNormal == FixedVector3.Zero)) {
+            if (
+                (dynamicObstruction == FixedVector3.Zero) &&
+                !neighbourResolution.Grounded &&
+                (neighbourResolution.ObstructionNormal == FixedVector3.Zero)
+            ) {
                 // Nothing on the neighbour's side either — try the next band (a body straddling a corner post could
                 // sit inside two bands' extents at once) rather than committing an inert round trip.
                 continue;
             }
             // Map the projected neighbour's depenetrated answer through every forward stage into this authority.
-            position = MapIntoSource(value: neighbourPosition, path: projection.Path);
-            velocity = MapVectorIntoSource(value: neighbourVelocity, path: projection.Path);
+            position = MapIntoSource(
+                value: neighbourPosition,
+                path: projection.Path
+            );
+            velocity = MapVectorIntoSource(
+                value: neighbourVelocity,
+                path: projection.Path
+            );
 
             var neighbourObstruction = ((neighbourResolution.ObstructionNormal != FixedVector3.Zero)
                 ? neighbourResolution.ObstructionNormal
-                : dynamicObstruction);
+                : dynamicObstruction
+            );
+
             return new ContactResolution(
                 Grounded: (resolution.Grounded || neighbourResolution.Grounded),
-                ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero) ? resolution.ObstructionNormal : MapVectorIntoSource(value: neighbourObstruction, path: projection.Path))
+                ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero)
+                ? resolution.ObstructionNormal
+                : MapVectorIntoSource(
+                        value: neighbourObstruction,
+                        path: projection.Path
+                    ))
             );
         }
 
         return resolution;
     }
-
     // Stage 0 is the hop that reads this projection's neighbour geometry; every earlier index is transport toward it.
     private static bool TryMapIntoNeighbour(FixedVector3 position, WorldAdjacencyProjection projection, out FixedVector3 mapped) {
         mapped = position;
-        for (var stageIndex = (projection.Path.Count - 1); stageIndex >= 0; stageIndex--) {
+        for (var stageIndex = (projection.Path.Count - 1); (stageIndex >= 0); stageIndex--) {
             var stage = projection.Path[stageIndex];
-            var band = new WorldAdjacencyBand(Name: projection.Name, Frame: stage.Source);
+            var band = new WorldAdjacencyBand(
+                Name: projection.Name,
+                Frame: stage.Source
+            );
             var admitted = ((stageIndex == 0)
-                ? band.Contains(position: mapped, depth: stage.OverlapDepth, ownershipThreshold: stage.OwnershipThreshold)
-                : band.Transits(position: mapped, depth: stage.OverlapDepth));
+                ? band.Contains(
+                    position: mapped,
+                    depth: stage.OverlapDepth,
+                    ownershipThreshold: stage.OwnershipThreshold
+                )
+                : band.Transits(
+                    position: mapped,
+                    depth: stage.OverlapDepth
+                )
+            );
 
             if (!admitted) {
                 mapped = default;
                 return false;
             }
 
-            mapped = WorldFrameIsometry.MapPoint(point: mapped, source: stage.Source, destination: stage.Neighbour);
+            mapped = WorldFrameIsometry.MapPoint(
+                point: mapped,
+                source: stage.Source,
+                destination: stage.Neighbour
+            );
         }
         return true;
     }
 
-    private static FixedVector3 MapIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        for (var stageIndex = (path.Count - 1); stageIndex >= 0; stageIndex--) {
-            var stage = path[stageIndex];
-            value = WorldFrameIsometry.MapPoint(point: value, source: stage.Source, destination: stage.Neighbour);
-        }
-        return value;
+    /// <inheritdoc/>
+    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        return ResolveCore(
+            entityIndex: -1,
+            orientation: in orientation,
+            position: ref position,
+            previousPosition: position,
+            velocity: ref velocity,
+            volumes: volumes
+        );
     }
-
-    private static FixedVector3 MapVectorIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        for (var stageIndex = (path.Count - 1); stageIndex >= 0; stageIndex--) {
-            var stage = path[stageIndex];
-            value = WorldFrameIsometry.MapVector(value: value, source: stage.Source, destination: stage.Neighbour);
-        }
-        return value;
+    /// <inheritdoc/>
+    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        return ResolveCore(
+            entityIndex: entityIndex,
+            orientation: in orientation,
+            position: ref position,
+            previousPosition: position,
+            velocity: ref velocity,
+            volumes: volumes
+        );
     }
-
-    private static FixedQuaternion MapOrientationIntoNeighbour(FixedQuaternion value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        for (var stageIndex = (path.Count - 1); stageIndex >= 0; stageIndex--) {
-            var stage = path[stageIndex];
-            value = (WorldFrameIsometry.Rotation(source: stage.Source, destination: stage.Neighbour) * value).Normalize();
-        }
-        return value;
-    }
-
-    private static FixedVector3 MapIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        foreach (var stage in path) {
-            value = WorldFrameIsometry.MapPoint(point: value, source: stage.Neighbour, destination: stage.Source);
-        }
-        return value;
-    }
-
-    private static FixedVector3 MapVectorIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        foreach (var stage in path) {
-            value = WorldFrameIsometry.MapVector(value: value, source: stage.Neighbour, destination: stage.Source);
-        }
-        return value;
-    }
+    /// <inheritdoc/>
+    public ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        ResolveCore(
+            entityIndex: entityIndex,
+            orientation: in orientation,
+            position: ref position,
+            previousPosition: previousPosition,
+            velocity: ref velocity,
+            volumes: volumes
+        );
+    /// <inheritdoc/>
+    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        ResolveCore(
+            entityIndex: -1,
+            orientation: in orientation,
+            position: ref position,
+            previousPosition: previousPosition,
+            velocity: ref velocity,
+            volumes: volumes
+        );
+    /// <inheritdoc/>
+    public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(
+        position: in position,
+        up: out up
+    );
 
 }

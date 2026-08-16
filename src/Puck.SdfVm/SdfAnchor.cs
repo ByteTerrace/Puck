@@ -14,7 +14,6 @@ namespace Puck.SdfVm;
 /// <param name="Orientation">The world-space orientation. <see cref="Quaternion.Identity"/> for a pose that only ever
 /// needs a position (many anchors — a room's spawn point, a static console screen — never rotate).</param>
 public readonly record struct SdfAnchor(Vector3 Position, Quaternion Orientation);
-
 /// <summary>
 /// Resolves a stable integer anchor id to its current pose — the read half of the anchor contract. A camera rig, a
 /// placed light, or any other consumer that wants to ride "whatever is publishing anchor 7 this tick" takes one of
@@ -29,7 +28,6 @@ public interface ISdfAnchorSource {
     /// <returns><see langword="true"/> when the id is currently live.</returns>
     bool TryResolveAnchor(int anchorId, out SdfAnchor anchor);
 }
-
 /// <summary>
 /// The sim-side anchor registry — the write half of the anchor contract <see cref="ISdfAnchorSource"/> reads. A host
 /// (the overworld's frame source, a future RTS scenario) owns one instance and, once per tick, republishes every
@@ -76,7 +74,6 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
             m_live[index] = false;
         }
     }
-
     /// <summary>Publishes (or republishes) <paramref name="name"/>'s pose for this tick, returning its stable id. The
     /// first publish under a given name allocates a new id; every later publish under the same name (this tick or a
     /// future one) reuses it — a consumer that resolved the id once via <see cref="TryResolveId"/> keeps working
@@ -103,7 +100,6 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
 
         return id;
     }
-
     /// <summary>Resolves a published name to its stable id, without requiring the caller to know the pose (a rig
     /// binding a camera to <c>"player.0"</c> once at setup, then resolving the pose every frame through
     /// <see cref="TryResolveAnchor"/>).</summary>
@@ -117,7 +113,6 @@ public sealed class SdfAnchorTable : ISdfAnchorSource {
 
         return m_idsByName.TryGetValue(key: name, value: out anchorId);
     }
-
     /// <inheritdoc/>
     public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
         if ((anchorId < 0) || (anchorId >= m_poses.Count) || !m_live[anchorId]) {

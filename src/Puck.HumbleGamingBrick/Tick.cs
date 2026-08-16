@@ -32,7 +32,6 @@ public readonly record struct Tick(UFixedQ4816 Value)
     public static Tick MinValue => default;
     /// <summary>The latest representable instant.</summary>
     public static Tick MaxValue => new(Value: UFixedQ4816.MaxValue);
-
     /// <summary>Gets the fundamental tick: the raw <c>ulong</c> storage, the represented T-cycle count scaled by
     /// <c>2¹⁶</c>.</summary>
     public ulong RawBits {
@@ -139,7 +138,6 @@ public readonly record struct Tick(UFixedQ4816 Value)
         x: left.Value,
         y: right.Value
     ));
-
     /// <summary>Counts how many whole fundamental ticks of <paramref name="resolution"/> have elapsed at this instant,
     /// flooring any finer sub-cycle remainder.</summary>
     /// <param name="resolution">The resolution whose <see cref="TickResolution.Quantum"/> to count in.</param>

@@ -52,10 +52,10 @@ internal static class AttestationInterchangeHarness {
     private const string RecipientSealingKeyFileName = "recipient-sealing.pkcs8";
     private const string RootKeyFileName = "root.spki";
     private const string SealedFileName = "sealed.attestation";
+
     private static readonly AttestationProfile InterchangeProfile = AttestationProfile.Base.WithExtensions(
         extensions: AttestationExtensions.SealedAttestationV1
     );
-
     /// <summary>The manifest keys this fixture requires, every one of which must be present with a non-empty value. Any other key is ignored — the set is open, and <c>minted-by</c> is the optional key this implementation writes.</summary>
     private static readonly string[] RequiredManifestKeys = [
         "algorithm",
@@ -68,7 +68,6 @@ internal static class AttestationInterchangeHarness {
         "sequence",
         "subject",
     ];
-
     /// <summary>The manifest's encoding: UTF-8 with no byte-order mark, refusing byte sequences that are not valid UTF-8 rather than substituting replacement characters.</summary>
     private static readonly UTF8Encoding ManifestEncoding = new(
         encoderShouldEmitUTF8Identifier: false,
@@ -77,22 +76,16 @@ internal static class AttestationInterchangeHarness {
 
     /// <summary>The purpose the interchange claim is minted with, so both sides expect the same one without negotiating.</summary>
     public const string InterchangePurpose = "attestation.cross-check";
-
     /// <summary>The purpose the interchange sealed claim is minted with.</summary>
     public const string InterchangeSealedPurpose = "attestation.cross-check.sealed";
-
     /// <summary>The audience both fixture attestations are directed at. The sealed attestation uses the claim's audience, so the manifest carries one value for both.</summary>
     public const string InterchangeAudience = "world:interchange";
-
     /// <summary>The sequence the interchange claim carries. The fixture verifier inspects the returned commit requirement but deliberately does not mutate production replay state.</summary>
     public const ulong InterchangeSequence = 1UL;
-
     /// <summary>The verifier-wide horizon the fixture uses to derive and cross-check its replay requirement.</summary>
-    public const long InterchangeReplayHorizonSeconds = (31L * 24 * 60 * 60);
-
+    public const long InterchangeReplayHorizonSeconds = (((31L * 24) * 60) * 60);
     /// <summary>The subject the interchange chain is minted for.</summary>
     public const string InterchangeSubject = "puck:interchange-subject";
-
     /// <summary>The plaintext the interchange sealed payload carries, so the verifying side knows what a correct unseal must produce.</summary>
     public const string InterchangeSealedPlaintext = "sealed by Puck.Attestation under puck.attestation.sealed.v1";
 
@@ -124,8 +117,8 @@ internal static class AttestationInterchangeHarness {
         var issuingSpki = issuingKey.ExportSubjectPublicKeyInfo();
         var subjectSpki = subjectKey.ExportSubjectPublicKeyInfo();
         var rootId = KeyId.ForRoot(
-            subjectPublicKeyInfo: rootSpki,
-            algorithm: AttestationAlgorithms.EcdsaP256Sha256
+            algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+            subjectPublicKeyInfo: rootSpki
         );
         var issuingId = KeyId.ForIssuing(
             domain: rootId.Domain,
@@ -375,13 +368,13 @@ internal static class AttestationInterchangeHarness {
         }
 
         var rootId = KeyId.ForRoot(
-            subjectPublicKeyInfo: rootSpki,
-            algorithm: algorithm
+            algorithm: algorithm,
+            subjectPublicKeyInfo: rootSpki
         );
 
         Console.WriteLine(value: $"verifying a chain minted by '{manifest.GetValueOrDefault(
-            key: "minted-by",
-            defaultValue: "(unstated)"
+            defaultValue: "(unstated)",
+            key: "minted-by"
         )}' from {directory}");
         Console.WriteLine(value: $"  domain recomputed from {RootKeyFileName}: {rootId.Domain}");
 
@@ -460,8 +453,8 @@ internal static class AttestationInterchangeHarness {
         if (TryStep(
             check: "cross-verify",
             body: () => VerifyClaimBytes(
-                wire: claimBytes,
-                expected: expectedPurpose
+                expected: expectedPurpose,
+                wire: claimBytes
             ),
             value: out var result
         )) {
@@ -484,7 +477,7 @@ internal static class AttestationInterchangeHarness {
                     expectedEpoch--;
                 }
 
-                expectedEpoch = checked(expectedEpoch * horizonSeconds);
+                expectedEpoch = checked((expectedEpoch * horizonSeconds));
 
                 if (
                     (replay is null) ||
@@ -492,7 +485,7 @@ internal static class AttestationInterchangeHarness {
                     !string.Equals(a: replay.Subject, b: claim.Header.Subject, comparisonType: StringComparison.Ordinal) ||
                     (replay.Sequence != claim.Header.Sequence) ||
                     (replay.EpochStartUnixSeconds != expectedEpoch) ||
-                    (replay.RetainThroughUnixSeconds != checked(expectedEpoch + (2 * horizonSeconds) - 1))
+                    (replay.RetainThroughUnixSeconds != checked(((expectedEpoch + (2 * horizonSeconds)) - 1)))
                 ) {
                     failures += 1;
                     Console.WriteLine(value: "[FAIL] cross-verify replay contract: the sequenced claim did not return the exact epoch-scoped commit requirement §8 derives");
@@ -509,14 +502,14 @@ internal static class AttestationInterchangeHarness {
         }
 
         failures += CheckClaimHeader(
-            codec: codec,
             claimBytes: claimBytes,
+            codec: codec,
             manifest: manifest
         );
 
         // One flipped byte inside the claim's signature: the bytes still decode, so this lands on the
         // signature check rather than on the parser, which is what makes it a control for the case above.
-        var tampered = (byte[])claimBytes.Clone();
+        var tampered = ((byte[])claimBytes.Clone());
 
         tampered[^1] ^= 0xFF;
 
@@ -524,24 +517,23 @@ internal static class AttestationInterchangeHarness {
             check: "cross-verify tamper",
             detail: "one flipped byte",
             body: () => VerifyClaimBytes(
-                wire: tampered,
-                expected: expectedPurpose
+                expected: expectedPurpose,
+                wire: tampered
             )
         );
 
         failures += VerifySealed(
+            chain: chain,
             codec: codec,
             directory: directory,
             manifest: manifest,
-            trustList: trustList,
-            chain: chain
+            trustList: trustList
         );
 
         return ((failures == 0)
             ? 0
             : 1);
     }
-
     /// <summary>
     /// Checks the imported claim's own header against what the manifest says it carries. The manifest is not
     /// signed, so this is not a security check — it is the fixture's self-consistency check, and it is what
@@ -616,7 +608,6 @@ internal static class AttestationInterchangeHarness {
 
         return 0;
     }
-
     /// <summary>
     /// Verifies the sealed artifact: the attestation's signature by the ordinary chain walk, then the AEAD
     /// open itself. This is the only part of the fixture that exercises §14's key derivation, and it is the
@@ -783,7 +774,6 @@ internal static class AttestationInterchangeHarness {
             return failures;
         }
     }
-
     /// <summary>
     /// Runs one fixture step and turns every way it can fail into a named <c>[FAIL]</c> line rather than an
     /// escaping exception. The catch is deliberately unfiltered: a step's whole job is to interpret bytes
@@ -812,7 +802,6 @@ internal static class AttestationInterchangeHarness {
             return false;
         }
     }
-
     private static TimeSpan ParseReplayHorizon(string value) {
         if (
             !long.TryParse(
@@ -829,10 +818,9 @@ internal static class AttestationInterchangeHarness {
         try {
             return TimeSpan.FromSeconds(value: seconds);
         } catch (OverflowException exception) {
-            throw new FormatException(message: "manifest.txt's replay-horizon-seconds is outside TimeSpan's representable range.", innerException: exception);
+            throw new FormatException(innerException: exception, message: "manifest.txt's replay-horizon-seconds is outside TimeSpan's representable range.");
         }
     }
-
     /// <summary>
     /// Runs a control that must refuse. A refusal reported as a verdict and a refusal raised as an exception
     /// are the same outcome here — §0's "refuse" is a negative verdict, and throw-or-return is a language
@@ -866,7 +854,6 @@ internal static class AttestationInterchangeHarness {
         }
     }
     private static string Describe(Exception exception) => $"{exception.GetType().Name}: {exception.Message}";
-
     /// <summary>
     /// Writes the fixture manifest as UTF-8 with no byte-order mark, one <c>key=value</c> per
     /// line, LF line terminators including a final one, and the three backslash escapes applied to values.
@@ -888,7 +875,6 @@ internal static class AttestationInterchangeHarness {
             encoding: ManifestEncoding
         );
     }
-
     /// <summary>
     /// Reads the fixture manifest. Empty lines are ignored; every other line must hold a
     /// <c>key=value</c> pair split at its first <c>=</c>; a repeated key refuses rather than resolving by
@@ -901,8 +887,8 @@ internal static class AttestationInterchangeHarness {
     private static Dictionary<string, string> ReadManifest(string path) {
         var manifest = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
         var text = File.ReadAllText(
-            path: path,
-            encoding: ManifestEncoding
+            encoding: ManifestEncoding,
+            path: path
         );
         var lineNumber = 0;
 
@@ -941,7 +927,6 @@ internal static class AttestationInterchangeHarness {
 
         return manifest;
     }
-
     /// <summary>Applies the fixture's three value escapes: a backslash, a line feed, and a carriage return. Nothing else is escaped — <c>=</c> needs no escape, because only the first one on a line splits.</summary>
     /// <param name="value">The raw value.</param>
     private static string EscapeManifestValue(string value) {
@@ -958,7 +943,6 @@ internal static class AttestationInterchangeHarness {
 
         return builder.ToString();
     }
-
     /// <summary>Reverses <see cref="EscapeManifestValue"/>, refusing an escape the format does not define rather than passing the backslash through — one escaped value must have exactly one unescaped reading.</summary>
     /// <param name="value">The escaped value.</param>
     /// <param name="key">The key it belongs to, for the refusal message.</param>

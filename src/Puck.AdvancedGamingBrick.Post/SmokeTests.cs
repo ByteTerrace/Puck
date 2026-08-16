@@ -11,10 +11,8 @@ internal static class SmokeTests {
     private const uint FlagT = (1u << 5);
     private const uint FlagV = (1u << 28);
     private const uint FlagZ = (1u << 30);
-
     // ARM "branch to self" — a safe landing pad so over-stepping a vector just re-executes the loop.
     private const uint ArmSelfLoop = 0xEAFFFFFEu;
-
     // Thumb "branch to self".
     private const ushort ThumbSelfLoop = 0xE7FE;
 
@@ -22,6 +20,7 @@ internal static class SmokeTests {
     private static int Failed;
     private static int Skipped;
     private static ReadOnlyMemory<byte> Bios;
+
     private static readonly List<string> Failures = [];
 
     /// <summary>Runs every smoke vector once and returns the aggregate result. Vectors that need a real replacement BIOS
@@ -199,7 +198,7 @@ internal static class SmokeTests {
         // "next" stage and only reach the synchronizer (the CPU's line) after StepSync shifts them through — the
         // 2-cycle recognition latency. IF is write-one-to-clear.
         var controller = new AgbInterruptController();
-        var timer0Bit = (ushort)(1u << (int)InterruptSource.Timer0);
+        var timer0Bit = ((ushort)(1u << ((int)InterruptSource.Timer0)));
 
         Check(
             name: "IRQ line low at rest",
@@ -325,50 +324,50 @@ internal static class SmokeTests {
         );
 
         bus.Write32(
+            access: BusAccessType.NonSequential,
             address: 0x03000000u,
-            value: 0xCAFEBABEu,
-            access: BusAccessType.NonSequential
+            value: 0xCAFEBABEu
         );
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000B0u,
-            value: 0x0000,
-            access: BusAccessType.NonSequential
+            value: 0x0000
         ); // SAD lo
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000B2u,
-            value: 0x0300,
-            access: BusAccessType.NonSequential
+            value: 0x0300
         ); // SAD hi → 0x03000000
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000B4u,
-            value: 0x0100,
-            access: BusAccessType.NonSequential
+            value: 0x0100
         ); // DAD lo
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000B6u,
-            value: 0x0300,
-            access: BusAccessType.NonSequential
+            value: 0x0300
         ); // DAD hi → 0x03000100
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000B8u,
-            value: 0x0001,
-            access: BusAccessType.NonSequential
+            value: 0x0001
         ); // count = 1
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000BAu,
-            value: 0x8400,
-            access: BusAccessType.NonSequential
+            value: 0x8400
         ); // enable + 32-bit + immediate
 
         var copied = bus.Read32(
-            address: 0x03000100u,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: 0x03000100u
         );
 
         Check(
+            detail: $"got 0x{copied:X8}",
             name: "immediate DMA copies a word",
-            ok: (copied == 0xCAFEBABEu),
-            detail: $"got 0x{copied:X8}"
+            ok: (copied == 0xCAFEBABEu)
         );
     }
     private static void DmaCountLatching() {
@@ -404,83 +403,83 @@ internal static class SmokeTests {
         // src[i] = i as halfwords in IWRAM; the destination is a single fixed halfword.
         for (uint i = 0; (i < 8u); ++i) {
             bus.Write16(
+                access: BusAccessType.NonSequential,
                 address: (0x03000000u + (i * 2u)),
-                value: (ushort)i,
-                access: BusAccessType.NonSequential
+                value: ((ushort)i)
             );
         }
 
         // DMA3: src 0x03000000 (increment), dst 0x03000100 (fixed), 16-bit, VBlank timing, repeat, count = 2.
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000D4u,
-            value: 0x0000,
-            access: BusAccessType.NonSequential
+            value: 0x0000
         ); // SAD lo
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000D6u,
-            value: 0x0300,
-            access: BusAccessType.NonSequential
+            value: 0x0300
         ); // SAD hi → 0x03000000
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000D8u,
-            value: 0x0100,
-            access: BusAccessType.NonSequential
+            value: 0x0100
         ); // DAD lo
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000DAu,
-            value: 0x0300,
-            access: BusAccessType.NonSequential
+            value: 0x0300
         ); // DAD hi → 0x03000100
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000DCu,
-            value: 0x0002,
-            access: BusAccessType.NonSequential
+            value: 0x0002
         ); // count = 2 (latched here)
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000DEu,
-            value: 0x9240,
-            access: BusAccessType.NonSequential
+            value: 0x9240
         ); // enable+VBlank+repeat+dst-fixed
 
         // Rewrite the count to 4 AFTER enable — the first run must still transfer the latched 2, not 4.
         bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x040000DCu,
-            value: 0x0004,
-            access: BusAccessType.NonSequential
+            value: 0x0004
         );
 
         dma.OnVBlank(bus: bus);
         dma.RunPending(bus: bus);
         var first = bus.Read16(
-            address: 0x03000100u,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: 0x03000100u
         );
 
         Check(
+            detail: $"got {first}",
             name: "DMA count latched at enable (first run transfers 2)",
-            ok: (first == 1u),
-            detail: $"got {first}"
+            ok: (first == 1u)
         );
 
         dma.OnVBlank(bus: bus);
         dma.RunPending(bus: bus);
         var reload = bus.Read16(
-            address: 0x03000100u,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: 0x03000100u
         );
 
         Check(
+            detail: $"got {reload}",
             name: "DMA count reloads from register on repeat (transfers 4)",
-            ok: (reload == 5u),
-            detail: $"got {reload}"
+            ok: (reload == 5u)
         );
     }
     private static void PpuTiming() {
         var interrupts = new AgbInterruptController();
         var scheduler = new AgbScheduler();
         var ppu = new AgbPpu(
-            scheduler: scheduler,
-            interrupts: interrupts
+            interrupts: interrupts,
+            scheduler: scheduler
         );
 
         interrupts.WriteRegister(
@@ -489,7 +488,7 @@ internal static class SmokeTests {
         );
         interrupts.WriteRegister(
             offset: 0x200u,
-            value: (ushort)(1u << (int)InterruptSource.VBlank)
+            value: ((ushort)(1u << ((int)InterruptSource.VBlank)))
         );
         ppu.WriteRegister(
             offset: 0x04u,
@@ -564,33 +563,33 @@ internal static class SmokeTests {
         for (uint i = 0; (i < 32u); i += 2u) {
             ppu.WriteVideo(
                 address: (0x06010000u + i),
-                width: 2,
-                value: 0x1111
+                value: 0x1111,
+                width: 2
             );
         }
 
         // OBJ palette colour index 1 = red (BGR555 0x001F); OBJ palette starts at palette index 256.
         ppu.WriteVideo(
             address: (0x05000000u + ((256u + 1u) * 2u)),
-            width: 2,
-            value: 0x001F
+            value: 0x001F,
+            width: 2
         );
 
         // OAM sprite 0 at (0,0), 8×8 square, tile 0, priority 0.
         ppu.WriteVideo(
             address: 0x07000000u,
-            width: 2,
-            value: 0x0000
+            value: 0x0000,
+            width: 2
         ); // attr0: y=0, normal
         ppu.WriteVideo(
             address: 0x07000002u,
-            width: 2,
-            value: 0x0000
+            value: 0x0000,
+            width: 2
         ); // attr1: x=0, 8×8
         ppu.WriteVideo(
             address: 0x07000004u,
-            width: 2,
-            value: 0x0000
+            value: 0x0000,
+            width: 2
         ); // attr2: tile 0
 
         scheduler.Advance(cycles: 1232); // render scanline 0
@@ -599,17 +598,16 @@ internal static class SmokeTests {
         var backdrop = ppu.Framebuffer[100]; // x=100 is beyond the 8-pixel sprite → backdrop
 
         Check(
+            detail: $"got 0x{pixel:X8}",
             name: "sprite pixel is red",
-            ok: (pixel == 0xFF0000FFu),
-            detail: $"got 0x{pixel:X8}"
+            ok: (pixel == 0xFF0000FFu)
         );
         Check(
+            detail: $"got 0x{backdrop:X8}",
             name: "non-sprite pixel is backdrop",
-            ok: ((backdrop & 0x00FFFFFFu) == 0u),
-            detail: $"got 0x{backdrop:X8}"
+            ok: ((backdrop & 0x00FFFFFFu) == 0u)
         );
     }
-
     // Proves the OBJ per-line rendering cycle budget: with H-Blank
     // Interval Free set the budget is 954 cycles, 8 per 8×8 regular sprite. 119 "burner" sprites overlapping at
     // x=0 spend 952 of it (overlap is irrelevant to the charge — cost is per column processed, not per column
@@ -634,43 +632,43 @@ internal static class SmokeTests {
         for (uint i = 0; (i < 32u); i += 2u) {
             ppu.WriteVideo(
                 address: (0x06010000u + i),
-                width: 2,
-                value: 0x1111
+                value: 0x1111,
+                width: 2
             );
         }
 
         // OBJ palette colour index 1 = red.
         ppu.WriteVideo(
             address: (0x05000000u + ((256u + 1u) * 2u)),
-            width: 2,
-            value: 0x001F
+            value: 0x001F,
+            width: 2
         );
 
         // Backdrop (BG palette index 0) = blue, unmistakably distinct from the sprite colour.
         ppu.WriteVideo(
             address: 0x05000000u,
-            width: 2,
-            value: 0x7C00
+            value: 0x7C00,
+            width: 2
         );
 
         const int BurnerCount = 119; // 119 * 8 cycles = 952 of the 954-cycle budget.
 
         for (var sprite = 0; (sprite < BurnerCount); ++sprite) {
             WriteBudgetSprite(
-                ppu: ppu,
                 index: sprite,
+                ppu: ppu,
                 x: 0
             );
         }
 
         WriteBudgetSprite(
-            ppu: ppu,
             index: BurnerCount,
+            ppu: ppu,
             x: 50
         );      // 2 cycles left: columns 0-1 render, 2-7 don't.
         WriteBudgetSprite(
-            ppu: ppu,
             index: (BurnerCount + 1),
+            ppu: ppu,
             x: 100
         ); // budget already 0: never processed.
 
@@ -684,48 +682,46 @@ internal static class SmokeTests {
         var droppedSprite = ppu.Framebuffer[100];
 
         Check(
+            detail: $"got 0x{burnerPixel:X8}",
             name: "OBJ budget: early sprite still renders",
-            ok: (burnerPixel == SpriteRed),
-            detail: $"got 0x{burnerPixel:X8}"
+            ok: (burnerPixel == SpriteRed)
         );
         Check(
+            detail: $"got 0x{targetEarly:X8}",
             name: "OBJ budget: sprite renders while cycles remain",
-            ok: (targetEarly == SpriteRed),
-            detail: $"got 0x{targetEarly:X8}"
+            ok: (targetEarly == SpriteRed)
         );
         Check(
+            detail: $"got 0x{targetLate:X8}",
             name: "OBJ budget: exhaustion stops mid-sprite",
-            ok: (targetLate == BackdropBlue),
-            detail: $"got 0x{targetLate:X8}"
+            ok: (targetLate == BackdropBlue)
         );
         Check(
+            detail: $"got 0x{droppedSprite:X8}",
             name: "OBJ budget: later sprite drops out entirely",
-            ok: (droppedSprite == BackdropBlue),
-            detail: $"got 0x{droppedSprite:X8}"
+            ok: (droppedSprite == BackdropBlue)
         );
     }
-
     // Writes an 8×8, normal (non-affine), priority-0 OAM entry at (x, 0) referencing tile 0 / OBJ palette bank 0.
     private static void WriteBudgetSprite(AgbPpu ppu, int index, int x) {
-        var attributeBase = (0x07000000u + (uint)(index * 8));
+        var attributeBase = (0x07000000u + ((uint)(index * 8)));
 
         ppu.WriteVideo(
             address: attributeBase,
-            width: 2,
-            value: 0x0000
+            value: 0x0000,
+            width: 2
         );              // attr0: y=0, normal, 8×8
         ppu.WriteVideo(
             address: (attributeBase + 2u),
-            width: 2,
-            value: (uint)x
+            value: ((uint)x),
+            width: 2
         );         // attr1: x, 8×8
         ppu.WriteVideo(
             address: (attributeBase + 4u),
-            width: 2,
-            value: 0x0000
+            value: 0x0000,
+            width: 2
         );          // attr2: tile 0, priority 0
     }
-
     // Proves GRSWP (0x4000002) bit 0: with it clear the two BGR555 bitmap pixels come through untouched; with it
     // set, only their green components trade places (red/blue stay put): "BGRbgr → BgRbGr".
     private static void GreenSwap() {
@@ -748,13 +744,13 @@ internal static class SmokeTests {
         ); // Mode 3, BG2 enabled (bit 10)
         offPpu.WriteVideo(
             address: 0x06000000u,
-            width: 2,
-            value: (uint)ColorA
+            value: ((uint)ColorA),
+            width: 2
         );
         offPpu.WriteVideo(
             address: 0x06000002u,
-            width: 2,
-            value: (uint)ColorB
+            value: ((uint)ColorB),
+            width: 2
         );
         offScheduler.Advance(cycles: 1232);
 
@@ -762,14 +758,14 @@ internal static class SmokeTests {
         var offPixel1 = offPpu.Framebuffer[1];
 
         Check(
+            detail: $"got 0x{offPixel0:X8}",
             name: "green swap off leaves pixel 0 untouched",
-            ok: (offPixel0 == ColorAUnswapped),
-            detail: $"got 0x{offPixel0:X8}"
+            ok: (offPixel0 == ColorAUnswapped)
         );
         Check(
+            detail: $"got 0x{offPixel1:X8}",
             name: "green swap off leaves pixel 1 untouched",
-            ok: (offPixel1 == ColorBUnswapped),
-            detail: $"got 0x{offPixel1:X8}"
+            ok: (offPixel1 == ColorBUnswapped)
         );
 
         var onScheduler = new AgbScheduler();
@@ -788,13 +784,13 @@ internal static class SmokeTests {
         ); // GRSWP bit 0
         onPpu.WriteVideo(
             address: 0x06000000u,
-            width: 2,
-            value: (uint)ColorA
+            value: ((uint)ColorA),
+            width: 2
         );
         onPpu.WriteVideo(
             address: 0x06000002u,
-            width: 2,
-            value: (uint)ColorB
+            value: ((uint)ColorB),
+            width: 2
         );
         onScheduler.Advance(cycles: 1232);
 
@@ -802,14 +798,14 @@ internal static class SmokeTests {
         var onPixel1 = onPpu.Framebuffer[1];
 
         Check(
+            detail: $"got 0x{onPixel0:X8}",
             name: "green swap exchanges pixel 0's green",
-            ok: (onPixel0 == ColorASwapped),
-            detail: $"got 0x{onPixel0:X8}"
+            ok: (onPixel0 == ColorASwapped)
         );
         Check(
+            detail: $"got 0x{onPixel1:X8}",
             name: "green swap exchanges pixel 1's green",
-            ok: (onPixel1 == ColorBSwapped),
-            detail: $"got 0x{onPixel1:X8}"
+            ok: (onPixel1 == ColorBSwapped)
         );
     }
     private static void AffineBackgroundRendering() {
@@ -851,16 +847,16 @@ internal static class SmokeTests {
         for (uint i = 0; (i < 64u); i += 2u) {
             ppu.WriteVideo(
                 address: (0x06000000u + i),
-                width: 2,
-                value: 0x0101
+                value: 0x0101,
+                width: 2
             );
         }
 
         // BG palette colour index 1 = red.
         ppu.WriteVideo(
             address: 0x05000002u,
-            width: 2,
-            value: 0x001F
+            value: 0x001F,
+            width: 2
         );
 
         scheduler.Advance(cycles: 1232); // render scanline 0
@@ -868,9 +864,9 @@ internal static class SmokeTests {
         var pixel = ppu.Framebuffer[0];
 
         Check(
+            detail: $"got 0x{pixel:X8}",
             name: "affine BG renders (identity transform)",
-            ok: (pixel == 0xFF0000FFu),
-            detail: $"got 0x{pixel:X8}"
+            ok: (pixel == 0xFF0000FFu)
         );
     }
     private static void BrightnessBlend() {
@@ -905,16 +901,16 @@ internal static class SmokeTests {
         for (uint i = 0; (i < 32u); i += 2u) {
             ppu.WriteVideo(
                 address: (0x06000000u + i),
-                width: 2,
-                value: 0x1111
+                value: 0x1111,
+                width: 2
             );
         }
 
         // BG palette index 1 = red.
         ppu.WriteVideo(
             address: 0x05000002u,
-            width: 2,
-            value: 0x001F
+            value: 0x001F,
+            width: 2
         );
 
         scheduler.Advance(cycles: 1232);
@@ -922,9 +918,9 @@ internal static class SmokeTests {
         var pixel = ppu.Framebuffer[0];
 
         Check(
+            detail: $"got 0x{pixel:X8}",
             name: "brightness blend → white at EVY=16",
-            ok: (pixel == 0xFFFFFFFFu),
-            detail: $"got 0x{pixel:X8}"
+            ok: (pixel == 0xFFFFFFFFu)
         );
     }
     private static void ApuPulseOutput() {
@@ -1062,7 +1058,7 @@ internal static class SmokeTests {
     }
     private static void BiosIrqDispatch() {
         // Needs the real replacement BIOS; skip cleanly when only the zero stub is present.
-        if (Bios.Span.IndexOfAnyExcept(value: (byte)0) < 0) {
+        if (Bios.Span.IndexOfAnyExcept(value: ((byte)0)) < 0) {
             ++Skipped;
 
             return;
@@ -1094,31 +1090,31 @@ internal static class SmokeTests {
 
         for (var i = 0; (i < handler.Length); ++i) {
             machine.Bus.Write32(
-                address: (0x03000000u + ((uint)i * 4u)),
+                address: (0x03000000u + (((uint)i) * 4u)),
                 value: handler[i],
                 access: BusAccessType.NonSequential
             );
         }
 
         machine.Bus.Write32(
+            access: BusAccessType.NonSequential,
             address: 0x03007FFCu,
-            value: 0x03000000u,
-            access: BusAccessType.NonSequential
+            value: 0x03000000u
         ); // BIOS user-IRQ-handler pointer
         machine.Bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x04000004u,
-            value: 0x0008,
-            access: BusAccessType.NonSequential
+            value: 0x0008
         );       // DISPSTAT: V-blank IRQ enable
         machine.Bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x04000200u,
-            value: 0x0001,
-            access: BusAccessType.NonSequential
+            value: 0x0001
         );       // IE: V-blank
         machine.Bus.Write16(
+            access: BusAccessType.NonSequential,
             address: 0x04000208u,
-            value: 0x0001,
-            access: BusAccessType.NonSequential
+            value: 0x0001
         );       // IME
 
         for (long i = 0; (i < 1_000_000); ++i) {
@@ -1126,14 +1122,14 @@ internal static class SmokeTests {
         }
 
         var marker = machine.Bus.Read32(
-            address: 0x03001000u,
-            access: BusAccessType.NonSequential
+            access: BusAccessType.NonSequential,
+            address: 0x03001000u
         );
 
         Check(
+            detail: $"got 0x{marker:X8}",
             name: "BIOS dispatches V-blank IRQ to user handler",
-            ok: (marker == 0xAAu),
-            detail: $"got 0x{marker:X8}"
+            ok: (marker == 0xAAu)
         );
     }
     private static void DependencyInjectionScope() {
@@ -1193,7 +1189,6 @@ internal static class SmokeTests {
         }
     }
 }
-
 /// <summary>The aggregate result of a <see cref="SmokeTests.Run"/> pass: how many individual checks passed, failed, or
 /// skipped (a BIOS-dependent check with no real BIOS), and the names of the failing checks.</summary>
 /// <param name="Passed">The number of checks that passed.</param>

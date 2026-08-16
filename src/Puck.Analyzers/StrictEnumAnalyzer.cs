@@ -80,7 +80,6 @@ public sealed class StrictEnumAnalyzer : DiagnosticAnalyzer {
         isEnabledByDefault: true,
         description: "Every enum reachable from a JsonSerializerContext's [JsonSerializable] roots through ordinary property serialization must declare how it crosses the wire. The default — no converter — is a silent numeric ordinal that tolerates any in-range integer on read, which is exactly the accepted-and-inert regression the strict-enum mechanism exists to prevent."
     );
-
     /// <summary>ENUM002: the walk reached a member shape it cannot classify without risking a false 'covered'.</summary>
     public static readonly DiagnosticDescriptor Enum002UnclassifiableJsonShape = new(
         id: "ENUM002",
@@ -119,14 +118,14 @@ public sealed class StrictEnumAnalyzer : DiagnosticAnalyzer {
 
         context.RegisterSymbolAction(
             action: symbolContext => AnalyzeNamedType(
-                symbolContext: symbolContext,
-                knownTypes: knownTypes
+                knownTypes: knownTypes,
+                symbolContext: symbolContext
             ),
             symbolKinds: ImmutableArray.Create(item: SymbolKind.NamedType)
         );
     }
     private static void AnalyzeNamedType(SymbolAnalysisContext symbolContext, StrictEnumKnownTypes knownTypes) {
-        var candidate = (INamedTypeSymbol)symbolContext.Symbol;
+        var candidate = ((INamedTypeSymbol)symbolContext.Symbol);
 
         if (!StrictEnumReachability.DerivesFromJsonSerializerContext(
             type: candidate,

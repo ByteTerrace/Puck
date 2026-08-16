@@ -1,3 +1,5 @@
+using Puck.SignedDistance;
+
 namespace Puck.SdfVm;
 
 /// <summary>
@@ -8,9 +10,9 @@ namespace Puck.SdfVm;
 /// <remarks>
 /// The pixels are tightly packed, row-major, top-down RGBA (<c><see cref="Width"/> × <see cref="Height"/> × 4</c>
 /// bytes). The true single-channel signed distance the glyph shape marches must live in the alpha channel: the
-/// engine's runtime generator (<c>Puck.Text.SdfCoverageAtlas</c>) replicates its single channel into every channel,
-/// and the font-atlas bake pipeline's (<c>experimental/tools/font-atlas</c>) MTSDF atlas carries the true distance
-/// in alpha by convention, so a consumer of either source samples alpha uniformly.
+/// managed MTSDF generator computes it exactly, the coverage-conversion fallback
+/// (<c>Puck.Text.SdfCoverageAtlas</c>) replicates its single channel into every channel, and the imported fixed-UI
+/// MTSDF atlas carries it by construction, so a consumer of every source samples alpha uniformly.
 /// </remarks>
 /// <param name="Rgba">The tightly packed, row-major, top-down RGBA atlas pixels.</param>
 /// <param name="Width">The atlas width in texels.</param>

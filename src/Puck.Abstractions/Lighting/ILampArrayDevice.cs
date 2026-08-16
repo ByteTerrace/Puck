@@ -10,13 +10,10 @@ namespace Puck.Abstractions.Lighting;
 public interface ILampArrayDevice : IDisposable {
     /// <summary>Gets a stable identity for the device (its device-interface path), unique per physical port.</summary>
     string DeviceId { get; }
-
     /// <summary>Gets the kind of device this array lights.</summary>
     LampArrayKind Kind { get; }
-
     /// <summary>Gets the number of individually addressable lamps; lamp ids run <c>0</c>..(<see cref="LampCount"/> - 1).</summary>
     int LampCount { get; }
-
     /// <summary>Gets the device's minimum update interval in milliseconds — the fastest cadence a driver should write at.</summary>
     int MinUpdateIntervalInMilliseconds { get; }
 
@@ -25,7 +22,6 @@ public interface ILampArrayDevice : IDisposable {
     /// <param name="info">When this method returns <see langword="true"/>, the lamp's attributes.</param>
     /// <returns><see langword="true"/> when <paramref name="index"/> is in range; otherwise <see langword="false"/>.</returns>
     bool TryGetLampInfo(int index, out LampInfo info);
-
     /// <summary>
     /// Sets a batch of lamps by id. The two spans are parallel: <c>colors[i]</c> is applied to
     /// <c>lampIds[i]</c>. The implementation fragments the batch into as many device writes as the transport
@@ -34,11 +30,9 @@ public interface ILampArrayDevice : IDisposable {
     /// <param name="lampIds">The lamp ids to set.</param>
     /// <param name="colors">The colors to apply, one per id (same length as <paramref name="lampIds"/>).</param>
     void UpdateLamps(ReadOnlySpan<int> lampIds, ReadOnlySpan<LampColor> colors);
-
     /// <summary>Sets every lamp on the device to one color in a single update.</summary>
     /// <param name="color">The color to apply to all lamps.</param>
     void UpdateAllLamps(LampColor color);
-
     /// <summary>
     /// Sets the device's autonomous mode. Pass <see langword="false"/> to take host control (stop the device's
     /// built-in effects so host color updates take effect); pass <see langword="true"/> to hand control back to

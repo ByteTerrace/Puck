@@ -39,6 +39,7 @@ public sealed class IrLinkSession : IDisposable {
     private readonly InfraredPort m_firstPort;
     private readonly Machine m_second;
     private readonly InfraredPort m_secondPort;
+
     private bool m_disposed;
     private ulong m_firstTarget;
     private ulong m_secondTarget;
@@ -70,7 +71,6 @@ public sealed class IrLinkSession : IDisposable {
         m_firstTarget = m_first.Clock.CycleCount;
         m_secondTarget = m_second.Clock.CycleCount;
     }
-
     /// <summary>Reconnects a suspended pair, re-anchoring each machine's pacing target at <c>CycleCount − credit</c> so the
     /// run continues the exact pacing the matching <see cref="Suspend"/> severed at — the credit-preserving path a
     /// snapshot/restore/reconnect cycle needs. Use this (never the plain constructor) after restoring both machines from

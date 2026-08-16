@@ -30,6 +30,6 @@ internal static class DmaSource {
             return memory.ReadWorkRam(address: address);
         }
 
-        return memory.ReadWorkRam(address: (ushort)(address - MemoryMap.EchoRamMirrorOffset));
+        return memory.ReadWorkRam(address: ((ushort)(address - MemoryMap.EchoRamMirrorOffset)));
     }
 }

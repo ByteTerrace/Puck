@@ -15,6 +15,7 @@ public sealed class VulkanViewTarget : IGpuRenderTarget, IVulkanRenderTarget {
     private readonly nint m_memoryHandle;
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
     private readonly VulkanRenderPass m_renderPass;
+
     private bool m_disposed;
 
     /// <summary>Creates an offscreen render target.</summary>

@@ -7,6 +7,7 @@ namespace Puck.AdvancedGamingBrick;
 /// </summary>
 public sealed partial class ApuNoiseChannel {
     private static readonly int[] Divisors = { 8, 16, 32, 48, 64, 80, 96, 112 };
+
     private int m_frequencyTimer;
     private int m_lengthCounter;
     private int m_envelopeVolume;
@@ -24,7 +25,6 @@ public sealed partial class ApuNoiseChannel {
 
     /// <summary>Gets a value indicating whether the channel is currently producing sound.</summary>
     public bool Active => (m_enabled && m_dacEnabled);
-
     /// <summary>Gets the current output amplitude, 0–15.</summary>
     public int Output => ((Active && ((m_lfsr & 1) == 0))
         ? m_envelopeVolume
@@ -40,34 +40,29 @@ public sealed partial class ApuNoiseChannel {
 
             var feedback = (m_lfsr ^ (m_lfsr >> 1)) & 1;
 
-            m_lfsr = (ushort)((m_lfsr >> 1) | (feedback << 14));
+            m_lfsr = ((ushort)((m_lfsr >> 1) | (feedback << 14)));
 
             if (m_widthMode) {
-                m_lfsr = (ushort)((m_lfsr & ~0x40) | (feedback << 6));
+                m_lfsr = ((ushort)((m_lfsr & ~0x40) | (feedback << 6)));
             }
         }
     }
-
     /// <summary>Reads back the envelope register (NR42): initial volume, direction, and period.</summary>
-    public byte ReadEnvelope() => (byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
+    public byte ReadEnvelope() => ((byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
         ? 0x8
-        : 0) | m_envelopePeriod);
-
+        : 0) | m_envelopePeriod));
     /// <summary>Reads back the polynomial register (NR43): divisor, width mode, and shift clock.</summary>
-    public byte ReadPolynomial() => (byte)(m_divisorCode | (m_widthMode
+    public byte ReadPolynomial() => ((byte)(m_divisorCode | (m_widthMode
         ? 0x8
-        : 0) | (m_shiftClock << 4));
-
+        : 0) | (m_shiftClock << 4)));
     /// <summary>Reads back NR44's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => (byte)(m_lengthEnabled
+    public byte ReadControl() => ((byte)(m_lengthEnabled
         ? 0x40
-        : 0);
-
+        : 0));
     /// <summary>Reloads the length counter (NR41).</summary>
     public void WriteLength(byte value) {
         m_lengthCounter = (64 - (value & 0x3F));
     }
-
     /// <summary>Sets the envelope (NR42); clearing the upper five bits disables the DAC.</summary>
     public void WriteEnvelope(byte value) {
         m_envelopeInitial = (value >> 4) & 0xF;
@@ -79,14 +74,12 @@ public sealed partial class ApuNoiseChannel {
             m_enabled = false;
         }
     }
-
     /// <summary>Sets the divisor, LFSR width, and shift clock (NR43).</summary>
     public void WritePolynomial(byte value) {
         m_divisorCode = value & 0x7;
         m_widthMode = ((value & 0x8) != 0);
         m_shiftClock = (value >> 4) & 0xF;
     }
-
     /// <summary>Sets control (NR44); bit 7 triggers the channel, bit 6 enables the length counter.</summary>
     public void WriteControl(byte value) {
         m_lengthEnabled = ((value & 0x40) != 0);
@@ -103,7 +96,6 @@ public sealed partial class ApuNoiseChannel {
             }
         }
     }
-
     /// <summary>Clocks the length counter (256&#160;Hz).</summary>
     public void ClockLength() {
         if (
@@ -114,7 +106,6 @@ public sealed partial class ApuNoiseChannel {
             m_enabled = false;
         }
     }
-
     /// <summary>Clocks the volume envelope (64&#160;Hz).</summary>
     public void ClockEnvelope() {
         if (m_envelopePeriod == 0) {

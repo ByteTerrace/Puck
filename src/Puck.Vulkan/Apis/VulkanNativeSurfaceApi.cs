@@ -187,11 +187,11 @@ public unsafe sealed class VulkanNativeSurfaceApi : IVulkanSurfaceApi {
         return m_pointers.GetOrAdd(
             key: instanceHandle,
             valueFactory: static handle => new InstancePointers {
-                CreateViSurfaceNn = (delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateViSurfaceNN"u8),
-                CreateWaylandSurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateWaylandSurfaceKHR"u8),
-                CreateWin32SurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateWin32SurfaceKHR"u8),
-                CreateXcbSurfaceKhr = (delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(instanceHandle: handle, functionName: "vkCreateXcbSurfaceKHR"u8),
-                DestroySurfaceKhr = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkDestroySurfaceKHR"u8),
+                CreateViSurfaceNn = ((delegate* unmanaged[Cdecl]<nint, in VkViSurfaceCreateInfoNn, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateViSurfaceNN"u8, instanceHandle: handle)),
+                CreateWaylandSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWaylandSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateWaylandSurfaceKHR"u8, instanceHandle: handle)),
+                CreateWin32SurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkWin32SurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateWin32SurfaceKHR"u8, instanceHandle: handle)),
+                CreateXcbSurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, in VkXcbSurfaceCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveOptionalInstanceProc(functionName: "vkCreateXcbSurfaceKHR"u8, instanceHandle: handle)),
+                DestroySurfaceKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkDestroySurfaceKHR"u8, instanceHandle: handle)),
             }
         );
     }

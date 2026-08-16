@@ -20,10 +20,8 @@ internal sealed class PostContext {
 
     /// <summary>The directory stages write artifacts to.</summary>
     public string ArtifactsDirectory { get; }
-
     /// <summary>The resolved reference-ROM corpus root, or <see langword="null"/> when absent.</summary>
     public string? TestRomRoot { get; }
-
     /// <summary>The resolved SingleStepTests/sm83 corpus root, or <see langword="null"/> when absent.</summary>
     public string? SstRoot { get; }
 }

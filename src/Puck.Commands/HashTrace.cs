@@ -24,6 +24,7 @@ public static class HashTrace {
 
         return ((left.Length == right.Length)
             ? -1
-            : count);
+            : count
+        );
     }
 }

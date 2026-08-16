@@ -49,34 +49,33 @@ public readonly record struct CommandEntry {
         Value = value;
     }
 
+    /// <summary>Whether applying this local live entry releases <see cref="TextCommandSource"/>'s deferred-mutation
+    /// drain barrier. Local-only like <see cref="Device"/>; a re-driven entry reconstructs it as <see langword="false"/>.</summary>
+    internal bool CompletesTextSubmission { get; init; }
+    internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
+
     /// <summary>Whether the physical signal that produced this entry created its device-to-slot assignment. Unlike
     /// <see cref="Device"/>, this is deterministic snapshot semantics so a first-seat gesture is consumed identically
     /// wherever the same input stream is re-driven.</summary>
     public bool AssignedSlot { get; internal init; }
-
     /// <summary>The interned command id (<see cref="CommandRegistry.TryGetId"/>).</summary>
     public ushort CommandId { get; internal init; }
-
     /// <summary>
     /// The local device that produced this command, for output handlers that act on the originating controller
     /// (e.g. rumble). This is a <em>local-only</em> annotation: it is excluded from the deterministic identity and
     /// must not be hashed — the lane's slot is the cross-machine identity.
     /// </summary>
     public InputDeviceId Device { get; internal init; }
-
     /// <summary>Whether this entry's handler fires when the snapshot is applied. Held digitals reassert with
     /// this <see langword="false"/>, while continuous analog routes re-dispatch; bindings that explicitly activate on
     /// release carry <see langword="true"/> on their completed edge.</summary>
     public bool Dispatch { get; internal init; }
-
     /// <summary>How this command entered the command pipeline. This is deterministic snapshot content and remains
     /// meaningful when a binding is synthesized and therefore has no <see cref="Source"/>.</summary>
     public CommandOrigin Origin { get; internal init; }
-
     /// <summary>The edge this tick represents: <see cref="CommandPhase.Started"/> / <see cref="CommandPhase.Active"/>
     /// (held) / <see cref="CommandPhase.Completed"/>.</summary>
     public CommandPhase Phase { get; internal init; }
-
     /// <summary>
     /// The identity acting through this entry. An injected entry carries the principal its sink was CONSTRUCTED with;
     /// every other entry is stamped at snapshot assembly from the lane's <see cref="ICommandPrincipalResolver"/> answer.
@@ -84,27 +83,18 @@ public readonly record struct CommandEntry {
     /// both doors.
     /// </summary>
     public CommandPrincipal Principal { get; internal init; }
-
     /// <summary>The provider-neutral physical source id that produced this entry (e.g. <c>keyboard.w</c>), or
     /// <see langword="null"/> when no physical control is behind it. Unlike
     /// <see cref="Device"/>, this is deterministic BINDING vocabulary, not a per-connection identity — a consumer that
     /// must distinguish two DIFFERENT physical controls dispatching the SAME command (e.g. two keys both bound to
     /// one channel) reads this, never <see cref="Device"/>. Use <see cref="Origin"/> for ingress.</summary>
     public string? Source { get; internal init; }
-
     /// <summary>The original text line for a simulation-routed console command. <see langword="null"/> for physical
     /// input. This is deterministic snapshot payload; it lets argument-bearing verbs execute at their assigned
     /// tick.</summary>
     public string? Text { get; internal init; }
-
     /// <summary>The command's value for this tick.</summary>
     public CommandValue Value { get; internal init; }
-
-    /// <summary>Whether applying this local live entry releases <see cref="TextCommandSource"/>'s deferred-mutation
-    /// drain barrier. Local-only like <see cref="Device"/>; a re-driven entry reconstructs it as <see langword="false"/>.</summary>
-    internal bool CompletesTextSubmission { get; init; }
-
-    internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
 
     /// <summary>Compares deterministic entry content. Process-local annotations are deliberately excluded.</summary>
     public bool Equals(CommandEntry other) {
@@ -115,12 +105,19 @@ public readonly record struct CommandEntry {
             (Origin == other.Origin) &&
             (Phase == other.Phase) &&
             Principal.Equals(other: other.Principal) &&
-            string.Equals(a: Source, b: other.Source, comparisonType: StringComparison.Ordinal) &&
-            string.Equals(a: Text, b: other.Text, comparisonType: StringComparison.Ordinal) &&
+            string.Equals(
+            a: Source,
+            b: other.Source,
+            comparisonType: StringComparison.Ordinal
+        ) &&
+            string.Equals(
+            a: Text,
+            b: other.Text,
+            comparisonType: StringComparison.Ordinal
+        ) &&
             Value.Equals(other: other.Value)
         );
     }
-
     /// <inheritdoc/>
     public override int GetHashCode() {
         var hash = new HashCode();
@@ -131,8 +128,14 @@ public readonly record struct CommandEntry {
         hash.Add(value: Origin);
         hash.Add(value: Phase);
         hash.Add(value: Principal);
-        hash.Add(value: Source, comparer: StringComparer.Ordinal);
-        hash.Add(value: Text, comparer: StringComparer.Ordinal);
+        hash.Add(
+            value: Source,
+            comparer: StringComparer.Ordinal
+        );
+        hash.Add(
+            value: Text,
+            comparer: StringComparer.Ordinal
+        );
         hash.Add(value: Value);
 
         return hash.ToHashCode();

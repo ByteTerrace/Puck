@@ -77,7 +77,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             ImageType = ImageType2d,
             InitialLayout = 0,
             MipLevels = 1,
-            PNext = (nint)(&externalInfo),
+            PNext = ((nint)(&externalInfo)),
             SType = StructureTypeImageCreateInfo,
             Samples = SampleCount1Bit,
             SharingMode = SharingModeExclusive,
@@ -131,13 +131,13 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             var importInfo = new VkImportMemoryWin32HandleInfoKHR {
                 Handle = request.SharedHandle,
                 HandleType = ExternalMemoryHandleTypeD3D12ResourceBit,
-                PNext = (nint)(&dedicatedInfo),
+                PNext = ((nint)(&dedicatedInfo)),
                 SType = StructureTypeImportMemoryWin32HandleInfo,
             };
             var allocateInfo = new VkMemoryAllocateInfo {
                 AllocationSize = memoryRequirements.Size,
                 MemoryTypeIndex = memoryTypeIndex,
-                PNext = (nint)(&importInfo),
+                PNext = ((nint)(&importInfo)),
                 SType = StructureTypeMemoryAllocateInfo,
             };
 
@@ -198,7 +198,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             ImageType = ImageType2d,
             InitialLayout = 0,
             MipLevels = 1,
-            PNext = (nint)(&externalInfo),
+            PNext = ((nint)(&externalInfo)),
             SType = StructureTypeImageCreateInfo,
             Samples = SampleCount1Bit,
             SharingMode = SharingModeExclusive,
@@ -242,13 +242,13 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             var importInfo = new VkImportMemoryWin32HandleInfoKHR {
                 Handle = request.SharedHandle,
                 HandleType = ExternalMemoryHandleTypeOpaqueWin32Bit,
-                PNext = (nint)(&dedicatedInfo),
+                PNext = ((nint)(&dedicatedInfo)),
                 SType = StructureTypeImportMemoryWin32HandleInfo,
             };
             var allocateInfo = new VkMemoryAllocateInfo {
                 AllocationSize = memoryRequirements.Size,
                 MemoryTypeIndex = memoryTypeIndex,
-                PNext = (nint)(&importInfo),
+                PNext = ((nint)(&importInfo)),
                 SType = StructureTypeMemoryAllocateInfo,
             };
 
@@ -309,7 +309,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
             ImageType = ImageType2d,
             InitialLayout = 0,
             MipLevels = 1,
-            PNext = (nint)(&externalInfo),
+            PNext = ((nint)(&externalInfo)),
             SType = StructureTypeImageCreateInfo,
             Samples = SampleCount1Bit,
             SharingMode = SharingModeExclusive,
@@ -355,18 +355,18 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 DwAccess = GenericAll,
                 Name = 0,
                 PAttributes = 0,
-                PNext = (nint)(&dedicatedInfo),
+                PNext = ((nint)(&dedicatedInfo)),
                 SType = StructureTypeExportMemoryWin32HandleInfo,
             };
             var exportInfo = new VkExportMemoryAllocateInfo {
                 HandleTypes = ExternalMemoryHandleTypeOpaqueWin32Bit,
-                PNext = (nint)(&exportWin32Info),
+                PNext = ((nint)(&exportWin32Info)),
                 SType = StructureTypeExportMemoryAllocateInfo,
             };
             var allocateInfo = new VkMemoryAllocateInfo {
                 AllocationSize = memoryRequirements.Size,
                 MemoryTypeIndex = memoryTypeIndex,
-                PNext = (nint)(&exportInfo),
+                PNext = ((nint)(&exportInfo)),
                 SType = StructureTypeMemoryAllocateInfo,
             };
 
@@ -446,14 +446,14 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateImage = (delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImage"u8),
-                DestroyImage = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImage"u8),
-                GetImageMemoryRequirements = (delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetImageMemoryRequirements"u8),
-                AllocateMemory = (delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8),
-                FreeMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8),
-                BindImageMemory = (delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindImageMemory"u8),
-                GetMemoryWin32HandleProperties = (delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8),
-                GetMemoryWin32Handle = (delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandleKHR"u8),
+                CreateImage = ((delegate* unmanaged[Cdecl]<nint, in VkImageCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateImage"u8)),
+                DestroyImage = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyImage"u8)),
+                GetImageMemoryRequirements = ((delegate* unmanaged[Cdecl]<nint, nint, out VkMemoryRequirements, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetImageMemoryRequirements"u8)),
+                AllocateMemory = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryAllocateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateMemory"u8)),
+                FreeMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkFreeMemory"u8)),
+                BindImageMemory = ((delegate* unmanaged[Cdecl]<nint, nint, nint, ulong, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkBindImageMemory"u8)),
+                GetMemoryWin32HandleProperties = ((delegate* unmanaged[Cdecl]<nint, uint, nint, out VkMemoryWin32HandlePropertiesKHR, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandlePropertiesKHR"u8)),
+                GetMemoryWin32Handle = ((delegate* unmanaged[Cdecl]<nint, in VkMemoryGetWin32HandleInfoKHR, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetMemoryWin32HandleKHR"u8)),
             }
         );
     }
@@ -461,7 +461,7 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
         return m_instancePointers.GetOrAdd(
             key: instanceHandle,
             valueFactory: static handle => new InstancePointers {
-                GetPhysicalDeviceMemoryProperties = (delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkGetPhysicalDeviceMemoryProperties"u8),
+                GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkGetPhysicalDeviceMemoryProperties"u8, instanceHandle: handle)),
             }
         );
     }

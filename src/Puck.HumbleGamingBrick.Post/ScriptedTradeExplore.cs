@@ -1,5 +1,5 @@
+using Puck.Assets;
 using Puck.HumbleGamingBrick.Interfaces;
-using Puck.Recording.Capture;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -209,8 +209,8 @@ internal static class ScriptedTradeExplore {
                 rom: File.ReadAllBytes(path: tradeRom),
                 dumpEvery: IntArg(
                     args: args,
-                    name: "--dump-every",
-                    fallback: 60
+                    fallback: 60,
+                    name: "--dump-every"
                 ),
                 outDir: (CommandLineArguments.Value(
                     args: args,
@@ -249,13 +249,13 @@ internal static class ScriptedTradeExplore {
         var rom = File.ReadAllBytes(path: romPath);
         var frames = IntArg(
             args: args,
-            name: "--frames",
-            fallback: 1200
+            fallback: 1200,
+            name: "--frames"
         );
         var dumpEvery = IntArg(
             args: args,
-            name: "--dump-every",
-            fallback: 120
+            fallback: 120,
+            name: "--dump-every"
         );
         var outDir = (CommandLineArguments.Value(
             args: args,
@@ -304,20 +304,20 @@ internal static class ScriptedTradeExplore {
 
         if (linked) {
             RunLinked(
+                dumpEvery: dumpEvery,
+                frames: frames,
+                outDir: outDir,
                 rom: rom,
                 scriptA: scriptA,
-                scriptB: scriptB,
-                frames: frames,
-                dumpEvery: dumpEvery,
-                outDir: outDir
+                scriptB: scriptB
             );
         } else {
             RunLone(
-                rom: rom,
-                script: scriptA,
-                frames: frames,
                 dumpEvery: dumpEvery,
-                outDir: outDir
+                frames: frames,
+                outDir: outDir,
+                rom: rom,
+                script: scriptA
             );
         }
 
@@ -340,18 +340,17 @@ internal static class ScriptedTradeExplore {
         void Run(JoypadButtons b, int frames) {
             for (var f = 0; (f < frames); ++f) {
                 joypad.SetButtons(pressed: b);
-                machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
             }
         }
 
         void Log(string tag) =>
-            Console.WriteLine(value: (($"  {tag}: yx={bus.ReadByte(address: 0xDA02):X2},{bus.ReadByte(address: 0xDA03):X2} pDir={bus.ReadByte(address: 0xD205):X2} pFacing={bus.ReadByte(address: 0xD20A):X2} "
-                + $"rcpSprite={bus.ReadByte(address: 0xD225):X2} rcpMapY={bus.ReadByte(address: (0xD225 + 17)):X2} rcpMapX={bus.ReadByte(address: (0xD225 + 16)):X2} ")
+            Console.WriteLine(value: (((string)$"  {tag}: yx={bus.ReadByte(address: 0xDA02):X2},{bus.ReadByte(address: 0xDA03):X2} pDir={bus.ReadByte(address: 0xD205):X2} pFacing={bus.ReadByte(address: 0xD20A):X2} rcpSprite={bus.ReadByte(address: 0xD225):X2} rcpMapY={bus.ReadByte(address: (0xD225 + 17)):X2} rcpMapX={bus.ReadByte(address: (0xD225 + 16)):X2} ")
                 + $"SC={bus.ReadByte(address: 0xFF02):X2} linkMode={bus.ReadByte(address: 0xD042):X2} scriptVar={bus.ReadByte(address: 0xD173):X2} scriptBank={bus.ReadByte(address: 0xD08C):X2} scriptRunning={bus.ReadByte(address: 0xD160):X2}"));
 
         for (var frame = 0; (frame < 600); ++frame) {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
         }
 
         Log(tag: "spawned");
@@ -373,9 +372,9 @@ internal static class ScriptedTradeExplore {
             var rgba = new byte[(pixels.Length * 4)];
 
             for (var p = 0; (p < pixels.Length); ++p) {
-                rgba[(p * 4)] = (byte)(pixels[p] >> 16);
-                rgba[((p * 4) + 1)] = (byte)(pixels[p] >> 8);
-                rgba[((p * 4) + 2)] = (byte)pixels[p];
+                rgba[(p * 4)] = ((byte)(pixels[p] >> 16));
+                rgba[((p * 4) + 1)] = ((byte)(pixels[p] >> 8));
+                rgba[((p * 4) + 2)] = ((byte)pixels[p]);
                 rgba[((p * 4) + 3)] = 0xFF;
             }
 
@@ -437,13 +436,13 @@ internal static class ScriptedTradeExplore {
         void Hold(JoypadButtons b, int frames) {
             for (var f = 0; (f < frames); ++f) {
                 joypad.SetButtons(pressed: b);
-                machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+                machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
             }
         }
 
         for (var frame = 0; (frame < 600); ++frame) {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
         }
 
         Console.WriteLine(value: $"  spawned: map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2} yx={Y():X2},{X():X2}");
@@ -461,8 +460,8 @@ internal static class ScriptedTradeExplore {
 
         WalkLog(
             b: JoypadButtons.Left,
-            tag: "LEFT",
-            steps: 6
+            steps: 6,
+            tag: "LEFT"
         );
 
         Hold(
@@ -471,7 +470,7 @@ internal static class ScriptedTradeExplore {
         );
 
         var recSprite = bus.ReadByte(address: 0xD225); // wObject1Struct sprite ($D225).
-        var recSprite2 = bus.ReadByte(address: (ushort)(0xD225 + 40)); // wObject2Struct.
+        var recSprite2 = bus.ReadByte(address: ((ushort)(0xD225 + 40))); // wObject2Struct.
 
         Console.WriteLine(value: $"  after warp: map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2} yx={Y():X2},{X():X2} obj1Sprite=0x{recSprite:X2} obj2Sprite=0x{recSprite2:X2} playerSprite=0x{bus.ReadByte(address: 0xD1FD):X2}");
     }
@@ -494,7 +493,7 @@ internal static class ScriptedTradeExplore {
 
         for (var frame = 0; (frame < 900); ++frame) {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
         }
 
         Console.WriteLine(value: $"  after WARP continue: map={bus.ReadByte(address: 0xDA00):X2}/{bus.ReadByte(address: 0xDA01):X2} yx={bus.ReadByte(address: 0xDA02):X2},{bus.ReadByte(address: 0xDA03):X2} pState={bus.ReadByte(address: 0xD682):X2}");
@@ -505,7 +504,7 @@ internal static class ScriptedTradeExplore {
             var buffer = new byte[length];
 
             for (var index = 0; (index < length); ++index) {
-                buffer[index] = b.ReadByte(address: (ushort)(start + index));
+                buffer[index] = b.ReadByte(address: ((ushort)(start + index)));
             }
 
             return buffer;
@@ -513,19 +512,19 @@ internal static class ScriptedTradeExplore {
 
         var structs = Read(
             b: bus,
-            start: 0xD1FD,
-            length: (13 * 40)
+            length: (13 * 40),
+            start: 0xD1FD
         );
         var mapObjects = Read(
             b: bus,
-            start: 0xD445,
-            length: (16 * 16)
+            length: (16 * 16),
+            start: 0xD445
         );
 
         for (var obj = 0; (obj < 13); ++obj) {
             var s = structs.AsSpan(
-                start: (obj * 40),
-                length: 40
+                length: 40,
+                start: (obj * 40)
             );
 
             if (s[0] == 0) {
@@ -537,8 +536,8 @@ internal static class ScriptedTradeExplore {
 
         for (var obj = 0; (obj < 16); ++obj) {
             var m = mapObjects.AsSpan(
-                start: (obj * 16),
-                length: 16
+                length: 16,
+                start: (obj * 16)
             );
 
             if (m[1] == 0) {
@@ -560,14 +559,14 @@ internal static class ScriptedTradeExplore {
 
         for (var frame = 0; (frame < 620); ++frame) {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
         }
 
         static byte[] Snap(ISystemBus b) {
             var buffer = new byte[0x10000];
 
             for (var address = 0xC000; (address <= 0xFFFE); ++address) {
-                buffer[address] = b.ReadByte(address: (ushort)address);
+                buffer[address] = b.ReadByte(address: ((ushort)address));
             }
 
             return buffer;
@@ -592,7 +591,7 @@ internal static class ScriptedTradeExplore {
         var oamSprites = 0;
 
         for (var sprite = 0; (sprite < 40); ++sprite) {
-            var y = bus.ReadByte(address: (ushort)(0xFE00 + (sprite * 4)));
+            var y = bus.ReadByte(address: ((ushort)(0xFE00 + (sprite * 4))));
 
             if (
                 (y > 0) &&
@@ -606,7 +605,7 @@ internal static class ScriptedTradeExplore {
         var playerStruct = new byte[16];
 
         for (var offset = 0; (offset < 16); ++offset) {
-            playerStruct[offset] = bus.ReadByte(address: (ushort)(0xD1FD + offset));
+            playerStruct[offset] = bus.ReadByte(address: ((ushort)(0xD1FD + offset)));
         }
 
         Console.WriteLine(value: $"  OAM on-screen sprites: {oamSprites}");
@@ -617,7 +616,7 @@ internal static class ScriptedTradeExplore {
         var idle0 = Snap(b: bus);
 
         joypad.SetButtons(pressed: JoypadButtons.None);
-        machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+        machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
 
         Diff(
             tag: "idle-frame",
@@ -630,7 +629,7 @@ internal static class ScriptedTradeExplore {
 
         for (var frame = 0; (frame < 4); ++frame) {
             joypad.SetButtons(pressed: JoypadButtons.Down);
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
         }
 
         Diff(
@@ -639,7 +638,6 @@ internal static class ScriptedTradeExplore {
             after: Snap(b: bus)
         );
     }
-
     // Continue to the overworld, hold a button, and histogram the CPU PC over a long instruction window to see whether the
     // overworld main loop is actually running.
     private static void ProbePc(byte[] rom, string hold) {
@@ -654,51 +652,50 @@ internal static class ScriptedTradeExplore {
 
         for (var frame = 0; (frame < 620); ++frame) {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
         }
 
         Console.WriteLine(value: $"  after continue: map={ScriptedTradeHarness.LiveMapGroup(machine: machine):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: machine):X2} yx={ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA02
+            address: 0xDA02,
+            machine: machine
         ):X2},{ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA03
+            address: 0xDA03,
+            machine: machine
         ):X2}");
 
         static string StateLine(MachineInstance m) =>
-            ((($"yx={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xDA02
+            ((((string)$"yx={ScriptedTradeHarness.Peek(
+            address: 0xDA02,
+            machine: m
         ):X2},{ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xDA03
-        ):X2} "
-            + $"pState={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xD682
+            address: 0xDA03,
+            machine: m
+        ):X2} pState={ScriptedTradeHarness.Peek(
+            address: 0xD682,
+            machine: m
         ):X2} pDir={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xD205
+            address: 0xD205,
+            machine: m
         ):X2} pFacing={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xD20A
+            address: 0xD20A,
+            machine: m
         ):X2} ")
             + $"linkMode={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xD042
+            address: 0xD042,
+            machine: m
         ):X2} scriptVar={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xD173
+            address: 0xD173,
+            machine: m
         ):X2} ")
             + $"vblank={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xFF8C
+            address: 0xFF8C,
+            machine: m
         ):X2} hJoypadDown={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xFF9C
+            address: 0xFF9C,
+            machine: m
         ):X2} hJoyDown={ScriptedTradeHarness.Peek(
-            machine: m,
-            address: 0xFFA0
+            address: 0xFFA0,
+            machine: m
         ):X2}");
 
         Console.WriteLine(value: $"  no-input : {StateLine(m: machine)}");
@@ -707,7 +704,7 @@ internal static class ScriptedTradeExplore {
 
         for (var frame = 0; (frame < 24); ++frame) {
             joypad.SetButtons(pressed: held);
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
 
             if (frame < 4) {
                 Console.WriteLine(value: $"  hold[{frame}] : {StateLine(m: machine)}");
@@ -741,18 +738,17 @@ internal static class ScriptedTradeExplore {
 
         Console.WriteLine(value: $"  holding {hold}: {Steps} instructions, {histogram.Count} distinct PCs, halted at {haltCount} samples ({((100.0 * haltCount) / Steps):F1}%)");
         Console.WriteLine(value: $"  after window: map={ScriptedTradeHarness.LiveMapGroup(machine: machine):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: machine):X2} yx={ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA02
+            address: 0xDA02,
+            machine: machine
         ):X2},{ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA03
+            address: 0xDA03,
+            machine: machine
         ):X2}");
 
         foreach (var entry in histogram.OrderByDescending(keySelector: e => e.Value).Take(count: 20)) {
             Console.WriteLine(value: $"    PC 0x{entry.Key:X4}: {entry.Value}");
         }
     }
-
     // Drives the full peek-gated scripted trade, dumping each side's framebuffer + peek panel every dumpEvery frames and
     // logging every phase transition + the resolved rendezvous roles, so an operator can watch the receptionist walk, the
     // rendezvous, the block exchange, the mon selection, and the post-trade CANCEL exit.
@@ -786,26 +782,26 @@ internal static class ScriptedTradeExplore {
                     var b = frame.Driver.MachineB;
 
                     Console.WriteLine(value: $"    [{frame.Frame:D5}] {frame.Phase} statA={ScriptedTradeHarness.ConnectionStatus(machine: a):X2} statB={ScriptedTradeHarness.ConnectionStatus(machine: b):X2} linkA={ScriptedTradeHarness.Peek(
-                        machine: a,
-                        address: 0xD042
+                        address: 0xD042,
+                        machine: a
                     ):X2}/{ScriptedTradeHarness.Peek(
-                        machine: b,
-                        address: 0xD042
+                        address: 0xD042,
+                        machine: b
                     ):X2} ayx={ScriptedTradeHarness.Peek(
-                        machine: a,
-                        address: 0xDA02
+                        address: 0xDA02,
+                        machine: a
                     ):X2},{ScriptedTradeHarness.Peek(
-                        machine: a,
-                        address: 0xDA03
+                        address: 0xDA03,
+                        machine: a
                     ):X2} aDir={ScriptedTradeHarness.Peek(
-                        machine: a,
-                        address: 0xD205
+                        address: 0xD205,
+                        machine: a
                     ):X2} byx={ScriptedTradeHarness.Peek(
-                        machine: b,
-                        address: 0xDA02
+                        address: 0xDA02,
+                        machine: b
                     ):X2},{ScriptedTradeHarness.Peek(
-                        machine: b,
-                        address: 0xDA03
+                        address: 0xDA03,
+                        machine: b
                     ):X2} mapA={ScriptedTradeHarness.LiveMapGroup(machine: a):X2}/{ScriptedTradeHarness.LiveMapNumber(machine: a):X2}");
                 }
 
@@ -839,24 +835,23 @@ internal static class ScriptedTradeExplore {
 
         for (var frame = 0; (frame < frames); ++frame) {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
 
             if (
                 (((frame + 1) % dumpEvery) == 0) ||
                 ((frame + 1) == frames)
             ) {
                 Dump(
+                    frame: (frame + 1),
                     machine: machine,
                     outDir: outDir,
-                    tag: "A",
-                    frame: (frame + 1)
+                    tag: "A"
                 );
             }
         }
 
         ScanForMapSpawn(machine: machine);
     }
-
     // Empirically locate wMapGroup in live WRAM by scanning 0xC000..0xDFFF for the crafted spawn signature
     // (group 20 / map 1, i.e. 0x14 0x01) — resolves "did the map actually load?" and pins the absolute WRAM address
     // of the map-position block for later peek-gated phases (this cart's WRAM addresses are specific to it).
@@ -865,11 +860,11 @@ internal static class ScriptedTradeExplore {
 
         for (var address = 0xC000; (address <= 0xDFFE); ++address) {
             if (
-                (bus.ReadByte(address: (ushort)address) == 0x14) &&
-                (bus.ReadByte(address: (ushort)(address + 1)) == 0x01)
+                (bus.ReadByte(address: ((ushort)address)) == 0x14) &&
+                (bus.ReadByte(address: ((ushort)(address + 1))) == 0x01)
             ) {
-                var y = bus.ReadByte(address: (ushort)(address + 2));
-                var x = bus.ReadByte(address: (ushort)(address + 3));
+                var y = bus.ReadByte(address: ((ushort)(address + 2)));
+                var x = bus.ReadByte(address: ((ushort)(address + 3)));
 
                 Console.WriteLine(value: $"  wram 0x{address:X4}: 0x14 0x01 then 0x{y:X2} 0x{x:X2} (candidate wMapGroup/wMapNumber/wYCoord/wXCoord)");
             }
@@ -899,16 +894,16 @@ internal static class ScriptedTradeExplore {
                     ((frame + 1) == frames)
                 ) {
                     Dump(
+                        frame: (frame + 1),
                         machine: machineA,
                         outDir: outDir,
-                        tag: "A",
-                        frame: (frame + 1)
+                        tag: "A"
                     );
                     Dump(
+                        frame: (frame + 1),
                         machine: machineB,
                         outDir: outDir,
-                        tag: "B",
-                        frame: (frame + 1)
+                        tag: "B"
                     );
                 }
             }
@@ -926,9 +921,9 @@ internal static class ScriptedTradeExplore {
             var offset = (pixel * 4);
             var value = pixels[pixel];
 
-            rgba[offset] = (byte)(value >> 16);
-            rgba[(offset + 1)] = (byte)(value >> 8);
-            rgba[(offset + 2)] = (byte)value;
+            rgba[offset] = ((byte)(value >> 16));
+            rgba[(offset + 1)] = ((byte)(value >> 8));
+            rgba[(offset + 2)] = ((byte)value);
             rgba[(offset + 3)] = 0xFF;
         }
 
@@ -946,45 +941,45 @@ internal static class ScriptedTradeExplore {
 
         var status = ScriptedTradeHarness.ConnectionStatus(machine: machine);
         var control = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xFF02
+            address: 0xFF02,
+            machine: machine
         );
         var lead = TradeSaveFactory.ReadLeadSpecies(sram: ScriptedTradeHarness.ExportSram(machine: machine));
         var group = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA00
+            address: 0xDA00,
+            machine: machine
         );
         var map = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA01
+            address: 0xDA01,
+            machine: machine
         );
         var yCoord = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA02
+            address: 0xDA02,
+            machine: machine
         );
         var xCoord = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xDA03
+            address: 0xDA03,
+            machine: machine
         );
         var lcdc = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xFF40
+            address: 0xFF40,
+            machine: machine
         );
         var ly = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xFF44
+            address: 0xFF44,
+            machine: machine
         );
         var key1 = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xFF4D
+            address: 0xFF4D,
+            machine: machine
         );
         var iflag = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xFF0F
+            address: 0xFF0F,
+            machine: machine
         );
         var ienable = ScriptedTradeHarness.Peek(
-            machine: machine,
-            address: 0xFFFF
+            address: 0xFFFF,
+            machine: machine
         );
 
         Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} fb=0x{HashPixels(pixels: pixels):X16} status=0x{status:X2} SC=0x{control:X2} lead=0x{lead:X2} map={group:X2}/{map:X2} yx={yCoord:X2},{xCoord:X2} LCDC={lcdc:X2} LY={ly:X2} KEY1={key1:X2} IF={iflag:X2} IE={ienable:X2}");
@@ -1019,13 +1014,12 @@ internal static class ScriptedTradeExplore {
         }
 
         return ScriptedTradeHarness.BuildFromSave(
-            rom: rom,
-            save: save,
+            bootRom: BootRom,
             model: s_model,
-            bootRom: BootRom
+            rom: rom,
+            save: save
         );
     }
-
     // Writes the two crafted trade saves + a README to outDir (created if absent). Each .sav is [32 KiB SRAM][48-byte MBC3
     // RTC footer] — exactly what the demo's GamingBrickChildNode battery import consumes.
     private static void ExportSaves(string outDir) {
@@ -1043,12 +1037,12 @@ internal static class ScriptedTradeExplore {
         );
 
         File.WriteAllBytes(
-            path: pathA,
-            bytes: sideA
+            bytes: sideA,
+            path: pathA
         );
         File.WriteAllBytes(
-            path: pathB,
-            bytes: sideB
+            bytes: sideB,
+            path: pathB
         );
         File.WriteAllText(
             path: Path.Combine(
@@ -1103,8 +1097,8 @@ internal static class ScriptedTradeExplore {
         );
 
         return (((value is not null) && int.TryParse(
-            s: value,
-            result: out var parsed
+            result: out var parsed,
+            s: value
         ))
             ? parsed
             : fallback);

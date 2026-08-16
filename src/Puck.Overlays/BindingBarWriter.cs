@@ -8,6 +8,9 @@ namespace Puck.Overlays;
 /// with the render node staying dumb. Pure record emission; no GPU types.
 /// </summary>
 public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
+    // A viewport eased/shrunk to nothing has nowhere to draw a bar.
+    private const float MinRegionExtent = 0.05f;
+
     /// <summary>The chord-hint lines one seat's bar draws. A page with more command-chord rows than this shows the
     /// first <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
     public const int MaxHintLines = 8;
@@ -16,9 +19,6 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     public const int MaxLineChars = 46;
     /// <summary>The modifier pips one seat's bar draws.</summary>
     public const int MaxModifierPips = 8;
-
-    // A viewport eased/shrunk to nothing has nowhere to draw a bar.
-    private const float MinRegionExtent = 0.05f;
 
     private readonly IBindingBarSource m_source;
 
@@ -31,26 +31,11 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         m_source = source;
     }
 
-    /// <summary>Emits this frame's per-seat bars, when a snapshot has been published.</summary>
-    /// <param name="builder">The frame builder.</param>
-    /// <exception cref="InvalidOperationException">The published frame carries more seats than
-    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
-    public void Emit(OverlayFrameBuilder builder) {
-        ArgumentNullException.ThrowIfNull(argument: builder);
-
-        if (!m_source.TrySnapshot(frame: out var frame)) {
-            return;
-        }
-
-        var seats = frame.Seats.Span;
-
-        OverlaySeatLoop.Emit(
+    void IOverlaySeatEmitter<OverlayBindingSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) =>
+        EmitSeat(
             builder: builder,
-            seats: seats,
-            writerName: nameof(BindingBarWriter),
-            writer: this
+            seat: in seat
         );
-    }
 
     // One seat's cluster: the layout runs in the seat REGION's own space (its aspect, its bottom-center anchor,
     // every length a fraction of the region height), then maps to pixels — so a bar shrinks with its pane through
@@ -134,8 +119,8 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 role: OverlayColorRole.TextPrimary,
                 text: seat.Label,
                 x: (anchorX - (builder.TextWidth(
-                    chars: labelChars,
-                    cellHeight: labelCell
+                    cellHeight: labelCell,
+                    chars: labelChars
                 ) * 0.5f)),
                 y: (anchorY + (pipHalf * 1.4f))
             );
@@ -238,17 +223,32 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 role: OverlayColorRole.TextDim,
                 text: hint,
                 x: (anchorX - (builder.TextWidth(
-                    chars: hintChars,
-                    cellHeight: hintCell
+                    cellHeight: hintCell,
+                    chars: hintChars
                 ) * 0.5f)),
                 y: ((hintBaseY - (((hintCount - 1) - index) * hintLineStep)) - hintCell)
             );
         }
     }
 
-    void IOverlaySeatEmitter<OverlayBindingSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) =>
-        EmitSeat(
+    /// <summary>Emits this frame's per-seat bars, when a snapshot has been published.</summary>
+    /// <param name="builder">The frame builder.</param>
+    /// <exception cref="InvalidOperationException">The published frame carries more seats than
+    /// <see cref="OverlayChannelLeases.MaxSeats"/> provisions for.</exception>
+    public void Emit(OverlayFrameBuilder builder) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+
+        if (!m_source.TrySnapshot(frame: out var frame)) {
+            return;
+        }
+
+        var seats = frame.Seats.Span;
+
+        OverlaySeatLoop.Emit(
             builder: builder,
-            seat: in seat
+            seats: seats,
+            writerName: nameof(BindingBarWriter),
+            writer: this
         );
+    }
 }

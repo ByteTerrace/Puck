@@ -18,39 +18,16 @@
           "Microsoft.Extensions.Primitives": "10.0.11"
         }
       },
-      "Microsoft.Windows.CsWin32": {
+      "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[0.3.183, 0.3.183]",
-        "resolved": "0.3.183",
-        "contentHash": "Ze3aE2y7xgzKxEWtNb4SH0CExXpCHr3sbmwnvMiWMzJhWDX/G4Rs5wgg2UNs3VN+qVHh/DkDWLCPaVQv/b//Nw==",
-        "dependencies": {
-          "Microsoft.Windows.SDK.Win32Docs": "0.1.42-alpha",
-          "Microsoft.Windows.SDK.Win32Metadata": "61.0.15-preview",
-          "Microsoft.Windows.WDK.Win32Metadata": "0.12.8-experimental"
-        }
+        "requested": "[10.0.11, )",
+        "resolved": "10.0.11",
+        "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
       "Microsoft.Extensions.Primitives": {
         "type": "Transitive",
         "resolved": "10.0.11",
         "contentHash": "SXcz+kF+4Oo9b1+55zntpJFYfwb1jw66ioxptyNOOTDc8g2FHnBFWjZpsWfCvZIhzr0x+4e2trVTs4OKwQfBtw=="
-      },
-      "Microsoft.Windows.SDK.Win32Docs": {
-        "type": "Transitive",
-        "resolved": "0.1.42-alpha",
-        "contentHash": "Z/9po23gUA9aoukirh2ItMU2ZS9++Js9Gdds9fu5yuMojDrmArvY2y+tq9985tR3cxFxpZO1O35Wjfo0khj5HA=="
-      },
-      "Microsoft.Windows.SDK.Win32Metadata": {
-        "type": "Transitive",
-        "resolved": "61.0.15-preview",
-        "contentHash": "cysex3dazKtCPALCluC2XX3f5Aedy9H2pw5jb+TW5uas2rkem1Z7FRnbUrg2vKx0pk0Qz+4EJNr37HdYTEcvEQ=="
-      },
-      "Microsoft.Windows.WDK.Win32Metadata": {
-        "type": "Transitive",
-        "resolved": "0.12.8-experimental",
-        "contentHash": "3n8R44/Z96Ly+ty4eYVJfESqbzvpw96lRLs3zOzyDmr1x1Kw7FNn5CyE416q+bZQV3e1HRuMUvyegMeRE/WedA==",
-        "dependencies": {
-          "Microsoft.Windows.SDK.Win32Metadata": "61.0.15-preview"
-        }
       },
       "System.CommandLine": {
         "type": "Transitive",
@@ -62,6 +39,9 @@
         "resolved": "10.0.11",
         "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
       },
+      "ByteTerrace.Puck.Abstractions": {
+        "type": "Project"
+      },
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
@@ -72,14 +52,11 @@
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
-      "puck.abstractions": {
-        "type": "Project"
-      },
       "puck.input": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Abstractions": "[1.0.0, )",
           "System.IO.Hashing": "[10.*, )"
         }
       }

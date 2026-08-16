@@ -14,7 +14,7 @@ public sealed class VulkanGpuRenderTargetFactory(
 ) : IGpuRenderTargetFactory {
     /// <inheritdoc/>
     public IGpuRenderTarget Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
 
         return new VulkanViewTarget(
             commandResourcesFactory: commandResourcesFactory,

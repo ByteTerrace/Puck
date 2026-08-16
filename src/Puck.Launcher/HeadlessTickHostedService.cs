@@ -24,10 +24,10 @@ public sealed class HeadlessTickHostedService : BackgroundService {
     private readonly ILogger<HeadlessTickHostedService> m_logger;
     private readonly LauncherOptions m_options;
     private readonly IPrecisionWaiter? m_precisionWaiter;
-    private readonly TextCommandSource m_textSource;
     private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation? m_simulation;
     private readonly TerminalControl m_terminal;
+    private readonly TextCommandSource m_textSource;
 
     public HeadlessTickHostedService(
         IHostApplicationLifetime applicationLifetime,
@@ -56,13 +56,21 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         m_applicationLifetime = applicationLifetime;
         m_bufferedOutput = bufferedOutput;
         m_inputClock = inputClock;
-        m_inputRouter = LauncherHostLoop.SingleOrDefault(items: inputRouters, name: nameof(InputRouter), hostDescription: "headless host");
+        m_inputRouter = LauncherHostLoop.SingleOrDefault(
+            items: inputRouters,
+            name: nameof(InputRouter),
+            hostDescription: "headless host"
+        );
         m_logger = logger;
         m_options = options;
         m_precisionWaiter = precisionWaiters.FirstOrDefault();
         m_registry = registry;
         m_textSource = textSource;
-        m_simulation = LauncherHostLoop.SingleOrDefault(items: simulations, name: nameof(IFixedStepSimulation), hostDescription: "headless host");
+        m_simulation = LauncherHostLoop.SingleOrDefault(
+            items: simulations,
+            name: nameof(IFixedStepSimulation),
+            hostDescription: "headless host"
+        );
         m_terminal = terminal;
 
         if ((m_simulation is null) != (m_inputRouter is null)) {
@@ -75,17 +83,6 @@ public sealed class HeadlessTickHostedService : BackgroundService {
         m_registry.RouteSimulationTo(sink: m_inputRouter?.ConsoleTextSink);
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) {
-        var pumpThread = new Thread(start: () => RunHeadlessLoop(stoppingToken: stoppingToken)) {
-            IsBackground = true,
-            Name = "Puck.Launcher Headless Tick Pump",
-        };
-
-        pumpThread.Start();
-
-        return Task.CompletedTask;
-    }
-
     private void RunHeadlessLoop(CancellationToken stoppingToken) {
         try {
             if (m_logger.IsEnabled(logLevel: LogLevel.Information)) {
@@ -96,8 +93,14 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             // Mirrors LauncherWindowHostedService's own null-simulation tolerance: a composition root that registers
             // no fixed-step sim still runs the console pump alone.
             var pump = (((m_simulation is { } pumpSimulation) && (m_inputRouter is { } pumpInputRouter))
-                ? new FixedStepPump(simulation: pumpSimulation, inputRouter: pumpInputRouter, registry: m_registry, captureOriginTicks: m_inputClock.NowTicks)
-                : null);
+                ? new FixedStepPump(
+                    simulation: pumpSimulation,
+                    inputRouter: pumpInputRouter,
+                    registry: m_registry,
+                    captureOriginTicks: m_inputClock.NowTicks
+                )
+                : null
+            );
             var frequency = Stopwatch.Frequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
             // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
@@ -115,14 +118,18 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             static uint ResolveRatePerSecond(IFixedStepSimulation? simulation) {
                 var simRatePerSecond = (simulation?.RatePerSecond ?? LauncherHostLoop.DefaultUpdateRate);
 
-                return ((simRatePerSecond == 0U) ? LauncherHostLoop.DefaultUpdateRate : simRatePerSecond);
+                return ((simRatePerSecond == 0U)
+                    ? LauncherHostLoop.DefaultUpdateRate
+                    : simRatePerSecond
+                );
             }
 
             var spinThreshold = ((frequency / 1000L) * LauncherHostLoop.SpinThresholdMilliseconds);
             var nextDeadline = Stopwatch.GetTimestamp();
             var exitAfterTimestamp = ((m_options.ExitAfter is { } exitAfter)
-                ? (nextDeadline + (long)(exitAfter.TotalSeconds * frequency))
-                : (long?)null);
+                ? (nextDeadline + ((long)(exitAfter.TotalSeconds * frequency)))
+                : (long?)null
+            );
 
             while (!stoppingToken.IsCancellationRequested) {
                 m_textSource.Collect();
@@ -149,9 +156,13 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 // The wall-clock pacing grid for ONE fixed step — presentation-adjacent only (paces the wait, never
                 // enters sim state); the TickClock sample above is what actually measures elapsed time for the
                 // accumulator.
-                var period = (frequency / (long)ratePerSecond);
+                var period = (frequency / ((long)ratePerSecond));
 
-                pump?.Advance(deltaTicks: deltaTicks, maxFrameTicks: maxFrameTicks, stepTicks: stepTicks);
+                pump?.Advance(
+                    deltaTicks: deltaTicks,
+                    maxFrameTicks: maxFrameTicks,
+                    stepTicks: stepTicks
+                );
 
                 // Simulation-routed console handlers run while snapshots are applied above. Flush their real results
                 // in this iteration rather than leaving them buffered until the next tick.
@@ -169,7 +180,12 @@ public sealed class HeadlessTickHostedService : BackgroundService {
                 if ((nowTimestamp - nextDeadline) > period) {
                     nextDeadline = nowTimestamp;
                 } else {
-                    LauncherHostLoop.WaitUntil(deadlineTimestamp: nextDeadline, frequency: frequency, spinThreshold: spinThreshold, precisionWaiter: m_precisionWaiter);
+                    LauncherHostLoop.WaitUntil(
+                        deadlineTimestamp: nextDeadline,
+                        frequency: frequency,
+                        precisionWaiter: m_precisionWaiter,
+                        spinThreshold: spinThreshold
+                    );
                 }
             }
 
@@ -181,6 +197,17 @@ public sealed class HeadlessTickHostedService : BackgroundService {
 
             m_applicationLifetime.StopApplication();
         }
+    }
+
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) {
+        var pumpThread = new Thread(start: () => RunHeadlessLoop(stoppingToken: stoppingToken)) {
+            IsBackground = true,
+            Name = "Puck.Launcher Headless Tick Pump",
+        };
+
+        pumpThread.Start();
+
+        return Task.CompletedTask;
     }
 
 }

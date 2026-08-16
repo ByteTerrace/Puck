@@ -10,14 +10,15 @@ namespace Puck.Input.Lighting;
 /// on first tick and restores autonomous mode on <see cref="Dispose"/>.
 /// </summary>
 public sealed class LightLegendDriver : IDisposable {
+    private readonly LampColor[] m_composed;
     private readonly LightLegendComposer m_composer;
     private readonly ILampArrayDevice m_device;
+    private readonly LampColor[] m_dirtyColors;
+    private readonly int[] m_dirtyIds;
     private readonly double m_flashDecaySeconds;
     private readonly double m_updateIntervalSeconds;
-    private readonly LampColor[] m_composed;
     private readonly LampColor[] m_written;
-    private readonly int[] m_dirtyIds;
-    private readonly LampColor[] m_dirtyColors;
+
     private double m_accumulator;
     private bool m_hasWritten;
     private bool m_isDisposed;
@@ -39,14 +40,26 @@ public sealed class LightLegendDriver : IDisposable {
 
         m_device = device;
         m_composer = (composer ?? new LightLegendComposer());
-        m_flashDecaySeconds = ((flashDecaySeconds <= 0.0) ? 0.0001 : flashDecaySeconds);
+        m_flashDecaySeconds = ((flashDecaySeconds <= 0.0)
+            ? 0.0001
+            : flashDecaySeconds
+        );
 
-        var requested = ((updateHz <= 0.0) ? (1.0 / 30.0) : (1.0 / updateHz));
+        var requested = ((updateHz <= 0.0)
+            ? (1.0 / 30.0)
+            : (1.0 / updateHz)
+        );
         var deviceFloor = (device.MinUpdateIntervalInMilliseconds / 1000.0);
 
-        m_updateIntervalSeconds = Math.Max(val1: requested, val2: deviceFloor);
+        m_updateIntervalSeconds = Math.Max(
+            val1: requested,
+            val2: deviceFloor
+        );
 
-        var count = Math.Max(val1: device.LampCount, val2: 1);
+        var count = Math.Max(
+            val1: device.LampCount,
+            val2: 1
+        );
 
         m_composed = new LampColor[count];
         m_written = new LampColor[count];
@@ -56,29 +69,78 @@ public sealed class LightLegendDriver : IDisposable {
 
     /// <summary>Gets the composer this driver paints with (for palette access or a flash reset).</summary>
     public LightLegendComposer Composer => m_composer;
-
     /// <summary>Gets the device this driver drives.</summary>
     public ILampArrayDevice Device => m_device;
 
+    // Writes only the lamps whose composed color changed since the last write (all of them on the first write).
+    private void FlushDirty() {
+        var count = m_device.LampCount;
+        var dirty = 0;
+
+        for (var index = 0; (index < count); index++) {
+            var color = m_composed[index];
+
+            if (
+                !m_hasWritten ||
+                (m_written[index] != color)
+            ) {
+                m_dirtyIds[dirty] = index;
+                m_dirtyColors[dirty] = color;
+                m_written[index] = color;
+                dirty++;
+            }
+        }
+
+        if (dirty == 0) {
+            return;
+        }
+
+        m_device.UpdateLamps(
+            colors: m_dirtyColors.AsSpan(
+                length: dirty,
+                start: 0
+            ),
+            lampIds: m_dirtyIds.AsSpan(
+                length: dirty,
+                start: 0
+            )
+        );
+
+        m_hasWritten = true;
+    }
+
+    /// <summary>Restores the device to autonomous mode and stops driving it.</summary>
+    public void Dispose() {
+        if (m_isDisposed) {
+            return;
+        }
+
+        m_isDisposed = true;
+
+        if (m_isStarted) {
+            _ = m_device.TrySetAutonomousMode(enabled: true);
+        }
+    }
     /// <summary>
     /// Forgets the last written colors, forcing the next composed frame to repaint every lamp. Call after
-    /// something else wrote to the device directly (e.g. a <see cref="LightCelebration"/>) so the legend
-    /// restores completely instead of trusting a stale dirty-cache.
+    /// something else wrote to the device directly so the legend restores completely instead of trusting a
+    /// stale dirty-cache.
     /// </summary>
     public void MarkDirty() {
         m_hasWritten = false;
     }
-
     /// <summary>Takes host control of the device (clears autonomous mode) so composed colors take effect.</summary>
     public void Start() {
-        if (m_isStarted || m_isDisposed) {
+        if (
+            m_isStarted ||
+            m_isDisposed
+        ) {
             return;
         }
 
         m_isStarted = true;
         _ = m_device.TrySetAutonomousMode(enabled: false);
     }
-
     /// <summary>
     /// Advances the driver by <paramref name="elapsedSeconds"/>. Composes and writes at most one frame per update
     /// interval; sub-interval calls just accumulate time. Takes host control on the first call.
@@ -95,9 +157,15 @@ public sealed class LightLegendDriver : IDisposable {
 
         Start();
 
-        m_accumulator += Math.Max(val1: 0.0, val2: elapsedSeconds);
+        m_accumulator += Math.Max(
+            val1: 0.0,
+            val2: elapsedSeconds
+        );
 
-        if ((m_accumulator < m_updateIntervalSeconds) && m_hasWritten) {
+        if (
+            (m_accumulator < m_updateIntervalSeconds) &&
+            m_hasWritten
+        ) {
             return;
         }
 
@@ -115,46 +183,5 @@ public sealed class LightLegendDriver : IDisposable {
         );
 
         FlushDirty();
-    }
-
-    // Writes only the lamps whose composed color changed since the last write (all of them on the first write).
-    private void FlushDirty() {
-        var count = m_device.LampCount;
-        var dirty = 0;
-
-        for (var index = 0; (index < count); index++) {
-            var color = m_composed[index];
-
-            if (!m_hasWritten || (m_written[index] != color)) {
-                m_dirtyIds[dirty] = index;
-                m_dirtyColors[dirty] = color;
-                m_written[index] = color;
-                dirty++;
-            }
-        }
-
-        if (dirty == 0) {
-            return;
-        }
-
-        m_device.UpdateLamps(
-            colors: m_dirtyColors.AsSpan(start: 0, length: dirty),
-            lampIds: m_dirtyIds.AsSpan(start: 0, length: dirty)
-        );
-
-        m_hasWritten = true;
-    }
-
-    /// <summary>Restores the device to autonomous mode and stops driving it.</summary>
-    public void Dispose() {
-        if (m_isDisposed) {
-            return;
-        }
-
-        m_isDisposed = true;
-
-        if (m_isStarted) {
-            _ = m_device.TrySetAutonomousMode(enabled: true);
-        }
     }
 }

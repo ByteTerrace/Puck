@@ -25,7 +25,6 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     private const int CameraRegisterCount = 0x36;
     private const int RamBankSize = 0x2000;
     private const int RomBankSize = 0x4000;
-
     // Camera register indices (M64282FP working registers, as the MAC-GBD exposes them at 0xA000+).
     private const int ShootRegister = 0x00;         // bit 0: capture trigger / busy; bits 1-2: 1-D / edge mode
     private const int GainAndEdgeRegister = 0x01;   // bits 0-4: analog gain index; bits 5-7 == 0xE0: edge enhancement on
@@ -33,7 +32,6 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     private const int ExposureLowRegister = 0x03;   // exposure time, low byte
     private const int EdgeRatioRegister = 0x04;     // bits 4-6: edge-enhancement exclusive-ratio index
     private const int DitherPatternStart = 0x06;    // registers 6..0x35: 16 cells × 3 thresholds = the dither matrix
-
     // Busy timing (in LCD dots ≈ CPU T-cycles at normal speed), matching real-hardware countdown timing: a fixed base, a penalty
     // when 1-D processing is off (register 1 bit 7 clear), and 64 dots per unit of the 16-bit exposure register. The
     // real cart's sub-DIV alignment jitter is a host-clock artifact and is deliberately not modeled (it would import
@@ -57,10 +55,12 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
     // The eight edge-enhancement exclusive ratios {0.5, 0.75, 1, 1.25, 2, 3, 4, 5} in quarter units, so the enhancement
     // term is `ratioQuarters × (4·color − neighbours) / 4` — the ratios are exact quarters, so nothing is lost.
     private static readonly int[] EdgeRatioQuarters = [2, 3, 4, 5, 8, 12, 16, 20];
+
     private readonly byte[] m_cameraRegisters;
     private readonly byte[] m_plane;         // scratch: the latched sensor readout (rebuilt every capture)
     private readonly byte[] m_tiles;         // scratch: the packed 2bpp image (rebuilt every capture)
     private readonly int m_ramBankWrapMask;
+
     private int m_busyDots;
     private bool m_cameraSelected;
     private ICameraSensor m_sensor;
@@ -96,7 +96,6 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
         get => m_sensor;
         set => m_sensor = (value ?? throw new ArgumentNullException(paramName: nameof(value)));
     }
-
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Lcd;
@@ -118,7 +117,6 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
             m_cameraRegisters[ShootRegister] &= 0xFE;
         }
     }
-
     /// <inheritdoc/>
     public override void WriteControl(ushort address, byte value) {
         switch (address >> 13) {
@@ -312,8 +310,8 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
                         highPlane |= (((shade >> 1) & 0x01) << bit);
                     }
 
-                    m_tiles[(tileBase + (row * 2))] = (byte)lowPlane;
-                    m_tiles[((tileBase + (row * 2)) + 1)] = (byte)highPlane;
+                    m_tiles[(tileBase + (row * 2))] = ((byte)lowPlane);
+                    m_tiles[((tileBase + (row * 2)) + 1)] = ((byte)highPlane);
                 }
             }
         }
@@ -332,7 +330,6 @@ public sealed class CameraCartridge : CartridgeBase, IClockedComponent {
             : BusyOneDimensionalPenaltyDots))
             + (exposure * BusyDotsPerExposureUnit));
     }
-
     // The M64282FP per-pixel analog readout: the latched sensor value scaled by the gain step and the exposure register.
     // Coordinates are edge-clamped so the edge-enhancement neighbour taps stay on the plane. Returns a signed value that
     // may fall outside 0..255 (the dither thresholds map it back into the four shades), so the accumulator is `long`.

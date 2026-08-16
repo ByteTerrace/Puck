@@ -31,8 +31,7 @@
         ]
       },
       "algorithm": {
-        "description": "Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door\u0027s mandatory attestation-v1-base profile.",
-        "const": "ecdsa-p256-sha256",
+        "description": "Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door\u0027s mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation.",
         "type": "string"
       },
       "publicKey": {

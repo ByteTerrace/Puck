@@ -18,31 +18,34 @@ namespace Puck.Input;
 /// and publishes connections through the manager's registry.
 /// </remarks>
 public sealed class GamepadManager : IDisposable {
+    private readonly Lock m_gate = new();
+    private readonly HashSet<string> m_rejectedPaths = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly List<IGamepadConnection> m_devices = [];
+    private readonly List<IGamepadConnection> m_orderedDevices = [];
+
+    private const ushort ProductDualSense = 3302;      // 0x0CE6 (same over USB and Bluetooth)
+    private const ushort ProductSteamControllerDongle = 4418;  // 0x1142 (wireless receiver; up to four slots)
+    private const ushort ProductSteamControllerTriton = 4868;  // 0x1304 (2026 "Triton" pad, over its wireless puck receiver)
+    private const ushort ProductSteamControllerWired = 4354;   // 0x1102 (wired)
+    private const ushort ProductSwitchPro = 8201;      // 0x2009 (same over USB and Bluetooth)
+    private const ushort SteamControllerUsage = 0x0001;
     private const ushort VendorMicrosoft = 1118;
     private const ushort VendorNintendo = 1406;
     private const ushort VendorSony = 1356;
-    private const ushort VendorValve = 10462;          // 0x28DE
-    private const ushort ProductSwitchPro = 8201;      // 0x2009 (same over USB and Bluetooth)
-    private const ushort ProductDualSense = 3302;      // 0x0CE6 (same over USB and Bluetooth)
-    private const ushort ProductSteamControllerWired = 4354;   // 0x1102 (wired)
-    private const ushort ProductSteamControllerDongle = 4418;  // 0x1142 (wireless receiver; up to four slots)
-    private const ushort ProductSteamControllerTriton = 4868;  // 0x1304 (2026 "Triton" pad, over its wireless puck receiver)
     // The Steam Controller exposes its controller state on a vendor-defined HID collection (usage page 0xFF00,
     // usage 0x01), not a generic-desktop gamepad one, so it needs its own gate below. The receiver additionally
     // exposes a management collection (usage 0x02) that carries no controller input and must not be opened.
     private const ushort VendorUsagePage = 0xFF00;
-    private const ushort SteamControllerUsage = 0x0001;
+    private const ushort VendorValve = 10462;          // 0x28DE
 
     private static readonly TimeSpan RescanInterval = TimeSpan.FromSeconds(value: 1.5);
+
     private readonly IGamepadAcquisitionSource? m_acquisitionSource;
     private readonly IInputClock m_clock;
     private readonly Action<string>? m_diagnostics;
-    private readonly List<IGamepadConnection> m_devices = [];
-    private readonly object m_gate = new();
     private readonly IHidDeviceSource m_hidSource;
-    private readonly List<IGamepadConnection> m_orderedDevices = [];
-    private readonly HashSet<string> m_rejectedPaths = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly Registry m_registry;
+
     private bool m_disposed;
     private CancellationTokenSource? m_rescanCancellation;
     private Task? m_rescanLoop;
@@ -82,45 +85,30 @@ public sealed class GamepadManager : IDisposable {
         m_registry = new Registry(owner: this);
     }
 
-    private static bool IsKnownVendor(ushort vendorId) {
-        return (vendorId is VendorMicrosoft or VendorSony or VendorNintendo or VendorValve);
-    }
-    // A multi-slot wireless receiver exposes one vendor input collection per pairing slot, most of which may sit
-    // empty indefinitely. Those open DORMANT — no player slot, exempt from the streaming watchdog — and claim a
-    // player slot only when a controller actually streams through them. Opening them eagerly instead makes every
-    // empty slot flap forever (open → 5 s liveness fault → prune → reopen on the next rescan) while burning real
-    // player slots on phantoms.
-    private static bool IsDeferredActivationProduct(ushort vendorId, ushort productId) {
-        return ((VendorValve == vendorId)
-            && (productId is ProductSteamControllerDongle or ProductSteamControllerTriton));
-    }
-    private static bool IsSupportedSteamController(ushort productId) {
-        return (productId is ProductSteamControllerWired or ProductSteamControllerDongle);
-    }
-    // The Steam Controller's input arrives on a vendor-defined collection that the generic gamepad gate rejects;
-    // accept it explicitly (a supported product's usage-0x01 vendor collection), and only it — the receiver's
-    // usage-0x02 management collection and the lizard keyboard/mouse collections are correctly left out.
-    private static bool IsSteamControllerInputInterface(IHidDevice hid) {
-        return ((VendorValve == hid.VendorId)
-            && IsSupportedSteamController(productId: hid.ProductId)
-            && (VendorUsagePage == hid.UsagePage)
-            && (SteamControllerUsage == hid.Usage));
-    }
-    // The 2026 "Triton" pad also arrives on the vendor input collection, but speaks a different control framing
-    // (feature reports under report id 1) and a richer input report, so it has its own parser and gate.
-    private static bool IsSteamControllerTritonInputInterface(IHidDevice hid) {
-        return ((VendorValve == hid.VendorId)
-            && (ProductSteamControllerTriton == hid.ProductId)
-            && (VendorUsagePage == hid.UsagePage)
-            && (SteamControllerUsage == hid.Usage));
+    private int AllocatePlayerSlotLocked() {
+        // The lowest slot not held by a currently-connected device, so a disconnect frees its slot and a
+        // reconnecting controller reclaims the lowest available one.
+        var slot = 0;
+
+        while (UsesSlotLocked(slot: slot)) {
+            ++slot;
+        }
+
+        return slot;
     }
     private static IGamepadParser? CreateParser(IHidDevice hid) {
         // Switch Pro and DualSense are wired up over HID; Xbox flows through the acquisition source, not here.
-        if ((VendorNintendo == hid.VendorId) && (ProductSwitchPro == hid.ProductId)) {
+        if (
+            (VendorNintendo == hid.VendorId) &&
+            (ProductSwitchPro == hid.ProductId)
+        ) {
             return new NintendoSwitchController(device: hid);
         }
 
-        if ((VendorSony == hid.VendorId) && (ProductDualSense == hid.ProductId)) {
+        if (
+            (VendorSony == hid.VendorId) &&
+            (ProductDualSense == hid.ProductId)
+        ) {
             return new DualSenseController(device: hid);
         }
 
@@ -134,52 +122,207 @@ public sealed class GamepadManager : IDisposable {
 
         return null;
     }
+    private List<HidDeviceInfo> EnumerateControllerInterfaces() {
+        var result = new List<HidDeviceInfo>();
 
-    /// <summary>
-    /// Performs an initial scan for connected controllers, starts the background rescan loop that picks up
-    /// hotplugged devices, and starts the optional acquisition source. Idempotent.
-    /// </summary>
-    public void Start() {
-        lock (m_gate) {
-            if (m_started || m_disposed) {
-                return;
+        // Filter to controller vendors from the parsed path before opening anything, so we never open the
+        // system's keyboards/mice just to identify them.
+        foreach (var info in m_hidSource.EnumerateInterfaces()) {
+            if (IsKnownVendor(vendorId: info.VendorId)) {
+                result.Add(item: info);
             }
-
-            m_started = true;
         }
 
-        Rescan();
-
-        var cancellation = new CancellationTokenSource();
-
-        lock (m_gate) {
-            if (m_disposed) {
-                cancellation.Dispose();
-
-                return;
-            }
-
-            m_rescanCancellation = cancellation;
-            m_rescanLoop = Task.Run(function: () => RescanLoopAsync(cancellationToken: cancellation.Token));
-
-            // The acquisition source owns its own thread; starting it here (under the gate, after the disposed
-            // check) mirrors how the HID rescan loop is launched and keeps start/stop ordering simple.
-            m_acquisitionSource?.Start(registry: m_registry);
-        }
+        return result;
     }
+    // A multi-slot wireless receiver exposes one vendor input collection per pairing slot, most of which may sit
+    // empty indefinitely. Those open DORMANT — no player slot, exempt from the streaming watchdog — and claim a
+    // player slot only when a controller actually streams through them. Opening them eagerly instead makes every
+    // empty slot flap forever (open → 5 s liveness fault → prune → reopen on the next rescan) while burning real
+    // player slots on phantoms.
+    private static bool IsDeferredActivationProduct(ushort vendorId, ushort productId) {
+        return (
+            (VendorValve == vendorId) &&
+            (productId is ProductSteamControllerDongle or ProductSteamControllerTriton)
+        );
+    }
+    private static bool IsGamepadCollection(IHidDevice hid) {
+        const ushort GenericDesktopPage = 0x01;
+        const ushort JoystickUsage = 0x04;
+        const ushort GamepadUsage = 0x05;
 
-    private async Task RescanLoopAsync(CancellationToken cancellationToken) {
+        return (
+            (hid.UsagePage == GenericDesktopPage) &&
+            ((hid.Usage == GamepadUsage) || (hid.Usage == JoystickUsage))
+        );
+    }
+    private static bool IsKnownVendor(ushort vendorId) {
+        return (vendorId is VendorMicrosoft or VendorSony or VendorNintendo or VendorValve);
+    }
+    // The Steam Controller's input arrives on a vendor-defined collection that the generic gamepad gate rejects;
+    // accept it explicitly (a supported product's usage-0x01 vendor collection), and only it — the receiver's
+    // usage-0x02 management collection and the lizard keyboard/mouse collections are correctly left out.
+    private static bool IsSteamControllerInputInterface(IHidDevice hid) {
+        return (
+            (VendorValve == hid.VendorId) &&
+            IsSupportedSteamController(productId: hid.ProductId) &&
+            (VendorUsagePage == hid.UsagePage) &&
+            (SteamControllerUsage == hid.Usage)
+        );
+    }
+    // The 2026 "Triton" pad also arrives on the vendor input collection, but speaks a different control framing
+    // (feature reports under report id 1) and a richer input report, so it has its own parser and gate.
+    private static bool IsSteamControllerTritonInputInterface(IHidDevice hid) {
+        return (
+            (VendorValve == hid.VendorId) &&
+            (ProductSteamControllerTriton == hid.ProductId) &&
+            (VendorUsagePage == hid.UsagePage) &&
+            (SteamControllerUsage == hid.Usage)
+        );
+    }
+    private static bool IsSupportedSteamController(ushort productId) {
+        return (productId is ProductSteamControllerWired or ProductSteamControllerDongle);
+    }
+    private bool IsTrackedLocked(string path) {
+        foreach (var device in m_devices) {
+            if (string.Equals(
+                a: device.Key,
+                b: path,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private PreparedCandidate? PrepareCandidate(HidDeviceInfo candidate, out bool rejected) {
+        rejected = false;
+
+        IHidDevice? hid;
+
         try {
-            using var timer = new PeriodicTimer(period: RescanInterval);
+            hid = m_hidSource.Open(devicePath: candidate.Path);
+        } catch {
+            hid = null;
+        }
 
-            while (await timer.WaitForNextTickAsync(cancellationToken: cancellationToken)) {
-                Rescan();
+        if (hid is null) {
+            // Transient (e.g. another process briefly holds the handle) — retry on a later scan.
+            return null;
+        }
+
+        // A controller can expose several HID top-level collections (gamepad, audio, vendor); only the
+        // input-bearing one is opened. Standard pads use the generic-desktop gamepad/joystick collection;
+        // the Steam Controller uses a vendor collection, gated separately. Reject the rest so they never
+        // claim a player slot or a duplicate identity for the same physical device.
+        if (
+            !IsGamepadCollection(hid: hid) &&
+            !IsSteamControllerInputInterface(hid: hid) &&
+            !IsSteamControllerTritonInputInterface(hid: hid)
+        ) {
+            if (
+                (VendorValve == candidate.VendorId) &&
+                (VendorUsagePage == hid.UsagePage)
+            ) {
+                m_diagnostics?.Invoke($"[gamepad] Valve product=0x{candidate.ProductId:x4} vendor collection (usage 0x{hid.UsagePage:x4}/0x{hid.Usage:x4}) carries no controller input (management/secondary collection); skipping");
+            } else {
+                m_diagnostics?.Invoke($"[gamepad] vendor=0x{candidate.VendorId:x4} product=0x{candidate.ProductId:x4} skipped (usage 0x{hid.UsagePage:x2}/0x{hid.Usage:x2}, not a gamepad collection)");
             }
-        } catch (OperationCanceledException) {
-            // Expected on disposal.
+
+            hid.Dispose();
+            rejected = true;
+
+            return null;
+        }
+
+        var parser = CreateParser(hid: hid);
+
+        if (parser is null) {
+            m_diagnostics?.Invoke($"[gamepad] HID vendor=0x{candidate.VendorId:x4} product=0x{candidate.ProductId:x4} (no parser yet)");
+            hid.Dispose();
+            rejected = true;
+
+            return null;
+        }
+
+        return new PreparedCandidate(
+            deferActivation: IsDeferredActivationProduct(
+                productId: candidate.ProductId,
+                vendorId: candidate.VendorId
+            ),
+            hid: hid,
+            parser: parser
+        );
+    }
+    private void PrepareOrderedDevicesLocked() {
+        m_orderedDevices.Clear();
+
+        foreach (var device in m_devices) {
+            if (
+                !device.IsFaulted &&
+                (device.PlayerIndex >= 0)
+            ) {
+                m_orderedDevices.Add(item: device);
+            }
+        }
+
+        m_orderedDevices.Sort(comparison: static (left, right) => left.PlayerIndex.CompareTo(value: right.PlayerIndex));
+    }
+    // Removes faulted devices from the tracked set under the gate and hands them to the caller to Dispose AFTER
+    // the gate is released (Dispose briefly joins a HID device's I/O loop, which must not block under the gate).
+    private void PruneFaultedLocked(List<IGamepadConnection> disposed) {
+        for (var index = (m_devices.Count - 1); (index >= 0); --index) {
+            var device = m_devices[index];
+
+            if (device.IsFaulted) {
+                m_devices.RemoveAt(index: index);
+                disposed.Add(item: device);
+            }
         }
     }
+    // Deferred-activation devices (wireless-receiver slots) hold a player slot only while a controller actually
+    // streams through them: assign the lowest free slot when streaming starts, release it when the receiver
+    // reports the slot empty again. Runs under the gate, from both the rescan and the per-frame drain (so
+    // activation latency is one frame, not one rescan).
+    private void ReconcileDeferredActivationLocked() {
+        foreach (var connection in m_devices) {
+            if (
+                (connection is not GamepadDevice device) ||
+                !device.ActivateOnStream ||
+                device.IsFaulted
+            ) {
+                continue;
+            }
 
+            if (
+                device.HasStream &&
+                (device.PlayerIndex < 0)
+            ) {
+                device.AssignPlayerSlot(playerIndex: AllocatePlayerSlotLocked());
+                m_diagnostics?.Invoke($"[gamepad] {device.Type} paired as player {(device.PlayerIndex + 1)} ({device.DeviceId})");
+            } else if (
+                !device.HasStream &&
+                (device.PlayerIndex >= 0)
+            ) {
+                device.ReleasePlayerSlot();
+                m_diagnostics?.Invoke($"[gamepad] {device.Type} unpaired; player slot released ({device.DeviceId})");
+            }
+        }
+    }
+    private void ReconcileRejectedLocked(List<HidDeviceInfo> candidates) {
+        if (m_rejectedPaths.Count == 0) {
+            return;
+        }
+
+        var present = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in candidates) {
+            _ = present.Add(item: candidate.Path);
+        }
+
+        _ = m_rejectedPaths.RemoveWhere(match: path => !present.Contains(item: path));
+    }
     // Enumeration and device opening can enter the OS, so both run outside the manager gate. The gate protects
     // only set reconciliation, slot assignment, and publication of a fully prepared device.
     private void Rescan() {
@@ -210,7 +353,10 @@ public sealed class GamepadManager : IDisposable {
             foreach (var candidate in candidates) {
                 // Skip devices we already track, and known-vendor devices we've already opened but can't drive
                 // yet (e.g. a non-gamepad collection or an unsupported product), so we don't reopen them every scan.
-                if (IsTrackedLocked(path: candidate.Path) || m_rejectedPaths.Contains(item: candidate.Path)) {
+                if (
+                    IsTrackedLocked(path: candidate.Path) ||
+                    m_rejectedPaths.Contains(item: candidate.Path)
+                ) {
                     continue;
                 }
 
@@ -223,7 +369,10 @@ public sealed class GamepadManager : IDisposable {
         }
 
         foreach (var candidate in unopened) {
-            var prepared = PrepareCandidate(candidate: candidate, rejected: out var rejected);
+            var prepared = PrepareCandidate(
+                candidate: candidate,
+                rejected: out var rejected
+            );
 
             if (prepared is null) {
                 if (rejected) {
@@ -238,8 +387,15 @@ public sealed class GamepadManager : IDisposable {
             GamepadDevice? device = null;
 
             lock (m_gate) {
-                if (!m_disposed && !IsTrackedLocked(path: candidate.Path) && !m_rejectedPaths.Contains(item: candidate.Path)) {
-                    var playerIndex = (prepared.DeferActivation ? -1 : AllocatePlayerSlotLocked());
+                if (
+                    !m_disposed &&
+                    !IsTrackedLocked(path: candidate.Path) &&
+                    !m_rejectedPaths.Contains(item: candidate.Path)
+                ) {
+                    var playerIndex = (prepared.DeferActivation
+                        ? -1
+                        : AllocatePlayerSlotLocked()
+                    );
 
                     device = new GamepadDevice(
                         activateOnStream: prepared.DeferActivation,
@@ -269,117 +425,51 @@ public sealed class GamepadManager : IDisposable {
                 : $"[gamepad] opened {prepared.Parser.Type} as player {(device.PlayerIndex + 1)} ({candidate.Transport.ToString().ToLowerInvariant()} vendor=0x{candidate.VendorId:x4} product=0x{candidate.ProductId:x4}, {device.DeviceId})"));
         }
     }
-    private PreparedCandidate? PrepareCandidate(HidDeviceInfo candidate, out bool rejected) {
-        rejected = false;
-
-        IHidDevice? hid;
-
+    private async Task RescanLoopAsync(CancellationToken cancellationToken) {
         try {
-            hid = m_hidSource.Open(devicePath: candidate.Path);
-        } catch {
-            hid = null;
-        }
+            using var timer = new PeriodicTimer(period: RescanInterval);
 
-        if (hid is null) {
-            // Transient (e.g. another process briefly holds the handle) — retry on a later scan.
-            return null;
-        }
-
-        // A controller can expose several HID top-level collections (gamepad, audio, vendor); only the
-        // input-bearing one is opened. Standard pads use the generic-desktop gamepad/joystick collection;
-        // the Steam Controller uses a vendor collection, gated separately. Reject the rest so they never
-        // claim a player slot or a duplicate identity for the same physical device.
-        if (!IsGamepadCollection(hid: hid) && !IsSteamControllerInputInterface(hid: hid) && !IsSteamControllerTritonInputInterface(hid: hid)) {
-            if ((VendorValve == candidate.VendorId) && (VendorUsagePage == hid.UsagePage)) {
-                m_diagnostics?.Invoke($"[gamepad] Valve product=0x{candidate.ProductId:x4} vendor collection (usage 0x{hid.UsagePage:x4}/0x{hid.Usage:x4}) carries no controller input (management/secondary collection); skipping");
-            } else {
-                m_diagnostics?.Invoke($"[gamepad] vendor=0x{candidate.VendorId:x4} product=0x{candidate.ProductId:x4} skipped (usage 0x{hid.UsagePage:x2}/0x{hid.Usage:x2}, not a gamepad collection)");
+            while (await timer.WaitForNextTickAsync(cancellationToken: cancellationToken)) {
+                Rescan();
             }
-
-            hid.Dispose();
-            rejected = true;
-
-            return null;
-        }
-
-        var parser = CreateParser(hid: hid);
-
-        if (parser is null) {
-            m_diagnostics?.Invoke($"[gamepad] HID vendor=0x{candidate.VendorId:x4} product=0x{candidate.ProductId:x4} (no parser yet)");
-            hid.Dispose();
-            rejected = true;
-
-            return null;
-        }
-
-        return new PreparedCandidate(
-            deferActivation: IsDeferredActivationProduct(vendorId: candidate.VendorId, productId: candidate.ProductId),
-            hid: hid,
-            parser: parser
-        );
-    }
-    // Deferred-activation devices (wireless-receiver slots) hold a player slot only while a controller actually
-    // streams through them: assign the lowest free slot when streaming starts, release it when the receiver
-    // reports the slot empty again. Runs under the gate, from both the rescan and the per-frame drain (so
-    // activation latency is one frame, not one rescan).
-    private void ReconcileDeferredActivationLocked() {
-        foreach (var connection in m_devices) {
-            if ((connection is not GamepadDevice device) || !device.ActivateOnStream || device.IsFaulted) {
-                continue;
-            }
-
-            if (device.HasStream && (device.PlayerIndex < 0)) {
-                device.AssignPlayerSlot(playerIndex: AllocatePlayerSlotLocked());
-                m_diagnostics?.Invoke($"[gamepad] {device.Type} paired as player {(device.PlayerIndex + 1)} ({device.DeviceId})");
-            } else if (!device.HasStream && (device.PlayerIndex >= 0)) {
-                device.ReleasePlayerSlot();
-                m_diagnostics?.Invoke($"[gamepad] {device.Type} unpaired; player slot released ({device.DeviceId})");
-            }
+        } catch (OperationCanceledException) {
+            // Expected on disposal.
         }
     }
-    private void ReconcileRejectedLocked(List<HidDeviceInfo> candidates) {
-        if (m_rejectedPaths.Count == 0) {
-            return;
-        }
+    private bool TryGetConnectionLocked(InputDeviceId deviceId, out IGamepadConnection connection) {
+        foreach (var device in m_devices) {
+            // Skip faulted entries so a stale duplicate cannot shadow the live device, and dormant receiver slots
+            // because no controller is currently available behind them.
+            if (
+                (device.DeviceId == deviceId) &&
+                !device.IsFaulted &&
+                (device.PlayerIndex >= 0)
+            ) {
+                connection = device;
 
-        var present = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
-
-        foreach (var candidate in candidates) {
-            _ = present.Add(item: candidate.Path);
-        }
-
-        _ = m_rejectedPaths.RemoveWhere(match: path => !present.Contains(item: path));
-    }
-    private static bool IsGamepadCollection(IHidDevice hid) {
-        const ushort GenericDesktopPage = 0x01;
-        const ushort JoystickUsage = 0x04;
-        const ushort GamepadUsage = 0x05;
-
-        return ((hid.UsagePage == GenericDesktopPage) && ((hid.Usage == GamepadUsage) || (hid.Usage == JoystickUsage)));
-    }
-    private List<HidDeviceInfo> EnumerateControllerInterfaces() {
-        var result = new List<HidDeviceInfo>();
-
-        // Filter to controller vendors from the parsed path before opening anything, so we never open the
-        // system's keyboards/mice just to identify them.
-        foreach (var info in m_hidSource.EnumerateInterfaces()) {
-            if (IsKnownVendor(vendorId: info.VendorId)) {
-                result.Add(item: info);
+                return true;
             }
         }
 
-        return result;
-    }
-    private int AllocatePlayerSlotLocked() {
-        // The lowest slot not held by a currently-connected device, so a disconnect frees its slot and a
-        // reconnecting controller reclaims the lowest available one.
-        var slot = 0;
+        connection = null!;
 
-        while (UsesSlotLocked(slot: slot)) {
-            ++slot;
+        return false;
+    }
+    private bool TryGetValue<T>(InputDeviceId deviceId, Func<IGamepadConnection, T> selector, T missing, out T value) {
+        lock (m_gate) {
+            if (TryGetConnectionLocked(
+                connection: out var connection,
+                deviceId: deviceId
+            )) {
+                value = selector(arg: connection);
+
+                return true;
+            }
         }
 
-        return slot;
+        value = missing;
+
+        return false;
     }
     private bool UsesSlotLocked(int slot) {
         foreach (var device in m_devices) {
@@ -389,87 +479,6 @@ public sealed class GamepadManager : IDisposable {
         }
 
         return false;
-    }
-    private bool IsTrackedLocked(string path) {
-        foreach (var device in m_devices) {
-            if (string.Equals(a: device.Key, b: path, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    // Removes faulted devices from the tracked set under the gate and hands them to the caller to Dispose AFTER
-    // the gate is released (Dispose briefly joins a HID device's I/O loop, which must not block under the gate).
-    private void PruneFaultedLocked(List<IGamepadConnection> disposed) {
-        for (var index = (m_devices.Count - 1); (index >= 0); --index) {
-            var device = m_devices[index];
-
-            if (device.IsFaulted) {
-                m_devices.RemoveAt(index: index);
-                disposed.Add(item: device);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Collects each connected device's coalesced contribution for this frame into <paramref name="buffer"/>
-    /// (cleared first). Call once per frame from the command pipeline.
-    /// </summary>
-    /// <param name="buffer">The reusable buffer that receives one entry per device with pending data.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
-    public void Drain(List<GamepadDrain> buffer) {
-        ArgumentNullException.ThrowIfNull(buffer);
-
-        buffer.Clear();
-
-        List<IGamepadConnection>? faulted = null;
-
-        lock (m_gate) {
-            // Promote a receiver slot that just started streaming (and demote one whose pad left) before folding
-            // contributions, so its very first drained data already carries a player identity.
-            ReconcileDeferredActivationLocked();
-
-            for (var index = (m_devices.Count - 1); (index >= 0); --index) {
-                var device = m_devices[index];
-
-                // Prune disconnected/faulted devices promptly (between rescans) so they stop replaying stale
-                // state, but Dispose them AFTER releasing the gate: a HID device's Dispose briefly joins its I/O
-                // loop, and blocking that join under the global gate would serialize the rescan and acquisition.
-                if (device.IsFaulted) {
-                    m_devices.RemoveAt(index: index);
-                    (faulted ??= []).Add(item: device);
-
-                }
-            }
-
-            PrepareOrderedDevicesLocked();
-
-            foreach (var device in m_orderedDevices) {
-                if (device.Coalescer.Drain(
-                    gyro: out var gyro,
-                    latest: out var latest,
-                    pressed: out var pressed,
-                    pressEdges: out var pressEdges,
-                    released: out var released
-                )) {
-                    buffer.Add(item: new GamepadDrain(
-                        DeviceId: device.DeviceId,
-                        Gyro: gyro,
-                        Latest: latest,
-                        Pressed: pressed,
-                        PressEdges: pressEdges,
-                        Released: released
-                    ));
-                }
-            }
-        }
-
-        if (faulted is not null) {
-            foreach (var device in faulted) {
-                device.Dispose();
-            }
-        }
     }
 
     /// <summary>Returns a snapshot of the currently connected device identifiers.</summary>
@@ -487,34 +496,6 @@ public sealed class GamepadManager : IDisposable {
             return ids;
         }
     }
-
-    /// <summary>Resolves the output (haptics/indicator) handle for a connected device.</summary>
-    /// <param name="deviceId">The device to resolve.</param>
-    /// <param name="output">The device's output handle when found.</param>
-    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
-    public bool TryGetOutput(InputDeviceId deviceId, out IGamepadOutput output) =>
-        TryGetValue(deviceId: deviceId, selector: static connection => connection.Output, missing: null!, value: out output);
-
-    /// <summary>Resolves the zero-based player slot of a connected device (drives its indicator color).</summary>
-    /// <param name="deviceId">The device to resolve.</param>
-    /// <param name="playerIndex">The device's player slot when found.</param>
-    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
-    public bool TryGetPlayerIndex(InputDeviceId deviceId, out int playerIndex) =>
-        TryGetValue(deviceId: deviceId, selector: static connection => connection.PlayerIndex, missing: 0, value: out playerIndex);
-
-    /// <summary>Resolves the controller family of a connected device (drives per-family UI glyphs).</summary>
-    /// <param name="deviceId">The device to resolve.</param>
-    /// <param name="type">The device's controller family when found.</param>
-    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
-    public bool TryGetType(InputDeviceId deviceId, out GamepadType type) =>
-        TryGetValue(deviceId: deviceId, selector: static connection => connection.Type, missing: GamepadType.Unknown, value: out type);
-
-    /// <summary>Resolves the input capabilities (gyro, analog triggers) of a connected device.</summary>
-    /// <param name="deviceId">The device to resolve.</param>
-    /// <param name="capabilities">The device's input capabilities when found.</param>
-    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
-    public bool TryGetInputCapabilities(InputDeviceId deviceId, out GamepadInputCapabilities capabilities) =>
-        TryGetValue(deviceId: deviceId, selector: static connection => connection.InputCapabilities, missing: GamepadInputCapabilities.None, value: out capabilities);
     /// <summary>Stops acquisition and releases the connected gamepad resources.</summary>
     public void Dispose() {
         IGamepadAcquisitionSource? acquisitionSource;
@@ -564,6 +545,144 @@ public sealed class GamepadManager : IDisposable {
 
         cancellation?.Dispose();
     }
+    /// <summary>
+    /// Collects each connected device's coalesced contribution for this frame into <paramref name="buffer"/>
+    /// (cleared first). Call once per frame from the command pipeline.
+    /// </summary>
+    /// <param name="buffer">The reusable buffer that receives one entry per device with pending data.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
+    public void Drain(List<GamepadDrain> buffer) {
+        ArgumentNullException.ThrowIfNull(buffer);
+
+        buffer.Clear();
+
+        List<IGamepadConnection>? faulted = null;
+
+        lock (m_gate) {
+            // Promote a receiver slot that just started streaming (and demote one whose pad left) before folding
+            // contributions, so its very first drained data already carries a player identity.
+            ReconcileDeferredActivationLocked();
+
+            for (var index = (m_devices.Count - 1); (index >= 0); --index) {
+                var device = m_devices[index];
+
+                // Prune disconnected/faulted devices promptly (between rescans) so they stop replaying stale
+                // state, but Dispose them AFTER releasing the gate: a HID device's Dispose briefly joins its I/O
+                // loop, and blocking that join under the global gate would serialize the rescan and acquisition.
+                if (device.IsFaulted) {
+                    m_devices.RemoveAt(index: index);
+                    (faulted ??= []).Add(item: device);
+
+                }
+            }
+
+            PrepareOrderedDevicesLocked();
+
+            foreach (var device in m_orderedDevices) {
+                if (device.Coalescer.Drain(
+                    gyro: out var gyro,
+                    latest: out var latest,
+                    pressEdges: out var pressEdges,
+                    pressed: out var pressed,
+                    released: out var released
+                )) {
+                    buffer.Add(item: new GamepadDrain(
+                        DeviceId: device.DeviceId,
+                        Gyro: gyro,
+                        Latest: latest,
+                        PressEdges: pressEdges,
+                        Pressed: pressed,
+                        Released: released
+                    ));
+                }
+            }
+        }
+
+        if (faulted is not null) {
+            foreach (var device in faulted) {
+                device.Dispose();
+            }
+        }
+    }
+    /// <summary>
+    /// Performs an initial scan for connected controllers, starts the background rescan loop that picks up
+    /// hotplugged devices, and starts the optional acquisition source. Idempotent.
+    /// </summary>
+    public void Start() {
+        lock (m_gate) {
+            if (
+                m_started ||
+                m_disposed
+            ) {
+                return;
+            }
+
+            m_started = true;
+        }
+
+        Rescan();
+
+        var cancellation = new CancellationTokenSource();
+
+        lock (m_gate) {
+            if (m_disposed) {
+                cancellation.Dispose();
+
+                return;
+            }
+
+            m_rescanCancellation = cancellation;
+            m_rescanLoop = Task.Run(function: () => RescanLoopAsync(cancellationToken: cancellation.Token));
+
+            // The acquisition source owns its own thread; starting it here (under the gate, after the disposed
+            // check) mirrors how the HID rescan loop is launched and keeps start/stop ordering simple.
+            m_acquisitionSource?.Start(registry: m_registry);
+        }
+    }
+    /// <summary>Resolves the input capabilities (gyro, analog triggers) of a connected device.</summary>
+    /// <param name="deviceId">The device to resolve.</param>
+    /// <param name="capabilities">The device's input capabilities when found.</param>
+    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetInputCapabilities(InputDeviceId deviceId, out GamepadInputCapabilities capabilities) =>
+        TryGetValue(
+            deviceId: deviceId,
+            missing: GamepadInputCapabilities.None,
+            selector: static connection => connection.InputCapabilities,
+            value: out capabilities
+        );
+    /// <summary>Resolves the output (haptics/indicator) handle for a connected device.</summary>
+    /// <param name="deviceId">The device to resolve.</param>
+    /// <param name="output">The device's output handle when found.</param>
+    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetOutput(InputDeviceId deviceId, out IGamepadOutput output) =>
+        TryGetValue(
+            deviceId: deviceId,
+            missing: null!,
+            selector: static connection => connection.Output,
+            value: out output
+        );
+    /// <summary>Resolves the zero-based player slot of a connected device (drives its indicator color).</summary>
+    /// <param name="deviceId">The device to resolve.</param>
+    /// <param name="playerIndex">The device's player slot when found.</param>
+    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetPlayerIndex(InputDeviceId deviceId, out int playerIndex) =>
+        TryGetValue(
+            deviceId: deviceId,
+            missing: 0,
+            selector: static connection => connection.PlayerIndex,
+            value: out playerIndex
+        );
+    /// <summary>Resolves the controller family of a connected device (drives per-family UI glyphs).</summary>
+    /// <param name="deviceId">The device to resolve.</param>
+    /// <param name="type">The device's controller family when found.</param>
+    /// <returns><see langword="true"/> if a matching connected device exists; otherwise <see langword="false"/>.</returns>
+    public bool TryGetType(InputDeviceId deviceId, out GamepadType type) =>
+        TryGetValue(
+            deviceId: deviceId,
+            missing: GamepadType.Unknown,
+            selector: static connection => connection.Type,
+            value: out type
+        );
 
     // The surface handed to an acquisition source: it allocates a player slot, builds the connection, and tracks
     // it atomically under the gate, mirroring how the HID rescan opens and registers a device.
@@ -600,47 +719,6 @@ public sealed class GamepadManager : IDisposable {
             m_owner.m_diagnostics?.Invoke($"[gamepad] device removed ({connection.DeviceId})");
         }
     }
-
-    private void PrepareOrderedDevicesLocked() {
-        m_orderedDevices.Clear();
-
-        foreach (var device in m_devices) {
-            if (!device.IsFaulted && (device.PlayerIndex >= 0)) {
-                m_orderedDevices.Add(item: device);
-            }
-        }
-
-        m_orderedDevices.Sort(comparison: static (left, right) => left.PlayerIndex.CompareTo(value: right.PlayerIndex));
-    }
-    private bool TryGetConnectionLocked(InputDeviceId deviceId, out IGamepadConnection connection) {
-        foreach (var device in m_devices) {
-            // Skip faulted entries so a stale duplicate cannot shadow the live device, and dormant receiver slots
-            // because no controller is currently available behind them.
-            if ((device.DeviceId == deviceId) && !device.IsFaulted && (device.PlayerIndex >= 0)) {
-                connection = device;
-
-                return true;
-            }
-        }
-
-        connection = null!;
-
-        return false;
-    }
-    private bool TryGetValue<T>(InputDeviceId deviceId, Func<IGamepadConnection, T> selector, T missing, out T value) {
-        lock (m_gate) {
-            if (TryGetConnectionLocked(deviceId: deviceId, connection: out var connection)) {
-                value = selector(arg: connection);
-
-                return true;
-            }
-        }
-
-        value = missing;
-
-        return false;
-    }
-
     private sealed class PreparedCandidate(bool deferActivation, IHidDevice hid, IGamepadParser parser) : IDisposable {
         public bool DeferActivation { get; } = deferActivation;
         public IHidDevice Hid { get; } = hid;

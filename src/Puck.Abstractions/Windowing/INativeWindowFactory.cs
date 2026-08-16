@@ -8,7 +8,7 @@ namespace Puck.Abstractions.Windowing;
 public interface INativeWindowFactory {
     /// <summary>Creates a new window; the caller owns it and disposes it.</summary>
     /// <returns>The new window.</returns>
-    /// <exception cref="PlatformNotSupportedException">The resolved display kind has no platform-window backend (or,
-    /// for <see cref="NativeDisplayKind.Vi"/>, the licensed Switch backend is not registered).</exception>
+    /// <exception cref="PlatformNotSupportedException">The resolved display kind has no registered platform-window
+    /// backend.</exception>
     INativeWindow Create();
 }

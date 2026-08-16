@@ -9,17 +9,16 @@ namespace Puck.Text;
 /// </summary>
 /// <remarks>
 /// This is the pre-baked counterpart to <see cref="IFontAtlasGenerator"/>: instead of rasterizing a font at
-/// runtime, it loads an atlas image and JSON metadata produced ahead of time by the font-atlas bake
-/// pipeline (<c>experimental/tools/font-atlas</c>). The metadata schema is extended with two non-standard conventions this loader honors: a
+/// runtime, it loads an atlas image and JSON metadata produced ahead of time by <c>puck font-atlas</c>
+/// or an external oracle. The metadata schema is extended with two non-standard conventions this loader honors: a
 /// top-level <c>variants[]</c> array, whose first entry's <c>metrics</c>/<c>glyphs</c>/<c>kerning</c>
 /// sections take precedence over the document-level ones when present; and per-glyph <c>emRange</c> /
 /// <c>pxRange</c> / <c>distanceRange</c> distance-field overrides (see
 /// <see cref="MtsdfSampling.ComputeUnitRange(FontAtlas, FontAtlasGlyph)"/>).
 /// </remarks>
 public sealed partial class FontAtlasLoader {
-
     /// <summary>Loads a font atlas from a JSON metadata file on disk, together with its atlas image.</summary>
-    /// <param name="jsonPath">The path to the font-atlas bake pipeline's JSON metadata file.</param>
+    /// <param name="jsonPath">The path to the font atlas's JSON metadata file.</param>
     /// <param name="imagePath">
     /// The path to the atlas image, absolute or relative to <paramref name="jsonPath"/>'s directory, or
     /// <see langword="null"/> to use <paramref name="jsonPath"/> with its extension changed to <c>.png</c>.
@@ -37,7 +36,10 @@ public sealed partial class FontAtlasLoader {
         }
 
         if (!File.Exists(path: jsonPath)) {
-            throw new FileNotFoundException(fileName: jsonPath, message: "Font atlas metadata file was not found.");
+            throw new FileNotFoundException(
+                fileName: jsonPath,
+                message: "Font atlas metadata file was not found."
+            );
         }
 
         var document = DeserializeDocument(
@@ -45,24 +47,26 @@ public sealed partial class FontAtlasLoader {
             jsonContent: File.ReadAllBytes(path: jsonPath)
         );
         var resolvedImagePath = ResolveImagePath(
-            jsonPath: jsonPath,
-            imagePath: imagePath
+            imagePath: imagePath,
+            jsonPath: jsonPath
         );
 
         if (!File.Exists(path: resolvedImagePath)) {
-            throw new FileNotFoundException(fileName: resolvedImagePath, message: "Font atlas image file was not found.");
+            throw new FileNotFoundException(
+                fileName: resolvedImagePath,
+                message: "Font atlas image file was not found."
+            );
         }
 
         return CreateAtlas(
             document: document,
-            imagePath: resolvedImagePath,
-            imageData: null
+            imageData: null,
+            imagePath: resolvedImagePath
         );
     }
-
     /// <summary>Loads a font atlas from in-memory JSON metadata bytes and a pre-decoded atlas image.</summary>
     /// <param name="atlasIdentifier">A content-addressed or otherwise unique identifier for the metadata, used only in error messages.</param>
-    /// <param name="jsonContent">The font-atlas bake pipeline's JSON metadata bytes.</param>
+    /// <param name="jsonContent">The font atlas's JSON metadata bytes.</param>
     /// <param name="imageIdentifier">The identifier recorded as the loaded atlas's <see cref="FontAtlas.ImagePath"/>.</param>
     /// <param name="imageData">The already-decoded atlas image; its dimensions must agree with the metadata.</param>
     /// <returns>The loaded <see cref="FontAtlas"/>, carrying <paramref name="imageData"/> in memory.</returns>
@@ -95,10 +99,9 @@ public sealed partial class FontAtlasLoader {
             imageData: imageData
         );
     }
-
     /// <summary>Loads a font atlas from in-memory JSON metadata bytes, recording <paramref name="imagePath"/> as the atlas image without decoding any pixels.</summary>
     /// <param name="atlasIdentifier">A stable identifier for the metadata, used only in error messages.</param>
-    /// <param name="jsonContent">The font-atlas bake pipeline's JSON metadata bytes.</param>
+    /// <param name="jsonContent">The font atlas's JSON metadata bytes.</param>
     /// <param name="imagePath">The path or identifier recorded as the loaded atlas's <see cref="FontAtlas.ImagePath"/>.</param>
     /// <returns>The loaded <see cref="FontAtlas"/>. No image pixels are decoded (see <see cref="IFontAtlasImageDataLoader"/> for that).</returns>
     /// <exception cref="ArgumentException"><paramref name="atlasIdentifier"/> or <paramref name="imagePath"/> is <see langword="null"/>, empty, or whitespace.</exception>
@@ -130,12 +133,15 @@ public sealed partial class FontAtlasLoader {
 
     private static FontAtlasDocument DeserializeDocument(string atlasIdentifier, ReadOnlySpan<byte> jsonContent) {
         try {
-            return (JsonSerializer.Deserialize(utf8Json: jsonContent, jsonTypeInfo: FontAtlasJsonContext.Default.FontAtlasDocument)
+            return (JsonSerializer.Deserialize(
+                utf8Json: jsonContent,
+                jsonTypeInfo: FontAtlasJsonContext.Default.FontAtlasDocument
+            )
                 ?? throw new InvalidDataException(message: $"Font atlas metadata '{atlasIdentifier}' is empty or invalid JSON."));
         } catch (JsonException exception) {
             throw new InvalidDataException(
-                message: $"Font atlas metadata '{atlasIdentifier}' is malformed JSON.",
-                innerException: exception
+                innerException: exception,
+                message: $"Font atlas metadata '{atlasIdentifier}' is malformed JSON."
             );
         }
     }
@@ -156,17 +162,18 @@ public sealed partial class FontAtlasLoader {
             (imageData is not null) &&
             ((imageData.Width != atlas.Width) || (imageData.Height != atlas.Height))
         ) {
-            throw new InvalidDataException(
-                message: $"Font atlas image dimensions {imageData.Width}x{imageData.Height} did not match metadata dimensions {atlas.Width}x{atlas.Height}.");
+            throw new InvalidDataException(message: $"Font atlas image dimensions {imageData.Width}x{imageData.Height} did not match metadata dimensions {atlas.Width}x{atlas.Height}.");
         }
 
         var kind = ParseKind(kind: atlas.Type);
 
-        if (MtsdfSampling.UsesDistanceField(kind: kind) && (atlas.DistanceRange <= 0.0f)) {
+        if (
+            MtsdfSampling.UsesDistanceField(kind: kind) &&
+            (atlas.DistanceRange <= 0.0f)
+        ) {
             // Fail at load with a clear message instead of mid-frame inside
             // MtsdfSampling.ComputeUnitRange.
-            throw new InvalidDataException(
-                message: $"Font atlas metadata '{imagePath}' is a distance-field atlas ('{atlas.Type}') but does not define a positive distanceRange.");
+            throw new InvalidDataException(message: $"Font atlas metadata '{imagePath}' is a distance-field atlas ('{atlas.Type}') but does not define a positive distanceRange.");
         }
 
         return new FontAtlas(
@@ -218,7 +225,8 @@ public sealed partial class FontAtlasLoader {
                 atlasHeight: atlasHeight
             ),
             emRange: emRange,
-            pxRange: pxRange
+            pxRange: pxRange,
+            glyphId: (glyph.Index ?? -1)
         );
     }
     private static float? NormalizeOptionalPositiveRange(float? value, int unicode, string propertyName) {
@@ -240,9 +248,9 @@ public sealed partial class FontAtlasLoader {
                 Bottom: bounds.Bottom,
                 Right: bounds.Right,
                 Top: bounds.Top
-            ));
+            )
+        );
     }
-
     /// <summary>Normalizes atlas bounds to the one supported convention (see
     /// <see cref="FontAtlasBounds"/>: top-down rows, Bottom = larger row edge).
     /// A top-origin bake already matches; a bottom-origin bake measures rows from the image's bottom edge
@@ -264,7 +272,8 @@ public sealed partial class FontAtlasLoader {
                 Bottom: (atlasHeight - bounds.Bottom),
                 Right: bounds.Right,
                 Top: (atlasHeight - bounds.Top)
-            ));
+            )
+        );
     }
     private static FontAtlasKind ParseKind(string? kind) {
         return kind?.ToLowerInvariant() switch {
@@ -279,12 +288,19 @@ public sealed partial class FontAtlasLoader {
     }
     private static string ResolveImagePath(string jsonPath, string? imagePath) {
         if (string.IsNullOrWhiteSpace(value: imagePath)) {
-            return Path.ChangeExtension(path: jsonPath, extension: ".png");
+            return Path.ChangeExtension(
+                extension: ".png",
+                path: jsonPath
+            );
         }
 
         return (Path.IsPathRooted(path: imagePath)
             ? imagePath
-            : Path.Combine(path1: Path.GetDirectoryName(path: jsonPath)!, path2: imagePath));
+            : Path.Combine(
+                path1: Path.GetDirectoryName(path: jsonPath)!,
+                path2: imagePath
+            )
+        );
     }
 
     private sealed class FontAtlasDocument {

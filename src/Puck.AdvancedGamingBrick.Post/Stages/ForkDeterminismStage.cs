@@ -15,7 +15,6 @@ internal sealed class ForkDeterminismStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "fork-determinism";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

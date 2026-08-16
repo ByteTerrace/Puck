@@ -8,9 +8,13 @@
         <RootNamespace>Puck.HumbleGamingBrick.Post</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <!-- PngEncoder, which the diagnostics and link explorers write framebuffer dumps through. -->
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.GamingBricks.Post\Puck.GamingBricks.Post.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <!-- The capture sink, frame-hash observer and PNG encoder the diagnostics and link explorers write through. -->
-        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.GamingBricks.Post" />
     </ItemGroup>
 </Project>

@@ -8,7 +8,6 @@ internal static class RomCatalog {
     // a ROM that never reports — a genuine failure to detect — not the common path.
     private const int ConformanceFrameCap = 5_000;
     private const int AcceptanceFrameCap = 600;
-
     // We target exactly two SoC revisions: the Dmg tier (DMG-CPU C) and the Cgb tier (CPU CGB E). An acceptance-corpus
     // revision tag naming any other revision is skipped rather than counted as a failure.
     private const char DmgTargetRevision = 'C';
@@ -31,8 +30,8 @@ internal static class RomCatalog {
                 path2: "blargg"
             ),
             path2: subPath.Replace(
-                oldChar: '/',
-                newChar: Path.DirectorySeparatorChar
+                newChar: Path.DirectorySeparatorChar,
+                oldChar: '/'
             )
         );
 
@@ -43,8 +42,8 @@ internal static class RomCatalog {
         return Directory
             .EnumerateFiles(
             path: directory,
-            searchPattern: "*.gb",
-            searchOption: SearchOption.TopDirectoryOnly
+            searchOption: SearchOption.TopDirectoryOnly,
+            searchPattern: "*.gb"
         )
             .OrderBy(
             keySelector: static path => path,
@@ -59,7 +58,6 @@ internal static class RomCatalog {
         ))
             .ToArray();
     }
-
     /// <summary>Enumerates the acceptance ROMs under a relative directory, one case per (ROM, eligible model).
     /// The model eligibility comes from the file-name tag, narrowed to the two target revisions; off-target revisions
     /// (dmg0, mgb, cgb0, agb, ags, sgb) yield nothing and are skipped rather than failed.</summary>
@@ -98,8 +96,8 @@ internal static class RomCatalog {
 
         foreach (var file in Directory.EnumerateFiles(
             path: directory,
-            searchPattern: "*.gb",
-            searchOption: option
+            searchOption: option,
+            searchPattern: "*.gb"
         ).OrderBy(
             keySelector: static path => path,
             comparer: StringComparer.OrdinalIgnoreCase
@@ -108,11 +106,11 @@ internal static class RomCatalog {
 
             foreach (var model in ParseEligibleModels(tag: ModelTag(fileName: name))) {
                 cases.Add(item: new RomCase(
-                    Group: group,
-                    Name: name,
+                    FrameCap: AcceptanceFrameCap,
                     FullPath: file,
+                    Group: group,
                     Model: model,
-                    FrameCap: AcceptanceFrameCap
+                    Name: name
                 ));
             }
         }
@@ -128,7 +126,6 @@ internal static class RomCatalog {
             ? fileName[(dash + 1)..]
             : string.Empty);
     }
-
     // Maps an acceptance-corpus model tag to the emulated models it is expected to pass on, narrowed to the two target
     // revisions. An untagged test runs on both models; a group tag (letters G/S/C/A) expands to its families; a named
     // tag (dmg/cgb + revision letters) matches only when our target revision is in range; off-target tags yield nothing.
@@ -161,14 +158,14 @@ internal static class RomCatalog {
         } else {
             // mgb-only and agb/ags-only tags name hardware we do not target, so they match nothing here.
             dmg = RevisionMatches(
-                tag: tag,
                 prefix: "dmg",
-                revision: DmgTargetRevision
+                revision: DmgTargetRevision,
+                tag: tag
             );
             cgb = RevisionMatches(
-                tag: tag,
                 prefix: "cgb",
-                revision: CgbTargetRevision
+                revision: CgbTargetRevision,
+                tag: tag
             );
         }
 
@@ -184,13 +181,12 @@ internal static class RomCatalog {
 
         return models;
     }
-
     // True when the tag names a model family and our target revision is in scope: either no revision letters follow the
     // prefix (the test applies to every revision of that family) or the explicit revision run contains the target.
     private static bool RevisionMatches(string tag, string prefix, char revision) {
         var index = tag.IndexOf(
-            value: prefix,
-            comparisonType: StringComparison.OrdinalIgnoreCase
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: prefix
         );
 
         if (index < 0) {
@@ -218,7 +214,7 @@ internal static class RomCatalog {
     }
     private static bool ContainsAny(string value, params string[] needles) =>
         needles.Any(predicate: needle => value.Contains(
-        value: needle,
-        comparisonType: StringComparison.OrdinalIgnoreCase
+        comparisonType: StringComparison.OrdinalIgnoreCase,
+        value: needle
     ));
 }

@@ -19,7 +19,11 @@ public sealed class GpuPushConstantBinding {
     /// <param name="stageFlags">The shader stages that read the range; must name at least one stage.</param>
     /// <param name="data">The push constant data to upload.</param>
     public GpuPushConstantBinding(uint offset, GpuShaderStage stageFlags, ReadOnlyMemory<byte> data) {
-        ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);
+        ValidateRange(
+            stageFlags: stageFlags,
+            offset: offset,
+            dataLength: data.Length
+        );
 
         Offset = offset;
         StageFlags = stageFlags;
@@ -28,18 +32,36 @@ public sealed class GpuPushConstantBinding {
 
     /// <summary>Validates the backend-neutral alignment and stage-mask requirements for a push-constant update.</summary>
     public static void ValidateRange(GpuShaderStage stageFlags, uint offset, int dataLength) {
-        const GpuShaderStage allStages = GpuShaderStage.Vertex | GpuShaderStage.Fragment | GpuShaderStage.Compute;
+        const GpuShaderStage AllStages = GpuShaderStage.Vertex | GpuShaderStage.Fragment | GpuShaderStage.Compute;
 
-        if ((GpuShaderStage.None == stageFlags) || (GpuShaderStage.None != (stageFlags & ~allStages))) {
-            throw new ArgumentOutOfRangeException(nameof(stageFlags), stageFlags, "The push constant range must contain only defined shader-stage flags and name at least one stage.");
+        if (
+            (GpuShaderStage.None == stageFlags) ||
+            (GpuShaderStage.None != (stageFlags & ~AllStages))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                nameof(stageFlags),
+                stageFlags,
+                "The push constant range must contain only defined shader-stage flags and name at least one stage."
+            );
         }
         if (0 != (offset & 3u)) {
-            throw new ArgumentOutOfRangeException(nameof(offset), offset, "The push constant offset must be four-byte aligned.");
+            throw new ArgumentOutOfRangeException(
+                nameof(offset),
+                offset,
+                "The push constant offset must be four-byte aligned."
+            );
         }
-        if ((dataLength <= 0) || (0 != (dataLength & 3))) {
-            throw new ArgumentOutOfRangeException(nameof(dataLength), dataLength, "Push constant data must be non-empty and a multiple of four bytes.");
+        if (
+            (dataLength <= 0) ||
+            (0 != (dataLength & 3))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                nameof(dataLength),
+                dataLength,
+                "Push constant data must be non-empty and a multiple of four bytes."
+            );
         }
 
-        _ = checked(offset + (uint)dataLength);
+        _ = checked((offset + ((uint)dataLength)));
     }
 }

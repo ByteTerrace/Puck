@@ -16,6 +16,7 @@ namespace Puck.Input.Lighting;
 /// </summary>
 public sealed class LightLegendComposer {
     private readonly LightLegendPalette m_palette;
+
     private float[] m_flash = [];
 
     /// <summary>Initializes a new instance over a palette.</summary>
@@ -27,9 +28,82 @@ public sealed class LightLegendComposer {
     /// <summary>Gets the palette this composer paints with.</summary>
     public LightLegendPalette Palette => m_palette;
 
-    /// <summary>Clears the carried activation-flash decay (e.g. on focus loss).</summary>
-    public void ResetFlash() {
-        Array.Clear(array: m_flash);
+    private void EnsureFlashCapacity(int count) {
+        if (m_flash.Length < count) {
+            Array.Resize(
+                array: ref m_flash,
+                newSize: count
+            );
+        }
+    }
+    private static LampColor Lerp(LampColor a, LampColor b, float t) {
+        return new LampColor(
+            Red: LerpChannel(
+                a: a.Red,
+                b: b.Red,
+                t: t
+            ),
+            Green: LerpChannel(
+                a: a.Green,
+                b: b.Green,
+                t: t
+            ),
+            Blue: LerpChannel(
+                a: a.Blue,
+                b: b.Blue,
+                t: t
+            ),
+            Intensity: LerpChannel(
+                a: a.Intensity,
+                b: b.Intensity,
+                t: t
+            )
+        );
+    }
+    private static byte LerpChannel(byte a, byte b, float t) {
+        return ((byte)(a + ((b - a) * t)));
+    }
+    private LampColor ResolveBase(ILampArrayDevice device, int index, LightLegendState state, out string? source) {
+        source = null;
+
+        if (
+            !device.TryGetLampInfo(
+            index: index,
+            info: out var info
+        ) ||
+            !info.HasInputBinding
+        ) {
+            return m_palette.Idle;
+        }
+
+        if (!KeyboardUsageMap.TryGetSource(
+            source: out var resolved,
+            usage: info.InputBindingUsage,
+            usagePage: info.InputBindingUsagePage
+        )) {
+            return m_palette.Idle;
+        }
+
+        source = resolved;
+
+        // A held chord modifier always wins the base — its key marks the chord the board has switched to.
+        if (state.IsHeldModifier(source: resolved)) {
+            return m_palette.Modifier;
+        }
+
+        if (!state.TryGetBinding(
+            entry: out var entry,
+            source: resolved
+        )) {
+            return m_palette.Idle;
+        }
+
+        var color = m_palette.ColorFor(category: entry.Category);
+
+        return (entry.IsAvailable
+            ? color
+            : color.Scale(scale: m_palette.UnavailableScale)
+        );
     }
 
     /// <summary>
@@ -49,16 +123,26 @@ public sealed class LightLegendComposer {
         var count = device.LampCount;
 
         if (destination.Length < count) {
-            throw new ArgumentException(message: "destination is shorter than the device's lamp count.", paramName: nameof(destination));
+            throw new ArgumentException(
+                message: "destination is shorter than the device's lamp count.",
+                paramName: nameof(destination)
+            );
         }
 
         EnsureFlashCapacity(count: count);
 
-        var decay = Math.Clamp(value: flashDecay, min: 0f, max: 1f);
+        var decay = Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: flashDecay
+        );
 
         for (var index = 0; (index < count); index++) {
             // Decay the carried flash for this lamp before this tick's events re-arm it.
-            m_flash[index] = Math.Max(val1: 0f, val2: (m_flash[index] - decay));
+            m_flash[index] = Math.Max(
+                val1: 0f,
+                val2: (m_flash[index] - decay)
+            );
 
             var color = ResolveBase(
                 device: device,
@@ -67,64 +151,28 @@ public sealed class LightLegendComposer {
                 state: state
             );
 
-            if ((source is not null) && state.WasFlashed(source: source)) {
+            if (
+                (source is not null) &&
+                state.WasFlashed(source: source)
+            ) {
                 m_flash[index] = 1f;
             }
 
             var flash = m_flash[index];
 
             if (flash > 0f) {
-                color = Lerp(a: color, b: m_palette.Flash, t: flash);
+                color = Lerp(
+                    a: color,
+                    b: m_palette.Flash,
+                    t: flash
+                );
             }
 
             destination[index] = color;
         }
     }
-
-    private LampColor ResolveBase(ILampArrayDevice device, int index, LightLegendState state, out string? source) {
-        source = null;
-
-        if (!device.TryGetLampInfo(index: index, info: out var info) || !info.HasInputBinding) {
-            return m_palette.Idle;
-        }
-
-        if (!KeyboardUsageMap.TryGetSource(
-            usagePage: info.InputBindingUsagePage,
-            usage: info.InputBindingUsage,
-            source: out var resolved
-        )) {
-            return m_palette.Idle;
-        }
-
-        source = resolved;
-
-        // A held chord modifier always wins the base — its key marks the chord the board has switched to.
-        if (state.IsHeldModifier(source: resolved)) {
-            return m_palette.Modifier;
-        }
-
-        if (!state.TryGetBinding(source: resolved, entry: out var entry)) {
-            return m_palette.Idle;
-        }
-
-        var color = m_palette.ColorFor(category: entry.Category);
-
-        return (entry.IsAvailable ? color : color.Scale(scale: m_palette.UnavailableScale));
-    }
-    private void EnsureFlashCapacity(int count) {
-        if (m_flash.Length < count) {
-            Array.Resize(array: ref m_flash, newSize: count);
-        }
-    }
-    private static LampColor Lerp(LampColor a, LampColor b, float t) {
-        return new LampColor(
-            Red: LerpChannel(a: a.Red, b: b.Red, t: t),
-            Green: LerpChannel(a: a.Green, b: b.Green, t: t),
-            Blue: LerpChannel(a: a.Blue, b: b.Blue, t: t),
-            Intensity: LerpChannel(a: a.Intensity, b: b.Intensity, t: t)
-        );
-    }
-    private static byte LerpChannel(byte a, byte b, float t) {
-        return ((byte)(a + ((b - a) * t)));
+    /// <summary>Clears the carried activation-flash decay (e.g. on focus loss).</summary>
+    public void ResetFlash() {
+        Array.Clear(array: m_flash);
     }
 }

@@ -18,13 +18,6 @@ namespace Puck.Maths;
 /// shared by both tiers, which makes their agreement above the product structural rather than tested.
 /// </remarks>
 internal static class BinaryFieldKernels {
-    /// <summary>The number of whole vectors a region must span before a nibble-split rung is preferred to the scalar loop.</summary>
-    /// <remarks>
-    /// Building the two sixteen-entry tables costs thirty-two scalar field multiplies — sixteen per table — which a
-    /// region shorter than a few vectors never earns back. The threshold is a throughput tuning value and never a correctness bound: every
-    /// rung produces the same bytes at every length, so moving it can only change how fast the answer arrives.
-    /// </remarks>
-    private const int SplitTableAmortizationVectors = 4;
     /// <summary>The number of whole vectors a region must span before a byte-wide affine rung is preferred to the next rung down.</summary>
     /// <remarks>
     /// Building the transform matrix costs eight scalar field multiplies and sixty-four bit placements. A rung whose
@@ -37,6 +30,13 @@ internal static class BinaryFieldKernels {
     /// only change how fast the answer arrives.
     /// </remarks>
     private const int AffineMatrixAmortizationVectors = 2;
+    /// <summary>The number of whole vectors a region must span before a nibble-split rung is preferred to the scalar loop.</summary>
+    /// <remarks>
+    /// Building the two sixteen-entry tables costs thirty-two scalar field multiplies — sixteen per table — which a
+    /// region shorter than a few vectors never earns back. The threshold is a throughput tuning value and never a correctness bound: every
+    /// rung produces the same bytes at every length, so moving it can only change how fast the answer arrives.
+    /// </remarks>
+    private const int SplitTableAmortizationVectors = 4;
     /// <summary>The number of whole vectors a region must span before a sixteen-bit affine rung is preferred to the next rung down.</summary>
     /// <remarks>
     /// This width needs four matrices rather than one — the sixteen-by-sixteen bit matrix in eight-by-eight blocks — so
@@ -57,39 +57,78 @@ internal static class BinaryFieldKernels {
     /// region of two gibibytes or more is processed in full rather than wrapping a 32-bit count.
     /// </remarks>
     internal static void AddRegion<T>(Span<T> destination, ReadOnlySpan<T> source) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        var count = (((nuint)(uint)destination.Length) * ((nuint)Unsafe.SizeOf<T>()));
+        var count = (((nuint)((uint)destination.Length)) * ((nuint)Unsafe.SizeOf<T>()));
         var index = ((nuint)0U);
         ref var destinationBytes = ref Unsafe.As<T, byte>(source: ref MemoryMarshal.GetReference(span: destination));
         ref var sourceBytes = ref Unsafe.As<T, byte>(source: ref MemoryMarshal.GetReference(span: source));
 
         if (Vector512.IsHardwareAccelerated) {
             for (; ((index + 64) <= count); index += 64) {
-                (Vector512.LoadUnsafe(source: ref destinationBytes, elementOffset: index) ^
-                 Vector512.LoadUnsafe(source: ref sourceBytes, elementOffset: index))
-                    .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+                (Vector512.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref destinationBytes
+                ) ^
+                 Vector512.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref sourceBytes
+                ))
+                    .StoreUnsafe(
+                    destination: ref destinationBytes,
+                    elementOffset: index
+                );
             }
         }
 
         if (Vector256.IsHardwareAccelerated) {
             for (; ((index + 32) <= count); index += 32) {
-                (Vector256.LoadUnsafe(source: ref destinationBytes, elementOffset: index) ^
-                 Vector256.LoadUnsafe(source: ref sourceBytes, elementOffset: index))
-                    .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+                (Vector256.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref destinationBytes
+                ) ^
+                 Vector256.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref sourceBytes
+                ))
+                    .StoreUnsafe(
+                    destination: ref destinationBytes,
+                    elementOffset: index
+                );
             }
         }
 
         if (Vector128.IsHardwareAccelerated) {
             for (; ((index + 16) <= count); index += 16) {
-                (Vector128.LoadUnsafe(source: ref destinationBytes, elementOffset: index) ^
-                 Vector128.LoadUnsafe(source: ref sourceBytes, elementOffset: index))
-                    .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+                (Vector128.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref destinationBytes
+                ) ^
+                 Vector128.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref sourceBytes
+                ))
+                    .StoreUnsafe(
+                    destination: ref destinationBytes,
+                    elementOffset: index
+                );
             }
         }
 
         for (; (index < count); ++index) {
-            Unsafe.Add(source: ref destinationBytes, elementOffset: index) ^= Unsafe.Add(source: ref sourceBytes, elementOffset: index);
+            Unsafe.Add(
+                elementOffset: index,
+                source: ref destinationBytes
+            ) ^= Unsafe.Add(
+                elementOffset: index,
+                source: ref sourceBytes
+            );
         }
     }
+    /// <summary>Gets the total number of bits occupied by the element carrier.</summary>
+    /// <typeparam name="T">The packed element carrier.</typeparam>
+    /// <returns>The carrier's width in bits.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int CarrierBitCount<T>() where T : IBinaryInteger<T>, IUnsignedNumber<T> =>
+        (Unsafe.SizeOf<T>() << 3);
     /// <summary>Computes the exact carryless product of two polynomials packed into <see cref="ulong"/> values.</summary>
     /// <param name="left">The left operand; bit <c>i</c> is the coefficient of <c>t^i</c>.</param>
     /// <param name="right">The right operand; bit <c>i</c> is the coefficient of <c>t^i</c>.</param>
@@ -100,9 +139,17 @@ internal static class BinaryFieldKernels {
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static (ulong Low, ulong High) CarrylessMultiply64(ulong left, ulong right) {
-        if (Pclmulqdq.IsSupported) { return CarrylessMultiply64Hardware(left: left, right: right); }
+        if (Pclmulqdq.IsSupported) {
+            return CarrylessMultiply64Hardware(
+                left: left,
+                right: right
+            );
+        }
 
-        return CarrylessMultiply64Portable(left: left, right: right);
+        return CarrylessMultiply64Portable(
+            left: left,
+            right: right
+        );
     }
     /// <summary>Computes the exact carryless product of two polynomials packed into <see cref="ulong"/> values, using the hardware carryless-multiply instruction unconditionally.</summary>
     /// <param name="left">The left operand; bit <c>i</c> is the coefficient of <c>t^i</c>.</param>
@@ -137,11 +184,23 @@ internal static class BinaryFieldKernels {
         var a1 = ((uint)(left >>> 32));
         var b0 = ((uint)right);
         var b1 = ((uint)(right >>> 32));
-        var middle = CarrylessMultiply32(left: a0, right: b1) ^ CarrylessMultiply32(left: a1, right: b0);
+        var middle = CarrylessMultiply32(
+            left: a0,
+            right: b1
+        ) ^ CarrylessMultiply32(
+            left: a1,
+            right: b0
+        );
 
         return (
-            Low: CarrylessMultiply32(left: a0, right: b0) ^ (middle << 32),
-            High: CarrylessMultiply32(left: a1, right: b1) ^ (middle >>> 32)
+            Low: CarrylessMultiply32(
+            left: a0,
+            right: b0
+        ) ^ (middle << 32),
+            High: CarrylessMultiply32(
+            left: a1,
+            right: b1
+        ) ^ (middle >>> 32)
         );
     }
     /// <summary>Computes the exact carryless product of two packed polynomials, split into two limbs of the carrier's own width.</summary>
@@ -186,10 +245,22 @@ internal static class BinaryFieldKernels {
                     var a1 = ((ulong)(leftBits >>> 64));
                     var b0 = ((ulong)rightBits);
                     var b1 = ((ulong)(rightBits >>> 64));
-                    var lower = CarrylessMultiply64(left: a0, right: b0);
-                    var upper = CarrylessMultiply64(left: a1, right: b1);
-                    var firstCross = CarrylessMultiply64(left: a0, right: b1);
-                    var secondCross = CarrylessMultiply64(left: a1, right: b0);
+                    var lower = CarrylessMultiply64(
+                        left: a0,
+                        right: b0
+                    );
+                    var upper = CarrylessMultiply64(
+                        left: a1,
+                        right: b1
+                    );
+                    var firstCross = CarrylessMultiply64(
+                        left: a0,
+                        right: b1
+                    );
+                    var secondCross = CarrylessMultiply64(
+                        left: a1,
+                        right: b0
+                    );
                     var middleLow = firstCross.Low ^ secondCross.Low;
                     var middleHigh = firstCross.High ^ secondCross.High;
 
@@ -204,12 +275,6 @@ internal static class BinaryFieldKernels {
 
         return ThrowUnsupportedCarrier<T>();
     }
-    /// <summary>Gets the total number of bits occupied by the element carrier.</summary>
-    /// <typeparam name="T">The packed element carrier.</typeparam>
-    /// <returns>The carrier's width in bits.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static int CarrierBitCount<T>() where T : IBinaryInteger<T>, IUnsignedNumber<T> =>
-        (Unsafe.SizeOf<T>() << 3);
     /// <summary>Raises a field element to a caller-supplied power.</summary>
     /// <typeparam name="T">The packed element carrier.</typeparam>
     /// <param name="value">The reduced element to raise.</param>
@@ -223,11 +288,25 @@ internal static class BinaryFieldKernels {
         var result = T.One;
 
         while (0UL != exponent) {
-            if (0UL != (exponent & 1UL)) { result = Multiply(left: result, right: power, degree: degree, tail: tail); }
+            if (0UL != (exponent & 1UL)) {
+                result = Multiply(
+                    degree: degree,
+                    left: result,
+                    right: power,
+                    tail: tail
+                );
+            }
 
             exponent >>>= 1;
 
-            if (0UL != exponent) { power = Multiply(left: power, right: power, degree: degree, tail: tail); }
+            if (0UL != exponent) {
+                power = Multiply(
+                    degree: degree,
+                    left: power,
+                    right: power,
+                    tail: tail
+                );
+            }
         }
 
         return result;
@@ -255,7 +334,12 @@ internal static class BinaryFieldKernels {
 
         for (var bit = (BitOperations.Log2(value: ((uint)exponent)) - 1); (0 <= bit); --bit) {
             result = Multiply(
-                left: FrobeniusRepeat(value: result, count: reach, degree: degree, tail: tail),
+                left: FrobeniusRepeat(
+                    count: reach,
+                    degree: degree,
+                    tail: tail,
+                    value: result
+                ),
                 right: result,
                 degree: degree,
                 tail: tail
@@ -264,7 +348,12 @@ internal static class BinaryFieldKernels {
 
             if (0 != ((exponent >>> bit) & 1)) {
                 result = Multiply(
-                    left: Multiply(left: result, right: result, degree: degree, tail: tail),
+                    left: Multiply(
+                        degree: degree,
+                        left: result,
+                        right: result,
+                        tail: tail
+                    ),
                     right: value,
                     degree: degree,
                     tail: tail
@@ -274,7 +363,12 @@ internal static class BinaryFieldKernels {
         }
 
         // `result` is value^(2^(degree - 1) - 1); one further Frobenius step lands on value^(2^degree - 2).
-        return Multiply(left: result, right: result, degree: degree, tail: tail);
+        return Multiply(
+            degree: degree,
+            left: result,
+            right: result,
+            tail: tail
+        );
     }
     /// <summary>Determines whether the modulus <c>t^degree + tail</c> is irreducible over the two-element field.</summary>
     /// <typeparam name="T">The packed element carrier.</typeparam>
@@ -288,14 +382,30 @@ internal static class BinaryFieldKernels {
     internal static bool IsIrreducible<T>(int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         if (1 > degree) { return false; }
 
-        var indeterminate = ReduceWide(low: (T.One << 1), high: T.Zero, degree: degree, tail: tail);
+        var indeterminate = ReduceWide(
+            low: (T.One << 1),
+            high: T.Zero,
+            degree: degree,
+            tail: tail
+        );
         var power = indeterminate;
 
         for (var exponent = 1; (exponent <= degree); ++exponent) {
-            power = Multiply(left: power, right: power, degree: degree, tail: tail);
+            power = Multiply(
+                degree: degree,
+                left: power,
+                right: power,
+                tail: tail
+            );
 
-            if ((exponent <= (degree >> 1)) &&
-                (T.One != ModulusGreatestCommonDivisor(value: power ^ indeterminate, degree: degree, tail: tail))) {
+            if (
+                (exponent <= (degree >> 1)) &&
+                (T.One != ModulusGreatestCommonDivisor(
+                degree: degree,
+                tail: tail,
+                value: power ^ indeterminate
+            ))
+            ) {
                 return false;
             }
         }
@@ -332,9 +442,17 @@ internal static class BinaryFieldKernels {
     /// <returns>The reduced product.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static T Multiply<T>(T left, T right, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
-        var product = CarrylessMultiplyWide(left: left, right: right);
+        var product = CarrylessMultiplyWide(
+            left: left,
+            right: right
+        );
 
-        return ReduceWide(low: product.Low, high: product.High, degree: degree, tail: tail);
+        return ReduceWide(
+            degree: degree,
+            high: product.High,
+            low: product.Low,
+            tail: tail
+        );
     }
     /// <summary>Scales a region of packed field elements by a single element, either accumulating into the destination or overwriting it.</summary>
     /// <typeparam name="T">The packed element carrier.</typeparam>
@@ -354,18 +472,39 @@ internal static class BinaryFieldKernels {
     internal static void MultiplyAccumulateRegion<T>(Span<T> destination, ReadOnlySpan<T> source, T scalar, bool accumulate, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         switch (scalar) {
             case byte:
-                if (TryMultiplyAccumulateRegionByte(destination: destination, source: source, scalar: scalar, accumulate: accumulate, degree: degree, tail: tail)) { return; }
+                if (TryMultiplyAccumulateRegionByte(
+                    accumulate: accumulate,
+                    degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
+                    tail: tail
+                )) { return; }
 
                 break;
             case ushort:
-                if (TryMultiplyAccumulateRegionWide(destination: destination, source: source, scalar: scalar, accumulate: accumulate, degree: degree, tail: tail)) { return; }
+                if (TryMultiplyAccumulateRegionWide(
+                    accumulate: accumulate,
+                    degree: degree,
+                    destination: destination,
+                    scalar: scalar,
+                    source: source,
+                    tail: tail
+                )) { return; }
 
                 break;
             default:
                 break;
         }
 
-        MultiplyAccumulateRegionScalar(destination: destination, source: source, scalar: scalar, accumulate: accumulate, degree: degree, tail: tail);
+        MultiplyAccumulateRegionScalar(
+            accumulate: accumulate,
+            degree: degree,
+            destination: destination,
+            scalar: scalar,
+            source: source,
+            tail: tail
+        );
     }
     /// <summary>Scales a region of byte-wide field elements through the 128-bit Galois-field affine transform.</summary>
     /// <param name="destination">The region to write, whose length matches <paramref name="source"/>.</param>
@@ -377,22 +516,38 @@ internal static class BinaryFieldKernels {
     /// <remarks>Elements past the last whole vector are finished by the element-at-a-time loop rather than by a masked store, which would be a further kernel to prove for the last few bytes of a region measured in kilobytes.</remarks>
     /// <exception cref="PlatformNotSupportedException">The 128-bit Galois-field instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionAffine128(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var matrix = Vector128.Create(value: AffineMatrix(scalar: scalar, degree: degree, tail: tail)).AsByte();
+        var matrix = Vector128.Create(value: AffineMatrix(
+            degree: degree,
+            scalar: scalar,
+            tail: tail
+        )).AsByte();
         // A zero mask turns accumulation into a plain store. The destination is still loaded either way, so the rung
         // keeps one branch-free loop body instead of two nearly identical ones.
-        var keep = (accumulate ? Vector128<byte>.AllBitsSet : Vector128<byte>.Zero);
+        var keep = (accumulate
+            ? Vector128<byte>.AllBitsSet
+            : Vector128<byte>.Zero
+        );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 16) <= count); index += 16) {
             (Gfni.GaloisFieldAffineTransform(
-                x: Vector128.LoadUnsafe(source: ref sourceBytes, elementOffset: index),
+                x: Vector128.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref sourceBytes
+                ),
                 a: matrix,
                 b: 0
-             ) ^ (Vector128.LoadUnsafe(source: ref destinationBytes, elementOffset: index) & keep))
-                .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+            ) ^ (Vector128.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationBytes
+            ) & keep))
+                .StoreUnsafe(
+                destination: ref destinationBytes,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -414,20 +569,36 @@ internal static class BinaryFieldKernels {
     /// <remarks>The matrix qword is broadcast explicitly because the transform reads its matrix operand once per eight-byte group and does not broadcast it itself.</remarks>
     /// <exception cref="PlatformNotSupportedException">The 256-bit Galois-field instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionAffine256(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var matrix = Vector256.Create(value: AffineMatrix(scalar: scalar, degree: degree, tail: tail)).AsByte();
-        var keep = (accumulate ? Vector256<byte>.AllBitsSet : Vector256<byte>.Zero);
+        var matrix = Vector256.Create(value: AffineMatrix(
+            degree: degree,
+            scalar: scalar,
+            tail: tail
+        )).AsByte();
+        var keep = (accumulate
+            ? Vector256<byte>.AllBitsSet
+            : Vector256<byte>.Zero
+        );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 32) <= count); index += 32) {
             (Gfni.V256.GaloisFieldAffineTransform(
-                x: Vector256.LoadUnsafe(source: ref sourceBytes, elementOffset: index),
+                x: Vector256.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref sourceBytes
+                ),
                 a: matrix,
                 b: 0
-             ) ^ (Vector256.LoadUnsafe(source: ref destinationBytes, elementOffset: index) & keep))
-                .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+            ) ^ (Vector256.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationBytes
+            ) & keep))
+                .StoreUnsafe(
+                destination: ref destinationBytes,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -448,20 +619,36 @@ internal static class BinaryFieldKernels {
     /// <param name="tail">The modulus tail.</param>
     /// <exception cref="PlatformNotSupportedException">The 512-bit Galois-field instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionAffine512(Span<byte> destination, ReadOnlySpan<byte> source, byte scalar, bool accumulate, int degree, byte tail) {
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var matrix = Vector512.Create(value: AffineMatrix(scalar: scalar, degree: degree, tail: tail)).AsByte();
-        var keep = (accumulate ? Vector512<byte>.AllBitsSet : Vector512<byte>.Zero);
+        var matrix = Vector512.Create(value: AffineMatrix(
+            degree: degree,
+            scalar: scalar,
+            tail: tail
+        )).AsByte();
+        var keep = (accumulate
+            ? Vector512<byte>.AllBitsSet
+            : Vector512<byte>.Zero
+        );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 64) <= count); index += 64) {
             (Gfni.V512.GaloisFieldAffineTransform(
-                x: Vector512.LoadUnsafe(source: ref sourceBytes, elementOffset: index),
+                x: Vector512.LoadUnsafe(
+                    elementOffset: index,
+                    source: ref sourceBytes
+                ),
                 a: matrix,
                 b: 0
-             ) ^ (Vector512.LoadUnsafe(source: ref destinationBytes, elementOffset: index) & keep))
-                .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+            ) ^ (Vector512.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationBytes
+            ) & keep))
+                .StoreUnsafe(
+                destination: ref destinationBytes,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -487,14 +674,24 @@ internal static class BinaryFieldKernels {
 
         if (accumulate) {
             for (var index = 0; (index < count); ++index) {
-                destination[index] ^= Multiply(left: scalar, right: source[index], degree: degree, tail: tail);
+                destination[index] ^= Multiply(
+                    left: scalar,
+                    right: source[index],
+                    degree: degree,
+                    tail: tail
+                );
             }
 
             return;
         }
 
         for (var index = 0; (index < count); ++index) {
-            destination[index] = Multiply(left: scalar, right: source[index], degree: degree, tail: tail);
+            destination[index] = Multiply(
+                left: scalar,
+                right: source[index],
+                degree: degree,
+                tail: tail
+            );
         }
     }
     /// <summary>Scales a region of byte-wide field elements through a 128-bit nibble-split table shuffle.</summary>
@@ -515,27 +712,54 @@ internal static class BinaryFieldKernels {
         Span<byte> highTable = stackalloc byte[16];
         Span<byte> lowTable = stackalloc byte[16];
 
-        BuildSplitTables(scalar: scalar, degree: degree, tail: tail, lowTable: lowTable, highTable: highTable);
+        BuildSplitTables(
+            degree: degree,
+            highTable: highTable,
+            lowTable: lowTable,
+            scalar: scalar,
+            tail: tail
+        );
 
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
         var highVector = Vector128.Create(values: ((ReadOnlySpan<byte>)highTable));
         var lowVector = Vector128.Create(values: ((ReadOnlySpan<byte>)lowTable));
         var nibble = Vector128.Create(value: ((byte)0x0FU));
-        var keep = (accumulate ? Vector128<byte>.AllBitsSet : Vector128<byte>.Zero);
+        var keep = (accumulate
+            ? Vector128<byte>.AllBitsSet
+            : Vector128<byte>.Zero
+        );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 16) <= count); index += 16) {
-            var block = Vector128.LoadUnsafe(source: ref sourceBytes, elementOffset: index);
+            var block = Vector128.LoadUnsafe(
+                elementOffset: index,
+                source: ref sourceBytes
+            );
             // No vector instruction set has a byte-wide logical shift, so the high nibble is extracted with a 16-bit
             // shift and the mask below discards the four bits that crossed the byte boundary.
-            var high = Vector128.ShiftRightLogical(vector: block.AsUInt16(), shiftCount: 4).AsByte() & nibble;
+            var high = Vector128.ShiftRightLogical(
+                vector: block.AsUInt16(),
+                shiftCount: 4
+            ).AsByte() & nibble;
             var low = block & nibble;
-            var product = Ssse3.Shuffle(value: lowVector, mask: low) ^ Ssse3.Shuffle(value: highVector, mask: high);
+            var product = Ssse3.Shuffle(
+                mask: low,
+                value: lowVector
+            ) ^ Ssse3.Shuffle(
+                mask: high,
+                value: highVector
+            );
 
-            (product ^ (Vector128.LoadUnsafe(source: ref destinationBytes, elementOffset: index) & keep))
-                .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+            (product ^ (Vector128.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationBytes
+            ) & keep))
+                .StoreUnsafe(
+                destination: ref destinationBytes,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -564,27 +788,60 @@ internal static class BinaryFieldKernels {
         Span<byte> highTable = stackalloc byte[16];
         Span<byte> lowTable = stackalloc byte[16];
 
-        BuildSplitTables(scalar: scalar, degree: degree, tail: tail, lowTable: lowTable, highTable: highTable);
+        BuildSplitTables(
+            degree: degree,
+            highTable: highTable,
+            lowTable: lowTable,
+            scalar: scalar,
+            tail: tail
+        );
 
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
         var highHalf = Vector128.Create(values: ((ReadOnlySpan<byte>)highTable));
         var lowHalf = Vector128.Create(values: ((ReadOnlySpan<byte>)lowTable));
-        var highVector = Vector256.Create(lower: highHalf, upper: highHalf);
-        var lowVector = Vector256.Create(lower: lowHalf, upper: lowHalf);
+        var highVector = Vector256.Create(
+            lower: highHalf,
+            upper: highHalf
+        );
+        var lowVector = Vector256.Create(
+            lower: lowHalf,
+            upper: lowHalf
+        );
         var nibble = Vector256.Create(value: ((byte)0x0FU));
-        var keep = (accumulate ? Vector256<byte>.AllBitsSet : Vector256<byte>.Zero);
+        var keep = (accumulate
+            ? Vector256<byte>.AllBitsSet
+            : Vector256<byte>.Zero
+        );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 32) <= count); index += 32) {
-            var block = Vector256.LoadUnsafe(source: ref sourceBytes, elementOffset: index);
-            var high = Vector256.ShiftRightLogical(vector: block.AsUInt16(), shiftCount: 4).AsByte() & nibble;
+            var block = Vector256.LoadUnsafe(
+                elementOffset: index,
+                source: ref sourceBytes
+            );
+            var high = Vector256.ShiftRightLogical(
+                vector: block.AsUInt16(),
+                shiftCount: 4
+            ).AsByte() & nibble;
             var low = block & nibble;
-            var product = Avx2.Shuffle(value: lowVector, mask: low) ^ Avx2.Shuffle(value: highVector, mask: high);
+            var product = Avx2.Shuffle(
+                mask: low,
+                value: lowVector
+            ) ^ Avx2.Shuffle(
+                mask: high,
+                value: highVector
+            );
 
-            (product ^ (Vector256.LoadUnsafe(source: ref destinationBytes, elementOffset: index) & keep))
-                .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+            (product ^ (Vector256.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationBytes
+            ) & keep))
+                .StoreUnsafe(
+                destination: ref destinationBytes,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -613,29 +870,68 @@ internal static class BinaryFieldKernels {
         Span<byte> highTable = stackalloc byte[16];
         Span<byte> lowTable = stackalloc byte[16];
 
-        BuildSplitTables(scalar: scalar, degree: degree, tail: tail, lowTable: lowTable, highTable: highTable);
+        BuildSplitTables(
+            degree: degree,
+            highTable: highTable,
+            lowTable: lowTable,
+            scalar: scalar,
+            tail: tail
+        );
 
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
         var highQuarter = Vector128.Create(values: ((ReadOnlySpan<byte>)highTable));
         var lowQuarter = Vector128.Create(values: ((ReadOnlySpan<byte>)lowTable));
-        var highHalf = Vector256.Create(lower: highQuarter, upper: highQuarter);
-        var lowHalf = Vector256.Create(lower: lowQuarter, upper: lowQuarter);
-        var highVector = Vector512.Create(lower: highHalf, upper: highHalf);
-        var lowVector = Vector512.Create(lower: lowHalf, upper: lowHalf);
+        var highHalf = Vector256.Create(
+            lower: highQuarter,
+            upper: highQuarter
+        );
+        var lowHalf = Vector256.Create(
+            lower: lowQuarter,
+            upper: lowQuarter
+        );
+        var highVector = Vector512.Create(
+            lower: highHalf,
+            upper: highHalf
+        );
+        var lowVector = Vector512.Create(
+            lower: lowHalf,
+            upper: lowHalf
+        );
         var nibble = Vector512.Create(value: ((byte)0x0FU));
-        var keep = (accumulate ? Vector512<byte>.AllBitsSet : Vector512<byte>.Zero);
+        var keep = (accumulate
+            ? Vector512<byte>.AllBitsSet
+            : Vector512<byte>.Zero
+        );
         ref var destinationBytes = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceBytes = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 64) <= count); index += 64) {
-            var block = Vector512.LoadUnsafe(source: ref sourceBytes, elementOffset: index);
-            var high = Vector512.ShiftRightLogical(vector: block.AsUInt16(), shiftCount: 4).AsByte() & nibble;
+            var block = Vector512.LoadUnsafe(
+                elementOffset: index,
+                source: ref sourceBytes
+            );
+            var high = Vector512.ShiftRightLogical(
+                vector: block.AsUInt16(),
+                shiftCount: 4
+            ).AsByte() & nibble;
             var low = block & nibble;
-            var product = Avx512BW.Shuffle(value: lowVector, mask: low) ^ Avx512BW.Shuffle(value: highVector, mask: high);
+            var product = Avx512BW.Shuffle(
+                mask: low,
+                value: lowVector
+            ) ^ Avx512BW.Shuffle(
+                mask: high,
+                value: highVector
+            );
 
-            (product ^ (Vector512.LoadUnsafe(source: ref destinationBytes, elementOffset: index) & keep))
-                .StoreUnsafe(destination: ref destinationBytes, elementOffset: index);
+            (product ^ (Vector512.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationBytes
+            ) & keep))
+                .StoreUnsafe(
+                destination: ref destinationBytes,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -662,9 +958,13 @@ internal static class BinaryFieldKernels {
     /// </remarks>
     /// <exception cref="PlatformNotSupportedException">The 128-bit Galois-field instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionWideAffine128(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail) {
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var matrices = WideAffineMatrices(scalar: scalar, degree: degree, tail: tail);
+        var matrices = WideAffineMatrices(
+            degree: degree,
+            scalar: scalar,
+            tail: tail
+        );
         var lowFromHigh = Vector128.Create(value: matrices.LowFromHigh).AsByte();
         var lowFromLow = Vector128.Create(value: matrices.LowFromLow).AsByte();
         var highFromHigh = Vector128.Create(value: matrices.HighFromHigh).AsByte();
@@ -672,24 +972,61 @@ internal static class BinaryFieldKernels {
         // The processor is little-endian on every platform this library targets, so byte lane zero of each element
         // holds its low half and lane one its high half; the mask below selects the low halves.
         var lowLanes = Vector128.Create(value: ((ushort)0x00FFU)).AsByte();
-        var keep = (accumulate ? Vector128<byte>.AllBitsSet : Vector128<byte>.Zero);
+        var keep = (accumulate
+            ? Vector128<byte>.AllBitsSet
+            : Vector128<byte>.Zero
+        );
         ref var destinationElements = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceElements = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 8) <= count); index += 8) {
-            var block = Vector128.LoadUnsafe(source: ref sourceElements, elementOffset: index);
-            var swapped = Vector128.ShiftLeft(vector: block, shiftCount: 8) | Vector128.ShiftRightLogical(vector: block, shiftCount: 8);
+            var block = Vector128.LoadUnsafe(
+                elementOffset: index,
+                source: ref sourceElements
+            );
+            var swapped = Vector128.ShiftLeft(
+                shiftCount: 8,
+                vector: block
+            ) | Vector128.ShiftRightLogical(
+                shiftCount: 8,
+                vector: block
+            );
             var blockBytes = block.AsByte();
             var swappedBytes = swapped.AsByte();
-            var lowHalves = Gfni.GaloisFieldAffineTransform(x: blockBytes, a: lowFromLow, b: 0) ^
-                             Gfni.GaloisFieldAffineTransform(x: swappedBytes, a: lowFromHigh, b: 0);
-            var highHalves = Gfni.GaloisFieldAffineTransform(x: blockBytes, a: highFromHigh, b: 0) ^
-                              Gfni.GaloisFieldAffineTransform(x: swappedBytes, a: highFromLow, b: 0);
-            var product = (lowHalves & lowLanes) | Vector128.AndNot(left: highHalves, right: lowLanes);
+            var lowHalves = Gfni.GaloisFieldAffineTransform(
+                a: lowFromLow,
+                b: 0,
+                x: blockBytes
+            ) ^
+                             Gfni.GaloisFieldAffineTransform(
+                a: lowFromHigh,
+                b: 0,
+                x: swappedBytes
+            );
+            var highHalves = Gfni.GaloisFieldAffineTransform(
+                a: highFromHigh,
+                b: 0,
+                x: blockBytes
+            ) ^
+                              Gfni.GaloisFieldAffineTransform(
+                a: highFromLow,
+                b: 0,
+                x: swappedBytes
+            );
+            var product = (lowHalves & lowLanes) | Vector128.AndNot(
+                left: highHalves,
+                right: lowLanes
+            );
 
-            (product ^ (Vector128.LoadUnsafe(source: ref destinationElements, elementOffset: index).AsByte() & keep))
+            (product ^ (Vector128.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationElements
+            ).AsByte() & keep))
                 .AsUInt16()
-                .StoreUnsafe(destination: ref destinationElements, elementOffset: index);
+                .StoreUnsafe(
+                destination: ref destinationElements,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -710,32 +1047,73 @@ internal static class BinaryFieldKernels {
     /// <param name="tail">The modulus tail.</param>
     /// <exception cref="PlatformNotSupportedException">The 256-bit Galois-field instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionWideAffine256(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail) {
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var matrices = WideAffineMatrices(scalar: scalar, degree: degree, tail: tail);
+        var matrices = WideAffineMatrices(
+            degree: degree,
+            scalar: scalar,
+            tail: tail
+        );
         var lowFromHigh = Vector256.Create(value: matrices.LowFromHigh).AsByte();
         var lowFromLow = Vector256.Create(value: matrices.LowFromLow).AsByte();
         var highFromHigh = Vector256.Create(value: matrices.HighFromHigh).AsByte();
         var highFromLow = Vector256.Create(value: matrices.HighFromLow).AsByte();
         var lowLanes = Vector256.Create(value: ((ushort)0x00FFU)).AsByte();
-        var keep = (accumulate ? Vector256<byte>.AllBitsSet : Vector256<byte>.Zero);
+        var keep = (accumulate
+            ? Vector256<byte>.AllBitsSet
+            : Vector256<byte>.Zero
+        );
         ref var destinationElements = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceElements = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 16) <= count); index += 16) {
-            var block = Vector256.LoadUnsafe(source: ref sourceElements, elementOffset: index);
-            var swapped = Vector256.ShiftLeft(vector: block, shiftCount: 8) | Vector256.ShiftRightLogical(vector: block, shiftCount: 8);
+            var block = Vector256.LoadUnsafe(
+                elementOffset: index,
+                source: ref sourceElements
+            );
+            var swapped = Vector256.ShiftLeft(
+                shiftCount: 8,
+                vector: block
+            ) | Vector256.ShiftRightLogical(
+                shiftCount: 8,
+                vector: block
+            );
             var blockBytes = block.AsByte();
             var swappedBytes = swapped.AsByte();
-            var lowHalves = Gfni.V256.GaloisFieldAffineTransform(x: blockBytes, a: lowFromLow, b: 0) ^
-                             Gfni.V256.GaloisFieldAffineTransform(x: swappedBytes, a: lowFromHigh, b: 0);
-            var highHalves = Gfni.V256.GaloisFieldAffineTransform(x: blockBytes, a: highFromHigh, b: 0) ^
-                              Gfni.V256.GaloisFieldAffineTransform(x: swappedBytes, a: highFromLow, b: 0);
-            var product = (lowHalves & lowLanes) | Vector256.AndNot(left: highHalves, right: lowLanes);
+            var lowHalves = Gfni.V256.GaloisFieldAffineTransform(
+                a: lowFromLow,
+                b: 0,
+                x: blockBytes
+            ) ^
+                             Gfni.V256.GaloisFieldAffineTransform(
+                a: lowFromHigh,
+                b: 0,
+                x: swappedBytes
+            );
+            var highHalves = Gfni.V256.GaloisFieldAffineTransform(
+                a: highFromHigh,
+                b: 0,
+                x: blockBytes
+            ) ^
+                              Gfni.V256.GaloisFieldAffineTransform(
+                a: highFromLow,
+                b: 0,
+                x: swappedBytes
+            );
+            var product = (lowHalves & lowLanes) | Vector256.AndNot(
+                left: highHalves,
+                right: lowLanes
+            );
 
-            (product ^ (Vector256.LoadUnsafe(source: ref destinationElements, elementOffset: index).AsByte() & keep))
+            (product ^ (Vector256.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationElements
+            ).AsByte() & keep))
                 .AsUInt16()
-                .StoreUnsafe(destination: ref destinationElements, elementOffset: index);
+                .StoreUnsafe(
+                destination: ref destinationElements,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -756,32 +1134,73 @@ internal static class BinaryFieldKernels {
     /// <param name="tail">The modulus tail.</param>
     /// <exception cref="PlatformNotSupportedException">The 512-bit Galois-field instruction set is unavailable.</exception>
     internal static void MultiplyAccumulateRegionWideAffine512(Span<ushort> destination, ReadOnlySpan<ushort> source, ushort scalar, bool accumulate, int degree, ushort tail) {
-        var count = ((nuint)(uint)destination.Length);
+        var count = ((nuint)((uint)destination.Length));
         var index = ((nuint)0U);
-        var matrices = WideAffineMatrices(scalar: scalar, degree: degree, tail: tail);
+        var matrices = WideAffineMatrices(
+            degree: degree,
+            scalar: scalar,
+            tail: tail
+        );
         var lowFromHigh = Vector512.Create(value: matrices.LowFromHigh).AsByte();
         var lowFromLow = Vector512.Create(value: matrices.LowFromLow).AsByte();
         var highFromHigh = Vector512.Create(value: matrices.HighFromHigh).AsByte();
         var highFromLow = Vector512.Create(value: matrices.HighFromLow).AsByte();
         var lowLanes = Vector512.Create(value: ((ushort)0x00FFU)).AsByte();
-        var keep = (accumulate ? Vector512<byte>.AllBitsSet : Vector512<byte>.Zero);
+        var keep = (accumulate
+            ? Vector512<byte>.AllBitsSet
+            : Vector512<byte>.Zero
+        );
         ref var destinationElements = ref MemoryMarshal.GetReference(span: destination);
         ref var sourceElements = ref MemoryMarshal.GetReference(span: source);
 
         for (; ((index + 32) <= count); index += 32) {
-            var block = Vector512.LoadUnsafe(source: ref sourceElements, elementOffset: index);
-            var swapped = Vector512.ShiftLeft(vector: block, shiftCount: 8) | Vector512.ShiftRightLogical(vector: block, shiftCount: 8);
+            var block = Vector512.LoadUnsafe(
+                elementOffset: index,
+                source: ref sourceElements
+            );
+            var swapped = Vector512.ShiftLeft(
+                shiftCount: 8,
+                vector: block
+            ) | Vector512.ShiftRightLogical(
+                shiftCount: 8,
+                vector: block
+            );
             var blockBytes = block.AsByte();
             var swappedBytes = swapped.AsByte();
-            var lowHalves = Gfni.V512.GaloisFieldAffineTransform(x: blockBytes, a: lowFromLow, b: 0) ^
-                             Gfni.V512.GaloisFieldAffineTransform(x: swappedBytes, a: lowFromHigh, b: 0);
-            var highHalves = Gfni.V512.GaloisFieldAffineTransform(x: blockBytes, a: highFromHigh, b: 0) ^
-                              Gfni.V512.GaloisFieldAffineTransform(x: swappedBytes, a: highFromLow, b: 0);
-            var product = (lowHalves & lowLanes) | Vector512.AndNot(left: highHalves, right: lowLanes);
+            var lowHalves = Gfni.V512.GaloisFieldAffineTransform(
+                a: lowFromLow,
+                b: 0,
+                x: blockBytes
+            ) ^
+                             Gfni.V512.GaloisFieldAffineTransform(
+                a: lowFromHigh,
+                b: 0,
+                x: swappedBytes
+            );
+            var highHalves = Gfni.V512.GaloisFieldAffineTransform(
+                a: highFromHigh,
+                b: 0,
+                x: blockBytes
+            ) ^
+                              Gfni.V512.GaloisFieldAffineTransform(
+                a: highFromLow,
+                b: 0,
+                x: swappedBytes
+            );
+            var product = (lowHalves & lowLanes) | Vector512.AndNot(
+                left: highHalves,
+                right: lowLanes
+            );
 
-            (product ^ (Vector512.LoadUnsafe(source: ref destinationElements, elementOffset: index).AsByte() & keep))
+            (product ^ (Vector512.LoadUnsafe(
+                elementOffset: index,
+                source: ref destinationElements
+            ).AsByte() & keep))
                 .AsUInt16()
-                .StoreUnsafe(destination: ref destinationElements, elementOffset: index);
+                .StoreUnsafe(
+                destination: ref destinationElements,
+                elementOffset: index
+            );
         }
 
         MultiplyAccumulateRegionScalar(
@@ -813,15 +1232,30 @@ internal static class BinaryFieldKernels {
         // The mask is built by right-shifting an all-ones value rather than as ((one << degree) - one): at
         // degree == width the latter's shift count is masked back to zero and the mask comes out as one.
         var mask = (T.AllBitsSet >>> (width - degree));
-        var split = Split(low: low, high: high, degree: degree, mask: mask, width: width);
+        var split = Split(
+            degree: degree,
+            high: high,
+            low: low,
+            mask: mask,
+            width: width
+        );
         var accumulator = split.Low;
         var remainder = split.High;
 
         // Written as a loop rather than the two passes the canonical minimum-weight moduli happen to need: a dense
         // caller-supplied modulus needs more, and a fixed unroll would be silently wrong for exactly that case.
         while (T.Zero != remainder) {
-            var fold = CarrylessMultiplyWide(left: remainder, right: tail);
-            var folded = Split(low: fold.Low, high: fold.High, degree: degree, mask: mask, width: width);
+            var fold = CarrylessMultiplyWide(
+                left: remainder,
+                right: tail
+            );
+            var folded = Split(
+                degree: degree,
+                high: fold.High,
+                low: fold.Low,
+                mask: mask,
+                width: width
+            );
 
             accumulator ^= folded.Low;
             remainder = folded.High;
@@ -837,7 +1271,12 @@ internal static class BinaryFieldKernels {
     /// <returns>The unique element whose square is <paramref name="value"/>, under an irreducible modulus.</returns>
     /// <remarks>Under an irreducible modulus squaring is a bijection in characteristic two, and its inverse is <c>degree - 1</c> further squarings; a reducible modulus voids that, and the result then need not square back to <paramref name="value"/>.</remarks>
     internal static T SquareRoot<T>(T value, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> =>
-        FrobeniusRepeat(value: value, count: (degree - 1), degree: degree, tail: tail);
+        FrobeniusRepeat(
+            count: (degree - 1),
+            degree: degree,
+            tail: tail,
+            value: value
+        );
 
     /// <summary>Builds the bit matrix that the Galois-field affine transform applies to scale a byte-wide field element.</summary>
     /// <param name="scalar">The reduced element to scale by.</param>
@@ -856,13 +1295,23 @@ internal static class BinaryFieldKernels {
         for (var column = 0; (column < 8); ++column) {
             var entry = Multiply(
                 left: scalar,
-                right: ReduceWide(low: ((byte)(1 << column)), high: ((byte)0U), degree: degree, tail: tail),
+                right: ReduceWide(
+                    degree: degree,
+                    high: ((byte)0U),
+                    low: ((byte)(1 << column)),
+                    tail: tail
+                ),
                 degree: degree,
                 tail: tail
             );
 
             for (var row = 0; (row < 8); ++row) {
-                if (0 != ((entry >>> row) & 1)) { matrix |= MatrixBit(row: row, column: column); }
+                if (0 != ((entry >>> row) & 1)) {
+                    matrix |= MatrixBit(
+                        column: column,
+                        row: row
+                    );
+                }
             }
         }
 
@@ -879,13 +1328,23 @@ internal static class BinaryFieldKernels {
         for (var index = 0; (index < 16); ++index) {
             highTable[index] = Multiply(
                 left: scalar,
-                right: ReduceWide(low: ((byte)(index << 4)), high: ((byte)0U), degree: degree, tail: tail),
+                right: ReduceWide(
+                    degree: degree,
+                    high: ((byte)0U),
+                    low: ((byte)(index << 4)),
+                    tail: tail
+                ),
                 degree: degree,
                 tail: tail
             );
             lowTable[index] = Multiply(
                 left: scalar,
-                right: ReduceWide(low: ((byte)index), high: ((byte)0U), degree: degree, tail: tail),
+                right: ReduceWide(
+                    degree: degree,
+                    high: ((byte)0U),
+                    low: ((byte)index),
+                    tail: tail
+                ),
                 degree: degree,
                 tail: tail
             );
@@ -934,7 +1393,12 @@ internal static class BinaryFieldKernels {
     /// <returns><paramref name="value"/> raised to <c>2^count</c>.</returns>
     private static T FrobeniusRepeat<T>(T value, int count, int degree, T tail) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         for (var index = 0; (index < count); ++index) {
-            value = Multiply(left: value, right: value, degree: degree, tail: tail);
+            value = Multiply(
+                degree: degree,
+                left: value,
+                right: value,
+                tail: tail
+            );
         }
 
         return value;
@@ -980,7 +1444,10 @@ internal static class BinaryFieldKernels {
 
         return PolynomialGreatestCommonDivisor(
             value: value,
-            other: accumulator ^ PolynomialRemainder(dividend: tail, divisor: value)
+            other: accumulator ^ PolynomialRemainder(
+                dividend: tail,
+                divisor: value
+            )
         );
     }
     /// <summary>Computes the greatest common divisor of two packed polynomials.</summary>
@@ -990,7 +1457,10 @@ internal static class BinaryFieldKernels {
     /// <returns>The monic greatest common divisor.</returns>
     private static T PolynomialGreatestCommonDivisor<T>(T value, T other) where T : IBinaryInteger<T>, IUnsignedNumber<T> {
         while (T.Zero != other) {
-            (value, other) = (other, PolynomialRemainder(dividend: value, divisor: other));
+            (value, other) = (other, PolynomialRemainder(
+                dividend: value,
+                divisor: other
+            ));
         }
 
         return value;
@@ -1006,7 +1476,10 @@ internal static class BinaryFieldKernels {
 
         var divisorDegree = DegreeOf(value: divisor);
 
-        while ((T.Zero != dividend) && (DegreeOf(value: dividend) >= divisorDegree)) {
+        while (
+            (T.Zero != dividend) &&
+            (DegreeOf(value: dividend) >= divisorDegree)
+        ) {
             dividend ^= (divisor << (DegreeOf(value: dividend) - divisorDegree));
         }
 
@@ -1052,41 +1525,107 @@ internal static class BinaryFieldKernels {
         var count = destination.Length;
         var narrowScalar = byte.CreateTruncating(value: scalar);
         var narrowTail = byte.CreateTruncating(value: tail);
-        var narrowDestination = MemoryMarshal.CreateSpan(reference: ref Unsafe.As<T, byte>(source: ref MemoryMarshal.GetReference(span: destination)), length: count);
-        var narrowSource = MemoryMarshal.CreateReadOnlySpan(reference: ref Unsafe.As<T, byte>(source: ref MemoryMarshal.GetReference(span: source)), length: count);
+        var narrowDestination = MemoryMarshal.CreateSpan(
+            reference: ref Unsafe.As<T, byte>(source: ref MemoryMarshal.GetReference(span: destination)),
+            length: count
+        );
+        var narrowSource = MemoryMarshal.CreateReadOnlySpan(
+            reference: ref Unsafe.As<T, byte>(source: ref MemoryMarshal.GetReference(span: source)),
+            length: count
+        );
 
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) && ((AffineMatrixAmortizationVectors * 64) <= count)) {
-            MultiplyAccumulateRegionAffine512(destination: narrowDestination, source: narrowSource, scalar: narrowScalar, accumulate: accumulate, degree: degree, tail: narrowTail);
-
-            return true;
-        }
-
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Split512) && ((SplitTableAmortizationVectors * 64) <= count)) {
-            MultiplyAccumulateRegionSplit512(destination: narrowDestination, source: narrowSource, scalar: narrowScalar, accumulate: accumulate, degree: degree, tail: narrowTail);
-
-            return true;
-        }
-
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) && ((AffineMatrixAmortizationVectors * 32) <= count)) {
-            MultiplyAccumulateRegionAffine256(destination: narrowDestination, source: narrowSource, scalar: narrowScalar, accumulate: accumulate, degree: degree, tail: narrowTail);
-
-            return true;
-        }
-
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Split256) && ((SplitTableAmortizationVectors * 32) <= count)) {
-            MultiplyAccumulateRegionSplit256(destination: narrowDestination, source: narrowSource, scalar: narrowScalar, accumulate: accumulate, degree: degree, tail: narrowTail);
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) &&
+            ((AffineMatrixAmortizationVectors * 64) <= count)
+        ) {
+            MultiplyAccumulateRegionAffine512(
+                accumulate: accumulate,
+                degree: degree,
+                destination: narrowDestination,
+                scalar: narrowScalar,
+                source: narrowSource,
+                tail: narrowTail
+            );
 
             return true;
         }
 
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) && ((AffineMatrixAmortizationVectors * 16) <= count)) {
-            MultiplyAccumulateRegionAffine128(destination: narrowDestination, source: narrowSource, scalar: narrowScalar, accumulate: accumulate, degree: degree, tail: narrowTail);
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Split512) &&
+            ((SplitTableAmortizationVectors * 64) <= count)
+        ) {
+            MultiplyAccumulateRegionSplit512(
+                accumulate: accumulate,
+                degree: degree,
+                destination: narrowDestination,
+                scalar: narrowScalar,
+                source: narrowSource,
+                tail: narrowTail
+            );
 
             return true;
         }
 
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Split128) && ((SplitTableAmortizationVectors * 16) <= count)) {
-            MultiplyAccumulateRegionSplit128(destination: narrowDestination, source: narrowSource, scalar: narrowScalar, accumulate: accumulate, degree: degree, tail: narrowTail);
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) &&
+            ((AffineMatrixAmortizationVectors * 32) <= count)
+        ) {
+            MultiplyAccumulateRegionAffine256(
+                accumulate: accumulate,
+                degree: degree,
+                destination: narrowDestination,
+                scalar: narrowScalar,
+                source: narrowSource,
+                tail: narrowTail
+            );
+
+            return true;
+        }
+
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Split256) &&
+            ((SplitTableAmortizationVectors * 32) <= count)
+        ) {
+            MultiplyAccumulateRegionSplit256(
+                accumulate: accumulate,
+                degree: degree,
+                destination: narrowDestination,
+                scalar: narrowScalar,
+                source: narrowSource,
+                tail: narrowTail
+            );
+
+            return true;
+        }
+
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) &&
+            ((AffineMatrixAmortizationVectors * 16) <= count)
+        ) {
+            MultiplyAccumulateRegionAffine128(
+                accumulate: accumulate,
+                degree: degree,
+                destination: narrowDestination,
+                scalar: narrowScalar,
+                source: narrowSource,
+                tail: narrowTail
+            );
+
+            return true;
+        }
+
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Split128) &&
+            ((SplitTableAmortizationVectors * 16) <= count)
+        ) {
+            MultiplyAccumulateRegionSplit128(
+                accumulate: accumulate,
+                degree: degree,
+                destination: narrowDestination,
+                scalar: narrowScalar,
+                source: narrowSource,
+                tail: narrowTail
+            );
 
             return true;
         }
@@ -1107,26 +1646,62 @@ internal static class BinaryFieldKernels {
         var count = destination.Length;
         var wideScalar = ushort.CreateTruncating(value: scalar);
         var wideTail = ushort.CreateTruncating(value: tail);
-        var wideDestination = MemoryMarshal.CreateSpan(reference: ref Unsafe.As<T, ushort>(source: ref MemoryMarshal.GetReference(span: destination)), length: count);
-        var wideSource = MemoryMarshal.CreateReadOnlySpan(reference: ref Unsafe.As<T, ushort>(source: ref MemoryMarshal.GetReference(span: source)), length: count);
+        var wideDestination = MemoryMarshal.CreateSpan(
+            reference: ref Unsafe.As<T, ushort>(source: ref MemoryMarshal.GetReference(span: destination)),
+            length: count
+        );
+        var wideSource = MemoryMarshal.CreateReadOnlySpan(
+            reference: ref Unsafe.As<T, ushort>(source: ref MemoryMarshal.GetReference(span: source)),
+            length: count
+        );
 
         // The thresholds count ELEMENTS rather than bytes, because a sixteen-bit element is half a byte-rung lane: a
         // 512-bit vector carries thirty-two of them. The four matrices this width needs cost four times the byte rung's
         // one, so a rung that cannot complete a vector iteration is an even worse trade here than there.
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) && ((WideAffineMatrixAmortizationVectors * 32) <= count)) {
-            MultiplyAccumulateRegionWideAffine512(destination: wideDestination, source: wideSource, scalar: wideScalar, accumulate: accumulate, degree: degree, tail: wideTail);
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine512) &&
+            ((WideAffineMatrixAmortizationVectors * 32) <= count)
+        ) {
+            MultiplyAccumulateRegionWideAffine512(
+                accumulate: accumulate,
+                degree: degree,
+                destination: wideDestination,
+                scalar: wideScalar,
+                source: wideSource,
+                tail: wideTail
+            );
 
             return true;
         }
 
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) && ((WideAffineMatrixAmortizationVectors * 16) <= count)) {
-            MultiplyAccumulateRegionWideAffine256(destination: wideDestination, source: wideSource, scalar: wideScalar, accumulate: accumulate, degree: degree, tail: wideTail);
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine256) &&
+            ((WideAffineMatrixAmortizationVectors * 16) <= count)
+        ) {
+            MultiplyAccumulateRegionWideAffine256(
+                accumulate: accumulate,
+                degree: degree,
+                destination: wideDestination,
+                scalar: wideScalar,
+                source: wideSource,
+                tail: wideTail
+            );
 
             return true;
         }
 
-        if (IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) && ((WideAffineMatrixAmortizationVectors * 8) <= count)) {
-            MultiplyAccumulateRegionWideAffine128(destination: wideDestination, source: wideSource, scalar: wideScalar, accumulate: accumulate, degree: degree, tail: wideTail);
+        if (
+            IsRegionTierSupported(tier: BinaryFieldRegionTier.Affine128) &&
+            ((WideAffineMatrixAmortizationVectors * 8) <= count)
+        ) {
+            MultiplyAccumulateRegionWideAffine128(
+                accumulate: accumulate,
+                degree: degree,
+                destination: wideDestination,
+                scalar: wideScalar,
+                source: wideSource,
+                tail: wideTail
+            );
 
             return true;
         }
@@ -1153,19 +1728,32 @@ internal static class BinaryFieldKernels {
         for (var column = 0; (column < 8); ++column) {
             var fromHigh = Multiply(
                 left: scalar,
-                right: ReduceWide(low: ((ushort)(1 << (column + 8))), high: ((ushort)0U), degree: degree, tail: tail),
+                right: ReduceWide(
+                    degree: degree,
+                    high: ((ushort)0U),
+                    low: ((ushort)(1 << (column + 8))),
+                    tail: tail
+                ),
                 degree: degree,
                 tail: tail
             );
             var fromLow = Multiply(
                 left: scalar,
-                right: ReduceWide(low: ((ushort)(1 << column)), high: ((ushort)0U), degree: degree, tail: tail),
+                right: ReduceWide(
+                    degree: degree,
+                    high: ((ushort)0U),
+                    low: ((ushort)(1 << column)),
+                    tail: tail
+                ),
                 degree: degree,
                 tail: tail
             );
 
             for (var row = 0; (row < 8); ++row) {
-                var bit = MatrixBit(row: row, column: column);
+                var bit = MatrixBit(
+                    column: column,
+                    row: row
+                );
 
                 if (0 != ((fromHigh >>> row) & 1)) { lowFromHigh |= bit; }
                 if (0 != ((fromHigh >>> (row + 8)) & 1)) { highFromHigh |= bit; }

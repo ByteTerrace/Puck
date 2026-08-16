@@ -43,7 +43,6 @@ internal readonly record struct WorldWheelStatus(
     Vector2 Center,
     bool CenterKnown
 );
-
 /// <summary>
 /// Per-seat radial presentation over the compiled binding system. It owns only radial interaction state (layout,
 /// aim, ring, hover); opening, selection, ring steps, commit and cancel are ordinary authored bindings. A committed
@@ -57,40 +56,43 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // silently cancel every commit landing on such a frame. Counted in observed frames, never wall time.
     private const int CommitGraceFrames = 2;
 
-    private sealed class SeatState {
-        public BindingWheelView? Wheel;
-        public int ActiveRing;
-        public float RingScroll;
-        public Vector2 Center;
-        public bool CenterKnown;
-        public int AxisExcursionRing = -1;
-        public int SpatialExcursionRing = -1;
-        public BindingWheelGestureState Gesture { get; } = new();
-        public long PointerSequence;
-        public float BankedNotches;
-        public OverlayWheelRing[] RingCache = [];
-        public BindingWheelView? RingCacheSource;
-        public bool CommitArmed;
-        public BindingWheelView? CommitWheel;
-        public int CommitRing;
-        public int CommitSector;
-        public BindingActivation? CommitActivation;
-        public string CommitLabel = string.Empty;
-        public string CommitReason = "closed";
-        public int ClosedFrames;
-        public WorldWheelStatus Status;
-    }
-
     private readonly WorldSeatBindings m_bindings;
     private readonly WorldCursorFeed m_cursor;
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
-    private readonly SeatState[] m_state = new SeatState[PlayerRoster.MaxSlots];
     private readonly WheelStore m_store;
-    private readonly OverlayWheelSeat[] m_visible = new OverlayWheelSeat[PlayerRoster.MaxSlots];
     private readonly WorldSeatViewports m_viewports;
+
     private long m_selectionSequence;
+
+    private sealed class SeatState {
+        public int ActiveRing;
+        public float BankedNotches;
+        public Vector2 Center;
+        public bool CenterKnown;
+        public int ClosedFrames;
+        public BindingActivation? CommitActivation;
+        public bool CommitArmed;
+        public int CommitRing;
+        public int CommitSector;
+        public BindingWheelView? CommitWheel;
+        public long PointerSequence;
+        public BindingWheelView? RingCacheSource;
+        public float RingScroll;
+        public WorldWheelStatus Status;
+        public BindingWheelView? Wheel;
+
+        public int AxisExcursionRing = -1;
+        public int SpatialExcursionRing = -1;
+        public BindingWheelGestureState Gesture { get; } = new();
+        public OverlayWheelRing[] RingCache = [];
+        public string CommitLabel = string.Empty;
+        public string CommitReason = "closed";
+    }
+
+    private readonly SeatState[] m_state = new SeatState[PlayerRoster.MaxSlots];
+    private readonly OverlayWheelSeat[] m_visible = new OverlayWheelSeat[PlayerRoster.MaxSlots];
 
     /// <summary>Initializes a new instance of the <see cref="WorldWheelFeed"/> class.</summary>
     /// <param name="pointer">The live pointer store — this type is its one registered wheel consumer.</param>
@@ -131,14 +133,296 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// argument.</summary>
     public WorldWheelStatus Status => StatusFor(slot: WorldPointerSlot.Resolve(roster: m_roster));
 
-    /// <summary>One seat's last composed status.</summary>
-    /// <param name="slot">The 0-based seat slot to read.</param>
-    /// <returns>That seat's status, or a closed status when the slot is out of range.</returns>
-    public WorldWheelStatus StatusFor(int slot) => (((uint)slot < m_state.Length) ? m_state[slot].Status : ClosedStatus(slot: 0));
+    private static void ApplyRingScroll(SeatState state, BindingWheelView wheel) {
+        state.RingScroll += state.BankedNotches;
+        state.BankedNotches = 0f;
 
+        while (state.RingScroll >= 1f) {
+            state.RingScroll -= 1f;
+            state.ActiveRing = ((state.ActiveRing + 1) % wheel.Rings.Count);
+        }
+
+        while (state.RingScroll <= -1f) {
+            state.RingScroll += 1f;
+            state.ActiveRing = (((state.ActiveRing - 1) + wheel.Rings.Count) % wheel.Rings.Count);
+        }
+    }
+    private static void Arm(SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) {
+        if (!state.Gesture.CanArm) {
+            state.CommitArmed = false;
+            state.CommitWheel = wheel;
+            state.CommitRing = state.ActiveRing;
+            state.CommitSector = -1;
+            state.CommitActivation = null;
+            state.CommitLabel = string.Empty;
+            state.CommitReason = "cancelled";
+            state.ClosedFrames = 0;
+
+            return;
+        }
+
+        var hovered = ((hoverSector >= 0)
+            ? ring.Sectors[hoverSector]
+            : null
+        );
+
+        state.CommitArmed = true;
+        state.CommitWheel = wheel;
+        state.CommitRing = state.ActiveRing;
+        state.CommitSector = hoverSector;
+        state.CommitActivation = hovered?.Activation;
+        state.CommitLabel = (hovered?.Label ?? (hovered?.Command ?? string.Empty));
+        state.CommitReason = hoverReason;
+        state.ClosedFrames = 0;
+    }
+    private static OverlayWheelSeat BuildSeat(SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
+        if (!ReferenceEquals(
+            objA: state.RingCacheSource,
+            objB: wheel
+        )) {
+            var rings = new OverlayWheelRing[wheel.Rings.Count];
+
+            for (var ringIndex = 0; (ringIndex < rings.Length); ringIndex++) {
+                var ring = wheel.Rings[ringIndex];
+                var sectors = ring.Sectors.Select(selector: static sector => (sector.Label ?? sector.Command)).ToArray();
+
+                rings[ringIndex] = new OverlayWheelRing(
+                    Label: (ring.Label ?? ring.PageId),
+                    Sectors: sectors
+                );
+            }
+
+            state.RingCache = rings;
+            state.RingCacheSource = wheel;
+        }
+
+        var centerX = (state.CenterKnown
+            ? state.Center.X
+            : ((viewport.Region.X + (viewport.Region.Width * 0.5f)) * viewport.Width)
+        );
+        var centerY = (state.CenterKnown
+            ? state.Center.Y
+            : ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height)
+        );
+
+        return new OverlayWheelSeat(
+            Viewport: viewport.Region,
+            CenterX: centerX,
+            CenterY: centerY,
+            InnerRadius: (unit * wheel.Style.DeadZoneFraction),
+            RingWidth: (unit * wheel.Style.RingWidthFraction),
+            ActiveRing: state.ActiveRing,
+            HoveredSector: hoverSector,
+            RotationRadians: (wheel.Style.RotationDegrees * (MathF.PI / 180f)),
+            Clockwise: wheel.Style.Clockwise,
+            Rings: state.RingCache
+        );
+    }
+    private static void Close(int slot, SeatState state) {
+        state.Wheel = null;
+        state.Gesture.Close();
+        state.AxisExcursionRing = -1;
+        state.SpatialExcursionRing = -1;
+        state.BankedNotches = 0f;
+
+        if (
+            state.CommitArmed &&
+            (++state.ClosedFrames > CommitGraceFrames)
+        ) {
+            state.CommitArmed = false;
+        }
+
+        state.Status = ClosedStatus(slot: slot);
+    }
+    private static WorldWheelStatus ClosedStatus(int slot) => new(
+        Slot: slot,
+        Open: false,
+        Id: string.Empty,
+        Group: string.Empty,
+        RingCount: 0,
+        ActiveRing: -1,
+        ActiveRingLabel: string.Empty,
+        HoverSector: -1,
+        HoverLabel: string.Empty,
+        HoverCommand: null,
+        HoverReason: "closed",
+        PointerSelection: BindingWheelSpatialSelectionMode.Disabled,
+        Placement: BindingWheelPlacement.ViewportCenter,
+        RingSelection: BindingWheelRingSelectionMode.Explicit,
+        Center: Vector2.Zero,
+        CenterKnown: false
+    );
+    private static bool RequiresSpatialNeutral(BindingWheelView wheel) =>
+        ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.Angle) ||
+            ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.HitTarget) && (wheel.Excursion is not null)));
+    private static BindingWheelSelection SelectAxis(SeatState state, BindingWheelView wheel) {
+        var vector = state.Gesture.Axis;
+
+        if (wheel.Excursion is not { } excursion) {
+            return BindingWheelGeometry.SelectAxis(
+                vector: vector,
+                sectorCount: wheel.Rings[state.ActiveRing].Sectors.Count,
+                style: wheel.Style
+            );
+        }
+
+        var ring = BindingWheelGeometry.ResolveExcursionRing(
+            excursion: excursion,
+            previousRing: state.AxisExcursionRing,
+            vector: vector
+        );
+
+        state.AxisExcursionRing = ring;
+
+        if (ring < 0) {
+            return new BindingWheelSelection(
+                Outcome: BindingWheelSelectionOutcome.DeadZone,
+                Sector: -1
+            );
+        }
+
+        state.ActiveRing = ring;
+
+        return BindingWheelGeometry.SelectDirection(
+            vector: vector,
+            sectorCount: wheel.Rings[ring].Sectors.Count,
+            style: wheel.Style
+        );
+    }
+    private static BindingWheelSelection SelectPointer(SeatState state, BindingWheelView wheel, Vector2 pointer, Vector2 center, float unit) {
+        var mode = wheel.Style.PointerSelection;
+        var targetingVector = BindingWheelGeometry.ResolveSpatialTargetVector(
+            mode: mode,
+            position: pointer,
+            neutral: state.Gesture.SpatialNeutral,
+            hub: center
+        );
+
+        if (
+            (mode == BindingWheelSpatialSelectionMode.Disabled) ||
+            (wheel.Excursion is not { } excursion)
+        ) {
+            return BindingWheelGeometry.SelectSpatial(
+                vector: targetingVector,
+                sectorCount: wheel.Rings[state.ActiveRing].Sectors.Count,
+                ringCount: wheel.Rings.Count,
+                style: wheel.Style,
+                mode: mode,
+                unit: unit
+            );
+        }
+
+        var neutralVector = (pointer - state.Gesture.SpatialNeutral);
+        var normalized = BindingWheelGeometry.NormalizeSpatialExcursion(
+            excursion: excursion,
+            vector: neutralVector,
+            viewportUnit: unit
+        );
+        var ring = BindingWheelGeometry.ResolveExcursionRing(
+            excursion: excursion,
+            previousRing: state.SpatialExcursionRing,
+            vector: normalized
+        );
+
+        state.SpatialExcursionRing = ring;
+
+        if (ring < 0) {
+            return new BindingWheelSelection(
+                Outcome: BindingWheelSelectionOutcome.DeadZone,
+                Sector: -1
+            );
+        }
+
+        state.ActiveRing = ring;
+
+        return ((mode == BindingWheelSpatialSelectionMode.Angle)
+            ? BindingWheelGeometry.SelectDirection(
+                vector: normalized,
+                sectorCount: wheel.Rings[ring].Sectors.Count,
+                style: wheel.Style
+            )
+            : BindingWheelGeometry.SelectSpatial(
+                vector: targetingVector,
+                sectorCount: wheel.Rings[ring].Sectors.Count,
+                ringCount: wheel.Rings.Count,
+                style: wheel.Style,
+                mode: mode,
+                unit: unit
+            )
+        );
+    }
+
+    /// <summary>Commits the last presented sector — the <c>player.wheel.commit</c> handler's whole act. When another
+    /// authored opener still presents the same radial, the release is deferred: the remaining opener owns the
+    /// eventual commit.</summary>
+    /// <param name="slot">The 0-based seat slot the commit targets.</param>
+    /// <returns>The commit disposition, every failure distinguishable from the others.</returns>
+    public BindingWheelCommitResult Commit(int slot) {
+        if (((uint)slot) >= m_state.Length) {
+            return BindingWheelCommitResult.NotArmed();
+        }
+
+        var state = m_state[slot];
+
+        if (state.Gesture.Cancelled) {
+            return BindingWheelCommitResult.Cancelled(
+                reason: "cancelled",
+                ring: state.CommitRing,
+                sector: -1
+            );
+        }
+
+        if (!state.CommitArmed) {
+            return BindingWheelCommitResult.NotArmed();
+        }
+
+        var currentlyOpen = m_bindings.WheelView(slot: slot);
+
+        if (
+            (currentlyOpen is not null) &&
+            string.Equals(
+            a: currentlyOpen.Id,
+            b: state.CommitWheel?.Id,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            return BindingWheelCommitResult.Deferred(
+                label: state.CommitLabel,
+                ring: state.CommitRing,
+                sector: state.CommitSector
+            );
+        }
+
+        state.CommitArmed = false;
+
+        if (state.CommitActivation is not { } activation) {
+            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} release cancelled ({state.CommitReason})");
+
+            return BindingWheelCommitResult.Cancelled(
+                reason: state.CommitReason,
+                ring: state.CommitRing,
+                sector: -1
+            );
+        }
+
+        var outcome = BindingWheelCommitResult.Dispatch(
+            router: m_router(),
+            slot: slot,
+            activation: activation,
+            label: state.CommitLabel,
+            ring: state.CommitRing,
+            sector: state.CommitSector
+        );
+
+        if (outcome.Status == BindingWheelCommitStatus.Dispatched) {
+            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} committed ring {(state.CommitRing + 1)} sector {(state.CommitSector + 1)} '{state.CommitLabel}' -> {activation.Command}");
+        }
+
+        return outcome;
+    }
     /// <inheritdoc/>
     public void OnPointer(int slot) {
-        if ((uint)slot >= m_state.Length) {
+        if (((uint)slot) >= m_state.Length) {
             return;
         }
 
@@ -147,18 +431,39 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.BankedNotches += m_pointer.TakeWheel(slot: slot);
         state.PointerSequence = ++m_selectionSequence;
     }
+    /// <summary>Latches cancellation for the seat's current gesture — both the author-bound
+    /// <c>player.wheel.cancel</c> act and the router's synthesized focus-loss cancellation (an alt-tab mid-hold must
+    /// never commit a sector). The latch holds until the radial next opens, so no later presentation frame can
+    /// re-arm the decision it cleared.</summary>
+    /// <param name="slot">The 0-based seat slot the cancellation targets.</param>
+    public void Revoke(int slot) {
+        if (((uint)slot) < m_state.Length) {
+            var state = m_state[slot];
 
+            state.Gesture.Cancel();
+            state.CommitArmed = false;
+        }
+    }
     /// <summary>Accepts an authored Axis2D selection binding for a seat.</summary>
     public void Select(int slot, Vector2 axis) {
-        if ((uint)slot >= m_state.Length) {
+        if (((uint)slot) >= m_state.Length) {
             return;
         }
 
         var state = m_state[slot];
 
-        state.Gesture.Select(axis: axis, sequence: ++m_selectionSequence);
+        state.Gesture.Select(
+            axis: axis,
+            sequence: ++m_selectionSequence
+        );
     }
-
+    /// <summary>One seat's last composed status.</summary>
+    /// <param name="slot">The 0-based seat slot to read.</param>
+    /// <returns>That seat's status, or a closed status when the slot is out of range.</returns>
+    public WorldWheelStatus StatusFor(int slot) => ((((uint)slot) < m_state.Length)
+        ? m_state[slot].Status
+        : ClosedStatus(slot: 0)
+    );
     /// <summary>Composes every open seat's radial once per produced frame.</summary>
     public void Tick() {
         var pointerSlot = WorldPointerSlot.Resolve(roster: m_roster);
@@ -170,8 +475,14 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             var wheel = m_bindings.WheelView(slot: slot);
             var viewport = m_viewports.Seat(slot: slot);
 
-            if ((wheel is null) || !viewport.Present) {
-                Close(slot: slot, state: state);
+            if (
+                (wheel is null) ||
+                !viewport.Present
+            ) {
+                Close(
+                    slot: slot,
+                    state: state
+                );
 
                 continue;
             }
@@ -181,9 +492,15 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 y: ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height)
             );
             var pointerAvailable = ((slot == pointerSlot) && (pointerStatus.Reason is not ("no-position" or "no-view")));
-            var unit = MathF.Min(x: (viewport.Region.Width * viewport.Width), y: (viewport.Region.Height * viewport.Height));
+            var unit = MathF.Min(
+                x: (viewport.Region.Width * viewport.Width),
+                y: (viewport.Region.Height * viewport.Height)
+            );
 
-            var opened = !ReferenceEquals(objA: state.Wheel, objB: wheel);
+            var opened = !ReferenceEquals(
+                objA: state.Wheel,
+                objB: wheel
+            );
 
             if (opened) {
                 state.Wheel = wheel;
@@ -201,12 +518,18 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 );
                 state.CenterKnown = true;
             } else if (wheel.Style.RingSelection == BindingWheelRingSelectionMode.Explicit) {
-                ApplyRingScroll(state: state, wheel: wheel);
+                ApplyRingScroll(
+                    state: state,
+                    wheel: wheel
+                );
             } else {
                 state.BankedNotches = 0f;
             }
 
-            if (pointerAvailable && RequiresSpatialNeutral(wheel: wheel)) {
+            if (
+                pointerAvailable &&
+                RequiresSpatialNeutral(wheel: wheel)
+            ) {
                 _ = state.Gesture.TryCaptureSpatialNeutral(position: pointerStatus.Frame);
             }
 
@@ -217,22 +540,52 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
             if (state.Gesture.Cancelled) {
                 hoverReason = "cancelled";
-            } else if (state.Gesture.AxisKnown && (state.Gesture.AxisSequence > state.PointerSequence)) {
-                var selection = SelectAxis(state: state, wheel: wheel);
+            } else if (
+                state.Gesture.AxisKnown &&
+                (state.Gesture.AxisSequence > state.PointerSequence)
+            ) {
+                var selection = SelectAxis(
+                    state: state,
+                    wheel: wheel
+                );
+
                 hoverSector = selection.Sector;
                 hoverReason = selection.Reason;
-            } else if (pointerAvailable && centerKnown &&
-                (!RequiresSpatialNeutral(wheel: wheel) || state.Gesture.SpatialNeutralKnown)) {
-                var selection = SelectPointer(state: state, wheel: wheel, pointer: pointerStatus.Frame, center: center, unit: unit);
+            } else if (
+                pointerAvailable &&
+                centerKnown &&
+                (!RequiresSpatialNeutral(wheel: wheel) || state.Gesture.SpatialNeutralKnown)
+            ) {
+                var selection = SelectPointer(
+                    state: state,
+                    wheel: wheel,
+                    pointer: pointerStatus.Frame,
+                    center: center,
+                    unit: unit
+                );
+
                 hoverSector = selection.Sector;
                 hoverReason = selection.Reason;
             }
 
             var ring = wheel.Rings[state.ActiveRing];
+
             state.Center = center;
             state.CenterKnown = centerKnown;
-            Arm(state: state, wheel: wheel, ring: ring, hoverSector: hoverSector, hoverReason: hoverReason);
-            m_visible[visibleCount++] = BuildSeat(state: state, wheel: wheel, viewport: in viewport, hoverSector: hoverSector, unit: unit);
+            Arm(
+                hoverReason: hoverReason,
+                hoverSector: hoverSector,
+                ring: ring,
+                state: state,
+                wheel: wheel
+            );
+            m_visible[visibleCount++] = BuildSeat(
+                hoverSector: hoverSector,
+                state: state,
+                unit: unit,
+                viewport: in viewport,
+                wheel: wheel
+            );
             state.Status = new WorldWheelStatus(
                 Slot: slot,
                 Open: true,
@@ -253,9 +606,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             );
         }
 
-        m_store.Publish(frame: new OverlayWheelFrame(Seats: m_visible.AsMemory(start: 0, length: visibleCount)));
+        m_store.Publish(frame: new OverlayWheelFrame(Seats: m_visible.AsMemory(
+            length: visibleCount,
+            start: 0
+        )));
     }
-
     /// <summary>Steps the active ring — the <c>player.wheel.ring</c> handler's whole act.</summary>
     /// <param name="slot">The 0-based seat slot the step targets.</param>
     /// <param name="direction">+1 cycles outward, -1 inward (wrapping).</param>
@@ -271,7 +626,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         ringLabel = string.Empty;
         excursionControlled = false;
 
-        if (((uint)slot >= m_state.Length) || (m_state[slot].Wheel is not { } wheel)) {
+        if (
+            (((uint)slot) >= m_state.Length) ||
+            (m_state[slot].Wheel is not { } wheel)
+        ) {
             return false;
         }
 
@@ -290,240 +648,4 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
         return true;
     }
-
-    /// <summary>Commits the last presented sector — the <c>player.wheel.commit</c> handler's whole act. When another
-    /// authored opener still presents the same radial, the release is deferred: the remaining opener owns the
-    /// eventual commit.</summary>
-    /// <param name="slot">The 0-based seat slot the commit targets.</param>
-    /// <returns>The commit disposition, every failure distinguishable from the others.</returns>
-    public BindingWheelCommitResult Commit(int slot) {
-        if ((uint)slot >= m_state.Length) {
-            return BindingWheelCommitResult.NotArmed();
-        }
-
-        var state = m_state[slot];
-
-        if (state.Gesture.Cancelled) {
-            return BindingWheelCommitResult.Cancelled(reason: "cancelled", ring: state.CommitRing, sector: -1);
-        }
-
-        if (!state.CommitArmed) {
-            return BindingWheelCommitResult.NotArmed();
-        }
-
-        var currentlyOpen = m_bindings.WheelView(slot: slot);
-
-        if ((currentlyOpen is not null) && string.Equals(a: currentlyOpen.Id, b: state.CommitWheel?.Id, comparisonType: StringComparison.Ordinal)) {
-            return BindingWheelCommitResult.Deferred(label: state.CommitLabel, ring: state.CommitRing, sector: state.CommitSector);
-        }
-
-        state.CommitArmed = false;
-
-        if (state.CommitActivation is not { } activation) {
-            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} release cancelled ({state.CommitReason})");
-
-            return BindingWheelCommitResult.Cancelled(reason: state.CommitReason, ring: state.CommitRing, sector: -1);
-        }
-
-        var outcome = BindingWheelCommitResult.Dispatch(
-            router: m_router(),
-            slot: slot,
-            activation: activation,
-            label: state.CommitLabel,
-            ring: state.CommitRing,
-            sector: state.CommitSector
-        );
-
-        if (outcome.Status == BindingWheelCommitStatus.Dispatched) {
-            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} committed ring {(state.CommitRing + 1)} sector {(state.CommitSector + 1)} '{state.CommitLabel}' -> {activation.Command}");
-        }
-
-        return outcome;
-    }
-
-    /// <summary>Latches cancellation for the seat's current gesture — both the author-bound
-    /// <c>player.wheel.cancel</c> act and the router's synthesized focus-loss cancellation (an alt-tab mid-hold must
-    /// never commit a sector). The latch holds until the radial next opens, so no later presentation frame can
-    /// re-arm the decision it cleared.</summary>
-    /// <param name="slot">The 0-based seat slot the cancellation targets.</param>
-    public void Revoke(int slot) {
-        if ((uint)slot < m_state.Length) {
-            var state = m_state[slot];
-
-            state.Gesture.Cancel();
-            state.CommitArmed = false;
-        }
-    }
-
-    private static void ApplyRingScroll(SeatState state, BindingWheelView wheel) {
-        state.RingScroll += state.BankedNotches;
-        state.BankedNotches = 0f;
-
-        while (state.RingScroll >= 1f) {
-            state.RingScroll -= 1f;
-            state.ActiveRing = ((state.ActiveRing + 1) % wheel.Rings.Count);
-        }
-
-        while (state.RingScroll <= -1f) {
-            state.RingScroll += 1f;
-            state.ActiveRing = (((state.ActiveRing - 1) + wheel.Rings.Count) % wheel.Rings.Count);
-        }
-    }
-
-    private static BindingWheelSelection SelectAxis(SeatState state, BindingWheelView wheel) {
-        var vector = state.Gesture.Axis;
-
-        if (wheel.Excursion is not { } excursion) {
-            return BindingWheelGeometry.SelectAxis(vector: vector, sectorCount: wheel.Rings[state.ActiveRing].Sectors.Count, style: wheel.Style);
-        }
-
-        var ring = BindingWheelGeometry.ResolveExcursionRing(vector: vector, excursion: excursion, previousRing: state.AxisExcursionRing);
-        state.AxisExcursionRing = ring;
-
-        if (ring < 0) {
-            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.DeadZone);
-        }
-
-        state.ActiveRing = ring;
-
-        return BindingWheelGeometry.SelectDirection(vector: vector, sectorCount: wheel.Rings[ring].Sectors.Count, style: wheel.Style);
-    }
-
-    private static BindingWheelSelection SelectPointer(SeatState state, BindingWheelView wheel, Vector2 pointer, Vector2 center, float unit) {
-        var mode = wheel.Style.PointerSelection;
-        var targetingVector = BindingWheelGeometry.ResolveSpatialTargetVector(
-            mode: mode,
-            position: pointer,
-            neutral: state.Gesture.SpatialNeutral,
-            hub: center
-        );
-
-        if ((mode == BindingWheelSpatialSelectionMode.Disabled) || (wheel.Excursion is not { } excursion)) {
-            return BindingWheelGeometry.SelectSpatial(
-                vector: targetingVector,
-                sectorCount: wheel.Rings[state.ActiveRing].Sectors.Count,
-                ringCount: wheel.Rings.Count,
-                style: wheel.Style,
-                mode: mode,
-                unit: unit
-            );
-        }
-
-        var neutralVector = (pointer - state.Gesture.SpatialNeutral);
-        var normalized = BindingWheelGeometry.NormalizeSpatialExcursion(vector: neutralVector, viewportUnit: unit, excursion: excursion);
-        var ring = BindingWheelGeometry.ResolveExcursionRing(vector: normalized, excursion: excursion, previousRing: state.SpatialExcursionRing);
-        state.SpatialExcursionRing = ring;
-
-        if (ring < 0) {
-            return new BindingWheelSelection(Sector: -1, Outcome: BindingWheelSelectionOutcome.DeadZone);
-        }
-
-        state.ActiveRing = ring;
-
-        return ((mode == BindingWheelSpatialSelectionMode.Angle)
-            ? BindingWheelGeometry.SelectDirection(vector: normalized, sectorCount: wheel.Rings[ring].Sectors.Count, style: wheel.Style)
-            : BindingWheelGeometry.SelectSpatial(
-                vector: targetingVector,
-                sectorCount: wheel.Rings[ring].Sectors.Count,
-                ringCount: wheel.Rings.Count,
-                style: wheel.Style,
-                mode: mode,
-                unit: unit
-            ));
-    }
-
-    private static bool RequiresSpatialNeutral(BindingWheelView wheel) =>
-        ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.Angle) ||
-            ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.HitTarget) && (wheel.Excursion is not null)));
-
-    private static void Arm(SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) {
-        if (!state.Gesture.CanArm) {
-            state.CommitArmed = false;
-            state.CommitWheel = wheel;
-            state.CommitRing = state.ActiveRing;
-            state.CommitSector = -1;
-            state.CommitActivation = null;
-            state.CommitLabel = string.Empty;
-            state.CommitReason = "cancelled";
-            state.ClosedFrames = 0;
-
-            return;
-        }
-
-        var hovered = ((hoverSector >= 0) ? ring.Sectors[hoverSector] : null);
-
-        state.CommitArmed = true;
-        state.CommitWheel = wheel;
-        state.CommitRing = state.ActiveRing;
-        state.CommitSector = hoverSector;
-        state.CommitActivation = hovered?.Activation;
-        state.CommitLabel = (hovered?.Label ?? hovered?.Command ?? string.Empty);
-        state.CommitReason = hoverReason;
-        state.ClosedFrames = 0;
-    }
-
-    private static OverlayWheelSeat BuildSeat(SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
-        if (!ReferenceEquals(objA: state.RingCacheSource, objB: wheel)) {
-            var rings = new OverlayWheelRing[wheel.Rings.Count];
-
-            for (var ringIndex = 0; (ringIndex < rings.Length); ringIndex++) {
-                var ring = wheel.Rings[ringIndex];
-                var sectors = ring.Sectors.Select(selector: static sector => (sector.Label ?? sector.Command)).ToArray();
-
-                rings[ringIndex] = new OverlayWheelRing(Label: (ring.Label ?? ring.PageId), Sectors: sectors);
-            }
-
-            state.RingCache = rings;
-            state.RingCacheSource = wheel;
-        }
-
-        var centerX = (state.CenterKnown ? state.Center.X : ((viewport.Region.X + (viewport.Region.Width * 0.5f)) * viewport.Width));
-        var centerY = (state.CenterKnown ? state.Center.Y : ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height));
-
-        return new OverlayWheelSeat(
-            Viewport: viewport.Region,
-            CenterX: centerX,
-            CenterY: centerY,
-            InnerRadius: (unit * wheel.Style.DeadZoneFraction),
-            RingWidth: (unit * wheel.Style.RingWidthFraction),
-            ActiveRing: state.ActiveRing,
-            HoveredSector: hoverSector,
-            RotationRadians: (wheel.Style.RotationDegrees * (MathF.PI / 180f)),
-            Clockwise: wheel.Style.Clockwise,
-            Rings: state.RingCache
-        );
-    }
-
-    private static void Close(int slot, SeatState state) {
-        state.Wheel = null;
-        state.Gesture.Close();
-        state.AxisExcursionRing = -1;
-        state.SpatialExcursionRing = -1;
-        state.BankedNotches = 0f;
-
-        if (state.CommitArmed && (++state.ClosedFrames > CommitGraceFrames)) {
-            state.CommitArmed = false;
-        }
-
-        state.Status = ClosedStatus(slot: slot);
-    }
-
-    private static WorldWheelStatus ClosedStatus(int slot) => new(
-        Slot: slot,
-        Open: false,
-        Id: string.Empty,
-        Group: string.Empty,
-        RingCount: 0,
-        ActiveRing: -1,
-        ActiveRingLabel: string.Empty,
-        HoverSector: -1,
-        HoverLabel: string.Empty,
-        HoverCommand: null,
-        HoverReason: "closed",
-        PointerSelection: BindingWheelSpatialSelectionMode.Disabled,
-        Placement: BindingWheelPlacement.ViewportCenter,
-        RingSelection: BindingWheelRingSelectionMode.Explicit,
-        Center: Vector2.Zero,
-        CenterKnown: false
-    );
 }

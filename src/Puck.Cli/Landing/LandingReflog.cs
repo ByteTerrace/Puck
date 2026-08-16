@@ -22,7 +22,7 @@ internal static class LandingReflog {
             var text = line.TrimEnd(trimChar: '\r');
             var fields = text.Split(separator: '|');
 
-            if ((fields.Length < 4) || !fields[2].StartsWith(value: "rebase (start): checkout ", comparisonType: StringComparison.Ordinal)) {
+            if ((fields.Length < 4) || !fields[2].StartsWith(comparisonType: StringComparison.Ordinal, value: "rebase (start): checkout ")) {
                 continue;
             }
 

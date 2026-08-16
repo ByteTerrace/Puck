@@ -52,7 +52,6 @@ public readonly record struct TickResolution {
 
     /// <summary>Gets the base-two logarithm of the number of fundamental ticks per T-cycle.</summary>
     public int SubdivisionLog2 { get; }
-
     /// <summary>Gets the number of fundamental ticks that make up one T-cycle (<c>2^<see cref="SubdivisionLog2"/></c>).</summary>
     public ulong TicksPerCycle {
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]

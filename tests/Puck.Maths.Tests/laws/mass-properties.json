@@ -2,12 +2,17 @@
   {
     "Id": "mass-properties.volumes-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedPointRounding",
+        "Name": "TryRoundRational"
+      }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.TrySphereVolume, TryBoxVolume, TryCylinderVolume and TryCapsuleVolume (internal) — all four exercised on every draw, each one rounding of the exact rational volume at a swept output scale",
+        "Subject": "FixedMassProperties.TrySphereVolume, TryBoxVolume, TryCylinderVolume and TryCapsuleVolume (internal) — all four exercised on every draw, each one rounding of the exact rational volume at a swept output scale — together with the shared FixedPointRounding.TryRoundRational kernel each of those roundings divides, tie-breaks and narrows through",
         "Against": "Oracles.TryPrimitiveVolume — the same four volumes assembled from the GEOMETRIC definition rather than from the subject's folded constants: the box from its FULL extents (2h in each axis) rather than three half-extents folded into a leading eight, and the capsule as a cylinder PLUS a whole sphere as two separate terms rather than as one collapsed fraction over three. A mis-folded constant in the subject therefore cannot be mirrored in the reference",
         "Shared": "",
         "Citation": "",
@@ -16,7 +21,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "SHARED CONSTANT, declared: both sides substitute the same pinned rational FixedMassProperties.PiRaw for the transcendental, read from the subject's own declaration rather than transcribed as digits (a transcription would let the two drift while every law stayed green). That the constant IS the correctly rounded pi is decided separately by mass-properties.pinned-pi-is-correctly-rounded against this suite's own Machin enclosure. ENVELOPE: dimensions are folded onto a twenty-bit band and fraction bit counts onto [0, 32] — the accumulation is exact in BigInteger at any width, so a wider fold would buy only carrier refusals; the refusal side of the biconditional is asserted on every draw either way",
+        "Subject": "SHARED CONSTANT, declared: both sides substitute the same pinned rational FixedQ4816.PiQ61 for the transcendental, read from the subject's own declaration rather than transcribed as digits (a transcription would let the two drift while every law stayed green). That the constant IS the correctly rounded pi is decided separately by mass-properties.pinned-pi-is-correctly-rounded against this suite's own Machin enclosure. ENVELOPE: dimensions are folded onto a twenty-bit band and fraction bit counts onto [0, 32] — the accumulation is exact in BigInteger at any width, so a wider fold would buy only carrier refusals; the refusal side of the biconditional is asserted on every draw either way. This family folds its scale into the numerator before dividing, so the shared kernel is reached at a zero fractionBitCount only; its shifting path is driven by Puck.Physics's softness chain, which no law in this suite runs",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -27,12 +32,14 @@
   {
     "Id": "mass-properties.sphere-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedMassProperties", "Name": "TrySphereBody" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.TrySphereBody (internal) — the mass and the isotropic inertia of a solid sphere about its centre, each one rounding of its own exact rational at independently swept density, length, mass and inertia scales",
+        "Subject": "FixedMassProperties.TrySphereBody — the mass and the isotropic inertia of a solid sphere about its centre, each one rounding of its own exact rational at independently swept density, length, mass and inertia scales",
         "Against": "Oracles.TrySphereBody, which takes the inertia as (2/5)*M*r^2 against the EXACT rational mass, where the subject collapses the whole chain into (8/15)*rho*pi*r^5. The two routes reach the same rational by different constant folds, so a mis-folded 8/15 cannot appear in both",
         "Shared": "",
         "Citation": "",
@@ -52,12 +59,14 @@
   {
     "Id": "mass-properties.box-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedMassProperties", "Name": "TryBoxBody" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.TryBoxBody (internal) — the mass and all three diagonal moments of a solid box about its centre, from half-extents",
+        "Subject": "FixedMassProperties.TryBoxBody — the mass and all three diagonal moments of a solid box about its centre, from half-extents",
         "Against": "Oracles.TryBoxBody, stated entirely in FULL extents — V = Lx*Ly*Lz and I_xx = (M/12)(Ly^2 + Lz^2), the textbook forms — where the subject works in half-extents with the factors of two and twelve already folded to eight and three. A mis-folded halving, or a transposed axis pair in one of the three diagonal entries, is exactly what that difference catches; all three entries are compared separately",
         "Shared": "",
         "Citation": "",
@@ -102,12 +111,14 @@
   {
     "Id": "mass-properties.capsule-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedMassProperties", "Name": "TryCapsuleBody" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.TryCapsuleBody (internal) — the mass and both moments of a solid capsule about its centre, stated with the hemisphere's own centroidal coefficient 83/320 and the parallel-axis offset (h/2 + 3r/8)",
+        "Subject": "FixedMassProperties.TryCapsuleBody — the mass and both moments of a solid capsule about its centre, stated with the hemisphere's own centroidal coefficient 83/320 and the parallel-axis offset (h/2 + 3r/8)",
         "Against": "Oracles.TryCapsuleBody, THE independent derivation of this family: it assembles the capsule from its parts and never names 83/320 at all. A hemisphere's moment about the centre of its own FLAT FACE is (2/5)*m*r^2 — half a sphere's mass carrying half its moment about the same diameter — and its centroid sits 3r/8 from that face, so the parallel-axis theorem gives the centroidal moment as (2/5)m r^2 - m(3r/8)^2 and a SECOND transfer carries it out to the capsule's centre, a distance h/2 + 3r/8 away. Agreement is what proves the 83/320 coefficient, which appears on only one side",
         "Shared": "",
         "Citation": "",
@@ -143,12 +154,14 @@
   {
     "Id": "mass-properties.parallel-axis-vs-oracle",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedMassProperties", "Name": "TryTranslateInertia" }
+    ],
     "Legs": [
       {
         "Kind": "SharedSubstrate",
         "Flavor": "Transcription",
-        "Subject": "FixedMassProperties.TryTranslateInertia (internal) — the parallel-axis transfer I' = I + m(|d|^2*delta - d(x)d) of a symmetric tensor to a parallel frame, all six distinct entries, each rounded once",
+        "Subject": "FixedMassProperties.TryTranslateInertia — the parallel-axis transfer I' = I + m(|d|^2*delta - d(x)d) of a symmetric tensor to a parallel frame, all six distinct entries, each rounded once",
         "Against": "Oracles.TryTranslateInertia, which states the general tensor form with |d|^2 formed ONCE as dx^2 + dy^2 + dz^2 and each diagonal entry taken as that total minus its own squared component, where the subject writes each diagonal entry's own pre-expanded pair (dy^2 + dz^2, and so on). A mis-assigned axis in that expansion is what the difference catches",
         "Shared": "the parallel-axis theorem itself: the reference TRANSCRIBES the same identity rather than deriving the transferred tensor independently, so a wrong theorem — as opposed to a wrong expansion, a wrong scale or a wrong sign on the outer product — would be invisible to this comparison",
         "Citation": "The independent witness is mass-properties.capsule-vs-oracle, whose oracle applies this same theorem TWICE from first principles (flat face to hemisphere centroid, centroid to capsule centre) and reaches a coefficient the subject states independently; agreement there is evidence the theorem as applied is right, not merely transcribed consistently",
@@ -193,7 +206,10 @@
   {
     "Id": "mass-properties.inversion-refuses-below-resolution",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedMassProperties", "Name": "TryInvertMass" },
+      { "Type": "Puck.Maths.FixedMassProperties", "Name": "TryInvertInertia" }
+    ],
     "Legs": [
       {
         "Kind": "Structural",
@@ -207,14 +223,35 @@
     ]
   },
   {
+    "Id": "mass-properties.fraction-bit-count-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedMassProperties", "Name": "MaximumFractionBitCount" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The type's own remarks: 'Every count must lie in [0, MaximumFractionBitCount]; a count outside it is refused rather than rounded.' This pins the boundary the remarks state, at both members the bound gates. TryInvertMass at fractionBitsMass == MaximumFractionBitCount (mass = 2^(bound-2), fractionBitsOut = 0) must be ADMITTED to the arithmetic — the reciprocal 2^bound/2^(bound-2) is the exact integer 4 with nothing to round, so a bare 'true, 4' return is proof the guard let the count through rather than merely a resolution refusal that a bound refusal would look identical to from outside. TrySphereBody at all four scales == MaximumFractionBitCount, with density = 0, is likewise admitted: every numerator folds to zero regardless of radius or scale, so 'true, (0,0)' is guaranteed once the guard is passed and proves nothing else. Moving either member's fraction bit count to MaximumFractionBitCount + 1, or to -1, with every other operand held at the admitted case's values, must refuse outright — both TryInvertMass's out parameter and TrySphereBody's mass and inertia are checked to be exactly zero on every refusal, never the last successful value left behind",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "mass-properties.pinned-pi-is-correctly-rounded",
     "Tier": "Default",
-    "Members": [],
+    "Members": [
+      { "Type": "Puck.Maths.FixedQ4816", "Name": "PiQ61FractionBitCount" },
+      { "Type": "Puck.Maths.FixedQ4816", "Name": "PiQ61" }
+    ],
     "Legs": [
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedMassProperties.PiRaw — the ONE constant the mass-property subject and its oracles share, and therefore the one value the family's agreement laws cannot themselves check",
+        "Subject": "FixedQ4816.PiQ61 — the ONE constant the mass-property subject and its oracles share, and therefore the one value the family's agreement laws cannot themselves check",
         "Against": "Oracles.Pi's Machin enclosure at 128 bits, derived by this suite from an alternating arctangent series rather than transcribed from any digit table. The enclosure's two ends are each reduced to 61 fraction bits; the law REQUIRES them to agree before deciding, so the verdict is a decision rather than an estimate, and then requires the pinned raw to equal that common value",
         "Shared": "",
         "Citation": "",

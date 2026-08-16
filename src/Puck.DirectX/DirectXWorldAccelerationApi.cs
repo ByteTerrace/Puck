@@ -28,7 +28,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             return false;
         }
 
-        var device = (ID3D12Device*)deviceHandle;
+        var device = ((ID3D12Device*)deviceHandle);
         D3D12_FEATURE_DATA_D3D12_OPTIONS5 options = default;
 
         // CsWin32's friendly CheckFeatureSupport overload throws on a failing HRESULT; an unsupported feature query
@@ -36,8 +36,8 @@ public sealed unsafe class DirectXWorldAccelerationApi {
         try {
             device->CheckFeatureSupport(
                 Feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5,
-                pFeatureSupportData: &options,
-                FeatureSupportDataSize: (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5)
+                FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5)),
+                pFeatureSupportData: &options
             );
         } catch {
             return false;
@@ -45,7 +45,6 @@ public sealed unsafe class DirectXWorldAccelerationApi {
 
         return (options.RaytracingTier >= D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_1);
     }
-
     /// <summary>Creates the shared unit-AABB BLAS, the per-frame TLAS, their backing and scratch buffers, and the
     /// persistently mapped AABB and instance upload buffers.</summary>
     /// <param name="deviceHandle">The native <c>ID3D12Device</c> handle.</param>
@@ -60,17 +59,17 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             throw new ArgumentOutOfRangeException(actualValue: maxInstanceCount, message: "Acceleration-structure instance capacity must be greater than zero.", paramName: nameof(maxInstanceCount));
         }
 
-        var device = (ID3D12Device*)deviceHandle;
+        var device = ((ID3D12Device*)deviceHandle);
         var device5 = QueryDevice5(device: device);
 
         try {
             // Unit AABB [-1, 1]^3, written once into a mapped upload buffer.
-            var aabbBuffer = CreateBuffer(device: device, sizeBytes: AabbByteSize, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            var aabbValues = (float*)Map(resource: aabbBuffer);
+            var aabbBuffer = CreateBuffer(device: device, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ, sizeBytes: AabbByteSize);
+            var aabbValues = ((float*)Map(resource: aabbBuffer));
 
             aabbValues[0] = -1.0f; aabbValues[1] = -1.0f; aabbValues[2] = -1.0f; // MinX, MinY, MinZ
             aabbValues[3] = 1.0f; aabbValues[4] = 1.0f; aabbValues[5] = 1.0f;    // MaxX, MaxY, MaxZ
-            ((ID3D12Resource*)aabbBuffer)->Unmap(Subresource: 0, pWrittenRange: (D3D12_RANGE*)null);
+            ((ID3D12Resource*)aabbBuffer)->Unmap(Subresource: 0, pWrittenRange: ((D3D12_RANGE*)null));
 
             var aabbAddress = ((ID3D12Resource*)aabbBuffer)->GetGPUVirtualAddress();
 
@@ -83,28 +82,28 @@ public sealed unsafe class DirectXWorldAccelerationApi {
 
             device5->GetRaytracingAccelerationStructurePrebuildInfo(pDesc: &blasInputs, pInfo: &blasInfo);
 
-            var blasBuffer = CreateBuffer(device: device, sizeBytes: blasInfo.ResultDataMaxSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
-            var blasScratch = CreateBuffer(device: device, sizeBytes: blasInfo.ScratchDataSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON);
+            var blasBuffer = CreateBuffer(device: device, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, sizeBytes: blasInfo.ResultDataMaxSizeInBytes);
+            var blasScratch = CreateBuffer(device: device, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, sizeBytes: blasInfo.ScratchDataSizeInBytes);
             var blasAddress = ((ID3D12Resource*)blasBuffer)->GetGPUVirtualAddress();
 
             // Instance buffer: a mapped upload buffer the world rewrites; cleared so unused slots are inert.
-            var instanceBufferSize = ((ulong)maxInstanceCount * InstanceByteSize);
-            var instanceBuffer = CreateBuffer(device: device, sizeBytes: instanceBufferSize, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
+            var instanceBufferSize = (((ulong)maxInstanceCount) * InstanceByteSize);
+            var instanceBuffer = CreateBuffer(device: device, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ, sizeBytes: instanceBufferSize);
             var instanceMapped = Map(resource: instanceBuffer);
 
-            new Span<byte>(pointer: (void*)instanceMapped, length: (int)instanceBufferSize).Clear();
+            new Span<byte>(length: ((int)instanceBufferSize), pointer: ((void*)instanceMapped)).Clear();
 
             var instanceAddress = ((ID3D12Resource*)instanceBuffer)->GetGPUVirtualAddress();
 
             // TLAS sizing, PREFER_FAST_BUILD (rebuilt from scratch each frame).
-            var tlasInputs = TlasInputs(instanceGpuAddress: instanceAddress, instanceCount: maxInstanceCount);
+            var tlasInputs = TlasInputs(instanceCount: maxInstanceCount, instanceGpuAddress: instanceAddress);
 
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasInfo;
 
             device5->GetRaytracingAccelerationStructurePrebuildInfo(pDesc: &tlasInputs, pInfo: &tlasInfo);
 
-            var tlasBuffer = CreateBuffer(device: device, sizeBytes: tlasInfo.ResultDataMaxSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
-            var tlasScratch = CreateBuffer(device: device, sizeBytes: tlasInfo.ScratchDataSizeInBytes, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON);
+            var tlasBuffer = CreateBuffer(device: device, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, sizeBytes: tlasInfo.ResultDataMaxSizeInBytes);
+            var tlasScratch = CreateBuffer(device: device, flags: D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, sizeBytes: tlasInfo.ScratchDataSizeInBytes);
             var tlasAddress = ((ID3D12Resource*)tlasBuffer)->GetGPUVirtualAddress();
 
             return new DirectXWorldAccelerationResources(
@@ -125,7 +124,6 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             _ = ((IUnknown*)device5)->Release();
         }
     }
-
     /// <summary>Writes one <c>D3D12_RAYTRACING_INSTANCE_DESC</c> (64 bytes) into the mapped instance buffer: a
     /// per-axis scale plus translation transform over the shared unit-AABB BLAS, with the caller's instance id and
     /// visibility mask. Written as the raw 64-byte layout (transform 3x4, then the packed id/mask and
@@ -158,19 +156,18 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             return;
         }
 
-        var entry = ((byte*)instanceBufferMappedPointer + (index * InstanceByteSize));
-        var transform = (float*)entry;
+        var entry = (((byte*)instanceBufferMappedPointer) + (index * InstanceByteSize));
+        var transform = ((float*)entry);
 
         // Row-major 3x4: per-axis scale on the diagonal, translation in the last column.
         transform[0] = scaleX; transform[1] = 0.0f; transform[2] = 0.0f; transform[3] = worldCenterX;
         transform[4] = 0.0f; transform[5] = scaleY; transform[6] = 0.0f; transform[7] = worldCenterY;
         transform[8] = 0.0f; transform[9] = 0.0f; transform[10] = scaleZ; transform[11] = worldCenterZ;
         // InstanceID:24 | InstanceMask:8, then InstanceContributionToHitGroupIndex:24 | Flags:8.
-        *(uint*)(entry + 48) = (instanceId & 0x00FFFFFF) | (visibilityMask << 24);
-        *(uint*)(entry + 52) = 0;
-        *(ulong*)(entry + 56) = blasGpuAddress;
+        *((uint*)(entry + 48)) = (instanceId & 0x00FFFFFF) | (visibilityMask << 24);
+        *((uint*)(entry + 52)) = 0;
+        *((ulong*)(entry + 56)) = blasGpuAddress;
     }
-
     /// <summary>Records the per-frame TLAS build (and, when <paramref name="includeBlasBuild"/>, the static unit-AABB
     /// BLAS build) into the command buffer, with UAV barriers ordering the BLAS before the TLAS and the TLAS before
     /// the ray-query dispatch.</summary>
@@ -179,8 +176,8 @@ public sealed unsafe class DirectXWorldAccelerationApi {
     /// <param name="instanceCount">The number of leading instance-buffer entries to build the TLAS over.</param>
     /// <param name="includeBlasBuild">Whether to prepend the static unit-AABB BLAS build.</param>
     public void RecordWorldAccelerationBuild(nint commandBufferHandle, in DirectXWorldAccelerationResources resources, uint instanceCount, bool includeBlasBuild) {
-        var state = (DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!;
-        var commandList4 = QueryCommandList4(commandList: (ID3D12GraphicsCommandList*)state.CommandList);
+        var state = ((DirectXCommandBufferState)GCHandle.FromIntPtr(value: commandBufferHandle).Target!);
+        var commandList4 = QueryCommandList4(commandList: ((ID3D12GraphicsCommandList*)state.CommandList));
 
         try {
             if (includeBlasBuild) {
@@ -193,8 +190,8 @@ public sealed unsafe class DirectXWorldAccelerationApi {
                     SourceAccelerationStructureData = 0,
                 };
 
-                commandList4->BuildRaytracingAccelerationStructure(pDesc: &blasBuild, NumPostbuildInfoDescs: 0, pPostbuildInfoDescs: (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC*)null);
-                UavBarrier(commandList: (ID3D12GraphicsCommandList*)state.CommandList, resource: resources.BlasBufferHandle);
+                commandList4->BuildRaytracingAccelerationStructure(NumPostbuildInfoDescs: 0, pDesc: &blasBuild, pPostbuildInfoDescs: ((D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC*)null));
+                UavBarrier(commandList: ((ID3D12GraphicsCommandList*)state.CommandList), resource: resources.BlasBufferHandle);
             }
 
             var tlasInputs = TlasInputs(instanceGpuAddress: resources.InstanceBufferGpuAddress, instanceCount: Math.Min(val1: instanceCount, val2: resources.MaxInstanceCount));
@@ -205,13 +202,12 @@ public sealed unsafe class DirectXWorldAccelerationApi {
                 SourceAccelerationStructureData = 0,
             };
 
-            commandList4->BuildRaytracingAccelerationStructure(pDesc: &tlasBuild, NumPostbuildInfoDescs: 0, pPostbuildInfoDescs: (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC*)null);
-            UavBarrier(commandList: (ID3D12GraphicsCommandList*)state.CommandList, resource: resources.TlasBufferHandle);
+            commandList4->BuildRaytracingAccelerationStructure(NumPostbuildInfoDescs: 0, pDesc: &tlasBuild, pPostbuildInfoDescs: ((D3D12_RAYTRACING_ACCELERATION_STRUCTURE_POSTBUILD_INFO_DESC*)null));
+            UavBarrier(commandList: ((ID3D12GraphicsCommandList*)state.CommandList), resource: resources.TlasBufferHandle);
         } finally {
             _ = ((IUnknown*)commandList4)->Release();
         }
     }
-
     /// <summary>Releases all acceleration-structure buffers.</summary>
     /// <param name="resources">The acceleration-structure resources to release.</param>
     public void DestroyResources(in DirectXWorldAccelerationResources resources) {
@@ -266,14 +262,14 @@ public sealed unsafe class DirectXWorldAccelerationApi {
 
         ((IUnknown*)device)->QueryInterface(ppvObject: out var device5, riid: in iid).ThrowIfFailed(operation: "ID3D12Device->QueryInterface(ID3D12Device5)");
 
-        return (ID3D12Device5*)device5;
+        return ((ID3D12Device5*)device5);
     }
     private static ID3D12GraphicsCommandList4* QueryCommandList4(ID3D12GraphicsCommandList* commandList) {
         var iid = ID3D12GraphicsCommandList4.IID_Guid;
 
         ((IUnknown*)commandList)->QueryInterface(ppvObject: out var commandList4, riid: in iid).ThrowIfFailed(operation: "ID3D12GraphicsCommandList->QueryInterface(ID3D12GraphicsCommandList4)");
 
-        return (ID3D12GraphicsCommandList4*)commandList4;
+        return ((ID3D12GraphicsCommandList4*)commandList4);
     }
     private static nint CreateBuffer(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES initialState) {
         var heapProperties = new D3D12_HEAP_PROPERTIES { Type = heapType };
@@ -297,19 +293,19 @@ public sealed unsafe class DirectXWorldAccelerationApi {
             InitialResourceState: initialState,
             pDesc: in bufferDesc,
             pHeapProperties: in heapProperties,
-            pOptimizedClearValue: (D3D12_CLEAR_VALUE?)null,
+            pOptimizedClearValue: ((D3D12_CLEAR_VALUE?)null),
             ppvResource: &buffer,
             riidResource: in resourceIid
         );
 
-        return (nint)buffer;
+        return ((nint)buffer);
     }
     private static nint Map(nint resource) {
         void* mapped;
 
-        ((ID3D12Resource*)resource)->Map(Subresource: 0, pReadRange: (D3D12_RANGE*)null, ppData: &mapped);
+        ((ID3D12Resource*)resource)->Map(Subresource: 0, pReadRange: ((D3D12_RANGE*)null), ppData: &mapped);
 
-        return (nint)mapped;
+        return ((nint)mapped);
     }
     private static void UavBarrier(ID3D12GraphicsCommandList* commandList, nint resource) {
         var barrier = new D3D12_RESOURCE_BARRIER {
@@ -317,7 +313,7 @@ public sealed unsafe class DirectXWorldAccelerationApi {
         };
 
         barrier.Anonymous.UAV = new D3D12_RESOURCE_UAV_BARRIER {
-            pResource = (ID3D12Resource*)resource,
+            pResource = ((ID3D12Resource*)resource),
         };
 
         commandList->ResourceBarrier(NumBarriers: 1, pBarriers: &barrier);

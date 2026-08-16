@@ -41,7 +41,6 @@ public sealed class OutputHubLawTests {
         Assert.Equal(expected: 2, actual: sinkA.SnapshotDeliveries);
         Assert.Equal(expected: 4, actual: sinkB.SnapshotDeliveries);
     }
-
     [Fact]
     public void LateAttachPrimerDoesNotConsumeContinuityAPriorSinkObserves() {
         using var fixture = Fixtures.FreshServer();
@@ -52,11 +51,12 @@ public sealed class OutputHubLawTests {
         // Activate body 0 (Fixtures.FreshServer boots every seat unjoined — see EngageAuthorityLawTests' own
         // remarks) so it appears in the snapshot's entries at all.
         var actor = WorldPrincipal.Seat(slot: 0);
+
         _ = fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: actor, Slot: actor.Index, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey));
 
         // Stamp body 0 with a hard-teleport continuity hint through the ordinary authoritative door — the ONE-SHOT
         // flag BuildSnapshot's ordinary (consuming) path is due to report on the NEXT tick's broadcast.
-        fixture.Server.Body(index: 0)!.Pose(x: 5f, y: 0f, z: 5f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Server.Body(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 5f, y: 0f, yawRadians: 0f, z: 5f);
 
         // The late attach: its own primer must PEEK, not consume — see WorldServer.BuildPrimerSnapshot.
         var lateSink = new RecordingSink();
@@ -66,15 +66,16 @@ public sealed class OutputHubLawTests {
         fixture.Step();
 
         var priorContinuity = priorSink.LastContinuity(index: 0);
+
         Assert.NotNull(@object: priorContinuity);
         Assert.Equal(expected: EntityContinuityKind.Teleport, actual: priorContinuity!.Value.Kind);
 
         // The late sink observes the SAME tick's fact too — the primer's peek did not desynchronize it either.
         var lateContinuity = lateSink.LastContinuity(index: 0);
+
         Assert.NotNull(@object: lateContinuity);
         Assert.Equal(expected: EntityContinuityKind.Teleport, actual: lateContinuity!.Value.Kind);
     }
-
     [Fact]
     public void FaultingSinkIsDetached_LaterTicksStillDeliverToHealthySinks() {
         using var fixture = Fixtures.FreshServer();
@@ -102,7 +103,6 @@ public sealed class OutputHubLawTests {
         Assert.Equal(expected: 2, actual: faulting.Attempts);
         Assert.Equal(expected: 4, actual: healthy.SnapshotDeliveries);
     }
-
     [Fact]
     public void SelfDisposingThenThrowingSink_DoesNotStarveHealthySubscribers() {
         using var fixture = Fixtures.FreshServer();
@@ -123,7 +123,6 @@ public sealed class OutputHubLawTests {
         // the healthy sink must instead keep receiving every subsequent tick.
         Assert.Equal(expected: 4, actual: healthy.SnapshotDeliveries);
     }
-
     [Fact]
     public void AttachingFromWithinADeliveryCallback_IsRefusedWithoutCorruptingTheFanOut() {
         using var fixture = Fixtures.FreshServer();
@@ -151,21 +150,17 @@ public sealed class OutputHubLawTests {
 /// contract) and counts deliveries.</summary>
 internal sealed class RecordingSink : IClientSink {
     public int SnapshotDeliveries { get; private set; }
+
     private EntitySnapshot[] m_lastEntries = [];
 
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         SnapshotDeliveries++;
         m_lastEntries = snapshot.Entries.ToArray();
     }
-
     public void DeliverAnswer(in QueryAnswer answer) { }
-
     public void DeliverDefinition(WorldDefinition definition) { }
-
     public void DeliverComposition(WorldComposition composition) { }
-
     public void DeliverSessionLever(WorldSessionLever lever) { }
-
     /// <summary>The most recently delivered snapshot's continuity hint for the named entity index, or
     /// <see langword="null"/> when no delivery has reported that index active.</summary>
     public EntityContinuity? LastContinuity(int index) {
@@ -178,13 +173,13 @@ internal sealed class RecordingSink : IClientSink {
         return null;
     }
 }
-
 /// <summary>A typed-lane sink test double that disposes its OWN lease and then throws, from its first ordinary tick
 /// delivery onward (the attach primer is benign) — the exact pairing that once double-decremented the hub's active
 /// count through Dispose and the fault-detach both.</summary>
 internal sealed class SelfDisposingThrowingSink : IClientSink {
     /// <summary>The sink's own lease, assigned by the test right after <c>AttachSink</c> returns it.</summary>
     public IDisposable? Lease;
+
     private int m_attempts;
 
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
@@ -195,22 +190,18 @@ internal sealed class SelfDisposingThrowingSink : IClientSink {
             throw new InvalidOperationException(message: "SelfDisposingThrowingSink: deliberate dispose-then-throw for OutputHubLawTests.");
         }
     }
-
     public void DeliverAnswer(in QueryAnswer answer) { }
-
     public void DeliverDefinition(WorldDefinition definition) { }
-
     public void DeliverComposition(WorldComposition composition) { }
-
     public void DeliverSessionLever(WorldSessionLever lever) { }
 }
-
 /// <summary>A typed-lane sink test double that calls <c>AttachSink</c> from within its first ordinary tick delivery
 /// (the attach primer is benign), attempting to smuggle a second sink into the live fan-out — the reentrancy
 /// <c>WorldOutputHub.Subscribe</c> refuses by throwing.</summary>
 internal sealed class ReattachingSink(Puck.World.Server.WorldServer server) : IClientSink {
     /// <summary>The sink the reentrant attach tries to smuggle in — must never receive a delivery.</summary>
     public RecordingSink Smuggled { get; } = new();
+
     private int m_attempts;
 
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
@@ -220,16 +211,11 @@ internal sealed class ReattachingSink(Puck.World.Server.WorldServer server) : IC
             _ = server.AttachSink(sink: Smuggled);
         }
     }
-
     public void DeliverAnswer(in QueryAnswer answer) { }
-
     public void DeliverDefinition(WorldDefinition definition) { }
-
     public void DeliverComposition(WorldComposition composition) { }
-
     public void DeliverSessionLever(WorldSessionLever lever) { }
 }
-
 /// <summary>A typed-lane sink test double that throws out of <see cref="DeliverSnapshot"/> from
 /// <paramref name="throwFromCall"/> onward (1-based call count) — proves <c>WorldOutputHub</c>'s per-sink exception
 /// isolation without needing the sink to fail on its own <c>AttachSink</c> primer too.</summary>
@@ -243,12 +229,8 @@ internal sealed class FaultingSink(int throwFromCall) : IClientSink {
             throw new InvalidOperationException(message: "FaultingSink: deliberate delivery fault for OutputHubLawTests.");
         }
     }
-
     public void DeliverAnswer(in QueryAnswer answer) { }
-
     public void DeliverDefinition(WorldDefinition definition) { }
-
     public void DeliverComposition(WorldComposition composition) { }
-
     public void DeliverSessionLever(WorldSessionLever lever) { }
 }

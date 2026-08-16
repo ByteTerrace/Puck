@@ -1,10 +1,31 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <AssemblyName>Puck.Text</AssemblyName>
+        <Description>Render-agnostic font atlas generation and text layout: reads TrueType and CFF/CFF2 OpenType outlines into a queryable MTSDF/SDF/mask font atlas, lays strings out into positioned glyph quads, and supplies the distance-field sampling math and optional per-glyph markup/effect channels a renderer needs. Carries no GPU or windowing concepts; em-space geometry is left for the caller to map to screen pixels.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Text</PackageId>
+        <PackageTags>cff;font;glyph;layout;msdf;opentype;sdf;text;truetype</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.Text</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Shared pre-baked oracle/fixed-UI assets. Runtime-authored fonts do not use these: the managed generator
+             builds their SDF atlases in process. Keeping the committed bake here gives font data one production home;
+             Puck.Overlays adds only its surface-specific prepacked cell artifact. Only in-repo consumers (Puck.World,
+             through Puck.Overlays) read this bake, from AppContext.BaseDirectory\Assets\Fonts at run time via project-
+             reference content copy; a NuGet consumer has no such directory and uses the managed generator instead, so
+             this bake is deliberately NOT packed (Pack="false") rather than shipped as package content. -->
+        <Content Include="Assets\Fonts\**\*.png" CopyToOutputDirectory="PreserveNewest" Pack="false" />
+        <Content Include="Assets\Fonts\**\*.json" CopyToOutputDirectory="PreserveNewest" Pack="false" />
+        <!-- The vendored source TTFs + OFL license texts the bake above was produced from (see Assets\Fonts\source's
+             own citation in the README). Not consumed at run time — kept only so the bake can be regenerated and so
+             the OFL notice travels with the font data — and never packed. -->
+        <Content Include="Assets\Fonts\source\**\*.ttf" Pack="false" />
+        <Content Include="Assets\Fonts\source\**\*.txt" Pack="false" />
     </ItemGroup>
 </Project>

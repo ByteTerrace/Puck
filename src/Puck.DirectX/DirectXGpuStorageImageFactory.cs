@@ -13,7 +13,7 @@ public sealed class DirectXGpuStorageImageFactory : IGpuStorageImageFactory {
     /// <inheritdoc/>
     public IGpuStorageImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) =>
         new DirectXGpuStorageImage(
-            deviceContext: (IDirectXDeviceContext)deviceContext,
+            deviceContext: ((IDirectXDeviceContext)deviceContext),
             format: DirectXGpuFormats.ToDxgiFormat(gpuPixelFormat: format),
             height: height,
             width: width

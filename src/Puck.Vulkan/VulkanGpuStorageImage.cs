@@ -11,6 +11,7 @@ public sealed class VulkanGpuStorageImage : IGpuStorageImage {
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
     private readonly nint m_memoryHandle;
     private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
+
     private bool m_disposed;
     private nint m_imageHandle;
     private nint m_imageViewHandle;

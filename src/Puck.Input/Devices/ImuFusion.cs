@@ -14,7 +14,11 @@ internal static class ImuFusion {
     private const float AccelerometerTrust = 0.02f;
     private const float Epsilon = 1e-6f;
 
-    private static readonly Vector3 WorldUp = new(x: 0f, y: 1f, z: 0f);
+    private static readonly Vector3 WorldUp = new(
+        x: 0f,
+        y: 1f,
+        z: 0f
+    );
 
     /// <summary>Advances an orientation estimate by one IMU sample.</summary>
     /// <param name="orientation">The current body-to-world orientation (start from <see cref="Quaternion.Identity"/>).</param>
@@ -26,8 +30,14 @@ internal static class ImuFusion {
         // 1. Integrate the body-frame angular velocity into the orientation (post-multiply applies it in body space).
         var speed = gyroRadiansPerSecond.Length();
 
-        if ((speed > Epsilon) && (deltaSeconds > 0f)) {
-            var delta = Quaternion.CreateFromAxisAngle(axis: (gyroRadiansPerSecond / speed), angle: (speed * deltaSeconds));
+        if (
+            (speed > Epsilon) &&
+            (deltaSeconds > 0f)
+        ) {
+            var delta = Quaternion.CreateFromAxisAngle(
+                angle: (speed * deltaSeconds),
+                axis: (gyroRadiansPerSecond / speed)
+            );
 
             orientation = Quaternion.Normalize(value: (orientation * delta));
         }
@@ -37,15 +47,31 @@ internal static class ImuFusion {
 
         if (magnitude > 1e-3f) {
             var measuredUp = (accelerometerG / magnitude);
-            var predictedUp = Vector3.Transform(value: WorldUp, rotation: Quaternion.Conjugate(value: orientation));
+            var predictedUp = Vector3.Transform(
+                value: WorldUp,
+                rotation: Quaternion.Conjugate(value: orientation)
+            );
             // Mahony error term: cross(measured, estimated). This ordering makes the aligned pose the stable
             // point; reversing the operands would make the 180° antiparallel pose stable instead.
-            var axis = Vector3.Cross(vector1: measuredUp, vector2: predictedUp);
+            var axis = Vector3.Cross(
+                vector1: measuredUp,
+                vector2: predictedUp
+            );
             var axisLength = axis.Length();
 
             if (axisLength > Epsilon) {
-                var angle = (AccelerometerTrust * MathF.Acos(x: Math.Clamp(value: Vector3.Dot(vector1: predictedUp, vector2: measuredUp), max: 1f, min: -1f)));
-                var correction = Quaternion.CreateFromAxisAngle(axis: (axis / axisLength), angle: angle);
+                var angle = (AccelerometerTrust * MathF.Acos(x: Math.Clamp(
+                    value: Vector3.Dot(
+                        vector1: predictedUp,
+                        vector2: measuredUp
+                    ),
+                    max: 1f,
+                    min: -1f
+                )));
+                var correction = Quaternion.CreateFromAxisAngle(
+                    angle: angle,
+                    axis: (axis / axisLength)
+                );
 
                 orientation = Quaternion.Normalize(value: (orientation * correction));
             }

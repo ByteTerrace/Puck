@@ -27,7 +27,7 @@
 // bytes and therefore a different hash even with identical sources. Refresh deliberately, and read
 // a changed hash as "these are new bytes", never as "the source changed".
 
-#:project ../src/Puck.World.Data/Puck.World.Data.csproj
+#:project ../src/Puck.World.Schema/Puck.World.Schema.csproj
 
 using System.Diagnostics;
 

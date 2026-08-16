@@ -16,49 +16,71 @@ namespace Puck.World.Client;
 /// the portal trigger and the arrival isometry. This class is the render consumer — it converts a finished frame to
 /// single precision once and applies the render-only policy (proud epsilon, interior fraction) on top.</remarks>
 internal static class WorldCreationFacets {
-    /// <summary>The first reserved derived-face screen index — high in the 0..<see cref="Puck.SdfVm.SdfProgramBuilder.MaxScreenSurfaces"/>
-    /// range so it never collides with authored screens (which pack from index 0). The binder registers
-    /// <c>[DerivedFaceBase, DerivedFaceBase + DerivedFaceScreens)</c> up front so a derived face re-points a slot that
-    /// already exists (the render provider key set is frozen at boot). Single-sourced in
-    /// <see cref="WorldPlacementPolicy.DerivedFaceBase"/> (Puck.World.Data) — the document validator needs the same
-    /// reserved band and cannot reference this class (it needs Puck.SdfVm).</summary>
-    public const int DerivedFaceBase = WorldPlacementPolicy.DerivedFaceBase;
-
-    /// <summary>Determines whether <paramref name="index"/> falls inside the reserved derived-face band
-    /// <c>[<see cref="DerivedFaceBase"/>, DerivedFaceBase + <paramref name="derivedFaceScreens"/>)</c> — the one
-    /// exclusion every rule that hands out a screen index shares. Two of them exist:
-    /// <c>WorldDefinitionValidator</c> refuses an authored screen here, and <c>WorldSceneEmitter</c>'s
-    /// authoring-headroom scan skips it. They must not be two independently-correct rules — a headroom slot claimed
-    /// inside this band collides with the binder's boot-reserved placeholder just as an authored screen would.
-    /// Forwards to <see cref="WorldPlacementPolicy.IsReservedFaceIndex"/>.</summary>
-    /// <param name="index">The engine screen-surface index to test.</param>
-    /// <param name="derivedFaceScreens">The count of reserved derived-face slots (<c>authoring.derivedFaceScreens</c>).</param>
-    /// <returns><see langword="true"/> when the index is reserved for a derived face.</returns>
-    public static bool IsReservedFaceIndex(int index, int derivedFaceScreens) =>
-        WorldPlacementPolicy.IsReservedFaceIndex(index: index, derivedFaceScreens: derivedFaceScreens);
-
     // RENDER POLICY over the shared frame, not geometry: the slab sits proud of the face surface by
     // FaceProudEpsilon so its zero-set never coincides with the host shape's (coincident zero-sets speckle), and it
     // covers FaceInteriorFraction of the frame so the drawn image reads as an inset screen rather than reaching the
     // frame's edge. The portal trigger reads the SAME frame and applies neither.
     private const float FaceInteriorFraction = 0.8f;
-    private const float FaceProudEpsilon = 0.05f;
-    private const float FaceRound = 0.02f;
     private const float FaceMinimumHalfDepth = 0.01f;
+    private const float FaceProudEpsilon = 0.05f;
+    private const uint FaceRenderHeight = 192;
+    private const uint FaceRenderWidth = 256;
+    private const float FaceRound = 0.02f;
     // Where the reserved-band placeholder for an unclaimed slot parks: far below any play area, so a slot that
     // exists only to keep the frozen provider key set complete is never seen.
     private const float PlaceholderDepth = -1000f;
     private const float PlaceholderHalfDepth = 0.04f;
     private const float PlaceholderHalfHeight = 0.45f;
     private const float PlaceholderHalfWidth = 0.6f;
-    private const uint FaceRenderHeight = 192;
-    private const uint FaceRenderWidth = 256;
 
-    /// <summary>The derived rows a delivery produces: creation-eye cameras and creation-face screens. Neither is ever
-    /// written to the document — they are recomputed each delivery from <c>(placements x creations)</c>.</summary>
-    /// <param name="Cameras">The derived camera feeds, concatenated onto the document's own camera rows.</param>
-    /// <param name="Faces">The derived face screens at the reserved index range, reconciled onto the boot-reserved slots.</param>
-    internal readonly record struct DerivedFacets(IReadOnlyList<WorldCamera> Cameras, IReadOnlyList<WorldScreen> Faces);
+    /// <summary>The first reserved derived-face screen index — high in the 0..<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>
+    /// range so it never collides with authored screens (which pack from index 0). The binder registers
+    /// <c>[DerivedFaceBase, DerivedFaceBase + DerivedFaceScreens)</c> up front so a derived face re-points a slot that
+    /// already exists (the render provider key set is frozen at boot). Single-sourced in
+    /// <see cref="WorldPlacementPolicy.DerivedFaceBase"/> (Puck.World.Schema) — the document validator needs the same
+    /// reserved band and cannot reference this class (it needs Puck.SdfVm for the classes it derives against).</summary>
+    public const int DerivedFaceBase = WorldPlacementPolicy.DerivedFaceBase;
+
+    // THE ONE FRAME CONVERSION BOUNDARY for rendering. The frame is derived in fixed point (WorldFaceCatalog) because
+    // the portal trigger it also feeds is simulation state; fixed-to-float is exactly rounded, so every machine draws
+    // the slab it collides with. Everything applied here — proud epsilon, interior fraction, the round radius, the
+    // minimum half-depth — is render policy over that one geometry, never part of it.
+    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source) {
+        var normal = frame.Normal.ToVector3();
+        var halfDepth = ((float)((double)frame.HalfDepth));
+
+        return new WorldScreen(
+            Index: index,
+            Origin: (frame.Origin.ToVector3() + (normal * (halfDepth + FaceProudEpsilon))),
+            Right: frame.Right.ToVector3(),
+            Up: frame.Up.ToVector3(),
+            HalfWidth: (((float)((double)frame.HalfWidth)) * FaceInteriorFraction),
+            HalfHeight: (((float)((double)frame.HalfHeight)) * FaceInteriorFraction),
+            HalfDepth: MathF.Max(
+                x: (halfDepth * FaceInteriorFraction),
+                y: FaceMinimumHalfDepth
+            ),
+            Round: FaceRound,
+            Source: source,
+            Route: WorldScreenRoute.Passive
+        );
+    }
+    private static WorldScreen PlaceholderScreen(int index) => new(
+        Index: index,
+        Origin: new Vector3(
+            x: 0f,
+            y: PlaceholderDepth,
+            z: 0f
+        ),
+        Right: Vector3.UnitX,
+        Up: Vector3.UnitY,
+        HalfWidth: PlaceholderHalfWidth,
+        HalfHeight: PlaceholderHalfHeight,
+        HalfDepth: PlaceholderHalfDepth,
+        Round: FaceRound,
+        Source: new WorldScreenSource.None(),
+        Route: WorldScreenRoute.Passive
+    );
 
     /// <summary>Derives the camera and face rows a definition's placements imply. Face rows come from
     /// <see cref="WorldFaceCatalog"/> — the same derivation the portal trigger and arrival isometry read — so nothing
@@ -76,7 +98,10 @@ internal static class WorldCreationFacets {
         var seated = new HashSet<int>();
 
         foreach (var placement in definition.Placements) {
-            if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.CreationId) is not { } creation) {
+            if (WorldDefinitionRows.FindCreation(
+                creations: definition.Creations,
+                id: placement.CreationId
+            ) is not { } creation) {
                 continue;
             }
 
@@ -86,9 +111,16 @@ internal static class WorldCreationFacets {
                         placementId: placement.Id,
                         feed: (eye.Feed ?? eye.Id.ToString(provider: CultureInfo.InvariantCulture))
                     ),
-                    Anchor: new WorldAnchor.Placement(PlacementId: placement.Id, ShapeId: eye.ShapeId),
+                    Anchor: new WorldAnchor.Placement(
+                        PlacementId: placement.Id,
+                        ShapeId: eye.ShapeId
+                    ),
                     Rig: new WorldCameraRig(
-                        Motion: new WorldCameraMotion.Follow(Offset: eye.Position, WorldAxes: false, SpreadPullback: 0f),
+                        Motion: new WorldCameraMotion.Follow(
+                            Offset: eye.Position,
+                            WorldAxes: false,
+                            SpreadPullback: 0f
+                        ),
                         Aim: new WorldCameraAim.Forward(FocusDistance: (eye.Focus ?? 1f)),
                         Lens: new WorldCameraLens(FieldOfViewRadians: ((eye.Fov ?? 60f) * (MathF.PI / 180f)))
                     ),
@@ -117,7 +149,11 @@ internal static class WorldCreationFacets {
             }
 
             _ = seated.Add(item: row.ScreenIndex);
-            faces.Add(item: FaceScreen(index: row.ScreenIndex, frame: row.Frame, source: row.Source));
+            faces.Add(item: FaceScreen(
+                index: row.ScreenIndex,
+                frame: row.Frame,
+                source: row.Source
+            ));
         }
 
         // Pad the reserved range so the reconcile always covers every reserved slot — a slot dropped from the
@@ -128,9 +164,26 @@ internal static class WorldCreationFacets {
             }
         }
 
-        return new DerivedFacets(Cameras: cameras, Faces: faces);
+        return new DerivedFacets(
+            Cameras: cameras,
+            Faces: faces
+        );
     }
-
+    /// <summary>Determines whether <paramref name="index"/> falls inside the reserved derived-face band
+    /// <c>[<see cref="DerivedFaceBase"/>, DerivedFaceBase + <paramref name="derivedFaceScreens"/>)</c> — the one
+    /// exclusion every rule that hands out a screen index shares. Two of them exist:
+    /// <c>WorldDefinitionValidator</c> refuses an authored screen here, and <c>WorldSceneEmitter</c>'s
+    /// authoring-headroom scan skips it. They must not be two independently-correct rules — a headroom slot claimed
+    /// inside this band collides with the binder's boot-reserved placeholder just as an authored screen would.
+    /// Forwards to <see cref="WorldPlacementPolicy.IsReservedFaceIndex"/>.</summary>
+    /// <param name="index">The engine screen-surface index to test.</param>
+    /// <param name="derivedFaceScreens">The count of reserved derived-face slots (<c>authoring.derivedFaceScreens</c>).</param>
+    /// <returns><see langword="true"/> when the index is reserved for a derived face.</returns>
+    public static bool IsReservedFaceIndex(int index, int derivedFaceScreens) =>
+        WorldPlacementPolicy.IsReservedFaceIndex(
+            derivedFaceScreens: derivedFaceScreens,
+            index: index
+        );
     /// <summary>The boot-reserved derived-face screen slots (None-sourced placeholders) the binder must register up
     /// front, so a derived face appearing at a later delivery re-points a slot that already exists rather than hitting
     /// the frozen provider key set.</summary>
@@ -147,38 +200,9 @@ internal static class WorldCreationFacets {
         return slots;
     }
 
-    // THE ONE FRAME CONVERSION BOUNDARY for rendering. The frame is derived in fixed point (WorldFaceCatalog) because
-    // the portal trigger it also feeds is simulation state; fixed-to-float is exactly rounded, so every machine draws
-    // the slab it collides with. Everything applied here — proud epsilon, interior fraction, the round radius, the
-    // minimum half-depth — is render policy over that one geometry, never part of it.
-    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source) {
-        var normal = frame.Normal.ToVector3();
-        var halfDepth = (float)(double)frame.HalfDepth;
-
-        return new WorldScreen(
-            Index: index,
-            Origin: (frame.Origin.ToVector3() + (normal * (halfDepth + FaceProudEpsilon))),
-            Right: frame.Right.ToVector3(),
-            Up: frame.Up.ToVector3(),
-            HalfWidth: ((float)(double)frame.HalfWidth * FaceInteriorFraction),
-            HalfHeight: ((float)(double)frame.HalfHeight * FaceInteriorFraction),
-            HalfDepth: MathF.Max(x: (halfDepth * FaceInteriorFraction), y: FaceMinimumHalfDepth),
-            Round: FaceRound,
-            Source: source,
-            Route: WorldScreenRoute.Passive
-        );
-    }
-
-    private static WorldScreen PlaceholderScreen(int index) => new(
-        Index: index,
-        Origin: new Vector3(x: 0f, y: PlaceholderDepth, z: 0f),
-        Right: Vector3.UnitX,
-        Up: Vector3.UnitY,
-        HalfWidth: PlaceholderHalfWidth,
-        HalfHeight: PlaceholderHalfHeight,
-        HalfDepth: PlaceholderHalfDepth,
-        Round: FaceRound,
-        Source: new WorldScreenSource.None(),
-        Route: WorldScreenRoute.Passive
-    );
+    /// <summary>The derived rows a delivery produces: creation-eye cameras and creation-face screens. Neither is ever
+    /// written to the document — they are recomputed each delivery from <c>(placements x creations)</c>.</summary>
+    /// <param name="Cameras">The derived camera feeds, concatenated onto the document's own camera rows.</param>
+    /// <param name="Faces">The derived face screens at the reserved index range, reconciled onto the boot-reserved slots.</param>
+    internal readonly record struct DerivedFacets(IReadOnlyList<WorldCamera> Cameras, IReadOnlyList<WorldScreen> Faces);
 }

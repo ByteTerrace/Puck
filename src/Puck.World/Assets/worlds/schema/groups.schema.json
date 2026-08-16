@@ -106,7 +106,7 @@
       "description": "The group roster \u2014 authored and runtime rows in one list (see WorldGroup).",
       "type": "array",
       "items": {
-        "description": "One group row \u2014 a roster of principals under a kind. One shape whether the row was boot-authored (present in the server\u0027s own base document \u2014 re-seeded on every world.reset/.load/.reload) or formed live by FormGroup (never written back to the base, so a whole-document rebuild simply does not carry it forward \u2014 the party-vs-roster split falls out of the ordinary document-swap machinery, not a bespoke flag on this type).",
+        "description": "One group row \u2014 a roster of principals under a kind. One shape whether the row was boot-authored (present in the server\u0027s own base document \u2014 re-seeded on every world.reset/.load/.reload) or formed live by WorldMutation.FormGroup (never written back to the base, so a whole-document rebuild simply does not carry it forward \u2014 the party-vs-roster split falls out of the ordinary document-swap machinery, not a bespoke flag on this type).",
         "type": [
           "object",
           "null"
@@ -151,7 +151,7 @@
       "description": "The ownership bindings (see WorldOwnership). May be empty.",
       "type": "array",
       "items": {
-        "description": "One ownership binding \u2014 subject \u2192 principal-or-group-or-escrow, the second kind of the group\u002Bbinding substrate. A row is document-authored (boot/reset/load-seeded, like every other row in this section), but its Owner moves live through OfferOwnership (owner -\u003E escrow) and SettleOwnership (escrow -\u003E recipient, or escrow -\u003E offerer on timeout) \u2014 the escrow/transfer lane, riding this exact row shape. There is still no mutation kind that creates a row from nothing (only a document may declare a subject\u0027s first owner) or that widens Kind past Group \u2014 a later lane adding item/instance subjects is expected to add whatever mints their first row, riding this same shape.",
+        "description": "One ownership binding \u2014 subject \u2192 principal-or-group-or-escrow, the second kind of the group\u002Bbinding substrate. A row is document-authored (boot/reset/load-seeded, like every other row in this section), but its Owner moves live through WorldMutation.OfferOwnership (owner -\u003E escrow) and WorldMutation.SettleOwnership (escrow -\u003E recipient, or escrow -\u003E offerer on timeout) \u2014 the escrow/transfer lane, riding this exact row shape. There is still no mutation kind that creates a row from nothing (only a document may declare a subject\u0027s first owner) or that widens Kind past Group \u2014 a later lane adding item/instance subjects is expected to add whatever mints their first row, riding this same shape.",
         "type": [
           "object",
           "null"
@@ -210,7 +210,7 @@
                     "description": "The principal named to accept the subject \u2014 the sole accept beneficiary. Never equal to Offerer (refused by name \u2014 an offer to oneself is not a trade)."
                   },
                   "deadlineTick": {
-                    "description": "The server tick at or after which SettleOwnership\u0027s reclaim admits \u2014 the same tick unit EpochTick already rides. Before this tick, only an accept by Recipient can resolve the escrow.",
+                    "description": "The server tick at or after which WorldMutation.SettleOwnership\u0027s reclaim admits \u2014 the same tick unit EpochTick already rides. Before this tick, only an accept by Recipient can resolve the escrow.",
                     "type": "integer"
                   }
                 },

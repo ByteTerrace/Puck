@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 
 namespace Puck.SdfVm.Views;
 
@@ -21,12 +21,10 @@ internal static class ViewTiming {
     /// <summary>A cheap timestamp mark — 0 (free) when <see cref="Enabled"/> is false.</summary>
     internal static long Mark() =>
         (Enabled ? Stopwatch.GetTimestamp() : 0L);
-
     /// <summary>Ticks elapsed since <paramref name="start"/> (a prior <see cref="Mark"/>), or 0 when disabled.</summary>
     internal static long Elapsed(long start) =>
         (Enabled ? (Stopwatch.GetTimestamp() - start) : 0L);
-
     /// <summary>Ticks converted to milliseconds via the Stopwatch frequency.</summary>
     internal static double Milliseconds(long ticks) =>
-        (((double)ticks * 1000.0) / Stopwatch.Frequency);
+        ((((double)ticks) * 1000.0) / Stopwatch.Frequency);
 }

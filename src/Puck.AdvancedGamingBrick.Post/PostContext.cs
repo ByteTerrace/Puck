@@ -23,14 +23,11 @@ internal sealed class PostContext {
 
     /// <summary>The directory stages write artifacts to.</summary>
     public string ArtifactsDirectory { get; }
-
     /// <summary>The BIOS image every built machine boots with; a zeroed 16&#160;KiB stub when no replacement BIOS was
     /// supplied (the stages that genuinely need a real BIOS check for it and skip when only the stub is present).</summary>
     public ReadOnlyMemory<byte> BiosImage { get; }
-
     /// <summary>The resolved commercial-ROM directory (for render-hash floors), or <see langword="null"/> when absent.</summary>
     public string? GamesRoot { get; }
-
     /// <summary>The resolved reference conformance-corpus root, or <see langword="null"/> when absent.</summary>
     public string? TestRomRoot { get; }
 }

@@ -22,7 +22,6 @@ public readonly record struct OverlayGizmoChip(
     bool Selected,
     bool Pulse
 );
-
 /// <summary>One EDITING seat's gizmo set, scoped to its viewport rect.</summary>
 /// <param name="Viewport">The seat's viewport rect in normalized frame space.</param>
 /// <param name="Chips">The projected chips visible in this seat's view.</param>
@@ -30,14 +29,12 @@ public readonly record struct OverlayGizmoSeat(
     NormalizedRect Viewport,
     ReadOnlyMemory<OverlayGizmoChip> Chips
 );
-
 /// <summary>The per-frame editor-gizmo snapshot — one entry per EDITING seat (an empty frame draws nothing; the
 /// host publishes every produced frame so leaving editor mode clears the chips).</summary>
 /// <param name="Seats">The editing seats, in slot order.</param>
 public readonly record struct OverlayGizmoFrame(
     ReadOnlyMemory<OverlayGizmoSeat> Seats
 );
-
 /// <summary>The read seam <see cref="EditorGizmoWriter"/> consumes; the host's frame source is the writer.</summary>
 public interface IEditorGizmoSource {
     /// <summary>Copies the latest published frame, when one exists.</summary>
@@ -45,7 +42,6 @@ public interface IEditorGizmoSource {
     /// <returns><see langword="true"/> when a frame has been published.</returns>
     bool TrySnapshot(out OverlayGizmoFrame frame);
 }
-
 /// <summary>
 /// The editor-gizmo state store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. Same threading
 /// contract as <see cref="EditorHudStore"/>: the host's produce path publishes and the same-thread overlay writer
@@ -57,7 +53,6 @@ public sealed class EditorGizmoStore : IEditorGizmoSource {
     /// <summary>Publishes a frame (the writer side).</summary>
     /// <param name="frame">The frame to publish.</param>
     public void Publish(in OverlayGizmoFrame frame) => m_buffer.Publish(frame: frame);
-
     /// <inheritdoc/>
     public bool TrySnapshot(out OverlayGizmoFrame frame) => m_buffer.TrySnapshot(frame: out frame);
 }

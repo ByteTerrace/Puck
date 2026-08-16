@@ -417,6 +417,62 @@ public static class PrimeExtensions {
 
         for (var i = 0; (i < values.Length); ++i) { values[i] -= subtrahend; }
     }
+    /// <summary>Returns the <paramref name="remaining"/>-th prime at or below <paramref name="start"/>, counting downward, by sieving backward windows.</summary>
+    /// <param name="gap">The expected spacing between consecutive primes near <paramref name="start"/>, used to size the windows.</param>
+    /// <param name="remaining">The number of primes to encounter, counting <paramref name="start"/> itself; must be positive.</param>
+    /// <param name="start">The (odd) value the walk begins at.</param>
+    private static uint WalkBackward(double gap, uint remaining, uint start) {
+        var bitmap = ArrayPool<ulong>.Shared.Rent(minimumLength: 16384);
+
+        try {
+            var cursor = ((ulong)start);
+
+            while (true) {
+                var span = WindowSpan(
+                    gap: gap,
+                    remaining: remaining
+                );
+                var low = ((cursor > (span + 3UL))
+                    ? (cursor - span)
+                    : 3UL
+                );
+                var bits = (((cursor - low) >> 1) + 1UL);
+                var words = ((int)((bits + 63UL) >> 6));
+                var tail = ((((ulong)words) << 6) - bits);
+
+                PrimeKernels.MarkWindow(
+                    basePrimes: PrimeKernels.BasePrimes,
+                    bitmap: bitmap,
+                    bits: bits,
+                    low: low
+                );
+
+                if (0UL != tail) { bitmap[(words - 1)] |= (ulong.MaxValue << ((int)(64UL - tail))); }
+
+                for (var word = (words - 1); (0 <= word); --word) {
+                    var candidates = (~bitmap[word]);
+                    var matches = ((uint)BitOperations.PopCount(value: candidates));
+
+                    if (matches < remaining) {
+                        remaining -= matches;
+
+                        continue;
+                    }
+
+                    while (1U < remaining) {
+                        candidates ^= (1UL << (63 - BitOperations.LeadingZeroCount(value: candidates)));
+                        --remaining;
+                    }
+
+                    return ((uint)(low + (((((ulong)word) << 6) + ((ulong)(63 - BitOperations.LeadingZeroCount(value: candidates)))) << 1)));
+                }
+
+                cursor = (low - 2UL);
+            }
+        } finally {
+            ArrayPool<ulong>.Shared.Return(array: bitmap);
+        }
+    }
     /// <summary>Returns the <paramref name="remaining"/>-th prime strictly greater than <paramref name="start"/> by sieving forward windows.</summary>
     /// <param name="gap">The expected spacing between consecutive primes near <paramref name="start"/>, used to size the windows.</param>
     /// <param name="remaining">The number of primes to advance past; must be positive.</param>
@@ -473,61 +529,6 @@ public static class PrimeExtensions {
             ArrayPool<ulong>.Shared.Return(array: bitmap);
         }
     }
-    /// <summary>Returns the <paramref name="remaining"/>-th prime at or below <paramref name="start"/>, counting downward, by sieving backward windows.</summary>
-    /// <param name="gap">The expected spacing between consecutive primes near <paramref name="start"/>, used to size the windows.</param>
-    /// <param name="remaining">The number of primes to encounter, counting <paramref name="start"/> itself; must be positive.</param>
-    /// <param name="start">The (odd) value the walk begins at.</param>
-    private static uint WalkBackward(double gap, uint remaining, uint start) {
-        var bitmap = ArrayPool<ulong>.Shared.Rent(minimumLength: 16384);
-
-        try {
-            var cursor = ((ulong)start);
-
-            while (true) {
-                var span = WindowSpan(
-                    gap: gap,
-                    remaining: remaining
-                );
-                var low = ((cursor > (span + 3UL))
-                    ? (cursor - span)
-                    : 3UL);
-                var bits = (((cursor - low) >> 1) + 1UL);
-                var words = ((int)((bits + 63UL) >> 6));
-                var tail = ((((ulong)words) << 6) - bits);
-
-                PrimeKernels.MarkWindow(
-                    basePrimes: PrimeKernels.BasePrimes,
-                    bitmap: bitmap,
-                    bits: bits,
-                    low: low
-                );
-
-                if (0UL != tail) { bitmap[(words - 1)] |= (ulong.MaxValue << ((int)(64UL - tail))); }
-
-                for (var word = (words - 1); (0 <= word); --word) {
-                    var candidates = (~bitmap[word]);
-                    var matches = ((uint)BitOperations.PopCount(value: candidates));
-
-                    if (matches < remaining) {
-                        remaining -= matches;
-
-                        continue;
-                    }
-
-                    while (1U < remaining) {
-                        candidates ^= (1UL << (63 - BitOperations.LeadingZeroCount(value: candidates)));
-                        --remaining;
-                    }
-
-                    return ((uint)(low + (((((ulong)word) << 6) + ((ulong)(63 - BitOperations.LeadingZeroCount(value: candidates)))) << 1)));
-                }
-
-                cursor = (low - 2UL);
-            }
-        } finally {
-            ArrayPool<ulong>.Shared.Return(array: bitmap);
-        }
-    }
     /// <summary>Sizes the window one pass of a walk sieves.</summary>
     /// <param name="gap">The expected spacing between consecutive primes near the walk's cursor.</param>
     /// <param name="remaining">The number of primes the walk has still to encounter; it shrinks as windows are consumed, so the span is re-sized each pass.</param>
@@ -566,8 +567,8 @@ public static class PrimeExtensions {
         Span<ulong> factors = stackalloc ulong[64];
 
         var count = PrimeKernels.Factorize(
-            value: value,
-            destination: factors
+            destination: factors,
+            value: value
         );
 
         if (destination.Length < count) {
@@ -702,7 +703,8 @@ public static class PrimeExtensions {
                 ? 2U
                 : ((1U == value)
                     ? 3U
-                    : 5U));
+                    : 5U
+            ));
         }
 
         var count = (value + 1U);
@@ -778,7 +780,8 @@ public static class PrimeExtensions {
                         ? 2U
                         : ((value < 7U)
                             ? 3U
-                            : 4U))));
+                            : 4U
+            ))));
         }
 
         var squareRoot = ((uint)Math.Sqrt(d: value));
@@ -829,7 +832,8 @@ public static class PrimeExtensions {
                                 var x = (i * factor);
                                 var y = ((x > squareRoot)
                                     ? smalls[(((value / x) - 1U) >> 1)]
-                                    : larges[(smalls[(x >> 1)] - counter)]);
+                                    : larges[(smalls[(x >> 1)] - counter)]
+                                );
                                 var z = (larges[j] - y);
 
                                 larges[k] = (z + counter);
@@ -852,8 +856,8 @@ public static class PrimeExtensions {
                                 SubtractInPlace(
                                     subtrahend: x,
                                     values: smalls.AsSpan(
-                                        start: ((int)k),
-                                        length: ((int)((i - k) + 1U))
+                                        length: ((int)((i - k) + 1U)),
+                                        start: ((int)k)
                                     )
                                 );
 

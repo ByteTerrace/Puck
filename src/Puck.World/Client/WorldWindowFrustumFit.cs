@@ -25,7 +25,11 @@ internal static class WorldWindowFrustumFit {
     /// plane for a sound frustum to exist (see <see cref="SdfAsymmetricFrustum.MinEyeDepth"/>); <see langword="false"/>
     /// otherwise — the caller falls back to its ordinary default projection for this frame.</returns>
     public static bool TryFitWindow(Vector3 localEye, WorldFaceGeometry source, WorldFaceGeometry destination, out Puck.Abstractions.Cameras.CameraSnapshot camera, out Vector2 offset) {
-        var mappedEye = WorldWindowProjectionMath.MapPoint(point: localEye, source: source, destination: destination);
+        var mappedEye = WorldWindowProjectionMath.MapPoint(
+            destination: destination,
+            point: localEye,
+            source: source
+        );
 
         // -destination.Normal, not destination.Normal: WorldWindowProjectionMath.MapPoint's full 180° flip lands the
         // mapped eye on the destination aperture's OUTSIDE (the side its own Normal faces away from — see that

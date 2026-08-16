@@ -30,7 +30,6 @@ public sealed partial class AgbPpu : ISnapshotable {
         writer.WriteBoolean(value: m_event.Scheduled);
         writer.WriteInt64(value: m_event.When);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

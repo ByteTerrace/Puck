@@ -18,6 +18,146 @@ namespace Puck.World;
 /// analyzer ceilings.
 /// </summary>
 internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLink link, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+    // The live analytic-vocabulary census, compiled by the same server path that materializes placement colliders.
+    private CommandResult Census() {
+        var census = server.Population.ContactCensus;
+
+        return new CommandResult(Output: $"[world.contacts: analytic census {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
+    }
+    private static string DescribeCollider(WorldCollider collider) {
+        return collider switch {
+            WorldCollider.Sphere sphere => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"sphere r={sphere.Radius:0.##}"
+        ),
+            WorldCollider.Capsule capsule => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"capsule endpoint=({capsule.Endpoint.X:0.##},{capsule.Endpoint.Y:0.##},{capsule.Endpoint.Z:0.##}) r={capsule.Radius:0.##}"
+        ),
+            WorldCollider.Box box => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"box half=({box.HalfExtents.X:0.##},{box.HalfExtents.Y:0.##},{box.HalfExtents.Z:0.##}) rotation=({box.Rotation.X:0.##},{box.Rotation.Y:0.##},{box.Rotation.Z:0.##},{box.Rotation.W:0.##})"
+        ),
+            WorldCollider.FromCreation fromCreation => $"fromCreation creation={fromCreation.CreationId}",
+            _ => throw new ArgumentOutOfRangeException(
+            paramName: nameof(collider),
+            actualValue: collider,
+            message: null
+        ),
+        };
+    }
+    // The live-field point read (world.collision.probe): sample distance/material/gradient exactly as the resolver does.
+    private CommandResult Probe(WireArgs args) {
+        if (
+            (args.Count != 3) ||
+            !float.TryParse(
+            s: args[0],
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture,
+            result: out var x
+        ) ||
+            !float.TryParse(
+            s: args[1],
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture,
+            result: out var y
+        ) ||
+            !float.TryParse(
+            s: args[2],
+            style: NumberStyles.Float,
+            provider: CultureInfo.InvariantCulture,
+            result: out var z
+        )
+        ) {
+            return Usage(
+                form: "<x> <y> <z>",
+                verb: "world.collision.probe"
+            );
+        }
+
+        if (server.SolidField is not { } field) {
+            return CommandResult.Error(output: "[world.collision.probe: no field — author a field-selecting contact requirement]");
+        }
+
+        var position = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: x),
+            Y: FixedQ4816.FromDouble(value: y),
+            Z: FixedQ4816.FromDouble(value: z)
+        );
+
+        if (!field.Probe(
+            distance: out var distance,
+            gradient: out var gradient,
+            material: out var material,
+            position: in position
+        )) {
+            return CommandResult.Error(output: "[world.collision.probe: the field has no geometry to answer against]");
+        }
+
+        var upMode = (field.GradientUp
+            ? "gradient"
+            : "+Y"
+        );
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.collision.probe: ({x:0.###}, {y:0.###}, {z:0.###}) distance={((double)distance):0.000} material={material} gradient=({((double)gradient.X):0.000}, {((double)gradient.Y):0.000}, {((double)gradient.Z):0.000}) up={upMode}]"
+        ));
+    }
+    private static string RequirementName(WorldContactRequirement requirement) {
+        return requirement switch {
+            WorldContactRequirement.SmoothUnionContact => "smooth-union-contact",
+            WorldContactRequirement.GradientDerivedUp => "gradient-derived-up",
+            _ => throw new ArgumentOutOfRangeException(
+            nameof(requirement),
+            requirement,
+            message: null
+        ),
+        };
+    }
+    // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
+    // collider table so the whole grounded-contact configuration is one Immediate read.
+    private CommandResult Status() {
+        var collision = server.Definition.Collision;
+        var provider = ((server.SolidField is null)
+            ? "analytic"
+            : "field"
+        );
+        var forcedBy = ((collision.Requirements.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ",",
+                values: collision.Requirements.Select(selector: static requirement => RequirementName(requirement: requirement))
+            )
+        );
+        var instructions = (server.SolidField?.InstructionCount ?? 0);
+        var colliders = new List<string>();
+
+        foreach (var kit in server.Definition.Kits) {
+            if (kit.Collider is { } collider) {
+                colliders.Add(item: $"{kit.Name}({DescribeCollider(collider: collider)})");
+            }
+        }
+
+        var kitTable = ((colliders.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ", ",
+                values: colliders
+            )
+        );
+        var census = server.Population.ContactCensus;
+        var placementFieldShapes = (server.SolidField?.PlacementShapeCount ?? 0L);
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.collision.status: selectedProvider={provider} forcedBy={forcedBy} instructions={instructions} placementFieldShapes={placementFieldShapes} placementColliders={census.PlacementColliderCount} placementColliderLimit={WorldPlacementPolicy.MaxSolidPlacementColliders} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° colliders=[{kitTable}]]"
+        ));
+    }
+    private static CommandResult Usage(string verb, string form) {
+        return CommandResult.Error(output: $"[{verb}: expected {form}]");
+    }
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
@@ -33,22 +173,34 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                     return CommandResult.Error(output: "[world.contacts: too many arguments — expected [<body-index>]]");
                 }
 
-                if (!args.TryInt(index: 0, value: out var index) || (index < 1) || (index > server.Population.Capacity)) {
+                if (
+                    !args.TryInt(
+                    index: 0,
+                    value: out var index
+                ) ||
+                    (index < 1) ||
+                    (index > server.Population.Capacity)
+                ) {
                     return CommandResult.Error(output: $"[world.contacts: bad body index '{args[0].ToString()}' — 1..{server.Population.Capacity}]");
                 }
 
                 var result = default(CommandResult);
                 var submissions = link;
                 var authorityIndex = index;
+
                 if (index <= WorldPopulation.LocalSeatCount) {
                     var route = seatRouter.Route(slot: (index - 1));
+
                     submissions = route.Endpoint.Submissions;
                     authorityIndex = (route.EntityIndex + 1);
                 }
 
-                submissions.Query(query: new WorldQuery.Contacts(Index: authorityIndex), completion: answer => {
-                    result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
-                });
+                submissions.Query(
+                    query: new WorldQuery.Contacts(Index: authorityIndex),
+                    completion: answer => {
+                        result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
+                    }
+                );
                 return result;
             }
         );
@@ -62,90 +214,10 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             bindability: CommandBindability.Unbindable,
             name: "world.collision.status",
             description: "Reports the selected contact provider, the requirements that forced it, solid instruction count, field revision, contact skin, and the per-kit collider table.",
-            handler: (_, args) => (args.Count == 0
-                ? Status()
-                : CommandResult.Error(output: $"[world.collision.status: unrecognized '{args[0]}' — expected no arguments]"))
+            handler: (_, args) => ((args.Count == 0)
+            ? Status()
+            : CommandResult.Error(output: $"[world.collision.status: unrecognized '{args[0]}' — expected no arguments]"))
         );
-    }
-
-    // The live-field point read (world.collision.probe): sample distance/material/gradient exactly as the resolver does.
-    private CommandResult Probe(WireArgs args) {
-        if ((args.Count != 3)
-            || !float.TryParse(s: args[0], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var x)
-            || !float.TryParse(s: args[1], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var y)
-            || !float.TryParse(s: args[2], style: NumberStyles.Float, provider: CultureInfo.InvariantCulture, result: out var z)) {
-            return Usage(verb: "world.collision.probe", form: "<x> <y> <z>");
-        }
-
-        if (server.SolidField is not { } field) {
-            return CommandResult.Error(output: "[world.collision.probe: no field — author a field-selecting contact requirement]");
-        }
-
-        var position = new FixedVector3(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
-
-        if (!field.Probe(position: in position, distance: out var distance, material: out var material, gradient: out var gradient)) {
-            return CommandResult.Error(output: "[world.collision.probe: the field has no geometry to answer against]");
-        }
-
-        var upMode = (field.GradientUp ? "gradient" : "+Y");
-
-        return new CommandResult(Output: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"[world.collision.probe: ({x:0.###}, {y:0.###}, {z:0.###}) distance={(double)distance:0.000} material={material} gradient=({(double)gradient.X:0.000}, {(double)gradient.Y:0.000}, {(double)gradient.Z:0.000}) up={upMode}]"
-        ));
-    }
-
-    // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
-    // collider table so the whole grounded-contact configuration is one Immediate read.
-    private CommandResult Status() {
-        var collision = server.Definition.Collision;
-        var provider = ((server.SolidField is null) ? "analytic" : "field");
-        var forcedBy = ((collision.Requirements.Count == 0)
-            ? "none"
-            : string.Join(separator: ",", values: collision.Requirements.Select(selector: static requirement => RequirementName(requirement: requirement))));
-        var instructions = (server.SolidField?.InstructionCount ?? 0);
-        var colliders = new List<string>();
-
-        foreach (var kit in server.Definition.Kits) {
-            if (kit.Collider is { } collider) {
-                colliders.Add(item: $"{kit.Name}({DescribeCollider(collider: collider)})");
-            }
-        }
-
-        var kitTable = ((colliders.Count == 0) ? "none" : string.Join(separator: ", ", values: colliders));
-        var census = server.Population.ContactCensus;
-        var placementFieldShapes = (server.SolidField?.PlacementShapeCount ?? 0L);
-
-        return new CommandResult(Output: string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"[world.collision.status: selectedProvider={provider} forcedBy={forcedBy} instructions={instructions} placementFieldShapes={placementFieldShapes} placementColliders={census.PlacementColliderCount} placementColliderLimit={WorldPlacementPolicy.MaxSolidPlacementColliders} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° colliders=[{kitTable}]]"
-        ));
-    }
-    private static string DescribeCollider(WorldCollider collider) {
-        return collider switch {
-            WorldCollider.Sphere sphere => string.Create(provider: CultureInfo.InvariantCulture, handler: $"sphere r={sphere.Radius:0.##}"),
-            WorldCollider.Capsule capsule => string.Create(provider: CultureInfo.InvariantCulture, handler: $"capsule endpoint=({capsule.Endpoint.X:0.##},{capsule.Endpoint.Y:0.##},{capsule.Endpoint.Z:0.##}) r={capsule.Radius:0.##}"),
-            WorldCollider.Box box => string.Create(provider: CultureInfo.InvariantCulture, handler: $"box half=({box.HalfExtents.X:0.##},{box.HalfExtents.Y:0.##},{box.HalfExtents.Z:0.##}) rotation=({box.Rotation.X:0.##},{box.Rotation.Y:0.##},{box.Rotation.Z:0.##},{box.Rotation.W:0.##})"),
-            WorldCollider.FromCreation fromCreation => $"fromCreation creation={fromCreation.CreationId}",
-            _ => throw new ArgumentOutOfRangeException(paramName: nameof(collider), actualValue: collider, message: null),
-        };
-    }
-    private static string RequirementName(WorldContactRequirement requirement) {
-        return requirement switch {
-            WorldContactRequirement.SmoothUnionContact => "smooth-union-contact",
-            WorldContactRequirement.GradientDerivedUp => "gradient-derived-up",
-            _ => throw new ArgumentOutOfRangeException(nameof(requirement), requirement, message: null),
-        };
-    }
-
-    // The live analytic-vocabulary census, compiled by the same server path that materializes placement colliders.
-    private CommandResult Census() {
-        var census = server.Population.ContactCensus;
-
-        return new CommandResult(Output: $"[world.contacts: analytic census {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
-    }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
     }
 
 }

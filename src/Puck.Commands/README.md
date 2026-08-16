@@ -269,8 +269,8 @@ Two public paths reach a handler:
    instead enters the router through `ConsoleTextSink` and runs when the host
    applies its fixed-step snapshot.
 
-The current `Puck.Scripting.Simulation` addon pump is not a third
-`Puck.Commands` path. `Puck.World.Server` reads its typed submissions and turns
+The addon pump (`Puck.World.Addons`' `AddonSimulationPump`) is not a third
+`Puck.Commands` path. `Puck.World.Addons` reads its typed submissions and turns
 them directly into world intents under the addon's mounted identity.
 
 The public API prevents callers from inventing another path. A handler needs a

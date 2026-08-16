@@ -41,6 +41,16 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         Z: FixedQ4816.Zero,
         W: FixedQ4816.One
     );
+    /// <summary>Gets the full-width norm, saturating when it exceeds the scalar carrier.</summary>
+    public FixedQ4816 Length => (TryLength(length: out var length)
+        ? length
+        : FixedQ4816.MaxValue
+    );
+    /// <summary>Gets the full-width squared norm rounded once to Q16, saturating when it exceeds the scalar carrier.</summary>
+    public FixedQ4816 LengthSquared => (TryLengthSquared(squaredLength: out var squaredLength)
+        ? squaredLength
+        : FixedQ4816.MaxValue
+    );
     /// <summary>Gets the multiplicative identity, the identity rotation.</summary>
     public static FixedQuaternion MultiplicativeIdentity => Identity;
 
@@ -50,44 +60,43 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     /// <returns>The componentwise sum.</returns>
     public static FixedQuaternion operator +(FixedQuaternion left, FixedQuaternion right) =>
         new(
-        X: (left.X + right.X),
-        Y: (left.Y + right.Y),
-        Z: (left.Z + right.Z),
-        W: (left.W + right.W)
-    );
+            X: (left.X + right.X),
+            Y: (left.Y + right.Y),
+            Z: (left.Z + right.Z),
+            W: (left.W + right.W)
+        );
     /// <summary>Subtracts <paramref name="right"/> from <paramref name="left"/> componentwise.</summary>
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
     /// <returns>The componentwise difference.</returns>
     public static FixedQuaternion operator -(FixedQuaternion left, FixedQuaternion right) =>
         new(
-        X: (left.X - right.X),
-        Y: (left.Y - right.Y),
-        Z: (left.Z - right.Z),
-        W: (left.W - right.W)
-    );
+            X: (left.X - right.X),
+            Y: (left.Y - right.Y),
+            Z: (left.Z - right.Z),
+            W: (left.W - right.W)
+        );
     /// <summary>Scales a quaternion by a scalar.</summary>
     /// <param name="value">The quaternion to scale.</param>
     /// <param name="scalar">The scale factor.</param>
     /// <returns>The componentwise product.</returns>
     public static FixedQuaternion operator *(FixedQuaternion value, FixedQ4816 scalar) =>
         new(
-        X: (value.X * scalar),
-        Y: (value.Y * scalar),
-        Z: (value.Z * scalar),
-        W: (value.W * scalar)
-    );
-
+            X: (value.X * scalar),
+            Y: (value.Y * scalar),
+            Z: (value.Z * scalar),
+            W: (value.W * scalar)
+        );
     /// <summary>Negates every component; <c>−q</c> represents the same rotation as <c>q</c>.</summary>
     /// <param name="value">The quaternion to negate.</param>
     /// <returns>The componentwise negation.</returns>
     public static FixedQuaternion operator -(FixedQuaternion value) =>
         new(
-        X: -value.X,
-        Y: -value.Y,
-        Z: -value.Z,
-        W: -value.W
-    );
+            X: -value.X,
+            Y: -value.Y,
+            Z: -value.Z,
+            W: -value.W
+        );
     /// <summary>Composes two rotations (the Hamilton product); <c>left * right</c> applies <paramref name="right"/> first.</summary>
     /// <param name="left">The second rotation.</param>
     /// <param name="right">The first rotation.</param>
@@ -112,10 +121,10 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             z = FixedQ4816.RoundProductSum(productSum: unchecked(((((lw * rz) + (lx * ry)) - (ly * rx)) + (lz * rw))));
             w = FixedQ4816.RoundProductSum(productSum: unchecked(((((lw * rw) - (lx * rx)) - (ly * ry)) - (lz * rz))));
         } else {
-            x = FixedQ4816.RoundProductSum(productSum: unchecked((((((Int128)lw * rx) + ((Int128)lx * rw)) + ((Int128)ly * rz)) - ((Int128)lz * ry))));
-            y = FixedQ4816.RoundProductSum(productSum: unchecked((((((Int128)lw * ry) - ((Int128)lx * rz)) + ((Int128)ly * rw)) + ((Int128)lz * rx))));
-            z = FixedQ4816.RoundProductSum(productSum: unchecked((((((Int128)lw * rz) + ((Int128)lx * ry)) - ((Int128)ly * rx)) + ((Int128)lz * rw))));
-            w = FixedQ4816.RoundProductSum(productSum: unchecked((((((Int128)lw * rw) - ((Int128)lx * rx)) - ((Int128)ly * ry)) - ((Int128)lz * rz))));
+            x = FixedQ4816.RoundProductSum(productSum: unchecked(((((((Int128)lw) * rx) + (((Int128)lx) * rw)) + (((Int128)ly) * rz)) - (((Int128)lz) * ry))));
+            y = FixedQ4816.RoundProductSum(productSum: unchecked(((((((Int128)lw) * ry) - (((Int128)lx) * rz)) + (((Int128)ly) * rw)) + (((Int128)lz) * rx))));
+            z = FixedQ4816.RoundProductSum(productSum: unchecked(((((((Int128)lw) * rz) + (((Int128)lx) * ry)) - (((Int128)ly) * rx)) + (((Int128)lz) * rw))));
+            w = FixedQ4816.RoundProductSum(productSum: unchecked(((((((Int128)lw) * rw) - (((Int128)lx) * rx)) - (((Int128)ly) * ry)) - (((Int128)lz) * rz))));
         }
 
         return new(
@@ -126,6 +135,27 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         );
     }
 
+    // Norm of a vector part at full precision, saturating only when the scalar carrier cannot represent it.
+    internal static FixedQ4816 VectorNorm(long x, long y, long z) =>
+        (FixedVectorMath.TryMagnitude(
+            result: out var magnitude,
+            x: x,
+            y: y,
+            z: z
+        )
+            ? magnitude
+            : FixedQ4816.MaxValue
+        );
+
+    /// <summary>Returns the conjugate — the inverse rotation for a unit quaternion.</summary>
+    /// <returns>The quaternion with the vector part negated.</returns>
+    public FixedQuaternion Conjugate() =>
+        new(
+            X: -X,
+            Y: -Y,
+            Z: -Z,
+            W: W
+        );
     /// <summary>Gets the dot product of two quaternions.</summary>
     /// <param name="left">The first quaternion.</param>
     /// <param name="right">The second quaternion.</param>
@@ -144,8 +174,8 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         }
 
         return FixedQ4816.FromRawBits(value: FixedQ4816.RoundProductSum(productSum: unchecked(
-            (((((Int128)left.X.Value * right.X.Value) + ((Int128)left.Y.Value * right.Y.Value)) +
-            ((Int128)left.Z.Value * right.Z.Value)) + ((Int128)left.W.Value * right.W.Value)))));
+            ((((((Int128)left.X.Value) * right.X.Value) + (((Int128)left.Y.Value) * right.Y.Value)) +
+            (((Int128)left.Z.Value) * right.Z.Value)) + (((Int128)left.W.Value) * right.W.Value)))));
     }
     /// <summary>Computes the exponential of a bivector — the unit rotation it generates.</summary>
     /// <param name="bivector">The rotation plane scaled by the half-angle; equivalently the rotation axis times
@@ -197,6 +227,22 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             W: cos
         );
     }
+    /// <summary>Converts a single-precision <see cref="System.Numerics.Quaternion"/> componentwise into fixed point —
+    /// the inbound counterpart of <see cref="ToQuaternion"/>, and the one door an authored or renderer-side rotation
+    /// takes into the deterministic world, so the rounding a caller gets is not a per-caller decision (the same role
+    /// <see cref="FixedVector3.FromVector3"/> plays for a direction).</summary>
+    /// <param name="value">The rotation to convert.</param>
+    /// <returns>The nearest fixed-point quaternion, each component rounded to nearest with ties to even by
+    /// <see cref="FixedQ4816.FromDouble"/>. The result is not renormalized: a source already off the unit sphere stays
+    /// off it, and the Q16 quantization of the components moves it further, so call <see cref="Normalize"/> whenever
+    /// the rotation is about to be used — exactly as the single-precision callers do.</returns>
+    public static FixedQuaternion FromQuaternion(System.Numerics.Quaternion value) =>
+        new(
+            X: FixedQ4816.FromDouble(value: value.X),
+            Y: FixedQ4816.FromDouble(value: value.Y),
+            Z: FixedQ4816.FromDouble(value: value.Z),
+            W: FixedQ4816.FromDouble(value: value.W)
+        );
     /// <summary>Creates the shortest-arc rotation taking the direction of <paramref name="from"/> to the direction
     /// of <paramref name="to"/>.</summary>
     /// <param name="from">The start direction; any non-zero magnitude (directions are normalized internally).</param>
@@ -212,7 +258,10 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
         var fromDirection = from.Normalize();
         var toDirection = to.Normalize();
 
-        if ((fromDirection == FixedVector3.Zero) || (toDirection == FixedVector3.Zero)) {
+        if (
+            (fromDirection == FixedVector3.Zero) ||
+            (toDirection == FixedVector3.Zero)
+        ) {
             return Identity;
         }
 
@@ -232,14 +281,11 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
 
         if (norm < AntiparallelThreshold) {
             // Antiparallel: π about f̂ × ê for the basis vector ê least aligned with f̂.
-            var absX = FixedQ4816.Abs(value: fx);
-            var absY = FixedQ4816.Abs(value: fy);
-            var absZ = FixedQ4816.Abs(value: fz);
-            var axis = (((absX <= absY) && (absX <= absZ))
-                ? new FixedVector3(X: FixedQ4816.Zero, Y: fz, Z: -fy)
-                : ((absY <= absZ)
-                    ? new FixedVector3(X: -fz, Y: FixedQ4816.Zero, Z: fx)
-                    : new FixedVector3(X: fy, Y: -fx, Z: FixedQ4816.Zero))).Normalize();
+            FixedVector3.OrthonormalBasis(
+                normal: fromDirection,
+                tangent1: out var axis,
+                tangent2: out _
+            );
 
             return new(
                 X: axis.X,
@@ -249,7 +295,12 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             );
         }
 
-        (cx, cy, cz, cw) = FixedVectorMath.Normalize(x: cx, y: cy, z: cz, w: cw);
+        (cx, cy, cz, cw) = FixedVectorMath.Normalize(
+            w: cw,
+            x: cx,
+            y: cy,
+            z: cz
+        );
 
         return new(
             X: FixedQ4816.FromRawBits(value: cx),
@@ -258,77 +309,6 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             W: FixedQ4816.FromRawBits(value: cw)
         );
     }
-    /// <summary>Interpolates along the shortest great-circle arc between two unit rotations.</summary>
-    /// <param name="from">The rotation at <paramref name="amount"/> zero.</param>
-    /// <param name="to">The rotation at <paramref name="amount"/> one.</param>
-    /// <param name="amount">The interpolation parameter, expected in <c>[0, 1]</c>.</param>
-    /// <returns>The interpolated rotation, normalized.</returns>
-    public static FixedQuaternion Slerp(FixedQuaternion from, FixedQuaternion to, FixedQ4816 amount) {
-        var dot = Dot(
-            left: from,
-            right: to
-        );
-
-        if (dot < FixedQ4816.Zero) {
-            to = -to;
-            dot = -dot;
-        }
-
-        if (dot > NlerpThreshold) {
-            // Nearly parallel: normalized linear blend (the sine ratio is numerically unstable here).
-            return new FixedQuaternion(
-                X: (from.X + ((to.X - from.X) * amount)),
-                Y: (from.Y + ((to.Y - from.Y) * amount)),
-                Z: (from.Z + ((to.Z - from.Z) * amount)),
-                W: (from.W + ((to.W - from.W) * amount))
-            ).Normalize();
-        }
-
-        // One SinCos serves both weights: sin((1−t)θ)/sin θ = cos(tθ) − cos θ·sin(tθ)/sin θ, with cos θ = dot.
-        var sinTheta = FixedQ4816.Sqrt(value: (FixedQ4816.One - (dot * dot)));
-        var theta = FixedQ4816.Atan2(
-            y: sinTheta,
-            x: dot
-        );
-
-        var (sinScaled, cosScaled) = FixedQ4816.SinCos(angle: (amount * theta));
-        var toWeight = (sinScaled / sinTheta);
-        var fromWeight = (cosScaled - (dot * toWeight));
-
-        return new FixedQuaternion(
-            X: ((from.X * fromWeight) + (to.X * toWeight)),
-            Y: ((from.Y * fromWeight) + (to.Y * toWeight)),
-            Z: ((from.Z * fromWeight) + (to.Z * toWeight)),
-            W: ((from.W * fromWeight) + (to.W * toWeight))
-        ).Normalize();
-    }
-
-    /// <summary>Gets the full-width squared norm rounded once to Q16, saturating when it exceeds the scalar carrier.</summary>
-    public FixedQ4816 LengthSquared => (TryLengthSquared(squaredLength: out var squaredLength)
-        ? squaredLength
-        : FixedQ4816.MaxValue);
-    /// <summary>Gets the full-width norm, saturating when it exceeds the scalar carrier.</summary>
-    public FixedQ4816 Length => (TryLength(length: out var length)
-        ? length
-        : FixedQ4816.MaxValue);
-
-    /// <summary>Tries to get the full-width quaternion norm.</summary>
-    public bool TryLength(out FixedQ4816 length) =>
-        FixedVectorMath.TryMagnitude(x: X.Value, y: Y.Value, z: Z.Value, w: W.Value, result: out length);
-
-    /// <summary>Tries to get the full-width squared quaternion norm after one ties-to-even Q16 rounding.</summary>
-    public bool TryLengthSquared(out FixedQ4816 squaredLength) =>
-        FixedVectorMath.TrySquaredMagnitude(x: X.Value, y: Y.Value, z: Z.Value, w: W.Value, result: out squaredLength);
-
-    /// <summary>Returns the conjugate — the inverse rotation for a unit quaternion.</summary>
-    /// <returns>The quaternion with the vector part negated.</returns>
-    public FixedQuaternion Conjugate() =>
-        new(
-        X: -X,
-        Y: -Y,
-        Z: -Z,
-        W: W
-    );
     /// <summary>Returns the multiplicative inverse; a zero quaternion inverts to <see cref="Identity"/>.</summary>
     /// <returns>The conjugate divided by the exact full-width squared norm, with each final component rounded once.
     /// An inverse smaller than half a raw Q16 unit quantizes to zero. When the four-square raw sum reaches the
@@ -340,17 +320,35 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             return Identity;
         }
 
-        var complete = FixedVectorMath.TrySumSquares(x: X.Value, y: Y.Value, z: Z.Value, w: W.Value, squaredSum: out var squaredSum);
+        var complete = FixedVectorMath.TrySumSquares(
+            x: X.Value,
+            y: Y.Value,
+            z: Z.Value,
+            w: W.Value,
+            squaredSum: out var squaredSum
+        );
 
         if (!complete) {
             return default;
         }
 
         return new(
-            X: FixedQ4816.FromRawBits(value: unchecked(-FixedVectorMath.DivideBySquaredSum(value: X.Value, squaredSum: squaredSum))),
-            Y: FixedQ4816.FromRawBits(value: unchecked(-FixedVectorMath.DivideBySquaredSum(value: Y.Value, squaredSum: squaredSum))),
-            Z: FixedQ4816.FromRawBits(value: unchecked(-FixedVectorMath.DivideBySquaredSum(value: Z.Value, squaredSum: squaredSum))),
-            W: FixedQ4816.FromRawBits(value: FixedVectorMath.DivideBySquaredSum(value: W.Value, squaredSum: squaredSum))
+            X: FixedQ4816.FromRawBits(value: unchecked(-FixedVectorMath.DivideBySquaredSum(
+                value: X.Value,
+                squaredSum: squaredSum
+            ))),
+            Y: FixedQ4816.FromRawBits(value: unchecked(-FixedVectorMath.DivideBySquaredSum(
+                value: Y.Value,
+                squaredSum: squaredSum
+            ))),
+            Z: FixedQ4816.FromRawBits(value: unchecked(-FixedVectorMath.DivideBySquaredSum(
+                value: Z.Value,
+                squaredSum: squaredSum
+            ))),
+            W: FixedQ4816.FromRawBits(value: FixedVectorMath.DivideBySquaredSum(
+                value: W.Value,
+                squaredSum: squaredSum
+            ))
         );
     }
     /// <summary>Computes the logarithm — the bivector generating this rotation, which must be unit length.</summary>
@@ -371,7 +369,10 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             return FixedVector3.Zero;
         }
 
-        var scale = (FixedQ4816.Atan2(y: vectorLength, x: W) / vectorLength);
+        var scale = (FixedQ4816.Atan2(
+            y: vectorLength,
+            x: W
+        ) / vectorLength);
 
         return new(
             X: (X * scale),
@@ -384,15 +385,26 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
     /// <returns>The normalized quaternion.</returns>
     public FixedQuaternion Normalize() {
         var rawMagnitude = Math.Max(
-            val1: Math.Max(val1: FixedVectorMath.RawMagnitude(value: X.Value), val2: FixedVectorMath.RawMagnitude(value: Y.Value)),
-            val2: Math.Max(val1: FixedVectorMath.RawMagnitude(value: Z.Value), val2: FixedVectorMath.RawMagnitude(value: W.Value))
+            val1: Math.Max(
+                val1: FixedVectorMath.RawMagnitude(value: X.Value),
+                val2: FixedVectorMath.RawMagnitude(value: Y.Value)
+            ),
+            val2: Math.Max(
+                val1: FixedVectorMath.RawMagnitude(value: Z.Value),
+                val2: FixedVectorMath.RawMagnitude(value: W.Value)
+            )
         );
 
         if (rawMagnitude == 0UL) {
             return Identity;
         }
 
-        var (x, y, z, w) = FixedVectorMath.Normalize(x: X.Value, y: Y.Value, z: Z.Value, w: W.Value);
+        var (x, y, z, w) = FixedVectorMath.Normalize(
+            x: X.Value,
+            y: Y.Value,
+            z: Z.Value,
+            w: W.Value
+        );
 
         return new(
             X: FixedQ4816.FromRawBits(value: x),
@@ -430,12 +442,12 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             dy = FixedQ4816.RoundProductSum(productSum: unchecked(((uz * tx) - (ux * tz))));
             dz = FixedQ4816.RoundProductSum(productSum: unchecked(((ux * ty) - (uy * tx))));
         } else {
-            tx = FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)uy * vz) - ((Int128)uz * vy)) + ((Int128)w * vx))));
-            ty = FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)uz * vx) - ((Int128)ux * vz)) + ((Int128)w * vy))));
-            tz = FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)ux * vy) - ((Int128)uy * vx)) + ((Int128)w * vz))));
-            dx = FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)uy * tz) - ((Int128)uz * ty))));
-            dy = FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)uz * tx) - ((Int128)ux * tz))));
-            dz = FixedQ4816.RoundProductSum(productSum: unchecked((((Int128)ux * ty) - ((Int128)uy * tx))));
+            tx = FixedQ4816.RoundProductSum(productSum: unchecked((((((Int128)uy) * vz) - (((Int128)uz) * vy)) + (((Int128)w) * vx))));
+            ty = FixedQ4816.RoundProductSum(productSum: unchecked((((((Int128)uz) * vx) - (((Int128)ux) * vz)) + (((Int128)w) * vy))));
+            tz = FixedQ4816.RoundProductSum(productSum: unchecked((((((Int128)ux) * vy) - (((Int128)uy) * vx)) + (((Int128)w) * vz))));
+            dx = FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)uy) * tz) - (((Int128)uz) * ty))));
+            dy = FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)uz) * tx) - (((Int128)ux) * tz))));
+            dz = FixedQ4816.RoundProductSum(productSum: unchecked(((((Int128)ux) * ty) - (((Int128)uy) * tx))));
         }
 
         return new(
@@ -444,42 +456,80 @@ public readonly record struct FixedQuaternion(FixedQ4816 X, FixedQ4816 Y, FixedQ
             Z: FixedQ4816.FromRawBits(value: unchecked((vz + (dz << 1))))
         );
     }
-
     /// <summary>Rotates a vector by the inverse of this unit quaternion.</summary>
     /// <param name="vector">The vector to rotate.</param>
     /// <returns>The vector rotated by the conjugate quaternion through the same fused kernel as <see cref="Rotate"/>.</returns>
     public FixedVector3 RotateInverse(FixedVector3 vector) =>
         Conjugate().Rotate(vector: vector);
-    // Norm of a vector part at full precision, saturating only when the scalar carrier cannot represent it.
-    internal static FixedQ4816 VectorNorm(long x, long y, long z) =>
-        (FixedVectorMath.TryMagnitude(x: x, y: y, z: z, result: out var magnitude)
-            ? magnitude
-            : FixedQ4816.MaxValue);
+    /// <summary>Interpolates along the shortest great-circle arc between two unit rotations.</summary>
+    /// <param name="from">The rotation at <paramref name="amount"/> zero.</param>
+    /// <param name="to">The rotation at <paramref name="amount"/> one.</param>
+    /// <param name="amount">The interpolation parameter, expected in <c>[0, 1]</c>.</param>
+    /// <returns>The interpolated rotation, normalized.</returns>
+    public static FixedQuaternion Slerp(FixedQuaternion from, FixedQuaternion to, FixedQ4816 amount) {
+        var dot = Dot(
+            left: from,
+            right: to
+        );
 
-    /// <summary>Converts a single-precision <see cref="System.Numerics.Quaternion"/> componentwise into fixed point —
-    /// the inbound counterpart of <see cref="ToQuaternion"/>, and the one door an authored or renderer-side rotation
-    /// takes into the deterministic world, so the rounding a caller gets is not a per-caller decision (the same role
-    /// <see cref="FixedVector3.FromVector3"/> plays for a direction).</summary>
-    /// <param name="value">The rotation to convert.</param>
-    /// <returns>The nearest fixed-point quaternion, each component rounded to nearest with ties to even by
-    /// <see cref="FixedQ4816.FromDouble"/>. The result is not renormalized: a source already off the unit sphere stays
-    /// off it, and the Q16 quantization of the components moves it further, so call <see cref="Normalize"/> whenever
-    /// the rotation is about to be used — exactly as the single-precision callers do.</returns>
-    public static FixedQuaternion FromQuaternion(System.Numerics.Quaternion value) =>
-        new(
-        X: FixedQ4816.FromDouble(value: value.X),
-        Y: FixedQ4816.FromDouble(value: value.Y),
-        Z: FixedQ4816.FromDouble(value: value.Z),
-        W: FixedQ4816.FromDouble(value: value.W)
-    );
+        if (dot < FixedQ4816.Zero) {
+            to = -to;
+            dot = -dot;
+        }
 
+        if (dot > NlerpThreshold) {
+            // Nearly parallel: normalized linear blend (the sine ratio is numerically unstable here).
+            return new FixedQuaternion(
+                X: (from.X + ((to.X - from.X) * amount)),
+                Y: (from.Y + ((to.Y - from.Y) * amount)),
+                Z: (from.Z + ((to.Z - from.Z) * amount)),
+                W: (from.W + ((to.W - from.W) * amount))
+            ).Normalize();
+        }
+
+        // One SinCos serves both weights: sin((1−t)θ)/sin θ = cos(tθ) − cos θ·sin(tθ)/sin θ, with cos θ = dot.
+        var sinTheta = FixedQ4816.Sqrt(value: (FixedQ4816.One - (dot * dot)));
+        var theta = FixedQ4816.Atan2(
+            x: dot,
+            y: sinTheta
+        );
+
+        var (sinScaled, cosScaled) = FixedQ4816.SinCos(angle: (amount * theta));
+        var toWeight = (sinScaled / sinTheta);
+        var fromWeight = (cosScaled - (dot * toWeight));
+
+        return new FixedQuaternion(
+            X: ((from.X * fromWeight) + (to.X * toWeight)),
+            Y: ((from.Y * fromWeight) + (to.Y * toWeight)),
+            Z: ((from.Z * fromWeight) + (to.Z * toWeight)),
+            W: ((from.W * fromWeight) + (to.W * toWeight))
+        ).Normalize();
+    }
     /// <summary>Converts to a single-precision <see cref="System.Numerics.Quaternion"/> for presentation (the renderer).</summary>
     /// <returns>The nearest single-precision quaternion.</returns>
     public System.Numerics.Quaternion ToQuaternion() =>
         new(
-        x: ((float)((double)X)),
-        y: ((float)((double)Y)),
-        z: ((float)((double)Z)),
-        w: ((float)((double)W))
-    );
+            x: ((float)((double)X)),
+            y: ((float)((double)Y)),
+            z: ((float)((double)Z)),
+            w: ((float)((double)W))
+        );
+    /// <summary>Tries to get the full-width quaternion norm.</summary>
+    public bool TryLength(out FixedQ4816 length) =>
+        FixedVectorMath.TryMagnitude(
+            x: X.Value,
+            y: Y.Value,
+            z: Z.Value,
+            w: W.Value,
+            result: out length
+        );
+    /// <summary>Tries to get the full-width squared quaternion norm after one ties-to-even Q16 rounding.</summary>
+    public bool TryLengthSquared(out FixedQ4816 squaredLength) =>
+        FixedVectorMath.TrySquaredMagnitude(
+            x: X.Value,
+            y: Y.Value,
+            z: Z.Value,
+            w: W.Value,
+            result: out squaredLength
+        );
 }

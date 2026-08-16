@@ -80,7 +80,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             }
 
             var descriptorSetLayoutCreateInfo = new VkDescriptorSetLayoutCreateInfo {
-                BindingCount = (uint)descriptorBindings.Count,
+                BindingCount = ((uint)descriptorBindings.Count),
                 PBindings = descriptorSetLayoutBindingPointer,
                 SType = StructureTypeDescriptorSetLayoutCreateInfo,
             };
@@ -110,7 +110,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 val: descriptorSetLayoutHandle
             );
 
-            pipelineLayoutCreateInfo.SetLayoutCount = (uint)setLayoutCount;
+            pipelineLayoutCreateInfo.SetLayoutCount = ((uint)setLayoutCount);
             pipelineLayoutCreateInfo.PSetLayouts = setLayoutsPointer;
         }
 
@@ -210,7 +210,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                     );
                 }
 
-                vertexInputState.VertexBindingDescriptionCount = (uint)vertexBindings.Count;
+                vertexInputState.VertexBindingDescriptionCount = ((uint)vertexBindings.Count);
                 vertexInputState.PVertexBindingDescriptions = bindingsPointer;
             }
 
@@ -226,7 +226,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                     );
                 }
 
-                vertexInputState.VertexAttributeDescriptionCount = (uint)vertexAttributes.Count;
+                vertexInputState.VertexAttributeDescriptionCount = ((uint)vertexAttributes.Count);
                 vertexInputState.PVertexAttributeDescriptions = attributesPointer;
             }
 
@@ -291,7 +291,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             }
 
             var dynamicState = new VkPipelineDynamicStateCreateInfo {
-                DynamicStateCount = (uint)dynamicStateCount,
+                DynamicStateCount = ((uint)dynamicStateCount),
                 PDynamicStates = dynamicStatesPointer,
                 SType = StructureTypePipelineDynamicStateCreateInfo,
             };
@@ -300,7 +300,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
             var colorBlendAttachments = (request.ColorBlendAttachments ?? []);
             var colorBlendStride = Marshal.SizeOf<VkPipelineColorBlendAttachmentState>();
             var colorBlendState = new VkPipelineColorBlendStateCreateInfo {
-                AttachmentCount = (uint)colorBlendAttachments.Count,
+                AttachmentCount = ((uint)colorBlendAttachments.Count),
                 LogicOp = LogicOpCopy,
                 LogicOpEnable = False,
                 PAttachments = ((colorBlendAttachments.Count > 0)
@@ -467,12 +467,12 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateGraphicsPipelines = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateGraphicsPipelines"u8),
-                CreatePipelineLayout = (delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreatePipelineLayout"u8),
-                CreateDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorSetLayout"u8),
-                DestroyPipeline = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipeline"u8),
-                DestroyDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorSetLayout"u8),
-                DestroyPipelineLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipelineLayout"u8),
+                CreateGraphicsPipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateGraphicsPipelines"u8)),
+                CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreatePipelineLayout"u8)),
+                CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorSetLayout"u8)),
+                DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipeline"u8)),
+                DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorSetLayout"u8)),
+                DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipelineLayout"u8)),
             }
         );
     }

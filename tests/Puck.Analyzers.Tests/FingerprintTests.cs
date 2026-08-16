@@ -47,9 +47,8 @@ public sealed class FingerprintTests {
 
         // Pins csharp-tokens-v1 itself against the value the committed ledger carries: the algorithm frames each
         // token's kind and byte count as little-endian Int32s, so this hash is the same on every architecture.
-        Assert.Equal(expected: Sources.BitMixRecordedHash, actual: hash);
+        Assert.Equal(actual: hash, expected: Sources.BitMixRecordedHash);
     }
-
     [Fact]
     public void ChangingAConstantTheBrandedBodyDependsOnBreaksTheRecordedHash() {
         // The multiplier the proof rests on being odd becomes even. It is declared outside the branded method, so
@@ -62,7 +61,6 @@ public sealed class FingerprintTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Equal(expected: new[] { "VER001" }, actual: result.Ids);
     }
-
     [Fact]
     public void EditingTheFileAroundABrandAndItsDependenciesKeepsTheRecordedHash() {
         // The other half of the same contract: a seal that moved for any edit anywhere would teach people to
@@ -80,7 +78,6 @@ public sealed class FingerprintTests {
         Assert.True(condition: result.CompilesCleanly, userMessage: result.CompilerErrorText);
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void DependencyOrderInTheLedgerDoesNotChangeTheHash() {
         var reversed = Sources.BitMixDependencies.Reverse().ToArray();
@@ -89,10 +86,9 @@ public sealed class FingerprintTests {
             expected: Harness.Fingerprint(source: Sources.BitMix(), id: Sources.BitMixId, assemblyName: Sources.BitMixAssemblyName, symbol: Sources.BitMixSymbol, dependencies: Sources.BitMixDependencies),
             actual: Harness.Fingerprint(source: Sources.BitMix(), id: Sources.BitMixId, assemblyName: Sources.BitMixAssemblyName, symbol: Sources.BitMixSymbol, dependencies: reversed));
     }
-
     [Fact]
     public void DroppingADependencyFromTheLedgerChangesTheHash() {
-        var narrowed = Sources.BitMixDependencies.Where(predicate: dependency => !dependency.EndsWith(value: ".FirstMultiplier", comparisonType: StringComparison.Ordinal)).ToArray();
+        var narrowed = Sources.BitMixDependencies.Where(predicate: dependency => !dependency.EndsWith(comparisonType: StringComparison.Ordinal, value: ".FirstMultiplier")).ToArray();
 
         // The declared ids are inside the seal, so narrowing what a brand claims to rest on is itself a drift —
         // otherwise the list could be emptied to make a subverted constant pass again.
@@ -100,7 +96,6 @@ public sealed class FingerprintTests {
             expected: Harness.Fingerprint(source: Sources.BitMix(), id: Sources.BitMixId, assemblyName: Sources.BitMixAssemblyName, symbol: Sources.BitMixSymbol, dependencies: Sources.BitMixDependencies),
             actual: Harness.Fingerprint(source: Sources.BitMix(), id: Sources.BitMixId, assemblyName: Sources.BitMixAssemblyName, symbol: Sources.BitMixSymbol, dependencies: narrowed));
     }
-
     [Fact]
     public void ChangingADependencysTypeChangesTheHash() {
         static string Constant(string type) =>
@@ -124,7 +119,6 @@ public sealed class FingerprintTests {
             expected: DependentHashOf(source: Constant(type: "int"), dependencies: ["F:Subject.Assembly.Subject.Scale"]),
             actual: DependentHashOf(source: Constant(type: "long"), dependencies: ["F:Subject.Assembly.Subject.Scale"]));
     }
-
     [Fact]
     public void EditingAConstantSharingOneFieldDeclarationWithADependencyDoesNotChangeTheHash() {
         static string Shared(string sibling) =>
@@ -148,7 +142,6 @@ public sealed class FingerprintTests {
             expected: DependentHashOf(source: Shared(sibling: "1"), dependencies: ["F:Subject.Assembly.Subject.Scale"]),
             actual: DependentHashOf(source: Shared(sibling: "2"), dependencies: ["F:Subject.Assembly.Subject.Scale"]));
     }
-
     [Fact]
     public void ChangingTheRepresentationARecordStructsOperatorRestsOnChangesTheHash() {
         static string Representation(string carrier) =>
@@ -176,7 +169,6 @@ public sealed class FingerprintTests {
     [Fact]
     public void EditingTheBrandedBodyChangesTheHash() =>
         Assert.NotEqual(expected: HashOf(source: Sources.BrandedMethod()), actual: HashOf(source: Sources.BrandedMethod(body: "        return 2;")));
-
     [Fact]
     public void RenamingAParameterChangesTheHash() {
         var before = Sources.InType(members: """
@@ -195,7 +187,6 @@ public sealed class FingerprintTests {
 
         Assert.NotEqual(expected: HashOf(source: before), actual: HashOf(source: after));
     }
-
     [Fact]
     public void CommentsAndWhitespaceDoNotChangeTheHash() {
         var commented = Sources.InType(members: """
@@ -211,7 +202,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Sources.BrandedMethod()), actual: HashOf(source: commented));
     }
-
     [Fact]
     public void EditingASiblingMemberDoesNotChangeTheHash() {
         var withSibling = Sources.InType(members: """
@@ -227,19 +217,16 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Sources.BrandedMethod()), actual: HashOf(source: withSibling));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeAMethodsHash() =>
         Assert.Equal(
             expected: HashOf(source: Sources.BrandedMethod(attribute: "[VerifiedCode(\"target\", Basis = \"exhaustive\")]")),
             actual: HashOf(source: Sources.BrandedMethod(attribute: "[VerifiedCode(\"target\", Basis = \"exact-by-proof\")]")));
-
     [Fact]
     public void EditingTheBrandsOwnLawsDoesNotChangeAMethodsHash() =>
         Assert.Equal(
             expected: HashOf(source: Sources.BrandedMethod(attribute: "[VerifiedCode(\"target\", Laws = \"one\")]")),
             actual: HashOf(source: Sources.BrandedMethod(attribute: "[VerifiedCode(\"target\", Laws = \"one, two\")]")));
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeAConstructorsHash() {
         static string Constructor(string basis) =>
@@ -256,7 +243,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Constructor(basis: "exhaustive")), actual: HashOf(source: Constructor(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeAnOperatorsHash() {
         static string Operator(string basis) =>
@@ -274,7 +260,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Operator(basis: "exhaustive")), actual: HashOf(source: Operator(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeAConversionOperatorsHash() {
         static string Conversion(string basis) =>
@@ -292,7 +277,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Conversion(basis: "exhaustive")), actual: HashOf(source: Conversion(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeAClassesHash() {
         static string Class(string basis) =>
@@ -307,7 +291,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Class(basis: "exhaustive")), actual: HashOf(source: Class(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeAStructsHash() {
         static string Struct(string basis) =>
@@ -322,7 +305,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Struct(basis: "exhaustive")), actual: HashOf(source: Struct(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeARecordsHash() {
         static string Record(string basis) =>
@@ -336,7 +318,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Record(basis: "exhaustive")), actual: HashOf(source: Record(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeARecordsPrimaryConstructorHash() {
         static string Record(string basis) =>
@@ -350,11 +331,9 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Record(basis: "exhaustive")), actual: HashOf(source: Record(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeTheHashWhenTheBrandIsAliased() =>
         Assert.Equal(expected: HashOf(source: Aliased(basis: "exhaustive")), actual: HashOf(source: Aliased(basis: "exact-by-proof")));
-
     [Fact]
     public void EditingAnAliasedBrandsBasisDemandsNoReVerificationWhenTheLedgerAgrees() {
         var result = Harness.Run(
@@ -368,7 +347,6 @@ public sealed class FingerprintTests {
 
         Assert.Empty(collection: result.Ids);
     }
-
     [Fact]
     public void EditingABrandedGettersBasisDemandsNoReVerificationWhenTheLedgerAgrees() {
         var result = Harness.Run(
@@ -397,7 +375,6 @@ public sealed class FingerprintTests {
         }
 
         """;
-
     private static string BrandedGetter(string basis) =>
         $$"""
         namespace Subject.Assembly;
@@ -414,7 +391,6 @@ public sealed class FingerprintTests {
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeAnAccessorsHash() =>
         Assert.Equal(expected: HashOf(source: BrandedGetter(basis: "exhaustive")), actual: HashOf(source: BrandedGetter(basis: "exact-by-proof")));
-
     [Fact]
     public void EditingTheBrandsOwnBasisDoesNotChangeADestructorsHash() {
         static string Destructor(string basis) =>
@@ -431,11 +407,10 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: HashOf(source: Destructor(basis: "exhaustive")), actual: HashOf(source: Destructor(basis: "exact-by-proof")));
     }
-
     [Fact]
     public void EditingAnUnrelatedAttributeThatSharesTheBrandsNameChangesTheHash() {
         static string WithForeignAttribute(string payload) =>
-            ForeignAttribute + $$"""
+            (ForeignAttribute + $$"""
             namespace Subject.Assembly {
                 internal static class Subject {
                     [VerifiedCode("target"), Evil.VerifiedCode("{{payload}}")]
@@ -445,19 +420,17 @@ public sealed class FingerprintTests {
                 }
             }
 
-            """;
+            """);
 
         // Only the attribute the analyzer actually resolved is excluded, so a foreign attribute's payload — which a
         // generator or reflection may act on — stays sealed under the brand.
         Assert.NotEqual(expected: HashOf(source: WithForeignAttribute(payload: "payload-a")), actual: HashOf(source: WithForeignAttribute(payload: "payload-b")));
     }
-
     [Fact]
     public void EditingAnUnrelatedAttributeWithADifferentNameDoesChangeTheHash() =>
         Assert.NotEqual(
             expected: HashOf(source: Sources.BrandedMethod(attribute: "[Obsolete(\"a\"), VerifiedCode(\"target\")]")),
             actual: HashOf(source: Sources.BrandedMethod(attribute: "[Obsolete(\"b\"), VerifiedCode(\"target\")]")));
-
     [Fact]
     public void RenamingTheBrandIdLeavesTheOldEntryUnclaimedAndTheNewOneUnrecorded() {
         var result = Harness.Run(
@@ -470,7 +443,6 @@ public sealed class FingerprintTests {
 
         Assert.Equal(expected: new[] { "VER001", "VER002" }, actual: result.Ids);
     }
-
     [Fact]
     public void RemovingTheBrandWithoutRemovingItsEntryLeavesTheEntryUnclaimed() {
         var result = Harness.Run(

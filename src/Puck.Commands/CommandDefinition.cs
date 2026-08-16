@@ -42,40 +42,16 @@ public sealed record CommandDefinition {
         this.ValueKind = ValueKind;
     }
 
-    /// <summary>Gets whether a binding document may name this command as a destination.</summary>
-    public CommandBindability Bindability { get; init; }
-
-    /// <summary>Gets the human-readable description shown in help output.</summary>
-    public string Description { get; init; }
-
     /// <summary>Gets the delegate invoked on each activation. Internal: dispatch happens through the registry, which
     /// is what stamps the <see cref="CommandContext.Principal"/> the handler acts on.</summary>
     internal Func<CommandContext, CommandResult> Handler { get; init; }
-
-    /// <summary>Gets the command map that classifies source-driven activation.</summary>
-    public string Map { get; init; }
-
-    /// <summary>Gets whether source-driven activation requires ordinary terminal focus.</summary>
-    public CommandInputScope InputScope { get; init; } = CommandInputScope.Focused;
-
-    /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
-    public string Name { get; init; }
-
-    /// <summary>Gets the <see cref="Command"/> used to parse the command from a text line.</summary>
-    public Command TextCommand { get; init; }
-
-    /// <summary>Gets the shape of the value the command carries.</summary>
-    public CommandValueKind ValueKind { get; init; }
-
-    /// <summary>Gets the alternate names that also resolve to this command, on both the text and
-    /// snapshot-driven paths. Empty by default.</summary>
-    public IReadOnlyList<string> Aliases { get; init; } = [];
-
     /// <summary>
-    /// Gets the command's determinism class — whether a submitted text line runs inline or is folded into the
-    /// deterministic per-tick <see cref="CommandSnapshot"/>. Defaults to <see cref="CommandRouting.Immediate"/>.
+    /// The raw wire-argument handler for a command built by <see cref="WithWireArgs"/> — the same delegate wrapped into
+    /// <see cref="Handler"/>, exposed so the wire-native text path can hand it a zero-copy <see cref="WireArgs"/> view
+    /// over the submitted line (no substrings, no argument array) instead of running the System.CommandLine parse.
+    /// <see langword="null"/> only for a bare <see cref="Verb"/>, which stays on the full parse.
     /// </summary>
-    public CommandRouting Routing { get; init; } = CommandRouting.Immediate;
+    internal Func<CommandContext, WireArgs, CommandResult>? WireArgsHandler { get; init; }
 
     /// <summary>
     /// Whether this verb's success <see cref="CommandResult.Output"/> is a bare acknowledgement of a side effect —
@@ -88,15 +64,12 @@ public sealed record CommandDefinition {
     /// registration shape: every argument-bearing verb is wire-native, so wire-nativeness distinguishes nothing.
     /// </remarks>
     public bool AcknowledgementOnly { get; init; }
-
-    /// <summary>
-    /// The raw wire-argument handler for a command built by <see cref="WithWireArgs"/> — the same delegate wrapped into
-    /// <see cref="Handler"/>, exposed so the wire-native text path can hand it a zero-copy <see cref="WireArgs"/> view
-    /// over the submitted line (no substrings, no argument array) instead of running the System.CommandLine parse.
-    /// <see langword="null"/> only for a bare <see cref="Verb"/>, which stays on the full parse.
-    /// </summary>
-    internal Func<CommandContext, WireArgs, CommandResult>? WireArgsHandler { get; init; }
-
+    /// <summary>Gets whether a binding document may name this command as a destination.</summary>
+    public CommandBindability Bindability { get; init; }
+    /// <summary>Gets the human-readable description shown in help output.</summary>
+    public string Description { get; init; }
+    /// <summary>Gets the command map that classifies source-driven activation.</summary>
+    public string Map { get; init; }
     /// <summary>Gets the publicly readable facts about this command — what <see cref="CommandRegistry.Definitions"/>
     /// hands out.</summary>
     public CommandMetadata Metadata => new(
@@ -107,6 +80,23 @@ public sealed record CommandDefinition {
         InputScope: InputScope,
         Map: Map
     );
+    /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
+    public string Name { get; init; }
+    /// <summary>Gets the <see cref="Command"/> used to parse the command from a text line.</summary>
+    public Command TextCommand { get; init; }
+    /// <summary>Gets the shape of the value the command carries.</summary>
+    public CommandValueKind ValueKind { get; init; }
+
+    /// <summary>Gets whether source-driven activation requires ordinary terminal focus.</summary>
+    public CommandInputScope InputScope { get; init; } = CommandInputScope.Focused;
+    /// <summary>Gets the alternate names that also resolve to this command, on both the text and
+    /// snapshot-driven paths. Empty by default.</summary>
+    public IReadOnlyList<string> Aliases { get; init; } = [];
+    /// <summary>
+    /// Gets the command's determinism class — whether a submitted text line runs inline or is folded into the
+    /// deterministic per-tick <see cref="CommandSnapshot"/>. Defaults to <see cref="CommandRouting.Immediate"/>.
+    /// </summary>
+    public CommandRouting Routing { get; init; } = CommandRouting.Immediate;
 
     /// <summary>Creates a definition whose text command is a bare verb with no arguments or options.</summary>
     /// <param name="name">The unique name used to identify and dispatch the command.</param>
@@ -141,8 +131,8 @@ public sealed record CommandDefinition {
             Description: description,
             ValueKind: valueKind,
             TextCommand: new Command(
-                name: name,
-                description: description
+                description: description,
+                name: name
             ),
             Bindability: bindability,
             Handler: handler,
@@ -153,7 +143,6 @@ public sealed record CommandDefinition {
             Routing = routing,
         };
     }
-
     /// <summary>Creates a wire-native definition whose handler receives its trailing tokens as a zero-copy
     /// <see cref="WireArgs"/> view rather than a materialized <see cref="string"/> array — the argument-bearing verb
     /// shape the stdin hot path dispatches without allocating (span tokenize → frozen alternate-lookup → this handler,

@@ -13,8 +13,6 @@ public enum GamepadOutputKind : byte {
     /// <summary>Adaptive trigger effects.</summary>
     TriggerEffect = 4,
 }
-
-
 /// <summary>
 /// A single queued output request handed from a caller's thread to the device's I/O loop. One tagged shape
 /// keeps the per-device queue homogeneous; only the field selected by <see cref="Kind"/> is meaningful.

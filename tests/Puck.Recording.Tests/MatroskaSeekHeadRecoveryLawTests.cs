@@ -4,8 +4,8 @@ using Xunit;
 namespace Puck.Recording.Tests;
 
 public sealed class MatroskaSeekHeadRecoveryLawTests {
-    private static ReadOnlySpan<byte> SegmentId => [0x18, 0x53, 0x80, 0x67];
     private static ReadOnlySpan<byte> SeekHeadId => [0x11, 0x4D, 0x9B, 0x74];
+    private static ReadOnlySpan<byte> SegmentId => [0x18, 0x53, 0x80, 0x67];
 
     [Fact]
     public void LiveFileReservesVoidAndCleanStopPublishesSeekHeadAtTheSameOffset() {
@@ -21,7 +21,7 @@ public sealed class MatroskaSeekHeadRecoveryLawTests {
             seekPreRollNanoseconds: 0L);
 
         muxer.Start();
-        muxer.WriteBlock(trackNumber: track, data: [0x01, 0x02, 0x03], timestampNanoseconds: 0L, isKeyframe: true);
+        muxer.WriteBlock(data: [0x01, 0x02, 0x03], isKeyframe: true, timestampNanoseconds: 0L, trackNumber: track);
 
         var live = output.ToArray();
         var reservationOffset = SegmentPayloadOffset(bytes: live);
@@ -39,9 +39,9 @@ public sealed class MatroskaSeekHeadRecoveryLawTests {
     private static int SegmentPayloadOffset(ReadOnlySpan<byte> bytes) {
         var segmentOffset = bytes.IndexOf(value: SegmentId);
 
-        Assert.True(condition: segmentOffset >= 0, userMessage: "the muxer did not write a Segment element");
+        Assert.True(condition: (segmentOffset >= 0), userMessage: "the muxer did not write a Segment element");
 
         // Segment is a four-byte id followed by the writer's fixed eight-byte unknown-size field while live.
-        return (segmentOffset + SegmentId.Length + 8);
+        return ((segmentOffset + SegmentId.Length) + 8);
     }
 }

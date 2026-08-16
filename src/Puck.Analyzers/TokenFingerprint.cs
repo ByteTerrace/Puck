@@ -19,7 +19,6 @@ namespace Puck.Analyzers;
 /// entry naming something the walk cannot find.
 /// </param>
 internal sealed record TokenFingerprintResult(string? Hash, string? Refusal, string? DependencyId);
-
 /// <summary>
 /// Computes the <c>csharp-tokens-v1</c> fingerprint: a SHA-256 over every non-trivia token of a declaration's
 /// syntax, across all of its declaring syntax references, with the branding <c>[VerifiedCode(...)]</c> attribute's
@@ -55,6 +54,163 @@ internal static class TokenFingerprint {
     /// raw kind can ever be negative and no token stream can be mistaken for the start of this section.
     /// </summary>
     private const int DependencySectionMarker = -1;
+
+    private static void AppendTokens(IEnumerable<SyntaxToken> tokens, TextSpan? excludedSpan, Stream stream, CancellationToken cancellationToken) {
+        foreach (var token in tokens) {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (
+                (excludedSpan is TextSpan span) &&
+                span.Contains(span: token.Span)
+            ) {
+                continue;
+            }
+
+            WriteInt32(
+                stream: stream,
+                value: token.RawKind
+            );
+            WriteUtf8(
+                stream: stream,
+                text: token.Text
+            );
+        }
+    }
+    private static bool IsPartial(SyntaxNode node) =>
+        node switch {
+            MethodDeclarationSyntax method => method.Modifiers.Any(kind: SyntaxKind.PartialKeyword),
+            PropertyDeclarationSyntax property => property.Modifiers.Any(kind: SyntaxKind.PartialKeyword),
+            TypeDeclarationSyntax type => type.Modifiers.Any(kind: SyntaxKind.PartialKeyword),
+            // Operators, conversion operators, constructors, destructors, and accessors cannot be declared partial.
+            _ => false,
+        };
+    private static TokenFingerprintResult Refuse(string reason) =>
+        new(
+            DependencyId: null,
+            Hash: null,
+            Refusal: reason
+        );
+    /// <summary>
+    /// Resolves one documentation-comment id to the single source declaration in <paramref name="compilation"/>'s
+    /// own assembly that it names, and gathers that declaration's tokens.
+    /// </summary>
+    /// <remarks>
+    /// Resolution is narrowed to the compilation's own assembly deliberately. A dependency in a referenced assembly
+    /// has no source syntax here, so folding it would fold nothing while looking like it folded something — and the
+    /// entry that named it is swept by this compilation alone.
+    /// </remarks>
+    private static DependencyWalk ResolveDependency(Compilation compilation, string documentationId, CancellationToken cancellationToken) {
+        var candidates = DocumentationCommentId
+            .GetSymbolsForDeclarationId(
+            compilation: compilation,
+            id: documentationId
+        )
+            .Where(predicate: candidate => SymbolEqualityComparer.Default.Equals(
+            x: candidate.ContainingAssembly,
+            y: compilation.Assembly
+        ))
+            .ToArray();
+
+        if (candidates.Length == 0) {
+            return DependencyWalk.Refused(reason: $"it names no declaration in '{compilation.AssemblyName}'");
+        }
+
+        if (candidates.Length > 1) {
+            return DependencyWalk.Refused(reason: $"it names {candidates.Length} declarations in '{compilation.AssemblyName}', so which one the brand rests on is ambiguous");
+        }
+
+        var references = candidates[0].DeclaringSyntaxReferences
+            .OrderBy(
+            keySelector: reference => reference.SyntaxTree.FilePath,
+            comparer: StringComparer.Ordinal
+        )
+            .ThenBy(keySelector: reference => reference.Span.Start)
+            .ToArray();
+
+        if (references.Length == 0) {
+            return DependencyWalk.Refused(reason: "it has no declaring source syntax to walk");
+        }
+
+        if (references.Length > 1) {
+            return DependencyWalk.Refused(reason: "it is declared in more than one place, so no single walk sees it whole");
+        }
+
+        return WalkDependency(node: references[0].GetSyntax(cancellationToken: cancellationToken));
+    }
+    /// <summary>Gathers the tokens that make up one dependency's declaration, or refuses a shape this walk cannot cover.</summary>
+    private static DependencyWalk WalkDependency(SyntaxNode node) {
+        // A field symbol's declaring syntax is its variable declarator alone, which carries neither the type nor
+        // the modifiers that decide what the constant IS — and several declarators can share one field
+        // declaration. So the type and modifiers are picked up from the shared declaration while the sibling
+        // declarators are left out: `public const uint FirstMultiplier = 0x7FEB352DU` is sealed whole, and adding
+        // or removing a constant beside it is a sibling edit, which no fingerprint here has ever moved.
+        if (
+            (node is VariableDeclaratorSyntax declarator) &&
+            (declarator.Parent is VariableDeclarationSyntax variableDeclaration) &&
+            (variableDeclaration.Parent is BaseFieldDeclarationSyntax fieldDeclaration)
+        ) {
+            if (fieldDeclaration.ContainsDirectives) {
+                return DependencyWalk.Refused(reason: "its declaration contains a preprocessor directive, so its compiled tokens can depend on symbols this fingerprint does not read");
+            }
+
+            var tokens = new List<SyntaxToken>();
+
+            foreach (var attributeList in fieldDeclaration.AttributeLists) {
+                tokens.AddRange(collection: attributeList.DescendantTokens(descendIntoTrivia: false));
+            }
+
+            tokens.AddRange(collection: fieldDeclaration.Modifiers);
+            tokens.AddRange(collection: variableDeclaration.Type.DescendantTokens(descendIntoTrivia: false));
+            tokens.AddRange(collection: declarator.DescendantTokens(descendIntoTrivia: false));
+
+            return new DependencyWalk(
+                Refusal: null,
+                Tokens: tokens
+            );
+        }
+
+        if (IsPartial(node: node)) {
+            return DependencyWalk.Refused(reason: "it is declared partial, so it may be edited from a syntax reference this fingerprint never sees");
+        }
+
+        if (node.ContainsDirectives) {
+            return DependencyWalk.Refused(reason: "it contains a preprocessor directive, so its compiled tokens can depend on symbols this fingerprint does not read");
+        }
+
+        return new DependencyWalk(
+            Tokens: node.DescendantTokens(descendIntoTrivia: false).ToArray(),
+            Refusal: null
+        );
+    }
+    /// <summary>Writes <paramref name="value"/> little-endian, so the fingerprint does not depend on the host's byte order.</summary>
+    private static void WriteInt32(Stream stream, int value) {
+        var bytes = new byte[] {
+            ((byte)value),
+            ((byte)(value >> 8)),
+            ((byte)(value >> 16)),
+            ((byte)(value >> 24)),
+        };
+
+        stream.Write(
+            buffer: bytes,
+            offset: 0,
+            count: bytes.Length
+        );
+    }
+    /// <summary>Writes <paramref name="text"/> as a little-endian UTF-8 byte count followed by those bytes.</summary>
+    private static void WriteUtf8(Stream stream, string text) {
+        var textBytes = Encoding.UTF8.GetBytes(s: text);
+
+        WriteInt32(
+            stream: stream,
+            value: textBytes.Length
+        );
+        stream.Write(
+            buffer: textBytes,
+            offset: 0,
+            count: textBytes.Length
+        );
+    }
 
     /// <summary>Computes the fingerprint for <paramref name="symbol"/>'s declaration and its declared dependencies.</summary>
     /// <param name="symbol">The branded method, constructor, class, or struct.</param>
@@ -152,9 +308,9 @@ internal static class TokenFingerprint {
             cancellationToken.ThrowIfCancellationRequested();
 
             var resolved = ResolveDependency(
+                cancellationToken: cancellationToken,
                 compilation: compilation,
-                documentationId: dependency,
-                cancellationToken: cancellationToken
+                documentationId: dependency
             );
 
             if (resolved.Refusal is not null) {
@@ -197,175 +353,14 @@ internal static class TokenFingerprint {
         );
     }
 
-    private static TokenFingerprintResult Refuse(string reason) =>
-        new(
-        Hash: null,
-        Refusal: reason,
-        DependencyId: null
-    );
-
     /// <summary>The tokens one declared dependency contributes, or why it contributes none.</summary>
     /// <param name="Tokens">The dependency's own tokens, in source order.</param>
     /// <param name="Refusal">Why the dependency cannot be sealed, phrased to complete the sentence "cannot be sealed because …".</param>
     private readonly record struct DependencyWalk(IReadOnlyList<SyntaxToken> Tokens, string? Refusal) {
         public static DependencyWalk Refused(string reason) =>
             new(
-            Tokens: [],
-            Refusal: reason
-        );
-    }
-
-    /// <summary>
-    /// Resolves one documentation-comment id to the single source declaration in <paramref name="compilation"/>'s
-    /// own assembly that it names, and gathers that declaration's tokens.
-    /// </summary>
-    /// <remarks>
-    /// Resolution is narrowed to the compilation's own assembly deliberately. A dependency in a referenced assembly
-    /// has no source syntax here, so folding it would fold nothing while looking like it folded something — and the
-    /// entry that named it is swept by this compilation alone.
-    /// </remarks>
-    private static DependencyWalk ResolveDependency(Compilation compilation, string documentationId, CancellationToken cancellationToken) {
-        var candidates = DocumentationCommentId
-            .GetSymbolsForDeclarationId(
-            id: documentationId,
-            compilation: compilation
-        )
-            .Where(predicate: candidate => SymbolEqualityComparer.Default.Equals(
-            x: candidate.ContainingAssembly,
-            y: compilation.Assembly
-        ))
-            .ToArray();
-
-        if (candidates.Length == 0) {
-            return DependencyWalk.Refused(reason: $"it names no declaration in '{compilation.AssemblyName}'");
-        }
-
-        if (candidates.Length > 1) {
-            return DependencyWalk.Refused(reason: $"it names {candidates.Length} declarations in '{compilation.AssemblyName}', so which one the brand rests on is ambiguous");
-        }
-
-        var references = candidates[0].DeclaringSyntaxReferences
-            .OrderBy(
-            keySelector: reference => reference.SyntaxTree.FilePath,
-            comparer: StringComparer.Ordinal
-        )
-            .ThenBy(keySelector: reference => reference.Span.Start)
-            .ToArray();
-
-        if (references.Length == 0) {
-            return DependencyWalk.Refused(reason: "it has no declaring source syntax to walk");
-        }
-
-        if (references.Length > 1) {
-            return DependencyWalk.Refused(reason: "it is declared in more than one place, so no single walk sees it whole");
-        }
-
-        return WalkDependency(node: references[0].GetSyntax(cancellationToken: cancellationToken));
-    }
-
-    /// <summary>Gathers the tokens that make up one dependency's declaration, or refuses a shape this walk cannot cover.</summary>
-    private static DependencyWalk WalkDependency(SyntaxNode node) {
-        // A field symbol's declaring syntax is its variable declarator alone, which carries neither the type nor
-        // the modifiers that decide what the constant IS — and several declarators can share one field
-        // declaration. So the type and modifiers are picked up from the shared declaration while the sibling
-        // declarators are left out: `public const uint FirstMultiplier = 0x7FEB352DU` is sealed whole, and adding
-        // or removing a constant beside it is a sibling edit, which no fingerprint here has ever moved.
-        if (
-            (node is VariableDeclaratorSyntax declarator) &&
-            (declarator.Parent is VariableDeclarationSyntax variableDeclaration) &&
-            (variableDeclaration.Parent is BaseFieldDeclarationSyntax fieldDeclaration)
-        ) {
-            if (fieldDeclaration.ContainsDirectives) {
-                return DependencyWalk.Refused(reason: "its declaration contains a preprocessor directive, so its compiled tokens can depend on symbols this fingerprint does not read");
-            }
-
-            var tokens = new List<SyntaxToken>();
-
-            foreach (var attributeList in fieldDeclaration.AttributeLists) {
-                tokens.AddRange(collection: attributeList.DescendantTokens(descendIntoTrivia: false));
-            }
-
-            tokens.AddRange(collection: fieldDeclaration.Modifiers);
-            tokens.AddRange(collection: variableDeclaration.Type.DescendantTokens(descendIntoTrivia: false));
-            tokens.AddRange(collection: declarator.DescendantTokens(descendIntoTrivia: false));
-
-            return new DependencyWalk(
-                Tokens: tokens,
-                Refusal: null
+                Refusal: reason,
+                Tokens: []
             );
-        }
-
-        if (IsPartial(node: node)) {
-            return DependencyWalk.Refused(reason: "it is declared partial, so it may be edited from a syntax reference this fingerprint never sees");
-        }
-
-        if (node.ContainsDirectives) {
-            return DependencyWalk.Refused(reason: "it contains a preprocessor directive, so its compiled tokens can depend on symbols this fingerprint does not read");
-        }
-
-        return new DependencyWalk(
-            Tokens: node.DescendantTokens(descendIntoTrivia: false).ToArray(),
-            Refusal: null
-        );
-    }
-    private static bool IsPartial(SyntaxNode node) =>
-        node switch {
-            MethodDeclarationSyntax method => method.Modifiers.Any(kind: SyntaxKind.PartialKeyword),
-            PropertyDeclarationSyntax property => property.Modifiers.Any(kind: SyntaxKind.PartialKeyword),
-            TypeDeclarationSyntax type => type.Modifiers.Any(kind: SyntaxKind.PartialKeyword),
-            // Operators, conversion operators, constructors, destructors, and accessors cannot be declared partial.
-            _ => false,
-        };
-    private static void AppendTokens(IEnumerable<SyntaxToken> tokens, TextSpan? excludedSpan, Stream stream, CancellationToken cancellationToken) {
-        foreach (var token in tokens) {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (
-                (excludedSpan is TextSpan span) &&
-                span.Contains(span: token.Span)
-            ) {
-                continue;
-            }
-
-            WriteInt32(
-                stream: stream,
-                value: token.RawKind
-            );
-            WriteUtf8(
-                stream: stream,
-                text: token.Text
-            );
-        }
-    }
-
-    /// <summary>Writes <paramref name="text"/> as a little-endian UTF-8 byte count followed by those bytes.</summary>
-    private static void WriteUtf8(Stream stream, string text) {
-        var textBytes = Encoding.UTF8.GetBytes(s: text);
-
-        WriteInt32(
-            stream: stream,
-            value: textBytes.Length
-        );
-        stream.Write(
-            buffer: textBytes,
-            offset: 0,
-            count: textBytes.Length
-        );
-    }
-
-    /// <summary>Writes <paramref name="value"/> little-endian, so the fingerprint does not depend on the host's byte order.</summary>
-    private static void WriteInt32(Stream stream, int value) {
-        var bytes = new byte[] {
-            (byte)value,
-            (byte)(value >> 8),
-            (byte)(value >> 16),
-            (byte)(value >> 24),
-        };
-
-        stream.Write(
-            buffer: bytes,
-            offset: 0,
-            count: bytes.Length
-        );
     }
 }

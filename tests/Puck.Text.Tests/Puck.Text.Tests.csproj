@@ -16,4 +16,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Content Include="..\..\src\Puck.Text\Assets\Fonts\source\JetBrainsMono-Regular.ttf" Link="Fonts\JetBrainsMono-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

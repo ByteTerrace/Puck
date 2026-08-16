@@ -31,7 +31,6 @@ public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ul
         RomLength: rom.Length
     );
 }
-
 /// <summary>
 /// A self-contained, deterministic byte image of an Advanced GamingBrick's entire mutable state at one instant. It owns
 /// its bytes (through a shared <see cref="SnapshotImage"/>) and aliases nothing in the live machine, so it can be held
@@ -51,7 +50,7 @@ public sealed class AgbMachineSnapshot : MachineSnapshot<AgbMachineSnapshot, Agb
     protected override AgbMachineSnapshot Create(AgbMachineIdentity identity, long takenAt, SnapshotImage image) =>
         new(
         identity: identity,
-        takenAt: takenAt,
-        image: image
+        image: image,
+        takenAt: takenAt
     );
 }

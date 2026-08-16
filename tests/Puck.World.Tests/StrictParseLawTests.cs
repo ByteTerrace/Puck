@@ -26,7 +26,6 @@ public sealed class StrictParseLawTests {
         // inspects an exception message, and only for the injected member's own name.
         Assert.Contains(expectedSubstring: "bogusField", actualString: exception.InnerException!.Message, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void UnknownMemberOnNestedRow_RefusesByName_ControlParsesClean() {
         Laws.RefusalWithControl(
@@ -34,7 +33,6 @@ public sealed class StrictParseLawTests {
             deniedOutcome: static () => TryParse(bytes: Fixtures.SabotagedAddonBytes()),
             controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes()));
     }
-
     [Fact]
     public void MissingSeatLook_RefusesByName() {
         var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.MissingSeatLookBytes()));
@@ -49,7 +47,6 @@ public sealed class StrictParseLawTests {
         // pinning the wording of whichever layer happens to win would make this test a record of plumbing.
         Assert.Contains(expectedSubstring: "seatLook", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void MissingSeatLook_RefusesByName_ControlParsesClean() {
         Laws.RefusalWithControl(
@@ -57,7 +54,6 @@ public sealed class StrictParseLawTests {
             deniedOutcome: static () => TryParse(bytes: Fixtures.MissingSeatLookBytes()),
             controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes()));
     }
-
     [Fact]
     public void MissingRequiredConstructorMember_RefusesByName() {
         var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.MissingHostPresentationBytes()));
@@ -66,7 +62,6 @@ public sealed class StrictParseLawTests {
         // missing ones were silently filled — an absent enum landing on 0 and answering with a value nobody authored.
         Assert.Contains(expectedSubstring: "presentation", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void MissingRequiredConstructorMember_RefusesByName_ControlParsesClean() {
         Laws.RefusalWithControl(
@@ -74,7 +69,6 @@ public sealed class StrictParseLawTests {
             deniedOutcome: static () => TryParse(bytes: Fixtures.MissingHostPresentationBytes()),
             controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes()));
     }
-
     [Fact]
     public void AnOptionalMemberMayBeOmitted() {
         // The complement, and the reason the change is a contract rather than a blanket tightening: a member that

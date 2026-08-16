@@ -64,16 +64,28 @@
             "type": "string"
           },
           "rect": {
-            "$ref": "./common.schema.json#/$defs/WorldHudRect"
+            "$ref": "./common.schema.json#/$defs/WorldHudRect",
+            "description": "The panel\u0027s viewport rect, normalized to screen space."
           },
           "layer": {
-            "$ref": "./common.schema.json#/$defs/WorldHudLayer"
+            "description": "Which band the panel draws in.",
+            "enum": [
+              "Under",
+              "Over",
+              "Replace"
+            ]
           },
           "style": {
-            "$ref": "./common.schema.json#/$defs/WorldHudPanelStyle"
+            "description": "The panel\u0027s chrome recipe.",
+            "enum": [
+              "Panel",
+              "Strip",
+              "Chip"
+            ]
           },
           "elements": {
-            "$ref": "./common.schema.json#/$defs/WorldHudElementList"
+            "$ref": "./common.schema.json#/$defs/WorldHudElementList",
+            "description": "Gets the panel\u0027s child elements. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
           }
         },
         "required": [

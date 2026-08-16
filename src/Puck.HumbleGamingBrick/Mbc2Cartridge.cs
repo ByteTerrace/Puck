@@ -68,7 +68,7 @@ public sealed class Mbc2Cartridge : CartridgeBase {
     public override void WriteRam(ushort address, byte value) =>
         base.WriteRam(
         address: address,
-        value: (byte)(value & 0x0F)
+        value: ((byte)(value & 0x0F))
     );
     /// <inheritdoc/>
     /// <remarks>Overridden: <see cref="ReadRam"/>/<see cref="WriteRam"/> apply the built-in RAM's nibble mask, so the

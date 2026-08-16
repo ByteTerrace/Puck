@@ -21,7 +21,7 @@ namespace Puck.Demo.Text;
 /// unavailable and the caller simply declares no world text. The output is DETERMINISTIC: the same installed font +
 /// charset + cell size rasterizes to a byte-identical coverage raster, and the transform is a pure function of it, so
 /// the same inputs always yield a byte-identical atlas. The higher-fidelity marchable source is the committed
-/// MTSDF atlas from the font-atlas bake pipeline (true-distance by construction); this runtime path is the
+/// imported MTSDF oracle atlas (true-distance by construction); this runtime path is the
 /// no-toolchain fallback.
 /// </remarks>
 internal static class GlyphAtlasBuilder {

@@ -11,9 +11,12 @@ with hand-rolled first-positional verb dispatch:
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express. |
+| [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck declarations`](#puck-declarations--declaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
+| [`puck packages`](#puck-packages--published-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report — id/description/tags — checked and regenerated against `docs/site/index.html`. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlib--wasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library — currently `FixedQ4816`'s Rust port and known-answer vectors. |
+| [`puck worktree-base`](#puck-worktree-base--worktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
 
 Unlike its retired `tools/` predecessors, this project is a **first-class member
 of `Puck.slnx`** and joins the full root build regime (warnings-as-errors,
@@ -57,6 +60,37 @@ remove it and break every `references` run.
 
 ---
 
+## `puck font-atlas` — managed SDF font artifacts
+
+`puck font-atlas` turns an OpenType font or collection into the same
+loader-compatible SDF atlas that `Puck.World` can generate in process. The CLI
+and runtime share `ManagedFontAtlasGenerator`; there is no Python or native
+rasterizer hiding behind the command.
+
+```text
+puck font-atlas fonts/Inter-Regular.ttf \
+  --range U+0020-U+007E \
+  --range U+00A0-U+024F \
+  --face-index 0 \
+  --size 48 \
+  --output artifacts/inter-regular.json
+```
+
+The output path names the JSON metadata. A PNG with the same base name is
+written beside it. Ranges are repeatable and use the same syntax as world font
+definitions; `--range "*"` requests every mapped Basic Multilingual Plane
+scalar. The command also exposes the raster size, signed-distance range,
+padding, preferred columns, and atlas dimension and pixel limits through the
+options listed by `puck font-atlas --help`.
+
+Standalone OpenType fonts and TTC/OTC collections are accepted with TrueType
+quadratic or CFF/CFF2 cubic outlines. `--face-index` explicitly selects a
+zero-based collection face and defaults to 0. CFF2 variable outlines use their
+default design coordinates. Complex-script shaping remains a separate layer;
+generated atlases preserve source glyph IDs for it.
+
+---
+
 ## `puck canary` — real-World behavioral proofs
 
 `puck canary` is deliberately narrow: it runs deterministic stdin-driven
@@ -95,6 +129,38 @@ This is not a universal verification gate. The richer PowerShell batteries
 `sdf-decode-sign-refusal`, `doc-links`, `addon-mutation-seam`, and
 `four-world-boot-smoke` remain named, on-demand, and ungated. They are not
 wrapped, ported, or executed by `puck canary`.
+
+---
+
+## `puck parity` — cross-backend composed-frame comparison
+
+For every corpus entry — the authored pattern worlds under
+[docs/verification/parity/](../../docs/verification/parity/README.md)
+(gradient, edges, modifiers, glyphs, each stressing one contract slice) plus the
+shipped default world — `puck parity` boots the real `Puck.World` windowed
+twice, once on Vulkan and once on Direct3D 12, arms `world.screenshot` at the
+same fenced simulation moment in each run, and compares the backend pair under
+the relaxed parity envelope: mean absolute channel delta at most 0.35 LSB over
+every pixel, and at most 20% of pixels differing at all. Benign ±1-LSB
+shader-codegen noise passes; a missing, relocated, or recolored region lands
+in multiples of 1.0 and fails. There are no stored baselines — both frames of
+a pair come from the same build, so content changes cannot fail the check.
+Two different patterns rendered by the same backend must fail the same
+envelope — a comparator that cannot refuse cannot report green.
+
+```
+puck parity                         run the pattern corpus plus the shipped default world
+puck parity --world <path>          additionally run the named world as a corpus entry
+```
+
+The runner builds `Puck.World` once, runs each leg from fresh state with its
+own `--state-dir`, requires every scripted command accepted (`wire.errors`
+must close the transcript with zero rejections), and leaves the frames and
+both transcripts in a per-run temp directory it names on stdout. It needs a
+display and both GPU devices, and it covers composed-frame agreement only —
+nothing about the SDF ISA, document schemas, or deterministic numerics.
+Exit codes are 0 for parity held and the discriminator refused, 1 for an
+observed failure, and 2 for usage, build, or infrastructure refusal.
 
 ---
 
@@ -290,12 +356,12 @@ makes the check a tautology rather than evidence.
 ## `puck schema` — world.def JSON Schema
 
 Generates the JSON Schema for `puck.world.def.v1` from the live C# model —
-`Puck.World.WorldSchema` (`src/Puck.World.Data/WorldSchema.cs`) walks
+`Puck.World.WorldSchema` (`src/Puck.World.Schema/WorldSchema.cs`) walks
 `WorldDefinition` over its own source-generated `WorldJsonContext` via
 `System.Text.Json`'s `JsonSchemaExporter`, so `$type` unions, enum values, and
 `additionalProperties: false` all come from the SAME contract the loader
 enforces, never a hand-maintained copy. Descriptions come from
-`Puck.World.Data.xml`, resolved property `<summary>` first, then the
+`Puck.World.Schema.xml`, resolved property `<summary>` first, then the
 declaring record's own `<param>` (most members are documented that way — a
 positional record's XML doc lives on the record declaration, not the
 property), then a type `<summary>` for a node with no containing property
@@ -329,7 +395,7 @@ which already flow to `Puck.World`'s build output (`Assets\**` copies
 `PreserveNewest`), so the schema ships beside the world documents it
 describes. Running `puck schema` also DELETES any section file the current
 model no longer produces, so the checked-in tree never carries an orphan.
-A missing `Puck.World.Data.xml` still produces a schema, with no
+A missing `Puck.World.Schema.xml` still produces a schema, with no
 descriptions, and this verb says so on stderr rather than failing. Exit
 codes: **0** wrote or matched, **1** `--check` found drift (reported per file
 — missing, orphan, or the path plus the first differing line), **2** usage
@@ -344,9 +410,9 @@ parse-and-write per file.
 
 ```
 puck format [<root=src>] [-WhatIf] [-Verify] [-h]
-            [-Only attr-order,member-spacing,member-order,null-pattern,paren-clarity,
-                   logical-lines,arg-lines,ternary-lines,init-order,trailing-comma,
-                   decl-spacing,literal-var,named-args]
+            [-Only attr-order,member-groups,member-spacing,member-order,null-pattern,
+                   string-merge,paren-clarity,logical-lines,arg-lines,ternary-lines,
+                   init-order,trailing-comma,decl-spacing,literal-var,named-args]
 ```
 
 **Phase 0 always runs first**, for every mode and every `-Only` selection:
@@ -360,22 +426,29 @@ first; the tree-wide sweep is deliberately its own, separately-landed change.
 | Pass | Rewrite | In the bare-`format` set |
 |---|---|---|
 | `attr-order` | one attribute per list/line, alphabetized. | yes |
-| `member-spacing` | blank-line grouping between type members. | yes |
-| `member-order` | a const block or property block (same kind + scope) sorted by name; non-const fields are never reordered. | yes |
-| `null-pattern` | `== null` / `!= null` → `is null` / `is not null`. | yes |
+| `member-spacing` | blank-line grouping between type members; a field's kind is its storage class (const / static readonly / static / readonly / mutable), and initializer-coupled fields/properties share one kind, so each `member-groups` group is one blank-line-delimited unit. | yes |
+| `member-order` | a const block or uncoupled property block (same kind + scope) sorted by name; non-const fields and initializer-coupled properties are never reordered, and layout-sensitive/attributed, partial, or directive-bearing types stay as written. | yes |
+| `null-pattern` | compiler-resolved `== null` / `!= null` → `is null` / `is not null`; pointer, dynamic/error-bound, and user-defined equality comparisons stay unchanged. | yes |
+| `string-merge` | `+` of two string/interpolated literals → one literal (`"a" + $"b{x}"` → `(string)$"ab{x}"`), so message text is searchable contiguously. The explicit cast preserves the concatenation's string type and overload binding. A seam carrying a comment, a verbatim/raw interpolated operand, and any non-literal operand are left alone. | yes |
 | `paren-clarity` | explicit precedence parens (`((0 == a) \|\| (0 == b))`), casts included (`((uint)sets.Length)` — bare only under checked/unchecked and as a ternary branch). | yes |
-| `init-order` | object-initializer members alphabetized. | yes |
+| `init-order` | object-initializer members alphabetized when every right-hand value is syntactically reorder-safe. Setter invocation order still changes; use only where those setters are order-independent (auto-properties and fields satisfy that boundary). | yes |
 | `trailing-comma` | trailing comma on a multi-line initializer's last element. | yes |
 | `decl-spacing` | one blank line between a local-declaration run and the next statement. | yes |
 | `literal-var` | `uint x = 0;` → `var x = 0U;` for suffix-bearing primitives. | yes |
 | `named-args` | call arguments named and alphabetized (semantic). | yes |
+| `member-groups` | fields, properties, and methods each gathered at their first occurrence. Fields use kind order (const → static readonly → static → instance readonly → instance mutable), then accessibility scope, then name; properties and methods use accessibility scope then name, with overloads stable in source order. Struct/record-struct instance-field declarations stay fixed, while constants, static fields, properties, and methods still group; on an unattributed struct this opt-in may change generated auto-property backing-field order. Complete declarations move, so comments and attributes travel with them. Initializer-coupled movable members stay together in source order. A type is left as written when moving could change behavior: attributed or partial types, members carrying `#directives`, or a coupled member that would cross a fixed field or field-like event initializer. | `-Only` |
 | `logical-lines` | multi-operand `&&`/`\|\|` one operand per line, operator trailing. | `-Only` |
 | `arg-lines` | a call with >1 argument: one argument per line, hanging close paren. | `-Only` |
 | `ternary-lines` | `c ? t : f` across three lines, operators leading; a statement-ending paren-wrapped ternary's trailing close parens hang at the root's indent. | `-Only` |
 
 The three vertical line-wrappers stay opt-in because their one-per-line layout
-is a deliberate choice, not a baseline. Required braces are `.editorconfig`'s
-job (`IDE0011`, `csharp_prefer_braces`), applied by `dotnet format style`.
+is a deliberate choice, not a baseline; `member-groups` stays opt-in because
+regrouping a type's declarations changes source and metadata order and is a
+reorganization to ask for, not a convention to drift into. Run it with the
+default set (or run a bare `format` after it) so `member-spacing` renormalizes
+the blank lines the moved declarations carried along.
+Required braces are `.editorconfig`'s job (`IDE0011`, `csharp_prefer_braces`),
+applied by `dotnet format style`.
 
 ### Dry modes
 
@@ -392,10 +465,15 @@ failure in write mode.
 
 ### Safety
 
-- **The write guard is unconditional.** A pass whose output would leave a file
-  with more syntax errors than it started with is dropped, the file is reported
-  as corrupt, and the run fails loudly — never written, not even in a plain
-  rewrite run.
+- **The write guard is unconditional.** A syntactically invalid input file is
+  declined, and output from valid input must remain syntactically valid. The
+  file is reported as corrupt and the run fails loudly — never written, not
+  even in a plain rewrite run. This is a syntax guard, not a substitute for the
+  compiler and tests after semantic normalizers.
+- **Custom rewrites preserve source newline trivia.** Ordinary whitespace policy
+  belongs to phase 0. The disk writer does not normalize the complete file text,
+  because doing so would change newline characters inside verbatim or raw string
+  literals.
 - **Annotated code is left alone.** The four reordering passes (`attr-order`,
   `member-order`, `init-order`, `named-args`) reassign trivia by *slot*, so a
   reorder would leave a comment — or an `#if` — describing whichever element
@@ -406,6 +484,25 @@ failure in write mode.
   preprocessor directive in **any slot they touch**, separators, operators and
   delimiters included — a comment written after a comma belongs to the comma, not
   to either neighbour, and a slot-preserving reorder would strand it.
+- **`member-groups` moves complete declarations.** A field, property, or method
+  keeps its attributes and leading/trailing comments when it moves. A type with
+  any preprocessor directive is left as written because a directive's guarded
+  region cannot safely be inferred from syntax trivia alone.
+- **Declaration and attribute order is observable metadata.** `attr-order`,
+  `member-order`, and `member-groups` deliberately establish source order. Code
+  that consumes reflection order, default JSON property order, sequential struct
+  layout, or byte-exact metadata must use explicit ordering/layout contracts or
+  leave the relevant reorderer off. `member-groups` additionally calls out its
+  auto-property backing-field boundary in the pass table above.
+- **Semantic rewrites need the project built.** `null-pattern` uses the compiler
+  to decline pointer, dynamic/error-bound, and overloaded-equality comparisons;
+  unresolved comparisons stay unchanged. `named-args` uses the same project
+  closure to resolve parameters.
+- **Evaluation-order rewriters are conservative, not omniscient.** `named-args`
+  uses the semantic model and declines calls whose moved arguments contain calls,
+  mutations, indexers, construction, awaits, or property getters. `init-order`
+  has no semantic model: it applies the syntactic value guard but cannot inspect
+  setter bodies, so initializer setters must be order-independent.
 - **`named-args` needs the project built.** It resolves symbols against the
   project's real build closure — the built output under `bin/`, the restore's
   package assemblies from `obj/project.assets.json`, the generated global-usings
@@ -528,6 +625,38 @@ sweep covers one tree — and its parse with `scan`.
 
 ---
 
+## `puck packages` — published NuGet package report
+
+Enumerates every csproj under `src/` declaring `<IsPackable>true</IsPackable>`
+(see `build/Packaging.targets`) and reads the same fields `dotnet pack` reads:
+`<PackageId>`, `<Description>`, `<PackageTags>`. `src/Web.Functions` is
+excluded, for the reason `Architecture.props`' `PuckArchitectureGateEnabled`
+predicate states beside its own matching exclusion.
+
+```
+puck packages                list every packable project: id, description, tags
+puck packages --check <path> compare <path>'s GENERATED package section against the
+                              current list; write nothing, exit 1 on disagreement
+puck packages --write <path> regenerate the GENERATED package section in <path>
+puck packages -h / --help    this text
+```
+
+The GENERATED section a page carries is delimited by a comment pair:
+
+```html
+<!-- GENERATED: puck packages -->
+...
+<!-- /GENERATED -->
+```
+
+`docs/site/index.html` carries the one checked-in instance, its `<p
+class="libs">` paragraph. `--write` replaces everything between and including
+the pair; the rest of the file is untouched. Exit codes: **0**
+listed/wrote/matched, **1** `--check` found drift, **2** usage error or
+missing repository root.
+
+---
+
 ## `puck wasm-stdlib` — WASM standard library sources
 
 Regenerates every GENERATED Rust source registered in
@@ -564,3 +693,23 @@ path (e.g. `wasm/puck-stdlib/src`) names a repository convention rather than
 something a caller supplies, so it is anchored at the repository root instead
 of the working directory. Exit codes: **0** wrote every file, **2** usage error,
 repository root not found, or a destination directory missing.
+
+---
+
+## `puck worktree-base` — worktree base guard
+
+A git worktree an agent is handed can sit at a stale base. `puck worktree-base
+<sha-or-ref> [--path <worktree>]` resolves HEAD and `<sha-or-ref>^{commit}` in
+the target worktree (default `--path`: the current directory) and shells out to
+`git` to reconcile them:
+
+- HEAD already at the base — prints "at base", exits 0.
+- Clean tree, wrong base — `git reset --hard <base>`, prints old → new, exits 0.
+- Dirty tree, wrong base — prints what is dirty and refuses, exits 1, resets
+  nothing.
+- Git failure, not a git tree, or an unresolvable ref — exits 2.
+
+"Dirty" is a tracked modification (`git status --porcelain
+--untracked-files=no` nonempty); untracked files never block a reset. Always
+prints the worktree's toplevel path it acted on. Shells out to `git` rather
+than adding a git library dependency.

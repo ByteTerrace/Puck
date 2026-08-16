@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>A from-scratch Vulkan backend for Puck's neutral GPU contracts: no binding generator and no third-party wrapper — the native loader is resolved and its structures mirrored by hand behind small, interface-driven APIs, so the renderer is built and tested against seams rather than raw vkXxx calls. It carries no windowing of its own: native surfaces arrive as Puck.Abstractions handles and compiled SPIR-V arrives from Puck.Shaders.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Vulkan</PackageId>
+        <PackageTags>gpu;spir-v;swapchain;vulkan</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Backends</PuckLayer>
     </PropertyGroup>

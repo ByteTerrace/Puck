@@ -10,11 +10,9 @@ internal sealed class ScanOptions {
     public int MinStatements { get; init; } = 4;
     public int MinTokens { get; init; } = 30;
     public string OutDirectory { get; init; } = "";
-
     // The repository root the comment-smell analyzer resolves cited document paths against. Empty
     // disables the doc-referent probe rather than reporting every citation dangling.
     public string RepositoryRoot { get; init; } = "";
-
     // The tree the comment-smell analyzer resolves shader-file and define references against. Explicit
     // rather than derived inside the analyzer, so the corpus is not silently widened by a hidden global.
     public string ShaderRoot { get; init; } = "";

@@ -21,7 +21,6 @@ internal sealed class CameraCaptureStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "camera-capture";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -74,24 +73,24 @@ internal sealed class CameraCaptureStage : IPostStage {
 
             Configure(
                 cartridge: cartridge,
-                gain: 4,
-                exposure: 0x1000,
+                dither: dither,
                 edge: false,
                 edgeRatio: 0x00,
-                dither: dither
+                exposure: 0x1000,
+                gain: 4
             );
             Trigger(
-                machine: machine,
-                cartridge: cartridge
+                cartridge: cartridge,
+                machine: machine
             );
 
             var image = ReadImage(cartridge: cartridge);
-            var expectedLow = (byte)(((shade & 0x01) != 0)
+            var expectedLow = ((byte)(((shade & 0x01) != 0)
                 ? 0xFF
-                : 0x00);
-            var expectedHigh = (byte)(((shade & 0x02) != 0)
+                : 0x00));
+            var expectedHigh = ((byte)(((shade & 0x02) != 0)
                 ? 0xFF
-                : 0x00);
+                : 0x00));
 
             for (var index = 0; (index < image.Length); ++index) {
                 var expected = (((index & 1) == 0)
@@ -106,7 +105,6 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         return null;
     }
-
     // Lowering the exposure register scales the processed colour down, dropping a mid-value pixel across a threshold into
     // a darker shade — the auto-exposure feedback a real camera ROM relies on.
     private static string? CheckExposureResponds() {
@@ -118,16 +116,16 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         // colour = 100 * exposure / 0x1000: at 0x1000 -> 100 (shade 2), at 0x0400 -> 25 (shade 3).
         var bright = CaptureFlat(
-            value: 100,
-            gain: 4,
+            dither: dither,
             exposure: 0x1000,
-            dither: dither
+            gain: 4,
+            value: 100
         );
         var dark = CaptureFlat(
-            value: 100,
-            gain: 4,
+            dither: dither,
             exposure: 0x0400,
-            dither: dither
+            gain: 4,
+            value: 100
         );
 
         if (bright[1] != 0xFF) {
@@ -143,7 +141,6 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         return null;
     }
-
     // The dither matrix is indexed by (x&3, y&3). With cells whose x&3==0 forced to shade 3 and the rest to shade 0, each
     // tile row must pack to 0x88 on both planes (bits set at columns 0 and 4) — proving the ((x&3)+(y&3)*4)*3 register
     // mapping and the MSB-left 2bpp packing.
@@ -154,9 +151,9 @@ internal sealed class CameraCaptureStage : IPostStage {
             for (var cellX = 0; (cellX < 4); ++cellX) {
                 var cellBase = (((cellX + (cellY * 4)) * 3));
                 // colour is 100 everywhere; thresholds {200,200,200} -> shade 3, {50,50,50} -> shade 0.
-                var threshold = (byte)((cellX == 0)
+                var threshold = ((byte)((cellX == 0)
                     ? 200
-                    : 50);
+                    : 50));
 
                 dither[cellBase] = threshold;
                 dither[(cellBase + 1)] = threshold;
@@ -169,15 +166,15 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         Configure(
             cartridge: cartridge,
-            gain: 4,
-            exposure: 0x1000,
+            dither: dither,
             edge: false,
             edgeRatio: 0x00,
-            dither: dither
+            exposure: 0x1000,
+            gain: 4
         );
         Trigger(
-            machine: machine,
-            cartridge: cartridge
+            cartridge: cartridge,
+            machine: machine
         );
 
         var image = ReadImage(cartridge: cartridge);
@@ -190,7 +187,6 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         return null;
     }
-
     // The busy bit (register 0, bit 0) reads set immediately after a trigger and stays set for the exposure-dependent
     // window (129792 + 2048 + exposure*64 dots at gain with 1-D off), then clears — the poll loop a ROM spins on.
     private static string? CheckBusyTiming() {
@@ -213,8 +209,8 @@ internal sealed class CameraCaptureStage : IPostStage {
             )
         );
         Trigger(
-            machine: machine,
-            cartridge: cartridge
+            cartridge: cartridge,
+            machine: machine
         );
 
         if ((ReadShootRegister(cartridge: cartridge) & 0x01) == 0) {
@@ -223,8 +219,8 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         // One frame is short of the busy window, so it must still be busy.
         PostMachine.RunFrames(
-            instance: machine,
-            frames: 1
+            frames: 1,
+            instance: machine
         );
 
         if ((ReadShootRegister(cartridge: cartridge) & 0x01) == 0) {
@@ -235,8 +231,8 @@ internal sealed class CameraCaptureStage : IPostStage {
         var framesToClear = (((busyDots / PostMachine.TCyclesPerFrame) + 2));
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: framesToClear
+            frames: framesToClear,
+            instance: machine
         );
 
         if ((ReadShootRegister(cartridge: cartridge) & 0x01) != 0) {
@@ -245,7 +241,6 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         return null;
     }
-
     // Edge enhancement combines each pixel with its four neighbours, so on a non-flat (gradient) sensor it must change
     // the captured image versus the same capture with enhancement disabled.
     private static string? CheckEdgeEnhancement() {
@@ -260,15 +255,15 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         Configure(
             cartridge: plainCartridge,
-            gain: 4,
-            exposure: 0x1000,
+            dither: dither,
             edge: false,
             edgeRatio: 0x40,
-            dither: dither
+            exposure: 0x1000,
+            gain: 4
         );
         Trigger(
-            machine: plain,
-            cartridge: plainCartridge
+            cartridge: plainCartridge,
+            machine: plain
         );
 
         var plainImage = ReadImage(cartridge: plainCartridge);
@@ -278,15 +273,15 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         Configure(
             cartridge: sharpenedCartridge,
-            gain: 4,
-            exposure: 0x1000,
+            dither: dither,
             edge: true,
             edgeRatio: 0x40,
-            dither: dither
+            exposure: 0x1000,
+            gain: 4
         );
         Trigger(
-            machine: sharpened,
-            cartridge: sharpenedCartridge
+            cartridge: sharpenedCartridge,
+            machine: sharpened
         );
 
         var sharpenedImage = ReadImage(cartridge: sharpenedCartridge);
@@ -295,7 +290,6 @@ internal sealed class CameraCaptureStage : IPostStage {
             ? "enabling edge enhancement did not change a gradient capture"
             : null);
     }
-
     // A capture triggered and then snapshotted while still busy must, after restore, resume its countdown and produce a
     // byte-identical image — the deposited tiles and the busy countdown both survive the snapshot.
     private static string? CheckSnapshotMidCapture() {
@@ -313,28 +307,28 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         Configure(
             cartridge: cartridge,
-            gain: 4,
-            exposure: Exposure,
+            dither: dither,
             edge: false,
             edgeRatio: 0x00,
-            dither: dither
+            exposure: Exposure,
+            gain: 4
         );
         Trigger(
-            machine: machine,
-            cartridge: cartridge
+            cartridge: cartridge,
+            machine: machine
         );
 
         // Snapshot one frame in, while still busy.
         PostMachine.RunFrames(
-            instance: machine,
-            frames: 1
+            frames: 1,
+            instance: machine
         );
 
         var midCapture = machine.Machine.Snapshot();
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: framesToClear
+            frames: framesToClear,
+            instance: machine
         );
 
         var firstImage = ReadImage(cartridge: cartridge);
@@ -342,8 +336,8 @@ internal sealed class CameraCaptureStage : IPostStage {
         machine.Machine.Restore(snapshot: midCapture);
 
         PostMachine.RunFrames(
-            instance: machine,
-            frames: framesToClear
+            frames: framesToClear,
+            instance: machine
         );
 
         var secondImage = ReadImage(cartridge: cartridge);
@@ -367,27 +361,26 @@ internal sealed class CameraCaptureStage : IPostStage {
         return machine;
     }
     private static CameraCartridge Cartridge(MachineInstance machine) =>
-        (CameraCartridge)machine.GetRequiredService<ICartridge>();
+        ((CameraCartridge)machine.GetRequiredService<ICartridge>());
     private static byte[] CaptureFlat(byte value, byte gain, int exposure, byte[] dither) {
         using var machine = BuildCamera(sensor: new FlatSensor(value: value));
         var cartridge = Cartridge(machine: machine);
 
         Configure(
             cartridge: cartridge,
-            gain: gain,
-            exposure: exposure,
+            dither: dither,
             edge: false,
             edgeRatio: 0x00,
-            dither: dither
+            exposure: exposure,
+            gain: gain
         );
         Trigger(
-            machine: machine,
-            cartridge: cartridge
+            cartridge: cartridge,
+            machine: machine
         );
 
         return ReadImage(cartridge: cartridge);
     }
-
     // Selects the camera block and writes the M64282FP registers (gain/edge flag, 16-bit exposure, edge ratio, and the
     // 48-byte dither matrix) — everything except the shoot trigger.
     private static void Configure(CameraCartridge cartridge, byte gain, int exposure, bool edge, byte edgeRatio, byte[] dither) {
@@ -397,17 +390,17 @@ internal sealed class CameraCaptureStage : IPostStage {
         );
         cartridge.WriteRam(
             address: 0xA001,
-            value: (byte)((gain & 0x1F) | (edge
+            value: ((byte)((gain & 0x1F) | (edge
             ? 0xE0
-            : 0x00))
+            : 0x00)))
         );
         cartridge.WriteRam(
             address: 0xA002,
-            value: (byte)((exposure >> 8) & 0xFF)
+            value: ((byte)((exposure >> 8) & 0xFF))
         );
         cartridge.WriteRam(
             address: 0xA003,
-            value: (byte)(exposure & 0xFF)
+            value: ((byte)(exposure & 0xFF))
         );
         cartridge.WriteRam(
             address: 0xA004,
@@ -416,7 +409,7 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         for (var index = 0; (index < DitherByteCount); ++index) {
             cartridge.WriteRam(
-                address: (ushort)(0xA006 + index),
+                address: ((ushort)(0xA006 + index)),
                 value: dither[index]
             );
         }
@@ -439,7 +432,6 @@ internal sealed class CameraCaptureStage : IPostStage {
 
         return cartridge.ReadRam(address: 0xA000);
     }
-
     // Reads the deposited image back through the RAM window (camera block deselected, RAM enabled, bank 0).
     private static byte[] ReadImage(CameraCartridge cartridge) {
         cartridge.WriteControl(
@@ -454,7 +446,7 @@ internal sealed class CameraCaptureStage : IPostStage {
         var image = new byte[SensorImage.TiledByteCount];
 
         for (var index = 0; (index < image.Length); ++index) {
-            image[index] = cartridge.ReadRam(address: (ushort)((MemoryMap.ExternalRamStart + SensorImage.RamOffset) + index));
+            image[index] = cartridge.ReadRam(address: ((ushort)((MemoryMap.ExternalRamStart + SensorImage.RamOffset) + index)));
         }
 
         return image;

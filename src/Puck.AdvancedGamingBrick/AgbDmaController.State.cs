@@ -25,7 +25,6 @@ public sealed partial class AgbDmaController : ISnapshotable {
         writer.WriteBoolean(value: m_running);
         writer.WriteInt32(value: m_activeChannel);
     }
-
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);

@@ -4,7 +4,7 @@ namespace Puck.World.Server;
 
 /// <summary>Which gate of <see cref="WorldServer.TryAdmitMutation"/> decided a mutation's admission. One member per
 /// distinct way the one admission predicate can answer, so a caller maps a decided rule onto its own refusal
-/// vocabulary (the addon seam's <see cref="AddonMutateRefusal"/>, the apply path's loud stderr line) instead of
+/// vocabulary (the addon seam's <c>Addons.AddonMutateRefusal</c>, the apply path's loud stderr line) instead of
 /// re-deciding the rule for itself.</summary>
 public enum WorldMutationAdmissionRule : byte {
     /// <summary>Every gate cleared — the mutation may proceed (and its dispatch has been charged, when metered).</summary>
@@ -30,7 +30,6 @@ public enum WorldMutationAdmissionRule : byte {
     /// <summary>Denied — the untrusted principal's per-tick dispatch budget for this section is spent.</summary>
     BudgetExhausted,
 }
-
 /// <summary>The decided outcome of <see cref="WorldServer.TryAdmitMutation"/> — which rule fired and the row-level
 /// evidence behind it, produced inside the decision so a caller's narration can never disagree with the door (the
 /// same posture <see cref="GrantVerdict"/> carries for a bare capability check).</summary>

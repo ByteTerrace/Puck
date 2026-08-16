@@ -20,7 +20,8 @@ public static class UnicodeCodePointRangeExpander {
             value: "U+"
         )
             ? token[2..]
-            : token);
+            : token
+        );
 
         if (!int.TryParse(
             provider: CultureInfo.InvariantCulture,
@@ -31,7 +32,10 @@ public static class UnicodeCodePointRangeExpander {
             throw new ArgumentException(message: $"Unsupported allowed code point token '{token}'. Use U+XXXX or U+XXXX-U+YYYY, or '*' to probe all BMP code points (U+0000-U+FFFF).");
         }
 
-        if ((codePoint < 0) || (codePoint > 0x10FFFF)) {
+        if (
+            (codePoint < 0) ||
+            (codePoint > 0x10FFFF)
+        ) {
             // Eight hex digits with the high bit set parse to a negative int.
             throw new ArgumentException(message: $"Code point '{token}' exceeded the Unicode maximum U+10FFFF.");
         }

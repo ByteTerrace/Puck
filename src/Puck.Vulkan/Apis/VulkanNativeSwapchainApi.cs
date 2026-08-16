@@ -64,7 +64,7 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
                     ? IdentitySurfaceTransform
                     : request.PreTransform),
                 PresentMode = request.PresentMode,
-                QueueFamilyIndexCount = (uint)request.QueueFamilyIndices.Count,
+                QueueFamilyIndexCount = ((uint)request.QueueFamilyIndices.Count),
                 SType = VkStructureTypeSwapchainCreateInfoKhr,
                 Surface = request.SurfaceHandle,
             };
@@ -110,8 +110,8 @@ public unsafe sealed class VulkanNativeSwapchainApi : IVulkanSwapchainApi {
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateSwapchainKhr = (delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSwapchainKHR"u8),
-                DestroySwapchainKhr = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySwapchainKHR"u8),
+                CreateSwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, in VkSwapchainCreateInfoKhr, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSwapchainKHR"u8)),
+                DestroySwapchainKhr = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySwapchainKHR"u8)),
             }
         );
     }

@@ -20,7 +20,6 @@ namespace Puck.AdvancedGamingBrick;
 public sealed partial class AgbTimerController : IAgbTimerController {
     // Prescaler period mask per the 2-bit control field: divide by 1 / 64 / 256 / 1024.
     private static readonly long[] Mask = { 0, 63, 255, 1023 };
-
     // log2 of the prescaler period (1 / 64 / 256 / 1024), so a clock >> Shift is that clock's step index.
     private static readonly int[] Shift = { 0, 6, 8, 10 };
 
@@ -37,7 +36,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
     // One scheduled overflow event per timer; queued only while that timer is an enabled prescaler in scheduled mode.
     private readonly AgbScheduler.Event[] m_overflowEvent = new AgbScheduler.Event[4];
-
     // Live timer state (post-latch). period is the 16-bit counter games read back (authoritative for cascade,
     // disabled, and in-window timers; a scheduled prescaler timer's counter is CounterAt() from its anchor instead).
     private readonly int[] m_period = new int[4];
@@ -48,20 +46,18 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     private readonly bool[] m_cascade = new bool[4];
     private readonly bool[] m_pending = new bool[4];
     private readonly int[] m_irqCountdown = new int[4]; // >0 while an overflow's IRQ request is in flight (cycles left)
-
     // Closed-form anchor per prescaler timer: a read at absolute clock m_anchorClock returns m_anchorValue, and each
     // prescaler boundary crossed since then adds one step. Set at every overflow and at each per-cycle→scheduled
     // transition; unused while a timer is cascade/disabled/in-window.
     private readonly long[] m_anchorClock = new long[4];
     private readonly int[] m_anchorValue = new int[4];
-
     // Latched (deferred-by-one-cycle) control/reload writes, applied by StepLatch when m_timerLatched is set.
     private readonly bool[] m_controlFlag = new bool[4];
     private readonly int[] m_latchControl = new int[4];
     private readonly int[] m_reloadFlags = new int[4]; // bit0 = low byte pending, bit1 = high byte pending
     private readonly int[] m_latchReload = new int[4];
-    private bool m_timerLatched;
 
+    private bool m_timerLatched;
     // true = event-scheduled (steady) mode: prescaler timers advance via overflow events and are read closed-form.
     // false = per-cycle window: RunCycle drives the latch/IRQ machinery. The bus flips this via EnsureScheduled /
     // EnsurePerCycle at each span boundary; a freshly constructed block is per-cycle until the bus schedules it.
@@ -84,8 +80,8 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
             m_overflowEvent[index] = new AgbScheduler.Event {
                 Callback = (cyclesLate) => OverflowEvent(
-                timer: timer,
-                cyclesLate: cyclesLate
+                cyclesLate: cyclesLate,
+                timer: timer
             ),
             };
         }
@@ -99,15 +95,15 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) {
-        var timer = (int)((offset - 0x100u) >> 2);
+        var timer = ((int)((offset - 0x100u) >> 2));
 
         if ((offset & 0x2u) == 0u) {
             // CNT_L: the live counter (closed-form for a scheduled prescaler timer, materialized otherwise).
-            return (ushort)LiveCounter(timer: timer);
+            return ((ushort)LiveCounter(timer: timer));
         }
 
         // CNT_H: the committed control fields.
-        return (ushort)(PrescaleField(frequency: m_frequency[timer])
+        return ((ushort)(PrescaleField(frequency: m_frequency[timer])
             | (m_cascade[timer]
             ? 0x4u
             : 0u)
@@ -116,12 +112,11 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             : 0u)
             | (m_enable[timer]
             ? 0x80u
-            : 0u));
+            : 0u)));
     }
-
     /// <inheritdoc/>
     public void WriteRegister(uint offset, ushort value) {
-        var timer = (int)((offset - 0x100u) >> 2);
+        var timer = ((int)((offset - 0x100u) >> 2));
 
         if ((offset & 0x2u) == 0u) {
             // CNT_L write: latch both reload bytes; applied next cycle.
@@ -135,7 +130,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
         m_timerLatched = true;
     }
-
     /// <inheritdoc/>
     public void EnsureScheduled(long now) {
         // Enter event-scheduled mode: anchor every running prescaler timer at the current clock and queue its next
@@ -160,7 +154,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
         m_scheduled = true;
     }
-
     /// <inheritdoc/>
     public void EnsurePerCycle(long now) {
         // Leave event-scheduled mode: materialize every running prescaler timer's closed-form counter into its live
@@ -176,8 +169,8 @@ public sealed partial class AgbTimerController : IAgbTimerController {
                 !m_cascade[timer]
             ) {
                 m_period[timer] = CounterAt(
-                    timer: timer,
-                    now: now
+                    now: now,
+                    timer: timer
                 );
             }
 
@@ -186,7 +179,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
         m_scheduled = false;
     }
-
     /// <inheritdoc/>
     public void RunCycle(long clock) {
         // The per-cycle driver for the latch/IRQ windows (the bus calls EnsurePerCycle before entering them). Per the
@@ -199,20 +191,20 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         StepIrqDelay(timer: 3);
 
         Run(
-            timer: 0,
-            clock: clock
+            clock: clock,
+            timer: 0
         );
         Run(
-            timer: 1,
-            clock: clock
+            clock: clock,
+            timer: 1
         );
         Run(
-            timer: 2,
-            clock: clock
+            clock: clock,
+            timer: 2
         );
         Run(
-            timer: 3,
-            clock: clock
+            clock: clock,
+            timer: 3
         );
 
         ReloadLatch(timer: 0);
@@ -245,7 +237,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
         return m_period[timer] & 0xFFFF;
     }
-
     // The prescaler counter at absolute clock 'now', from the anchor: read(m_anchorClock) == m_anchorValue, and every
     // prescaler boundary in (m_anchorClock, now) adds one step. This is the exact closed form of the per-cycle Run —
     // it counts the same global-clock boundaries — and never wraps within one scheduled interval (the overflow event
@@ -254,9 +245,8 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         var shift = Shift[m_frequency[timer]];
         var steps = (((now - 1L) >> shift) - ((m_anchorClock[timer] - 1L) >> shift));
 
-        return (int)(m_anchorValue[timer] + steps) & 0xFFFF;
+        return ((int)(m_anchorValue[timer] + steps)) & 0xFFFF;
     }
-
     // Queue timer t's next overflow. The overflow STEP lands on the aligned clock where the counter wraps to reload;
     // the event fires the cycle after (overflow+1), matching the per-cycle model where a step at clock C becomes
     // visible to a read at C+1.
@@ -272,7 +262,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             when: (overflowClock + 1L)
         );
     }
-
     // The scheduled overflow: fired the cycle the wrap becomes visible. Does exactly what the per-cycle Step does on
     // wrap — reload, arm the delayed IRQ, clock Direct Sound, ripple a cascade — then re-anchors (read(when) ==
     // reload) and queues the next overflow. The APU flag and IRQ arm are consumed later (RunPendingDma / the
@@ -307,7 +296,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
 
         ScheduleOverflow(timer: timer);
     }
-
     // Overflow-IRQ delay: count an armed request down to its fire cycle, then assert the flag on the interrupt
     // controller. The controller's own two-stage synchronizer adds the register-visibility/recognition latency on top.
     private void StepIrqDelay(int timer) {
@@ -315,10 +303,9 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             (m_irqCountdown[timer] != 0) &&
             (--m_irqCountdown[timer] == 0)
         ) {
-            m_interrupts.Request(source: (InterruptSource)((int)InterruptSource.Timer0 + timer));
+            m_interrupts.Request(source: ((InterruptSource)(((int)InterruptSource.Timer0) + timer)));
         }
     }
-
     // Per-cycle timer run: a prescaler-driven timer steps when the global clock hits its boundary.
     private void Run(int timer, long clock) {
         if (
@@ -332,7 +319,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             Step(timer: timer);
         }
     }
-
     // Timer step: increment; on overflow reload, raise the IRQ, clock Direct Sound, and
     // cascade synchronously into the timer above.
     private void Step(int timer) {
@@ -366,7 +352,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             Step(timer: (timer + 1));
         }
     }
-
     // Reload-latch: apply a pending enable reload one cycle after it was armed.
     private void ReloadLatch(int timer) {
         if (m_pending[timer]) {
@@ -374,7 +359,6 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             m_pending[timer] = false;
         }
     }
-
     // Step-latch: commit latched reload bytes and the latched control word; a fresh
     // 0→1 enable arms the reload that ReloadLatch applies on the following cycle.
     private void StepLatch(int timer) {

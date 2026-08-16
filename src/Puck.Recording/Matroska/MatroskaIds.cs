@@ -6,90 +6,76 @@ namespace Puck.Recording.Matroska;
 /// natural byte count). Values are from the Matroska/WebM specification.
 /// </summary>
 internal static class MatroskaIds {
-    // EBML header.
-    public const uint Ebml = 0x1A45DFA3;
-    public const uint DocType = 0x4282;
-    public const uint DocTypeReadVersion = 0x4285;
-    public const uint DocTypeVersion = 0x4287;
-    public const uint EbmlMaxIdLength = 0x42F2;
-    public const uint EbmlMaxSizeLength = 0x42F3;
-    public const uint EbmlReadVersion = 0x42F7;
-    public const uint EbmlVersion = 0x4286;
-
-    // Segment and its top-level children.
-    public const uint Segment = 0x18538067;
-    public const uint Cluster = 0x1F43B675;
-    public const uint Cues = 0x1C53BB6B;
-    public const uint Info = 0x1549A966;
-    public const uint SeekHead = 0x114D9B74;
-    public const uint Tracks = 0x1654AE6B;
-
-    // SeekHead / Seek (the index of top-level element positions a demuxer reads before it parses any cluster).
-    public const uint Seek = 0x4DBB;
-    public const uint SeekId = 0x53AB;
-    public const uint SeekPosition = 0x53AC;
-
-    /// <summary>Padding: it occupies reserved space a demuxer must skip, used to retire a Seek entry whose target
-    /// was never written without moving anything that follows it.</summary>
-    public const uint Void = 0xEC;
-
-    // Info.
-    public const uint TimestampScale = 0x2AD7B1;
-    public const uint Duration = 0x4489;
-    public const uint MuxingApp = 0x4D80;
-    public const uint WritingApp = 0x5741;
-
-    // Tracks / TrackEntry.
-    public const uint TrackEntry = 0xAE;
-    public const uint CodecDelay = 0x56AA;
-    public const uint CodecId = 0x86;
-    public const uint CodecPrivate = 0x63A2;
-    public const uint DefaultDuration = 0x23E383;
-    public const uint FlagLacing = 0x9C;
-    public const uint SeekPreRoll = 0x56BB;
-    public const uint TrackNumber = 0xD7;
-    public const uint TrackType = 0x83;
-    public const uint TrackUid = 0x73C5;
-
-    // Video.
-    public const uint Video = 0xE0;
-    public const uint PixelHeight = 0xBA;
-    public const uint PixelWidth = 0xB0;
-
-    // Video / Colour (BT.709 limited-range signalling for the encoded stream).
-    public const uint Colour = 0x55B0;
-    public const uint ColourMatrixCoefficients = 0x55B1;
-    public const uint ColourPrimaries = 0x55BB;
-    public const uint ColourRange = 0x55B9;
-    public const uint ColourTransferCharacteristics = 0x55BA;
-
-    /// <summary>The Matroska <see cref="ColourRange"/> value for broadcast (limited/studio-swing) range.</summary>
-    public const byte ColourRangeLimited = 1;
-
-    /// <summary>The Matroska colour-coefficient value for ITU-R BT.709 (matrix, transfer, and primaries).</summary>
-    public const byte ColourBt709 = 1;
-
     // Audio.
     public const uint Audio = 0xE1;
     public const uint BitDepth = 0x6264;
     public const uint Channels = 0x9F;
-    public const uint SamplingFrequency = 0xB5;
-
-    // Cluster.
-    public const uint Timestamp = 0xE7;
-    public const uint SimpleBlock = 0xA3;
-
+    public const uint Cluster = 0x1F43B675;
+    public const uint CodecDelay = 0x56AA;
+    public const uint CodecId = 0x86;
+    public const uint CodecPrivate = 0x63A2;
+    // Video / Colour (BT.709 limited-range signalling for the encoded stream).
+    public const uint Colour = 0x55B0;
+    /// <summary>The Matroska colour-coefficient value for ITU-R BT.709 (matrix, transfer, and primaries).</summary>
+    public const byte ColourBt709 = 1;
+    public const uint ColourMatrixCoefficients = 0x55B1;
+    public const uint ColourPrimaries = 0x55BB;
+    public const uint ColourRange = 0x55B9;
+    /// <summary>The Matroska <see cref="ColourRange"/> value for broadcast (limited/studio-swing) range.</summary>
+    public const byte ColourRangeLimited = 1;
+    public const uint ColourTransferCharacteristics = 0x55BA;
+    public const uint CueClusterPosition = 0xF1;
     // Cues.
     public const uint CuePoint = 0xBB;
-    public const uint CueClusterPosition = 0xF1;
     public const uint CueRelativePosition = 0xF0;
     public const uint CueTime = 0xB3;
     public const uint CueTrack = 0xF7;
     public const uint CueTrackPositions = 0xB7;
-
-    /// <summary>The video <see cref="TrackType"/> value.</summary>
-    public const byte TrackTypeVideo = 1;
-
+    public const uint Cues = 0x1C53BB6B;
+    public const uint DefaultDuration = 0x23E383;
+    public const uint DocType = 0x4282;
+    public const uint DocTypeReadVersion = 0x4285;
+    public const uint DocTypeVersion = 0x4287;
+    public const uint Duration = 0x4489;
+    // EBML header.
+    public const uint Ebml = 0x1A45DFA3;
+    public const uint EbmlMaxIdLength = 0x42F2;
+    public const uint EbmlMaxSizeLength = 0x42F3;
+    public const uint EbmlReadVersion = 0x42F7;
+    public const uint EbmlVersion = 0x4286;
+    public const uint FlagLacing = 0x9C;
+    public const uint Info = 0x1549A966;
+    public const uint MuxingApp = 0x4D80;
+    public const uint PixelHeight = 0xBA;
+    public const uint PixelWidth = 0xB0;
+    public const uint SamplingFrequency = 0xB5;
+    // SeekHead / Seek (the index of top-level element positions a demuxer reads before it parses any cluster).
+    public const uint Seek = 0x4DBB;
+    public const uint SeekHead = 0x114D9B74;
+    public const uint SeekId = 0x53AB;
+    public const uint SeekPosition = 0x53AC;
+    public const uint SeekPreRoll = 0x56BB;
+    // Segment and its top-level children.
+    public const uint Segment = 0x18538067;
+    public const uint SimpleBlock = 0xA3;
+    // Cluster.
+    public const uint Timestamp = 0xE7;
+    // Info.
+    public const uint TimestampScale = 0x2AD7B1;
+    // Tracks / TrackEntry.
+    public const uint TrackEntry = 0xAE;
+    public const uint TrackNumber = 0xD7;
+    public const uint TrackType = 0x83;
     /// <summary>The audio <see cref="TrackType"/> value.</summary>
     public const byte TrackTypeAudio = 2;
+    /// <summary>The video <see cref="TrackType"/> value.</summary>
+    public const byte TrackTypeVideo = 1;
+    public const uint TrackUid = 0x73C5;
+    public const uint Tracks = 0x1654AE6B;
+    // Video.
+    public const uint Video = 0xE0;
+    /// <summary>Padding: it occupies reserved space a demuxer must skip, used to retire a Seek entry whose target
+    /// was never written without moving anything that follows it.</summary>
+    public const uint Void = 0xEC;
+    public const uint WritingApp = 0x5741;
 }

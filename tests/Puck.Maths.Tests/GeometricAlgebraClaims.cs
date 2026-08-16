@@ -10,11 +10,11 @@ namespace Puck.Maths.Tests;
 /// combinator expects, exactly as <see cref="CoreSurfaceClaims"/> does.
 /// </summary>
 internal static class GeometricAlgebraClaims {
-    private static readonly GeometricAlgebra ComplexAlgebra = GeometricAlgebra.Create(positiveCount: 0, negativeCount: 1, degenerateCount: 0);
-    private static readonly GeometricAlgebra SplitAlgebra = GeometricAlgebra.Create(positiveCount: 1, negativeCount: 0, degenerateCount: 0);
-    private static readonly GeometricAlgebra DualAlgebra = GeometricAlgebra.Create(positiveCount: 0, negativeCount: 0, degenerateCount: 1);
-    private static readonly GeometricAlgebra QuaternionAlgebra = GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 0);
-    private static readonly GeometricAlgebra MotorAlgebra = GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 1);
+    private static readonly GeometricAlgebra ComplexAlgebra = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 1, positiveCount: 0);
+    private static readonly GeometricAlgebra SplitAlgebra = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 1);
+    private static readonly GeometricAlgebra DualAlgebra = GeometricAlgebra.Create(degenerateCount: 1, negativeCount: 0, positiveCount: 0);
+    private static readonly GeometricAlgebra QuaternionAlgebra = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 3);
+    private static readonly GeometricAlgebra MotorAlgebra = GeometricAlgebra.Create(degenerateCount: 1, negativeCount: 0, positiveCount: 3);
     private static readonly FixedQ4816 Half = FixedQ4816.FromRawBits(value: 32768L);
 
     // ================================ (1)-(3) the planar trio ================================
@@ -30,17 +30,14 @@ internal static class GeometricAlgebraClaims {
 
         return (product[0].Value, product[1].Value);
     }
-
     public static (long U, long V) FixedComplexLanes(long u1, long v1, long u2, long v2) {
-        var product = new FixedComplex(Real: FixedQ4816.FromRawBits(value: u1), Imaginary: FixedQ4816.FromRawBits(value: v1)) *
-            new FixedComplex(Real: FixedQ4816.FromRawBits(value: u2), Imaginary: FixedQ4816.FromRawBits(value: v2));
+        var product = (new FixedComplex(Real: FixedQ4816.FromRawBits(value: u1), Imaginary: FixedQ4816.FromRawBits(value: v1)) *
+            new FixedComplex(Real: FixedQ4816.FromRawBits(value: u2), Imaginary: FixedQ4816.FromRawBits(value: v2)));
 
         return (product.Real.Value, product.Imaginary.Value);
     }
-
     public static (long U, long V) ComplexOracleWitness(long u1, long v1, long u2, long v2) =>
-        Oracles.QuadraticMultiply(pRaw: 0L, qRaw: -65536L, u1: u1, v1: v1, u2: u2, v2: v2);
-
+        Oracles.QuadraticMultiply(pRaw: 0L, qRaw: -65536L, u1: u1, u2: u2, v1: v1, v2: v2);
     public static (long U, long V) GeometricPlanarSplitSubject(long u1, long v1, long u2, long v2) {
         var product = SplitAlgebra.GeometricProduct(
             left: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u1), FixedQ4816.FromRawBits(value: v1)]),
@@ -49,17 +46,14 @@ internal static class GeometricAlgebraClaims {
 
         return (product[0].Value, product[1].Value);
     }
-
     public static (long U, long V) FixedSplitLanes(long u1, long v1, long u2, long v2) {
-        var product = new FixedSplit(U: FixedQ4816.FromRawBits(value: u1), V: FixedQ4816.FromRawBits(value: v1)) *
-            new FixedSplit(U: FixedQ4816.FromRawBits(value: u2), V: FixedQ4816.FromRawBits(value: v2));
+        var product = (new FixedSplit(U: FixedQ4816.FromRawBits(value: u1), V: FixedQ4816.FromRawBits(value: v1)) *
+            new FixedSplit(U: FixedQ4816.FromRawBits(value: u2), V: FixedQ4816.FromRawBits(value: v2)));
 
         return (product.U.Value, product.V.Value);
     }
-
     public static (long U, long V) SplitOracleWitness(long u1, long v1, long u2, long v2) =>
-        Oracles.QuadraticMultiply(pRaw: 0L, qRaw: 65536L, u1: u1, v1: v1, u2: u2, v2: v2);
-
+        Oracles.QuadraticMultiply(pRaw: 0L, qRaw: 65536L, u1: u1, u2: u2, v1: v1, v2: v2);
     public static (long U, long V) GeometricPlanarDualSubject(long u1, long v1, long u2, long v2) {
         var product = DualAlgebra.GeometricProduct(
             left: Multivector.FromCoefficients(coefficients: [FixedQ4816.FromRawBits(value: u1), FixedQ4816.FromRawBits(value: v1)]),
@@ -68,17 +62,14 @@ internal static class GeometricAlgebraClaims {
 
         return (product[0].Value, product[1].Value);
     }
-
     public static (long U, long V) FixedDualLanes(long u1, long v1, long u2, long v2) {
-        var product = new FixedDual<FixedQ4816>(Real: FixedQ4816.FromRawBits(value: u1), Dual: FixedQ4816.FromRawBits(value: v1)) *
-            new FixedDual<FixedQ4816>(Real: FixedQ4816.FromRawBits(value: u2), Dual: FixedQ4816.FromRawBits(value: v2));
+        var product = (new FixedDual<FixedQ4816>(Real: FixedQ4816.FromRawBits(value: u1), Dual: FixedQ4816.FromRawBits(value: v1)) *
+            new FixedDual<FixedQ4816>(Real: FixedQ4816.FromRawBits(value: u2), Dual: FixedQ4816.FromRawBits(value: v2)));
 
         return (product.Real.Value, product.Dual.Value);
     }
-
     public static (long U, long V) DualOracleWitness(long u1, long v1, long u2, long v2) =>
-        Oracles.QuadraticMultiply(pRaw: 0L, qRaw: 0L, u1: u1, v1: v1, u2: u2, v2: v2);
-
+        Oracles.QuadraticMultiply(pRaw: 0L, qRaw: 0L, u1: u1, u2: u2, v1: v1, v2: v2);
     // ================================ (4) the quaternion even subalgebra ================================
     // The even (3,0,0) embedding of two quaternions reproduces the Hamilton product, full raw range, and never leaves
     // the even subalgebra. GeometricQuaternionEvenFirst also cross-checks its recovered quaternion against an exact
@@ -113,8 +104,7 @@ internal static class GeometricAlgebraClaims {
 
         if ((recovered.X.Value != oracle.X) || (recovered.Y.Value != oracle.Y) || (recovered.Z.Value != oracle.Z) || (recovered.W.Value != oracle.W)) {
             throw new InvalidOperationException(
-                message: $"the even (3,0,0) embedding of {a} and {b} recovered ({recovered.X.Value},{recovered.Y.Value},{recovered.Z.Value},{recovered.W.Value}) " +
-                    $"but the independent exact Hamilton-product oracle gives ({oracle.X},{oracle.Y},{oracle.Z},{oracle.W})"
+                message: ((string)$"the even (3,0,0) embedding of {a} and {b} recovered ({recovered.X.Value},{recovered.Y.Value},{recovered.Z.Value},{recovered.W.Value}) but the independent exact Hamilton-product oracle gives ({oracle.X},{oracle.Y},{oracle.Z},{oracle.W})")
             );
         }
 
@@ -123,7 +113,6 @@ internal static class GeometricAlgebraClaims {
         result[2] = recovered.Z.Value;
         result[3] = recovered.W.Value;
     }
-
     public static void GeometricQuaternionEvenSecond(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
         var a = SweptQuaternion(raw: left);
         var b = SweptQuaternion(raw: right);
@@ -144,13 +133,11 @@ internal static class GeometricAlgebraClaims {
             Z: FixedQ4816.FromRawBits(value: ExcludeUnembeddableMinValue(raw: raw[2])),
             W: FixedQ4816.FromRawBits(value: raw[3])
         );
-
     // FixedQ4816.MinValue negates to itself (wraps) rather than to the unrepresentable +2^47, so a raw of exactly
     // long.MinValue on a lane this twin's embedding negates (X or Z) is folded one raw unit onto MinValue+1, whose
     // negation is exact. See the ENVELOPE note above GeometricQuaternionEvenFirst.
     private static long ExcludeUnembeddableMinValue(long raw) =>
         ((raw == long.MinValue) ? (raw + 1L) : raw);
-
     // The embedding of a quaternion into the even subalgebra of (3,0,0): scalar + the three Euclidean bivectors,
     // i ↔ -e23, j ↔ e13, k ↔ -e12.
     private static Multivector QuaternionToEven(FixedQuaternion value) {
@@ -163,10 +150,8 @@ internal static class GeometricAlgebraClaims {
 
         return result;
     }
-
     private static FixedQuaternion EvenToQuaternion(Multivector value) =>
         new(X: -value[0b0110], Y: value[0b0101], Z: -value[0b0011], W: value[0b0000]);
-
     // An independent, exact-BigInteger Hamilton-product reference: the same four-term formula
     // FixedQuaternion.operator* implements, transcribed once more here so the derivation is written down twice, but
     // computed with no call into FixedQuaternion or GeometricAlgebra and rounded through Oracles.RoundDyadic (shift
@@ -178,7 +163,7 @@ internal static class GeometricAlgebraClaims {
         BigInteger rx = right.X.Value, ry = right.Y.Value, rz = right.Z.Value, rw = right.W.Value;
 
         return (
-            X: Oracles.RoundDyadic(exact: (((lw * rx) + (lx * rw) + (ly * rz)) - (lz * ry)), shift: 16),
+            X: Oracles.RoundDyadic(exact: ((((lw * rx) + (lx * rw)) + (ly * rz)) - (lz * ry)), shift: 16),
             Y: Oracles.RoundDyadic(exact: ((((lw * ry) - (lx * rz)) + (ly * rw)) + (lz * rx)), shift: 16),
             Z: Oracles.RoundDyadic(exact: ((((lw * rz) + (lx * ry)) - (ly * rx)) + (lz * rw)), shift: 16),
             W: Oracles.RoundDyadic(exact: ((((lw * rw) - (lx * rx)) - (ly * ry)) - (lz * rz)), shift: 16)
@@ -236,12 +221,10 @@ internal static class GeometricAlgebraClaims {
             ? FixedQuaternion.Identity
             : candidate.Normalize());
     }
-
     // A raw folded onto the 8-fractional-bit sublattice within ±2000 integer units — every pairwise product of two
     // such values is exact in Q16.
     private static FixedQ4816 ExactFixed(long raw) =>
-        FixedQ4816.FromRawBits(value: ((((raw % 4001L) + 4001L) % 4001L) - 2000L) * 256L);
-
+        FixedQ4816.FromRawBits(value: (((((raw % 4001L) + 4001L) % 4001L) - 2000L) * 256L));
     // The translator by t: the exponential of the null bivector (t/2)·(e14 + e24 + e34).
     private static Multivector Translator(FixedVector3 translation) {
         var bivector = new Multivector();
@@ -252,12 +235,10 @@ internal static class GeometricAlgebraClaims {
 
         return MotorAlgebra.Exponential(bivector: bivector);
     }
-
     // The motor translator·rotor: rotation applied first (inner), translation second (outer), matching
     // FixedRigidTransform.FromRotationTranslation.
     private static Multivector Motor(FixedQuaternion rotation, FixedVector3 translation) =>
         MotorAlgebra.GeometricProduct(left: Translator(translation: translation), right: QuaternionToEven(value: rotation));
-
     // Embeds a Euclidean point as the (3,0,1) trivector, sandwiches it, and recovers the moved point.
     private static FixedVector3 ApplySandwich(Multivector motor, FixedVector3 point) {
         var embedded = new Multivector();
@@ -272,7 +253,6 @@ internal static class GeometricAlgebraClaims {
 
         return new(X: (-moved[0b1110] / weight), Y: (moved[0b1101] / weight), Z: (-moved[0b1011] / weight));
     }
-
     private static long RawError(FixedVector3 actual, FixedVector3 expected) =>
         Math.Max(
             val1: Math.Abs(value: (actual.X.Value - expected.X.Value)),
@@ -326,10 +306,10 @@ internal static class GeometricAlgebraClaims {
         var sum = new Multivector();
 
         for (var grade = 0; (grade <= MotorAlgebra.GeneratorCount); ++grade) {
-            var projected = MotorAlgebra.GradeProjection(value: mv, grade: grade);
+            var projected = MotorAlgebra.GradeProjection(grade: grade, value: mv);
 
             for (var lane = 0; (lane < n); ++lane) {
-                var isThisGrade = (BitOperations.PopCount(value: (uint)lane) == grade);
+                var isThisGrade = (BitOperations.PopCount(value: ((uint)lane)) == grade);
 
                 if (isThisGrade) {
                     if (projected[lane].Value != mv[lane].Value) { return $"GradeProjection(grade={grade}) altered blade {lane}"; }
@@ -390,7 +370,6 @@ internal static class GeometricAlgebraClaims {
 
         return (scalar, other);
     }
-
     private static Multivector Blades(params (int Lane, long Raw)[] lanes) {
         var result = new Multivector();
 
@@ -406,17 +385,17 @@ internal static class GeometricAlgebraClaims {
 
     public static string? CliffordExponentialDomainSurface() {
         var accepted = new (string Name, GeometricAlgebra Algebra, Multivector Bivector)[] {
-            ("circular (2,0,0)", GeometricAlgebra.Create(positiveCount: 2, negativeCount: 0, degenerateCount: 0), Blades((0b0011, 32768L))),
-            ("circular (2,0,0) unit", GeometricAlgebra.Create(positiveCount: 2, negativeCount: 0, degenerateCount: 0), Blades((0b0011, 65536L))),
-            ("circular (0,2,0)", GeometricAlgebra.Create(positiveCount: 0, negativeCount: 2, degenerateCount: 0), Blades((0b0011, 49152L))),
-            ("hyperbolic (1,1,0)", GeometricAlgebra.Create(positiveCount: 1, negativeCount: 1, degenerateCount: 0), Blades((0b0011, 32768L))),
-            ("hyperbolic (1,1,0) unit", GeometricAlgebra.Create(positiveCount: 1, negativeCount: 1, degenerateCount: 0), Blades((0b0011, 65536L))),
-            ("degenerate (1,0,1)", GeometricAlgebra.Create(positiveCount: 1, negativeCount: 0, degenerateCount: 1), Blades((0b0011, 98304L))),
-            ("rotor (3,0,0)", GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 0), Blades((0b0011, 32768L), (0b0101, -16384L), (0b0110, 24576L))),
-            ("zero (3,0,0)", GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 0), Blades()),
-            ("translator (3,0,1)", GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 1), Blades((0b1001, 65536L), (0b1010, 131072L), (0b1100, -65536L))),
-            ("screw generator (3,0,1)", GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 1), Blades((0b0011, 32768L))),
-            ("zero scalar algebra", GeometricAlgebra.Create(positiveCount: 0, negativeCount: 0, degenerateCount: 0), Blades()),
+            ("circular (2,0,0)", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 2), Blades((0b0011, 32768L))),
+            ("circular (2,0,0) unit", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 2), Blades((0b0011, 65536L))),
+            ("circular (0,2,0)", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 2, positiveCount: 0), Blades((0b0011, 49152L))),
+            ("hyperbolic (1,1,0)", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 1, positiveCount: 1), Blades((0b0011, 32768L))),
+            ("hyperbolic (1,1,0) unit", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 1, positiveCount: 1), Blades((0b0011, 65536L))),
+            ("degenerate (1,0,1)", GeometricAlgebra.Create(degenerateCount: 1, negativeCount: 0, positiveCount: 1), Blades((0b0011, 98304L))),
+            ("rotor (3,0,0)", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 3), Blades((0b0011, 32768L), (0b0101, -16384L), (0b0110, 24576L))),
+            ("zero (3,0,0)", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 3), Blades()),
+            ("translator (3,0,1)", GeometricAlgebra.Create(degenerateCount: 1, negativeCount: 0, positiveCount: 3), Blades((0b1001, 65536L), (0b1010, 131072L), (0b1100, -65536L))),
+            ("screw generator (3,0,1)", GeometricAlgebra.Create(degenerateCount: 1, negativeCount: 0, positiveCount: 3), Blades((0b0011, 32768L))),
+            ("zero scalar algebra", GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 0), Blades()),
         };
 
         foreach (var (name, algebra, bivector) in accepted) {
@@ -431,13 +410,12 @@ internal static class GeometricAlgebraClaims {
             var (scalarResidual, otherResidual) = VersorResidual(algebra: algebra, value: value);
 
             if ((scalarResidual > VersorToleranceRaw) || (otherResidual > VersorToleranceRaw)) {
-                return $"exp of the in-domain bivector '{name}' is not a versor: value*Reverse(value) misses the scalar 1 by " +
-                    $"{scalarResidual} raw and carries {otherResidual} raw on a non-scalar lane, exceeding {VersorToleranceRaw}";
+                return ((string)$"exp of the in-domain bivector '{name}' is not a versor: value*Reverse(value) misses the scalar 1 by {scalarResidual} raw and carries {otherResidual} raw on a non-scalar lane, exceeding {VersorToleranceRaw}");
             }
         }
 
-        var cl300 = GeometricAlgebra.Create(positiveCount: 3, negativeCount: 0, degenerateCount: 0);
-        var cl400 = GeometricAlgebra.Create(positiveCount: 4, negativeCount: 0, degenerateCount: 0);
+        var cl300 = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 3);
+        var cl400 = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 4);
         var refused = new (string Name, GeometricAlgebra Algebra, Multivector Input)[] {
             ("grade zero", cl300, Blades((0b0000, 65536L))),
             ("grade one", cl300, Blades((0b0001, 65536L))),
@@ -476,6 +454,7 @@ internal static class GeometricAlgebraClaims {
         }
 
         var magnitude = FixedQ4816.Sqrt(value: -square[0]);
+
         var (sin, cos) = FixedQ4816.SinCos(angle: magnitude);
         var cardinal = (sin / magnitude);
         var branchValue = new Multivector();
@@ -487,8 +466,7 @@ internal static class GeometricAlgebraClaims {
         var branchResidual = VersorResidual(algebra: cl400, value: branchValue);
 
         if (branchResidual.Other <= 32768L) {
-            return $"the scalar-square branch value for the refused bivector e12+e34 was expected to fail the versor identity by " +
-                $"more than half a unit, but it misses by only {branchResidual.Other} raw — the refusal would then be over-strict";
+            return ((string)$"the scalar-square branch value for the refused bivector e12+e34 was expected to fail the versor identity by more than half a unit, but it misses by only {branchResidual.Other} raw — the refusal would then be over-strict");
         }
 
         var trueExponential = cl400.GeometricProduct(
@@ -503,13 +481,11 @@ internal static class GeometricAlgebraClaims {
         var trueResidual = VersorResidual(algebra: cl400, value: trueExponential);
 
         if ((trueResidual.Scalar > VersorToleranceRaw) || (trueResidual.Other > VersorToleranceRaw)) {
-            return $"exp(e12)*exp(e34), the true exponential of the refused bivector, is not a versor: it misses by " +
-                $"({trueResidual.Scalar}, {trueResidual.Other}) raw, exceeding {VersorToleranceRaw}";
+            return ((string)$"exp(e12)*exp(e34), the true exponential of the refused bivector, is not a versor: it misses by ({trueResidual.Scalar}, {trueResidual.Other}) raw, exceeding {VersorToleranceRaw}");
         }
 
         return null;
     }
-
     // ================================ (9) descriptor and multivector identity ================================
     // A GeometricAlgebra descriptor's identity is its signature, and equality must track behavior in both directions:
     // descriptors that compare equal compute the same thing, and descriptors that compare unequal are exhibited
@@ -529,23 +505,23 @@ internal static class GeometricAlgebraClaims {
         if (signatures.Count != 35) { return $"the signatures with at most four generators number {signatures.Count}, expected 35"; }
 
         var descriptors = signatures
-            .Select(selector: signature => GeometricAlgebra.Create(positiveCount: signature.Positive, negativeCount: signature.Negative, degenerateCount: signature.Degenerate))
+            .Select(selector: signature => GeometricAlgebra.Create(degenerateCount: signature.Degenerate, negativeCount: signature.Negative, positiveCount: signature.Positive))
             .ToArray();
 
         for (var index = 0; (index < signatures.Count); ++index) {
             var signature = signatures[index];
             var first = descriptors[index];
-            var second = GeometricAlgebra.Create(positiveCount: signature.Positive, negativeCount: signature.Negative, degenerateCount: signature.Degenerate);
+            var second = GeometricAlgebra.Create(degenerateCount: signature.Degenerate, negativeCount: signature.Negative, positiveCount: signature.Positive);
 
             if (!first.Equals(other: second)) { return $"two independently created descriptors of signature {signature} compare unequal"; }
             if (!(first == second)) { return $"operator == disagrees with Equals for signature {signature}"; }
             if (first != second) { return $"operator != disagrees with Equals for signature {signature}"; }
-            if (!first.Equals(obj: (object)second)) { return $"the boxed Equals disagrees with the typed one for signature {signature}"; }
+            if (!first.Equals(obj: ((object)second))) { return $"the boxed Equals disagrees with the typed one for signature {signature}"; }
             if (first.Equals(obj: "not a descriptor")) { return $"the descriptor of signature {signature} claims equality with a value of another type"; }
             if (first.GetHashCode() != second.GetHashCode()) { return $"two independently created descriptors of signature {signature} hash differently"; }
         }
 
-        var canonical = GeometricAlgebra.Create(positiveCount: 0, negativeCount: 0, degenerateCount: 0);
+        var canonical = GeometricAlgebra.Create(degenerateCount: 0, negativeCount: 0, positiveCount: 0);
 
         if (!default(GeometricAlgebra).Equals(other: canonical)) { return "the default descriptor is unequal to Create(0,0,0) although it behaves as it throughout the public surface"; }
         if (!canonical.Equals(other: default)) { return "Create(0,0,0) is unequal to the default descriptor, so equality is not symmetric there"; }
@@ -643,11 +619,11 @@ internal static class GeometricAlgebraClaims {
         // ---- degree 2, against BOTH QuadraticAlgebra<BigInteger> and the from-definition reference ----
         var p = Bound(raw: left[0]);
         var q = Bound(raw: left[1]);
-        var modulus2 = (BigInteger[])[-q, -p];
+        var modulus2 = ((BigInteger[])[-q, -p]);
         var mono2 = MonogenicAlgebra<BigInteger>.Create(monicModulus: modulus2);
         var quad = QuadraticAlgebra<BigInteger>.Create(p: p, q: q);
-        var a2 = (BigInteger[])[Bound(raw: left[2]), Bound(raw: left[3])];
-        var b2 = (BigInteger[])[Bound(raw: left[4]), Bound(raw: left[5])];
+        var a2 = ((BigInteger[])[Bound(raw: left[2]), Bound(raw: left[3])]);
+        var b2 = ((BigInteger[])[Bound(raw: left[4]), Bound(raw: left[5])]);
 
         if (mono2.Degree != 2) { return "MonogenicAlgebra<BigInteger> degree-2 Degree is not 2"; }
 
@@ -674,7 +650,7 @@ internal static class GeometricAlgebraClaims {
 
         var monoProduct2 = mono2.Multiply(left: elementA2, right: elementB2);
         var quadProduct = quad.Multiply(left: qa2, right: qb2);
-        var refProduct2 = MonogenicReference<BigInteger>.Multiply(modulus: modulus2, left: a2, right: b2);
+        var refProduct2 = MonogenicReference<BigInteger>.Multiply(left: a2, modulus: modulus2, right: b2);
 
         if ((monoProduct2[0] != quadProduct.U) || (monoProduct2[1] != quadProduct.V)) {
             return "degree-2 Multiply disagrees with QuadraticAlgebra<BigInteger>";
@@ -702,7 +678,7 @@ internal static class GeometricAlgebraClaims {
         const ulong Exponent = 13UL;
         var monoPower2 = mono2.CompanionPower(exponent: Exponent);
         var quadPower = quad.CompanionPower(exponent: Exponent);
-        var refPower2 = MonogenicReference<BigInteger>.CompanionPower(modulus: modulus2, exponent: Exponent);
+        var refPower2 = MonogenicReference<BigInteger>.CompanionPower(exponent: Exponent, modulus: modulus2);
 
         if ((monoPower2[0] != quadPower.U) || (monoPower2[1] != quadPower.V)) {
             return "degree-2 CompanionPower disagrees with QuadraticAlgebra<BigInteger>";
@@ -736,8 +712,8 @@ internal static class GeometricAlgebraClaims {
         var root2 = mono2.Root;
         var rootSquared = mono2.Multiply(left: root2, right: root2);
         var expectedRootSquared = mono2.Add(
-            left: mono2.Multiply(left: mono2.FromCoordinates(coordinates: (BigInteger[])[p, BigInteger.Zero]), right: root2),
-            right: mono2.FromCoordinates(coordinates: (BigInteger[])[q, BigInteger.Zero])
+            left: mono2.Multiply(left: mono2.FromCoordinates(coordinates: ((BigInteger[])[p, BigInteger.Zero])), right: root2),
+            right: mono2.FromCoordinates(coordinates: ((BigInteger[])[q, BigInteger.Zero]))
         );
 
         if ((rootSquared[0] != expectedRootSquared[0]) || (rootSquared[1] != expectedRootSquared[1])) {
@@ -745,15 +721,15 @@ internal static class GeometricAlgebraClaims {
         }
 
         // ---- degree 3, against the from-definition reference only (no QuadraticAlgebra sibling exists) ----
-        var modulus3 = (BigInteger[])[Bound(raw: left[6]), Bound(raw: left[7]), Bound(raw: right[0])];
+        var modulus3 = ((BigInteger[])[Bound(raw: left[6]), Bound(raw: left[7]), Bound(raw: right[0])]);
         var mono3 = MonogenicAlgebra<BigInteger>.Create(monicModulus: modulus3);
-        var a3 = (BigInteger[])[Bound(raw: right[1]), Bound(raw: right[2]), Bound(raw: right[3])];
-        var b3 = (BigInteger[])[Bound(raw: right[4]), Bound(raw: right[5]), Bound(raw: right[6])];
+        var a3 = ((BigInteger[])[Bound(raw: right[1]), Bound(raw: right[2]), Bound(raw: right[3])]);
+        var b3 = ((BigInteger[])[Bound(raw: right[4]), Bound(raw: right[5]), Bound(raw: right[6])]);
         var elementA3 = mono3.FromCoordinates(coordinates: a3);
         var elementB3 = mono3.FromCoordinates(coordinates: b3);
 
         var monoProduct3 = mono3.Multiply(left: elementA3, right: elementB3);
-        var refProduct3 = MonogenicReference<BigInteger>.Multiply(modulus: modulus3, left: a3, right: b3);
+        var refProduct3 = MonogenicReference<BigInteger>.Multiply(left: a3, modulus: modulus3, right: b3);
 
         for (var i = 0; (i < 3); ++i) {
             if (monoProduct3[i] != refProduct3[i]) { return $"degree-3 Multiply disagrees with the from-definition reference at coordinate {i}"; }
@@ -798,15 +774,15 @@ internal static class GeometricAlgebraClaims {
     // ================================ monogenic algebra: the plastic-ratio world (own basis) ================================
 
     public static string? MonogenicPlasticRatioSurface() {
-        var modulus = (BigInteger[])[BigInteger.MinusOne, BigInteger.MinusOne, BigInteger.Zero]; // x^3 - x - 1
+        var modulus = ((BigInteger[])[BigInteger.MinusOne, BigInteger.MinusOne, BigInteger.Zero]); // x^3 - x - 1
         var mono = MonogenicAlgebra<BigInteger>.Create(monicModulus: modulus);
         var powers = new MonogenicAlgebra<BigInteger>.Element[61];
 
-        for (var n = 0; (n <= 60); ++n) { powers[n] = mono.CompanionPower(exponent: (ulong)n); }
+        for (var n = 0; (n <= 60); ++n) { powers[n] = mono.CompanionPower(exponent: ((ulong)n)); }
 
         for (var n = 3; (n <= 60); ++n) {
             for (var coordinate = 0; (coordinate < 3); ++coordinate) {
-                if (powers[n][coordinate] != (powers[n - 2][coordinate] + powers[n - 3][coordinate])) {
+                if (powers[n][coordinate] != (powers[(n - 2)][coordinate] + powers[(n - 3)][coordinate])) {
                     return $"the plastic-ratio recurrence a(n)=a(n-2)+a(n-3) broke at n={n}, coordinate={coordinate}";
                 }
             }
@@ -817,11 +793,11 @@ internal static class GeometricAlgebraClaims {
         if (discriminant != -23) { return $"CharacteristicDiscriminant of x^3-x-1 is {discriminant}, expected -23"; }
 
         (BigInteger[] A, BigInteger[] B)[] samples = [
-            ((BigInteger[])[1, 0, 0], (BigInteger[])[0, 1, 0]),
-            ((BigInteger[])[2, -3, 5], (BigInteger[])[-7, 1, 4]),
-            ((BigInteger[])[0, 0, 1], (BigInteger[])[1, 1, 1]),
-            ((BigInteger[])[-13, 8, -2], (BigInteger[])[6, -11, 3]),
-            ((BigInteger[])[100, -100, 1], (BigInteger[])[-1, 1, 100]),
+            (((BigInteger[])[1, 0, 0]), ((BigInteger[])[0, 1, 0])),
+            (((BigInteger[])[2, -3, 5]), ((BigInteger[])[-7, 1, 4])),
+            (((BigInteger[])[0, 0, 1]), ((BigInteger[])[1, 1, 1])),
+            (((BigInteger[])[-13, 8, -2]), ((BigInteger[])[6, -11, 3])),
+            (((BigInteger[])[100, -100, 1]), ((BigInteger[])[-1, 1, 100])),
         ];
 
         foreach (var (aRaw, bRaw) in samples) {
@@ -844,7 +820,6 @@ internal static class GeometricAlgebraClaims {
 
         return null;
     }
-
     // ================================ monogenic algebra: what a value's identity is made of ================================
     // The library draws a deliberate line: a MonogenicAlgebra descriptor IS its modulus tail, while an Element or a
     // Projective IS its coordinate vector and carries no modulus at all — which is exactly what lets a receiver
@@ -853,24 +828,24 @@ internal static class GeometricAlgebraClaims {
     // interchangeable ACROSS moduli, and a descriptor with a different tail is not.
 
     public static string? MonogenicIdentitySurface() {
-        var tail = (BigInteger[])[BigInteger.One, BigInteger.One];
+        var tail = ((BigInteger[])[BigInteger.One, BigInteger.One]);
         var algebra = MonogenicAlgebra<BigInteger>.Create(monicModulus: tail);
-        var twin = MonogenicAlgebra<BigInteger>.Create(monicModulus: (BigInteger[])[BigInteger.One, BigInteger.One]);
+        var twin = MonogenicAlgebra<BigInteger>.Create(monicModulus: ((BigInteger[])[BigInteger.One, BigInteger.One]));
 
         if (!algebra.Equals(other: twin)) { return "two descriptors built from the same modulus tail compare unequal"; }
         if (!(algebra == twin)) { return "operator == disagrees with Equals for two descriptors of the same tail"; }
         if (algebra != twin) { return "operator != disagrees with Equals for two descriptors of the same tail"; }
         if (algebra.GetHashCode() != twin.GetHashCode()) { return "two descriptors built from the same modulus tail hash differently"; }
-        if (!algebra.Equals(obj: (object)twin)) { return "the boxed descriptor Equals disagrees with the typed one"; }
+        if (!algebra.Equals(obj: ((object)twin))) { return "the boxed descriptor Equals disagrees with the typed one"; }
         if (algebra.Equals(obj: "not a descriptor")) { return "a descriptor claims equality with a value of another type"; }
 
-        var differentTails = (BigInteger[][])[
+        var differentTails = ((BigInteger[][])[
             [BigInteger.One, BigInteger.Zero],
             [BigInteger.Zero, BigInteger.One],
             [BigInteger.One],
             [BigInteger.One, BigInteger.One, BigInteger.One],
             [BigInteger.MinusOne, BigInteger.One],
-        ];
+        ]);
 
         foreach (var other in differentTails) {
             var otherAlgebra = MonogenicAlgebra<BigInteger>.Create(monicModulus: other);
@@ -889,7 +864,7 @@ internal static class GeometricAlgebraClaims {
         if (algebra.One.GetHashCode() != algebra.One.GetHashCode()) { return "two reads of One hash differently"; }
         if (!algebra.Add(left: algebra.One, right: algebra.Zero).Equals(other: algebra.One)) { return "Add(One, Zero) is not equal to One"; }
         if (!(algebra.Add(left: algebra.One, right: algebra.Zero) == algebra.One)) { return "operator == disagrees with Equals for Add(One, Zero) and One"; }
-        if (!algebra.Zero.Equals(other: algebra.FromCoordinates(coordinates: (BigInteger[])[BigInteger.Zero, BigInteger.Zero]))) { return "Zero is not equal to the all-zero coordinate vector"; }
+        if (!algebra.Zero.Equals(other: algebra.FromCoordinates(coordinates: ((BigInteger[])[BigInteger.Zero, BigInteger.Zero])))) { return "Zero is not equal to the all-zero coordinate vector"; }
         if (!algebra.Root.Equals(other: algebra.MultiplyByRoot(value: algebra.One))) { return "Root is not equal to MultiplyByRoot(One)"; }
         if (algebra.One.Equals(other: algebra.Zero)) { return "One compares equal to Zero"; }
         if (algebra.One.Equals(obj: "not an element")) { return "an element claims equality with a value of another type"; }
@@ -905,7 +880,7 @@ internal static class GeometricAlgebraClaims {
         // THE LINE. An element carries no modulus, so the same coordinates under a different modulus are the same
         // element — the value-level face of the receiver-affinity contract, under which any degree-2 receiver
         // reinterprets a degree-2 vector as its own. The descriptors that made them stay unequal.
-        var foreign = MonogenicAlgebra<BigInteger>.Create(monicModulus: (BigInteger[])[new BigInteger(5), new BigInteger(7)]);
+        var foreign = MonogenicAlgebra<BigInteger>.Create(monicModulus: ((BigInteger[])[new BigInteger(value: 5), new BigInteger(value: 7)]));
 
         if (!algebra.One.Equals(other: foreign.One)) {
             return "One under a different modulus of the same degree compares unequal, although an element carries no modulus and every receiver reinterprets an equal-dimensional vector as its own";
@@ -915,22 +890,22 @@ internal static class GeometricAlgebraClaims {
 
         // A shorter and a longer vector are different values, so the degree is genuinely part of an element's identity
         // even though the modulus is not.
-        var shorter = MonogenicAlgebra<BigInteger>.Create(monicModulus: (BigInteger[])[BigInteger.One]);
-        var longer = MonogenicAlgebra<BigInteger>.Create(monicModulus: (BigInteger[])[BigInteger.One, BigInteger.One, BigInteger.One]);
+        var shorter = MonogenicAlgebra<BigInteger>.Create(monicModulus: ((BigInteger[])[BigInteger.One]));
+        var longer = MonogenicAlgebra<BigInteger>.Create(monicModulus: ((BigInteger[])[BigInteger.One, BigInteger.One, BigInteger.One]));
 
         if (algebra.One.Equals(other: shorter.One)) { return "a degree-2 One compares equal to a degree-1 One"; }
         if (algebra.One.Equals(other: longer.One)) { return "a degree-2 One compares equal to a degree-3 One"; }
 
         // Projective windows carry the same identity rule.
-        var window = algebra.FromWindow(window: (BigInteger[])[new BigInteger(3), new BigInteger(5)]);
-        var sameWindow = algebra.FromWindow(window: (BigInteger[])[new BigInteger(3), new BigInteger(5)]);
+        var window = algebra.FromWindow(window: ((BigInteger[])[new BigInteger(value: 3), new BigInteger(value: 5)]));
+        var sameWindow = algebra.FromWindow(window: ((BigInteger[])[new BigInteger(value: 3), new BigInteger(value: 5)]));
 
         if (!window.Equals(other: sameWindow)) { return "two windows built from the same coordinates compare unequal"; }
         if (window.GetHashCode() != sameWindow.GetHashCode()) { return "two equal windows hash differently"; }
         if (!(window == sameWindow)) { return "operator == disagrees with Equals for two equal windows"; }
         if (window.Equals(other: algebra.ProjectiveStep(window: window))) { return "a window compares equal to its own successor under ProjectiveStep"; }
         if (!algebra.ProjectiveStep(window: window).Equals(other: algebra.ProjectiveStep(window: sameWindow))) { return "ProjectiveStep of two equal windows produced unequal results"; }
-        if (!window.Equals(other: foreign.FromWindow(window: (BigInteger[])[new BigInteger(3), new BigInteger(5)]))) {
+        if (!window.Equals(other: foreign.FromWindow(window: ((BigInteger[])[new BigInteger(value: 3), new BigInteger(value: 5)])))) {
             return "a window under a different modulus of the same degree compares unequal, although a window carries no modulus";
         }
         if (!default(MonogenicAlgebra<BigInteger>.Projective).Equals(other: default)) { return "two default windows compare unequal"; }
@@ -938,21 +913,21 @@ internal static class GeometricAlgebraClaims {
 
         // A second carrier, to show the rule is the type's and not BigInteger's: the house fixed-point scalar, whose
         // degree-2 surface runs the delegating quadratic lane rather than the general one.
-        var fixedTail = (FixedQ4816[])[FixedQ4816.FromRawBits(value: 32768L), FixedQ4816.FromRawBits(value: -49152L)];
+        var fixedTail = ((FixedQ4816[])[FixedQ4816.FromRawBits(value: 32768L), FixedQ4816.FromRawBits(value: -49152L)]);
         var fixedAlgebra = MonogenicAlgebra<FixedQ4816>.Create(monicModulus: fixedTail);
-        var fixedTwin = MonogenicAlgebra<FixedQ4816>.Create(monicModulus: (FixedQ4816[])[FixedQ4816.FromRawBits(value: 32768L), FixedQ4816.FromRawBits(value: -49152L)]);
+        var fixedTwin = MonogenicAlgebra<FixedQ4816>.Create(monicModulus: ((FixedQ4816[])[FixedQ4816.FromRawBits(value: 32768L), FixedQ4816.FromRawBits(value: -49152L)]));
 
         if (!fixedAlgebra.Equals(other: fixedTwin)) { return "two FixedQ4816 descriptors built from the same modulus tail compare unequal"; }
         if (fixedAlgebra.GetHashCode() != fixedTwin.GetHashCode()) { return "two FixedQ4816 descriptors built from the same modulus tail hash differently"; }
         if (!fixedAlgebra.One.Equals(other: fixedTwin.One)) { return "One over the FixedQ4816 carrier compares unequal across two equal descriptors"; }
         if (fixedAlgebra.One.GetHashCode() != fixedTwin.One.GetHashCode()) { return "One over the FixedQ4816 carrier hashes differently across two equal descriptors"; }
 
-        var fixedElement = fixedAlgebra.FromCoordinates(coordinates: (FixedQ4816[])[FixedQ4816.FromRawBits(value: 12345L), FixedQ4816.FromRawBits(value: -6789L)]);
+        var fixedElement = fixedAlgebra.FromCoordinates(coordinates: ((FixedQ4816[])[FixedQ4816.FromRawBits(value: 12345L), FixedQ4816.FromRawBits(value: -6789L)]));
         var fixedProduct = fixedAlgebra.Multiply(left: fixedElement, right: fixedAlgebra.One);
 
         if (!fixedProduct.Equals(other: fixedElement)) { return "multiplying a FixedQ4816 element by One did not land back on an equal element"; }
 
-        if (fixedElement.Equals(other: fixedAlgebra.FromCoordinates(coordinates: (FixedQ4816[])[FixedQ4816.FromRawBits(value: 12346L), FixedQ4816.FromRawBits(value: -6789L)]))) {
+        if (fixedElement.Equals(other: fixedAlgebra.FromCoordinates(coordinates: ((FixedQ4816[])[FixedQ4816.FromRawBits(value: 12346L), FixedQ4816.FromRawBits(value: -6789L)])))) {
             return "two FixedQ4816 elements differing by one raw unit compare equal";
         }
 
@@ -977,7 +952,6 @@ internal static class GeometricAlgebraClaims {
 
         for (var i = 0; (i < 3); ++i) { result[i] = product[i].Value; }
     }
-
     public static void MonogenicPerProductMultiply(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
         var a = new FixedQ4816[3];
         var b = new FixedQ4816[3];
@@ -987,7 +961,7 @@ internal static class GeometricAlgebraClaims {
             b[i] = FixedQ4816.FromRawBits(value: right[i]);
         }
 
-        var product = MonogenicReference<FixedQ4816>.Multiply(modulus: FusionModulus, left: a, right: b);
+        var product = MonogenicReference<FixedQ4816>.Multiply(left: a, modulus: FusionModulus, right: b);
 
         for (var i = 0; (i < 3); ++i) { result[i] = product[i].Value; }
     }
@@ -1013,32 +987,32 @@ internal static class GeometricAlgebraClaims {
             for (var index = 0; (index < wide.Length); ++index) { wide[index] = TScalar.AdditiveIdentity; }
 
             for (var i = 0; (i < n); ++i) {
-                for (var j = 0; (j < n); ++j) { wide[i + j] = (wide[i + j] + (left[i] * right[j])); }
+                for (var j = 0; (j < n); ++j) { wide[(i + j)] = (wide[(i + j)] + (left[i] * right[j])); }
             }
 
             for (var degree = (wide.Length - 1); (degree >= n); --degree) {
                 var carry = wide[degree];
 
-                for (var j = 0; (j < n); ++j) { wide[(degree - n) + j] = (wide[(degree - n) + j] - (carry * modulus[j])); }
+                for (var j = 0; (j < n); ++j) { wide[((degree - n) + j)] = (wide[((degree - n) + j)] - (carry * modulus[j])); }
 
                 wide[degree] = TScalar.AdditiveIdentity;
             }
 
             var result = new TScalar[n];
 
-            Array.Copy(sourceArray: wide, destinationArray: result, length: n);
+            Array.Copy(destinationArray: result, length: n, sourceArray: wide);
 
             return result;
         }
 
         private static TScalar[] MultiplyByRoot(TScalar[] modulus, TScalar[] value) {
             var n = modulus.Length;
-            var top = value[n - 1];
+            var top = value[(n - 1)];
             var result = new TScalar[n];
 
             result[0] = (TScalar.AdditiveIdentity - (top * modulus[0]));
 
-            for (var index = 1; (index < n); ++index) { result[index] = (value[index - 1] - (top * modulus[index])); }
+            for (var index = 1; (index < n); ++index) { result[index] = (value[(index - 1)] - (top * modulus[index])); }
 
             return result;
         }
@@ -1048,16 +1022,15 @@ internal static class GeometricAlgebraClaims {
             var power = MultiplyByRoot(modulus: modulus, value: result);
 
             while (0UL != exponent) {
-                if (0UL != (exponent & 1UL)) { result = Multiply(modulus: modulus, left: result, right: power); }
+                if (0UL != (exponent & 1UL)) { result = Multiply(left: result, modulus: modulus, right: power); }
 
                 exponent >>>= 1;
 
-                if (0UL != exponent) { power = Multiply(modulus: modulus, left: power, right: power); }
+                if (0UL != exponent) { power = Multiply(left: power, modulus: modulus, right: power); }
             }
 
             return result;
         }
-
         internal static TScalar Trace(TScalar[] modulus, TScalar[] value) {
             var n = modulus.Length;
             var column = value;
@@ -1070,14 +1043,13 @@ internal static class GeometricAlgebraClaims {
 
             return trace;
         }
-
         internal static TScalar Norm(TScalar[] modulus, TScalar[] value) {
             var n = modulus.Length;
-            var matrix = new TScalar[n * n];
+            var matrix = new TScalar[(n * n)];
             var column = value;
 
             for (var columnIndex = 0; (columnIndex < n); ++columnIndex) {
-                for (var rowIndex = 0; (rowIndex < n); ++rowIndex) { matrix[(rowIndex * n) + columnIndex] = column[rowIndex]; }
+                for (var rowIndex = 0; (rowIndex < n); ++rowIndex) { matrix[((rowIndex * n) + columnIndex)] = column[rowIndex]; }
 
                 if (columnIndex < (n - 1)) { column = MultiplyByRoot(modulus: modulus, value: column); }
             }
@@ -1094,14 +1066,13 @@ internal static class GeometricAlgebraClaims {
 
             return result;
         }
-
         private static TScalar CofactorDeterminant(TScalar[] matrix, int order) {
             if (1 == order) { return matrix[0]; }
 
             if (2 == order) { return ((matrix[0] * matrix[3]) - (matrix[1] * matrix[2])); }
 
             var result = TScalar.AdditiveIdentity;
-            var minor = new TScalar[(order - 1) * (order - 1)];
+            var minor = new TScalar[((order - 1) * (order - 1))];
 
             for (var column = 0; (column < order); ++column) {
                 var target = 0;
@@ -1110,7 +1081,7 @@ internal static class GeometricAlgebraClaims {
                     for (var minorColumn = 0; (minorColumn < order); ++minorColumn) {
                         if (minorColumn == column) { continue; }
 
-                        minor[target++] = matrix[(row * order) + minorColumn];
+                        minor[target++] = matrix[((row * order) + minorColumn)];
                     }
                 }
 

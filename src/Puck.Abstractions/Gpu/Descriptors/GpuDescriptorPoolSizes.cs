@@ -41,22 +41,22 @@ public readonly record struct GpuDescriptorPoolSizes(
 
                 switch (binding.Kind) {
                     case GpuComputeBindingKind.StorageImage:
-                        storageImageCount = checked(storageImageCount + count);
+                        storageImageCount = checked((storageImageCount + count));
 
                         break;
                     case GpuComputeBindingKind.StorageBufferRead:
                     case GpuComputeBindingKind.StorageBufferReadWrite:
-                        storageBufferCount = checked(storageBufferCount + count);
+                        storageBufferCount = checked((storageBufferCount + count));
 
                         break;
                     case GpuComputeBindingKind.AccelerationStructure:
-                        accelerationStructureCount = checked(accelerationStructureCount + count);
+                        accelerationStructureCount = checked((accelerationStructureCount + count));
 
                         break;
                     case GpuComputeBindingKind.SampledImage:
                         // A sampled image is a combined-image-sampler descriptor on Vulkan; on Direct3D 12 it is one
                         // SRV heap slot. Either way it must be provisioned, or the pool/heap under-counts.
-                        combinedImageSamplerCount = checked(combinedImageSamplerCount + count);
+                        combinedImageSamplerCount = checked((combinedImageSamplerCount + count));
 
                         break;
                     default:

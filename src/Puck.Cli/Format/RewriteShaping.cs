@@ -18,22 +18,18 @@ internal static class RewriteShaping {
         || item.IsKind(kind: SyntaxKind.SingleLineDocumentationCommentTrivia)
         || item.IsKind(kind: SyntaxKind.MultiLineDocumentationCommentTrivia)
         || item.IsDirective));
-
     // The same guard over a node's own surrounding trivia.
     public static bool IsAnnotated(SyntaxNode node) =>
         (HasCommentOrDirective(trivia: node.GetLeadingTrivia()) || HasCommentOrDirective(trivia: node.GetTrailingTrivia()));
-
     // The same guard over a token's surrounding trivia.
     public static bool IsAnnotated(SyntaxToken token) =>
         (HasCommentOrDirective(trivia: token.LeadingTrivia) || HasCommentOrDirective(trivia: token.TrailingTrivia));
-
     // The same guard over a separated list: every element AND every separator. A comment written after a
     // comma attaches to the SEPARATOR, not to either neighbouring element, so an element-only check would
     // let a slot-preserving reorder leave it annotating whichever element moved into that slot.
     public static bool IsAnnotated<TNode>(SeparatedSyntaxList<TNode> list) where TNode : SyntaxNode =>
         (list.Any(predicate: static node => IsAnnotated(node: node))
         || list.GetSeparators().Any(predicate: static separator => IsAnnotated(token: separator)));
-
     // The accessibility-scope key two adjacent members are grouped by. Only the access modifiers count
     // (public/private/protected/internal); ordering is normalized so `protected internal` and `internal
     // protected` compare equal. A member with no explicit accessibility (interface members,
@@ -48,7 +44,6 @@ internal static class RewriteShaping {
                 || modifier.IsKind(kind: SyntaxKind.InternalKeyword)))
             .Select(selector: static modifier => modifier.ValueText)
             .OrderBy(keySelector: static text => text, comparer: StringComparer.Ordinal));
-
     // Forces exactly `desired` blank lines ahead of a construct: the leading end-of-lines are collapsed
     // and that many newlines are prepended, while the indentation whitespace (and any other lead) is
     // kept, so the construct stays where it sits horizontally.
@@ -70,7 +65,6 @@ internal static class RewriteShaping {
 
         return SyntaxFactory.TriviaList(trivias: rebuilt);
     }
-
     // The indent a wrapped construct hangs from, computed STRUCTURALLY so it is stable across runs
     // (idempotency). Anchoring to the input's current line would compound: once an enclosing construct
     // wraps, this one moves to a deeper line, and reading that line's indent would add a level every
@@ -113,7 +107,6 @@ internal static class RewriteShaping {
 
         return (baseIndent + (4 * depth));
     }
-
     // Reassigns an already-reordered element sequence back into a separated list, keeping each SLOT's
     // trivia and separator where they were — so the source's existing single-line or one-per-line layout
     // survives the reorder. Sound only because every caller first declines a list whose elements OR

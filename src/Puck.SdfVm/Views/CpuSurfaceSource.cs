@@ -25,7 +25,6 @@ public sealed class CpuSurfaceSource : IDisposable {
     /// <summary>Gets the current image-view handle (valid until the next publish or this object's disposal); 0 before
     /// the first successful publish.</summary>
     public nint CurrentHandle => m_handle;
-
     /// <summary>Gets a stable delegate that returns the <see cref="CurrentHandle"/> on each call — the
     /// <c>Func&lt;nint&gt;</c> a <see cref="GuestSurfaceView"/> resolves against. The same delegate instance is
     /// returned every time, so it may be captured once at registration.</summary>
@@ -52,7 +51,6 @@ public sealed class CpuSurfaceSource : IDisposable {
             format: surface.Format
         );
     }
-
     /// <summary>Publishes a raw tightly packed pixel buffer (a fill-a-buffer producer's frame). An empty buffer or a
     /// zero extent keeps the last handle.</summary>
     /// <param name="deviceContext">The GPU device context to upload on.</param>
@@ -84,7 +82,6 @@ public sealed class CpuSurfaceSource : IDisposable {
 
         return m_handle;
     }
-
     /// <summary>Pulls one frame from a capture source and publishes it — the convenience seam for driving a
     /// <see cref="IFrameCaptureSource"/> each tick. A source with no frame this call keeps the last handle.</summary>
     /// <param name="source">The capture source to pull.</param>
@@ -99,14 +96,12 @@ public sealed class CpuSurfaceSource : IDisposable {
             ? Publish(deviceContext: deviceContext, gpu: gpu, surface: in surface)
             : m_handle);
     }
-
     /// <summary>Drops the GPU upload after a device loss: the next publish rebuilds it on the fresh device.</summary>
     public void NotifyDeviceLost() {
         m_upload?.Dispose();
         m_upload = null;
         m_handle = 0;
     }
-
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {

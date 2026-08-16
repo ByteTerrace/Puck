@@ -7,11 +7,11 @@
     </PropertyGroup>
 
     <!-- Flow the Windows Graphics Capture projection references to every project automatically. The imported
-         ItemGroup self-selects (Windows + a ProjectReference to Puck.Platform), so any current or future executable
-         that references Puck.Platform records Microsoft.Windows.SDK.NET.dll + WinRT.Runtime.dll in its .deps.json
-         with no per-consumer csproj edit. This import lands after each project's body, so @(ProjectReference) is
-         already populated when the ItemGroup condition is evaluated. -->
-    <Import Project="$(MSBuildThisFileDirectory)src\Puck.Platform\WindowsCaptureProjection.targets" />
+         ItemGroup self-selects (Windows + a ProjectReference to Puck.Platform.Windows), so any current or future
+         executable that references Puck.Platform.Windows records Microsoft.Windows.SDK.NET.dll + WinRT.Runtime.dll
+         in its .deps.json with no per-consumer csproj edit. This import lands after each project's body, so
+         @(ProjectReference) is already populated when the ItemGroup condition is evaluated. -->
+    <Import Project="$(MSBuildThisFileDirectory)src\Puck.Platform.Windows\WindowsCaptureProjection.targets" />
 
     <!-- The architecture gate. Reads the RESOLVED reference set rather than @(ProjectReference), so a
          transitively-arriving edge is checked the same as a declared one. -->

@@ -40,7 +40,6 @@ public sealed record BindingWheelDefinition(
     /// <summary>The most sector rows a ring may declare.</summary>
     public const int MaxSectorsPerRing = 8;
 }
-
 /// <summary>A spatial input's sector-selection geometry. Pointer input authors this today; a future touch binding
 /// can reuse the same policy without pretending a touch location is an analog stick.</summary>
 public enum BindingWheelSpatialSelectionMode {
@@ -56,7 +55,6 @@ public enum BindingWheelSpatialSelectionMode {
     /// remains device-neutral-relative while this sector target remains hub-relative.</summary>
     HitTarget,
 }
-
 /// <summary>Where the radial hub is anchored for the lifetime of one open gesture.</summary>
 public enum BindingWheelPlacement {
     /// <summary>At the pointer's opening position when one is available; otherwise at viewport center.</summary>
@@ -65,7 +63,6 @@ public enum BindingWheelPlacement {
     /// <summary>At the center of the owning seat's viewport, regardless of pointer position.</summary>
     ViewportCenter,
 }
-
 /// <summary>How a wheel chooses among its authored rings.</summary>
 public enum BindingWheelRingSelectionMode {
     /// <summary>The active ring is selected explicitly by <c>player.wheel.ring</c> bindings or pointer-wheel input.</summary>
@@ -74,7 +71,6 @@ public enum BindingWheelRingSelectionMode {
     /// <summary>The active ring follows the selector's normalized distance from that input device's neutral.</summary>
     Excursion,
 }
-
 /// <summary>Author-controlled neutral-relative ring ranges. Magnitudes are device-neutral: an Axis2D selector uses
 /// its native magnitude, while pointer/touch displacement is divided by <paramref name="SpatialTravelFraction"/>
 /// of the seat viewport's smaller extent.</summary>
@@ -91,7 +87,6 @@ public sealed record BindingWheelExcursionDefinition(
     float SpatialTravelFraction = 0.25f,
     float Hysteresis = 0.02f
 );
-
 /// <summary>Author-controlled radial presentation policy. Fractions are relative to the seat viewport's smaller
 /// extent; rotation is degrees clockwise from twelve o'clock.</summary>
 /// <param name="PointerSelection">How pointer location selects a sector: disabled, angle-only, or direct target.</param>

@@ -101,7 +101,6 @@ public sealed class TransferAbortKitWideningLawTests {
             DefaultSeatKit = "kart-test",
         };
     }
-
     private static WorldDefinition BuildSwimKitDocument() {
         // "surge" stays at SurgeOrdinal (index 3), matching the vehicle kit's own layout above — "up" trails it so
         // the shared ordinal constants below address the same channel regardless of which fixture built the body.
@@ -238,7 +237,7 @@ public sealed class TransferAbortKitWideningLawTests {
         Assert.True(condition: capturedState.PendingDefaultChannelPress[UntimedPressOrdinal], userMessage: "the untimed tap must still be pending (not yet materialized) at capture");
         Assert.Equal(expected: FixedQ4816.One, actual: capturedState.PendingDefaultChannelValue[UntimedPressOrdinal]);
         Assert.True(condition: (capturedState.ChannelTimerTicks[TimedPressOrdinal] > 0), userMessage: "the timed press must have a live remaining-ticks countdown");
-        Assert.NotEqual(expected: 0L, actual: (capturedState.PlanarRampRemainder | capturedState.VehicleLongRemainder | capturedState.VehicleLatRemainder | capturedState.VehicleResidualRemainder));
+        Assert.NotEqual(expected: 0L, actual: capturedState.PlanarRampRemainder | capturedState.VehicleLongRemainder | capturedState.VehicleLatRemainder | capturedState.VehicleResidualRemainder);
         Assert.True(condition: (capturedState.LaneFactHeld[SurgeOrdinal] != 0UL), userMessage: "the surge action's OnFact edge (Falling) must be latched held by now");
         // LaneLatch (the OnPress pending-press buffer, distinct from LaneFactHeld's OnFact edge bit — see
         // WorldBody.LaneActionRuntime's own field remarks) legitimately stays 0 here: "surge" binds OnFact only, no
@@ -298,7 +297,6 @@ public sealed class TransferAbortKitWideningLawTests {
 
         Assert.False(condition: population.IsSeatParked(slot: actor.Index));
     }
-
     [Fact]
     public void DetachThenRestore_SwimKitBody_EveryNewlyCapturedFieldRoundTripsExactly() {
         using var fixture = Fixtures.FreshServer(definition: BuildSwimKitDocument());

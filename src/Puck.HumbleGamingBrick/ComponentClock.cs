@@ -40,6 +40,7 @@ public sealed class ComponentClock {
     private readonly HdmaController m_hdma;
     private readonly IClockedComponent? m_cartridgeClock;
     private readonly Ppu m_ppu;
+
     private bool m_isDoubleSpeed;
 
     /// <summary>Builds the driver over a clock and the machine's timed components, wiring each into its hard-coded
@@ -187,7 +188,6 @@ public sealed class ComponentClock {
             TickLcdDomain();
         }
     }
-
     // Registration order, Contract §3.5: the timer ticks before serial at an equal timestamp.
     private void TickCpuDomain() {
         m_timer.Tick();

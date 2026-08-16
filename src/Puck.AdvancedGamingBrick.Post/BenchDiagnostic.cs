@@ -79,19 +79,19 @@ internal static class BenchDiagnostic {
         // Discarded warm-up fleets so JIT tiering settles before anything is measured.
         RunFleet(
             bios: bios,
-            rom: rom,
+            choir: false,
             count: 2,
             frames: 30,
-            choir: false,
-            parallel: false
+            parallel: false,
+            rom: rom
         );
         RunFleet(
             bios: bios,
-            rom: rom,
+            choir: false,
             count: 2,
             frames: 30,
-            choir: false,
-            parallel: true
+            parallel: true,
+            rom: rom
         );
 
         Line(
@@ -119,35 +119,35 @@ internal static class BenchDiagnostic {
 
             var independentSingle = RunFleet(
                 bios: bios,
-                rom: rom,
+                choir: false,
                 count: count,
                 frames: frames,
-                choir: false,
-                parallel: false
+                parallel: false,
+                rom: rom
             );
             var independentParallel = RunFleet(
                 bios: bios,
-                rom: rom,
+                choir: false,
                 count: count,
                 frames: frames,
-                choir: false,
-                parallel: true
+                parallel: true,
+                rom: rom
             );
             var choirSingle = RunFleet(
                 bios: bios,
-                rom: rom,
+                choir: true,
                 count: count,
                 frames: frames,
-                choir: true,
-                parallel: false
+                parallel: false,
+                rom: rom
             );
             var choirParallel = RunFleet(
                 bios: bios,
-                rom: rom,
+                choir: true,
                 count: count,
                 frames: frames,
-                choir: true,
-                parallel: true
+                parallel: true,
+                rom: rom
             );
 
             // Every cell consumed stream 0 on machine 0, so all four anchors must be byte-identical — this is the
@@ -199,11 +199,11 @@ internal static class BenchDiagnostic {
         // machine uncapped, and one machine per logical processor all catching up at once.
         var burstSingle = RunFleet(
             bios: bios,
-            rom: rom,
+            choir: false,
             count: 1,
             frames: BurstFrames,
-            choir: false,
-            parallel: false
+            parallel: false,
+            rom: rom
         );
         var burstFleet = RunFleet(
             bios: bios,
@@ -244,8 +244,8 @@ internal static class BenchDiagnostic {
 
         MeasureLatencies(
             bios: bios,
-            rom: rom,
-            report: report
+            report: report,
+            rom: rom
         );
 
         Line(
@@ -302,15 +302,15 @@ internal static class BenchDiagnostic {
                 body: index => {
                     var machine = machines[index].Machine;
                     var stream = StreamFor(
-                        index: index,
+                        choir: choir,
                         count: count,
-                        choir: choir
+                        index: index
                     );
 
                     for (var frame = 0; (frame < frames); ++frame) {
                         machine.SetKeyInput(keys: KeyInputFor(
-                            stream: stream,
-                            frame: frame
+                            frame: frame,
+                            stream: stream
                         ));
                         _ = machine.RunFrame();
                     }
@@ -324,9 +324,9 @@ internal static class BenchDiagnostic {
 
                     machine.SetKeyInput(keys: KeyInputFor(
                         stream: StreamFor(
-                            index: index,
+                            choir: choir,
                             count: count,
-                            choir: choir
+                            index: index
                         ),
                         frame: frame
                     ));
@@ -345,7 +345,7 @@ internal static class BenchDiagnostic {
         }
 
         return new FleetCell(
-            MachineFramesPerSecond: (((double)count * frames) / stopwatch.Elapsed.TotalSeconds),
+            MachineFramesPerSecond: ((((double)count) * frames) / stopwatch.Elapsed.TotalSeconds),
             Anchor: anchor,
             PairMatched: pairMatched
         );
@@ -441,7 +441,6 @@ internal static class BenchDiagnostic {
             text: $"  Fork     {TicksToMicroseconds(ticks: (forkTicks / LatencyReps)),10:F1} us  {forkBytes,10:N0} B"
         );
     }
-
     /// <summary>The input stream a machine consumes: the choir shares stream 0; independent machines get their own
     /// stream, except the LAST machine, which always mirrors stream 0 so every cell carries a same-stream pair for
     /// the determinism guard.</summary>
@@ -449,16 +448,14 @@ internal static class BenchDiagnostic {
         ((choir || (index == (count - 1)))
         ? 0
         : index);
-
     /// <summary>A deterministic, edge-rich KEYINPUT script (the trio-lockstep pattern): odd multipliers walk all
     /// 10 button bits, offset per stream so independent machines genuinely diverge. KEYINPUT is active-low, so the
     /// walked pattern is inverted before it is written.</summary>
     private static ushort KeyInputFor(int stream, int frame) {
-        var pressed = (ushort)(((frame * 37) + (stream * 11)) & 0x3FF);
+        var pressed = ((ushort)(((frame * 37) + (stream * 11)) & 0x3FF));
 
-        return (ushort)(0x3FF & ~pressed);
+        return ((ushort)(0x3FF & ~pressed));
     }
-
     /// <summary>Small fleets get more frames so their cells are not stopwatch noise; the emulated span per cell
     /// stays roughly level until the floor takes over.</summary>
     private static int FramesFor(int count, int frameFloor) =>

@@ -17,7 +17,7 @@ public sealed class MotionScalarPositivityLawTests {
     public void NegativeEnvelopeMinRefusesByName() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = (WorldMotionModel.Grounded)kit.Motion;
+        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
         var negative = document with {
             Kits = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Min: -100f, Max: 10f) } }],
         };
@@ -26,12 +26,11 @@ public sealed class MotionScalarPositivityLawTests {
         Assert.Contains(expectedSubstring: "moveSpeedEnvelope.min", actualString: reason, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "-100", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void NonNegativeEnvelopeValidates() {
         var document = Fixtures.BuildDocument();
         var kit = document.Kits[0];
-        var grounded = (WorldMotionModel.Grounded)kit.Motion;
+        var grounded = ((WorldMotionModel.Grounded)kit.Motion);
         // Min 0 is the legitimate edge (full slowdown admitted); the kit's own moveSpeed must sit inside the bound.
         var control = document with {
             Kits = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Min: 0f, Max: (grounded.MoveSpeed + 1f)) } }],
@@ -39,7 +38,6 @@ public sealed class MotionScalarPositivityLawTests {
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, reason: out var reason, neighbours: null), userMessage: reason);
     }
-
     [Fact]
     public void IdentityMoveSpeedSetterThrowsOnNonPositive() {
         var identity = WorldIdentity.Pinned(name: "law", moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0), turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0), defaults: Fixtures.BuildDocument().PlayerDefaults);
@@ -48,7 +46,6 @@ public sealed class MotionScalarPositivityLawTests {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.MoveSpeed = 0f);
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => identity.TurnSpeed = float.NaN);
     }
-
     [Fact]
     public void IdentityMoveSpeedSetterAcceptsPositive() {
         var identity = WorldIdentity.Pinned(name: "law", moveSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 6.0), turnSpeed: Puck.Maths.FixedQ4816.FromDouble(value: 3.0), defaults: Fixtures.BuildDocument().PlayerDefaults);

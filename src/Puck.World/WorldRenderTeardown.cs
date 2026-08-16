@@ -31,12 +31,6 @@ internal sealed class WorldRenderTeardown : IRenderNode {
     public NodeDescriptor Descriptor => m_inner.Descriptor;
 
     /// <inheritdoc/>
-    public Surface ProduceFrame(in FrameContext context) => m_inner.ProduceFrame(context: in context);
-
-    /// <inheritdoc/>
-    public void OnDeviceLost() => m_inner.OnDeviceLost();
-
-    /// <inheritdoc/>
     public void Dispose() {
         m_inner.Dispose();
 
@@ -44,4 +38,8 @@ internal sealed class WorldRenderTeardown : IRenderNode {
             disposable.Dispose();
         }
     }
+    /// <inheritdoc/>
+    public void OnDeviceLost() => m_inner.OnDeviceLost();
+    /// <inheritdoc/>
+    public Surface ProduceFrame(in FrameContext context) => m_inner.ProduceFrame(context: in context);
 }

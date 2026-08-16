@@ -76,7 +76,7 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
                     fDeleteOld: false,
                     ptr: (referencesPointer + (index * referenceStride)),
                     structure: new VkAttachmentReference {
-                        Attachment = (uint)index,
+                        Attachment = ((uint)index),
                         Layout = ColorAttachmentOptimalLayout,
                     }
                 );
@@ -86,7 +86,7 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
                 fDeleteOld: false,
                 ptr: subpassPointer,
                 structure: new VkSubpassDescription {
-                    ColorAttachmentCount = (uint)attachmentCount,
+                    ColorAttachmentCount = ((uint)attachmentCount),
                     PColorAttachments = referencesPointer,
                     PipelineBindPoint = GraphicsPipelineBindPoint,
                 }
@@ -101,8 +101,8 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
             }
 
             var createInfo = new VkRenderPassCreateInfo {
-                AttachmentCount = (uint)attachmentCount,
-                DependencyCount = (uint)dependencyCount,
+                AttachmentCount = ((uint)attachmentCount),
+                DependencyCount = ((uint)dependencyCount),
                 PAttachments = attachmentsPointer,
                 PDependencies = dependencyPointer,
                 PSubpasses = subpassPointer,
@@ -154,8 +154,8 @@ public unsafe sealed class VulkanNativeRenderPassApi : IVulkanRenderPassApi {
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateRenderPass = (delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateRenderPass"u8),
-                DestroyRenderPass = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyRenderPass"u8),
+                CreateRenderPass = ((delegate* unmanaged[Cdecl]<nint, in VkRenderPassCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateRenderPass"u8)),
+                DestroyRenderPass = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyRenderPass"u8)),
             }
         );
     }

@@ -20,7 +20,6 @@ public sealed record BindingWheelView(
     BindingWheelStyleDefinition Style,
     BindingWheelExcursionView? Excursion
 );
-
 /// <summary>Squared neutral-relative range boundaries compiled once for allocation-free selector resolution.</summary>
 /// <param name="DeadZoneSquared">The authored inclusive dead zone, squared.</param>
 /// <param name="ThresholdsSquared">The ordinary squared boundary between adjacent rings.</param>
@@ -34,7 +33,6 @@ public sealed record BindingWheelExcursionView(
     IReadOnlyList<float> InwardThresholdsSquared,
     float SpatialTravelFraction
 );
-
 /// <summary>One wheel ring as the UI presents it — a page worn as a concentric shell.</summary>
 /// <param name="PageId">The ring page's profile-unique id.</param>
 /// <param name="Label">The ring page's display label, if any; opaque to the engine.</param>
@@ -45,7 +43,6 @@ public sealed record BindingWheelRingView(
     string? Label,
     IReadOnlyList<BindingWheelSectorView> Sectors
 );
-
 /// <summary>One wheel sector as the UI presents it and a commit dispatches it.</summary>
 /// <param name="Activation">The compiled binding activation the sector commits through the input router.</param>
 /// <param name="Label">The sector's display label, if any; opaque to the engine.</param>

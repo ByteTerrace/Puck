@@ -34,7 +34,6 @@ internal sealed class PostReport {
 
     /// <summary>The process exit code folded from the per-stage verdicts.</summary>
     public int ExitCode { get; }
-
     /// <summary>The per-stage results, in run order.</summary>
     public IReadOnlyList<PostStageResult> Results { get; }
 
@@ -61,7 +60,6 @@ internal sealed class PostReport {
 
         return builder.ToString();
     }
-
     /// <summary>Writes the report table to <c>post-report.txt</c> under the artifacts directory and echoes it to the
     /// console.</summary>
     /// <param name="artifactsDirectory">The directory to write the report into (created if absent).</param>

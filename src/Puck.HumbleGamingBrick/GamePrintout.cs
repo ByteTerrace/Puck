@@ -60,10 +60,10 @@ public sealed class GamePrintout {
     public ulong Fingerprint() {
         var hash = Fnv1aHash.Create();
 
-        hash.Add(value: (byte)Width);
-        hash.Add(value: (byte)(Width >> 8));
-        hash.Add(value: (byte)Height);
-        hash.Add(value: (byte)(Height >> 8));
+        hash.Add(value: ((byte)Width));
+        hash.Add(value: ((byte)(Width >> 8)));
+        hash.Add(value: ((byte)Height));
+        hash.Add(value: ((byte)(Height >> 8)));
         hash.Add(value: TopMargin);
         hash.Add(value: BottomMargin);
         hash.Add(value: Palette);

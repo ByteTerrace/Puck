@@ -33,8 +33,8 @@ public sealed class ModelState : ISnapshotable {
 
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) =>
-        writer.WriteByte(value: (byte)m_model);
+        writer.WriteByte(value: ((byte)m_model));
     /// <inheritdoc/>
     public void LoadState(StateReader reader) =>
-        m_model = (ConsoleModel)reader.ReadByte();
+        m_model = ((ConsoleModel)reader.ReadByte());
 }

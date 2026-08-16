@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
@@ -13,72 +12,6 @@ namespace Puck.Launcher;
 /// against the Puck.* libraries — no engine-wide bring-up helper. Grouped by concern so the composition
 /// root stays readable.</summary>
 public static class LauncherServiceRegistration {
-    /// <summary>Registers the launcher's deterministic fixed-step easy path: one consumer, one slot-aware input router,
-    /// and one command snapshot per host-owned fixed tick. The ordinary terminal registration still supplies the window,
-    /// clock, command registry, and run loop.</summary>
-    /// <typeparam name="TSimulation">The composition root's authoritative simulation.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="bindings">The physical-input bindings folded into snapshots.</param>
-    /// <returns>The same service collection.</returns>
-    public static IServiceCollection AddFixedStepSimulation<
-        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSimulation
-    >(this IServiceCollection services, IInputBindings bindings)
-        where TSimulation : class, IFixedStepSimulation {
-        ArgumentNullException.ThrowIfNull(bindings);
-        ArgumentNullException.ThrowIfNull(services);
-
-        services.TryAddSingleton<IInputBindings>(instance: bindings);
-        services.TryAddSingleton<TSimulation>();
-        services.TryAddSingleton<IFixedStepSimulation>(implementationFactory: static sp => sp.GetRequiredService<TSimulation>());
-        services.TryAddSingleton(implementationFactory: static sp => {
-            var slotResolver = sp.GetService<IInputSlotResolver>();
-            var bindings = sp.GetRequiredService<IInputBindings>();
-            var clock = sp.GetRequiredService<IInputClock>();
-            // REQUIRED, not optional: the mixer stamps every captured entry with the lane's acting identity, and there
-            // is no defensible fallback — synthesizing a seat from the slot number would attribute a claimant's action
-            // to the seat it displaced. A root that drives a simulation declares who its slots are.
-            var principalResolver = sp.GetRequiredService<ICommandPrincipalResolver>();
-            var registry = sp.GetRequiredService<CommandRegistry>();
-            var alwaysActiveBindings = sp.GetService<IAlwaysActiveInputBindings>();
-
-            return ((slotResolver is null)
-                ? new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry, alwaysActiveBindings: alwaysActiveBindings)
-                : new InputRouter(bindings: bindings, clock: clock, principalResolver: principalResolver, registry: registry, slotResolver: slotResolver, alwaysActiveBindings: alwaysActiveBindings));
-        });
-
-        return services;
-    }
-
-    /// <summary>The backend-neutral terminal: the terminal-control <em>baton</em>, the command pump, and the window
-    /// run loop. It carries no graphics backend AND no platform windowing — the run loop drives an
-    /// <see cref="ISurfacePresenter"/>, whichever root <see cref="IRenderNode"/> the developer registers, and the
-    /// <c>INativeWindowFactory</c> the composition root supplies. The composition root supplies a backend (e.g.
-    /// <c>AddVulkanPresenter</c>, which also provides the default root <see cref="IHostContext"/>), the native windowing
-    /// (e.g. <c>AddPlatformWindowing</c>), the root <see cref="IRenderNode"/>, the <see cref="IInputBindings"/> the
-    /// router folds physical input through, and any engine-specific <see cref="ICommandModule"/>s.</summary>
-    /// <param name="services">The service collection.</param>
-    public static IServiceCollection AddLauncherTerminal(this IServiceCollection services) {
-        AddLauncherTerminalShared(services: services);
-        services.AddHostedService<LauncherWindowHostedService>();
-        AddStandardInputReader(services: services);
-
-        return services;
-    }
-
-    /// <summary>The headless twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
-    /// <see cref="HeadlessTickHostedService"/> paces the fixed step instead of <see cref="LauncherWindowHostedService"/>
-    /// — no graphics backend, no platform windowing, no <see cref="IRenderNode"/> ever resolved. A composition root
-    /// calls this INSTEAD OF <see cref="AddLauncherTerminal"/> (never both) when its boot shape has no presentation
-    /// composed.</summary>
-    /// <param name="services">The service collection.</param>
-    public static IServiceCollection AddLauncherHeadlessTerminal(this IServiceCollection services) {
-        AddLauncherTerminalShared(services: services);
-        services.AddHostedService<HeadlessTickHostedService>();
-        AddStandardInputReader(services: services);
-
-        return services;
-    }
-
     // The registrations both boot shapes share: the terminal baton, the command pump (registry/stdin/shell), and the
     // capability aggregation — everything AddLauncherTerminal registered before it added its own hosted service. Pure
     // state/plumbing: nothing here opens a window, a GPU device, or a swapchain, so it is safe to register
@@ -140,9 +73,13 @@ public static class LauncherServiceRegistration {
             foreach (var contribution in sp.GetServices<HostCapabilityContribution>()) {
                 var target = (contribution.IsHeld
                     ? heldCapabilities
-                    : inheritedCapabilities);
+                    : inheritedCapabilities
+                );
 
-                _ = target.TryAdd(key: contribution.CapabilityType, value: contribution.Instance);
+                _ = target.TryAdd(
+                    key: contribution.CapabilityType,
+                    value: contribution.Instance
+                );
             }
 
             return new HostContext(
@@ -169,7 +106,10 @@ public static class LauncherServiceRegistration {
                     // Windowed hosts attach their per-seat bank after registry composition. Mirror every operator
                     // exchange into the displayed seat-one tape; headless roots simply leave the stable proxy
                     // unattached while stdout/stderr remain the authoritative script streams.
-                    provider.GetRequiredService<TerminalConsoleSessions>().RecordAdministrative(line: line, result: result);
+                    provider.GetRequiredService<TerminalConsoleSessions>().RecordAdministrative(
+                        line: line,
+                        result: result
+                    );
 
                     if (string.IsNullOrEmpty(value: result.Output)) {
                         return;
@@ -187,8 +127,8 @@ public static class LauncherServiceRegistration {
                 registry: provider.GetRequiredService<CommandRegistry>()
             ) {
                 HoldGate = ((holdGates.Length == 0)
-                    ? null
-                    : () => IsAnyTextCommandGateHolding(gates: holdGates)),
+                ? null
+                : () => IsAnyTextCommandGateHolding(gates: holdGates)),
             };
         });
         // The terminal's own command surface (just `quit`, which drives the baton). The fixed-step/tick hosted
@@ -198,17 +138,6 @@ public static class LauncherServiceRegistration {
         // the reader here (ahead of the caller's own hosted service) would flip it.
         services.AddSingleton<ICommandModule, TerminalCommandModule>();
     }
-
-    private static bool IsAnyTextCommandGateHolding(IReadOnlyList<ITextCommandHoldGate> gates) {
-        for (var index = 0; index < gates.Count; index++) {
-            if (gates[index].IsHolding()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     // The stdin reader — registered by both AddLauncherTerminal and AddLauncherHeadlessTerminal, AFTER their own
     // fixed-step/tick hosted service, so host startup order matches AddLauncherTerminal's original shape exactly.
     private static void AddStandardInputReader(IServiceCollection services) {
@@ -216,6 +145,15 @@ public static class LauncherServiceRegistration {
             source: sp.GetRequiredService<TextCommandSource>(),
             threadName: "Puck.Launcher Stdin Reader"
         ));
+    }
+    private static bool IsAnyTextCommandGateHolding(IReadOnlyList<ITextCommandHoldGate> gates) {
+        for (var index = 0; (index < gates.Count); index++) {
+            if (gates[index].IsHolding()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Registers the generic backend switch: it fronts every contributed <see cref="SurfacePresenterDescriptor"/>
@@ -238,15 +176,114 @@ public static class LauncherServiceRegistration {
                 throw new InvalidOperationException(message: "No surface presenters were registered; contribute at least one SurfacePresenterDescriptor before calling AddBackendSwitcher.");
             }
 
-            var preferred = (descriptors.Find(match: descriptor => string.Equals(a: descriptor.Name, b: preferredBackend, comparisonType: StringComparison.OrdinalIgnoreCase)) ?? descriptors[0]);
-            var other = descriptors.Find(match: descriptor => !ReferenceEquals(objA: descriptor, objB: preferred));
+            var preferred = (descriptors.Find(match: descriptor => string.Equals(
+                a: descriptor.Name,
+                b: preferredBackend,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )) ?? descriptors[0]);
+            var other = descriptors.Find(match: descriptor => !ReferenceEquals(
+                objA: descriptor,
+                objB: preferred
+            ));
 
             return ((other is null)
-                ? new BackendSwitcher(current: preferred.Presenter, currentName: preferred.Name, other: null, otherName: null)
-                : new BackendSwitcher(current: preferred.Presenter, currentName: preferred.Name, other: other.Presenter, otherName: other.Name));
+                ? new BackendSwitcher(
+                    current: preferred.Presenter,
+                    currentName: preferred.Name,
+                    other: null,
+                    otherName: null
+                )
+                : new BackendSwitcher(
+                    current: preferred.Presenter,
+                    currentName: preferred.Name,
+                    other: other.Presenter,
+                    otherName: other.Name
+                )
+            );
         });
         services.Replace(descriptor: ServiceDescriptor.Singleton<ISurfacePresenter>(implementationFactory: static sp => sp.GetRequiredService<BackendSwitcher>()));
         services.AddSingleton<ICommandModule, BackendCommandModule>();
+
+        return services;
+    }
+    /// <summary>Registers the launcher's deterministic fixed-step easy path: one consumer, one slot-aware input router,
+    /// and one command snapshot per host-owned fixed tick. The ordinary terminal registration still supplies the window,
+    /// clock, command registry, and run loop.</summary>
+    /// <typeparam name="TSimulation">The composition root's authoritative simulation.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <param name="bindings">The physical-input bindings folded into snapshots.</param>
+    /// <returns>The same service collection.</returns>
+    public static IServiceCollection AddFixedStepSimulation<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSimulation
+    >(this IServiceCollection services, IInputBindings bindings)
+        where TSimulation : class, IFixedStepSimulation {
+        ArgumentNullException.ThrowIfNull(bindings);
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IInputBindings>(instance: bindings);
+        services.TryAddSingleton<TSimulation>();
+        services.TryAddSingleton<IFixedStepSimulation>(implementationFactory: static sp => sp.GetRequiredService<TSimulation>());
+        services.TryAddSingleton(implementationFactory: static sp => {
+            var slotResolver = sp.GetService<IInputSlotResolver>();
+            var bindings = sp.GetRequiredService<IInputBindings>();
+            var clock = sp.GetRequiredService<IInputClock>();
+            // REQUIRED, not optional: the mixer stamps every captured entry with the lane's acting identity, and there
+            // is no defensible fallback — synthesizing a seat from the slot number would attribute a claimant's action
+            // to the seat it displaced. A root that drives a simulation declares who its slots are.
+            var principalResolver = sp.GetRequiredService<ICommandPrincipalResolver>();
+            var registry = sp.GetRequiredService<CommandRegistry>();
+            var alwaysActiveBindings = sp.GetService<IAlwaysActiveInputBindings>();
+
+            return ((slotResolver is null)
+                ? new InputRouter(
+                    bindings: bindings,
+                    clock: clock,
+                    principalResolver: principalResolver,
+                    registry: registry,
+                    alwaysActiveBindings: alwaysActiveBindings
+                )
+                : new InputRouter(
+                    alwaysActiveBindings: alwaysActiveBindings,
+                    bindings: bindings,
+                    clock: clock,
+                    principalResolver: principalResolver,
+                    registry: registry,
+                    slotResolver: slotResolver
+                )
+            );
+        });
+
+        return services;
+    }
+    /// <summary>The headless twin of <see cref="AddLauncherTerminal"/>: the SAME command pump and terminal baton, but
+    /// <see cref="HeadlessTickHostedService"/> paces the fixed step instead of <see cref="LauncherWindowHostedService"/>
+    /// — no graphics backend, no platform windowing, no <see cref="IRenderNode"/> ever resolved. A composition root
+    /// calls this INSTEAD OF <see cref="AddLauncherTerminal"/> (never both) when its boot shape has no presentation
+    /// composed.</summary>
+    /// <param name="services">The service collection.</param>
+    public static IServiceCollection AddLauncherHeadlessTerminal(this IServiceCollection services) {
+        AddLauncherTerminalShared(services: services);
+        services.AddHostedService<HeadlessTickHostedService>();
+        AddStandardInputReader(services: services);
+
+        return services;
+    }
+    /// <summary>The backend-neutral terminal: the terminal-control <em>baton</em>, the command pump, and the window
+    /// run loop. It carries no graphics backend AND no platform windowing — the run loop drives an
+    /// <see cref="ISurfacePresenter"/>, whichever root <see cref="IRenderNode"/> the developer registers, and the
+    /// <c>INativeWindowFactory</c> the composition root supplies. The composition root supplies a backend (e.g.
+    /// <c>AddVulkanPresenter</c>, which also provides the default root <see cref="IHostContext"/>), the native windowing
+    /// (e.g. <c>AddPlatformWindowing</c>), the root <see cref="IRenderNode"/>, the <see cref="IInputBindings"/> the
+    /// router folds physical input through, and any engine-specific <see cref="ICommandModule"/>s.</summary>
+    /// <param name="services">The service collection.</param>
+    public static IServiceCollection AddLauncherTerminal(this IServiceCollection services) {
+        AddLauncherTerminalShared(services: services);
+        // Hosting owns the generic session/cadence controller; the windowed launcher owns its placement between root
+        // production and presentation. Register one idle controller for every windowed host so composition roots need
+        // only arm it with their chosen ICaptureSink (PNG sequence, recording session, verifier, and so on).
+        services.TryAddSingleton<FrameCaptureController>();
+        services.AddHostedService<LauncherWindowHostedService>();
+        AddStandardInputReader(services: services);
 
         return services;
     }

@@ -12,38 +12,41 @@ namespace Puck.Input.Devices;
 /// handle.
 /// </summary>
 internal sealed class GamepadDevice : IGamepadConnection {
+    private readonly GamepadCoalescer m_coalescer = new();
+    private readonly CancellationTokenSource m_cancellation = new();
+    private readonly Lock m_lifecycleGate = new();
+    private readonly GamepadOutputQueue m_outputQueue = new();
+    private long m_rumbleExpiry = long.MaxValue;
+
     private const int DisposeJoinTimeoutMilliseconds = 250; // a wedged transport must not hang disposal
     private const int MaximumOutputCommandsPerIteration = 32;
-    private const int ReportBufferSize = 64;            // fallback when the device reports no input length
     private const int ReceiverSilenceTimeoutMilliseconds = 1000;
+    private const int ReportBufferSize = 64;            // fallback when the device reports no input length
     private const int StartupPollMilliseconds = 100;    // bound reads before streaming starts so the watchdog can fire
     private const int SteadyStatePollMilliseconds = 16; // services output/schedules even when input reports pause
 
     private static readonly long StreamingDeadlineTicks = (5L * Stopwatch.Frequency);  // fault if never streaming
+
     private readonly bool m_activateOnStream;
-    private readonly GamepadCoalescer m_coalescer = new();
-    private readonly CancellationTokenSource m_cancellation = new();
     private readonly IInputClock m_clock;
     private readonly Action<string>? m_diagnostics;
     private readonly IHidDevice m_hid;
-    private readonly object m_lifecycleGate = new();
     private readonly GamepadOutput m_output;
-    private readonly GamepadOutputQueue m_outputQueue = new();
     private readonly IGamepadParser m_parser;
     private readonly byte[] m_readBuffer;
     private readonly long m_receiverSilenceTimeoutTicks;
+
     private bool m_disposed;
     private volatile bool m_faulted;
     private volatile bool m_hasStream;
+    private Task? m_loop;
     private bool m_rumbleActive;
-    private long m_rumbleExpiry = long.MaxValue;
     private bool m_scheduledTriggerActive;
     private ulong m_scheduledTriggerFireTick;
     private TriggerEffectSpec m_scheduledTriggerLeft;
     private TriggerEffectSpec m_scheduledTriggerRight;
     private ulong m_sequence;
     private bool m_started;
-    private Task? m_loop;
 
     public GamepadDevice(
         IHidDevice hid,
@@ -78,20 +81,12 @@ internal sealed class GamepadDevice : IGamepadConnection {
         m_receiverSilenceTimeoutTicks = ((receiverSilenceTimeoutMilliseconds * Stopwatch.Frequency) / 1000L);
         // Size the read buffer from the device's declared input report length (Bluetooth reports exceed 64);
         // over-sizing is harmless since ReadAsync returns the actual byte count.
-        m_readBuffer = new byte[Math.Max(val1: inputLength, val2: ReportBufferSize)];
+        m_readBuffer = new byte[Math.Max(
+            val1: inputLength,
+            val2: ReportBufferSize
+        )];
     }
 
-    public GamepadCoalescer Coalescer => m_coalescer;
-    public InputDeviceId DeviceId { get; }
-    /// <summary>The device interface path, used to match against enumeration so a connected device isn't reopened.</summary>
-    public string Key => m_hid.DevicePath;
-    /// <summary>Whether the device's I/O loop has stopped due to a disconnect or I/O error (eligible for pruning).</summary>
-    public bool IsFaulted => m_faulted;
-    /// <summary>
-    /// The zero-based player slot assigned to this device (drives its indicator LEDs), or <c>-1</c> while a
-    /// deferred-activation device (an idle wireless-receiver slot) is dormant.
-    /// </summary>
-    public int PlayerIndex { get; private set; }
     /// <summary>
     /// Whether this device claims its player slot lazily — on first streamed state — rather than at open: a
     /// wireless-receiver slot may sit empty indefinitely, so it parks dormant (watchdog-exempt, invisible to
@@ -105,11 +100,61 @@ internal sealed class GamepadDevice : IGamepadConnection {
     /// </summary>
     internal bool HasStream => m_hasStream;
 
-    public IGamepadOutput Output => m_output;
-    public GamepadType Type => m_parser.Type;
+    public GamepadCoalescer Coalescer => m_coalescer;
+    public InputDeviceId DeviceId { get; }
     /// <summary>The optional input features this device provides, from its parser.</summary>
     public GamepadInputCapabilities InputCapabilities => m_parser.InputCapabilities;
+    /// <summary>Whether the device's I/O loop has stopped due to a disconnect or I/O error (eligible for pruning).</summary>
+    public bool IsFaulted => m_faulted;
+    /// <summary>The device interface path, used to match against enumeration so a connected device isn't reopened.</summary>
+    public string Key => m_hid.DevicePath;
+    public IGamepadOutput Output => m_output;
+    /// <summary>
+    /// The zero-based player slot assigned to this device (drives its indicator LEDs), or <c>-1</c> while a
+    /// deferred-activation device (an idle wireless-receiver slot) is dormant.
+    /// </summary>
+    public int PlayerIndex { get; private set; }
+    public GamepadType Type => m_parser.Type;
 
+    /// <summary>Assigns the player slot (manager-owned, called under its gate) when a deferred-activation device
+    /// begins streaming.</summary>
+    /// <param name="playerIndex">The zero-based player slot to assign.</param>
+    internal void AssignPlayerSlot(int playerIndex) {
+        PlayerIndex = playerIndex;
+    }
+    /// <summary>Releases the player slot (manager-owned, called under its gate) when the controller leaves its
+    /// receiver slot, returning the device to dormancy.</summary>
+    internal void ReleasePlayerSlot() {
+        PlayerIndex = -1;
+    }
+
+    private async ValueTask ApplyRumbleAsync(RumbleEffect effect, CancellationToken cancellationToken) {
+        if (m_parser is not IRumbleParser rumbleParser) {
+            return;
+        }
+
+        var applied = ((effect.DurationMilliseconds == 0u)
+            ? RumbleEffect.Off
+            : effect
+        );
+
+        await rumbleParser.SetRumbleAsync(
+            cancellationToken: cancellationToken,
+            highFrequency: applied.HighFrequency,
+            lowFrequency: applied.LowFrequency
+        );
+
+        if (
+            (0f >= applied.HighFrequency) &&
+            (0f >= applied.LowFrequency)
+        ) {
+            m_rumbleActive = false;
+            m_rumbleExpiry = long.MaxValue;
+        } else {
+            m_rumbleActive = true;
+            m_rumbleExpiry = (Stopwatch.GetTimestamp() + ((long)(applied.DurationMilliseconds * (Stopwatch.Frequency / 1000.0))));
+        }
+    }
     private static GamepadOutputCapabilities CapabilitiesFor(IGamepadParser parser) {
         // Derive capabilities from what the parser actually implements, so every advertised feature has a real
         // write path (no capability lies). The raw report channel exists for every HID parser — the escape hatch
@@ -130,37 +175,125 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
         return capabilities;
     }
+    private async ValueTask DrainOutputAsync(CancellationToken cancellationToken) {
+        for (var count = 0; ((count < MaximumOutputCommandsPerIteration) && m_outputQueue.TryDequeue(command: out var command)); ++count) {
+            switch (command.Kind) {
+                case GamepadOutputKind.Rumble:
+                    await ApplyRumbleAsync(
+                        cancellationToken: cancellationToken,
+                        effect: command.Rumble
+                    );
 
-    /// <summary>Assigns the player slot (manager-owned, called under its gate) when a deferred-activation device
-    /// begins streaming.</summary>
-    /// <param name="playerIndex">The zero-based player slot to assign.</param>
-    internal void AssignPlayerSlot(int playerIndex) {
-        PlayerIndex = playerIndex;
-    }
-    /// <summary>Releases the player slot (manager-owned, called under its gate) when the controller leaves its
-    /// receiver slot, returning the device to dormancy.</summary>
-    internal void ReleasePlayerSlot() {
-        PlayerIndex = -1;
-    }
+                    break;
+                case GamepadOutputKind.Led when (m_parser is ILedParser led):
+                    await led.SetLedAsync(
+                        cancellationToken: cancellationToken,
+                        color: command.Led
+                    );
 
-    /// <summary>Starts the device's I/O loop on a background task.</summary>
-    public void Start() {
-        lock (m_lifecycleGate) {
-            if (m_started || m_disposed) {
-                return;
+                    break;
+                case GamepadOutputKind.TriggerEffect when (m_parser is ITriggerEffectParser triggerEffect):
+                    // Apply immediately when unscheduled or its fire tick has already passed; otherwise hold it
+                    // until the capture clock reaches that tick (serviced below). A new effect supersedes any
+                    // still-pending schedule.
+                    if (
+                        (command.ScheduleTick == 0UL) ||
+                        (m_clock.NowTicks >= command.ScheduleTick)
+                    ) {
+                        m_scheduledTriggerActive = false;
+
+                        await triggerEffect.SetTriggerEffectAsync(
+                            cancellationToken: cancellationToken,
+                            left: command.TriggerEffectLeft,
+                            right: command.TriggerEffectRight
+                        );
+                    } else {
+                        m_scheduledTriggerActive = true;
+                        m_scheduledTriggerFireTick = command.ScheduleTick;
+                        m_scheduledTriggerLeft = command.TriggerEffectLeft;
+                        m_scheduledTriggerRight = command.TriggerEffectRight;
+                    }
+
+                    break;
+                case GamepadOutputKind.Raw when (command.Raw is { } raw):
+                    await m_hid.WriteAsync(
+                        buffer: raw,
+                        cancellationToken: cancellationToken
+                    );
+
+                    break;
+                default:
+                    // TriggerRumble is Xbox-only (serviced by the XInput connection, not here); any other kind is
+                    // unreachable given this device's advertised capabilities. Ignore defensively.
+                    break;
             }
+        }
 
-            m_started = true;
-            m_loop = Task.Run(function: () => RunAsync(cancellationToken: m_cancellation.Token));
+        // Honor a finite rumble duration by returning the motors to rest once it elapses.
+        if (
+            m_rumbleActive &&
+            (Stopwatch.GetTimestamp() >= m_rumbleExpiry)
+        ) {
+            await ApplyRumbleAsync(
+                cancellationToken: cancellationToken,
+                effect: RumbleEffect.Off
+            );
+        }
+
+        // Fire a scheduled trigger effect once the capture clock reaches its tick. The steady-state timed read
+        // bounds service latency even when reports pause; the device clock is the timing authority.
+        if (
+            m_scheduledTriggerActive &&
+            (m_clock.NowTicks >= m_scheduledTriggerFireTick) &&
+            (m_parser is ITriggerEffectParser scheduledParser)
+        ) {
+            m_scheduledTriggerActive = false;
+
+            await scheduledParser.SetTriggerEffectAsync(
+                cancellationToken: cancellationToken,
+                left: m_scheduledTriggerLeft,
+                right: m_scheduledTriggerRight
+            );
         }
     }
+    private async ValueTask ParkReceiverSlotAsync(CancellationToken cancellationToken) {
+        // The pad may still be reachable with its motors running on the last written speed, and the tracked
+        // expiry is about to be discarded — return the motors to rest first. When the pad is truly gone the
+        // write lands on the receiver and is harmless.
+        if (m_rumbleActive) {
+            await ApplyRumbleAsync(
+                cancellationToken: cancellationToken,
+                effect: RumbleEffect.Off
+            );
+        }
 
-    // A dormant receiver slot has no player identity yet, and the lifecycle diagnostics should say so instead of
-    // printing a bogus "player 0".
-    private string SlotLabel() {
-        var playerIndex = PlayerIndex;
+        m_hasStream = false;
+        m_sequence = 0UL;
+        m_rumbleActive = false;
+        m_rumbleExpiry = long.MaxValue;
+        m_scheduledTriggerActive = false;
+        m_output.Suspend();
+        m_coalescer.Reset();
 
-        return ((playerIndex >= 0) ? $"player {(playerIndex + 1)}" : "dormant receiver slot");
+        if (m_parser is IGamepadStreamReset resettable) {
+            resettable.ResetStreamState();
+        }
+    }
+    private static int RemainingMilliseconds(long expiryTimestamp) {
+        var remaining = (expiryTimestamp - Stopwatch.GetTimestamp());
+
+        if (remaining <= 0L) {
+            return 1;
+        }
+
+        var milliseconds = ((remaining * 1000L) / Stopwatch.Frequency);
+
+        return ((milliseconds < 1L)
+            ? 1
+            : ((milliseconds > 1000L)
+                ? 1000
+                : ((int)milliseconds)
+        ));
     }
     private async Task RunAsync(CancellationToken cancellationToken) {
         var firstParsed = false;
@@ -169,7 +302,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
         try {
             m_diagnostics?.Invoke($"[gamepad] {Type} init starting ({SlotLabel()})");
 
-            await m_parser.InitializeAsync(playerIndex: PlayerIndex, cancellationToken: cancellationToken);
+            await m_parser.InitializeAsync(
+                cancellationToken: cancellationToken,
+                playerIndex: PlayerIndex
+            );
 
             m_diagnostics?.Invoke($"[gamepad] {Type} init complete; awaiting reports");
 
@@ -193,8 +329,12 @@ internal sealed class GamepadDevice : IGamepadConnection {
                     );
                 } else {
                     var timeout = ((m_rumbleActive && (m_rumbleExpiry != long.MaxValue))
-                        ? Math.Min(val1: SteadyStatePollMilliseconds, val2: RemainingMilliseconds(expiryTimestamp: m_rumbleExpiry))
-                        : SteadyStatePollMilliseconds);
+                        ? Math.Min(
+                            val1: SteadyStatePollMilliseconds,
+                            val2: RemainingMilliseconds(expiryTimestamp: m_rumbleExpiry)
+                        )
+                        : SteadyStatePollMilliseconds
+                    );
 
                     read = await m_hid.ReadAsync(
                         buffer: buffer,
@@ -208,11 +348,24 @@ internal sealed class GamepadDevice : IGamepadConnection {
                     GamepadState state;
 
                     try {
-                        parsed = m_parser.TryParse(report: buffer.AsSpan(start: 0, length: read), state: out state);
+                        parsed = m_parser.TryParse(
+                            report: buffer.AsSpan(
+                                length: read,
+                                start: 0
+                            ),
+                            state: out state
+                        );
                     } catch (Exception parseException) {
                         // A parser must never throw on hostile bytes — when one does, the report payload IS the
                         // bug report. Dump it before the fault machinery eats the evidence.
-                        m_diagnostics?.Invoke($"[gamepad] {Type} parser THREW on report id=0x{buffer[0]:x2} len={read} head={Convert.ToHexString(buffer, 0, Math.Min(val1: read, val2: 24))}: {parseException}");
+                        m_diagnostics?.Invoke($"[gamepad] {Type} parser THREW on report id=0x{buffer[0]:x2} len={read} head={Convert.ToHexString(
+                            buffer,
+                            0,
+                            Math.Min(
+                                val1: read,
+                                val2: 24
+                            )
+                        )}: {parseException}");
                         throw;
                     }
 
@@ -238,8 +391,12 @@ internal sealed class GamepadDevice : IGamepadConnection {
                         }
                     } else {
                         var slotEvent = ((m_parser is IWirelessSlotParser slotParser)
-                            ? slotParser.ClassifySlotEvent(report: buffer.AsSpan(start: 0, length: read))
-                            : WirelessSlotEvent.None);
+                            ? slotParser.ClassifySlotEvent(report: buffer.AsSpan(
+                                length: read,
+                                start: 0
+                            ))
+                            : WirelessSlotEvent.None
+                        );
 
                         if (WirelessSlotEvent.Connected == slotEvent) {
                             // A controller just paired into this slot. The open-time initialization addressed an
@@ -251,7 +408,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
                             firstParsed = false;
                             streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
 
-                            await m_parser.InitializeAsync(playerIndex: PlayerIndex, cancellationToken: cancellationToken);
+                            await m_parser.InitializeAsync(
+                                cancellationToken: cancellationToken,
+                                playerIndex: PlayerIndex
+                            );
                         } else if (WirelessSlotEvent.Disconnected == slotEvent) {
                             // The controller left the slot: back to dormant. The manager releases the player slot
                             // when it sees HasStream drop; resetting firstParsed returns the loop to bounded reads
@@ -269,8 +429,11 @@ internal sealed class GamepadDevice : IGamepadConnection {
                     }
                 }
 
-                if (firstParsed && m_activateOnStream
-                    && ((Stopwatch.GetTimestamp() - lastParsedTimestamp) >= m_receiverSilenceTimeoutTicks)) {
+                if (
+                    firstParsed &&
+                    m_activateOnStream &&
+                    ((Stopwatch.GetTimestamp() - lastParsedTimestamp) >= m_receiverSilenceTimeoutTicks)
+                ) {
                     await ParkReceiverSlotAsync(cancellationToken: cancellationToken);
                     firstParsed = false;
                     streamingDeadline = (Stopwatch.GetTimestamp() + StreamingDeadlineTicks);
@@ -279,7 +442,11 @@ internal sealed class GamepadDevice : IGamepadConnection {
 
                 // A deferred-activation device is a receiver slot that may legitimately sit empty forever, so
                 // stream silence is not a fault for it; everything else must prove liveness within the deadline.
-                if (!firstParsed && !m_activateOnStream && (Stopwatch.GetTimestamp() > streamingDeadline)) {
+                if (
+                    !firstParsed &&
+                    !m_activateOnStream &&
+                    (Stopwatch.GetTimestamp() > streamingDeadline)
+                ) {
                     // Initialized but never produced a parseable report (a stuck handshake, or a controller still
                     // on its simple 0x3F report). Fault so the manager prunes it and the rescan reopens and
                     // re-initializes it, instead of leaving a zombie that holds a player slot forever.
@@ -300,107 +467,26 @@ internal sealed class GamepadDevice : IGamepadConnection {
                 : $"[gamepad] {Type} read error: {exception}"));
         }
     }
-    private async ValueTask ParkReceiverSlotAsync(CancellationToken cancellationToken) {
-        // The pad may still be reachable with its motors running on the last written speed, and the tracked
-        // expiry is about to be discarded — return the motors to rest first. When the pad is truly gone the
-        // write lands on the receiver and is harmless.
-        if (m_rumbleActive) {
-            await ApplyRumbleAsync(effect: RumbleEffect.Off, cancellationToken: cancellationToken);
-        }
+    // A dormant receiver slot has no player identity yet, and the lifecycle diagnostics should say so instead of
+    // printing a bogus "player 0".
+    private string SlotLabel() {
+        var playerIndex = PlayerIndex;
 
-        m_hasStream = false;
-        m_sequence = 0UL;
-        m_rumbleActive = false;
-        m_rumbleExpiry = long.MaxValue;
-        m_scheduledTriggerActive = false;
-        m_output.Suspend();
-        m_coalescer.Reset();
-
-        if (m_parser is IGamepadStreamReset resettable) {
-            resettable.ResetStreamState();
-        }
-    }
-    private static int RemainingMilliseconds(long expiryTimestamp) {
-        var remaining = (expiryTimestamp - Stopwatch.GetTimestamp());
-
-        if (remaining <= 0L) {
-            return 1;
-        }
-
-        var milliseconds = ((remaining * 1000L) / Stopwatch.Frequency);
-
-        return ((milliseconds < 1L) ? 1 : ((milliseconds > 1000L) ? 1000 : ((int)milliseconds)));
-    }
-    private async ValueTask DrainOutputAsync(CancellationToken cancellationToken) {
-        for (var count = 0; (count < MaximumOutputCommandsPerIteration) && m_outputQueue.TryDequeue(command: out var command); ++count) {
-            switch (command.Kind) {
-                case GamepadOutputKind.Rumble:
-                    await ApplyRumbleAsync(effect: command.Rumble, cancellationToken: cancellationToken);
-
-                    break;
-                case GamepadOutputKind.Led when (m_parser is ILedParser led):
-                    await led.SetLedAsync(color: command.Led, cancellationToken: cancellationToken);
-
-                    break;
-                case GamepadOutputKind.TriggerEffect when (m_parser is ITriggerEffectParser triggerEffect):
-                    // Apply immediately when unscheduled or its fire tick has already passed; otherwise hold it
-                    // until the capture clock reaches that tick (serviced below). A new effect supersedes any
-                    // still-pending schedule.
-                    if ((command.ScheduleTick == 0UL) || (m_clock.NowTicks >= command.ScheduleTick)) {
-                        m_scheduledTriggerActive = false;
-
-                        await triggerEffect.SetTriggerEffectAsync(left: command.TriggerEffectLeft, right: command.TriggerEffectRight, cancellationToken: cancellationToken);
-                    } else {
-                        m_scheduledTriggerActive = true;
-                        m_scheduledTriggerFireTick = command.ScheduleTick;
-                        m_scheduledTriggerLeft = command.TriggerEffectLeft;
-                        m_scheduledTriggerRight = command.TriggerEffectRight;
-                    }
-
-                    break;
-                case GamepadOutputKind.Raw when (command.Raw is { } raw):
-                    await m_hid.WriteAsync(buffer: raw, cancellationToken: cancellationToken);
-
-                    break;
-                default:
-                    // TriggerRumble is Xbox-only (serviced by the XInput connection, not here); any other kind is
-                    // unreachable given this device's advertised capabilities. Ignore defensively.
-                    break;
-            }
-        }
-
-        // Honor a finite rumble duration by returning the motors to rest once it elapses.
-        if (m_rumbleActive && (Stopwatch.GetTimestamp() >= m_rumbleExpiry)) {
-            await ApplyRumbleAsync(effect: RumbleEffect.Off, cancellationToken: cancellationToken);
-        }
-
-        // Fire a scheduled trigger effect once the capture clock reaches its tick. The steady-state timed read
-        // bounds service latency even when reports pause; the device clock is the timing authority.
-        if (m_scheduledTriggerActive && (m_clock.NowTicks >= m_scheduledTriggerFireTick) && (m_parser is ITriggerEffectParser scheduledParser)) {
-            m_scheduledTriggerActive = false;
-
-            await scheduledParser.SetTriggerEffectAsync(left: m_scheduledTriggerLeft, right: m_scheduledTriggerRight, cancellationToken: cancellationToken);
-        }
-    }
-    private async ValueTask ApplyRumbleAsync(RumbleEffect effect, CancellationToken cancellationToken) {
-        if (m_parser is not IRumbleParser rumbleParser) {
-            return;
-        }
-
-        var applied = ((effect.DurationMilliseconds == 0u) ? RumbleEffect.Off : effect);
-
-        await rumbleParser.SetRumbleAsync(
-            cancellationToken: cancellationToken,
-            highFrequency: applied.HighFrequency,
-            lowFrequency: applied.LowFrequency
+        return ((playerIndex >= 0)
+            ? $"player {(playerIndex + 1)}"
+            : "dormant receiver slot"
         );
+    }
+    private static bool TryJoinLoop(Task? loop) {
+        if (loop is null) {
+            return true;
+        }
 
-        if ((0f >= applied.HighFrequency) && (0f >= applied.LowFrequency)) {
-            m_rumbleActive = false;
-            m_rumbleExpiry = long.MaxValue;
-        } else {
-            m_rumbleActive = true;
-            m_rumbleExpiry = (Stopwatch.GetTimestamp() + ((long)(applied.DurationMilliseconds * (Stopwatch.Frequency / 1000.0))));
+        try {
+            return loop.Wait(timeout: TimeSpan.FromMilliseconds(value: DisposeJoinTimeoutMilliseconds));
+        } catch (AggregateException) {
+            // Wait wraps a canceled or faulted loop. Either state is terminal, so teardown may continue.
+            return true;
         }
     }
 
@@ -456,16 +542,18 @@ internal sealed class GamepadDevice : IGamepadConnection {
             m_cancellation.Dispose();
         }
     }
-    private static bool TryJoinLoop(Task? loop) {
-        if (loop is null) {
-            return true;
-        }
+    /// <summary>Starts the device's I/O loop on a background task.</summary>
+    public void Start() {
+        lock (m_lifecycleGate) {
+            if (
+                m_started ||
+                m_disposed
+            ) {
+                return;
+            }
 
-        try {
-            return loop.Wait(timeout: TimeSpan.FromMilliseconds(value: DisposeJoinTimeoutMilliseconds));
-        } catch (AggregateException) {
-            // Wait wraps a canceled or faulted loop. Either state is terminal, so teardown may continue.
-            return true;
+            m_started = true;
+            m_loop = Task.Run(function: () => RunAsync(cancellationToken: m_cancellation.Token));
         }
     }
 }

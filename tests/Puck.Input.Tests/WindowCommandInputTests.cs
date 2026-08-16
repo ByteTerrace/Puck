@@ -1,7 +1,5 @@
 using System.Numerics;
 using Puck.Commands;
-using Puck.Scripting;
-using Puck.Scripting.Simulation;
 
 namespace Puck.Input.Tests;
 
@@ -24,18 +22,16 @@ public sealed class WindowCommandInputTests {
         Assert.Equal(expected: new Vector2(x: -1f, y: 0.5f), actual: wheel.Value.AsAxis2D);
         Assert.True(condition: wheel.Transient);
     }
-
     [Fact]
     public void MouseButtonVocabularyIsOpenEndedButCanonical() {
         Assert.Equal(expected: InputSources.Mouse.LeftButton, actual: InputSources.Mouse.Button(number: 1));
         Assert.Equal(expected: "mouse.button17", actual: InputSources.Mouse.Button(number: 17));
-        Assert.True(condition: AddonSourceCatalog.TryResolve(sourceId: "mouse.button17", shape: out var shape));
-        Assert.Equal(expected: AddonSourceShape.Digital, actual: shape);
-        Assert.False(condition: AddonSourceCatalog.TryResolve(sourceId: "mouse.button017", shape: out _));
-        Assert.False(condition: AddonSourceCatalog.TryResolve(sourceId: "mouse.button0", shape: out _));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(() => InputSources.Mouse.Button(number: 0));
+        Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out var kind, sourceId: "mouse.button17"));
+        Assert.Equal(actual: kind, expected: CommandValueKind.Digital);
+        Assert.False(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out _, sourceId: "mouse.button017"));
+        Assert.False(condition: InputSourceVocabulary.TryResolveDeclaredKind(kind: out _, sourceId: "mouse.button0"));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => InputSources.Mouse.Button(number: 0));
     }
-
     [Fact]
     public void NumberRowAndNumpadProfilesRemainDistinctBindableControls() {
         var rowEvent = WindowInputEvent.KeyDown(key: KeyCode.Digit1);
@@ -46,12 +42,11 @@ public sealed class WindowCommandInputTests {
         Assert.Equal(expected: "keyboard.1", actual: row.Source);
         Assert.Equal(expected: "keyboard.numpad1", actual: pad.Source);
         Assert.NotEqual(expected: row.Source, actual: pad.Source);
-        Assert.True(condition: AddonSourceCatalog.TryResolve(sourceId: row.Source, shape: out var rowShape));
-        Assert.True(condition: AddonSourceCatalog.TryResolve(sourceId: pad.Source, shape: out var padShape));
-        Assert.Equal(expected: AddonSourceShape.Digital, actual: rowShape);
-        Assert.Equal(expected: AddonSourceShape.Digital, actual: padShape);
+        Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(sourceId: row.Source, kind: out var rowKind));
+        Assert.True(condition: InputSourceVocabulary.TryResolveDeclaredKind(sourceId: pad.Source, kind: out var padKind));
+        Assert.Equal(actual: rowKind, expected: CommandValueKind.Digital);
+        Assert.Equal(actual: padKind, expected: CommandValueKind.Digital);
     }
-
     [Fact]
     public void HeldDigitalStateReassertsInFirstDownOrderWithoutRepeatsOrSameFrameDuplicates() {
         var state = new HeldDigitalInputState();
@@ -59,40 +54,40 @@ public sealed class WindowCommandInputTests {
         var second = InputSignal.Press(source: "mouse.button17", deviceId: device);
         var first = InputSignal.Press(source: "keyboard.a", deviceId: device);
 
-        state.Observe(signal: in second, frameKey: 1UL);
-        state.Observe(signal: in first, frameKey: 2UL);
+        state.Observe(frameKey: 1UL, signal: in second);
+        state.Observe(frameKey: 2UL, signal: in first);
 
-        Assert.True(condition: state.TryReassert(index: 0, frameKey: 2UL, captureTick: 10UL, signal: out var reassertedSecond));
-        Assert.False(condition: state.TryReassert(index: 1, frameKey: 2UL, captureTick: 10UL, signal: out _));
+        Assert.True(condition: state.TryReassert(captureTick: 10UL, frameKey: 2UL, index: 0, signal: out var reassertedSecond));
+        Assert.False(condition: state.TryReassert(captureTick: 10UL, frameKey: 2UL, index: 1, signal: out _));
         Assert.Equal(expected: "mouse.button17", actual: reassertedSecond.Source);
         Assert.Equal(expected: CommandPhase.Active, actual: reassertedSecond.Phase);
 
         // An OS repeat neither duplicates nor moves the already-held key.
-        state.Observe(signal: in second, frameKey: 3UL);
+        state.Observe(frameKey: 3UL, signal: in second);
         Assert.Equal(expected: 2, actual: state.Count);
-        Assert.True(condition: state.TryReassert(index: 0, frameKey: 3UL, captureTick: 11UL, signal: out reassertedSecond));
-        Assert.True(condition: state.TryReassert(index: 1, frameKey: 3UL, captureTick: 11UL, signal: out var reassertedFirst));
+        Assert.True(condition: state.TryReassert(captureTick: 11UL, frameKey: 3UL, index: 0, signal: out reassertedSecond));
+        Assert.True(condition: state.TryReassert(captureTick: 11UL, frameKey: 3UL, index: 1, signal: out var reassertedFirst));
         Assert.Equal(expected: "mouse.button17", actual: reassertedSecond.Source);
         Assert.Equal(expected: "keyboard.a", actual: reassertedFirst.Source);
 
         var releaseSecond = InputSignal.Release(source: second.Source, deviceId: device);
-        state.Observe(signal: in releaseSecond, frameKey: 4UL);
-        state.Observe(signal: in second, frameKey: 4UL);
 
-        Assert.True(condition: state.TryReassert(index: 0, frameKey: 4UL, captureTick: 12UL, signal: out reassertedFirst));
-        Assert.False(condition: state.TryReassert(index: 1, frameKey: 4UL, captureTick: 12UL, signal: out _));
+        state.Observe(frameKey: 4UL, signal: in releaseSecond);
+        state.Observe(frameKey: 4UL, signal: in second);
+
+        Assert.True(condition: state.TryReassert(captureTick: 12UL, frameKey: 4UL, index: 0, signal: out reassertedFirst));
+        Assert.False(condition: state.TryReassert(captureTick: 12UL, frameKey: 4UL, index: 1, signal: out _));
         Assert.Equal(expected: "keyboard.a", actual: reassertedFirst.Source);
 
         state.Clear();
         Assert.Equal(expected: 0, actual: state.Count);
     }
-
     [Fact]
     public void TextPayloadDoesNotBecomeAPermanentHeldControl() {
         var state = new HeldDigitalInputState();
         var typed = InputSignal.Typed(source: InputSources.Keyboard.Text, text: "n");
 
-        state.Observe(signal: in typed, frameKey: 1UL);
+        state.Observe(frameKey: 1UL, signal: in typed);
 
         Assert.Equal(expected: 0, actual: state.Count);
     }

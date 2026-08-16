@@ -13,7 +13,7 @@ public sealed class VulkanGpuStorageImageFactory(IVulkanOffscreenImageApi offscr
     public IGpuStorageImage Create(IGpuDeviceContext deviceContext, GpuPixelFormat format, uint width, uint height) {
         ArgumentNullException.ThrowIfNull(deviceContext);
 
-        var vkContext = (IVulkanDeviceContext)deviceContext;
+        var vkContext = ((IVulkanDeviceContext)deviceContext);
         var logicalDevice = vkContext.LogicalDevice;
         var deviceHandle = logicalDevice.Handle;
         var vkFormat = VulkanGpuFormats.ToVkFormat(gpuPixelFormat: format);

@@ -18,7 +18,6 @@ public enum BindingWheelCommitStatus {
     /// <summary>The sector activation entered the seat's deterministic lane.</summary>
     Dispatched,
 }
-
 /// <summary>A radial commit result with enough identity for the command surface to report every failure honestly.</summary>
 /// <param name="Status">The commit disposition.</param>
 /// <param name="Command">The sector command when one was selected.</param>
@@ -34,60 +33,58 @@ public readonly record struct BindingWheelCommitResult(
     int Sector,
     string Reason
 ) {
+    /// <summary>Creates a non-dispatch result for an explicit cancellation or an empty selection.</summary>
+    public static BindingWheelCommitResult Cancelled(string reason, int ring, int sector) => new(
+        Command: null,
+        Label: string.Empty,
+        Reason: reason,
+        Ring: ring,
+        Sector: sector,
+        Status: BindingWheelCommitStatus.Cancelled
+    );
+    /// <summary>Creates a commit deferred by another opener holding the same radial.</summary>
+    public static BindingWheelCommitResult Deferred(string label, int ring, int sector) => new(
+        Command: null,
+        Label: label,
+        Reason: "still-held",
+        Ring: ring,
+        Sector: sector,
+        Status: BindingWheelCommitStatus.Deferred
+    );
     /// <summary>Queues a selected activation and preserves an unregistered-command refusal as its own status.</summary>
     public static BindingWheelCommitResult Dispatch(InputRouter router, int slot, BindingActivation activation, string label, int ring, int sector) {
         ArgumentNullException.ThrowIfNull(argument: router);
         ArgumentNullException.ThrowIfNull(argument: activation);
 
         return (router.Activate(
-            slot: slot,
-            activation: activation
+            activation: activation,
+            slot: slot
         )
             ? new BindingWheelCommitResult(
-            Status: BindingWheelCommitStatus.Dispatched,
-            Command: activation.Command,
-            Label: label,
-            Ring: ring,
-            Sector: sector,
-            Reason: string.Empty
-        )
+                Status: BindingWheelCommitStatus.Dispatched,
+                Command: activation.Command,
+                Label: label,
+                Ring: ring,
+                Sector: sector,
+                Reason: string.Empty
+            )
             : new BindingWheelCommitResult(
-            Status: BindingWheelCommitStatus.Unregistered,
-            Command: activation.Command,
-            Label: label,
-            Ring: ring,
-            Sector: sector,
-            Reason: "unregistered"
-        ));
+                Status: BindingWheelCommitStatus.Unregistered,
+                Command: activation.Command,
+                Label: label,
+                Ring: ring,
+                Sector: sector,
+                Reason: "unregistered"
+            )
+        );
     }
-
     /// <summary>Creates the no-armed-gesture result.</summary>
     public static BindingWheelCommitResult NotArmed() => new(
-        Status: BindingWheelCommitStatus.NotArmed,
         Command: null,
         Label: string.Empty,
+        Reason: "not-armed",
         Ring: -1,
         Sector: -1,
-        Reason: "not-armed"
-    );
-
-    /// <summary>Creates a commit deferred by another opener holding the same radial.</summary>
-    public static BindingWheelCommitResult Deferred(string label, int ring, int sector) => new(
-        Status: BindingWheelCommitStatus.Deferred,
-        Command: null,
-        Label: label,
-        Ring: ring,
-        Sector: sector,
-        Reason: "still-held"
-    );
-
-    /// <summary>Creates a non-dispatch result for an explicit cancellation or an empty selection.</summary>
-    public static BindingWheelCommitResult Cancelled(string reason, int ring, int sector) => new(
-        Status: BindingWheelCommitStatus.Cancelled,
-        Command: null,
-        Label: string.Empty,
-        Ring: ring,
-        Sector: sector,
-        Reason: reason
+        Status: BindingWheelCommitStatus.NotArmed
     );
 }

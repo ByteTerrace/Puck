@@ -17,7 +17,6 @@ internal static class CgbBootDivPrediction {
         0x0000, 0x0000, 0x0000, 0x0000, 0x2678, 0x2678, 0x269C, 0x0020, 0x267C, 0x267C, 0x267C, 0x267C,
         0x2FA8, 0x2FA8, 0x2FA8, 0x2FA8, 0x1E9C, 0x1E9C, 0x1EC0, 0x2FC8, 0x1EA0, 0x1EA0, 0x1EA0, 0x1EA0,
     ];
-
     // The checksum-dependent contribution, indexed by the 8-bit title checksum.
     private static readonly ushort[] ChecksumDiv = [
         0x28D4, 0x388C, 0x3784, 0x3784, 0x3784, 0x3784, 0x3784, 0x3784, 0x3784, 0x3784, 0x3784, 0x3784,
@@ -53,10 +52,10 @@ internal static class CgbBootDivPrediction {
             : ((header.OldLicenseeCode == 0x33)
                 ? 1
                 : 2));
-        var new0 = ((header.NewLicenseeCode0 == (byte)'0')
+        var new0 = ((header.NewLicenseeCode0 == ((byte)'0'))
             ? 1
             : 0);
-        var new1 = ((header.NewLicenseeCode1 == (byte)'1')
+        var new1 = ((header.NewLicenseeCode1 == ((byte)'1'))
             ? 1
             : 0);
         var index = ((((((header.SupportsColor
@@ -71,7 +70,7 @@ internal static class CgbBootDivPrediction {
         var checksumDiv = ChecksumDiv[header.TitleChecksum];
 
         if (checksumDiv > Sentinel) {
-            return (ushort)(baseDiv + checksumDiv);
+            return ((ushort)(baseDiv + checksumDiv));
         }
 
         // Titles whose checksums collide are told apart by the fourth title letter.
@@ -88,18 +87,18 @@ internal static class CgbBootDivPrediction {
     // The checksum rows whose contribution depends on the fourth title letter; zero when the checksum is not ambiguous.
     private static ushort AmbiguousDiv(byte checksum, byte fourthTitleLetter) =>
         checksum switch {
-            0x0D => fourthTitleLetter switch { (byte)'R' => 0x3EC4, (byte)'E' => 0x35E8, _ => 0x381C },
-            0x18 => fourthTitleLetter switch { (byte)'K' => 0x3BD4, (byte)'I' => 0x3728, _ => 0x375C },
-            0x27 => fourthTitleLetter switch { (byte)'B' => 0x3AF4, (byte)'N' => 0x3C10, _ => 0x36FC },
-            0x28 => fourthTitleLetter switch { (byte)'F' => 0x33EC, (byte)'A' => 0x3A88, _ => 0x363C },
-            0x46 => fourthTitleLetter switch { (byte)'E' => 0x333C, (byte)'R' => 0x3BE0, _ => 0x360C },
-            0x61 => fourthTitleLetter switch { (byte)'E' => 0x374C, (byte)'A' => 0x3C40, _ => 0x372C },
-            0x66 => fourthTitleLetter switch { (byte)'E' => 0x33FC, (byte)'L' => 0x3758, _ => 0x378C },
-            0x6A => fourthTitleLetter switch { (byte)'K' => 0x3C34, (byte)'I' => 0x34A8, _ => 0x37BC },
-            0xA5 => fourthTitleLetter switch { (byte)'A' => 0x3A5C, (byte)'R' => 0x34F8, _ => 0x366C },
-            0xB3 => fourthTitleLetter switch { (byte)'B' => 0x39D4, (byte)'U' => 0x3228, (byte)'R' => 0x3CFC, _ => 0x3638 },
-            0xBF => fourthTitleLetter switch { (byte)' ' => 0x357C, (byte)'C' => 0x3B80, _ => 0x37EC },
-            0xC6 => fourthTitleLetter switch { (byte)'A' => 0x3994, (byte)' ' => 0x3668, _ => 0x369C },
+            0x0D => fourthTitleLetter switch { ((byte)'R') => 0x3EC4, ((byte)'E') => 0x35E8, _ => 0x381C },
+            0x18 => fourthTitleLetter switch { ((byte)'K') => 0x3BD4, ((byte)'I') => 0x3728, _ => 0x375C },
+            0x27 => fourthTitleLetter switch { ((byte)'B') => 0x3AF4, ((byte)'N') => 0x3C10, _ => 0x36FC },
+            0x28 => fourthTitleLetter switch { ((byte)'F') => 0x33EC, ((byte)'A') => 0x3A88, _ => 0x363C },
+            0x46 => fourthTitleLetter switch { ((byte)'E') => 0x333C, ((byte)'R') => 0x3BE0, _ => 0x360C },
+            0x61 => fourthTitleLetter switch { ((byte)'E') => 0x374C, ((byte)'A') => 0x3C40, _ => 0x372C },
+            0x66 => fourthTitleLetter switch { ((byte)'E') => 0x33FC, ((byte)'L') => 0x3758, _ => 0x378C },
+            0x6A => fourthTitleLetter switch { ((byte)'K') => 0x3C34, ((byte)'I') => 0x34A8, _ => 0x37BC },
+            0xA5 => fourthTitleLetter switch { ((byte)'A') => 0x3A5C, ((byte)'R') => 0x34F8, _ => 0x366C },
+            0xB3 => fourthTitleLetter switch { ((byte)'B') => 0x39D4, ((byte)'U') => 0x3228, ((byte)'R') => 0x3CFC, _ => 0x3638 },
+            0xBF => fourthTitleLetter switch { ((byte)' ') => 0x357C, ((byte)'C') => 0x3B80, _ => 0x37EC },
+            0xC6 => fourthTitleLetter switch { ((byte)'A') => 0x3994, ((byte)' ') => 0x3668, _ => 0x369C },
             _ => 0,
         };
 }

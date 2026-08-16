@@ -39,7 +39,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: negativeRate, reason: out var negativeReason, neighbours: null), userMessage: "a negative rate was expected to refuse");
         Assert.Contains(expectedSubstring: "rateHz", actualString: negativeReason, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void ValidatorAtRateZero_SkipsTheDivisorCheck() {
         // 0 does not divide 50400 (nothing does, in the ordinary sense) — if ValidateSimulation applied the SAME
@@ -52,7 +51,6 @@ public sealed class SimulationRateZeroLawTests {
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, reason: out var reason, neighbours: null), userMessage: $"rate 0 was expected to validate; refused: {reason}");
     }
-
     /// <summary>The discriminator this suite's own test audit named missing: nothing above proves the divisor check
     /// still FIRES for a positive rate — <see cref="ValidatorAtRateZero_SkipsTheDivisorCheck"/> and
     /// <see cref="ValidatorAdmitsRateZero_RefusesNegativeRate"/> both only ever exercise 0 and -1, so a change that
@@ -65,7 +63,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: nonDivisor, reason: out var reason, neighbours: null), userMessage: "241 Hz does not divide 50400 and was expected to refuse");
         Assert.Contains(expectedSubstring: "does not divide", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void RateZeroDocument_WithOrdinaryInputHold_StillValidates() {
         // The fixture's own inputHold section (ceilingSeconds 0.5, lowerAfterSeconds 0.25, defaultSeconds 0) is
@@ -79,7 +76,6 @@ public sealed class SimulationRateZeroLawTests {
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, reason: out var reason, neighbours: null), userMessage: $"a rate-0 world authoring an ordinary inputHold section was expected to validate; refused: {reason}");
     }
-
     /// <summary>The discriminator <see cref="RateZeroDocument_WithOrdinaryInputHold_StillValidates"/> itself cannot
     /// provide: that test would pass identically if input-hold validation were deleted wholesale, since it only ever
     /// asserts SUCCESS. This proves the section is genuinely still checked at rate 0 — and proves it rate-
@@ -98,7 +94,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse even at rate 0");
         Assert.Contains(expectedSubstring: "lowerAfterSeconds", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     /// <summary>The other half of the same discriminator: a non-finite authored value evades every ordered
     /// comparison the old floats-only validator made (<c>NaN &gt; anything</c> and <c>anything &gt; NaN</c> are both
     /// <see langword="false"/>), so it must be refused by an explicit finiteness check, not inferred from a
@@ -115,7 +110,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "a NaN ceilingSeconds was expected to refuse even at rate 0");
         Assert.Contains(expectedSubstring: "finite", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     /// <summary>The adversarial review's finding 3, with its own concrete numbers: at 240 Hz, ceilingSeconds
     /// 10,000,000 compiles to 2,400,000,000 ticks — which does not fit <see cref="WorldInputHoldSettings"/>.
     /// <c>CeilingTicks</c>' <see cref="int"/> field. The pre-fix seconds-domain validator compared floats only and
@@ -131,12 +125,11 @@ public sealed class SimulationRateZeroLawTests {
         });
 
         Assert.Equal(expected: 240, actual: document.SimulationRateHz);
-        Assert.Throws<OverflowException>(testCode: () => document.InputHold.Compile(ratePerSecond: (uint)document.SimulationRateHz));
+        Assert.Throws<OverflowException>(testCode: () => document.InputHold.Compile(ratePerSecond: ((uint)document.SimulationRateHz)));
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "an uncompilable ceilingSeconds was expected to refuse");
         Assert.Contains(expectedSubstring: "ceilingSeconds", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     /// <summary>The adversarial review's finding 5, at the positive rate its own concrete case names: 240 Hz,
     /// lowerAfterSeconds 0.000001f. The comment above <c>WorldDefinitionValidator.ValidateInputHold</c> used to
     /// claim every positive lowerAfterSeconds compiles to at least one tick — false, because the float overload
@@ -151,12 +144,11 @@ public sealed class SimulationRateZeroLawTests {
         });
 
         Assert.Equal(expected: 240, actual: document.SimulationRateHz);
-        Assert.Equal(expected: 0, actual: document.InputHold.Compile(ratePerSecond: (uint)document.SimulationRateHz).LowerAfterTicks);
+        Assert.Equal(expected: 0, actual: document.InputHold.Compile(ratePerSecond: ((uint)document.SimulationRateHz)).LowerAfterTicks);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse at 240 Hz");
         Assert.Contains(expectedSubstring: "lowerAfterSeconds", actualString: reason, comparisonType: StringComparison.Ordinal);
     }
-
     [Fact]
     public void SecondsFromTicks_RefusesAtRateZero() {
         Assert.Throws<InvalidOperationException>(testCode: () => WorldSimulationTickConversion.SecondsFromTicks(ticks: 720, ratePerSecond: 0U));
@@ -165,7 +157,6 @@ public sealed class SimulationRateZeroLawTests {
         // shape, not just the more obviously-wrong Infinity case.
         Assert.Throws<InvalidOperationException>(testCode: () => WorldSimulationTickConversion.SecondsFromTicks(ticks: 0, ratePerSecond: 0U));
     }
-
     /// <summary>The apply-door discriminator this suite's own test audit named missing:
     /// <see cref="SecondsFromTicks_RefusesAtRateZero"/> proves the LOW-LEVEL conversion refuses, but not that a real
     /// caller reaching it through the ordinary submission pipeline gets a normal refusal rather than an unhandled
@@ -192,12 +183,10 @@ public sealed class SimulationRateZeroLawTests {
         Assert.Null(@object: exception);
         Assert.True(condition: before.AsSpan().SequenceEqual(other: after), userMessage: "a raw-ticks SetInputHold at rate 0 was expected to be refused (document left unchanged), not silently applied");
     }
-
     [Fact]
     public void SecondsFromTicks_WorksAtPositiveRate() {
         Assert.Equal(expected: 3.0f, actual: WorldSimulationTickConversion.SecondsFromTicks(ticks: 720, ratePerSecond: 240U));
     }
-
     [Fact]
     public void CompiledDuration_AtRateZero_PositiveSecondsIsNever_ZeroSecondsIsAuthoredDisabled() {
         var never = WorldSimulationTickConversion.CompiledDuration(seconds: 3.0f, ratePerSecond: 0U);
@@ -213,7 +202,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => never.Ticks);
         Assert.Equal(expected: 0, actual: disabled.Ticks);
     }
-
     [Fact]
     public void CompiledDuration_AtPositiveRate_MatchesDurationTicks() {
         var compiled = WorldSimulationTickConversion.CompiledDuration(seconds: 3.0f, ratePerSecond: 240U);
@@ -222,7 +210,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.Equal(expected: checked((int)WorldSimulationTickConversion.DurationTicks(seconds: 3.0f, ratePerSecond: 240U)), actual: compiled.Ticks);
         Assert.Equal(expected: 720, actual: compiled.Ticks);
     }
-
     [Fact]
     public void PopulationReconnectGraceTicks_AtRateZero_ReflectsNeverAndDisabled() {
         var neverDocument = BuildWithRateAndGrace(rateHz: 0, reconnectGraceSeconds: 3.0f);
@@ -232,7 +219,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: disabledDocument.PopulationReconnectGraceTicks.IsNever);
         Assert.True(condition: disabledDocument.PopulationReconnectGraceTicks.IsZero);
     }
-
     [Fact]
     public void PopulationReconnectGraceTicks_AtPositiveRate_IsFiniteAndUnchanged() {
         var document = BuildWithRateAndGrace(rateHz: 240, reconnectGraceSeconds: 3.0f);
@@ -241,7 +227,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: compiled.IsNever);
         Assert.Equal(expected: 720, actual: compiled.Ticks);
     }
-
     /// <summary>THE load-bearing law: a seat that disconnects in a rate-0 world parks FOREVER — never torn down —
     /// rather than the pre-park immediate-teardown behavior a stale <c>&lt;= 0</c> read on the compiled grace would
     /// produce (compiled ticks collapse to 0 at rate 0 for ANY positive authored grace, which the old shape could
@@ -259,7 +244,7 @@ public sealed class SimulationRateZeroLawTests {
         var document = BuildWithRateAndGrace(rateHz: 0, reconnectGraceSeconds: 3.0f);
         var population = new WorldPopulation(definition: document);
 
-        population.ActivateSeat(slot: 0, profile: null);
+        population.ActivateSeat(profile: null, slot: 0);
         population.DeactivateSeat(slot: 0, tick: 100UL);
 
         Assert.True(condition: population.IsActive(index: 0), userMessage: "a parked seat must stay Active (still IsHumanOccupied)");
@@ -275,7 +260,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.True(condition: population.IsSeatParked(slot: 0));
         Assert.Null(@object: population.ParkedRemainingTicks(index: 0, tick: 1_000_000_000UL));
     }
-
     /// <summary>The regression control for <see cref="DeactivateSeat_AtRateZero_ParksForever"/>: a positive-rate
     /// world's existing park-with-grace behavior (finite deadline, reclaimed once the grace window passes) must be
     /// byte-for-byte unchanged by introducing <see cref="CompiledTickDuration"/>.</summary>
@@ -284,11 +268,11 @@ public sealed class SimulationRateZeroLawTests {
         var document = BuildWithRateAndGrace(rateHz: 240, reconnectGraceSeconds: 3.0f);
         var population = new WorldPopulation(definition: document);
 
-        population.ActivateSeat(slot: 0, profile: null);
+        population.ActivateSeat(profile: null, slot: 0);
         population.DeactivateSeat(slot: 0, tick: 0UL);
 
         Assert.True(condition: population.IsSeatParked(slot: 0));
-        Assert.Equal(expected: (long?)720L, actual: population.ParkedRemainingTicks(index: 0, tick: 0UL));
+        Assert.Equal(expected: ((long?)720L), actual: population.ParkedRemainingTicks(index: 0, tick: 0UL));
 
         population.ReclaimExpiredParks(tick: 719UL);
         Assert.True(condition: population.IsSeatParked(slot: 0), userMessage: "the grace window has not elapsed yet");
@@ -297,7 +281,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: population.IsActive(index: 0), userMessage: "the grace window elapsed; the body must be torn down");
         Assert.False(condition: population.IsSeatParked(slot: 0));
     }
-
     /// <summary>An authored-DISABLED grace (0 seconds) keeps the immediate-teardown behavior at ANY rate, including
     /// 0 — disabled is a real, distinct meaning from NEVER, not the same zero read two ways.</summary>
     [Fact]
@@ -305,13 +288,12 @@ public sealed class SimulationRateZeroLawTests {
         var document = BuildWithRateAndGrace(rateHz: 0, reconnectGraceSeconds: 0f);
         var population = new WorldPopulation(definition: document);
 
-        population.ActivateSeat(slot: 0, profile: null);
+        population.ActivateSeat(profile: null, slot: 0);
         population.DeactivateSeat(slot: 0, tick: 100UL);
 
         Assert.False(condition: population.IsActive(index: 0));
         Assert.False(condition: population.IsSeatParked(slot: 0));
     }
-
     /// <summary><see cref="WorldPopulation.ApplyPeerDisconnected"/> shares the identical NEVER/authored-disabled/
     /// finite branch shape as <see cref="DeactivateSeat_AtRateZero_ParksForever"/> — proved directly here (a REAL
     /// remote-admitted peer, via <see cref="WorldPopulation.TryAdmitRemotePeer"/>, not a hand-poked field) rather
@@ -337,7 +319,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.True(condition: population.IsParked(index: admitted.BodyIndex));
         Assert.Null(@object: population.ParkedRemainingTicks(index: admitted.BodyIndex, tick: 1_000_000_000UL));
     }
-
     /// <summary>The regression control for <see cref="ApplyPeerDisconnected_AtRateZero_ParksForever"/>.</summary>
     [Fact]
     public void ApplyPeerDisconnected_AtPositiveRate_BehaviorUnchanged() {
@@ -349,14 +330,13 @@ public sealed class SimulationRateZeroLawTests {
         population.ApplyPeerDisconnected(peer: admitted, tick: 0UL);
 
         Assert.True(condition: population.IsParked(index: admitted.BodyIndex));
-        Assert.Equal(expected: (long?)720L, actual: population.ParkedRemainingTicks(index: admitted.BodyIndex, tick: 0UL));
+        Assert.Equal(expected: ((long?)720L), actual: population.ParkedRemainingTicks(index: admitted.BodyIndex, tick: 0UL));
 
         population.ReclaimExpiredParks(tick: 720UL);
 
         Assert.False(condition: population.IsActive(index: admitted.BodyIndex));
         Assert.False(condition: population.IsParked(index: admitted.BodyIndex));
     }
-
     /// <summary>The peer-path counterpart of <see cref="DeactivateSeat_AuthoredDisabledGrace_TearsDownImmediately_AtRateZero"/>
     /// — the review's own test audit named this gap explicitly ("no ... peer-path authored-zero grace test"). An
     /// authored-DISABLED grace (0 seconds) tears a disconnecting peer down immediately at rate 0 too, exactly as at
@@ -373,7 +353,6 @@ public sealed class SimulationRateZeroLawTests {
         Assert.False(condition: population.IsActive(index: admitted.BodyIndex));
         Assert.False(condition: population.IsParked(index: admitted.BodyIndex));
     }
-
     /// <summary>Finding A's regression test — the adversarial review's own words: "the highest-risk lifecycle: park
     /// at rate 0, rebuild/reload at 240 Hz, then reclaim/admit a replacement." Before the fix,
     /// <see cref="WorldPopulation.Rebuild"/> recompiled the grace table but never walked live entries, so a
@@ -408,7 +387,7 @@ public sealed class SimulationRateZeroLawTests {
 
         Assert.True(condition: population.IsActive(index: admitted.BodyIndex), userMessage: "the revival sweep must not tear the entry down on the same tick it gets a fresh deadline");
         Assert.True(condition: population.IsParked(index: admitted.BodyIndex));
-        Assert.Equal(expected: (long?)720L, actual: population.ParkedRemainingTicks(index: admitted.BodyIndex, tick: 500UL));
+        Assert.Equal(expected: ((long?)720L), actual: population.ParkedRemainingTicks(index: admitted.BodyIndex, tick: 500UL));
 
         // Short of the re-derived deadline (500 + 720 - 1 = 1219): still parked.
         population.ReclaimExpiredParks(tick: 1219UL);
@@ -432,7 +411,6 @@ public sealed class SimulationRateZeroLawTests {
         // (see Fixtures.BuildDocumentCore's own remarks); a peer-path law needs that loop non-empty instead.
         return (document with { Population = (document.Population with { Capacity = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 }) });
     }
-
     private static WorldDefinition BuildWithRateAndGrace(int rateHz, float reconnectGraceSeconds) {
         var document = Fixtures.BuildDocument();
 

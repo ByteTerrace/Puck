@@ -25,7 +25,7 @@ re-issued 2026-08-07): the discriminator is whether Play, Dive, Kart, and Jump
 would each want the value different — sensitivities, clamps, radii, timings,
 speeds, which button arms a mode. If yes, it is a document field in its FIRST
 commit, never a constant to migrate later. Before writing any feature carrying
-a tunable number, search `src/Puck.World.Data` for existing vocabulary: the
+a tunable number, search `src/Puck.World.Schema` for existing vocabulary: the
 2026-08-07 relapse built a bespoke mouse-orbit with hardcoded sensitivity and
 pitch clamps while `WorldCameraMotion.Orbit` and the authored `views.seatRig`
 already existed. Legitimate constants: capacity bounds that size memory or the
@@ -37,23 +37,34 @@ console is only a MIRROR of that pipe — nothing that draws (including a HUD
 away. Verify game behavior by RUNNING the game, never by a build gate
 (`CLAUDE.md` rule 3).
 
-## The three projects
+## The six projects
 
 | Project | Owns | Key types |
 |---|---|---|
-| `src/Puck.World.Data` | The document model and the whole Protocol wire surface | `WorldDefinition` + section records, `WorldDefinitionValidator`, `WorldDefinitionSerialization`; `Protocol/`: `PlayerIntent`, `WorldCommand`, `WorldMutation`, `WorldGrant`/`WorldPrincipal`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport` |
-| `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, `WorldEngagement`, `WorldMachineHost`, `WorldAddonRuntime`, `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
+| `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records, `WorldDefinitionValidator`, `WorldDefinitionSerialization`; authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`WorldPrincipal`, admission entries) |
+| `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport` |
+| `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
+| `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `WorldMachineHost`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
+| `src/Puck.World.Addons` | The addon guest host | `WorldAddonRuntime`, `WorldAddonMutationDecoder`, `WorldAddonWire`, `AddonMutateRefusal` |
 | `src/Puck.World` | The sole composition root | `Program.cs`, the client (`Client/`), presentation and the screen-output binder, `Audio/`, every `*CommandModule`, and the shipped world/scenario documents under `Assets/` |
 
 Dependency rules are enforced by the architecture gate (`PUCKARCH`
-diagnostics from `build/Architecture.props`): `Puck.World.Data` references
-only `Puck.Abstractions`, `Puck.Commands`, `Puck.Forge`, and `Puck.Maths` —
-structurally denied backends, presentation,
-`Puck.Overlays`, `Puck.Input`, and `Puck.World.Server`. `Puck.World.Server`
-adds `Puck.World.Data`, `Puck.Scripting.Simulation`, `Puck.Storage`,
-`Puck.Hosting` — and knows nothing about rendering or input. The two seams
+diagnostics from `build/Architecture.props`): `Puck.World.Schema` references
+only its declared leaf/authoring closure plus `Puck.Physics`, which owns the fixed collider vocabulary —
+structurally denied backends, presentation, `Puck.Overlays`, `Puck.Input`,
+`Puck.World.Protocol`, and `Puck.World.Server`. `Puck.World.Protocol` adds
+`Puck.World.Schema` and `Puck.Networking` (the transport-neutral frame/wire
+grammar). `Puck.World.Server`
+adds `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Physics`, `Puck.Storage`,
+`Puck.Hosting` — and knows nothing about rendering or input; `Puck.World.Addons` carries
+`Puck.Scripting` (the addon guest ABI) and its own `AddonSimulationPump` now, referencing
+`Puck.World.Server` rather than the reverse. Physics owns generic contact geometry; Server owns
+pair selection, authority, walkability/grounding, obstruction reporting, and body-state writes. The two seams
 that legitimately cross: `BindingVocabularyHook` (a `[ModuleInitializer]`
-injection so Data validators reach the input vocabulary), and hand-mirrored
+injection so Schema validators reach the input vocabulary; the sibling
+`MutationKindVocabularyHook` crosses the identical seam so a
+`MutationKindMask` field can round-trip its kind names against Protocol's
+mutation-kind catalog), and hand-mirrored
 constants in `Puck.Overlays.OverlayChannelLeases` (see
 [references/hud.md](references/hud.md)). Each project's README is the
 current developer reference — start there for narrative depth this skill
@@ -102,7 +113,7 @@ worlds in the same change either way. Precise direction:
 above are each stated separately; a feature carrying tunable values owes all of
 them together, and skipping the binding is how a bespoke mechanism gets built
 beside an existing one:
-1. **Search `src/Puck.World.Data` for existing vocabulary first** — the record,
+1. **Search `src/Puck.World.Schema` for existing vocabulary first** — the record,
    the `$type` arm, or the section that already says this. Extending what exists
    beats a parallel mechanism, and the existing one is usually invisible from
    the call site you started at.
@@ -178,38 +189,18 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - Committed batteries: the runners under `docs/verification/`
   (undo-all-or-nothing, strict-definition-parse, sdf-decode-sign-refusal,
   doc-links, addon-mutation-seam, four-world-boot-smoke,
-  four-corners-sharded) — re-run the ones
-  your change touches. `ordered-domain`,
-  `lane-present-deletion`, `hud-document`, `headless-boot`,
-  `engagement-dissolution`, and `verification/authority` are QUARANTINED
-  (`authority`/`engagement-dissolution` 2026-08-06, the four others
-  2026-08-06 by the earlier owner ruling): their fixtures (or, for
-  `hud-document`, its
-  `scripts/sabotage/hud-skip-writer-emission.patch` context hunk) drift out
-  of date at the repo's change rate faster than repair is worth —
-  `headless-boot` had rotted to the point that its own sabotage phase no
-  longer went red, failing identically at its base commit, so it was
-  measuring nothing; `authority`'s cases 04-06 AND every phase of
-  `engagement-dissolution` from (b) on assumed the retired `default` world's
-  `screen:0` (a mounted addon too, for `authority`), which no shipped world
-  authors today — `engagement-dissolution` was found broken the same way
-  while re-verifying `authority`'s quarantine, its own dependency being
-  implicit (`screen.insert 0 …`, no `--world` override) rather than a named
-  file citation a text sweep would catch. None of the six keeps a runner —
-  each directory now holds a README recording what it proved and why it was
-  retired; validate those contracts by RUNNING THE APP. `authority`'s
-  successor is `tests/Puck.World.Tests`
-  (`AuthorityAdministrationLawTests`) for the
-  acting-principal/administration contract; an engage-authority law with
-  code-built `testPattern`-screen furniture is chartered to follow there and
-  is expected to absorb `engagement-dissolution`'s engage/disengage phases
-  too (its tape/codec phases have no chartered successor yet — owed work).
-  Do NOT create new persisted runner/battery artifacts without asking, and do
+  four-corners-sharded) — re-run the ones your change touches. The
+  acting-principal/administration and engage/disengage-authority contracts
+  are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
+  `EngageAuthorityLawTests`); a retired battery leaves no record directory
+  behind — its history is in git, and its contract is validated by running
+  the app until a law or canary owns it. Do NOT create new persisted runner/battery artifacts without asking, and do
   NOT repair a rotted fixture — quarantine it and move on (validation currency
-  is run-the-app, owner-in-the-loop). Quarantining means DELETING the runner
-  and leaving a README in its place carrying what it proved, why it was
-  retired, and how to check the contract live; a runner kept alive only to
-  announce it no longer runs is a battery-shaped file that is not a battery. Verify
+  is run-the-app, owner-in-the-loop). A battery still worth a historical note
+  keeps a README recording what it proved and why after its runner is
+  deleted; once even that record adds nothing beyond git history, delete
+  the directory outright — a runner kept alive only to announce it no
+  longer runs is a battery-shaped file that is not a battery. Verify
   thoroughly; ask before committing new permanent verification
   infrastructure.
 

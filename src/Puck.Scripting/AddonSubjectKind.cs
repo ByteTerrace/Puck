@@ -18,7 +18,7 @@ public enum AddonSubjectKind : byte {
     /// carries a guest-memory pointer and the <c>C</c> lane the UTF-8 byte length of the section's declared NAME
     /// (a <c>Puck.World.Protocol.WorldSection</c> member, matched case-insensitively), the same ptr/len convention
     /// <see cref="AddonAbi.RequestVerbs.SubmitMutation"/> already uses for a mutation payload — never a baked
-    /// enum ordinal a prior renumbering can silently strand (see <c>Server.WorldAddonRuntime.ResolveAsks</c>'s
+    /// enum ordinal a prior renumbering can silently strand (see <c>Addons.WorldAddonRuntime.ResolveAsks</c>'s
     /// remarks on the drift class this closes). A <see cref="Body"/> ask still carries a plain population index
     /// in <c>A</c> with <c>C</c> required zero — bodies are a live table position, not a renumberable enum, so
     /// they keep the ordinal shape.</summary>

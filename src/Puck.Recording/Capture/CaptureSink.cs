@@ -1,5 +1,6 @@
 using Puck.Abstractions.Capture;
 using Puck.Abstractions.Presentation;
+using Puck.Assets;
 namespace Puck.Recording.Capture;
 
 /// <summary>
@@ -8,9 +9,18 @@ namespace Puck.Recording.Capture;
 /// <see cref="CaptureOptions.OutputDirectory"/>) after letting any observers inspect it.
 /// </summary>
 public sealed class CaptureSink : ICaptureSink {
+    private string ResolvePath(long frameIndex) {
+        return (string.IsNullOrWhiteSpace(value: m_options.OutputPath)
+            ? Path.Combine(
+                path1: m_options.OutputDirectory,
+                path2: $"{m_options.FileNamePrefix}-{frameIndex:000000}.png"
+            )
+            : m_options.OutputPath
+        );
+    }
     private static byte[] ToRgba(Surface surface) {
         var pixels = surface.Pixels.Span;
-        var rgba = new byte[checked((((int)surface.Width * (int)surface.Height) * 4))];
+        var rgba = new byte[checked(((((int)surface.Width) * ((int)surface.Height)) * 4))];
 
         if (pixels.Length != rgba.Length) {
             throw new ArgumentException(
@@ -43,22 +53,6 @@ public sealed class CaptureSink : ICaptureSink {
         return rgba;
     }
 
-    private bool m_disposed;
-    private readonly ICaptureFrameObserver[] m_observers;
-    private readonly CaptureOptions m_options;
-
-    /// <summary>Initializes a new instance of the <see cref="CaptureSink"/> class.</summary>
-    /// <param name="options">The output configuration.</param>
-    /// <param name="observers">Observers notified of each frame before it is encoded, in registration order.</param>
-    public CaptureSink(CaptureOptions options, IEnumerable<ICaptureFrameObserver>? observers = null) {
-        ArgumentNullException.ThrowIfNull(options);
-
-        m_observers = ((observers is null)
-            ? []
-            : [.. observers]);
-        m_options = options;
-    }
-
     /// <inheritdoc/>
     public void Consume(in CaptureFrame frame) {
         ObjectDisposedException.ThrowIf(
@@ -80,10 +74,10 @@ public sealed class CaptureSink : ICaptureSink {
 
         _ = Directory.CreateDirectory(path: (Path.GetDirectoryName(path: path) ?? "."));
         PngEncoder.Write(
-            height: (int)surface.Height,
+            height: ((int)surface.Height),
             path: path,
             rgba: ToRgba(surface: surface),
-            width: (int)surface.Width
+            width: ((int)surface.Width)
         );
     }
     /// <inheritdoc/>
@@ -91,12 +85,21 @@ public sealed class CaptureSink : ICaptureSink {
         m_disposed = true;
     }
 
-    private string ResolvePath(long frameIndex) {
-        return (string.IsNullOrWhiteSpace(value: m_options.OutputPath)
-            ? Path.Combine(
-                path1: m_options.OutputDirectory,
-                path2: $"{m_options.FileNamePrefix}-{frameIndex:000000}.png"
-            )
-            : m_options.OutputPath);
+    private readonly ICaptureFrameObserver[] m_observers;
+    private readonly CaptureOptions m_options;
+
+    private bool m_disposed;
+
+    /// <summary>Initializes a new instance of the <see cref="CaptureSink"/> class.</summary>
+    /// <param name="options">The output configuration.</param>
+    /// <param name="observers">Observers notified of each frame before it is encoded, in registration order.</param>
+    public CaptureSink(CaptureOptions options, IEnumerable<ICaptureFrameObserver>? observers = null) {
+        ArgumentNullException.ThrowIfNull(options);
+
+        m_observers = ((observers is null)
+            ? []
+            : [.. observers]
+        );
+        m_options = options;
     }
 }

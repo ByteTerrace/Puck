@@ -1,4 +1,5 @@
 using System.Reflection;
+using Puck.World.Addons;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -9,32 +10,27 @@ namespace Puck.World;
 /// on-demand read-back (<c>world.refusals</c> is Immediate and reads no simulation state), never a per-tick cost, and
 /// the doors themselves pay nothing for it — a refusal's own throw site names an enum member exactly as it always
 /// would; nothing here runs until an operator asks.</summary>
-/// <remarks>Scans three assemblies, not one: the split between <c>Puck.World.Data</c>, <c>Puck.World.Server</c>, and
-/// this composition root put refusal-tagged enums in Puck.World.Data
-/// (e.g. <c>WorldGrant</c>'s), Puck.World.Server (<c>WorldReplayRefusal</c>), and this composition root
-/// (<c>Client.Sdf.SdfRefusal</c>). A single-assembly scan would silently stop seeing two thirds of the catalog;
-/// the assembly list below is anchored on one known type per assembly rather than an
-/// AppDomain-wide scan, so it names exactly what it means to cover.</remarks>
+/// <remarks>Scans four assemblies, not one: the split between <c>Puck.World.Schema</c>, <c>Puck.World.Server</c>,
+/// <c>Puck.World.Addons</c>, and this composition root put refusal-tagged enums in Puck.World.Schema
+/// (e.g. <c>WorldGrant</c>'s), Puck.World.Server (<c>WorldReplayRefusal</c>), Puck.World.Addons
+/// (<c>AddonMutateRefusal</c>), and this composition root (<c>Client.Sdf.SdfRefusal</c>). A single-assembly scan
+/// would silently stop seeing three quarters of the catalog; the assembly list below is anchored on one known type
+/// per assembly rather than an AppDomain-wide scan, so it names exactly what it means to cover.</remarks>
 internal static class RefusalCatalog {
-    private static readonly Assembly[] s_assemblies = [
+    private static readonly Assembly[] Assemblies = [
         typeof(RefusalCatalog).Assembly,
         typeof(RefusalAttribute).Assembly,
         typeof(WorldServer).Assembly,
+        typeof(AddonMutateRefusal).Assembly,
     ];
-    private static IReadOnlyList<RefusalCatalogEntry>? s_entries;
 
-    /// <summary>Every declared refusal across every door in this build, sorted by door then by id. Computed once and
-    /// cached — safe to call repeatedly (e.g. once per <c>world.refusals</c> invocation) at no repeated cost.</summary>
-    /// <returns>The catalog.</returns>
-    public static IReadOnlyList<RefusalCatalogEntry> All() {
-        return (s_entries ??= Discover());
-    }
+    private static IReadOnlyList<RefusalCatalogEntry>? Entries;
 
     private static IReadOnlyList<RefusalCatalogEntry> Discover() {
         var entries = new List<RefusalCatalogEntry>();
         var seenAssemblies = new HashSet<Assembly>();
 
-        foreach (var assembly in s_assemblies) {
+        foreach (var assembly in Assemblies) {
             if (!seenAssemblies.Add(item: assembly)) {
                 continue;
             }
@@ -49,17 +45,38 @@ internal static class RefusalCatalog {
                         continue;
                     }
 
-                    entries.Add(item: new RefusalCatalogEntry(Door: refusal.Door, Id: field.Name, Kind: refusal.Kind, Condition: refusal.Condition));
+                    entries.Add(item: new RefusalCatalogEntry(
+                        Door: refusal.Door,
+                        Id: field.Name,
+                        Kind: refusal.Kind,
+                        Condition: refusal.Condition
+                    ));
                 }
             }
         }
 
         entries.Sort(comparison: static (left, right) => {
-            var byDoor = string.CompareOrdinal(strA: left.Door, strB: right.Door);
+            var byDoor = string.CompareOrdinal(
+                strA: left.Door,
+                strB: right.Door
+            );
 
-            return ((byDoor != 0) ? byDoor : string.CompareOrdinal(strA: left.Id, strB: right.Id));
+            return ((byDoor != 0)
+                ? byDoor
+                : string.CompareOrdinal(
+                    strA: left.Id,
+                    strB: right.Id
+                )
+            );
         });
 
         return entries;
+    }
+
+    /// <summary>Every declared refusal across every door in this build, sorted by door then by id. Computed once and
+    /// cached — safe to call repeatedly (e.g. once per <c>world.refusals</c> invocation) at no repeated cost.</summary>
+    /// <returns>The catalog.</returns>
+    public static IReadOnlyList<RefusalCatalogEntry> All() {
+        return (Entries ??= Discover());
     }
 }

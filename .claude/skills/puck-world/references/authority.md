@@ -2,7 +2,7 @@
 
 ONE server-side table authorizes every write: `WorldGrants`
 (`src/Puck.World.Server/WorldGrants.cs`). Protocol vocabulary:
-`src/Puck.World.Data/Protocol/WorldGrant.cs`, `WorldPrincipal.cs`,
+`src/Puck.World.Schema/WorldGrant.cs`, `WorldPrincipal.cs`,
 `ChannelPolicy.cs`, `WorldPrincipalMapping.cs`. The capability-channels campaign that designed this model was retired 2026-08-10 and its rulings moved into the code above — read the CODE for current rulings, and `docs/campaign.md` for what remains as work.
 
 ## Contents
@@ -261,13 +261,16 @@ The `admission` section therefore governs transfers too. A row in
 `WorldAdmissionTrustMode.FederatedAuthority` mode carries no key: its `domain`
 is the authenticated source-authority namespace, or
 `WorldAdmissionEntry.AnyAuthority` (`*`) for any authority that completes
-`WorldFederationSecurity`'s shared-secret handshake; a named row beats the
-wildcard in either authored order. The door skips such rows when building its
-attestation trust list, so a document authoring arrivals alone still admits no
+`Puck.Networking.IAuthenticator`'s signed-claim challenge/proof handshake
+(`WorldAttestedAuthenticator`); a named row beats the wildcard in either
+authored order. The door skips such rows when building its attestation
+trust list, so a document authoring arrivals alone still admits no
 connecting peer, and `TryAdmit` answers `NoAdmissionEntries` there.
 `WorldAdmissionRefusal.NoArrivalAuthority` names the arrival-side miss. Every
-shipped world authors a `*` arrivals row, because an authority is addressed
-`<machineId>/<instance>` and the machine id is minted per installation.
+shipped world authors a `*` arrivals row, because the authenticated namespace
+is `WorldAttestedAuthenticator`'s own verified claim subject — the document's
+own `host.authority` when authored, else the boot instance identity — never a
+label a connecting peer merely claimed.
 
 A template's `Subject` is NULLABLE and means "the body this admission assigns"
 when absent — `WorldAdmissionGrant.SubjectFor(bodyIndex)` is the one resolution
@@ -441,13 +444,10 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 
 ## Verifying
 
-`verification/authority/` is QUARANTINED (2026-08-06) — its cases
-04-06 assumed the retired `default` world's `screen:0` and a mounted addon,
-which no shipped world authors today. No runner remains; its README is the
-record, and names the successor.
-The acting-principal/administration contract it proved now lives in
-`tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests`; an engage-authority law with code-built `testPattern`-screen
-furniture is chartered to follow there. For ad-hoc work: every denial case
+The acting-principal/administration contract is proved by
+`AuthorityAdministrationLawTests` and the engage/disengage-authority contract by
+`EngageAuthorityLawTests`, both in `tests/Puck.World.Tests` with code-built
+furniture. For ad-hoc work: every denial case
 needs a control (actor holding the grant succeeds), keep actor ≠ target
 (every seat is seeded wide, so self-targeting discriminates nothing), and
 prove a new assertion once by breaking it.

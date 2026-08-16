@@ -26,6 +26,7 @@ public sealed partial class VulkanGpuExportableRenderTarget : IGpuExportableRend
     private readonly nint m_memoryHandle;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
     private readonly VulkanRenderPass m_renderPass;
+
     private bool m_disposed;
     private bool m_finalized;
     private nint m_sharedHandle;
@@ -201,7 +202,6 @@ public sealed partial class VulkanGpuExportableRenderTarget : IGpuExportableRend
         );
         m_finalized = true;
     }
-
     /// <summary>Releases the framebuffer, render pass, image view, exportable image and memory, and closes the
     /// exported shared handle. Safe to call more than once.</summary>
     public void Dispose() {

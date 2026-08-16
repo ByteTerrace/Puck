@@ -33,7 +33,6 @@ public enum WindowInputKind {
     /// <see cref="WindowInputMapper"/>: the pump intercepts it before mapping.</summary>
     FocusLost,
 }
-
 /// <summary>
 /// Specifies the modifier keys held alongside a <see cref="WindowInputEvent"/> (bitwise-combinable).
 /// </summary>
@@ -54,7 +53,6 @@ public enum WindowInputModifiers {
     /// <summary>Either Super (Windows / Command) key held.</summary>
     Super = 8,
 }
-
 /// <summary>
 /// A provider-neutral window input event: what a native window emits after translating raw OS keys and pointer
 /// motion, <em>before</em> the <see cref="InputSources"/> vocabulary and command bindings are applied. The
@@ -83,55 +81,103 @@ public readonly record struct WindowInputEvent(
     InputDeviceId DeviceId = default,
     int ButtonIndex = -1
 ) {
+    /// <summary>A neutral OS-focus-lost notification.</summary>
+    public static WindowInputEvent FocusLost() {
+        return new WindowInputEvent(Kind: WindowInputKind.FocusLost);
+    }
     /// <summary>A neutral named-key press (<see cref="CommandPhase.Started"/>).</summary>
     public static WindowInputEvent KeyDown(KeyCode key, InputDeviceId deviceId = default) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: key, Phase: CommandPhase.Started, DeviceId: deviceId);
+        return new WindowInputEvent(
+            Kind: WindowInputKind.Key,
+            Key: key,
+            Phase: CommandPhase.Started,
+            DeviceId: deviceId
+        );
     }
     /// <summary>A neutral named-key release (<see cref="CommandPhase.Completed"/>).</summary>
     public static WindowInputEvent KeyUp(KeyCode key, InputDeviceId deviceId = default) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: key, Phase: CommandPhase.Completed, DeviceId: deviceId);
+        return new WindowInputEvent(
+            Kind: WindowInputKind.Key,
+            Key: key,
+            Phase: CommandPhase.Completed,
+            DeviceId: deviceId
+        );
     }
     /// <summary>A neutral letter-key press.</summary>
     public static WindowInputEvent LetterDown(char character, InputDeviceId deviceId = default) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: KeyCode.Letter, Character: character, Phase: CommandPhase.Started, DeviceId: deviceId);
+        return new WindowInputEvent(
+            Kind: WindowInputKind.Key,
+            Key: KeyCode.Letter,
+            Character: character,
+            Phase: CommandPhase.Started,
+            DeviceId: deviceId
+        );
     }
     /// <summary>A neutral letter-key release.</summary>
     public static WindowInputEvent LetterUp(char character, InputDeviceId deviceId = default) {
-        return new WindowInputEvent(Kind: WindowInputKind.Key, Key: KeyCode.Letter, Character: character, Phase: CommandPhase.Completed, DeviceId: deviceId);
-    }
-    /// <summary>A neutral typed-text event.</summary>
-    public static WindowInputEvent TypedText(string text, InputDeviceId deviceId = default) {
-        ArgumentNullException.ThrowIfNull(text);
-
-        return new WindowInputEvent(Kind: WindowInputKind.Text, Text: text, DeviceId: deviceId);
-    }
-    /// <summary>A neutral relative pointer delta (the frame's summed motion).</summary>
-    public static WindowInputEvent PointerDelta(Vector2 delta) {
-        return new WindowInputEvent(Kind: WindowInputKind.PointerMove, Vector: delta, Phase: CommandPhase.Active);
+        return new WindowInputEvent(
+            Kind: WindowInputKind.Key,
+            Key: KeyCode.Letter,
+            Character: character,
+            Phase: CommandPhase.Completed,
+            DeviceId: deviceId
+        );
     }
     /// <summary>A neutral absolute pointer position.</summary>
     public static WindowInputEvent PointerAbsolute(Vector2 position) {
-        return new WindowInputEvent(Kind: WindowInputKind.PointerPosition, Vector: position, Phase: CommandPhase.Active);
+        return new WindowInputEvent(
+            Kind: WindowInputKind.PointerPosition,
+            Vector: position,
+            Phase: CommandPhase.Active
+        );
     }
     /// <summary>A neutral pointer-button transition (0=left, 1=right, 2=middle, larger values are extra buttons), with the edge in <paramref name="phase"/>
     /// (<see cref="CommandPhase.Started"/> for down, <see cref="CommandPhase.Completed"/> for up — the same convention
     /// as <see cref="KeyDown"/>/<see cref="KeyUp"/>).</summary>
     public static WindowInputEvent PointerButton(int button, CommandPhase phase) {
         ArgumentOutOfRangeException.ThrowIfNegative(button);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: button, other: ushort.MaxValue);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            value: button,
+            other: ushort.MaxValue
+        );
 
-        return new WindowInputEvent(Kind: WindowInputKind.PointerButton, Phase: phase, ButtonIndex: button);
+        return new WindowInputEvent(
+            Kind: WindowInputKind.PointerButton,
+            Phase: phase,
+            ButtonIndex: button
+        );
+    }
+    /// <summary>A neutral relative pointer delta (the frame's summed motion).</summary>
+    public static WindowInputEvent PointerDelta(Vector2 delta) {
+        return new WindowInputEvent(
+            Kind: WindowInputKind.PointerMove,
+            Vector: delta,
+            Phase: CommandPhase.Active
+        );
     }
     /// <summary>A neutral pointer wheel rotation, in notches (positive away from the user).</summary>
     public static WindowInputEvent PointerWheel(float notches) {
-        return PointerWheel(notches: new Vector2(x: 0f, y: notches));
+        return PointerWheel(notches: new Vector2(
+            x: 0f,
+            y: notches
+        ));
     }
     /// <summary>A neutral two-axis pointer wheel rotation, in notches (positive X is right; positive Y is away).</summary>
     public static WindowInputEvent PointerWheel(Vector2 notches) {
-        return new WindowInputEvent(Kind: WindowInputKind.PointerWheel, Vector: notches, Phase: CommandPhase.Active);
+        return new WindowInputEvent(
+            Kind: WindowInputKind.PointerWheel,
+            Vector: notches,
+            Phase: CommandPhase.Active
+        );
     }
-    /// <summary>A neutral OS-focus-lost notification.</summary>
-    public static WindowInputEvent FocusLost() {
-        return new WindowInputEvent(Kind: WindowInputKind.FocusLost);
+    /// <summary>A neutral typed-text event.</summary>
+    public static WindowInputEvent TypedText(string text, InputDeviceId deviceId = default) {
+        ArgumentNullException.ThrowIfNull(text);
+
+        return new WindowInputEvent(
+            Kind: WindowInputKind.Text,
+            Text: text,
+            DeviceId: deviceId
+        );
     }
 }

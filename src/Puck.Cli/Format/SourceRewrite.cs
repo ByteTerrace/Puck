@@ -9,7 +9,7 @@ namespace Puck.Cli.Format;
 // back to back — except each file is written once.
 internal static class SourceRewrite {
     public static int Run(string label, string rootArgument, bool whatIf, bool verify, IReadOnlyList<FormatPass> passes) {
-        if (!SourceFiles.TryEnumerate(rootArgument: rootArgument, scanRoot: out _, files: out var files)) {
+        if (!SourceFiles.TryEnumerate(files: out var files, rootArgument: rootArgument, scanRoot: out _)) {
             return 2;
         }
 
@@ -22,7 +22,7 @@ internal static class SourceRewrite {
 
         foreach (var file in files) {
             var original = File.ReadAllText(path: file);
-            var current = ApplyAll(text: original, passes: passes);
+            var current = ApplyAll(passes: passes, text: original);
 
             if (RewriteIo.ContentEquals(a: current, b: original)) {
                 continue;
@@ -30,13 +30,13 @@ internal static class SourceRewrite {
 
             var relative = CliPaths.ToDisplay(fullPath: file);
 
-            if (RewriteIo.IntroducesErrors(original: original, rewritten: current)) {
+            if (RewriteIo.HasSyntaxErrors(original: original, rewritten: current)) {
                 corrupted.Add(item: relative);
 
                 continue;
             }
 
-            if (verify && !RewriteIo.ContentEquals(a: ApplyAll(text: current, passes: passes), b: current)) {
+            if (verify && !RewriteIo.ContentEquals(a: ApplyAll(passes: passes, text: current), b: current)) {
                 nonConvergent.Add(item: relative);
 
                 continue;
@@ -45,7 +45,7 @@ internal static class SourceRewrite {
             drifted.Add(item: relative);
 
             if (writing) {
-                RewriteIo.WriteCrlf(file: file, text: current);
+                RewriteIo.WriteText(file: file, text: current);
             }
         }
 
@@ -55,7 +55,7 @@ internal static class SourceRewrite {
             drifted: drifted,
             whatIf: (whatIf || verify),
             problems: [
-                ("would introduce syntax errors — SKIPPED", corrupted),
+                ("have syntax errors before or after rewriting — SKIPPED", corrupted),
                 ("do not converge (a pass is not idempotent) — SKIPPED", nonConvergent),
             ]);
     }

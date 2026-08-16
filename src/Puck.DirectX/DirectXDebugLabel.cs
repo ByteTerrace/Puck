@@ -21,7 +21,7 @@ public static unsafe class DirectXDebugLabel {
             commandList->BeginEvent(
                 Metadata: PixEventUnicodeVersion,
                 pData: name,
-                Size: (uint)((label.Length + 1) * sizeof(char))
+                Size: ((uint)((label.Length + 1) * sizeof(char)))
             );
         }
     }

@@ -12,10 +12,10 @@ namespace Puck.Abstractions.Lighting;
 public readonly record struct LampColor(byte Red, byte Green, byte Blue, byte Intensity = 255) {
     /// <summary>Gets a fully-off lamp (all channels and intensity zero).</summary>
     public static LampColor Off => new(
-        Red: 0,
-        Green: 0,
         Blue: 0,
-        Intensity: 0
+        Green: 0,
+        Intensity: 0,
+        Red: 0
     );
 
     /// <summary>Creates a color from RGB with full intensity.</summary>
@@ -25,13 +25,12 @@ public readonly record struct LampColor(byte Red, byte Green, byte Blue, byte In
     /// <returns>The color at full intensity.</returns>
     public static LampColor Rgb(byte red, byte green, byte blue) {
         return new LampColor(
-            Red: red,
-            Green: green,
             Blue: blue,
-            Intensity: 255
+            Green: green,
+            Intensity: 255,
+            Red: red
         );
     }
-
     /// <summary>
     /// Returns this color scaled toward black by <paramref name="scale"/> (clamped to 0..1). Brightness is
     /// carried in the RGB channels rather than the intensity byte, because many lamps (e.g. per-key keyboards)

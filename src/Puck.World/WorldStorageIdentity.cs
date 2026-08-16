@@ -24,13 +24,18 @@ internal sealed record WorldStorageSettings(string? Endpoint, string? UserId, st
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         return new WorldStorageSettings(
-            Endpoint: (string.IsNullOrWhiteSpace(value: endpointOverride) ? defaults.Endpoint : endpointOverride),
-            UserId: (string.IsNullOrWhiteSpace(value: userIdOverride) ? defaults.UserId : userIdOverride),
-            DiscoveryEndpoint: (string.IsNullOrWhiteSpace(value: discoveryEndpointOverride) ? defaults.DiscoveryEndpoint : discoveryEndpointOverride)
+            Endpoint: (string.IsNullOrWhiteSpace(value: endpointOverride)
+            ? defaults.Endpoint
+            : endpointOverride),
+            UserId: (string.IsNullOrWhiteSpace(value: userIdOverride)
+            ? defaults.UserId
+            : userIdOverride),
+            DiscoveryEndpoint: (string.IsNullOrWhiteSpace(value: discoveryEndpointOverride)
+            ? defaults.DiscoveryEndpoint
+            : discoveryEndpointOverride)
         );
     }
 }
-
 /// <summary>
 /// Resolves the acting user to a per-user container id, or declines. Two implementations exist:
 /// <see cref="ExplicitOverridePlayerStorageIdentityResolver"/> (the authored storage-section <c>userId</c> or its
@@ -59,7 +64,6 @@ internal interface IPlayerStorageIdentityResolver {
     /// <c>storage.status</c>.</param>
     /// <returns><see langword="true"/> when an identity resolved; <see langword="false"/> when it declined.</returns>
     bool TryResolve(out Guid containerId, out string reason);
-
     /// <summary>Builds the resolver from the effective storage settings: an explicit user-id yields the override
     /// resolver, its absence yields the declining resolver.</summary>
     /// <param name="settings">The effective storage settings.</param>
@@ -69,20 +73,26 @@ internal interface IPlayerStorageIdentityResolver {
 
         return (string.IsNullOrWhiteSpace(value: settings.UserId)
             ? new DecliningPlayerStorageIdentityResolver()
-            : new ExplicitOverridePlayerStorageIdentityResolver(userId: settings.UserId));
+            : new ExplicitOverridePlayerStorageIdentityResolver(userId: settings.UserId)
+        );
     }
 }
-
 /// <summary>The explicit-override resolver: the authored storage-section <c>userId</c> or its <c>--user-id</c> reflection —
-/// the only identity source today (see <see cref="IPlayerStorageIdentityResolver"/>'s remarks). The value must be an
-/// Entra <c>oid</c>-shaped Guid (a valid container name); a non-Guid override declines loudly rather than inventing a
-/// container.</summary>
+/// the only identity source today (see <see cref="IPlayerStorageIdentityResolver"/>'s remarks). The value must pass
+/// <see cref="WorldEntraObjectId.IsValid"/> (a valid container name); a non-Guid override declines loudly rather than
+/// inventing a container.</summary>
 internal sealed class ExplicitOverridePlayerStorageIdentityResolver(string userId) : IPlayerStorageIdentityResolver {
     private readonly string m_userId = (userId ?? throw new ArgumentNullException(paramName: nameof(userId)));
 
     /// <inheritdoc/>
     public bool TryResolve(out Guid containerId, out string reason) {
-        if (Guid.TryParse(input: m_userId, result: out containerId) && (containerId != Guid.Empty)) {
+        if (
+            WorldEntraObjectId.IsValid(value: m_userId) &&
+            Guid.TryParse(
+            input: m_userId,
+            result: out containerId
+        )
+        ) {
             reason = $"explicit override userId={containerId}";
 
             return true;
@@ -94,7 +104,6 @@ internal sealed class ExplicitOverridePlayerStorageIdentityResolver(string userI
         return false;
     }
 }
-
 /// <summary>The declining resolver — the local-only default: no user identity, per-user sync off. The honest
 /// state <c>storage.status</c> reports when no user-id is authored.</summary>
 internal sealed class DecliningPlayerStorageIdentityResolver : IPlayerStorageIdentityResolver {

@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Hosting;
 
 namespace Puck.HumbleGamingBrick;
 
@@ -28,6 +27,7 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     // The CURRENT model — construction-fixed at boot, then live-mutable through TryReconfigure (the dmg<->cgb<->agb
     // device swap). The dmgSpeed fairness pin is construction-fixed (it sizes the deterministic tick->cycle budget).
     private ConsoleModel m_model;
+
     private readonly bool m_dmgSpeed;
 
     /// <summary>Initializes a new machine host. When <paramref name="cartridgeRom"/> is non-null the machine assembles
@@ -66,7 +66,6 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     /// <inheritdoc/>
     public byte PeekByte(int address) =>
         Worker.PeekByte(address: address);
-
     /// <inheritdoc/>
     public void PokeByte(int address, byte value) =>
         Worker.PokeByte(
@@ -77,8 +76,8 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     /// <inheritdoc/>
     public string Options =>
         GamingBrickEngine.FormatOptions(
-        model: m_model,
-        dmgSpeed: m_dmgSpeed
+        dmgSpeed: m_dmgSpeed,
+        model: m_model
     );
 
     /// <inheritdoc/>
@@ -110,9 +109,9 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
         new HumbleGamingBrickCore(
-        model: m_model,
         cartridgeRom: data,
-        savePath: savePath,
-        dmgSpeed: m_dmgSpeed
+        dmgSpeed: m_dmgSpeed,
+        model: m_model,
+        savePath: savePath
     );
 }

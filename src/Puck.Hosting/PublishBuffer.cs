@@ -16,7 +16,6 @@ public sealed class PublishBuffer<T> {
     public void Publish(in T frame) {
         m_latest = new Holder(Frame: frame);
     }
-
     /// <summary>Copies the latest published frame, when one exists.</summary>
     /// <param name="frame">The latest frame, when published.</param>
     /// <returns><see langword="true"/> when a frame has been published.</returns>

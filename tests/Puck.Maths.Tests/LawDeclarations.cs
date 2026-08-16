@@ -8,12 +8,10 @@ namespace Puck.Maths.Tests;
 /// <param name="Members">The public members this case claims to cover.</param>
 /// <param name="Legs">What the statement stands on; at least one is required.</param>
 internal sealed record LawDeclaration(string Id, string Tier, IReadOnlyList<MemberRef> Members, IReadOnlyList<LegText> Legs);
-
 /// <summary>A covered member, named by declaring type and member name.</summary>
 /// <param name="Type">The declaring type's full name, generic definitions included (for example <c>PresentedAlgebra`2</c>).</param>
 /// <param name="Name">The member name; all overloads of that name are credited together, exactly as the C# form did.</param>
 internal sealed record MemberRef(string Type, string Name);
-
 /// <summary>A leg's authored text, one field per <see cref="Leg"/> slot.</summary>
 /// <remarks>
 /// <para>
@@ -46,11 +44,10 @@ internal sealed record LegText(string Kind, string Flavor, string Subject, strin
         );
 
     private static TEnum Parse<TEnum>(string token, string slot) where TEnum : struct, Enum =>
-        (Enum.TryParse<TEnum>(value: token, ignoreCase: false, result: out var parsed)
+        (Enum.TryParse<TEnum>(ignoreCase: false, result: out var parsed, value: token)
             ? parsed
-            : throw new InvalidOperationException($"'{token}' is not a {typeof(TEnum).Name} and cannot fill a leg's {slot} slot."));
+            : throw new InvalidOperationException(message: $"'{token}' is not a {typeof(TEnum).Name} and cannot fill a leg's {slot} slot."));
 }
-
 /// <summary>
 /// Reads the authored law declarations out of <c>laws/*.json</c>.
 /// </summary>
@@ -70,16 +67,14 @@ internal sealed record LegText(string Kind, string Flavor, string Subject, strin
 /// </remarks>
 internal static class LawDeclarations {
     private static readonly JsonSerializerOptions ReadOptions = new() {
+        AllowTrailingCommas = true,
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
     };
-
     private static readonly IReadOnlyDictionary<string, LawDeclaration> Declarations = Load();
 
     /// <summary>Gets every authored declaration, keyed by law id.</summary>
     public static IReadOnlyDictionary<string, LawDeclaration> All => Declarations;
-
     /// <summary>Gets the directory the authored declaration files live in.</summary>
     public static string Directory => Path.Combine(path1: TestPaths.ProjectDirectory, path2: "laws");
 
@@ -89,12 +84,12 @@ internal static class LawDeclarations {
         if (!System.IO.Directory.Exists(path: Directory)) { return declarations; }
 
         foreach (var path in System.IO.Directory.EnumerateFiles(path: Directory, searchPattern: "*.json").OrderBy(keySelector: static name => name, comparer: StringComparer.Ordinal)) {
-            var rows = JsonSerializer.Deserialize<List<LawDeclaration>>(json: File.ReadAllText(path: path), options: ReadOptions)
-                ?? throw new InvalidOperationException($"{Path.GetFileName(path: path)} did not parse as a law declaration list.");
+            var rows = (JsonSerializer.Deserialize<List<LawDeclaration>>(json: File.ReadAllText(path: path), options: ReadOptions)
+                ?? throw new InvalidOperationException(message: $"{Path.GetFileName(path: path)} did not parse as a law declaration list."));
 
             foreach (var row in rows) {
                 if (!declarations.TryAdd(key: row.Id, value: row)) {
-                    throw new InvalidOperationException($"the law id '{row.Id}' is declared twice; ids are the test display name and must be unique.");
+                    throw new InvalidOperationException(message: $"the law id '{row.Id}' is declared twice; ids are the test display name and must be unique.");
                 }
             }
         }

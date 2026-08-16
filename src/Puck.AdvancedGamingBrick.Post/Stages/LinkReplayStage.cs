@@ -21,7 +21,6 @@ internal sealed class LinkReplayStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "link-replay";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.C;
@@ -52,8 +51,8 @@ internal sealed class LinkReplayStage : IPostStage {
             )}");
         }
 
-        var lastParentWord = (ushort)((MicroRoms.LinkParentSendBase + MicroRoms.LinkRounds) - 1);
-        var lastChildWord = (ushort)(((MicroRoms.LinkParentSendBase + MicroRoms.LinkRounds) - 2) ^ MicroRoms.LinkChildTransformMask);
+        var lastParentWord = ((ushort)((MicroRoms.LinkParentSendBase + MicroRoms.LinkRounds) - 1));
+        var lastChildWord = ((ushort)(((MicroRoms.LinkParentSendBase + MicroRoms.LinkRounds) - 2) ^ MicroRoms.LinkChildTransformMask));
 
         return PostStageOutcome.Pass(detail: $"{MicroRoms.LinkRounds} multiplayer rounds exchanged both ways (parent 0x{MicroRoms.LinkParentSendBase:X4}..0x{lastParentWord:X4} ↔ child 0x{MicroRoms.LinkChildSeedWord:X4},transforms..0x{lastChildWord:X4}), {MicroRoms.LinkRounds} serial IRQs per side, ids 0/1, replay-identical across two runs ({first.ParentState.Size}+{first.ChildState.Size} state bytes)");
     }
@@ -95,7 +94,6 @@ internal sealed class LinkReplayStage : IPostStage {
 
         return console;
     }
-
     // Judges the first run's protocol outcomes; null means every expectation held.
     private static string? Verify(LinkScenarioResult result) =>
         (LinkStageProtocol.VerifySide(

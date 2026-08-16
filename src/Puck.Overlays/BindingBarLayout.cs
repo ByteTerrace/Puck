@@ -21,7 +21,6 @@ public readonly record struct BindingBarLayoutOptions(
     float GlyphSizeRatio,
     float Scale
 );
-
 /// <summary>One placed slot, in region-height units: x in [0, aspect], y in [0, 1], origin top-left.</summary>
 /// <param name="Center">The plate center.</param>
 /// <param name="GlyphCenter">The gamepad-glyph badge center (corner-offset from <paramref name="Center"/> by the modulo pattern).</param>
@@ -33,7 +32,6 @@ public readonly record struct BindingSlotPlacement(
     float HalfSize,
     float GlyphHalfSize
 );
-
 /// <summary>
 /// The pure math that places one bar's twelve binding slots — two mirrored six-slot clusters around a bottom-center
 /// anchor: within a cluster the <c>index % 6</c> pattern shapes a diamond (d-pad / face buttons) with the stick press
@@ -74,7 +72,6 @@ public static class BindingBarLayout {
             x: (aspect * 0.5f),
             y: (1f - anchorOffsetY)
         );
-
     /// <summary>Places one slot: the shared <see cref="PadPictogramLayout"/> compass geometry (button center + badge
     /// direction from one source of truth), anchored at the bar's bottom-center point and converted to the overlay's
     /// y-down frame. <see cref="SlotButtons"/> already feeds the LEFT cluster pre-flipped slot indices (d-pad RIGHT at

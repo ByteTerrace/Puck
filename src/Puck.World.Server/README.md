@@ -1,30 +1,33 @@
 # Puck.World.Server — the authoritative world runtime
 
 This project is the server half of the world game: the entity table, the tick
-step, the capability-grant authority model, the P7 TCP network transport, the
-addon guest runtime, player profiles and their storage, and the deterministic
+step, the capability-grant authority model, the P7 TCP network transport,
+the addon host seam, player profiles and their storage, and the deterministic
 replay codec. It consumes
 the document and protocol shapes from
-[`Puck.World.Data`](../Puck.World.Data/README.md) and knows nothing about
+[`Puck.World.Schema`](../Puck.World.Schema/README.md) and
+[`Puck.World.Protocol`](../Puck.World.Protocol/README.md) and knows nothing about
 rendering or input devices — the same architecture lane profile that fences
-`Puck.World.Data` (see `build/Architecture.props`) denies this project every
+those two projects (see `build/Architecture.props`) denies this project every
 presentation and backend assembly. The composition root that hosts it is
 [`Puck.World`](../Puck.World/README.md).
 
-Project references: `Puck.World.Data`, `Puck.Scripting.Simulation` (the addon
-simulation pump), `Puck.Storage`, and `Puck.Hosting`.
+Project references: `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Networking`,
+`Puck.Storage`, and `Puck.Hosting`. The addon guest runtime itself is
+[`Puck.World.Addons`](../Puck.World.Addons/README.md), which references this
+project rather than the reverse — see `IWorldAddonHost` below.
 
 ## The tick (`WorldServer.cs`)
 
 `WorldServer.Step` advances one exact fixed tick, in a pinned order its own
 XML documentation states: tick the mounted addon guests
-(`WorldAddonRuntime.TickAddons` — decodes and validates, applies nothing) →
+(`IWorldAddonHost.TickAddons` — decodes and validates, applies nothing) →
 drain the buffered live edits (mutations and whole-document swaps) → drain the
 buffered intents → apply the guests' contributions
-(`WorldAddonRuntime.ApplyContributions`) → fold each human-occupied body's
+(`IWorldAddonHost.ApplyContributions`) → fold each human-occupied body's
 contributions (`FoldChannelContributions`) → settle per-body contention →
 advance every body → resolve the guests' reads
-(`WorldAddonRuntime.ResolveReads`) → deliver the tick's `WorldSnapshot`.
+(`IWorldAddonHost.ResolveReads`) → deliver the tick's `WorldSnapshot`.
 
 Every non-intent submission arrives as one `SubmissionEnvelope` through
 `WorldServer.Submit` — a single ordered domain, drained in submission order.
@@ -98,7 +101,7 @@ tape > submitted > producer > zero.
 ## The entity table (`WorldPopulation.cs`, `WorldBody.cs`)
 
 Capacities are single-sourced in `WorldPopulationLimits`
-(`Puck.World.Data`): up to 128 authoritative bodies, of which indices 0–3 are
+(`Puck.World.Schema`): up to 128 authoritative bodies, of which indices 0–3 are
 the reserved local seats and the rest host simulated stand-ins and network
 peers. `WorldBody` owns one entry's integration, pose, tape, motion model, and
 action state. Bodies advance against the one contact-resolution seam
@@ -127,9 +130,9 @@ for the full contract.
 run). Per connection, TWO doors run off the tick thread before any body is
 admitted — neither touches server state beyond a read-only document snapshot:
 door 1 is the raw protocol-version handshake (`WorldProtocol.WireProtocolKey`
-via `WorldHelloDoor.TryAccept`, `Puck.World.Data`); door 2, once door 1
+via `WorldHelloDoor.TryAccept`, `Puck.World.Protocol`); door 2, once door 1
 passes, is the IDENTITY challenge-response
-(`Puck.World.Data.Protocol.WorldAdmissionDoor`) — the host mints a fresh
+(`Puck.World.Protocol.WorldAdmissionDoor`) — the host mints a fresh
 nonce, the peer answers with a signed `Puck.Attestation` claim (and, for a
 vouching root, its two-hop chain), and the door verifies it against the world
 document's own authored `admission` section, mapping the verified identity to
@@ -161,9 +164,13 @@ travels on the wire; the downstream reply is a small NEW grammar
 (`WorldTcpWireFormat`) carrying exactly the Completion lane
 (`WorldSubmissionResult`, i.e. Ack/Session/Query) — never a streamed
 snapshot/definition/composition/lever (`WorldOutputHub`'s encoded lane stays
-a scaffold beyond this one lane). `Puck.World.WorldRemoteClient` is the
-`--connect` side: a minimal, self-contained stdin client speaking this same
-Hello + leaf-codec grammar directly, not a second composition graph.
+a scaffold beyond this one lane). `--connect` does not speak this door as a
+client at all: `Puck.World.Program` enqueues a federation transfer
+(`WorldInstanceHost.EnqueueTransfer` with `TransferDestination.Remote`),
+which authenticates the resulting `WorldRemoteAuthority` purely over
+`Puck.Networking.IAuthenticator` (`WorldAttestedAuthenticator`, a signed claim
+over the challenge — never a shared secret) — the interactive attestation
+identity door above is server-side only today; no production client crosses it.
 `Puck.World.WorldNetworkCommandModule`'s `world.peers` echoes the connection
 table this class owns — each connection's verified admission identity
 (domain/subject) — plus an `arrivals:` group naming every body admitted by
@@ -189,8 +196,9 @@ field through, so an authored template states exactly what the peer holds.
 
 A federated or colocated transfer crosses the same door. `WorldTransferEscrow`
 runs `TryAdmitArrival` once at reserve against `request.SourceAuthority` (the
-namespace `WorldFederationSecurity`'s shared-secret handshake authenticated, or
-the in-process host's own for a colocated authority), carries the verdict on
+namespace `Puck.Networking.IAuthenticator`'s signed-claim handshake derived from the
+verified proof — never a label the connection merely claimed — or the
+in-process host's own for a colocated authority), carries the verdict on
 the lease, and commits it through `WorldServer.AdmitTransferredPeer`. Reserve
 and commit therefore cannot disagree: the reservation's per-slot authorization
 asks the verdict's templates whether they confer `Drive` over the body it is
@@ -200,9 +208,12 @@ carried profile — `world.peers`'s `arrivals:` group echoes them.
 
 An `admission` row in `federatedAuthority` mode carries no key: its `domain` is
 the authenticated authority namespace, or `*` for any authority that completes
-the handshake. An authority is addressed `<machineId>/<instance>` and the
-machine id is minted per installation, so `*` is what a document authors when
-it cannot know its neighbours' machine ids in advance. Such a row is skipped
+the handshake. That namespace is `WorldAttestedAuthenticator`'s own verified
+claim subject — `host.authority` when the document authors one, else the
+boot instance identity (`Puck.World.WorldDefinitionLoader.BootInstanceName`)
+— never a label the connecting peer merely asserted, so `*` is what a
+document authors when it cannot know its neighbours' identities in advance.
+Such a row is skipped
 when the door builds its attestation trust list — it can never verify a claim —
 and a document authoring arrivals alone still admits no connecting peer.
 ## Federation transport (`WorldFederationCodec.cs`)
@@ -210,11 +221,11 @@ and a document authoring arrivals alone still admits no connecting peer.
 The same listener routes a second dialect off the first eight bytes:
 `WorldFederationCodec.WireKey` opens an authority-to-authority connection
 instead of a player connection. That connection is a persistent authenticated
-lane — challenge/proof once (`WorldFederationSecurity`), then framed requests
+lane — challenge/proof once (`Puck.Networking.IAuthenticator`), then framed requests
 in order, request-then-response, until `Observe` or `IntentStream` takes it
 over and streams on it. The frame grammar, the bounded reader/writer, and the
 refusal vocabulary are the shared ones in
-`Puck.World.Data/Protocol/WorldWireCodec.cs`, so this codec is not a second
+`Puck.Networking/WireCodec.cs`, so this codec is not a second
 wire dialect: every leaf is Try-shaped and bounded before it allocates, and
 every refusal frame's text opens with a `WorldFederationRefusal` name.
 `WorldTcpHost.FederationRefusals` counts those names, so a refusal is read back
@@ -360,7 +371,7 @@ inside `WorldServer.Step`, immediately after `WorldEngagement.FoldTick`, fed
 that tick's per-screen pads directly (`WorldEngagement.BuildPadSnapshot()`,
 in-process — no client/wire round-trip). `screen.insert`/`.eject`/`.select`/
 `.options`/`.link`/`.unlink` (`Puck.World.ScreenCommandModule`) submit a
-`WorldScreenOp` (`Puck.World.Data`) through the ordered submission domain
+`WorldScreenOp` (`Puck.World.Protocol`) through the ordered submission domain
 (`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
 `Revoke` and checked against the ordinary grant table (`Control` over
 `screen:<n>`) before `WorldMachineHost` is touched; `Insert` and a
@@ -398,46 +409,40 @@ screen sources (test pattern, authored QR, webcam, compositor capture,
 jumbotron view) that are not this type's concern. The list above is the
 current set.
 
-## The addon runtime (`WorldAddonRuntime.cs`)
+## The addon host seam (`IWorldAddonHost.cs`, `WorldAddonReceipt.cs`)
 
-A `WorldAddonRow` in the world document's `addons` section is a data-only
-descriptor (name, module path, content hash, fuel budget, enabled, requested
-capabilities). Mounting happens at boot: the runtime compiles each enabled
-row's WebAssembly module through `Puck.Scripting`, pins its content hash, and
-prints one capability-disclosure line per guest naming what its manifest
-requested versus what the grant table actually holds — granted, withheld, and
-holds-beyond-manifest. Requesting is not receiving: deny-by-default holds
-regardless of the manifest, and authority materializes only where the row
-asked AND the table grants (a hold outside the manifest mints no handle).
-`WorldAddonWire.cs` is the fixed engine-owned mapping from a guest's validated
-acts onto `PlayerIntent` values. `world.addon.mount`/`world.addon.unmount`
-(P5) live-mount a NEW guest, or fully remove one, through the ordered
-submission domain (`WorldSubmissionPayload.AddonLifecycle`, buffered to the
-tick boundary through the same `DrainPendingOps` door a document mutation
-drains through) and are captured on the replay tape through their own leaf
-codec — a recorded mount/unmount RE-EXECUTES on `replay.verify`, so they are
-not refused while a recording is armed. `world.addon.reload`,
-`world.addon.enable`, and `world.addon.disable` are the older, still-live
-side path: they manage already-mounted guests SYNCHRONOUSLY, calling
-straight into `WorldAddonRuntime` outside the ordered domain and outside the
-tape, so they stay refused outright while a recording is armed. `world.addons`
-is the per-guest cost surface (lifecycle state, fuel budget, fuel consumed) —
-an unmounted guest no longer appears there at all. Guests are pumped only
-from inside `WorldServer.Step` (the three pinned points above), which is
-what keeps guest driving reproducible under replay without recording it.
+`IWorldAddonHost` is every member this project calls on the mounted addon
+guest host — the three tick-boundary pump points above, mount/unmount,
+mutation completion, and the undeclared-granted-channel disclosure.
+`WorldServer` holds one as `m_addons` and never names the concrete host
+type; `WorldReplaySnapshot.Drive` takes an `addonHostFactory` delegate so an
+offline re-drive can mount its own fresh guest set. `WorldAddonReceipt`
+(one mounted guest's recorded-at-mount name/hash/fuel) stays here rather
+than in `Puck.World.Addons` because this project owns the replay tape that
+persists it. The concrete host — `WorldAddonRuntime`, the mount sequence,
+the WASM guest ABI decode, the addon.mutate refusal catalog — is
+[`Puck.World.Addons`](../Puck.World.Addons/README.md).
 
 ## Owned worlds and storage
 
 `WorldOwnedWorlds` loads one `puck.world.def.v1` file per identity from
-`owned-worlds` beneath the state root. The machine-local installation id stays
-separate in `machine.id`; controller recognition is stored through named text
-state rows in the owned world. `--user-id` and `--state-dir` still resolve who
-is playing and where those worlds live. `WorldOwnedWorldSync` pushes and pulls
-those documents against the per-user cloud container (one blob per world under
-`puck/worlds/`, ETag-guarded, refuse-and-surface) when the composition root wires an
-endpoint and a resolved identity; cloud version tokens persist in
-`owned-worlds/sync-state.json`, and the `storage.push`/`storage.pull`/
-`storage.status`/`storage.credential` verbs in `Puck.World` drive and echo it.
+`owned-worlds` beneath the state root, plus any hand-placed basis chain link
+under its `owned-worlds/basis/` subdirectory (outside the catalog's own
+directory glob, so a link never enumerates as a second owned world). The
+machine-local installation id stays separate in `machine.id`; controller
+recognition is stored through named text state rows in the owned world.
+`--user-id` and `--state-dir` still resolve who is playing and where those
+worlds live. `WorldOwnedWorldSync` pushes and pulls those documents against the
+per-user cloud container — one blob per world tip under `puck/worlds/`, ETag-guarded,
+refuse-and-surface — when the composition root wires an endpoint and a resolved
+identity. A world naming a basis pushes and pulls its WHOLE chain, not just its
+flattened tip: each chain link lives under its own `puck/worlds/basis/{name}`
+key, and a pull composing a chain-derived document writes each link to the
+local `basis/` subdirectory (never a flattened file) so the next save keeps
+writing a delta. Cloud version tokens persist in `owned-worlds/sync-state.json`
+(tips and basis links tracked separately), and the `storage.push`/
+`storage.pull`/`storage.status`/`storage.credential` verbs in `Puck.World`
+drive and echo it.
 `IObjectBlobStore` also exposes `ListAsync(target, objectId, keyPrefix)` (the
 object-relative keys beneath a key path, matched by whole path segment — the same
 key space a read or write address carries, whichever route served the list); a
@@ -471,7 +476,7 @@ Enumerating the edge's view instead (a container named for the namespace) asks
 for something no account layout has, and an emulator that has been laid out to
 match the edge's view will pass while production 404s.
 
-`WorldOwnedWorldFileName` (in `Puck.World.Data`, because the earliest door that
+`WorldOwnedWorldFileName` (in `Puck.World.Schema`, because the earliest door that
 has to enforce it is document validation) is the id↔file/blob-name mapping, and
 it is lossy — reserved characters collapse to `_` — so it only names a location
 unambiguously for an id `IsSafe` accepts. Its escaped set is fixed rather than
@@ -533,20 +538,14 @@ over stdin and by the committed, re-runnable batteries:
 - `docs/verification/undo-all-or-nothing/run.ps1` — the journal replay's
   all-or-nothing contract.
 
-`docs/verification/ordered-domain/` — the envelope's ordering
-contract — is QUARANTINED (owner ruling, 2026-08-06); no runner remains,
-only its README. Verify the ordering contract
-live instead: one stdin batch interleaving a grant and the command that
-needs it, plus the reversed order as the discriminating control (see that
-directory's README).
+No committed battery covers the ordered-domain envelope's ordering
+contract. Verify it live instead: one stdin batch interleaving a grant and
+the command that needs it, plus the reversed order as the discriminating
+control.
 
-`verification/authority/` — the principal/grant enforcement battery
-(denial/control pairs per player-facing verb) — is likewise QUARANTINED
-(2026-08-06): cases 04-06 assumed the retired `default` world's `screen:0`
-and mounted addon, which no shipped world authors today. Its README
-documents every case as historical record; the successor is
-`tests/Puck.World.Tests`'s `AuthorityAdministrationLawTests` (not yet in
-`Puck.slnx`), with an engage-authority law chartered to follow there.
+Principal/grant enforcement (denial/control pairs per player-facing verb) is
+proved by `AuthorityAdministrationLawTests` and `EngageAuthorityLawTests` in
+`tests/Puck.World.Tests`.
 
 A change that moves simulation math is expected to change replay hashes;
 re-record any persisted tape it invalidates in the same change (`CLAUDE.md`

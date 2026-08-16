@@ -5,9 +5,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// Ports the ENGAGE/disengage-authority law <c>verification/authority</c> proved out-of-process before its quarantine (its own
-/// <c>03-assign.txt</c>/<c>05-disengage.txt</c> cases — a denial paired with a control, actor always distinct from
-/// the target) as an in-process substrate law directly against the ENGAGE door:
+/// The engage/disengage-authority law (a denial paired with a control, actor always distinct from the target), as an
+/// in-process substrate law directly against the engage door:
 /// <see cref="Puck.World.Server.WorldEngagement.CheckEngage"/>, which is nothing more than a
 /// <see cref="WorldCapability.Control"/> read over the ONE grant table (<c>m_grants.Allows</c>) — the SAME table
 /// <c>player.engage</c> consults server-side before it ever calls

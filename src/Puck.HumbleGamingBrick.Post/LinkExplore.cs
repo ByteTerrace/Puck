@@ -1,5 +1,5 @@
+using Puck.Assets;
 using Puck.HumbleGamingBrick.Interfaces;
-using Puck.Recording.Capture;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -33,18 +33,18 @@ internal static class LinkExplore {
         }
 
         var positionals = Positionals(
-            args: args,
-            afterIndex: index
+            afterIndex: index,
+            args: args
         );
         var frames = IntArg(
             args: args,
-            name: "--frames",
-            fallback: 900
+            fallback: 900,
+            name: "--frames"
         );
         var dumpEvery = IntArg(
             args: args,
-            name: "--dump-every",
-            fallback: 60
+            fallback: 60,
+            name: "--dump-every"
         );
         var outDir = (CommandLineArguments.Value(
             args: args,
@@ -52,13 +52,13 @@ internal static class LinkExplore {
         ) ?? ".");
         var modelA = ModelArg(
             args: args,
-            name: "--modelA",
-            fallback: ConsoleModel.Cgb
+            fallback: ConsoleModel.Cgb,
+            name: "--modelA"
         );
         var modelB = ModelArg(
             args: args,
-            name: "--modelB",
-            fallback: ConsoleModel.Agb
+            fallback: ConsoleModel.Agb,
+            name: "--modelB"
         );
 
         Directory.CreateDirectory(path: outDir);
@@ -105,17 +105,17 @@ internal static class LinkExplore {
 
         for (var frame = 0; (frame < frames); ++frame) {
             joypad.SetButtons(pressed: script.ButtonsAt(frame: frame));
-            machine.Machine.Run(tCycles: (ulong)PostMachine.TCyclesPerFrame);
+            machine.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
 
             if (
                 (((frame + 1) % dumpEvery) == 0) ||
                 ((frame + 1) == frames)
             ) {
                 Dump(
+                    frame: (frame + 1),
                     machine: machine,
                     outDir: outDir,
-                    tag: tag,
-                    frame: (frame + 1)
+                    tag: tag
                 );
             }
         }
@@ -153,16 +153,16 @@ internal static class LinkExplore {
                     ((frame + 1) == frames)
                 ) {
                     Dump(
+                        frame: (frame + 1),
                         machine: machineA,
                         outDir: outDir,
-                        tag: tagA,
-                        frame: (frame + 1)
+                        tag: tagA
                     );
                     Dump(
+                        frame: (frame + 1),
                         machine: machineB,
                         outDir: outDir,
-                        tag: tagB,
-                        frame: (frame + 1)
+                        tag: tagB
                     );
                 }
             }
@@ -180,9 +180,9 @@ internal static class LinkExplore {
             var offset = (pixel * 4);
             var value = pixels[pixel];
 
-            rgba[offset] = (byte)(value >> 16);
-            rgba[(offset + 1)] = (byte)(value >> 8);
-            rgba[(offset + 2)] = (byte)value;
+            rgba[offset] = ((byte)(value >> 16));
+            rgba[(offset + 1)] = ((byte)(value >> 8));
+            rgba[(offset + 2)] = ((byte)value);
             rgba[(offset + 3)] = 0xFF;
         }
 
@@ -213,8 +213,8 @@ internal static class LinkExplore {
 
         for (var index = (afterIndex + 1); (index < args.Length); ++index) {
             if (args[index].StartsWith(
-                value: "--",
-                comparisonType: StringComparison.Ordinal
+                comparisonType: StringComparison.Ordinal,
+                value: "--"
             )) {
                 break;
             }
@@ -231,8 +231,8 @@ internal static class LinkExplore {
         );
 
         return (((value is not null) && int.TryParse(
-            s: value,
-            result: out var parsed
+            result: out var parsed,
+            s: value
         ))
             ? parsed
             : fallback);

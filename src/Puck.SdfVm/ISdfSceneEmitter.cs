@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -46,7 +47,6 @@ public readonly record struct SdfEmitContext(
     int SlotBase,
     float InterpolationAlpha = 0f
 );
-
 /// <summary>One composable content source for an SDF world program — a room's fixed geometry, a sculpted scene, an
 /// authoring pool, a debug takeover, or (later) an RTS terrain/unit layer. <see cref="SdfCompositionFrameSource"/>
 /// holds a fixed list of these and rebuilds one shared <see cref="SdfProgramBuilder"/> from them, so a host composes a

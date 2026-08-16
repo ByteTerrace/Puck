@@ -16,7 +16,6 @@ internal static class ScanJsonl {
 
         return ((span.StartLinePosition.Line + 1), (span.EndLinePosition.Line + 1));
     }
-
     // The span of a construct reported from two anchors (a `lock` keyword through its close paren), so
     // the record covers the header rather than the whole body.
     public static (int Start, int End) LineRange(Location start, Location end) =>
@@ -59,7 +58,6 @@ internal static class ScanJsonl {
 
         return builder.Append(value: ']').ToString();
     }
-
     // The densest files first, formatted for the stderr digest every analyzer prints —
     // `<count>  <file>`, top 30 by default.
     public static IEnumerable<string> TopFiles(Dictionary<string, int> perFile, int take = 30) =>
@@ -67,7 +65,6 @@ internal static class ScanJsonl {
             .ThenBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)
             .Take(count: take)
             .Select(selector: static pair => $"{pair.Value,5}  {pair.Key}");
-
     // Minimal JSON string escaper. The scan output is only ever read back through JsonDocument, so this
     // needs to round-trip, not to be a general serializer.
     public static string JsonString(string value) {

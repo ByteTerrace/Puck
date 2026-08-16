@@ -14,11 +14,9 @@ internal sealed record DeclarationsOptions {
     public required string? Name { get; init; }
     public required bool Quiet { get; init; }
     public required IReadOnlyList<string> Roots { get; init; }
-
     // A type declaration is emitted when --kind was absent or names a type kind.
     public bool WantTypes =>
         ((Kinds.Count == 0) || Kinds.Overlaps(other: DeclarationsWalker.TypeKinds));
-
     // Members are emitted when asked for by --members, or implied by a member kind in --kind (asking for
     // methods and getting nothing because --members was missing would be a trap).
     public bool WantMembers =>

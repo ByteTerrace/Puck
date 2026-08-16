@@ -13,7 +13,6 @@ internal sealed class ForkDeterminismStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "fork-determinism";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
@@ -26,15 +25,15 @@ internal sealed class ForkDeterminismStage : IPostStage {
         );
 
         PostMachine.RunFrames(
-            instance: parent,
-            frames: WarmFrames
+            frames: WarmFrames,
+            instance: parent
         );
 
         using var fork = parent.Fork();
 
         PostMachine.RunFrames(
-            instance: parent,
-            frames: TailFrames
+            frames: TailFrames,
+            instance: parent
         );
         PostMachine.RunFrames(
             fork: fork,

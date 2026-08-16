@@ -95,7 +95,7 @@ internal static class SearchCommand {
             },
             localFinally: _ => { });
 
-        return SearchEmitter.Emit(results: results, opt: opt);
+        return SearchEmitter.Emit(opt: opt, results: results);
     }
 
     private const string HelpText =

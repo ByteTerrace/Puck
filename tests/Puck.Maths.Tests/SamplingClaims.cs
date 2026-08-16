@@ -26,12 +26,12 @@ internal static class SamplingClaims {
         public uint Next() {
             var old = State;
 
-            State = unchecked((old * 6364136223846793005UL) + Inc);
+            State = unchecked(((old * 6364136223846793005UL) + Inc));
 
             var xorshifted = unchecked((uint)(((old >> 18) ^ old) >> 27));
             var rotation = ((int)(old >> 59));
 
-            return ((xorshifted >> rotation) | (xorshifted << ((-rotation) & 31)));
+            return (xorshifted >> rotation) | (xorshifted << ((-rotation) & 31));
         }
     }
 
@@ -47,7 +47,7 @@ internal static class SamplingClaims {
         ];
 
         foreach (var (state, increment) in pairs) {
-            var oddIncrement = (increment | 1UL);
+            var oddIncrement = increment | 1UL;
             var reference = new PcgRef { Inc = oddIncrement, State = state };
             var subject = Pcg32XshRr.FromRawBits(increment: oddIncrement, multiplier: Pcg32XshRr.DefaultMultiplier, state: state);
 
@@ -80,7 +80,6 @@ internal static class SamplingClaims {
 
         return null;
     }
-
     // ---- gaussian moments and the alias table (Log2/Exp2/Pow accuracy is the scalar.* family's) ----
 
     public static string? GaussianMomentsCdfTailSurface() {
@@ -105,7 +104,7 @@ internal static class SamplingClaims {
                 thirdMoment += ((sample * sample) * sample);
                 fourthMoment += (((sample * sample) * sample) * sample);
 
-                var magnitude = Math.Abs(sample);
+                var magnitude = Math.Abs(value: sample);
 
                 if (magnitude > 3.0) { ++beyondThreeSigma; }
 
@@ -125,17 +124,17 @@ internal static class SamplingClaims {
         var variance = (secondMoment - (mean * mean));
         var kurtosis = (fourthMoment / (variance * variance));
 
-        if (Math.Abs(mean) > 1e-3) { return $"mean {mean:E4} exceeds 1e-3"; }
-        if (Math.Abs(variance - 1.0) > 3e-3) { return $"variance {variance:F6} departs from 1 by more than 3e-3"; }
-        if (Math.Abs(thirdMoment) > 5e-3) { return $"third moment (skew) {thirdMoment:E4} exceeds 5e-3"; }
-        if (Math.Abs(kurtosis - 3.0) > 2e-2) { return $"kurtosis {kurtosis:F5} departs from 3 by more than 2e-2"; }
+        if (Math.Abs(value: mean) > 1e-3) { return $"mean {mean:E4} exceeds 1e-3"; }
+        if (Math.Abs(value: (variance - 1.0)) > 3e-3) { return $"variance {variance:F6} departs from 1 by more than 3e-3"; }
+        if (Math.Abs(value: thirdMoment) > 5e-3) { return $"third moment (skew) {thirdMoment:E4} exceeds 5e-3"; }
+        if (Math.Abs(value: (kurtosis - 3.0)) > 2e-2) { return $"kurtosis {kurtosis:F5} departs from 3 by more than 2e-2"; }
 
         double[] twoSidedPhi = [0.3829249, 0.6826895, 0.8663856, 0.9544997, 0.9875807, 0.9973002];
 
         for (var bin = 0; (bin < binEdges.Length); ++bin) {
             var empirical = (binCounts[bin] / total);
 
-            if (Math.Abs(empirical - twoSidedPhi[bin]) > 1.5e-3) {
+            if (Math.Abs(value: (empirical - twoSidedPhi[bin])) > 1.5e-3) {
                 return $"CDF bin |z|<={binEdges[bin]} empirical {empirical:F6} vs target {twoSidedPhi[bin]:F6}";
             }
         }
@@ -149,8 +148,8 @@ internal static class SamplingClaims {
         // ±3e-4 statistical margin still applies on top of the enclosure, unchanged from before.
         var tailEnclosure = Oracles.EncloseGaussianTailBeyondThreeSigma(guardBitCount: Oracles.GuardBitCount);
         var enclosureScale = ((double)(BigInteger.One << (16 + Oracles.GuardBitCount)));
-        var tailLow = ((double)tailEnclosure.Low / enclosureScale);
-        var tailHigh = ((double)tailEnclosure.High / enclosureScale);
+        var tailLow = (((double)tailEnclosure.Low) / enclosureScale);
+        var tailHigh = (((double)tailEnclosure.High) / enclosureScale);
         const double StatisticalMargin = 3e-4;
 
         if ((tail < (tailLow - StatisticalMargin)) || (tail > (tailHigh + StatisticalMargin))) {
@@ -159,7 +158,6 @@ internal static class SamplingClaims {
 
         return null;
     }
-
     public static string? ShuffleUniformitySurface() {
         var generator = Pcg32XshRr.Create(state: 777UL, stream: 30UL);
         var counts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -174,7 +172,7 @@ internal static class SamplingClaims {
 
             var key = $"{deck[0]}{deck[1]}{deck[2]}{deck[3]}";
 
-            counts[key] = (counts.GetValueOrDefault(key) + 1);
+            counts[key] = (counts.GetValueOrDefault(key: key) + 1);
         }
 
         if (counts.Count != 24) {
@@ -184,14 +182,13 @@ internal static class SamplingClaims {
         const int Expected = (Trials / 24);
 
         foreach (var (permutation, count) in counts) {
-            if (Math.Abs(count - Expected) > 500) {
+            if (Math.Abs(value: (count - Expected)) > 500) {
                 return $"permutation {permutation} occurred {count} times, expected {Expected} +/- 500";
             }
         }
 
         return null;
     }
-
     public static string? AliasTableFrequencyDistributionSurface() {
         (string Label, ulong[] Weights, int Draws, ulong Seed)[] cases = [
             ("small-integer-ratios", [1UL, 2UL, 7UL], 2_000_000, 101UL),
@@ -217,8 +214,8 @@ internal static class SamplingClaims {
             for (var i = 0; (i < weights.Length); ++i) {
                 // |count/draws - weight/total| <= 3/1000, cross-multiplied so the comparison is exact BigInteger
                 // arithmetic rather than a floating-point ratio.
-                var lhs = (BigInteger.Abs((counts[i] * total) - ((BigInteger)draws * weights[i])) * 1000);
-                var rhs = ((3 * (BigInteger)draws) * total);
+                var lhs = (BigInteger.Abs(value: ((counts[i] * total) - (((BigInteger)draws) * weights[i]))) * 1000);
+                var rhs = ((3 * ((BigInteger)draws)) * total);
 
                 if (lhs > rhs) {
                     return $"{label}[{i}] weight={weights[i]} count={counts[i]} of {draws} departs from weight/total by more than 3/1000";
@@ -228,7 +225,6 @@ internal static class SamplingClaims {
 
         return null;
     }
-
     // ---- field noise (R1/R2's recurrence and coverage are sampling.low-discrepancy-recurrence's) ----
 
     public static string? FieldNoisePeriodicityAndDistributionSurface() {
@@ -255,10 +251,10 @@ internal static class SamplingClaims {
             var unitTranslated = (position + new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero));
             var probeSeed = unchecked((ulong)(97 + probe));
 
-            if (FieldNoise.Sample(seed: probeSeed, position: position) == FieldNoise.Sample(seed: probeSeed, position: periodShifted)) {
+            if (FieldNoise.Sample(position: position, seed: probeSeed) == FieldNoise.Sample(position: periodShifted, seed: probeSeed)) {
                 return $"probe {probe}: the sample still aliases at the former hash period, which must no longer alias";
             }
-            if (FieldNoise.Sample(seed: unchecked(probeSeed + FormerSeedCombineConstant), position: position) == FieldNoise.Sample(seed: probeSeed, position: unitTranslated)) {
+            if (FieldNoise.Sample(position: position, seed: unchecked((probeSeed + FormerSeedCombineConstant))) == FieldNoise.Sample(position: unitTranslated, seed: probeSeed)) {
                 return $"probe {probe}: seeding by the former combine constant still matches a unit translation, which must no longer hold";
             }
         }
@@ -268,7 +264,7 @@ internal static class SamplingClaims {
         var seamRaw = (1L << 62);
         var seamLeft = FieldNoise.Sample(seed: 42UL, position: new FixedVector3(X: FixedQ4816.FromRawBits(value: (seamRaw - 1L)), Y: FixedQ4816.FromRawBits(value: 17_123L), Z: FixedQ4816.FromRawBits(value: -9_321L)), octaves: 5);
         var seamRight = FieldNoise.Sample(seed: 42UL, position: new FixedVector3(X: FixedQ4816.FromRawBits(value: seamRaw), Y: FixedQ4816.FromRawBits(value: 17_123L), Z: FixedQ4816.FromRawBits(value: -9_321L)), octaves: 5);
-        var seamStep = Math.Abs(seamRight.Value - seamLeft.Value);
+        var seamStep = Math.Abs(value: (seamRight.Value - seamLeft.Value));
 
         if (seamStep > 16L) {
             return $"octave-wrap seam step {seamStep} raw exceeds the 16-raw continuity bound";
@@ -288,16 +284,16 @@ internal static class SamplingClaims {
                 Y: FixedQ4816.FromRawBits(value: NextSignedRaw(generator: ref generator)),
                 Z: FixedQ4816.FromRawBits(value: NextSignedRaw(generator: ref generator))
             );
-            var value = ((double)FieldNoise.Sample(seed: 42UL, position: position).Value);
+            var value = ((double)FieldNoise.Sample(position: position, seed: 42UL).Value);
 
             sum += value;
             sumOfSquares += (value * value);
         }
 
         var mean = ((sum / SampleCount) / 65536.0);
-        var standardDeviation = (Math.Sqrt(((sumOfSquares / SampleCount) - Math.Pow((sum / SampleCount), 2))) / 65536.0);
+        var standardDeviation = (Math.Sqrt(d: ((sumOfSquares / SampleCount) - Math.Pow(x: (sum / SampleCount), y: 2))) / 65536.0);
 
-        if (Math.Abs(mean) > 1e-3) { return $"noise mean {mean:E4} exceeds 1e-3"; }
+        if (Math.Abs(value: mean) > 1e-3) { return $"noise mean {mean:E4} exceeds 1e-3"; }
         if ((standardDeviation < 0.15) || (standardDeviation > 0.45)) { return $"noise standard deviation {standardDeviation:F5} outside [0.15, 0.45]"; }
 
         return null;
@@ -306,7 +302,7 @@ internal static class SamplingClaims {
     private static long NextSignedRaw(ref Pcg32XshRr generator) {
         var high = generator.NextUInt32();
         var low = generator.NextUInt32();
-        var wide = unchecked((long)(((ulong)high << 32) | low));
+        var wide = unchecked((long)((((ulong)high) << 32) | low));
 
         return ((wide % (1L << 41)) - (1L << 40));
     }
@@ -325,15 +321,15 @@ internal static class SamplingClaims {
         ];
 
         foreach (var certifiedCase in cases) {
-            var sequence = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: certifiedCase.P, q: certifiedCase.Q, d: certifiedCase.D, r: certifiedCase.R);
+            var sequence = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: certifiedCase.D, p: certifiedCase.P, q: certifiedCase.Q, r: certifiedCase.R);
 
             Assert.Equal(expected: certifiedCase.Certificate, actual: sequence.Certificate);
 
             foreach (var pointCount in new[] { 64, 4096, 16384 }) {
-                var (numerator, denominator) = ExactStarDiscrepancy(sequence: sequence, pointCount: pointCount);
+                var (numerator, denominator) = ExactStarDiscrepancy(pointCount: pointCount, sequence: sequence);
                 var bound = sequence.DiscrepancyBound(pointCount: pointCount);
                 var lhs = (numerator * 65536);
-                var rhs = ((BigInteger)bound.Value * denominator);
+                var rhs = (((BigInteger)bound.Value) * denominator);
 
                 if (lhs > rhs) {
                     return $"{certifiedCase.Name} measured star discrepancy {numerator}/{denominator} exceeds the certified bound {bound} at N={pointCount}";
@@ -343,14 +339,14 @@ internal static class SamplingClaims {
 
         // Teeth: the K=100 certificate measures markedly worse than K=1's at every scale, and three certificates
         // 1 < 2 < 100 measure strictly monotone at every one of those scales.
-        var golden = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L);
-        var silver = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 1L, q: 1L, d: 2L, r: 1L);
-        var badK = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 0L, q: 1L, d: 2501L, r: 1L);
+        var golden = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 5L, p: 1L, q: 1L, r: 2L);
+        var silver = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 2L, p: 1L, q: 1L, r: 1L);
+        var badK = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 2501L, p: 0L, q: 1L, r: 1L);
 
         foreach (var pointCount in new[] { 1024, 4096, 16384 }) {
-            var (goldenNumerator, goldenDenominator) = ExactStarDiscrepancy(sequence: golden, pointCount: pointCount);
-            var (silverNumerator, _) = ExactStarDiscrepancy(sequence: silver, pointCount: pointCount);
-            var (badKNumerator, _) = ExactStarDiscrepancy(sequence: badK, pointCount: pointCount);
+            var (goldenNumerator, goldenDenominator) = ExactStarDiscrepancy(pointCount: pointCount, sequence: golden);
+            var (silverNumerator, _) = ExactStarDiscrepancy(pointCount: pointCount, sequence: silver);
+            var (badKNumerator, _) = ExactStarDiscrepancy(pointCount: pointCount, sequence: badK);
 
             // Every side shares the SAME pointCount, and therefore the same denominator, so the comparison is on the
             // numerators alone.
@@ -367,14 +363,14 @@ internal static class SamplingClaims {
         foreach (var (name, sequence) in new (string, CertifiedLowDiscrepancy)[] { ("golden", golden), ("silver", silver), ("badK", badK) }) {
             var points = new uint[4096];
 
-            for (var i = 0; (i < points.Length); ++i) { points[i] = sequence.Point(index: (ulong)(i + 1)).Value; }
+            for (var i = 0; (i < points.Length); ++i) { points[i] = sequence.Point(index: ((ulong)(i + 1))).Value; }
 
-            Array.Sort(points);
+            Array.Sort(array: points);
 
             var gap = ((((ulong)points[0]) + (uint.MaxValue - points[^1])) + 1UL);
 
             for (var i = 1; (i < points.Length); ++i) {
-                var step = ((ulong)(points[i] - points[i - 1]));
+                var step = ((ulong)(points[i] - points[(i - 1)]));
 
                 if (step > gap) { gap = step; }
             }
@@ -385,7 +381,7 @@ internal static class SamplingClaims {
         }
 
         // Determinism: two independently constructed instances of the same generator agree bit for bit.
-        var goldenAgain = CertifiedLowDiscrepancy.FromQuadraticIrrational(p: 1L, q: 1L, d: 5L, r: 2L);
+        var goldenAgain = CertifiedLowDiscrepancy.FromQuadraticIrrational(d: 5L, p: 1L, q: 1L, r: 2L);
 
         for (var i = 0UL; (i < 4096UL); ++i) {
             Assert.Equal(expected: golden.Point(index: i), actual: goldenAgain.Point(index: i));
@@ -417,9 +413,9 @@ internal static class SamplingClaims {
     private static (BigInteger Numerator, BigInteger Denominator) ExactStarDiscrepancy(CertifiedLowDiscrepancy sequence, int pointCount) {
         var points = new uint[pointCount];
 
-        for (var i = 0; (i < pointCount); ++i) { points[i] = sequence.Point(index: (ulong)(i + 1)).Value; }
+        for (var i = 0; (i < pointCount); ++i) { points[i] = sequence.Point(index: ((ulong)(i + 1))).Value; }
 
-        Array.Sort(points);
+        Array.Sort(array: points);
 
         var denominator = (((BigInteger)pointCount) << 32);
         var numerator = BigInteger.Zero;

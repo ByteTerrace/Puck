@@ -27,9 +27,15 @@ internal static class WorldArgs {
             return fallback.HasValue;
         }
 
-        return (TryParseInt(text: args[at], value: out value) && (value >= min) && (value <= max));
+        return (
+            TryParseInt(
+            text: args[at],
+            value: out value
+        ) &&
+            (value >= min) &&
+            (value <= max)
+        );
     }
-
     /// <summary>The zero-copy peer of <see cref="TryParseIndex(string[], int, int, int, int?, out int)"/> over a
     /// <see cref="WireArgs"/>, parsing the index token straight from its span. Same optional/required contract as the
     /// array overload.</summary>
@@ -47,6 +53,13 @@ internal static class WorldArgs {
             return fallback.HasValue;
         }
 
-        return (args.TryInt(index: at, value: out value) && (value >= min) && (value <= max));
+        return (
+            args.TryInt(
+            index: at,
+            value: out value
+        ) &&
+            (value >= min) &&
+            (value <= max)
+        );
     }
 }

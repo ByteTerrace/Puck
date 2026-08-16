@@ -15,7 +15,6 @@ public interface IAttestationCodec {
     /// scheme: everything here binds the payload to its context.
     /// </summary>
     byte[] EncodeSignedPortion(AttestationHeader header, AttestationPayloadKind payloadKind, ReadOnlySpan<byte> payloadBytes);
-
     /// <summary>
     /// Encodes ONLY the context header — no payload kind, no payload, no signature. Sealed attestation uses
     /// this as the AEAD associated data (README.md, "Signed attestation": "the serialized context
@@ -23,24 +22,18 @@ public interface IAttestationCodec {
     /// will accompany can even be produced.
     /// </summary>
     byte[] EncodeHeader(AttestationHeader header);
-
     /// <summary>Encodes a full attestation (signed portion plus signature) for transport.</summary>
     byte[] EncodeAttestation(SignedAttestation attestation);
-
     /// <summary>Decodes a full attestation from transport bytes produced by <see cref="EncodeAttestation"/> of THIS codec.</summary>
     /// <exception cref="FormatException">The bytes are truncated, malformed, or not this codec's shape.</exception>
     SignedAttestation DecodeAttestation(ReadOnlySpan<byte> wire);
-
     /// <summary>Encodes a key binding's payload (the nested content of a <see cref="AttestationPurposes.KeyBinding"/> attestation).</summary>
     byte[] EncodeKeyBindingPayload(KeyBindingPayload payload);
-
     /// <summary>Decodes a key binding's payload.</summary>
     /// <exception cref="FormatException">The bytes are truncated or malformed.</exception>
     KeyBindingPayload DecodeKeyBindingPayload(ReadOnlySpan<byte> bytes);
-
     /// <summary>Encodes a sealed attestation payload (the nested content of a <see cref="AttestationPayloadKind.Sealed"/> attestation).</summary>
     byte[] EncodeSealedPayload(SealedPayload payload);
-
     /// <summary>Decodes a sealed attestation payload.</summary>
     /// <exception cref="FormatException">The bytes are truncated or malformed.</exception>
     SealedPayload DecodeSealedPayload(ReadOnlySpan<byte> bytes);

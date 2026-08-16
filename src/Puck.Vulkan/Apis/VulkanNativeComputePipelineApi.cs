@@ -82,7 +82,7 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
                 }
 
                 var setLayoutCreateInfo = new VkDescriptorSetLayoutCreateInfo {
-                    BindingCount = (uint)bindings.Count,
+                    BindingCount = ((uint)bindings.Count),
                     PBindings = bindingsPointer,
                     SType = StructureTypeDescriptorSetLayoutCreateInfo,
                 };
@@ -257,12 +257,12 @@ public unsafe sealed class VulkanNativeComputePipelineApi : IVulkanComputePipeli
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                CreateComputePipelines = (delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateComputePipelines"u8),
-                CreatePipelineLayout = (delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreatePipelineLayout"u8),
-                CreateDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorSetLayout"u8),
-                DestroyPipeline = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipeline"u8),
-                DestroyDescriptorSetLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorSetLayout"u8),
-                DestroyPipelineLayout = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipelineLayout"u8),
+                CreateComputePipelines = ((delegate* unmanaged[Cdecl]<nint, nint, uint, nint, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateComputePipelines"u8)),
+                CreatePipelineLayout = ((delegate* unmanaged[Cdecl]<nint, in VkPipelineLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreatePipelineLayout"u8)),
+                CreateDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetLayoutCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorSetLayout"u8)),
+                DestroyPipeline = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipeline"u8)),
+                DestroyDescriptorSetLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorSetLayout"u8)),
+                DestroyPipelineLayout = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyPipelineLayout"u8)),
             }
         );
     }

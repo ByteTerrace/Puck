@@ -32,6 +32,25 @@ general enough for cross-game unlocks between trusted servers. Every world is a 
 starting points converge on the hub. An arcade cabinet stands dark in Play's plaza as the first of
 them.
 
+## Project-shape rulings
+
+Settled shape decisions from this arc, so a reader extending the split does not re-litigate them.
+
+**Documents belong in world-type projects.** Everything document-shaped — `puck.world.def.v1` and its
+neighbours — lives in `Puck.World.Schema` and `Puck.World.Protocol` (world wire residue), never in the
+generic layer beneath them. `Puck.Networking` carries the transport, hello, identity, request lane and
+authenticator that `Puck.World.Protocol` builds on, and it carries no `World` token — a world concept
+never leaks down into what is meant to stay reusable transport.
+
+**Forge is a world project.** `Puck.World.Forge` authors game content — SM83 cartridges and the authoring
+document families — for `Puck.World`; the name says so. Its C# namespace still reads `Puck.Forge` until
+the one-time namespace normalization.
+
+**Everything is v1.** `puck.world.def.v1`, `puck.world.projection.v1`, `puck.world.counterpart.v1` — no
+schema in this repository carries a v2, and none is planned. Supergreen holds: zero consumers, so a
+breaking change edits the v1 shape in place and updates every internal caller in the same change, never
+a parallel version or a compatibility shim.
+
 ## Where the campaign actually is
 
 **Do not trust this section's vintage — re-run the checks.** Each claim below names the check that
@@ -39,14 +58,15 @@ produced it, because a status sentence with no check behind it is how a reader e
 capability exists. This is the whole reason the old per-capability register was deleted and must not
 come back.
 
-**Verified 2026-08-11, at the seamless Four Corners landing:**
+**Verified 2026-08-15, on the branch that split the projects:**
 
 | Claim | The check |
 |---|---|
-| Five world documents boot | `dotnet run --project src/Puck.World -c Release -- --world <name> --exit-after-seconds 2`, audit STDERR — exit code 0 is NOT success |
-| Play authors ground, four walls, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/play.world.json`'s `placements` |
-| Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects` |
-| **No world authors WORLD-SCOPE rules** — 0 of 10 documents carry a `rules` or `interactions` section | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
+| Five world documents boot | `dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/<name>.world.json --exit-after-seconds 2`, audit STDERR — exit code 0 is NOT success (the only bracketed lines are the by-design `world.screen … recursion refused` notices for session mirrors) |
+| Play authors ground, four walls, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/play.world.json`'s `placements` — `arcade-cabinet` plus `dive-portal`/`kart-portal`/`jump-portal`/`studio-portal` |
+| Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
+| **No world authors WORLD-SCOPE rules** — 0 of 11 documents carry a `rules` or `interactions` section | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
+| Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
 
 **The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
@@ -154,6 +174,78 @@ generation-addressed entity namespaces, and zero wire errors.
 **Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
 primitives land with the content that proves them.
 
+## After this arc
+
+Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has
+landed.
+
+**Wave 3, landed:** the Forge rename; `Puck.Scripting.Simulation` dissolved (pump into
+`Puck.World.Addons`, the input-source vocabulary into `Puck.Input`); the queued-machine substrate and the
+POST battery scaffold folded into `Puck.GamingBricks` / `Puck.GamingBricks.Post`, and two link-session
+defects closed; the two-body spike folded into `tests/Puck.Physics.Tests`; separable tests mirrored into
+`Puck.Networking.Tests`, `Puck.World.Protocol.Tests`, `Puck.World.Schema.Tests`, `Puck.GamingBricks.Tests`;
+`quilt-nw-gap` back as a three-field basis delta with the `quilt-nw-gap-corner-strip` canary; the
+four-corners-sharded canary shape designed in `docs/verification/four-corners-sharded/CANARY-SHAPE.md`.
+**Wave 3, still open:** the `Puck.World.Client` split (seam designed, sequenced after the dissolution it
+depends on: `PlayerRoster` reads through a link query, remote-default); building the sharded canary
+shape; `docs/verification/manual` stays as the human-at-a-window procedures it is; `experimental/scripts`
+holds the only coverage of the audio mixer, the overlay frame builder, the mux determinism check and the
+audio-device failure paths — those become law tests or `puck` verbs in the arcs that own them, never
+deletions until then.
+
+Orleans becomes the first hosting substrate, under one constraint ("Stay Puck"): no Orleans type appears
+outside the adapter, a grain is a world instance, the silo hosts the door directly, hosted persistence
+goes non-private through the silo's own managed identity, and clustering rides Storage. Azure is already
+provisioned for the rest of the platform; what is missing for this is a second container app and a
+managed identity for the silo, authored as bicep in the sibling Azure.Resources repository.
+
+**Wave 4** is `Puck.Audio` — adaptive music, event voice, a rhythm judge, diegetic synthesizer machines.
+The decisions live in the sim (tick clock, director, judge, instrument machines); sound stays
+presentation, per the determinism split in [vision.md](vision.md#determinism-precisely). Its shape is
+ruled, not built:
+
+- **Music is synthesized end to end.** Authored music is tracker-style data — patterns, sequences,
+  instrument patches — with an iMUSE-style structural layer over it: segments with transition markers,
+  conditional layers, and director embellishments. No sample assets. Prior art to read before authoring
+  the document: iMUSE, Breath of the Wild (state-cued sparse layers, event stings), Hi-Fi Rush (the world
+  animates to the beat; judged windows are generous).
+- **The rhythm judge is a sim primitive any lane can opt into** — hit windows in ticks against the
+  tick-denominated musical clock, authored per action lane or interaction. No fifth world.
+- **Voice is synthesized babble**, not recorded lines: pitch, timbre, and cadence authored on the
+  identity; text renders as babble plus caption. Deterministic, asset-free, localization-free.
+- **Music, instrument, and voice documents are identity-owned libraries in storage**, referenced from a
+  world's audio section by content address and hash — the same shape as items and cartridges. A world
+  document never embeds them.
+- `Puck.Audio` parses no document (the `Puck.Physics` boundary); document families live in world
+  projects.
+
+**Quilt-as-nexus.** The shipped quilt IS the hub, and **Play IS the nexus**: the four ground corner
+authorities (`quilt-base`, `quilt-ne`, `quilt-se`, `quilt-sw`) plus the floating island together are the
+Dalaran-type place, and `play.world.json` retires, so the roster stays five documents (nexus, Dive, Kart,
+Jump, studio). Play's plaza furniture — the four dungeon/studio portals, the arcade cabinet, the market —
+and its crowd port onto the **island**; the ground corners stay ground. Other identities' worlds attach
+wherever a corner document declares a reciprocal adjacency; no face is reserved. The nexus runs at 30 Hz
+simulation with a 60 Hz render target; its one kit is `default` (the quilt's own tuning, renamed from
+`vaulter`); the `promenader` kit is dropped rather than ported. Studio keeps its archway portal
+(`arrival: "mapped"`) and never becomes a seam. The whole hub is silo-hosted — one silo, one grain per
+authority — and **owned by the platform's public-content identity** — the principal whose container the
+front door already serves anonymously and cached under `/public/*` — never by a person's container; the
+hub's documents and projections publish the way everything under that identity does. Orleans hosting is
+therefore a prerequisite of this landing; the identity is not. Not started.
+
+**Client seam.** `PlayerRoster`'s loopback-only reads of the live server become a link query that works
+identically in-process and over the wire; no direct-object interface is minted for the shortcut, and
+`WorldOwnedWorlds` stays in Server. Remote is the default path.
+
+**Voice rendering.** One short pitched synth voice per estimated syllable, on the identity's timbre with
+cadence jitter — never one sustained tone per sentence.
+
+**Namespace normalization** runs once, last, tree-wide, after the splits above settle rather than
+interleaved with them.
+
+**Owner-run, still owed:** the C-3/PL-2 live smoke against `Web.Functions` (see the federation remainder
+below), and the track-4 feel sitting.
+
 ## The rules that keep this honest
 
 These are earned, each from a defect that cost real time.
@@ -196,15 +288,30 @@ carry them), or `replica` (the whole `puck.world.def.v1`, the sanctioned downloa
 `admission` row's `disclosure`, decided once at admission and read by every remote egress; absent
 resolves to `presentation`, so a world authored before the field existed hands out no replica. A
 traveler crossing a seam discloses an identity projection — appearance and the two motion rates —
-never its owned document. A counterpart proves a border with a signed
-`puck.world.counterpart.v1` attestation rather than by handing over its world; a derived corner is a
-claim about a third authority and still needs the documents. Snapshot delivery carries a per-observer
+never its owned document. A counterpart proves a border with a
+`puck.world.counterpart.v1` attestation rather than by handing over its world; a derived corner is
+proven the same way from all three documents. The resolver that assembles a corner ranks a resolved
+document over a cryptographically verified attestation over a plain one, first-of-kind winning — only
+the first two ever complete a corner, and a plain, unverified attestation never does. Snapshot delivery
+carries a per-observer
 `population.disclosure` policy applied at the output hub's sink boundary, defaulting to disclose-all.
 Read them back with `world.projection`, `world.peers`, and `world.admission`.
 
-**The wire admits too early.** The hello proves protocol compatibility, then identity against the
-document's authored `admission` trust list — but a verified peer is then admitted straight to a
-population body. Still open, in order: destination/session resolution on the wire, an unembodied
+**A world names a cross-owner neighbour without reaching its storage directly.** Worlds ARE users, so
+one owner's storage container is never reachable from another's. `WorldReference` gained an owner arm
+(`owner/{oid}/{world}`), resolved by a cross-owner API counterpart resolver that fetches the named
+owner's published claim, verifies its chain against the reading world's own admission entries, and binds
+the verified subject to the reference's named owner before it can ever return a verified attestation.
+`storage.push` publishes that counterpart claim, and `storage.status` echoes it. The oracle endpoints
+behind this — key pairs, attestation, the counterpart trigger — live in `src/Web.Functions` (gitignored,
+in-tree, out of the architecture gate by stated predicate). Its live smoke against a real deployment is
+owner-run and not yet done, so the wire path above is exercised locally, not against the deployed oracle.
+
+**The wire admits too early.** The hello proves protocol compatibility, then identity by a
+challenge-response signed attestation — a direct pin on the peer's own key, or a two-hop chain through a
+vouching root, checked against the document's authored `admission` trust list; no shared secret is
+involved. A verified peer is then admitted straight to a population body. Still open, in order:
+destination/session resolution on the wire, an unembodied
 session authority (no session principal exists for observation without embodiment — which is also
 why a narrowed `population.disclosure` delivers a remote observer nothing until one of its travelers
 lands), and only then optional body reservation/allocation. With them: issuer-qualified

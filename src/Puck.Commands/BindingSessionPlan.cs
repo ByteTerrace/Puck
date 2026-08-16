@@ -66,14 +66,14 @@ public sealed record BindingSessionPlan(
             RequiredPresses: requiredPresses,
             ReservedSources: [.. document.Modifiers.Select(selector: static modifier => modifier.Source)],
             Steps: [.. sourcedEntries.Select(selector: static entry => new BindingSessionStep(
-                ActivateOn: entry.ActivateOn,
-                Command: ((entry.Channel is { } channel)
+                    ActivateOn: entry.ActivateOn,
+                    Command: ((entry.Channel is { } channel)
             ? BindingProfile.ChannelCommandName(channel: channel)
             : entry.Command!),
-                Icon: entry.Icon,
-                Label: entry.Label,
-                SuggestedSource: entry.Source!
-            ))]
+                    Icon: entry.Icon,
+                    Label: entry.Label,
+                    SuggestedSource: entry.Source!
+                ))]
         );
     }
 }

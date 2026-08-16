@@ -12,8 +12,12 @@ internal static class SteamControllerInput {
     public static Vector2 ReadStick(ReadOnlySpan<byte> report, int offset) {
         var stick = new Vector2(
             x: (BinaryPrimitives.ReadInt16LittleEndian(source: report[offset..]) / StickRange),
-            y: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) / StickRange));
+            y: (BinaryPrimitives.ReadInt16LittleEndian(source: report[(offset + 2)..]) / StickRange)
+        );
 
-        return GamepadNormalization.ApplyRadialDeadzone(stick: stick, deadzone: StickDeadzone);
+        return GamepadNormalization.ApplyRadialDeadzone(
+            deadzone: StickDeadzone,
+            stick: stick
+        );
     }
 }

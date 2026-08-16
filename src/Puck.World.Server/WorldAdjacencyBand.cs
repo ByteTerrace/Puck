@@ -32,15 +32,27 @@ public readonly record struct WorldAdjacencyBand(string Name, WorldFaceFrame Fra
         ArgumentOutOfRangeException.ThrowIfNegative(value: ownershipThreshold.Value);
 
         var relative = (position - Frame.Origin);
-        var horizontal = FixedVector3.Dot(left: relative, right: Frame.Right);
-        var vertical = FixedVector3.Dot(left: relative, right: Frame.Up);
-        var ownershipHalfWidth = (Frame.HalfWidth + (Frame.IsYawOnly ? ownershipThreshold : FixedQ4816.Zero));
+        var horizontal = FixedVector3.Dot(
+            left: relative,
+            right: Frame.Right
+        );
+        var vertical = FixedVector3.Dot(
+            left: relative,
+            right: Frame.Up
+        );
+        var ownershipHalfWidth = (Frame.HalfWidth + (Frame.IsYawOnly
+            ? ownershipThreshold
+            : FixedQ4816.Zero));
 
-        return (Transits(position: position, depth: depth) &&
+        return (
+            Transits(
+            depth: depth,
+            position: position
+        ) &&
             (FixedQ4816.Abs(value: horizontal) <= ownershipHalfWidth) &&
-            (FixedQ4816.Abs(value: vertical) <= Frame.HalfHeight));
+            (FixedQ4816.Abs(value: vertical) <= Frame.HalfHeight)
+        );
     }
-
     /// <summary>Whether <paramref name="position"/> may pass THROUGH this face on the way to a farther peer: the
     /// owned-side depth bound alone, with no aperture.</summary>
     /// <remarks>An intermediate hop of a derived corner path only transports coordinates; the stage that finally
@@ -52,19 +64,15 @@ public readonly record struct WorldAdjacencyBand(string Name, WorldFaceFrame Fra
     /// <param name="position">The point to test, in the SOURCE side's own local coordinates.</param>
     /// <param name="depth">The compiler-derived overlap depth.</param>
     public bool Transits(FixedVector3 position, FixedQ4816 depth) =>
-        (FixedVector3.Dot(left: (position - Frame.Origin), right: Frame.Normal) >= -depth);
+        (FixedVector3.Dot(
+            left: (position - Frame.Origin),
+            right: Frame.Normal
+        ) >= -depth);
 }
-
 /// <summary>Collects every <see cref="WorldAdjacencyBand"/> a definition authors — the walk both
 /// <see cref="WorldAdjacencyContactField"/> and the render composition share, so the two can never disagree about
 /// which faces carry an overlap band.</summary>
 public static class WorldAdjacencyBands {
-    /// <summary>The reservation ceiling for direct edges plus at most one derived peer per unordered edge pair.</summary>
-    public static int ProjectionCapacity(WorldDefinition definition) {
-        var edges = CollectFrom(definition: definition).Count;
-        return (edges + ((edges * (edges - 1)) / 2));
-    }
-
     /// <summary>Walks <paramref name="definition"/>'s adjacency rows in document order and compiles each boundary
     /// through the one fixed-point frame derivation.</summary>
     /// <param name="definition">The definition to walk.</param>
@@ -73,13 +81,23 @@ public static class WorldAdjacencyBands {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         List<WorldAdjacencyBand>? bands = null;
+
         foreach (var adjacency in (definition.Adjacencies ?? [])) {
             if (adjacency?.Boundary is not { } boundary) {
                 continue;
             }
-            (bands ??= []).Add(item: new WorldAdjacencyBand(Name: adjacency.Name.Value, Frame: boundary.CompileFrame()));
+            (bands ??= []).Add(item: new WorldAdjacencyBand(
+                Name: adjacency.Name.Value,
+                Frame: boundary.CompileFrame()
+            ));
         }
 
-        return ((IReadOnlyList<WorldAdjacencyBand>?)bands ?? []);
+        return (((IReadOnlyList<WorldAdjacencyBand>?)bands) ?? []);
+    }
+    /// <summary>The reservation ceiling for direct edges plus at most one derived peer per unordered edge pair.</summary>
+    public static int ProjectionCapacity(WorldDefinition definition) {
+        var edges = CollectFrom(definition: definition).Count;
+
+        return (edges + ((edges * (edges - 1)) / 2));
     }
 }

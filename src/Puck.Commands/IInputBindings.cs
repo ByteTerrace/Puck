@@ -15,7 +15,6 @@ public interface IInputBindings {
     /// <see cref="IInputBindingsReloadSource.Reloading"/> when mutable) to change bindings rather than mutating it
     /// in place.</returns>
     IReadOnlyList<CommandBinding>? Resolve(int slot, string source);
-
     /// <summary>
     /// Returns the bindings a slot maps a signal to. The default delegates to <see cref="Resolve(int, string)"/>;
     /// a stateful implementation (such as <see cref="PagedInputBindings"/>) overrides this to see the signal's
@@ -31,14 +30,12 @@ public interface IInputBindings {
             source: signal.Source
         );
     }
-
     /// <summary>Releases one slot's held chord/modifier and press-latch state. Runtime modality transitions use this
     /// seam before held digital controls reassert through the new command surface. Default no-op for stateless
     /// resolvers.</summary>
     /// <param name="slot">The logical player slot.</param>
     void Reset(int slot) {
     }
-
     /// <summary>
     /// Releases every slot's held chord/modifier and press-latch state a stateful implementation tracks
     /// (<see cref="PagedInputBindings"/>) — wire to OS window focus loss, where a modifier's own release can be

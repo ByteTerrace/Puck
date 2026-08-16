@@ -48,6 +48,7 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
 
     private readonly IApu m_apu;
     private readonly IKey1 m_key1;
+
     private int m_accumulator;
     private int m_capacityFrames;
     private int m_frameCount;
@@ -158,8 +159,7 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     // One side of the mix law: recenter the gated 0-60 channel sum around zero at the x512 scale, then apply the
     // side's NR50 volume as (volume + 1) / 8. The extremes land at -16384 and +14336, comfortably inside 16 bits.
     private static short MixSide(int gatedSum, int volume) =>
-        (short)((((gatedSum * MixScale) - MixMidpoint) * (volume + 1)) / 8);
-
+        ((short)((((gatedSum * MixScale) - MixMidpoint) * (volume + 1)) / 8));
     // Sample the APU's live state into one stereo frame. Everything is read through the APU's side-effect-free
     // register surface: PCM12/34 pack the four channels' digital outputs (a disabled channel reads zero), and the
     // NR50/NR51 mix registers read back their raw bits.

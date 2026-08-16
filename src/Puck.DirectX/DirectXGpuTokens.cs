@@ -16,7 +16,6 @@ public sealed class DirectXCommandBufferState {
     public nint CurrentRenderTargetHandle;
     public D3D12_RESOURCE_STATES RenderTargetState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
 }
-
 /// <summary>
 /// Pairs a timestamp <c>ID3D12QueryHeap</c> with the READBACK buffer its resolved results land in, plus the query
 /// capacity. Stored in a <see cref="GCHandle"/> so the neutral timing pool handle is the GCHandle pointer, decoded
@@ -28,7 +27,6 @@ public sealed class DirectXTimingPoolState {
     public nint ReadbackBufferHandle;
     public uint Capacity;
 }
-
 /// <summary>
 /// Packages a pipeline state object and its root signature alongside the parameter-index metadata the command
 /// recorder needs to call <c>SetGraphicsRootDescriptorTable</c> and <c>SetGraphicsRoot32BitConstants</c>.
@@ -77,7 +75,6 @@ public sealed class DirectXPipelineLayout : IDisposable {
         DirectXConstants.Release(pointer: ref RootSignatureHandle);
     }
 }
-
 /// <summary>
 /// Encodes a shader-visible CBV_SRV_UAV descriptor heap together with the cached base addresses and
 /// descriptor increment size needed to write and bind descriptors without re-querying the device.
@@ -94,7 +91,6 @@ public sealed class DirectXDescriptorPool {
     /// independent sets can share one pool (one shader-visible heap) without overlapping — like a Vulkan pool.</summary>
     public uint NextOffset;
 }
-
 /// <summary>
 /// A range inside a <see cref="DirectXDescriptorPool"/>'s heap, allocated once via
 /// <c>IGpuDescriptorAllocator.AllocateSet</c>. Stored in a <see cref="GCHandle"/>.
@@ -109,7 +105,6 @@ public sealed class DirectXDescriptorSet {
     /// lands at the same packed heap slot the root signature's range for that binding points at.</summary>
     public uint[] SlotByBinding = [];
 }
-
 /// <summary>
 /// Holds the three values needed to fill a <c>D3D12_VERTEX_BUFFER_VIEW</c>. Stored in a
 /// <see cref="GCHandle"/> so the raw pointer can serve as <see cref="IGpuVertexBuffer.BufferHandle"/>.
@@ -120,7 +115,6 @@ public sealed class DirectXVertexBufferView {
     public uint SizeBytes;
     public uint StrideBytes;
 }
-
 /// <summary>
 /// Pairs an <c>ID3D12Resource*</c> with its DXGI format so the descriptor allocator can create a typed SRV
 /// without calling the problematic <c>GetDesc</c> vtable slot. Stored in a <see cref="GCHandle"/>.

@@ -1,4 +1,4 @@
-using Puck.Hosting;
+using Puck.GamingBricks;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -14,7 +14,6 @@ internal sealed class QueuedHostMemoryAccessStage : IPostStage {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-memory-access";
-
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;

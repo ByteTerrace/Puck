@@ -12,7 +12,6 @@ using Puck.AdvancedGamingBrick.Post;
 
 var biosImage = LoadBios();
 Diagnostics.BiosImage = biosImage;
-
 // A diagnostic flag short-circuits the battery: run that single investigative mode and return its exit code.
 if (Diagnostics.TryRun(
     args: args,
@@ -51,20 +50,19 @@ var stages = PostStages.Create()
     tierFilter: tierFilter
 ))
     .Where(predicate: stage => NameMatches(
-    stage: stage,
-    nameFilter: nameFilter
+    nameFilter: nameFilter,
+    stage: stage
 ))
     .ToArray();
 var context = new PostContext(
     artifactsDirectory: artifactsDirectory,
-    testRomRoot: testRomRoot,
+    biosImage: biosImage,
     gamesRoot: gamesRoot,
-    biosImage: biosImage
+    testRomRoot: testRomRoot
 );
 var report = new PostBattery(stages: stages).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
 return report.ExitCode;
-
 // Loads a BIOS image from PUCK_AGB_BIOS when present and correctly sized, so the BIOS-dependent stages (BIOS IRQ
 // dispatch) run; otherwise a zeroed 16 KiB stub, on which those stages skip cleanly. The banner reports the image's
 // real classification (retail / replacement / unknown) via AgbBiosProfile rather than assuming a replacement — a
@@ -117,6 +115,6 @@ static bool TierMatches(IPostStage stage, string? tierFilter) =>
 ));
 static bool NameMatches(IPostStage stage, string? nameFilter) =>
     (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
-    value: nameFilter,
-    comparisonType: StringComparison.OrdinalIgnoreCase
+    comparisonType: StringComparison.OrdinalIgnoreCase,
+    value: nameFilter
 ));

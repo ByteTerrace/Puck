@@ -28,7 +28,6 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
     private const uint VkStructureTypeDeviceQueueCreateInfo = 2;
     // Values verified against the Vulkan SDK 1.4.350 header (vulkan_core.h).
     private const uint VkStructureTypePhysicalDeviceFeatures2 = 1000059000;
-
     // VkPhysicalDeviceFeatures is 55 consecutive VkBool32 fields.
     private const int PhysicalDeviceFeatureCount = 55;
 
@@ -62,7 +61,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         return m_instancePointers.GetOrAdd(
             key: instanceHandle,
             valueFactory: static handle => new InstancePointers {
-                CreateDevice = (delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(instanceHandle: handle, functionName: "vkCreateDevice"u8),
+                CreateDevice = ((delegate* unmanaged[Cdecl]<nint, in VkDeviceCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveInstanceProc(functionName: "vkCreateDevice"u8, instanceHandle: handle)),
             }
         );
     }
@@ -70,9 +69,9 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         return m_devicePointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                DestroyDevice = (delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDevice"u8),
-                DeviceWaitIdle = (delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDeviceWaitIdle"u8),
-                GetDeviceQueue = (delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetDeviceQueue"u8),
+                DestroyDevice = ((delegate* unmanaged[Cdecl]<nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDevice"u8)),
+                DeviceWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDeviceWaitIdle"u8)),
+                GetDeviceQueue = ((delegate* unmanaged[Cdecl]<nint, uint, uint, out nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkGetDeviceQueue"u8)),
             }
         );
     }
@@ -136,10 +135,10 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
             }
 
             var createInfo = new VkDeviceCreateInfo {
-                EnabledExtensionCount = (uint)request.ExtensionNames.Count,
+                EnabledExtensionCount = ((uint)request.ExtensionNames.Count),
                 PQueueCreateInfos = queueInfoBuffer,
                 PpEnabledExtensionNames = extensionBuffer.Pointer,
-                QueueCreateInfoCount = (uint)queueInfos.Length,
+                QueueCreateInfoCount = ((uint)queueInfos.Length),
                 SType = VkStructureTypeDeviceCreateInfo,
             };
 
@@ -161,7 +160,7 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                     featureBlocks[index] = block;
                     new Span<byte>(
                         length: FeatureStructureByteSize,
-                        pointer: (void*)block
+                        pointer: ((void*)block)
                     ).Clear();
                     Marshal.WriteInt32(
                         ofs: 0,
@@ -184,20 +183,20 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                 // The spec requires pEnabledFeatures to be null when a Features2 chain is
                 // used; the base feature flags live in Features2.Features instead.
                 for (var index = 0; (index < featureIndices.Count); index++) {
-                    features2.Features[(int)featureIndices[index]] = 1u;
+                    features2.Features[((int)featureIndices[index])] = 1u;
                 }
 
                 features2.PNext = chainHead;
-                createInfo.PNext = (nint)(&features2);
+                createInfo.PNext = ((nint)(&features2));
             } else if (featureIndices.Count > 0) {
                 enabledFeaturesBuffer = m_allocator.Alloc(size: (PhysicalDeviceFeatureCount * sizeof(uint)));
                 new Span<byte>(
                     length: (PhysicalDeviceFeatureCount * sizeof(uint)),
-                    pointer: (void*)enabledFeaturesBuffer
+                    pointer: ((void*)enabledFeaturesBuffer)
                 ).Clear();
                 for (var index = 0; (index < featureIndices.Count); index++) {
                     Marshal.WriteInt32(
-                        ofs: ((int)featureIndices[index] * sizeof(uint)),
+                        ofs: (((int)featureIndices[index]) * sizeof(uint)),
                         ptr: enabledFeaturesBuffer,
                         val: 1
                     );

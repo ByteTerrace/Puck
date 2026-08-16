@@ -18,7 +18,6 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     private readonly uint[] m_sourceLatch = new uint[4];
     private readonly uint[] m_destinationLatch = new uint[4];
     private readonly uint[] m_remaining = new uint[4];
-
     // Last value latched onto the internal DMA bus, PER CHANNEL (each of the four channels has its own 32-bit read
     // latch — the hardware-measured behaviour; there is no single shared latch, so one channel's leftover never
     // leaks into another channel's undrivable read). A read from an undrivable source (BIOS region < 0x02000000)
@@ -26,6 +25,7 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     // destination alignment selects the right half (open-bus DMA behavior).
     private readonly uint[] m_dataLatch = new uint[4];
     private readonly bool[] m_active = new bool[4];
+
     private bool m_running;
     private int m_activeChannel = -1;
 
@@ -59,10 +59,9 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
         RunDmaLoop(bus: bus);
     }
-
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) {
-        var channel = (int)((offset - 0xB0u) / ChannelStride);
+        var channel = ((int)((offset - 0xB0u) / ChannelStride));
         var local = ((offset - 0xB0u) % ChannelStride);
 
         return local switch {
@@ -71,16 +70,15 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             8u => 0,
             // The control halfword (CNT_H) masks its unused low bits to zero; the game-pak DRQ bit (11) exists
             // only on channel 3.
-            10u => (ushort)(m_control[channel] & ((channel == 3)
+            10u => ((ushort)(m_control[channel] & ((channel == 3)
             ? 0xFFE0u
-            : 0xF7E0u)),
+            : 0xF7E0u))),
             _ => 0,
         };
     }
-
     /// <inheritdoc/>
     public void WriteRegister(uint offset, ushort value, IAgbBus bus) {
-        var channel = (int)((offset - 0xB0u) / ChannelStride);
+        var channel = ((int)((offset - 0xB0u) / ChannelStride));
         var local = ((offset - 0xB0u) % ChannelStride);
 
         switch (local) {
@@ -89,7 +87,7 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
                 break;
             case 2u:
-                m_source[channel] = (m_source[channel] & 0x0000FFFFu) | ((uint)value << 16);
+                m_source[channel] = (m_source[channel] & 0x0000FFFFu) | (((uint)value) << 16);
 
                 break;
             case 4u:
@@ -97,7 +95,7 @@ public sealed partial class AgbDmaController : IAgbDmaController {
 
                 break;
             case 6u:
-                m_destination[channel] = (m_destination[channel] & 0x0000FFFFu) | ((uint)value << 16);
+                m_destination[channel] = (m_destination[channel] & 0x0000FFFFu) | (((uint)value) << 16);
 
                 break;
             case 8u:
@@ -106,27 +104,24 @@ public sealed partial class AgbDmaController : IAgbDmaController {
                 break;
             default: // 10: control
                 WriteControl(
+                    bus: bus,
                     channel: channel,
-                    value: value,
-                    bus: bus
+                    value: value
                 );
 
                 break;
         }
     }
-
     /// <inheritdoc/>
     public void OnVBlank(IAgbBus bus) => ActivateTimed(
-        timing: TimingVBlank,
-        bus: bus
+        bus: bus,
+        timing: TimingVBlank
     );
-
     /// <inheritdoc/>
     public void OnHBlank(IAgbBus bus) => ActivateTimed(
-        timing: TimingHBlank,
-        bus: bus
+        bus: bus,
+        timing: TimingHBlank
     );
-
     /// <inheritdoc/>
     public void OnFifo(int fifo, IAgbBus bus) {
         var fifoDestination = ((fifo == 0)
@@ -166,13 +161,12 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             }
 
             if ((control & 0x4000) != 0) {
-                m_interrupts.Request(source: (InterruptSource)((int)InterruptSource.Dma0 + channel));
+                m_interrupts.Request(source: ((InterruptSource)(((int)InterruptSource.Dma0) + channel)));
             }
         }
 
         bus.EndDmaStall(previous: stall);
     }
-
     /// <inheritdoc/>
     public void OnVideoCapture(IAgbBus bus) {
         _ = bus;
@@ -187,7 +181,6 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             m_active[3] = true;
         }
     }
-
     /// <inheritdoc/>
     public void OnVideoCaptureEnd() {
         if (
@@ -298,13 +291,13 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             if (source >= 0x02000000u) {
                 if (word) {
                     m_dataLatch[ch] = bus.Read32(
-                        address: source,
-                        access: access
+                        access: access,
+                        address: source
                     );
                 } else {
                     var half = bus.Read16(
-                        address: source,
-                        access: access
+                        access: access,
+                        address: source
                     ) & 0xFFFFu;
 
                     m_dataLatch[ch] = half | (half << 16);
@@ -321,12 +314,12 @@ public sealed partial class AgbDmaController : IAgbDmaController {
                 );
             } else {
                 // 16-bit transfer: the destination's bit 1 selects which mirrored half of the latch drives the bus.
-                var half = (m_dataLatch[ch] >> (int)((destination & 2u) * 8u));
+                var half = (m_dataLatch[ch] >> ((int)((destination & 2u) * 8u)));
 
                 bus.Write16(
+                    access: access,
                     address: destination,
-                    value: (ushort)half,
-                    access: access
+                    value: ((ushort)half)
                 );
             }
 
@@ -366,7 +359,7 @@ public sealed partial class AgbDmaController : IAgbDmaController {
         }
 
         if ((control & 0x4000) != 0) {
-            m_interrupts.Request(source: (InterruptSource)((int)InterruptSource.Dma0 + channel));
+            m_interrupts.Request(source: ((InterruptSource)(((int)InterruptSource.Dma0) + channel)));
         }
 
         if ((control & 0x200) == 0) {

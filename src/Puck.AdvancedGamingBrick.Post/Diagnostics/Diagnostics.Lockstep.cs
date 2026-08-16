@@ -60,7 +60,7 @@ internal static partial class Diagnostics {
         using (instance) {
             var machine = instance.Machine;
             var cpu = machine.Cpu;
-            var bus = (AgbBus)machine.Bus;
+            var bus = ((AgbBus)machine.Bus);
 
             // BIOS-boot mode: undo TryLoad's direct boot and run the BIOS reset to align with the oracle's full-BIOS
             // boot. Direct-boot mode: keep TryLoad's DirectBoot state so both cores start at the cartridge entry
@@ -95,8 +95,8 @@ internal static partial class Diagnostics {
                     }
 
                     var f = line.Split(
-                        separator: ' ',
-                        options: StringSplitOptions.RemoveEmptyEntries
+                        options: StringSplitOptions.RemoveEmptyEntries,
+                        separator: ' '
                     );
 
                     if (f.Length < 19) {

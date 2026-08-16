@@ -21,7 +21,9 @@
              tests/Puck.World.Tests/README.md. This project's base document is COMPILER-MAINTAINED
              (Fixtures.BuildDocument constructs a WorldDefinition directly in code) rather than read from any
              shipped world file — no src/Puck.World/Assets path is read here at all. -->
-        <ProjectReference Include="..\..\src\Puck.World.Data\Puck.World.Data.csproj" />
+        <ProjectReference Include="..\..\src\Puck.Networking\Puck.Networking.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Protocol\Puck.World.Protocol.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Server\Puck.World.Server.csproj" />
     </ItemGroup>
 </Project>

@@ -58,9 +58,9 @@ internal static class BessDiagnostic {
 
         if (!TryResolveRom(
             args: args,
+            model: out var model,
             rom: out var rom,
-            romLabel: out var romLabel,
-            model: out var model
+            romLabel: out var romLabel
         )) {
             return 2;
         }
@@ -70,8 +70,8 @@ internal static class BessDiagnostic {
             name: "--frames"
         );
         var frames = (((framesArg is not null) && int.TryParse(
-            s: framesArg,
-            result: out var parsedFrames
+            result: out var parsedFrames,
+            s: framesArg
         ))
             ? parsedFrames
             : DefaultExportFrames);
@@ -82,8 +82,8 @@ internal static class BessDiagnostic {
         );
 
         PostMachine.RunFrames(
-            instance: source,
-            frames: frames
+            frames: frames,
+            instance: source
         );
 
         var (file, exportedScope) = BessExporter.Export(
@@ -99,8 +99,8 @@ internal static class BessDiagnostic {
         }
 
         File.WriteAllBytes(
-            path: outPath,
-            bytes: file
+            bytes: file,
+            path: outPath
         );
 
         // Self-consistency round trip: import the just-exported bytes into a SECOND, independently built machine of
@@ -113,8 +113,8 @@ internal static class BessDiagnostic {
         );
 
         var report = BessImporter.Import(
-            instance: target,
-            file: file
+            file: file,
+            instance: target
         );
         var roundTripScope = BessScope.Capture(
             instance: target,
@@ -133,8 +133,8 @@ internal static class BessDiagnostic {
 
         var malformedCorpusClean = RunMalformedImportSelfCheck(
             goodFile: file,
-            rom: rom,
-            model: model
+            model: model,
+            rom: rom
         );
 
         PrintReferenceEmulatorNote();
@@ -160,8 +160,8 @@ internal static class BessDiagnostic {
 
             try {
                 BessImporter.Import(
-                    instance: probe,
-                    file: malformed
+                    file: malformed,
+                    instance: probe
                 );
             } catch (InvalidDataException exception) {
                 rejection = exception;
@@ -201,9 +201,9 @@ internal static class BessDiagnostic {
 
         if (!TryResolveRom(
             args: args,
+            model: out var model,
             rom: out var rom,
-            romLabel: out var romLabel,
-            model: out var model
+            romLabel: out var romLabel
         )) {
             return 2;
         }

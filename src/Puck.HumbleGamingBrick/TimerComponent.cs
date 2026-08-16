@@ -23,6 +23,7 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
 
     private readonly IInterruptController m_interrupts;
     private readonly IKey1 m_key1;
+
     private ushort m_counter;
     private bool m_lastTimaInput;
     private int m_overflowCountdown;
@@ -93,8 +94,8 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         if (m_switchBlockLatched) {
             m_switchBlockLatched = false;
 
-            SetCounter(value: (ushort)(m_counter & 0x000F));
-            SetCounter(value: (ushort)(m_counter + 1));
+            SetCounter(value: ((ushort)(m_counter & 0x000F)));
+            SetCounter(value: ((ushort)(m_counter + 1)));
             SetCounter(value: 0);
         }
 
@@ -111,15 +112,15 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
             }
         }
 
-        SetCounter(value: (ushort)(m_counter + 1));
+        SetCounter(value: ((ushort)(m_counter + 1)));
     }
     /// <inheritdoc/>
     public byte ReadRegister(ushort address) =>
         address switch {
-            MemoryMap.Divider => (byte)(m_counter >> 8),
+            MemoryMap.Divider => ((byte)(m_counter >> 8)),
             MemoryMap.TimerCounter => m_tima,
             MemoryMap.TimerModulo => m_tma,
-            _ => (byte)(~TacWritableMask | m_tac),
+            _ => ((byte)(~TacWritableMask | m_tac)),
         };
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
@@ -148,7 +149,7 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
 
                 break;
             default:
-                m_tac = (byte)(value & TacWritableMask);
+                m_tac = ((byte)(value & TacWritableMask));
 
                 // Changing the enable bit or the selected frequency can drop the detector's input, clocking TIMA. The
                 // input bit is fixed by TAC, so cache it here and the per-dot detector only has to mask the counter.

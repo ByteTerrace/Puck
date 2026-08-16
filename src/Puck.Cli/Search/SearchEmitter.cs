@@ -53,7 +53,7 @@ internal static class SearchEmitter {
                 Console.Out.WriteLine(value: "--");
             }
 
-            if (EmitLineBlock(r: r, opt: opt, emitted: ref emitted)) {
+            if (EmitLineBlock(emitted: ref emitted, opt: opt, r: r)) {
                 return 0;
             }
 

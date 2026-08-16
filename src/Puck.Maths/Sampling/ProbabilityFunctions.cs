@@ -8,6 +8,37 @@ namespace Puck.Maths;
 /// </summary>
 public static class ProbabilityFunctions {
     /// <summary>
+    /// Returns the inverse cumulative distribution function of a normal distribution.
+    /// </summary>
+    /// <param name="mean">The mean of the normal distribution. Must be finite.</param>
+    /// <param name="probability">The cumulative probability. Values must be in the inclusive range [0, 1].</param>
+    /// <param name="standardDeviation">The standard deviation of the normal distribution. Must be finite and strictly positive.</param>
+    /// <returns>The value <c>x</c> such that <c>Φ((x - mean) / standardDeviation) = probability</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is NaN, or is less than 0 or greater than 1.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mean"/> is not finite, or <paramref name="standardDeviation"/> is not finite or is not strictly positive.</exception>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+    public static double InverseNormalCdf(
+        this double probability,
+        double mean,
+        double standardDeviation
+    ) {
+        if (!double.IsFinite(d: mean)) {
+            throw new ArgumentOutOfRangeException(
+                message: "mean must be finite",
+                paramName: nameof(mean)
+            );
+        }
+
+        if (!(double.IsFinite(d: standardDeviation) && (0.0d < standardDeviation))) {
+            throw new ArgumentOutOfRangeException(
+                message: "standardDeviation must be finite and strictly positive",
+                paramName: nameof(standardDeviation)
+            );
+        }
+
+        return (mean + (standardDeviation * InverseStandardNormalCdf(probability: probability)));
+    }
+    /// <summary>
     /// Returns the inverse cumulative distribution function of the standard normal distribution.
     /// </summary>
     /// <param name="probability">The cumulative probability. Values must be in the inclusive range [0, 1].</param>
@@ -165,7 +196,8 @@ public static class ProbabilityFunctions {
 
             r = ((q < Zero)
                 ? probability
-                : (One - probability));
+                : (One - probability)
+            );
             r = Math.Sqrt(d: -Math.Log(d: r));
 
             if (r <= Five) {
@@ -301,36 +333,5 @@ public static class ProbabilityFunctions {
         }
 
         return v;
-    }
-    /// <summary>
-    /// Returns the inverse cumulative distribution function of a normal distribution.
-    /// </summary>
-    /// <param name="mean">The mean of the normal distribution. Must be finite.</param>
-    /// <param name="probability">The cumulative probability. Values must be in the inclusive range [0, 1].</param>
-    /// <param name="standardDeviation">The standard deviation of the normal distribution. Must be finite and strictly positive.</param>
-    /// <returns>The value <c>x</c> such that <c>Φ((x - mean) / standardDeviation) = probability</c>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="probability"/> is NaN, or is less than 0 or greater than 1.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mean"/> is not finite, or <paramref name="standardDeviation"/> is not finite or is not strictly positive.</exception>
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    public static double InverseNormalCdf(
-        this double probability,
-        double mean,
-        double standardDeviation
-    ) {
-        if (!double.IsFinite(d: mean)) {
-            throw new ArgumentOutOfRangeException(
-                message: "mean must be finite",
-                paramName: nameof(mean)
-            );
-        }
-
-        if (!(double.IsFinite(d: standardDeviation) && (0.0d < standardDeviation))) {
-            throw new ArgumentOutOfRangeException(
-                message: "standardDeviation must be finite and strictly positive",
-                paramName: nameof(standardDeviation)
-            );
-        }
-
-        return (mean + (standardDeviation * InverseStandardNormalCdf(probability: probability)));
     }
 }

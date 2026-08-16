@@ -37,7 +37,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         "VK_KHR_external_memory",
         "VK_KHR_external_memory_win32",
     ];
-
     /// <summary>Closed-loop present-timing extensions: <c>present_id</c> tags each present, <c>present_wait</c> blocks
     /// until it is displayed. Enabled only when both extensions AND both features are supported; otherwise the host pacer
     /// stays open-loop. present_wait depends on present_id, so both are required together.</summary>
@@ -58,7 +57,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // (the FEATURE struct, used here). Swapping them silently breaks the feature query AND device creation. (1000294001)
     private const uint StructureTypePhysicalDevicePresentIdFeaturesKhr = 1000294001;
     private const uint StructureTypePhysicalDevicePresentWaitFeaturesKhr = 1000248000;
-
     // The GPU capability floor requires fp16 arithmetic and 16-bit storage — supported at 2× rate on all four target
     // GPUs (Turing / RDNA2 / RDNA3) — plus subgroup-size-control from Vulkan 1.3. Each is enabled only when the
     // device reports it, through the generic single-flag chain: the FIRST VkBool32 of each struct is exactly the
@@ -293,7 +291,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         foreach (var index in StorageImageFeatureIndices) {
             if (
                 (index < support.Count) &&
-                support[(int)index]
+                support[((int)index)]
             ) {
                 featureIndices.Add(item: index);
             }

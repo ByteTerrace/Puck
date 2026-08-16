@@ -15,7 +15,6 @@ public enum ClosureOutcome {
     /// counterexample.</summary>
     SearchLimitReached = 2,
 }
-
 /// <summary>The certificate a guarded sum over all lengths runs under. The operation degrades by certificate; it is
 /// never offered on an assumption.</summary>
 public enum ClosureCertificate {
@@ -30,7 +29,6 @@ public enum ClosureCertificate {
     /// <summary>The material is a certified field and the resolvent is obtained by an exact solve.</summary>
     FieldResolvent,
 }
-
 /// <summary>The unresolved associator of one ordered basis triple, carried as the charge it puts on the leading term of
 /// <c>(a·b)·c − a·(b·c)</c>.</summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -39,7 +37,6 @@ public enum ClosureCertificate {
 /// <param name="Right">The third basis key.</param>
 /// <param name="Charge">The associator's coefficient on its lowest-key support entry.</param>
 public readonly record struct AssociatorCharge<TValue>(int Left, int Middle, int Right, TValue Charge);
-
 /// <summary>One ordered basis triple at which a hexagon identity fails, carried as the two charges that disagree.</summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
 /// <param name="Left">The first basis key.</param>
@@ -51,12 +48,10 @@ public readonly record struct AssociatorCharge<TValue>(int Left, int Middle, int
 /// <paramref name="Right"/>, the second folds the trailing pair against <paramref name="Left"/> — so one record shape
 /// serves both, exactly as one <see cref="CoherenceWitness{TValue}"/> serves both rebalancing routes.</remarks>
 public readonly record struct BraidingWitness<TValue>(int Left, int Middle, int Right, TValue Nested, TValue Flat);
-
 /// <summary>An ordered pair of basis keys whose product is zero.</summary>
 /// <param name="LeftKey">The left basis key.</param>
 /// <param name="RightKey">The right basis key.</param>
 public readonly record struct ZeroDivisorWitness(long LeftKey, long RightKey);
-
 /// <summary>One ordered basis quadruple whose two rebalancing routes charge differently, so the charge a bracketing
 /// picks up would depend on the order its brackets were spliced away.</summary>
 /// <typeparam name="TValue">The material's carrier.</typeparam>
@@ -67,19 +62,16 @@ public readonly record struct ZeroDivisorWitness(long LeftKey, long RightKey);
 /// <param name="Nested">The charge of the route that splices the innermost bracket first.</param>
 /// <param name="Flat">The charge of the route that splices the outermost bracket first.</param>
 public readonly record struct CoherenceWitness<TValue>(int First, int Second, int Third, int Fourth, TValue Nested, TValue Flat);
-
 /// <summary>The refusal a guarded sum over all lengths returns when no certificate could be issued.</summary>
 /// <param name="Attempted">The certificate the material licensed an attempt at.</param>
 /// <param name="SupportKey">A key still moving when the attempt was cut off, or zero when the sum had emptied.</param>
 /// <param name="StepsTaken">The number of lengths accumulated before the attempt was cut off.</param>
 public readonly record struct SumClosureObstruction(ClosureCertificate Attempted, long SupportKey, long StepsTaken);
-
 /// <summary>The refusal a bounded normalization returns.</summary>
 /// <param name="StepsTaken">The number of rewrite steps taken before the bound was reached.</param>
 /// <param name="BlockedKey">The packed key of the term that could not be reduced, or <c>-1</c> when the term outgrew
 /// the key scheme entirely.</param>
 public readonly record struct NormalizationObstruction(long StepsTaken, long BlockedKey);
-
 /// <summary>
 /// The computed law certificates of one presentation. Every flag is proved over the presentation's own basis; none is
 /// assumed, and the operation surface degrades by certificate rather than by a hardcoded assumption.
@@ -127,8 +119,6 @@ public readonly struct PresentationCertificate<TValue> {
         m_zeroDivisorWitness = zeroDivisorWitness;
     }
 
-    /// <summary>Gets the number of ordered basis triples whose associator is nonzero.</summary>
-    public long NonAssociativeTripleCount { get; }
     /// <summary>
     /// Gets the nonzero associators as charges on basis triples — the associator 3-cochain. Nonempty exactly at the
     /// quasialgebra floors over a signed exact material.
@@ -217,6 +207,8 @@ public readonly struct PresentationCertificate<TValue> {
     /// constrained and reports <see langword="false"/> anyway, because the flag is a proof and its annihilating pairs
     /// leave one unfinished.</remarks>
     public bool IsSymmetric { get; }
+    /// <summary>Gets the number of ordered basis triples whose associator is nonzero.</summary>
+    public long NonAssociativeTripleCount { get; }
     /// <summary>Gets the outcome of bounded law verification over the compiled finite-basis product.</summary>
     public ClosureOutcome Outcome { get; }
     /// <summary>Gets the ordered basis pairs whose product is zero.</summary>
@@ -240,12 +232,24 @@ public readonly struct PresentationCertificate<TValue> {
     /// certificate therefore reads zero at pairs a complete one charges, which is the budget showing through.</para>
     /// </remarks>
     public TValue BraidingCharge(long leftKey, long rightKey) {
-        if ((leftKey < 0L) || (leftKey >= m_braidingKeys)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(leftKey), message: "The key names no normal form of the certified presentation.");
+        if (
+            (leftKey < 0L) ||
+            (leftKey >= m_braidingKeys)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(leftKey),
+                message: "The key names no normal form of the certified presentation."
+            );
         }
 
-        if ((rightKey < 0L) || (rightKey >= m_braidingKeys)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(rightKey), message: "The key names no normal form of the certified presentation.");
+        if (
+            (rightKey < 0L) ||
+            (rightKey >= m_braidingKeys)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(rightKey),
+                message: "The key names no normal form of the certified presentation."
+            );
         }
 
         return m_braidingCharge[((leftKey * m_braidingKeys) + rightKey)];

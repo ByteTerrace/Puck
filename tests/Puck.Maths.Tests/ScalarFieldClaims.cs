@@ -17,11 +17,9 @@ internal static class ScalarFieldClaims {
     // ---- shared deterministic operand generators (no System.Random, no wall clock) ----
 
     private static ulong NextUInt64(ref Pcg32XshRr generator) =>
-        ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32());
-
+        (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
     private static UInt128 NextUInt128(ref Pcg32XshRr generator) =>
-        ((((UInt128)NextUInt64(generator: ref generator)) << 64) | NextUInt64(generator: ref generator));
-
+        (((UInt128)NextUInt64(generator: ref generator)) << 64) | NextUInt64(generator: ref generator);
     // ---- jacobi symbol: UnsignedNumberFunctions.JacobiSymbol<T> (uint/ulong/UInt128) and its NumberTheoryFunctions
     // .JacobiSymbol(BigInteger,BigInteger) sibling, both against a freshly transcribed BigInteger descent ----
 
@@ -34,9 +32,8 @@ internal static class ScalarFieldClaims {
     private static int JacobiSymbolReferenceDescent(BigInteger numerator, BigInteger denominator) {
         var reduced = (((numerator % denominator) + denominator) % denominator);
 
-        return JacobiRecurse(value: reduced, modulus: denominator);
+        return JacobiRecurse(modulus: denominator, value: reduced);
     }
-
     private static int JacobiRecurse(BigInteger value, BigInteger modulus) {
         if (BigInteger.Zero == value) { return ((BigInteger.One == modulus) ? 1 : 0); }
 
@@ -48,12 +45,12 @@ internal static class ScalarFieldClaims {
             ++twoExponent;
         }
 
-        var modulusMod8 = (int)(modulus % 8);
+        var modulusMod8 = ((int)(modulus % 8));
         var twoFactorSign = (((1 == (twoExponent & 1)) && ((3 == modulusMod8) || (5 == modulusMod8))) ? -1 : 1);
-        var reciprocitySign = ((((int)(oddPart % 4) == 3) && ((int)(modulus % 4) == 3)) ? -1 : 1);
+        var reciprocitySign = (((((int)(oddPart % 4)) == 3) && (((int)(modulus % 4)) == 3)) ? -1 : 1);
         var nextValue = (modulus % oddPart);
 
-        return (twoFactorSign * reciprocitySign * JacobiRecurse(value: nextValue, modulus: oddPart));
+        return ((twoFactorSign * reciprocitySign) * JacobiRecurse(modulus: oddPart, value: nextValue));
     }
 
     public static string? JacobiSymbolFixedWidthVsExactDescentSurface() {
@@ -62,12 +59,12 @@ internal static class ScalarFieldClaims {
         var multiplicativityRng = Pcg32XshRr.Create(state: 0x9F1D2B6A5C3E7081UL, stream: 11UL);
 
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var modulus32 = (multiplicativityRng.NextUInt32() | 1U);
+            var modulus32 = multiplicativityRng.NextUInt32() | 1U;
             var a32 = (multiplicativityRng.NextUInt32() % modulus32);
             var b32 = (multiplicativityRng.NextUInt32() % modulus32);
             var ja32 = a32.JacobiSymbol(modulus: modulus32);
             var jb32 = b32.JacobiSymbol(modulus: modulus32);
-            var product32 = ((uint)(((ulong)a32 * b32) % modulus32));
+            var product32 = ((uint)((((ulong)a32) * b32) % modulus32));
             var jab32 = product32.JacobiSymbol(modulus: modulus32);
 
             if (jab32 != (ja32 * jb32)) {
@@ -81,12 +78,12 @@ internal static class ScalarFieldClaims {
                 }
             }
 
-            var modulus64 = (NextUInt64(generator: ref multiplicativityRng) | 1UL);
+            var modulus64 = NextUInt64(generator: ref multiplicativityRng) | 1UL;
             var a64 = (NextUInt64(generator: ref multiplicativityRng) % modulus64);
             var b64 = (NextUInt64(generator: ref multiplicativityRng) % modulus64);
             var ja64 = a64.JacobiSymbol(modulus: modulus64);
             var jb64 = b64.JacobiSymbol(modulus: modulus64);
-            var product64 = ((ulong)(((UInt128)a64 * b64) % modulus64));
+            var product64 = ((ulong)((((UInt128)a64) * b64) % modulus64));
             var jab64 = product64.JacobiSymbol(modulus: modulus64);
 
             if (jab64 != (ja64 * jb64)) {
@@ -100,12 +97,12 @@ internal static class ScalarFieldClaims {
                 }
             }
 
-            var modulus128 = (NextUInt128(generator: ref multiplicativityRng) | UInt128.One);
+            var modulus128 = NextUInt128(generator: ref multiplicativityRng) | UInt128.One;
             var a128 = (NextUInt128(generator: ref multiplicativityRng) % modulus128);
             var b128 = (NextUInt128(generator: ref multiplicativityRng) % modulus128);
             var ja128 = a128.JacobiSymbol(modulus: modulus128);
             var jb128 = b128.JacobiSymbol(modulus: modulus128);
-            var product128 = ((UInt128)(((BigInteger)a128 * b128) % modulus128));
+            var product128 = ((UInt128)((((BigInteger)a128) * b128) % modulus128));
             var jab128 = product128.JacobiSymbol(modulus: modulus128);
 
             if (jab128 != (ja128 * jb128)) {
@@ -126,26 +123,26 @@ internal static class ScalarFieldClaims {
         var bigRng = Pcg32XshRr.Create(state: 0x2E8B1F4C9A5D3067UL, stream: 13UL);
 
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var modulus = (BigInteger)(NextUInt64(generator: ref bigRng) | 1UL);
-            var a = ((BigInteger)NextUInt64(generator: ref bigRng) % modulus);
-            var b = ((BigInteger)NextUInt64(generator: ref bigRng) % modulus);
+            var modulus = ((BigInteger)(NextUInt64(generator: ref bigRng) | 1UL));
+            var a = (((BigInteger)NextUInt64(generator: ref bigRng)) % modulus);
+            var b = (((BigInteger)NextUInt64(generator: ref bigRng)) % modulus);
 
             // Every third draw is negated, so the sweep exercises numerator < 0 on both the multiplicativity operands
             // and the periodicity probe rather than only on the reduction inside JacobiSymbolReferenceDescent above.
             if (0 == (trial % 3)) { a = -a; }
             if (1 == (trial % 3)) { b = -b; }
 
-            var ja = NumberTheoryFunctions.JacobiSymbol(numerator: a, denominator: modulus);
-            var jb = NumberTheoryFunctions.JacobiSymbol(numerator: b, denominator: modulus);
-            var product = (((a * b) % modulus + modulus) % modulus);
-            var jab = NumberTheoryFunctions.JacobiSymbol(numerator: product, denominator: modulus);
+            var ja = NumberTheoryFunctions.JacobiSymbol(denominator: modulus, numerator: a);
+            var jb = NumberTheoryFunctions.JacobiSymbol(denominator: modulus, numerator: b);
+            var product = ((((a * b) % modulus) + modulus) % modulus);
+            var jab = NumberTheoryFunctions.JacobiSymbol(denominator: modulus, numerator: product);
 
             if (jab != (ja * jb)) {
                 return $"BigInteger multiplicativity failed at a={a} b={b} n={modulus}: J(ab)={jab} J(a)*J(b)={(ja * jb)}";
             }
 
-            var jShiftedDown = NumberTheoryFunctions.JacobiSymbol(numerator: (a - modulus), denominator: modulus);
-            var jShiftedUp = NumberTheoryFunctions.JacobiSymbol(numerator: (a + modulus), denominator: modulus);
+            var jShiftedDown = NumberTheoryFunctions.JacobiSymbol(denominator: modulus, numerator: (a - modulus));
+            var jShiftedUp = NumberTheoryFunctions.JacobiSymbol(denominator: modulus, numerator: (a + modulus));
 
             if ((jShiftedDown != ja) || (jShiftedUp != ja)) {
                 return $"BigInteger periodicity failed at a={a} n={modulus}: J(a-n)={jShiftedDown} J(a+n)={jShiftedUp} J(a)={ja}";
@@ -159,13 +156,13 @@ internal static class ScalarFieldClaims {
         var crossRng = Pcg32XshRr.Create(state: 0x7C6A3E1B8F2D5049UL, stream: 17UL);
 
         for (var trial = 0; (trial < 30_000); ++trial) {
-            var modulusRaw = (crossRng.NextUInt32() | 1U);
+            var modulusRaw = crossRng.NextUInt32() | 1U;
             var valueRaw = crossRng.NextUInt32();
-            var expected = JacobiSymbolReferenceDescent(numerator: valueRaw, denominator: modulusRaw);
+            var expected = JacobiSymbolReferenceDescent(denominator: modulusRaw, numerator: valueRaw);
             var uintResult = valueRaw.JacobiSymbol(modulus: modulusRaw);
-            var ulongResult = ((ulong)valueRaw).JacobiSymbol(modulus: (ulong)modulusRaw);
-            var uint128Result = ((UInt128)valueRaw).JacobiSymbol(modulus: (UInt128)modulusRaw);
-            var bigResult = NumberTheoryFunctions.JacobiSymbol(numerator: valueRaw, denominator: modulusRaw);
+            var ulongResult = ((ulong)valueRaw).JacobiSymbol(modulus: ((ulong)modulusRaw));
+            var uint128Result = ((UInt128)valueRaw).JacobiSymbol(modulus: ((UInt128)modulusRaw));
+            var bigResult = NumberTheoryFunctions.JacobiSymbol(denominator: modulusRaw, numerator: valueRaw);
 
             if ((uintResult != expected) || (ulongResult != expected) || (uint128Result != expected) || (bigResult != expected)) {
                 return $"cross-carrier disagreement at value={valueRaw} modulus={modulusRaw}: expected={expected} uint={uintResult} ulong={ulongResult} UInt128={uint128Result} BigInteger={bigResult}";
@@ -178,18 +175,18 @@ internal static class ScalarFieldClaims {
         var wideRng = Pcg32XshRr.Create(state: 0x35E0A9C4712F68D3UL, stream: 19UL);
 
         for (var trial = 0; (trial < 20_000); ++trial) {
-            var modulus64 = (NextUInt64(generator: ref wideRng) | 1UL);
+            var modulus64 = NextUInt64(generator: ref wideRng) | 1UL;
             var value64 = NextUInt64(generator: ref wideRng);
-            var expected64 = JacobiSymbolReferenceDescent(numerator: value64, denominator: modulus64);
+            var expected64 = JacobiSymbolReferenceDescent(denominator: modulus64, numerator: value64);
             var actual64 = value64.JacobiSymbol(modulus: modulus64);
 
             if (actual64 != expected64) {
                 return $"ulong full-width disagreement at value={value64} modulus={modulus64}: expected={expected64} actual={actual64}";
             }
 
-            var modulus128 = (NextUInt128(generator: ref wideRng) | UInt128.One);
+            var modulus128 = NextUInt128(generator: ref wideRng) | UInt128.One;
             var value128 = NextUInt128(generator: ref wideRng);
-            var expected128 = JacobiSymbolReferenceDescent(numerator: (BigInteger)value128, denominator: (BigInteger)modulus128);
+            var expected128 = JacobiSymbolReferenceDescent(denominator: ((BigInteger)modulus128), numerator: ((BigInteger)value128));
             var actual128 = value128.JacobiSymbol(modulus: modulus128);
 
             if (actual128 != expected128) {
@@ -203,29 +200,30 @@ internal static class ScalarFieldClaims {
             (0, 1), (0, 3), (1, 1), (1, 3), (2, 3), (3, 3),
             (uint.MaxValue, uint.MaxValue), (uint.MaxValue, (uint.MaxValue - 2U)), ((uint.MaxValue - 1U), uint.MaxValue),
             (ulong.MaxValue, ulong.MaxValue), (ulong.MaxValue, (ulong.MaxValue - 2UL)), ((ulong.MaxValue - 1UL), ulong.MaxValue),
-            ((BigInteger)UInt128.MaxValue, (BigInteger)UInt128.MaxValue),
-            ((BigInteger)UInt128.MaxValue, (BigInteger)(UInt128.MaxValue - 2U)),
-            ((BigInteger)(UInt128.MaxValue - 1U), (BigInteger)UInt128.MaxValue),
+            (((BigInteger)UInt128.MaxValue), ((BigInteger)UInt128.MaxValue)),
+            (((BigInteger)UInt128.MaxValue), ((BigInteger)(UInt128.MaxValue - 2U))),
+            (((BigInteger)(UInt128.MaxValue - 1U)), ((BigInteger)UInt128.MaxValue)),
         ];
+
         foreach (var (value, modulus) in boundaryVectors) {
-            var expected = JacobiSymbolReferenceDescent(numerator: value, denominator: modulus);
+            var expected = JacobiSymbolReferenceDescent(denominator: modulus, numerator: value);
 
             if (modulus <= uint.MaxValue) {
-                var actual = ((uint)value).JacobiSymbol(modulus: (uint)modulus);
+                var actual = ((uint)value).JacobiSymbol(modulus: ((uint)modulus));
 
                 if (actual != expected) { return $"uint boundary mismatch at value={value} modulus={modulus}: expected={expected} actual={actual}"; }
             }
             if (modulus <= ulong.MaxValue) {
-                var actual = ((ulong)value).JacobiSymbol(modulus: (ulong)modulus);
+                var actual = ((ulong)value).JacobiSymbol(modulus: ((ulong)modulus));
 
                 if (actual != expected) { return $"ulong boundary mismatch at value={value} modulus={modulus}: expected={expected} actual={actual}"; }
             }
 
-            var actual128 = ((UInt128)value).JacobiSymbol(modulus: (UInt128)modulus);
+            var actual128 = ((UInt128)value).JacobiSymbol(modulus: ((UInt128)modulus));
 
             if (actual128 != expected) { return $"UInt128 boundary mismatch at value={value} modulus={modulus}: expected={expected} actual={actual128}"; }
 
-            var actualBig = NumberTheoryFunctions.JacobiSymbol(numerator: value, denominator: modulus);
+            var actualBig = NumberTheoryFunctions.JacobiSymbol(denominator: modulus, numerator: value);
 
             if (actualBig != expected) { return $"BigInteger boundary mismatch at value={value} modulus={modulus}: expected={expected} actual={actualBig}"; }
         }
@@ -268,13 +266,12 @@ internal static class ScalarFieldClaims {
         var reversed = UInt128.Zero;
 
         for (var bit = 0; (bit < 128); ++bit) {
-            reversed = ((reversed << 1) | (value & UInt128.One));
+            reversed = (reversed << 1) | (value & UInt128.One);
             value >>= 1;
         }
 
         return reversed;
     }
-
     /// <summary>A bit-by-bit Morton interleave, transcribed from the DEFINITION — value's bits at the even positions,
     /// other's at the odd ones — rather than from <see cref="BinaryIntegerFunctions.BitwisePair{TInput,TResult}"/>'s
     /// PDEP/SWAR implementation, which this shares no line with.</summary>
@@ -305,7 +302,7 @@ internal static class ScalarFieldClaims {
 
             var low = NextUInt64(generator: ref rng);
             var high = NextUInt64(generator: ref rng);
-            var expectedPair = BitwisePairReference(value: low, other: high);
+            var expectedPair = BitwisePairReference(other: high, value: low);
             var actualPair = low.BitwisePair<ulong, UInt128>(other: high);
 
             if (actualPair != expectedPair) {
@@ -319,8 +316,8 @@ internal static class ScalarFieldClaims {
             }
 
             var exponent = (rng.NextUInt32() % 130U);
-            var expectedPower = ((UInt128)BigInteger.ModPow(value: (BigInteger)value, exponent: exponent, modulus: (BigInteger.One << 128)));
-            var actualPower = value.Exponentiate(exponent: (UInt128)exponent);
+            var expectedPower = ((UInt128)BigInteger.ModPow(value: ((BigInteger)value), exponent: exponent, modulus: (BigInteger.One << 128)));
+            var actualPower = value.Exponentiate(exponent: ((UInt128)exponent));
 
             if (actualPower != expectedPower) {
                 return $"UInt128.Exponentiate disagreed with BigInteger.ModPow mod 2^128 at value={value} exponent={exponent}";
@@ -330,10 +327,11 @@ internal static class ScalarFieldClaims {
         // Boundary vectors: zero, one, the width-1 bit, alternating patterns, and both carrier extremes.
         UInt128[] boundaryValues = [
             UInt128.Zero, UInt128.One, ((UInt128)2), (UInt128.One << 127),
-            ((UInt128)0xAAAAAAAAAAAAAAAAUL | (((UInt128)0xAAAAAAAAAAAAAAAAUL) << 64)),
-            ((UInt128)0x5555555555555555UL | (((UInt128)0x5555555555555555UL) << 64)),
+            (((UInt128)0xAAAAAAAAAAAAAAAAUL) | (((UInt128)0xAAAAAAAAAAAAAAAAUL) << 64)),
+            (((UInt128)0x5555555555555555UL) | (((UInt128)0x5555555555555555UL) << 64)),
             UInt128.MaxValue, (UInt128.MaxValue - 1U),
         ];
+
         foreach (var value in boundaryValues) {
             var expectedReversed = ReverseBitsReference(value: value);
 
@@ -357,9 +355,9 @@ internal static class ScalarFieldClaims {
             return "UInt128.Exponentiate(MaxValue, 1) was not MaxValue";
         }
 
-        var deepBase = ((UInt128)0x0123456789ABCDEFUL | (((UInt128)0xFEDCBA9876543210UL) << 64));
+        var deepBase = ((UInt128)0x0123456789ABCDEFUL) | (((UInt128)0xFEDCBA9876543210UL) << 64);
         var deepExponent = ((UInt128)1_000_003UL);
-        var expectedDeepPower = ((UInt128)BigInteger.ModPow(value: (BigInteger)deepBase, exponent: deepExponent, modulus: (BigInteger.One << 128)));
+        var expectedDeepPower = ((UInt128)BigInteger.ModPow(value: ((BigInteger)deepBase), exponent: deepExponent, modulus: (BigInteger.One << 128)));
 
         if (deepBase.Exponentiate(exponent: deepExponent) != expectedDeepPower) {
             return "UInt128.Exponentiate disagreed with BigInteger.ModPow mod 2^128 at the deep exponent ladder";
@@ -367,7 +365,6 @@ internal static class ScalarFieldClaims {
 
         return null;
     }
-
     // ---- CRC-32/ISO-HDLC: the published catalogue check value, built from BinaryPolynomial's own %, << and + ----
 
     /// <summary>
@@ -394,7 +391,7 @@ internal static class ScalarFieldClaims {
             }
         }
 
-        var checkValue = (((uint)register.Bits).ReverseBits() ^ 0xFFFFFFFFU);
+        var checkValue = ((uint)register.Bits).ReverseBits() ^ 0xFFFFFFFFU;
 
         if (0xCBF43926U != checkValue) {
             return $"CRC-32/ISO-HDLC check value mismatch: expected 0xCBF43926, got 0x{checkValue:X8}";
@@ -402,7 +399,6 @@ internal static class ScalarFieldClaims {
 
         return null;
     }
-
     /// <summary>Proves the two conversion seams the library's cross-machine promise rests on are answered in code
     /// rather than by an architecture's choice: not-a-number converts to a stated value, and the exact-surd rendering
     /// does not read the ambient culture.</summary>
@@ -428,14 +424,14 @@ internal static class ScalarFieldClaims {
         if (UnitFraction32.FromDouble(value: -1d) != default) { return "UnitFraction32.FromDouble(-1) did not clamp to zero"; }
         if (UnitFraction16.FromDouble(value: 2d) != UnitFraction16.MaxValue) { return "UnitFraction16.FromDouble(2) did not clamp to the maximum"; }
 
-        var surd = QuadraticSurd.Create(rationalNumerator: -1234567890, surdNumerator: 1, radicand: 2, denominator: 3);
+        var surd = QuadraticSurd.Create(denominator: 3, radicand: 2, rationalNumerator: -1234567890, surdNumerator: 1);
         var invariant = surd.ToString();
         var original = CultureInfo.CurrentCulture;
 
         // The test host runs in globalization-invariant mode, so a culture cannot be fetched by name. A CLONE of the
         // invariant culture with its own negative sign needs no ICU data and reproduces the defect exactly: a component
         // formatted through the AMBIENT provider picks the marker up, one formatted invariantly cannot.
-        var hostile = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        var hostile = ((CultureInfo)CultureInfo.InvariantCulture.Clone());
 
         hostile.NumberFormat.NegativeSign = "−";
 

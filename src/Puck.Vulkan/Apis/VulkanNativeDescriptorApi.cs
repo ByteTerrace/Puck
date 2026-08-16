@@ -27,14 +27,14 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
         var allocateInfo = new VkDescriptorSetAllocateInfo {
             DescriptorPool = request.PoolHandle,
             DescriptorSetCount = 1,
-            PSetLayouts = (nint)(&layoutHandle),
+            PSetLayouts = ((nint)(&layoutHandle)),
             SType = StructureTypeDescriptorSetAllocateInfo,
         };
 
         pointers.AllocateDescriptorSets(
             request.DeviceHandle,
             in allocateInfo,
-            (nint)(&setHandle)
+            ((nint)(&setHandle))
         ).ThrowIfFailed(operation: "vkAllocateDescriptorSets");
 
         return setHandle;
@@ -56,8 +56,8 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             var createInfo = new VkDescriptorPoolCreateInfo {
                 Flags = request.Flags,
                 MaxSets = request.MaxSets,
-                PPoolSizes = (nint)sizesPointer,
-                PoolSizeCount = (uint)poolSizes.Length,
+                PPoolSizes = ((nint)sizesPointer),
+                PoolSizeCount = ((uint)poolSizes.Length),
                 SType = StructureTypeDescriptorPoolCreateInfo,
             };
 
@@ -142,7 +142,7 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
         var accelerationStructureHandle = request.AccelerationStructureHandle;
         var accelerationWrite = new VkWriteDescriptorSetAccelerationStructureKhr {
             AccelerationStructureCount = 1,
-            PAccelerationStructures = (nint)(&accelerationStructureHandle),
+            PAccelerationStructures = ((nint)(&accelerationStructureHandle)),
             SType = StructureTypeWriteDescriptorSetAccelerationStructureKhr,
         };
         var write = new VkWriteDescriptorSet {
@@ -151,14 +151,14 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             DstArrayElement = 0,
             DstBinding = request.Binding,
             DstSet = request.DescriptorSetHandle,
-            PNext = (nint)(&accelerationWrite),
+            PNext = ((nint)(&accelerationWrite)),
             SType = StructureTypeWriteDescriptorSet,
         };
 
         pointers.UpdateDescriptorSets(
             request.DeviceHandle,
             1,
-            (nint)(&write),
+            ((nint)(&write)),
             0,
             0
         );
@@ -177,14 +177,14 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             DstArrayElement = request.ArrayElement,
             DstBinding = request.Binding,
             DstSet = request.DescriptorSetHandle,
-            PBufferInfo = (nint)(&bufferInfo),
+            PBufferInfo = ((nint)(&bufferInfo)),
             SType = StructureTypeWriteDescriptorSet,
         };
 
         pointers.UpdateDescriptorSets(
             request.DeviceHandle,
             1,
-            (nint)(&write),
+            ((nint)(&write)),
             0,
             0
         );
@@ -203,14 +203,14 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
             DstArrayElement = request.ArrayElement,
             DstBinding = request.Binding,
             DstSet = request.DescriptorSetHandle,
-            PImageInfo = (nint)(&imageInfo),
+            PImageInfo = ((nint)(&imageInfo)),
             SType = StructureTypeWriteDescriptorSet,
         };
 
         pointers.UpdateDescriptorSets(
             request.DeviceHandle,
             1,
-            (nint)(&write),
+            ((nint)(&write)),
             0,
             0
         );
@@ -229,12 +229,12 @@ public unsafe sealed class VulkanNativeDescriptorApi : IVulkanDescriptorApi {
         return m_pointers.GetOrAdd(
             key: deviceHandle,
             valueFactory: static handle => new DevicePointers {
-                AllocateDescriptorSets = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateDescriptorSets"u8),
-                CreateDescriptorPool = (delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorPool"u8),
-                CreateSampler = (delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSampler"u8),
-                DestroyDescriptorPool = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorPool"u8),
-                DestroySampler = (delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySampler"u8),
-                UpdateDescriptorSets = (delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUpdateDescriptorSets"u8),
+                AllocateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorSetAllocateInfo, nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkAllocateDescriptorSets"u8)),
+                CreateDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, in VkDescriptorPoolCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateDescriptorPool"u8)),
+                CreateSampler = ((delegate* unmanaged[Cdecl]<nint, in VkSamplerCreateInfo, nint, out nint, VkResult>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkCreateSampler"u8)),
+                DestroyDescriptorPool = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroyDescriptorPool"u8)),
+                DestroySampler = ((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkDestroySampler"u8)),
+                UpdateDescriptorSets = ((delegate* unmanaged[Cdecl]<nint, uint, nint, uint, nint, void>)VulkanProcResolver.ResolveDeviceProc(deviceHandle: handle, functionName: "vkUpdateDescriptorSets"u8)),
             }
         );
     }
