@@ -171,13 +171,20 @@ which authenticates the resulting `WorldRemoteAuthority` purely over
 `Puck.Networking.IAuthenticator` (`WorldAttestedAuthenticator`, a signed claim
 over the challenge — never a shared secret) — the interactive attestation
 identity door above is server-side only today; no production client crosses it.
-`Puck.World.WorldNetworkCommandModule`'s `world.peers` echoes the connection
-table this class owns — each connection's verified admission identity
-(domain/subject) — plus an `arrivals:` group naming every body admitted by
-transfer and the authority its verdict was decided against;
-`Puck.World.WorldMutationCommandModule`'s
+`Puck.World.Console`'s `WorldNetworkCommandModule`'s `world.peers` echoes the
+connection table this class owns — each connection's verified admission
+identity (domain/subject) — plus an `arrivals:` group naming every body
+admitted by transfer and the authority its verdict was decided against;
+`Puck.World`'s `WorldMutationCommandModule`'s
 `world.admission` echoes the document's own authored `admission` entries —
 the runtime and document halves of the admission decision, respectively.
+
+Each connection's whole lifetime runs under `WorldNarrationScope.Current` set
+to this row's `AuthorityIdentity` (an `AsyncLocal<string?>`, flows across every
+await): a host running several rows uses it to tag the narration a connection
+writes to `Console.Out`/`Console.Error` by which row wrote it, without
+threading a row identity through every write site. Unset (and unread) on the
+desktop.
 
 ### One admission entry, every ingress
 
@@ -250,7 +257,9 @@ Whatever that gate protects is acquired and released under it.
 population state — is this transferred principal still live, then submit or
 describe on its behalf — is ONE gated operation, never two.
 
-The client half is `Puck.World.WorldRemoteAuthority`: an intent pump plus one
+The client half is `WorldRemoteAuthority` (`WorldRemoteAuthority.cs`), hosted in
+this project though its type still carries the `Puck.World` namespace pending a
+one-time normalization pass: an intent pump plus one
 request lane per (source authority namespace, `WorldFederationLane` concern), so
 connect, hello, and challenge are paid once per lane rather than once per
 operation. A lane is strictly ordered, so transfer transactions and routed
@@ -508,6 +517,37 @@ token from this machine and records the verdict for `storage.status`. Parsing a
 STORAGE access token for identity remains ruled out — it says what a credential
 is scoped to, never who is playing.
 
+## Hosted worlds and the authority store
+
+A hosted world's blobs live in a namespace sibling to, and never overlapping
+with, the owned-worlds catalog above: `puck/hosted/{world}/…` for its
+checkpoint/journal (never published), `private/puck/hosted/{world}/definition.json`
+and `.../projection.json` for the pair the platform's public content edge
+serves anonymously. One key writer, `WorldOwnedWorldSync.HostedAddressFor`,
+computes both roots so a reader can never drift from it.
+
+`IWorldAuthorityStore` (`WorldAuthorityBlobStore` over `IObjectBlobStore`) is
+programmed against opaque encoded bytes throughout — `LoadLatestAsync` returns
+the checkpoint blob's raw, hash-verified bytes plus its ordinal and tick, never
+a decoded record; `WorldAuthorityCheckpointCodec` decodes what this store
+hands back. A checkpoint write is content-addressed and
+create-only (an identical retry is idempotent, verified by byte comparison on
+a create-only loss), then the `checkpoints/latest` pointer moves under its own
+if-match compare-and-swap; a journal page is a read-modify-write append under
+the same discipline, relative to whichever checkpoint ordinal `checkpoints/latest`
+currently names. `WorldAuthorityCheckpointCadenceCounter` counts master-step
+engine ticks toward `WorldAuthorityCheckpointCadence.EngineTicks` and arms a
+capture request a caller honours at its own next boundary; it never decides
+whether a capture may proceed and never takes a row's own gate itself.
+
+`WorldHostedOrigin` (a `WorldDocumentOrigin` arm beside `WorldFileOrigin`)
+loads a hosted definition through `WorldDefinitionLoader`'s bytes entry — a
+hosted definition is always stored already composed, so this load never
+resolves a basis chain — and resolves its own `references[]` through
+`WorldStorageNeighbourResolver`'s hosted-namespace arm
+(`WorldStorageNamespace.Hosted`), the same resolver the owned-worlds catalog
+uses with its default namespace.
+
 ## Deterministic replay (`WorldReplayTape.cs`, `WorldReplaySnapshot.cs`)
 
 `replay.record <name>` captures the running session's record-start definition,
@@ -533,10 +573,13 @@ reports MISMATCH at tick 0 — are carried in
 ## Verifying a change here
 
 No build gate covers this project's behavior; verify by RUNNING `Puck.World`
-over stdin and by the committed, re-runnable batteries:
-
-- `docs/verification/undo-all-or-nothing/run.ps1` — the journal replay's
-  all-or-nothing contract.
+over stdin. The apply pipeline's all-or-nothing contract (a mutation that
+fails whole-document validation leaves the live definition byte-identical) —
+the same gate `WorldServer.ApplyUndo`'s journal-replay loop passes each kept
+entry through — is proven in-process by
+`tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`; that suite does not
+construct a genuine mid-replay validation failure, so the replay loop's own
+early-return is unproven beyond code inspection.
 
 No committed battery covers the ordered-domain envelope's ordering
 contract. Verify it live instead: one stdin batch interleaving a grant and
@@ -552,11 +595,10 @@ re-record any persisted tape it invalidates in the same change (`CLAUDE.md`
 rule 4).
 
 Adjacency/federation changes additionally run
-`docs/verification/four-corners-sharded/run.ps1`. It starts five distinct
-authorities and exercises horizontal and vertical reserve/commit handoffs,
-generation-addressed forwarding, held input continuity, autonomous travellers,
-neighbour contact, and routed read-backs. The automatic smaller proof is
-`puck canary seamless-adjacency`.
+`puck canary four-corners-sharded`. It starts five distinct authorities
+(four ground worlds plus the floating island) and exercises generation-
+addressed forwarding through a full four-ground-authority human circuit.
+The automatic smaller proof is `puck canary seamless-adjacency`.
 
 Verify a network-transport change by running two `Puck.World` processes: a
 headless host (`--headless --listen <ip:port> --state-dir <tmp>`) and a

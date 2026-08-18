@@ -19,17 +19,14 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
     public bool IsFull => (Policy.Mode == WorldObserverDisclosureMode.All);
 }
 /// <summary>
-/// The server's multi-subscriber output publication point — two lanes. The typed lane fans a
+/// The server's multi-subscriber output publication point. It fans a
 /// tick's output out to every attached <see cref="IClientSink"/> synchronously on the tick thread: each subscriber
 /// receives the borrowed <see cref="WorldSnapshot"/> (its <see cref="WorldSnapshot.Entries"/> memory wraps a reused
 /// server-owned array — see <see cref="WorldServer"/>'s own remarks) and must fully consume or copy it before its
 /// <see cref="IClientSink.DeliverSnapshot"/> call returns, because the next tick's snapshot overwrites the same
 /// backing array. <see cref="WorldServer.EmitSnapshot"/> only returns once every typed subscriber has done exactly
-/// that. The encoded lane is a scaffold only — <see cref="SubscribeEncoded"/> exists so a future socket connection
-/// could register without a second wiring pass, but nothing is produced or delivered on it: the TCP transport
-/// (<see cref="Server.WorldTcpHost"/>) uses its own strictly request-then-response wire instead
-/// (<see cref="Server.WorldTcpWireFormat"/>) and never subscribes here, so this lane and
-/// <see cref="SubscribeEncoded"/> remain unused.
+/// that. The TCP transport (<see cref="Server.WorldTcpHost"/>) uses its own strictly request-then-response wire
+/// instead (<see cref="Server.WorldTcpWireFormat"/>) and never subscribes here.
 /// </summary>
 /// <remarks><para>Play-and-host (a local sink plus N future connections, plus the tape) is first-class here: every
 /// <see cref="Subscribe(IClientSink)"/> call adds a subscriber; it never displaces one already attached.</para>
@@ -83,9 +80,6 @@ public sealed class WorldOutputHub {
     }
 
     private readonly List<Subscription> m_typed = new();
-    // SCAFFOLD list only — see the class remarks. Nothing ever iterates or delivers to this; the P7 TCP transport
-    // does not subscribe here.
-    private readonly List<object> m_encoded = new();
 
     // Count of subscriptions with Active == true — maintained incrementally (Subscribe increments, a lease's Dispose
     // or a caught fault decrements) so HasTypedSubscribers stays O(1) even while a detached-but-not-yet-compacted
@@ -173,81 +167,35 @@ public sealed class WorldOutputHub {
     /// <summary>Fans an accepted live window-composition override out to every typed subscriber. A faulting sink is
     /// isolated and detached — see the class remarks.</summary>
     /// <param name="composition">The composition override.</param>
-    public void DeliverComposition(WorldComposition composition) {
-        m_deliveryDepth++;
-
-        try {
-            var writeIndex = 0;
-
-            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
-                var subscription = m_typed[readIndex];
-
-                if (!subscription.Active) {
-                    continue;
-                }
-
-                try {
-                    subscription.Sink.DeliverComposition(composition: composition);
-                } catch (Exception exception) {
-                    Detach(
-                        subscription: subscription,
-                        callSite: nameof(DeliverComposition),
-                        exception: exception
-                    );
-                    continue;
-                }
-
-                if (subscription.Active) {
-                    m_typed[writeIndex++] = subscription;
-                }
-            }
-
-            Compact(writeIndex: writeIndex);
-        } finally {
-            m_deliveryDepth--;
-        }
-    }
+    public void DeliverComposition(WorldComposition composition) =>
+        Deliver(
+            callSite: nameof(DeliverComposition),
+            deliver: static (sink, payload) => sink.DeliverComposition(composition: payload),
+            payload: composition
+        );
     /// <summary>Fans the live world definition out to every typed subscriber (once per step with at least one applied
     /// edit, or a definition swap). A faulting sink is isolated and detached — see the class remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>
-    public void DeliverDefinition(WorldDefinition definition) {
-        m_deliveryDepth++;
-
-        try {
-            var writeIndex = 0;
-
-            for (var readIndex = 0; (readIndex < m_typed.Count); readIndex++) {
-                var subscription = m_typed[readIndex];
-
-                if (!subscription.Active) {
-                    continue;
-                }
-
-                try {
-                    subscription.Sink.DeliverDefinition(definition: definition);
-                } catch (Exception exception) {
-                    Detach(
-                        subscription: subscription,
-                        callSite: nameof(DeliverDefinition),
-                        exception: exception
-                    );
-                    continue;
-                }
-
-                if (subscription.Active) {
-                    m_typed[writeIndex++] = subscription;
-                }
-            }
-
-            Compact(writeIndex: writeIndex);
-        } finally {
-            m_deliveryDepth--;
-        }
-    }
+    public void DeliverDefinition(WorldDefinition definition) =>
+        Deliver(
+            callSite: nameof(DeliverDefinition),
+            deliver: static (sink, payload) => sink.DeliverDefinition(definition: payload),
+            payload: definition
+        );
     /// <summary>Fans an accepted live session lever out to every typed subscriber. A faulting sink is isolated and
     /// detached — see the class remarks.</summary>
     /// <param name="lever">The accepted lever write.</param>
-    public void DeliverSessionLever(WorldSessionLever lever) {
+    public void DeliverSessionLever(WorldSessionLever lever) =>
+        Deliver(
+            callSite: nameof(DeliverSessionLever),
+            deliver: static (sink, payload) => sink.DeliverSessionLever(lever: payload),
+            payload: lever
+        );
+
+    // The fan-out every by-value typed Deliver* shares: call `deliver` on each active subscriber's sink, isolating
+    // and detaching one that faults, then compact the live list in place. DeliverSnapshot/DeliverAnswer take their
+    // payload `in` (a large struct) and DeliverSnapshot also redacts per subscriber, so neither fits this shape.
+    private void Deliver<TPayload>(TPayload payload, Action<IClientSink, TPayload> deliver, string callSite) {
         m_deliveryDepth++;
 
         try {
@@ -261,12 +209,12 @@ public sealed class WorldOutputHub {
                 }
 
                 try {
-                    subscription.Sink.DeliverSessionLever(lever: lever);
+                    deliver(subscription.Sink, payload);
                 } catch (Exception exception) {
                     Detach(
-                        subscription: subscription,
-                        callSite: nameof(DeliverSessionLever),
-                        exception: exception
+                        callSite: callSite,
+                        exception: exception,
+                        subscription: subscription
                     );
                     continue;
                 }
@@ -281,6 +229,7 @@ public sealed class WorldOutputHub {
             m_deliveryDepth--;
         }
     }
+
     /// <summary>Fans a tick's snapshot out to every typed subscriber, synchronously, before returning. A faulting
     /// sink is isolated and detached — see the class remarks.</summary>
     /// <param name="snapshot">The tick snapshot.</param>
@@ -411,14 +360,5 @@ public sealed class WorldOutputHub {
         m_activeCount++;
 
         return subscription;
-    }
-    /// <summary>Registers an encoded-lane subscriber. Scaffold — no byte encoding happens (see the class remarks):
-    /// the TCP transport does not use this seam, and nothing else calls this method today.</summary>
-    /// <param name="subscriber">The encoded-lane subscriber to add.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="subscriber"/> is <see langword="null"/>.</exception>
-    public void SubscribeEncoded(object subscriber) {
-        ArgumentNullException.ThrowIfNull(argument: subscriber);
-
-        m_encoded.Add(item: subscriber);
     }
 }

@@ -62,6 +62,10 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// <param name="PlacementId">The placement row this entity INHABITS, or <see langword="null"/> for a seat/peer. The
 /// client renders an inhabitant's creation geometry (a body-rooted stamp riding this pose) instead of a catalog avatar —
 /// PRESENTATION-ONLY, never who is driving it. No transport change (the loopback is a pass-through).</param>
+/// <param name="Heading">The body's authoritative HEADING in radians about world up — the Turn role's integral, which
+/// way "forward" is — as distinct from <paramref name="Orientation"/>, the attitude it is drawn in (under a World-frame
+/// kit with facing snap the attitude turns to face the commanded travel while the heading holds). A seat moving in a
+/// heading-framed channel pair composes against this, never against the drawn attitude.</param>
 public readonly record struct EntitySnapshot(
     int Index,
     Vector3 Position,
@@ -73,7 +77,8 @@ public readonly record struct EntitySnapshot(
     byte CatalogRig,
     EntityContinuity Continuity,
     int Generation = 0,
-    string? PlacementId = null
+    string? PlacementId = null,
+    float Heading = 0f
 );
 /// <summary>The server's outbound tick image — the whole entity table's authoritative render state plus a revision the
 /// client watches to rebuild its avatar program (as the population/roster revisions drive it today). The client

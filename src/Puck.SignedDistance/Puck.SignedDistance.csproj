@@ -15,8 +15,6 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <!-- SdfProgramBuilder.Text() lays a string out against a Puck.Text FontAtlas and emits one SDF_SHAPE_GLYPH
-             cell per character; render-agnostic (Puck.Text carries no GPU or windowing concepts of its own). -->
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>
 </Project>

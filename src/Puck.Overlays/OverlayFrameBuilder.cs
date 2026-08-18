@@ -22,9 +22,10 @@ public enum OverlayPanelStyle : uint {
 /// then the per-frame region this builder owns: panel records, element records, glyph-code words, and the clip
 /// table. <para><b>Channel contract.</b> Every write belongs to a declared <see cref="OverlayChannel"/>, opened with
 /// <see cref="BeginChannel"/> and closed with <see cref="EndChannel"/>; a write outside a channel scope is a
-/// programming error and throws. A channel may write up to its <see cref="OverlayChannelLeases">lease</see> and no
-/// further: it clips at its own boundary, the drop is attributed to it (<see cref="Dropped"/>), and it can never
-/// consume another channel's capacity.</para><para><b>Clip contract.</b> A writer scoping per-seat UI wraps its records in
+/// programming error and throws. A channel may write up to its lease in the <see cref="OverlayChannelLeases"/> table
+/// the builder was constructed with (<see cref="Leases"/>) and no further: it clips at its own boundary, the drop is
+/// attributed to it (<see cref="Dropped"/>), and it can never consume another channel's capacity.</para><para><b>Clip
+/// contract.</b> A writer scoping per-seat UI wraps its records in
 /// <see cref="BeginClip"/>/<see cref="EndClip"/>; every record carries a clip index (word 9; 0 = unclipped) into
 /// the clip table and the shader discards the record's contribution outside its rect — placement inside a seat
 /// viewport is therefore also clipping to it. A scope whose rect could not be recorded still scopes (its records
@@ -32,17 +33,8 @@ public enum OverlayPanelStyle : uint {
 /// never take the records that follow it down with it.</para>
 /// </remarks>
 public sealed class OverlayFrameBuilder {
-    /// <summary>The clip-table rects no channel has reserved.</summary>
-    public const uint ClipHeadroom = ((uint)(MaxClips - OverlayChannelLeases.TotalClips));
     /// <summary>Words per clip-table rect (normalized x, y, w, h).</summary>
     public const int ClipWords = 4;
-    // THE STATIC ASSERTION. Each of these is the capacity remaining UNCLAIMED after every channel's reservation —
-    // the five first-party writers plus the authored-HUD reservation (OverlayChannelLeases.TotalElements /
-    // TotalTextWords / TotalPanels / TotalClips, which folds HudElements/HudTextWords/HudPanels/HudClips into the
-    // sum). An over-subscribed table makes one of these NEGATIVE, and a negative constant cannot convert to uint —
-    // the BUILD fails here, at the resource whose reservations over-ran, before any frame is composed.
-    /// <summary>The element records no channel has reserved.</summary>
-    public const uint ElementHeadroom = ((uint)(MaxElements - OverlayChannelLeases.TotalElements));
     /// <summary>Words per element record.</summary>
     public const int ElementWords = 12;
     /// <summary>The clip-rect ceiling (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips) — a
@@ -52,24 +44,18 @@ public sealed class OverlayFrameBuilder {
     /// backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int MaxElements = 1024;
     /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
-    /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all. The budget is
-    /// <see cref="OverlayChannelLeases"/>' per-channel reservations (the five first-party writers plus the authored
-    /// world-scope-and-reserved-seat-scope HUD reservation — see <c>OverlayChannelLeases</c>'
-    /// <c>HudPanels</c>/<c>HudElements</c>/<c>HudTextWords</c>/<c>HudClips</c>), which sum strictly below every
-    /// capacity; the remainder below is simply unclaimed — no addon/lease admission model reads it (that
-    /// contributor-lease design was never built and is not being built here). Capacity costs memory only: the
-    /// fragment shader loops to the written counts it receives in push constants, never to a capacity, so raising a
-    /// ceiling never enters per-pixel cost.</remarks>
+    /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the four
+    /// backstops size the GPU region the shader addresses. The budget is <see cref="OverlayChannelLeases"/>'
+    /// per-channel reservations, which that table refuses at construction unless they sum at or below every
+    /// backstop; the remainder below is simply unclaimed — no addon/lease admission model reads it. Capacity costs
+    /// memory only: the fragment shader loops to the written counts it receives in push constants, never to a
+    /// capacity, so raising a ceiling never enters per-pixel cost.</remarks>
     public const int MaxPanels = 16;
-    /// <summary>The panel records no channel has reserved.</summary>
-    public const uint PanelHeadroom = ((uint)(MaxPanels - OverlayChannelLeases.TotalPanels));
     /// <summary>Words per panel record.</summary>
     public const int PanelWords = 12;
     /// <summary>The glyph-code word ceiling every text run in a frame draws from — a cannot-overflow backstop, never
     /// a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int TextWordCapacity = 16384;
-    /// <summary>The glyph-code words no channel has reserved.</summary>
-    public const uint TextWordHeadroom = ((uint)(TextWordCapacity - OverlayChannelLeases.TotalTextWords));
 
     private readonly OverlayGlyphSdfPack m_glyphs;
     private readonly float m_inverseHeight;
@@ -88,10 +74,9 @@ public sealed class OverlayFrameBuilder {
 
     private readonly OverlayChannelReservation[] m_reservations = new OverlayChannelReservation[OverlayChannelLeases.Count];
     private readonly Counters[] m_written = new Counters[OverlayChannelLeases.Count];
-    // RESERVATION overflow: a channel exceeded the hard maximum OverlayChannelLeases declares for it — content it
-    // legally tried to offer the builder was clipped at the channel's OWN boundary. See m_refused for the other,
-    // unrelated loss cause these must never be conflated with (that conflation was M2: a narration that named the
-    // wrong cause).
+    // RESERVATION overflow: a channel exceeded the hard maximum its lease table declares for it — content it legally
+    // tried to offer the builder was clipped at the channel's OWN boundary. See m_refused for the other, unrelated
+    // loss cause these must never be conflated with.
     private readonly Counters[] m_dropped = new Counters[OverlayChannelLeases.Count];
     // WRITER'S OWN DECLARED CAP: content the writer itself chose never to offer (NoteRefused) or a WriteText
     // maxChars clamp that truncated a run — a deliberate, pinned limit the writer authored, never a reservation
@@ -110,19 +95,23 @@ public sealed class OverlayFrameBuilder {
     }
 
     /// <summary>Initializes a new instance of the <see cref="OverlayFrameBuilder"/> class.</summary>
+    /// <param name="leases">The lease table every channel writes against.</param>
     /// <param name="glyphs">The shared glyph SDF pack (cell metrics + the static prefix the node uploads).</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="glyphs"/> is <see langword="null"/>.</exception>
-    public OverlayFrameBuilder(OverlayGlyphSdfPack glyphs, uint width, uint height) {
+    /// <exception cref="ArgumentNullException"><paramref name="leases"/> or <paramref name="glyphs"/> is
+    /// <see langword="null"/>.</exception>
+    public OverlayFrameBuilder(OverlayChannelLeases leases, OverlayGlyphSdfPack glyphs, uint width, uint height) {
+        ArgumentNullException.ThrowIfNull(argument: leases);
         ArgumentNullException.ThrowIfNull(argument: glyphs);
 
         m_glyphs = glyphs;
+        Leases = leases;
         Width = width;
         Height = height;
 
         for (var index = 0; (index < OverlayChannelLeases.Count); index++) {
-            m_reservations[index] = OverlayChannelLeases.ReservationOf(channel: ((OverlayChannel)index));
+            m_reservations[index] = leases.ReservationOf(channel: ((OverlayChannel)index));
         }
 
         m_inverseWidth = (1f / width);
@@ -165,6 +154,8 @@ public sealed class OverlayFrameBuilder {
     public bool HasOverflow { get; private set; }
     /// <summary>Gets the render height in pixels.</summary>
     public uint Height { get; }
+    /// <summary>Gets the lease table every channel writes against.</summary>
+    public OverlayChannelLeases Leases { get; }
     /// <summary>Gets the first panel record's word index (also the length of the static token+glyph prefix).</summary>
     public int PanelBaseWords { get; }
     /// <summary>Gets the number of panels packed this frame.</summary>

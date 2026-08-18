@@ -19,15 +19,15 @@ public sealed class PlanarImpulseUnitDirectionLawTests {
     public void NonUnitBodyDirectionRefusesByName() {
         var typoed = DashDocument(bodyDirection: new Vector3(x: 3f, y: 0f, z: 4f)); // magnitude 5
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: typoed, reason: out var reason, neighbours: null), userMessage: "a magnitude-5 direction was expected to refuse");
-        Assert.Contains(expectedSubstring: "bodyDirection", actualString: reason, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "magnitude 5", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: typoed, neighbours: null, reason: out var reason), userMessage: "a magnitude-5 direction was expected to refuse");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "bodyDirection");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "magnitude 5");
     }
     [Fact]
     public void UnitBodyDirectionValidates() {
         var control = DashDocument(bodyDirection: new Vector3(x: 0f, y: 0f, z: 1f));
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, reason: out var reason, neighbours: null), userMessage: reason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var reason), userMessage: reason);
     }
 
     /// <summary>Builds the shared fixture document with a "dash" composition channel and a one-effect PlanarImpulse
@@ -46,8 +46,8 @@ public sealed class PlanarImpulseUnitDirectionLawTests {
         );
 
         return document with {
-            Channels = [.. document.Channels, dashChannel],
-            Kits = [document.Kits[0] with { Actions = new Dictionary<string, ActionSpec> { ["dash"] = dashAction } }],
+            ChannelsRaw = [.. document.Channels, dashChannel],
+            KitsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["dash"] = dashAction } }],
         };
     }
 }

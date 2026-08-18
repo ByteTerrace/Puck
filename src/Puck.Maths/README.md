@@ -102,7 +102,7 @@ Table construction and large prime-counting operations may allocate or rent.
 
 ## Orientation
 
-The library is organized into seven folders plus a set of root-level types.
+The library is organized into eight folders plus a set of root-level types.
 Each folder has its own README carrying the detailed contracts for its types:
 what each operation guarantees, the invariants, and how the folder is verified.
 Begin with the map and table below, then follow the link into the folder you
@@ -118,6 +118,7 @@ graph TB
     AL(["🏗️ Algebra<br/>configurable number systems"])
     OR(["🔮 Oracle<br/>graphs · paths · patterns"])
     RE(["🔬 Research<br/>exploratory, never the hot path"])
+    TR(["🎛️ Transforms<br/>NTT · fixed-point FFT"])
     Root --- FP
     Root --- SA
     Root --- FF
@@ -125,6 +126,7 @@ graph TB
     Root --- AL
     Root --- OR
     Root --- RE
+    Root --- TR
 ```
 
 | Folder | What lives in it | Read when you need |
@@ -135,7 +137,8 @@ graph TB
 | [`Algebra/`](Algebra/README.md) | Configurable number systems that can add a root, add generators, raise a degree, or double an existing number type. | A relationship chosen at runtime, or a proof that the same operation agrees across number types. |
 | [`Geometry/`](Geometry/README.md) | Hex grids, the locality-preserving Hilbert curve, layered index spaces, and exact integer geometry. | A grid, a space-filling order, or a layered index. |
 | [`Oracle/`](Oracle/README.md) | One configurable product operation evaluated with different rules for combining values, then used to build graphs, geometric algebras, planar tangles, divisor arithmetic, and pattern languages. | Reachability, shortest paths, pattern matching, holes in a structure, or group words. |
-| [`Research/`](Research/README.md) | Exploratory exact tools: continued-fraction tails, Sturmian and quasicrystal words, Fibonacci and metallic-mean arithmetic, odd-cyclic incidence, real-quadratic orders. Partly in `namespace Puck.Maths.Research`; that folder README says which types. | Research questions, never the hot path. |
+| [`Research/`](Research/README.md) | Exploratory exact tools: continued-fraction and radical tails, positional and Ostrowski automatic sequences, Sturmian and quasicrystal words, Fibonacci and metallic-mean arithmetic, odd-cyclic incidence, and real-quadratic orders. Partly in `namespace Puck.Maths.Research`; that folder README says which types. | Research questions and compiled random-access integer patterns, never the simulation hot path. |
+| [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64`, and the fixed-point FFT over `FixedComplex` — forward/inverse radix-2, cached twiddle plans, exact cyclic convolution. | A frequency-domain transform, or an exact convolution. |
 
 The [root-level type map](#root-level-types) below introduces the types that do
 not belong to one of those folders: integer routines, exact discrete rates,
@@ -168,6 +171,8 @@ operation I need. Pick a row, then follow its link for the detailed contract.
 | Arithmetic over fixed-size bit patterns, written `GF(2^k)` | `BinaryField<T>` over a chosen modulus, or the canonical `BinaryFields.Degree8/16/32/64/128` | [FiniteFields](FiniteFields/README.md#binaryfieldt) |
 | Error-correction symbols over a binary field, and reading a codeword back | `ReedSolomon.BuildGenerator` once, then `ComputeCheckSymbols` per message and `ComputeSyndromes` to verify | [FiniteFields](FiniteFields/README.md#reedsolomon) |
 | Modular arithmetic mod an odd prime, exact square roots, exact primality on `ulong` | `PrimeField64`, or `QuadraticExtensionField64` when each value needs two prime-field parts | [FiniteFields](FiniteFields/README.md#primefield64) |
+| An exact cyclic convolution, or a frequency-domain transform over a finite field | `NttPlan.Create` once, then `NumberTheoreticTransform.Forward` / `.Inverse` / `.Convolve` | [Transforms](Transforms/README.md#numbertheoretictransform) |
+| A fixed-point FFT — forward/inverse over `FixedComplex`, or a real sequence via `ForwardReal`/`InverseReal` | `FixedFourierPlan.Create` once, then `FixedFourierTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#fixedfouriertransform) |
 | Reachability, shortest paths, walk counts, best-probability routes | A `Presentations.Quiver` with the matching material — the rules used to combine path values | [Oracle](Oracle/README.md#choosing-an-entry-point) |
 | Pattern matching represented by algebra values | `TokenPattern` then `PatternMatcher.TryCompile` | [Oracle](Oracle/README.md#the-language-axis) |
 | An exact integer allocation over intervals (jobs per frame, samples per video frame) | `DiscreteMeasure`, compiled to `CompiledDiscreteMeasure64` for the hot path | [below](#root-level-types) |
@@ -336,7 +341,7 @@ the place to check a particular overload or failure condition.
 
 ## 🗺️ Where to go next
 
-- The seven folder READMEs linked from [Orientation](#orientation) are the
+- The eight folder READMEs linked from [Orientation](#orientation) are the
   per-type contracts.
 - [tests/Puck.Maths.Tests](../../tests/Puck.Maths.Tests/README.md) — the law
   suite, and `LawRegistry.cs` inside it is the executable index of what is proved.

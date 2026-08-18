@@ -54,6 +54,9 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         // instantiated on first use. Sized once at slot creation — see CompiledBindingProfile.ActivatorCount.
         public required RowActivatorTracker?[] ActivatorTrackers { get; init; }
         public required bool[] ArmedRows { get; init; }
+        // The sources whose press FIRED a command chord and is therefore consumed by it: the page's own binding for
+        // that source does not also resolve, and neither does its release. Cleared as each source releases.
+        public required HashSet<string> ChordConsumed { get; init; }
         public required Dictionary<string, IReadOnlyList<CommandBinding>> Latches { get; init; }
         public required CompiledBindingProfile Profile { get; init; }
         public required BindingChordTracker Tracker { get; init; }
@@ -122,29 +125,52 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                         state: state,
                         edge: new BindingChordEdge(
                             Command: activatorEntry.Edge.Command,
+                            Source: activatorEntry.Edge.Source,
                             Dispatch: true,
                             DispatchRelease: activatorEntry.Edge.DispatchRelease,
+                            Mode: activatorEntry.Edge.Mode,
                             Phase: CommandPhase.Started,
                             Value: activatorEntry.Edge.PressValue
                         )
                     );
                     break;
                 case RowActivatorTransition.Closed:
+                    if (activatorEntry.Edge.Mode == BindingEntryMode.Toggle) {
+                        break;
+                    }
                     AppendEdge(
                         state: state,
                         edge: new BindingChordEdge(
                             Command: activatorEntry.Edge.Command,
+                            Source: activatorEntry.Edge.Source,
                             Dispatch: activatorEntry.Edge.DispatchRelease,
+                            Mode: activatorEntry.Edge.Mode,
                             Phase: CommandPhase.Completed,
                             Value: activatorEntry.Edge.ReleaseValue
                         )
                     );
                     break;
                 case RowActivatorTransition.Completed:
+                    if (activatorEntry.Edge.Mode == BindingEntryMode.Toggle) {
+                        AppendEdge(
+                            state: state,
+                            edge: new BindingChordEdge(
+                                Command: activatorEntry.Edge.Command,
+                                Source: activatorEntry.Edge.Source,
+                                Dispatch: true,
+                                DispatchRelease: activatorEntry.Edge.DispatchRelease,
+                                Mode: BindingEntryMode.Toggle,
+                                Phase: CommandPhase.Started,
+                                Value: activatorEntry.Edge.PressValue
+                            )
+                        );
+                        break;
+                    }
                     AppendEdge(
                         state: state,
                         edge: new BindingChordEdge(
                         Command: activatorEntry.Edge.Command,
+                        Source: activatorEntry.Edge.Source,
                         Dispatch: true,
                         Phase: CommandPhase.Started,
                         Value: activatorEntry.Edge.PressValue,
@@ -160,6 +186,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                         slot: slot,
                         edge: new BindingChordEdge(
                             Command: activatorEntry.Edge.Command,
+                            Source: activatorEntry.Edge.Source,
                             Dispatch: activatorEntry.Edge.DispatchRelease,
                             Phase: CommandPhase.Completed,
                             Value: activatorEntry.Edge.ReleaseValue
@@ -239,6 +266,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             ArmedRows = new bool[profile.RowCount],
             GroupIndex = groupIndex,
             Latches = new Dictionary<string, IReadOnlyList<CommandBinding>>(comparer: StringComparer.OrdinalIgnoreCase),
+            ChordConsumed = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase),
             PageRowIndex = profile.RestingRowOf(groupIndex: groupIndex),
             Profile = profile,
             Tracker = new BindingChordTracker(profile: profile),
@@ -251,7 +279,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     }
     // Recompute a slot's chord-derived state after a tracker change: the deepest-page resolution, the published
     // view, and the command-row transition edges (releases of broken armed rows first, then fresh completions).
-    private static void SyncChordState(SlotState state, bool isDigitalReassertion) {
+    // Returns whether a command row FIRED on this signal — the caller consumes the signal, so the source's own page
+    // binding does not also resolve (the most specific match wins: LT+RB recenters, it does not also jetpack).
+    private static bool SyncChordState(SlotState state, bool isDigitalReassertion) {
+        var fired = false;
         var held = state.Tracker.HeldOrder;
         var profile = state.Profile;
 
@@ -262,15 +293,19 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
 
             var row = profile.RowAt(rowIndex: rowIndex);
 
-            if (!CompiledBindingProfile.IsPrefix(
-                chord: row.Chord,
-                heldOrder: held
+            if (!CompiledBindingProfile.Matches(
+                heldOrder: held,
+                row: row
             )) {
                 state.ArmedRows[rowIndex] = false;
+                if (row.Command!.Mode == BindingEntryMode.Toggle) {
+                    continue;
+                }
                 AppendEdge(
                     state: state,
                     edge: new BindingChordEdge(
                         Command: row.Command!.Command,
+                        Source: row.Command.Source,
                         Dispatch: row.Command.DispatchRelease,
                         Phase: CommandPhase.Completed,
                         Value: row.Command.ReleaseValue
@@ -286,9 +321,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
 
             var row = profile.RowAt(rowIndex: rowIndex);
 
-            // A command chord fires on COMPLETION: the held order equals its chord exactly (a press only ever
-            // appends to the held order, so completion is the exact-match moment).
-            if (held.SequenceEqual(other: row.Chord)) {
+            // A command row fires on COMPLETION: the down set is exactly its members with the sequence satisfied (a
+            // press only ever appends to the held order, so completion is that exact moment).
+            if (CompiledBindingProfile.Completes(
+                heldOrder: held,
+                row: row
+            )) {
                 var command = row.Command!;
 
                 if (
@@ -298,13 +336,16 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
                     continue;
                 }
 
+                fired = true;
                 state.ArmedRows[rowIndex] = true;
                 AppendEdge(
                     state: state,
                     edge: new BindingChordEdge(
                         Command: command.Command,
+                        Source: command.Source,
                         Dispatch: true,
                         DispatchRelease: command.DispatchRelease,
+                        Mode: command.Mode,
                         Phase: (isDigitalReassertion
                     ? CommandPhase.Active
                     : CommandPhase.Started),
@@ -315,6 +356,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         }
 
         ResolveAndPublishPage(state: state);
+
+        return fired;
     }
 
     /// <inheritdoc/>
@@ -390,6 +433,7 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             key: slot,
             value: out var state
         )) {
+            state.ChordConsumed.Clear();
             state.Latches.Clear();
             state.Tracker.Reset();
             Array.Clear(array: state.ArmedRows);
@@ -432,11 +476,18 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         var state = StateFor(slot: slot);
         var isDigitalReassertion = ((signal.Phase == CommandPhase.Active) && (signal.Value.Kind == CommandValueKind.Digital));
 
-        if (state.Tracker.Apply(signal: signal)) {
+        if (
+            state.Tracker.Apply(signal: signal) &&
             SyncChordState(
-                isDigitalReassertion: isDigitalReassertion,
-                state: state
-            );
+            isDigitalReassertion: isDigitalReassertion,
+            state: state
+        )
+        ) {
+            // This press completed a command chord: the chord owns it. Remember the source so its RELEASE is owned
+            // too — a page binding that never took the press must not be handed the release.
+            _ = state.ChordConsumed.Add(item: signal.Source);
+
+            return null;
         }
 
         // The active page's ROW ACTIVATORS, evaluated regardless of whether this signal matches this page's
@@ -454,6 +505,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         }
 
         if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
+            if (state.ChordConsumed.Remove(item: signal.Source)) {
+                return null;
+            }
+
             // A release resolves to whatever its press resolved to (see remarks), then the latch clears.
             if (state.Latches.Remove(
                 key: signal.Source,
@@ -471,6 +526,12 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
             : null
         );
 
+        // A held source whose press the chord consumed keeps being consumed while it is down (a digital control
+        // re-dispatches its hold every tick).
+        if (state.ChordConsumed.Contains(item: signal.Source)) {
+            return null;
+        }
+
         if (
             ((signal.Phase == CommandPhase.Started) || isDigitalReassertion) &&
             (resolved is not null) &&
@@ -483,6 +544,10 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
 
         return resolved;
     }
+    /// <summary>Gets a group's resting page id in the currently-loaded compiled profile, or <see langword="null"/>
+    /// when the profile declares no such group.</summary>
+    /// <param name="group">The group name to look up.</param>
+    public string? RestingPageIdOf(string group) => m_profile.RestingPageIdOf(group: group);
     /// <summary>Sets a slot's active group — the runtime mode flip. A pointer-level switch on the compiled
     /// profile: the active page re-resolves in the new group against the same held modifiers, while the press
     /// latches, the chord tracker, and any armed command chords survive untouched (see remarks). The request is

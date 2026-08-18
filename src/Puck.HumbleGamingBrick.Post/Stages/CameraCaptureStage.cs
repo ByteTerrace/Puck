@@ -13,7 +13,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// entire capture is reproducible. (Bit-exact parity against another emulator is evidence, not a gate; this battery is
 /// the gate.)
 /// </summary>
-internal sealed class CameraCaptureStage : IPostStage {
+internal sealed class CameraCaptureStage : IPostStage<PostContext> {
     private const ushort CameraBlockSelect = 0x4000; // WriteControl: bit 4 maps the camera registers over the RAM window
     private const ushort RamEnable = 0x0000;         // WriteControl: 0x0A enables the RAM window
     private const int DitherByteCount = 48;

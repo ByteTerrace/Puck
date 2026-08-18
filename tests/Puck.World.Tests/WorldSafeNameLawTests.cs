@@ -21,7 +21,7 @@ public sealed class WorldSafeNameLawTests {
         var pastLimit = new string(c: 'a', count: (WorldSafeName.MaxLength + 1));
 
         Assert.False(condition: WorldSafeName.TryParse(candidate: pastLimit, name: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: $"{WorldSafeName.MaxLength}-character limit", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: $"{WorldSafeName.MaxLength}-character limit");
 
         Assert.True(condition: WorldSafeName.TryParse(candidate: atLimit, name: out var parsed, reason: out var atLimitReason), userMessage: atLimitReason);
         Assert.Equal(expected: atLimit, actual: parsed.Value);
@@ -49,7 +49,7 @@ public sealed class WorldSafeNameLawTests {
         var groups = new WorldGroup[] {
             new(Id: WorldSafeName.Parse(candidate: longGroupId), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
         };
-        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Kinds: [kind], Groups: groups, Ownership: []) };
+        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         var destination = new WorldDestination(
             Name: WorldSafeName.Parse(candidate: longName),
             Reference: "ref",
@@ -59,11 +59,11 @@ public sealed class WorldSafeNameLawTests {
         );
         var cohort = new[] { new WorldSessionResolver.CohortMember(Principal: WorldPrincipal.Seat(slot: 1), IdentityId: null) };
 
-        var resolved = resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: "worlds/fixture.world.json", cohort: cohort, resolved: out _, reason: out var reason);
+        var resolved = resolver.TryResolve(cohort: cohort, destination: destination, reason: out var reason, referencedDocument: "worlds/fixture.world.json", resolved: out _, sourceDefinition: definition);
 
         Assert.False(condition: resolved);
-        Assert.Contains(expectedSubstring: "is not a safe name", actualString: reason, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "character limit", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "is not a safe name");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "character limit");
     }
     [Fact]
     public void TryResolve_ComposedNameExceedsMaxLength_RefusesByName_ControlWithShortNamesResolves() {
@@ -74,7 +74,7 @@ public sealed class WorldSafeNameLawTests {
             var groups = new WorldGroup[] {
                 new(Id: WorldSafeName.Parse(candidate: groupId), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
             };
-            var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Kinds: [kind], Groups: groups, Ownership: []) };
+            var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
             var destination = new WorldDestination(
                 Name: WorldSafeName.Parse(candidate: name),
                 Reference: "ref",
@@ -84,7 +84,7 @@ public sealed class WorldSafeNameLawTests {
             );
             var cohort = new[] { new WorldSessionResolver.CohortMember(Principal: WorldPrincipal.Seat(slot: 1), IdentityId: null) };
 
-            return resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: "worlds/fixture.world.json", cohort: cohort, resolved: out _, reason: out _);
+            return resolver.TryResolve(cohort: cohort, destination: destination, reason: out _, referencedDocument: "worlds/fixture.world.json", resolved: out _, sourceDefinition: definition);
         }
 
         Laws.RefusalWithControl(

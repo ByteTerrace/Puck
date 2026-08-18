@@ -25,10 +25,12 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// pulls each frame's scene + cameras + regions from an <see cref="ISdfFrameSource"/>, and drives the shared
 /// <see cref="SdfWorldEngine"/> core in its fire-and-forget mode (the host's frame pacing orders the frames).
 /// <para>
-/// Rendering is two-stage so the compositor is source-agnostic. <c>sdf-beam.comp</c> cone-marches the field per tile
-/// to a conservative march-start depth; <c>sdf-world-views.comp</c> (Stage 1) renders each viewport's SDF camera
-/// into its own rect-sized <em>source</em> texture; <c>sdf-world-composite.comp</c> (Stage 2) places each source —
-/// an SDF view, or a child node's output bound into the same slot — into its screen region by a 1:1 copy.
+/// Rendering is two-stage so the compositor is source-agnostic, ahead of which a sky pre-pass (<c>sdf-sky.comp</c>)
+/// fills every source pixel with the authored sky, so a tile the beam later culls is never a stale, undispatched
+/// pixel. <c>sdf-beam.comp</c> cone-marches the field per tile to a conservative march-start depth;
+/// <c>sdf-world-views.comp</c> (Stage 1) renders each viewport's SDF camera into its own rect-sized
+/// <em>source</em> texture; <c>sdf-world-composite.comp</c> (Stage 2) places each source — an SDF view, or a child
+/// node's output bound into the same slot — into its screen region by a 1:1 copy.
 /// The viewport count follows <see cref="SdfFrame.Views"/>; nothing about the scene, cameras, or layout is baked in.
 /// </para>
 /// <para>
@@ -384,30 +386,24 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     }
     // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Assets.
     // Returns false on any such failure so the caller can latch m_captureUnavailable and stop retrying a doomed load.
-    private static bool TryWriteCapturePng(string path, byte[] rgba, int width, int height) {
-        try {
-            WriteCapturePngCore(
-                height: height,
-                path: path,
-                rgba: rgba,
-                width: width
-            );
-
-            return true;
-        } catch (Exception exception) when ((exception is FileLoadException or FileNotFoundException or TypeLoadException or BadImageFormatException or TypeInitializationException)) {
-            Console.Error.WriteLine(value: $"[capture] WARNING: Puck.Assets is unavailable ({exception.GetType().Name}: {exception.Message}) — frame capture skipped, render continues without it.");
-
-            return false;
-        }
-    }
+    private static bool TryWriteCapturePng(string path, byte[] rgba, int width, int height) =>
+        CapturePngWriteGuard.TryWrite(
+            state: (Path: path, Rgba: rgba, Width: width, Height: height),
+            writeCore: static state => WriteCapturePngCore(
+                height: state.Height,
+                path: state.Path,
+                rgba: state.Rgba,
+                width: state.Width
+            )
+        );
     // Puck.Assets is an optional subsystem (screenshots/recording), not part of the render contract: an environment
     // that blocks or cannot load its assembly (an Application Control / code-integrity policy, a missing deployment
     // file) must not take the render loop down with it. WriteCapturePngCore is the ONLY member touching the
     // Puck.Assets-typed PngEncoder.Write call, kept non-inlined so the CLR only needs to resolve and load
     // Puck.Assets.dll when this exact method is JITted — i.e. lazily, on the first actual capture request, not on
-    // every produced frame. TryWriteCapturePng's try/catch sits at the CALL SITE one frame up: a failure to load the
-    // assembly surfaces as an exception thrown BY that call (the callee never got to run), which is exactly where a
-    // surrounding try/catch can observe and report it.
+    // every produced frame. CapturePngWriteGuard's try/catch wraps the call one frame up: a failure to load the
+    // assembly surfaces as an exception thrown by that call (the callee never got to run), which is exactly where
+    // the guard's surrounding try/catch can observe and report it.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void WriteCapturePngCore(string path, byte[] rgba, int width, int height) {
         PngEncoder.Write(

@@ -7,9 +7,8 @@ namespace Puck.World;
 /// Wires every Puck.World.Schema injection seam the instant this assembly loads — before <c>Main</c>, before the DI
 /// container, before any validator can run. Puck.World.Schema cannot reference Puck.Input (the architecture gate's
 /// structural denial), so <see cref="WorldDefinitionValidator"/> and identity-owned world validation reaches the
-/// engine-default binding document and the live vocabulary check through <see cref="BindingVocabularyHook"/> rather
-/// than naming <see cref="WorldDefaultBindings"/>/<see cref="WorldAffordances"/> directly.
-/// <see cref="BindingVocabularyHook.DefaultDocument"/> is wired unconditionally (a pure, always-available function);
+/// live vocabulary check through <see cref="BindingVocabularyHook"/> rather than naming
+/// <see cref="WorldAffordances"/> directly.
 /// <see cref="BindingVocabularyHook.VocabularyCheck"/> forwards to <see cref="WorldAffordances.Validate"/>,
 /// whose command half keeps its own separate absent-tolerant contract (a no-op until
 /// <see cref="WorldAffordances.Install"/> runs) and whose channel half needs no install at all — the caller hands it
@@ -24,11 +23,13 @@ namespace Puck.World;
 /// forward to <see cref="Protocol.WorldMutationKindCatalog"/> — Puck.World.Schema cannot reference
 /// Puck.World.Protocol (the mutation-kind vocabulary lives downstream of the document model a mask is a field on),
 /// so a mask's name round-trip crosses the same seam shape as the binding/extension hooks above.
+/// <see cref="WorldExtensionVocabularyHook.PostRenderExtensionCheck"/> is wired the identical way, to
+/// <see cref="WorldPostRenderExtensions.IsShipped"/> — required, not absent-tolerant, for the same reason as the
+/// screen-machine engine check.
 /// </summary>
 internal static class WorldDataHookInstaller {
     [ModuleInitializer]
     internal static void Install() {
-        BindingVocabularyHook.DefaultDocument = WorldDefaultBindings.BuildDocument;
         BindingVocabularyHook.VocabularyCheck = WorldAffordances.Validate;
         Protocol.MutationKindVocabularyHook.Describe = Protocol.WorldMutationKindCatalog.DescribeMask;
         Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
@@ -39,5 +40,6 @@ internal static class WorldDataHookInstaller {
         );
 
         WorldExtensionVocabularyHook.ScreenMachineEngineCheck = screenMachineEngines.IsRegistered;
+        WorldExtensionVocabularyHook.PostRenderExtensionCheck = WorldPostRenderExtensions.IsShipped;
     }
 }

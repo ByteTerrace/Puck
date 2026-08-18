@@ -27,22 +27,22 @@ namespace Puck.World;
 /// <c>editor.drag</c>, whose motion never crosses the wire (that is the whole point of the channel).</remarks>
 internal sealed class EditorSelectionCommandModule(WorldEditorSession session, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldClient client, IServerLink link) : ICommandModule {
     /// <summary>The drag abort (East on the place page): the pending row never existed.</summary>
-    public const string CancelCommand = "editor.cancel";
+    public const string CancelCommand = Puck.World.Client.EditorSelectionCommandNames.CancelCommand;
     /// <summary>The delete-selected act (East on the select page) — a discrete whole-row remove mutation.</summary>
-    public const string DeleteCommand = "editor.delete";
+    public const string DeleteCommand = Puck.World.Client.EditorSelectionCommandNames.DeleteCommand;
     /// <summary>The grab/release toggle (South on the place page; North on the select page): begins a drag on the
     /// selection, or commits a live drag as one mutation.</summary>
-    public const string GrabCommand = "editor.grab";
+    public const string GrabCommand = Puck.World.Client.EditorSelectionCommandNames.GrabCommand;
     /// <summary>The crosshair pick act (South on the select page; North on the camera page — the focus-selection).</summary>
-    public const string PickCommand = "editor.pick";
+    public const string PickCommand = Puck.World.Client.EditorSelectionCommandNames.PickCommand;
     /// <summary>The explicit release (typed scripting twin of the grab toggle's commit edge).</summary>
-    public const string ReleaseCommand = "editor.release";
+    public const string ReleaseCommand = Puck.World.Client.EditorSelectionCommandNames.ReleaseCommand;
     /// <summary>The select verb: <c>editor.select [&lt;section&gt; &lt;id&gt; | next | prev | none]</c>. D-pad
     /// Right/Left on the select page bind it with a constant Axis1D value (+1 next, -1 prev); West binds it with no
     /// override (a plain digital press means none/deselect).</summary>
-    public const string SelectCommand = "editor.select";
+    public const string SelectCommand = Puck.World.Client.EditorSelectionCommandNames.SelectCommand;
     /// <summary>The snap toggle (West on the place page) and pitch setter.</summary>
-    public const string SnapCommand = "editor.snap";
+    public const string SnapCommand = Puck.World.Client.EditorSelectionCommandNames.SnapCommand;
 
     private readonly WorldEditorSession m_session = session;
     private readonly WorldEditorTargeting m_targeting = targeting;

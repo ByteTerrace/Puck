@@ -141,7 +141,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private IGpuVertexBuffer? m_vertexBuffer;
     private IGpuShaderModule? m_vertexShader;
 
-    private static readonly byte[] FullscreenTriangleVertexData = CreateFullscreenTriangleVertexData();
+    private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
     private static readonly string[] OverlayPassLabels = ["overlay"];
     // Rewritten in place each frame (the draw command holds one binding over this array for the node's lifetime).
     private readonly byte[] m_pushConstantData = new byte[PushConstantByteLength];
@@ -156,6 +156,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     /// <summary>Initializes a new instance of the <see cref="UnifiedOverlayNode"/> class.</summary>
     /// <param name="inner">The producer whose render the overlay is drawn over (its surface must be sampleable here).</param>
     /// <param name="sources">The per-surface read seams + the feed tick.</param>
+    /// <param name="capacity">The host's declared counts the lease table is derived from (see
+    /// <see cref="OverlayCapacity"/>).</param>
     /// <param name="glyphs">The shared SDF glyph pack (per-glyph signed-distance cells).</param>
     /// <param name="services">The neutral GPU service bundle (same device as <paramref name="inner"/>).</param>
     /// <param name="vertexBytecode">The fullscreen vertex shader, in the host backend's bytecode format.</param>
@@ -163,9 +165,12 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> derives a lease table that
+    /// over-subscribes an <see cref="OverlayFrameBuilder"/> backstop (see <see cref="OverlayChannelLeases"/>).</exception>
     public UnifiedOverlayNode(
         IRenderNode inner,
         UnifiedOverlaySources sources,
+        OverlayCapacity capacity,
         OverlayGlyphSdfPack glyphs,
         OverlayServices services,
         ReadOnlyMemory<byte> vertexBytecode,
@@ -181,6 +186,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_builder = new OverlayFrameBuilder(
             glyphs: glyphs,
             height: height,
+            leases: new OverlayChannelLeases(capacity: capacity),
             width: width
         );
         m_bindingBarWriter = ((sources.BindingBar is { } bindingBar)
@@ -310,45 +316,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         );
 
         if (TryWriteCapturePng(
+            height: ((int)m_height),
             path: path,
-            rgba: pixels.Span,
-            width: ((int)m_width),
-            height: ((int)m_height)
+            rgba: pixels,
+            width: ((int)m_width)
         )) {
             Console.Error.WriteLine(value: $"[capture] unified overlay -> {path}");
         } else {
             m_captureUnavailable = true;
         }
-    }
-    private static byte[] CreateFullscreenTriangleVertexData() {
-        var vertices = new (float X, float Y)[]
-        {
-            (-1f, -1f),
-            (3f, -1f),
-            (-1f, 3f),
-        };
-        var vertexData = new byte[((int)(VertexStrideBytes * vertices.Length))];
-
-        for (var index = 0; (index < vertices.Length); index++) {
-            var offset = (index * ((int)VertexStrideBytes));
-
-            _ = BitConverter.TryWriteBytes(
-                destination: vertexData.AsSpan(
-                    length: sizeof(float),
-                    start: offset
-                ),
-                value: vertices[index].X
-            );
-            _ = BitConverter.TryWriteBytes(
-                destination: vertexData.AsSpan(
-                    length: sizeof(float),
-                    start: (offset + sizeof(float))
-                ),
-                value: vertices[index].Y
-            );
-        }
-
-        return vertexData;
     }
     // The resources a channel actually lost this frame, each as {verb} ({written} of {reserved} written) — shared by
     // both narrations so a reservation-overflow "dropped" and an own-cap "refused" read in the same shape.
@@ -407,16 +383,23 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         );
         m_pipeline = m_pipelineFactory.Create(
             deviceContext: m_deviceContext,
-            enableStorageBuffer: true,
+            description: new GpuGraphicsPipelineDescription(
+                Name: "overlay-unified",
+                VertexInput: new GpuVertexInputLayout(
+                    StrideBytes: VertexStrideBytes,
+                    Attributes: [new GpuVertexAttribute(Location: 0, Format: GpuVertexFormat.R32G32Float, OffsetBytes: 0)]
+                ),
+                TextureSamplerCount: 1,
+                EnableStorageBuffer: true,
+                PushConstantBinding: new GpuPushConstantBinding(
+                    data: new byte[PushConstantByteLength],
+                    offset: 0,
+                    stageFlags: GpuShaderStage.Fragment
+                )
+            ),
             fragmentShaderModule: m_fragmentShader,
             height: m_height,
-            pushConstantBinding: new GpuPushConstantBinding(
-                data: new byte[PushConstantByteLength],
-                offset: 0,
-                stageFlags: GpuShaderStage.Fragment
-            ),
             renderTarget: m_renderTarget,
-            textureSamplerCount: 1,
             vertexShaderModule: m_vertexShader,
             width: m_width
         );
@@ -788,22 +771,16 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     }
     // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Assets.
     // Returns false on any such failure so the caller can latch m_captureUnavailable and stop retrying a doomed load.
-    private static bool TryWriteCapturePng(string path, ReadOnlySpan<byte> rgba, int width, int height) {
-        try {
-            WriteCapturePngCore(
-                height: height,
-                path: path,
-                rgba: rgba,
-                width: width
-            );
-
-            return true;
-        } catch (Exception exception) when ((exception is FileLoadException or FileNotFoundException or TypeLoadException or BadImageFormatException or TypeInitializationException)) {
-            Console.Error.WriteLine(value: $"[capture] WARNING: Puck.Assets is unavailable ({exception.GetType().Name}: {exception.Message}) — frame capture skipped, render continues without it.");
-
-            return false;
-        }
-    }
+    private static bool TryWriteCapturePng(string path, ReadOnlyMemory<byte> rgba, int width, int height) =>
+        CapturePngWriteGuard.TryWrite(
+            state: (Path: path, Rgba: rgba, Width: width, Height: height),
+            writeCore: static state => WriteCapturePngCore(
+                height: state.Height,
+                path: state.Path,
+                rgba: state.Rgba,
+                width: state.Width
+            )
+        );
     // Uploads only what THIS frame actually wrote, per region — never the capacity-sized region behind it. The
     // shader's loops are bounded by these same counts (delivered above as push constants), so a region's untouched
     // tail holds nothing it will ever read; uploading it would be pure waste. The four regions are NOT contiguous at
@@ -856,15 +833,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     // loop down with it. WriteCapturePngCore is the ONLY member touching the Puck.Assets-typed PngEncoder.Write
     // call, kept non-inlined so the CLR only needs to resolve and load Puck.Assets.dll when this exact method is
     // JITted — i.e. lazily, on the first actual capture request, not on every produced frame (CaptureIfPending runs
-    // every frame; without this split, merely JITting it once would force the load). TryWriteCapturePng's try/catch
-    // sits at the CALL SITE one frame up: a failure to load the assembly surfaces as an exception thrown BY that
-    // call (the callee never got to run), which is exactly where a surrounding try/catch can observe and report it.
+    // every frame; without this split, merely JITting it once would force the load). CapturePngWriteGuard's try/catch
+    // wraps the call one frame up: a failure to load the assembly surfaces as an exception thrown by that call (the
+    // callee never got to run), which is exactly where the guard's surrounding try/catch can observe and report it.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static void WriteCapturePngCore(string path, ReadOnlySpan<byte> rgba, int width, int height) {
+    private static void WriteCapturePngCore(string path, ReadOnlyMemory<byte> rgba, int width, int height) {
         PngEncoder.Write(
             height: height,
             path: path,
-            rgba: rgba,
+            rgba: rgba.Span,
             width: width
         );
     }

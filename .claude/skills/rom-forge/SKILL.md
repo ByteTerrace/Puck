@@ -97,9 +97,11 @@ an absent capability.
   fields, and omitting it silently zeroes every transform). Alongside them:
   `CreationGeometry` (the canonical primitive dimension table every stamp,
   workbench and bake emits through — changing a value changes the meaning of
-  every persisted creation), `SculptModel` + `SculptChain`/`ChainSolver` (the
-  frame-rate editor model and its analytic two-bone/spine IK),
-  `EditHistory<T>` (the bounded undo/redo ring), and `GridSnap`. Host-side
+  every persisted creation), `SculptModel` (the frame-rate editor model — a
+  held `CreationDocument` IS the model, edited generically through
+  `CreationDocumentPatcher`'s dotted/indexed path walker) + `ChainRig`/
+  `ChainSolver` (its analytic two-bone/spine IK rest-geometry cache and
+  solver), `EditHistory<T>` (the bounded undo/redo ring), and `GridSnap`. Host-side
   float on purpose: this is authoring/presentation math, outside the
   simulation-state determinism contract.
 - `Tune/` — `TuneRom`/`TuneGame`/`TuneProtocol`/`TuneVerify`: the live cart.

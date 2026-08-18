@@ -8,6 +8,9 @@ FAIL when the substrate's observable contract breaks — not to describe the cod
 - `Puck.World.Schema` — the document model, validators, serialization.
 - `Puck.World.Protocol` — the Protocol wire surface.
 - `Puck.World.Server` — the sim contract: authority/grants, the mutation pipeline, the ordered domain, replay determinism.
+- The Schema→presentation capacity seam — `Puck.World.Client.WorldOverlayCapacity.FromSchema()` builds a
+  `Puck.Overlays.OverlayChannelLeases` that fits the overlay's backstops (the one cross-assembly property neither
+  side can state alone; not a HUD/presentation feature test).
 
 Nothing else.
 

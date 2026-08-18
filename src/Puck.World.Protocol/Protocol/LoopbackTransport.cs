@@ -110,6 +110,24 @@ public sealed class LoopbackTransport : IServerLink {
 
         return true;
     }
+    // Encodes and decodes a typed payload, taps its canonical value with the envelope's principal, then submits it.
+    // The payload's concrete leaf type proves that decoding returned the expected union case.
+    private void SubmitTapped<TPayload, TValue>(TPayload payload, WorldPrincipal principal, Func<TPayload, TValue> selectValue, Action<TValue, WorldPrincipal>? tap) where TPayload : WorldSubmissionPayload {
+        if (
+            TryNextEnvelope(
+            envelope: out var envelope,
+            payload: payload,
+            principal: principal
+        ) &&
+            (envelope.Payload is TPayload canonical)
+        ) {
+            tap?.Invoke(
+                arg1: selectValue(arg: canonical),
+                arg2: envelope.Principal
+            );
+            m_server.Submit(envelope: envelope);
+        }
+    }
 
     /// <summary>Binds the client sink the server delivers each tick's snapshot to.</summary>
     /// <param name="sink">The client sink.</param>
@@ -141,26 +159,17 @@ public sealed class LoopbackTransport : IServerLink {
             ));
         }
     }
+    // The tap fires before the envelope reaches the server, exactly like GrantTap/RevokeTap: replay re-applies a
+    // recorded entry through this identical door (WorldServer.EnqueueAddonLifecycle), so a mount/unmount the
+    // door goes on to refuse still reproduces as the identical refusal on replay rather than silently vanishing.
     /// <inheritdoc/>
-    public void SubmitAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal) {
-        // The tap fires BEFORE the envelope reaches the server, exactly like GrantTap/RevokeTap: replay re-applies a
-        // recorded entry through this identical door (WorldServer.EnqueueAddonLifecycle), so a mount/unmount the
-        // door goes on to refuse still reproduces as the identical refusal on replay rather than silently vanishing.
-        if (
-            TryNextEnvelope(
-            principal: principal,
+    public void SubmitAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal) =>
+        SubmitTapped(
             payload: new WorldSubmissionPayload.AddonLifecycle(Value: lifecycle),
-            envelope: out var envelope
-        ) &&
-            (envelope.Payload is WorldSubmissionPayload.AddonLifecycle canonical)
-        ) {
-            AddonLifecycleTap?.Invoke(
-                arg1: canonical.Value,
-                arg2: envelope.Principal
-            );
-            m_server.Submit(envelope: envelope);
-        }
-    }
+            principal: principal,
+            selectValue: static payload => payload.Value,
+            tap: AddonLifecycleTap
+        );
     /// <inheritdoc/>
     public void SubmitCommand(WorldCommand command) {
         if (
@@ -183,44 +192,26 @@ public sealed class LoopbackTransport : IServerLink {
         );
     }
     /// <inheritdoc/>
-    public void SubmitDesignation(WorldDesignation designation, WorldPrincipal principal) {
-        if (
-            TryNextEnvelope(
-            principal: principal,
+    public void SubmitDesignation(WorldDesignation designation, WorldPrincipal principal) =>
+        SubmitTapped(
             payload: new WorldSubmissionPayload.Designation(Value: designation),
-            envelope: out var envelope
-        ) &&
-            (envelope.Payload is WorldSubmissionPayload.Designation canonical)
-        ) {
-            DesignationTap?.Invoke(
-                arg1: canonical.Value,
-                arg2: envelope.Principal
-            );
-            m_server.Submit(envelope: envelope);
-        }
-    }
+            principal: principal,
+            selectValue: static payload => payload.Value,
+            tap: DesignationTap
+        );
+    // The tap fires before the envelope reaches the server, which is where WorldGrants.Conflicts actually rules —
+    // so the tape records the submitted grant, including one the door goes on to refuse. That is deliberate:
+    // replay re-applies a Grant entry through this identical door (WorldReplaySnapshot.Replay calls
+    // server.Grant, never a bypass), so a refusal on tape reproduces as the identical refusal on replay rather
+    // than silently vanishing or silently becoming accepted.
     /// <inheritdoc/>
-    public void SubmitGrant(WorldGrant grant, WorldPrincipal actor) {
-        // The tap fires BEFORE the envelope reaches the server, which is where WorldGrants.Conflicts actually rules —
-        // so the tape records the SUBMITTED grant, including one the door goes on to refuse. That is deliberate:
-        // replay re-applies a Grant entry through this identical door (WorldReplaySnapshot.Replay calls
-        // server.Grant, never a bypass), so a refusal on tape reproduces as the identical refusal on replay rather
-        // than silently vanishing or silently becoming accepted.
-        if (
-            TryNextEnvelope(
-            principal: actor,
+    public void SubmitGrant(WorldGrant grant, WorldPrincipal actor) =>
+        SubmitTapped(
             payload: new WorldSubmissionPayload.Grant(Value: grant),
-            envelope: out var envelope
-        ) &&
-            (envelope.Payload is WorldSubmissionPayload.Grant canonical)
-        ) {
-            GrantTap?.Invoke(
-                arg1: canonical.Value,
-                arg2: envelope.Principal
-            );
-            m_server.Submit(envelope: envelope);
-        }
-    }
+            principal: actor,
+            selectValue: static payload => payload.Value,
+            tap: GrantTap
+        );
     /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) {
         IntentTap?.Invoke(obj: submission);
@@ -234,22 +225,13 @@ public sealed class LoopbackTransport : IServerLink {
         );
     }
     /// <inheritdoc/>
-    public void SubmitRevoke(WorldGrant grant, WorldPrincipal actor) {
-        if (
-            TryNextEnvelope(
-            principal: actor,
+    public void SubmitRevoke(WorldGrant grant, WorldPrincipal actor) =>
+        SubmitTapped(
             payload: new WorldSubmissionPayload.Revoke(Value: grant),
-            envelope: out var envelope
-        ) &&
-            (envelope.Payload is WorldSubmissionPayload.Revoke canonical)
-        ) {
-            RevokeTap?.Invoke(
-                arg1: canonical.Value,
-                arg2: envelope.Principal
-            );
-            m_server.Submit(envelope: envelope);
-        }
-    }
+            principal: actor,
+            selectValue: static payload => payload.Value,
+            tap: RevokeTap
+        );
     /// <inheritdoc/>
     public void SubmitScreenOp(WorldScreenOp op, WorldPrincipal principal) {
         // No transport-level tap here — unlike AddonLifecycle/Grant/Revoke, a screen op's replay-relevant content

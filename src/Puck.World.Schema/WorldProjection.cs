@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 using Puck.World.Protocol;
 
 namespace Puck.World;
@@ -157,13 +158,6 @@ public sealed record WorldProjectionDocument(
 /// receiver has no directory to resolve one against.</para>
 /// </remarks>
 public static class WorldProjection {
-    // Canonical write, identical in every respect to WorldDefinitionSerialization's: LF newlines, two-space indent,
-    // UTF-8 with no BOM, exactly one trailing newline. Two documents in one repository never disagree about this.
-    private static readonly JsonWriterOptions WriterOptions = new() {
-        Indented = true,
-        NewLine = "\n",
-    };
-
     /// <summary>Composes what <paramref name="tier"/> authorizes a peer to receive of <paramref name="definition"/>.</summary>
     /// <param name="definition">The authority's live document.</param>
     /// <param name="tier">The tier the admission door decided for this peer.</param>
@@ -246,22 +240,10 @@ public static class WorldProjection {
     public static byte[] Serialize(WorldProjectionDocument projection) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(
-            options: WriterOptions,
-            utf8Json: stream
-        )) {
-            JsonSerializer.Serialize(
-                writer: writer,
-                value: projection,
-                jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument
-            );
-        }
-
-        stream.WriteByte(value: ((byte)'\n'));
-
-        return stream.ToArray();
+        return CanonicalJsonDocument.Serialize(
+            jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument,
+            value: projection
+        );
     }
     /// <summary>Rebuilds a locally-valid <see cref="WorldDefinition"/> from a projection — see the class remarks. Every
     /// undisclosed section arrives as its neutral built-in default, never as a fabricated stand-in for what the
@@ -277,53 +259,51 @@ public static class WorldProjection {
         for (var index = 0; (index < kits.Length); index++) {
             var kit = projection.Kits[index];
 
+            // An empty producer/action table is the honest hydration: this client never runs either, and the
+            // authority that does never reads this document.
             kits[index] = new WorldKit(
                 Name: kit.Name,
                 BodyMotionProgram: kit.BodyMotionProgram,
                 Motion: kit.Motion,
-                // An empty producer/action table is the honest hydration: this client never runs either, and the
-                // authority that does never reads this document.
-                Producers: new Dictionary<string, BodyProgramParameters>(comparer: StringComparer.Ordinal),
-                Actions: new Dictionary<string, ActionSpec>(comparer: StringComparer.Ordinal),
                 Collider: kit.Collider,
                 BodyContact: kit.BodyContact
             );
         }
 
         return new WorldDefinition(
-            Motion: projection.Motion,
-            SpawnPoints: projection.SpawnPoints,
-            Render: projection.Render,
-            Screens: projection.Screens,
-            Cameras: projection.Cameras,
-            Population: projection.Population,
-            PlayerDefaults: projection.PlayerDefaults,
-            Channels: projection.Channels,
-            TargetRegisters: [],
-            BodyMotionPrograms: [],
-            Kits: kits,
-            DefaultSeatKit: projection.DefaultSeatKit,
-            Assignment: projection.Assignment,
-            Addons: [],
-            BindingOverlays: projection.BindingOverlays,
-            Storage: new WorldStorageDefaults(),
-            Creations: projection.Creations,
-            Placements: projection.Placements,
-            Authoring: WorldAuthoringDefaults.Default,
-            Speakers: projection.Speakers,
-            Tunes: projection.Tunes,
-            Patches: projection.Patches,
-            Audio: projection.Audio,
-            Collision: projection.Collision,
-            Host: WorldHostDefaults.Default,
-            Views: projection.Views,
-            Looks: projection.Looks,
-            LookAssignment: projection.LookAssignment,
-            Links: projection.Links,
-            Grants: [],
-            Hud: projection.Hud,
-            State: [],
-            InputHold: new WorldInputHoldAuthoring(
+            MotionRaw: projection.Motion,
+            SpawnPointsRaw: projection.SpawnPoints,
+            RenderRaw: projection.Render,
+            ScreensRaw: projection.Screens,
+            CamerasRaw: projection.Cameras,
+            PopulationRaw: projection.Population,
+            PlayerDefaultsRaw: projection.PlayerDefaults,
+            ChannelsRaw: projection.Channels,
+            TargetRegistersRaw: [],
+            BodyMotionProgramsRaw: [],
+            KitsRaw: kits,
+            DefaultSeatKitRaw: projection.DefaultSeatKit,
+            AssignmentRaw: projection.Assignment,
+            AddonsRaw: [],
+            BindingOverlaysRaw: projection.BindingOverlays,
+            StorageRaw: new WorldStorageDefaults(),
+            CreationsRaw: projection.Creations,
+            PlacementsRaw: projection.Placements,
+            AuthoringRaw: WorldAuthoringDefaults.Default,
+            SpeakersRaw: projection.Speakers,
+            TunesRaw: projection.Tunes,
+            PatchesRaw: projection.Patches,
+            AudioRaw: projection.Audio,
+            CollisionRaw: projection.Collision,
+            HostRaw: WorldHostDefaults.Default,
+            ViewsRaw: projection.Views,
+            LooksRaw: projection.Looks,
+            LookAssignmentRaw: projection.LookAssignment,
+            LinksRaw: projection.Links,
+            GrantsRaw: [],
+            HudRaw: projection.Hud,
+            StateRaw: new WorldStateSection(World: []),
+            InputHoldRaw: new WorldInputHoldAuthoring(
                 CeilingSeconds: 0f,
                 DefaultSeconds: 0f,
                 EqualizeByDefault: false,

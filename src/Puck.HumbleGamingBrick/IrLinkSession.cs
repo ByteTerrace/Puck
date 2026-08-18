@@ -79,12 +79,24 @@ public sealed class IrLinkSession : IDisposable {
     /// <param name="second">The second machine, restored from its across-suspend snapshot.</param>
     /// <param name="resumeToken">The token the matching <see cref="Suspend"/> returned.</param>
     /// <exception cref="ArgumentNullException">Either machine is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">Both machines are the same instance.</exception>
+    /// <exception cref="ArgumentException">Both machines are the same instance, or a credit exceeds its machine's own
+    /// cycle count — a token that does not fit either machine, the signature a reordered, substituted, or otherwise
+    /// corrupted token leaves behind.</exception>
     /// <exception cref="InvalidOperationException">Either machine's infrared port is already linked.</exception>
     public IrLinkSession(MachineInstance first, MachineInstance second, IrLinkResumeToken resumeToken)
         : this(
-        first: first,
-        second: second
+        // Validated before either transceiver is connected: an oversized credit must fail here, never after the pair is
+        // already wired (there is no seam left to disconnect it through once construction has thrown).
+        first: LinkSessionStepper.RequireCreditFits(
+            credit: resumeToken.FirstCredit,
+            instance: first,
+            side: "first"
+        ),
+        second: LinkSessionStepper.RequireCreditFits(
+            credit: resumeToken.SecondCredit,
+            instance: second,
+            side: "second"
+        )
     ) {
         m_firstTarget = (m_first.Clock.CycleCount - resumeToken.FirstCredit);
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
@@ -100,35 +112,13 @@ public sealed class IrLinkSession : IDisposable {
             instance: this
         );
 
-        m_firstTarget += tCycles;
-        m_secondTarget += tCycles;
-
-        while (true) {
-            var firstRemaining = Remaining(
-                machine: m_first,
-                target: m_firstTarget
-            );
-            var secondRemaining = Remaining(
-                machine: m_second,
-                target: m_secondTarget
-            );
-
-            if (
-                (firstRemaining == 0UL) &&
-                (secondRemaining == 0UL)
-            ) {
-                return;
-            }
-
-            // Step whichever machine is further behind its target so neither ever observes the other's light more than one
-            // instruction stale; the tie goes to the first machine — a fixed, state-free rule, so the interleave (and
-            // therefore every light level each side reads) replays identically for identical inputs.
-            if (firstRemaining >= secondRemaining) {
-                StepOnce(machine: m_first);
-            } else {
-                StepOnce(machine: m_second);
-            }
-        }
+        LinkSessionStepper.Run(
+            first: m_first,
+            firstTarget: ref m_firstTarget,
+            second: m_second,
+            secondTarget: ref m_secondTarget,
+            tCycles: tCycles
+        );
     }
     /// <summary>Severs the cable and returns the credit token a later credit-preserving reconnect needs. Each machine's
     /// credit is its instruction overshoot at this instant — the T-cycles it has already run past its cumulative link
@@ -165,20 +155,5 @@ public sealed class IrLinkSession : IDisposable {
 
         InfraredPort.Disconnect(port: m_firstPort);
         InfraredPort.Disconnect(port: m_secondPort);
-    }
-
-    private static ulong Remaining(Machine machine, ulong target) {
-        var elapsed = machine.Clock.CycleCount;
-
-        return ((elapsed < target)
-            ? (target - elapsed)
-            : 0UL);
-    }
-    private static void StepOnce(Machine machine) {
-        if (machine.HasBusMaster) {
-            machine.StepInstruction();
-        } else {
-            machine.StepTick();
-        }
     }
 }

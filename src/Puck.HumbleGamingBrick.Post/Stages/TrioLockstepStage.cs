@@ -11,7 +11,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// (carry-forward under input, not just in attract mode). The wall-clock for stepping all four machines is reported
 /// as the trio-throughput evidence the demo's frame budget rests on.
 /// </summary>
-internal sealed class TrioLockstepStage : IPostStage {
+internal sealed class TrioLockstepStage : IPostStage<PostContext> {
     private const int Frames = 300;
 
     /// <inheritdoc/>

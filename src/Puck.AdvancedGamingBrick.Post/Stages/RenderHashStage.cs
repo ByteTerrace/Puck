@@ -26,7 +26,7 @@ internal sealed record RenderFloor(RenderFloorSource Source, string RelativePath
 /// individually when their ROM is absent; the stage skips entirely when none is present. Re-capture a shifted floor with
 /// <c>--render-hash</c> after confirming the frame is still visually correct.
 /// </summary>
-internal sealed class RenderHashStage : IPostStage {
+internal sealed class RenderHashStage : IPostStage<PostContext> {
     private readonly IReadOnlyList<RenderFloor> m_floors;
 
     /// <summary>Initializes a new instance of the <see cref="RenderHashStage"/> class.</summary>

@@ -1,0 +1,38 @@
+{
+  "id": "world-seat-binding-recompose",
+  "title": "A forced seat recompose against a registered command succeeds cleanly with no binding-narration",
+  "binding": "The positive leg forces a seat-1 recompose against a registered command and asserts both the success echo and the absence of every binding-narration form (the boot-sweep findings, unregistered-command skips, and both recompose-rejection forms — a value-kind mismatch is fatal only at recompose, never at boot). The discriminating leg targets an unregistered command instead, so the success echo goes red and the unregistered-command refusal appears.",
+  "bootShape": "windowed",
+  "requirements": ["gpu"],
+  "seconds": 6,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "replay.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "player.bind", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.save", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "recompose-succeeded-seat", "stream": "stdout", "match": "contains", "text": "seat 1 'keyboard.p'" },
+      { "type": "line", "name": "recompose-succeeded-destination", "stream": "stdout", "match": "contains", "text": "'editor.status'" },
+      { "type": "line", "name": "no-unregistered-command-refusal", "stream": "stderr", "match": "contains", "text": "names no registered command", "present": false },
+      { "type": "line", "name": "no-binding-narration", "stream": "stderr", "match": "contains", "text": "[player.bindings]", "present": false },
+      { "type": "line", "name": "world-save-wrote", "stream": "stdout", "match": "contains", "text": "[world.save: " }
+    ]
+  },
+  "discriminating": {
+    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "replay.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "player.bind", "occurrence": 1, "outcome": "refused" },
+      { "verb": "world.save", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "bind-refused-unregistered", "stream": "stderr", "match": "contains", "text": "names no registered command" }
+    ]
+  }
+}

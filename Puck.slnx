@@ -6,6 +6,7 @@
         <Project Path="src/Puck.Analyzers/Puck.Analyzers.csproj" />
         <Project Path="src/Puck.Assets/Puck.Assets.csproj" />
         <Project Path="src/Puck.Attestation/Puck.Attestation.csproj" />
+        <Project Path="src/Puck.Audio/Puck.Audio.csproj" />
         <Project Path="src/Puck.Cli/Puck.Cli.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
@@ -20,8 +21,10 @@
         <Project Path="src/Puck.Launcher/Puck.Launcher.csproj" />
         <Project Path="src/Puck.Launcher.Linux/Puck.Launcher.Linux.csproj" />
         <Project Path="src/Puck.Launcher.Windows/Puck.Launcher.Windows.csproj" />
+        <Project Path="src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />
         <Project Path="src/Puck.Networking/Puck.Networking.csproj" />
+        <Project Path="src/Puck.Networking.Host/Puck.Networking.Host.csproj" />
         <Project Path="src/Puck.Overlays/Puck.Overlays.csproj" />
         <Project Path="src/Puck.Physics/Puck.Physics.csproj" />
         <Project Path="src/Puck.Platform/Puck.Platform.csproj" />
@@ -29,7 +32,6 @@
         <Project Path="src/Puck.Platform.Windows/Puck.Platform.Windows.csproj" />
         <Project Path="src/Puck.Recording/Puck.Recording.csproj" />
         <Project Path="src/Puck.Scripting/Puck.Scripting.csproj" />
-        <Project Path="src/Puck.SdfVm.Bench/Puck.SdfVm.Bench.csproj" />
         <Project Path="src/Puck.SdfVm/Puck.SdfVm.csproj" />
         <Project Path="src/Puck.Shaders/Puck.Shaders.csproj" />
         <Project Path="src/Puck.SignedDistance/Puck.SignedDistance.csproj" />
@@ -38,9 +40,12 @@
         <Project Path="src/Puck.Vulkan.Presentation/Puck.Vulkan.Presentation.csproj" />
         <Project Path="src/Puck.Vulkan/Puck.Vulkan.csproj" />
         <Project Path="src/Puck.World.Addons/Puck.World.Addons.csproj" />
+        <Project Path="src/Puck.World.Client/Puck.World.Client.csproj" />
+        <Project Path="src/Puck.World.Console/Puck.World.Console.csproj" />
         <Project Path="src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <Project Path="src/Puck.World.Schema/Puck.World.Schema.csproj" />
         <Project Path="src/Puck.World.Server/Puck.World.Server.csproj" />
+        <Project Path="src/Puck.World.Silo/Puck.World.Silo.csproj" />
         <Project Path="src/Puck.World/Puck.World.csproj" />
     </Folder>
     <Folder Name="/tests/">
@@ -48,6 +53,7 @@
         <Project Path="tests/Puck.Analyzers.Tests/Puck.Analyzers.Tests.csproj" />
         <Project Path="tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj" />
         <Project Path="tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
+        <Project Path="tests/Puck.Audio.Tests/Puck.Audio.Tests.csproj" />
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
         <Project Path="tests/Puck.GamingBricks.Tests/Puck.GamingBricks.Tests.csproj" />
         <Project Path="tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj" />
@@ -57,6 +63,7 @@
         <Project Path="tests/Puck.Networking.Tests/Puck.Networking.Tests.csproj" />
         <Project Path="tests/Puck.Physics.Tests/Puck.Physics.Tests.csproj" />
         <Project Path="tests/Puck.Recording.Tests/Puck.Recording.Tests.csproj" />
+        <Project Path="tests/Puck.Shaders.Tests/Puck.Shaders.Tests.csproj" />
         <Project Path="tests/Puck.SignedDistance.Tests/Puck.SignedDistance.Tests.csproj" />
         <Project Path="tests/Puck.Text.Tests/Puck.Text.Tests.csproj" />
         <Project Path="tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj" />

@@ -1,20 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <IsAotCompatible>false</IsAotCompatible>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
-    <PropertyGroup>
-        <!-- Authoring documents use reflection-based JsonSerializer metadata and a runtime enum converter. -->
-        <IsAotCompatible>false</IsAotCompatible>
-    </PropertyGroup>
     <ItemGroup>
-        <!-- The content-addressed store the document core hashes through (DocumentCanonicalizer.Canonicalize). -->
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <!-- The self-verify batteries boot forged carts on a REAL headless Humble machine (pure CPU) — the forge's
-             "verify by running" discipline lives in the library with the chain it verifies. -->
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
-        <!-- The creation vocabulary Authoring/ is written against: SdfBlendOp/SdfShapeType on the wire, and the
-             SdfProgramBuilder chain CreationGeometry emits its canonical primitive dimensions onto. -->
         <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
     </ItemGroup>

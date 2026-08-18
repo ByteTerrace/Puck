@@ -284,8 +284,19 @@ the four shipped worlds author no `rules` section today, so there is no
 worked example to cite; the pattern still governs the first world that adds
 one.
 
-`state` (`WorldStateRow`, `Puck.World.Schema/WorldState.cs`) is genre-neutral
-game state — score, rounds, inventory, flags. **A slot is a table with one
+`state` (`WorldStateSection`, `Puck.World.Schema/WorldState.cs`) is the
+document's abstract state inventory. It has three ownership lanes:
+`world` holds mutation-addressable document cells; `body` holds ephemeral
+per-body counters and timers; `identity` holds the same compact slot vocabulary
+but synchronizes it through the durable identity-document seam. Body and
+identity names share one world-wide namespace and are compiled once into each
+body's bounded ordinal arrays — declarations never live under individual
+actions, and the runtime never performs document lookups on the action hot path.
+The lane is the lifetime declaration; there is no second `lifetime` field to
+contradict it.
+
+`state.world` (`WorldStateRow`) is genre-neutral game state — score, rounds,
+inventory, flags. **A slot is a table with one
 key, and there is ONE authored spelling for both.** A row names itself,
 declares its `kind`, and carries EITHER a bare `value` — sugar for the one
 cell keyed `WorldStateRow.SlotKey` (`"$value"`) — OR a `cells` array of
@@ -295,9 +306,12 @@ discriminators: a row carrying both, or a `value` beside a `capacity`
 Omitting both is a declared-but-empty row.
 
 ```json
-{"name":"score","kind":"int","value":0,"min":0,"max":1000}
-{"name":"lives","kind":"int","value":3,"nonNegative":true}
-{"name":"inventory","kind":"int","capacity":8,"cells":[{"key":"coin","value":2}]}
+"state": {
+  "world": [{"name":"score","kind":"int","value":0,"min":0,"max":1000}],
+  "body": [{"name":"jumpUses","kind":"Counter","initial":0,"resetFact":"Grounded"}],
+  "identity": [{"name":"stance","kind":"Counter","initial":0,"playerWritable":true,
+    "envelope":{"$type":"set","values":[0,1,2]}}]
+}
 ```
 
 ### Authored randomness — SOURCE x SITE x MOMENT
@@ -684,7 +698,7 @@ folded in as `hud.<Reason>: …`). A null required section fails earlier with
 included, gets no `Require` call; the struct sections `motion`/`wander`/
 `population` cannot be absent-null).
 
-Notable validator constants: `MaxCameras = 64`,
+Notable validator constants: `cameras` count ≤ `OffscreenRenderBudget.RegisteredViews` (64),
 `MaxSurfaceDimension = 4096`, `MaxLookScale = 16f`. Screen indices are
 validated unique, `< SdfProgramBuilder.MaxScreenSurfaces`, and outside the
 reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
@@ -703,8 +717,24 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   enum token is a parse error, never a silent default. (`CommandPhase` from
   `Puck.Commands` registers as a closed generic on the context's `Converters`
   because it cannot carry the attribute.)
-- **`Vector3` as `[x, y, z]`** via `Vector3JsonConverter` (STJ would silently
-  zero struct fields otherwise).
+- **`Vector2`/`Vector3`/`Quaternion` literals as `[x, y]`/`[x, y, z]`/`[x, y, z, w]`**
+  via `Puck.Assets.Documents.Vector2JsonConverter`/`Vector3JsonConverter`/
+  `QuaternionJsonConverter` — the one literal spelling every document family
+  (world, creation, audio, synth) shares; the object form is refused. World and
+  embedded-creation spatial fields additionally use `DocumentVector2`/`DocumentVector3`/
+  `DocumentQuaternion`, accepting a `state.<row>[.<key>]` string that names a
+  Text cell holding the matching array. `WorldStateDocumentValues` resolves
+  those only after the whole world parses, retains the reference for canonical
+  write-back, and rehydrates a fresh candidate when a referenced state row is
+  mutated so a rejected candidate cannot alter the live value holder.
+- **State-backed identifiers** use `DocumentIdentifier`: an ordinary string
+  remains literal, while a `state.<row>[.<key>]` string reads its identifier
+  from a Text state cell. This includes binding-group identifiers on chord,
+  context, and wheel rows; creation row/document/shape names; look names and
+  creation sources; and kit/look assignment row entries. Put linked names
+  behind one cell when they must rename atomically. Resolution precedes
+  validation and binding composition, and a live cell write rehydrates,
+  re-resolves, recompiles, and validates the complete candidate.
 - **`$type`-discriminated unions:** `ActionPredicate`, `ActionEffect`,
   `WorldScreenSource`
   (`none`/`testPattern`/`machine`/`camera`/`view`/`capture`/`console`/`qr`),
@@ -722,7 +752,7 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   untouched world reproduces the file byte-for-byte — a useful observation,
   never an acceptance gate.
 - Embedded Forge documents (creations/tunes/patches) bridge through
-  `Puck.Forge.Authoring.DocumentJsonOptions.Shared` so the inline embed
+  `Puck.Assets.Documents.DocumentJsonOptions.Shared` so the inline embed
   carries exactly the vocabulary its canonicalizer hashes.
 
 **Adding a schema field — the sweep direction.** Adding a top-level SECTION
@@ -848,11 +878,37 @@ The composer is N-ary (`Compose(params ReadOnlySpan<BindingProfileDocument?>)`,
 base-first, null layers skipped, mismatched `Version` throws). The four layer
 CLASSES are assembled by `src/Puck.World/WorldSeatBindings.cs`: engine
 default → every world `bindingOverlays` row in order → the seat profile's
-`bindings` → live session rebinds (freshest wins). Merge rules: the row key
-is group + ORDERED chord; a later layer's row for the same key overrides
+`bindings` → live session rebinds (freshest wins). A row's members are two
+lists: `held` (a SET — down in any order) and `chord` (a SEQUENCE — pressed in
+that order, tested with the held members removed from the press order); a
+member is a modifier id, or a raw source id (`"held": ["mouse.button1",
+"mouse.button2"]`) which becomes an implicit default-threshold modifier;
+`modifiers` remains for thresholds and named multi-source groups. A page row
+applies when its members are satisfied (deepest wins), a command row fires
+when the down set is exactly its members; a row with neither list is the
+group's resting page. A command row targeting a channel may author
+`mode: Toggle`: each chord completion flips the input-side channel latch, and
+breaking the physical chord leaves that latch untouched. This is the first-class
+authoring model for auto-actions: auto-X toggles channel X without inventing a
+bespoke command or simulation state. The standard profile uses held `look` (LT)
+plus `gamepad.leftStickPress` to toggle `forward` for autorun, and held `look`
+plus `gamepad.rightStickPress` to toggle `up` for auto-jetpack. Each command
+chord consumes its stick press before the resting page's bare stick binding can
+see it. Toggle contributions are owned by the compiled command destination,
+not by the button that flipped them; synthesized chord edges carry that stable
+logical source through press, reassertion, and release. Parallel auto-actions
+therefore coexist, while several bindings for the same destination operate one
+latch. Merge rules: the row key is
+(group, sorted `held`,
+ordered `chord`); a later layer's row for the same key overrides
 WHOLESALE when the meaning differs (a `Command`, or a page under a different
-id) and ENTRY-BY-SOURCE when both name the same page (per-source replace,
-first-touch-per-layer so a hold/release pair in one layer accumulates).
+id) and ENTRY-BY-SOURCE when both name the same page: a row's `sources` list
+(a control can activate a destination from several physical sources, e.g. a
+gamepad button AND a keyboard key) replaces the earlier layer's entries AT
+EACH of its listed sources independently — an entry surviving at all of its
+sources stays combined, one narrowed to fewer sources by a later layer keeps
+only the ones still its own — first-touch-per-layer so a hold/release pair in
+one layer accumulates.
 The merged document compiles once per change through
 `BindingProfile.Compile` in `Puck.Commands` — deliberately shared, never
 copied. `WorldSeatBindings` compares the filtered composed document plus the
@@ -861,15 +917,41 @@ instance with identical effective content is a true no-op, preserving held
 commands, chord/page state, and release latches. Live surface: `player.bind`,
 `player.bindings`.
 
+A page may name `inherits`, the profile-unique id of another page in the same
+group. Compilation flattens the inherited page first, then replaces its entries
+at every source or activator identity the child declares; untouched bindings
+remain active with no runtime fallback lookup. Missing pages, cross-group
+inheritance, empty ids, and cycles refuse by page name. The standard
+`actionWheel` page inherits `base`, so its right-stick selector override does
+not suspend left-stick or keyboard movement while the radial is open.
+
+A chord row's, context row's, and wheel row's `group` may be a literal or a
+`state.<row>[.<key>]` reference to a Text cell. All references to one cell
+resolve together before the profile is composed, so changing that single cell
+renames the relationship consistently instead of requiring a document-wide
+search/replace. The standard profile demonstrates this with
+`state.bindingGroups.defaultActionGroup`.
+
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Null resolves to `WorldBindingBarAuthoring.Default`
-(enabled, no rest timeout, reference layout), preserving the behavior of a row
-authored before the policy existed. The first world row supplies the world floor;
-the selected identity's own first row may replace it for that seat, matching the
-existing first-row binding-layer consumer in `WorldIdentity`. Durations are
-authored as `hideAfterRestSeconds` and compiled through the running world's
-simulation rate. `world.binding-bar [on|off|auto] [player]` reads the resolved
-policy and controls its live visibility override.
+(enabled, always visible, reference layout). The first world row supplies the
+world floor; the selected identity's own first row may replace it for that seat,
+matching the existing first-row binding-layer consumer in `WorldIdentity`.
+`world.binding-bar [on|off|auto] [player]` reads the resolved policy and controls
+its live visibility override.
+
+**Overlay visibility (`visible`).** Every overlay element — a `hud.panels` row, a
+seat's player-scope panel, `hud.defaults` (the gate over every world panel),
+`hud.defaults.cursor`, and `bindingBar` — takes an optional `visible` predicate
+over per-seat presentation facts (`OverlayPredicate` / `OverlayFact`,
+`WorldOverlayVisibility.cs`; evaluated by `WorldOverlayFacts`): `now {fact}`,
+`recently {fact, windowSeconds}`, `all`, `any`, `not`. Facts: `SeatInput` (a
+routed signal this tick), `PointerMotion`, `WheelOpen`, `ConsoleOpen`,
+`EditorActive`. Absent = always visible. `{ "$type": "recently", "fact":
+"SeatInput", "windowSeconds": 3 }` hides an element three seconds after the
+seat's last input and shows it on the next; a world-scope panel reads a fact as
+true when it holds for any joined local seat. Windows compile through the world's
+simulation rate; nothing here enters the simulation.
 
 **Context rows.** `puck.bindings.v1` carries an optional `contexts` section:
 `{family, state, group}` rows (`BindingContextDefinition`), merged across
@@ -922,7 +1004,21 @@ alone beyond the dead zone), `HitTarget` (the pointer must remain in the
 authored annulus; reusable by a future touch adapter), or `Disabled`;
 `placement` is `Pointer` (opening pointer position, with viewport-center
 fallback) or `ViewportCenter`. Authors also control dead-zone/ring/grace
-fractions, rotation, clockwise ordering, and the initial ring.
+fractions, rotation, clockwise ordering, and the initial ring. `axisDeadZone`
+is the normalized explicit-ring Axis2D neutral threshold, independent of the
+visual/spatial `deadZoneFraction`; excursion-controlled wheels instead use
+`excursion.deadZone`. `selectionGraceSeconds` is the neutral dwell before an
+empty commit becomes a cancel: a quick throw remains selected during that
+window, while holding the selector centered beyond it clears the command. Each
+return to neutral completes one selector excursion, so another flick in the
+same direction begins a fresh excursion even when its peak is weaker than the
+last. Direction remains live throughout an active excursion, including a
+constant-radius rotation whose magnitude never sets another peak. On return to
+neutral, the wheel retains the last direction at or above `switchFraction`, or
+the excursion's peak when a short throw never reached it. `switchFraction` is
+also the magnitude an opposite-side excursion must reach and the magnitude a
+different sector must reach while grace holds the prior sector; raise it to
+reject stronger spring rebound, or lower it to admit lighter direction changes.
 
 `ringSelection` is `Explicit` (the default: `player.wheel.ring` bindings and
 pointer-wheel notches step the active ring) or `Excursion` (neutral-relative
@@ -943,8 +1039,9 @@ targeting and gamepad excursion on the same authored radial.
 Selection, ring navigation, commit, and cancel sources are ordinary entries
 on each hold page. The engine default uses Tab and authors right-stick
 selection; the four shipped worlds currently replace the `play-primary`
-radial with one six-sector action ring. Presentation and the live verbs:
-[views.md](views.md)'s radial-menu section.
+radial with one six-sector action ring. `WorldWheelFeed` owns presentation,
+and `world.view.wheel` reports the live wheel, hover, effective selector dead
+zone, and neutral-grace duration.
 
 ## Capacity constants
 
@@ -958,7 +1055,9 @@ radial with one six-sector action ring. Presentation and the live verbs:
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
 - `WorldStateCapacity` (`WorldState.cs`): `MaxRows = 128`,
   `MaxCellsPerRow = 128` (an authored `capacity` may only narrow it),
-  `MaxTextValueLength = 256` (UTF-16 units, a text cell's value).
+  `MaxTextValueLength = 256` (UTF-16 units, a text cell's value), and
+  `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed
+  per-body register/checkpoint width).
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`,
   the document-global CPU/instance-grid admission ceiling. The recorded
   GPU-bound measurement is 0 but does not govern admission.
@@ -980,9 +1079,9 @@ radial with one six-sector action ring. Presentation and the live verbs:
   speakers); `WorldCameraRig.cs` — HOW a camera frames (compiles to one engine
   `ISdfCameraRig`; see [views.md](views.md)).
 - `WorldViews.cs` — the `views` section (slots, layouts, seat framing).
-- `WorldState.cs` — the `state` section: `WorldStateRow` (the one cell
-  substrate — `kind` int/fixed/bool/text, `value` sugar or `cells`),
-  `WorldStateCell`, and `WorldStateCapacity`.
+- `WorldState.cs` — the `state` section: `WorldStateSection` (world/body/identity ownership lanes),
+  `WorldStateRow` (the document-cell substrate — `kind` int/fixed/bool/text,
+  `value` sugar or `cells`), `WorldStateCell`, and `WorldStateCapacity`.
 - `WorldDefinitionRows.cs` — the one row-find per section
   (`FindCreation`/`FindPlacement`/`FindKit`/`FindSpawnPoint`/`FindStateRow`),
   ordinal and allocation-free.
@@ -1023,6 +1122,6 @@ radial with one six-sector action ring. Presentation and the live verbs:
 No engine gate. Build (`dotnet build Puck.slnx -c Release` — architecture
 lanes + XML-doc diagnostics) and RUN `Puck.World`, round-tripping the
 affected document over stdin (`world.status`, `world.save`, `world.load`).
-Committed runner: `docs/verification/strict-definition-parse/run.ps1`.
+Proven in-process by `tests/Puck.World.Tests/StrictParseLawTests.cs`.
 Validate HUD document changes by running the app — see [hud.md](hud.md)'s
 "Verifying" section for the recipe.

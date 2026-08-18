@@ -9,7 +9,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// wrapper that exercises the SM83 core through the shared <see cref="QueuedHostContractProbe"/> so both batteries
 /// gate the one substrate.
 /// </summary>
-internal sealed class QueuedHostAudioStage : IPostStage {
+internal sealed class QueuedHostAudioStage : IPostStage<PostContext> {
     private const int RequestedSampleRate = 32_000;
 
     /// <inheritdoc/>

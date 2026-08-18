@@ -82,13 +82,18 @@ internal static class WorldPostBuildWiring {
         // to reclamp the pitch instead). WorldSimulation's own per-tick SyncSeat loop (windowed only) would reach the
         // SAME state one poll later in the ordinary case — this is the explicit, shape-independent edge, not a
         // parallel mechanism.
-        var instances = services.GetRequiredService<WorldInstanceHost>();
+        var seatRouter = services.GetRequiredService<WorldSeatAuthorityRouter>();
 
-        services.GetRequiredService<WorldSeatAuthorityRouter>().RouteChanged += slot =>
-            seatBindings.SyncSeat(
-            slot: slot,
-            definition: instances.ResolveRoutedDefinition(slot: slot)
-        );
+        seatRouter.RouteChanged += slot => {
+            if (seatRouter.TryRoute(slot: slot) is { } route) {
+                seatBindings.SyncSeat(
+                    slot: slot,
+                    definition: route.Endpoint.Definition,
+                    entityIndex: route.EntityIndex,
+                    nextInputTick: route.Endpoint.NextInputTick
+                );
+            }
+        };
 
         // The genuine boot-document re-validation (see this method's remarks): the FIRST validation, at
         // WorldDefinitionLoader.TryResolve, ran before WorldAffordances.Installed — its command half was a no-op in
@@ -156,6 +161,7 @@ internal static class WorldPostBuildWiring {
         // client, which either applies it (presentation composed) or drops it per WorldClient's own documented
         // headless contract.
         services.GetRequiredService<WorldClient>().AttachSessionLevers(levers: services.GetRequiredService<WorldSessionLeverSink>());
+
 
         // The echo fan-out's halves — resolved ONCE so the tap closure below never queries the container per-echo.
         // toasts/overlayFeed are presentation-only (AddWorldPresentation registers both or neither); the stable

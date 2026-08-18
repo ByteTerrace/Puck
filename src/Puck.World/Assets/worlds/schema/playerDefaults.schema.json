@@ -1,10 +1,14 @@
 {
-  "description": "The authored player-profile seed palette and picker tuning.",
-  "type": "object",
+  "type": [
+    "object",
+    "null"
+  ],
   "properties": {
     "identities": {
-      "description": "The identities used to seed an absent owned-world directory.",
-      "type": "array",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "description": "One authored identity used to seed an owned world.",
         "type": [
@@ -31,50 +35,59 @@
           "color"
         ],
         "additionalProperties": false
-      }
+      },
+      "default": null
     },
     "neutralColor": {
-      "description": "The placeholder color used when no profile identity is available.",
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     },
     "colorSequence": {
-      "$ref": "./common.schema.json#/$defs/WorldSequence",
-      "description": "The deterministic sequence used for generated profile colors."
+      "$ref": "./common.schema.json#/$defs/WorldSequenceNullable",
+      "default": null
     },
     "saturation": {
-      "description": "The saturation used for generated colors.",
-      "type": "number"
+      "type": "number",
+      "default": 0
     },
     "value": {
-      "description": "The brightness used for generated colors.",
-      "type": "number"
+      "type": "number",
+      "default": 0
     },
     "colorSearchLimit": {
-      "description": "The number of generated colors checked before accepting the next sequence value.",
-      "type": "integer"
+      "type": "integer",
+      "default": 1
     },
     "noseFactor": {
-      "description": "The body-color multiplier used for avatar accents.",
-      "type": "number"
+      "type": "number",
+      "default": 0
     },
     "pickerThreshold": {
-      "description": "The stick magnitude that cycles a pending profile choice.",
-      "type": "number"
+      "type": "number",
+      "default": 0
     },
     "pickerNeutralColor": {
-      "description": "The pending-avatar desaturation target.",
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     },
     "pickerNeutralBlend": {
-      "description": "The pending-avatar blend amount toward PickerNeutralColor.",
-      "type": "number"
+      "type": "number",
+      "default": 0
     },
     "seatLook": {
-      "description": "The control feel a seat of this document wakes with. required \u2014 there is no engine fallback, so a document either states what its seats should feel like or fails validation. Read per seat from whichever document owns it: the world\u0027s for an unclaimed seat, the joined identity\u0027s own for a claimed one, which is how a player\u0027s feel travels with their profile (see WorldSeatLook).",
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "yawSensitivity": {
-          "description": "The yaw response in radians per pixel of raw (un-accelerated) pointer motion along the X axis.",
+          "description": "The yaw response in radians per pixel of raw pointer motion along the X axis.",
           "type": "number"
         },
         "pitchSensitivity": {
@@ -82,26 +95,59 @@
           "type": "number"
         },
         "invertYaw": {
-          "description": "Whether the yaw response is inverted.",
+          "description": "Whether the final semantic yaw response (pointer, stick, and gyro) is inverted.",
           "type": "boolean"
         },
         "invertPitch": {
-          "description": "Whether the pitch response is inverted.",
+          "description": "Whether the final semantic pitch response (pointer, stick, and gyro) is inverted.",
           "type": "boolean"
-        },
-        "arming": {
-          "description": "What enables the orbit drag.",
-          "enum": [
-            "None",
-            "Always",
-            "LeftButton",
-            "RightButton",
-            "MiddleButton"
-          ]
         },
         "stickLookRate": {
           "description": "The look stick\u0027s yaw/pitch rate in radians per second at full deflection.",
           "type": "number"
+        },
+        "gyro": {
+          "description": "The optional full-axis gyro projection. Absent resolves to Default.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "scale": {
+              "description": "The dimensionless multiplier applied after projection.",
+              "type": "number",
+              "default": 1
+            },
+            "deadZone": {
+              "description": "Independent X/Y/Z dead zones in radians per second.",
+              "default": null
+            },
+            "invertX": {
+              "description": "Whether the physical X angular-velocity axis is inverted before projection.",
+              "type": "boolean",
+              "default": false
+            },
+            "invertY": {
+              "description": "Whether the physical Y angular-velocity axis is inverted before projection.",
+              "type": "boolean",
+              "default": false
+            },
+            "invertZ": {
+              "description": "Whether the physical Z angular-velocity axis is inverted before projection.",
+              "type": "boolean",
+              "default": false
+            },
+            "yaw": {
+              "description": "The X/Y/Z projection weights producing semantic look-right angular velocity.",
+              "default": null
+            },
+            "pitch": {
+              "description": "The X/Y/Z projection weights producing semantic look-up angular velocity.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null
         }
       },
       "required": [
@@ -109,24 +155,12 @@
         "pitchSensitivity",
         "invertYaw",
         "invertPitch",
-        "arming",
         "stickLookRate"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "default": null
     }
   },
-  "required": [
-    "identities",
-    "neutralColor",
-    "colorSequence",
-    "saturation",
-    "value",
-    "colorSearchLimit",
-    "noseFactor",
-    "pickerThreshold",
-    "pickerNeutralColor",
-    "pickerNeutralBlend",
-    "seatLook"
-  ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "default": null
 }

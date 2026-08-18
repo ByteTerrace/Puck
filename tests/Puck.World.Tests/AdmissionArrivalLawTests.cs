@@ -56,7 +56,7 @@ public sealed class AdmissionArrivalLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: document);
         var carried = WorldIdentity.Pinned(name: "forged-subject", moveSpeed: Puck.Maths.FixedQ4816.One, turnSpeed: Puck.Maths.FixedQ4816.One, defaults: document.PlayerDefaults);
-        var slot = Land(fixture: fixture, transferId: 42, identity: carried);
+        var slot = Land(fixture: fixture, identity: carried, transferId: 42);
 
         var (domain, subject) = fixture.Server.Population.PeerIdentity(bodyIndex: slot);
 
@@ -115,12 +115,12 @@ public sealed class AdmissionArrivalLawTests {
         PeerAdmission: true,
         Members: [new WorldTransferReservationMember(
             Principal: WorldPrincipal.Console,
-            PreferredSlot: WorldPopulation.LocalSeatCount,
+            PreferredSlot: WorldPopulationLimits.LocalSeatCount,
             Identity: identity,
             Source: IntentSource.Live,
             BodyColor: default,
             CatalogRig: 0,
-            Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Index: 4, Generation: 7), Epoch: 0))]);
+            Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: 4), Epoch: 0))]);
     private static WorldAdmissionEntry Arrivals(string domain, bool drive = true, bool control = true, ushort budget = 64) {
         var grants = new List<WorldAdmissionGrant> { new(Capability: WorldCapability.Observe, Budget: budget) };
 
@@ -144,8 +144,8 @@ public sealed class AdmissionArrivalLawTests {
         var document = Fixtures.BuildDocument();
 
         return document with {
-            Population = document.Population with {
-                Capacity = (WorldPopulation.LocalSeatCount + 2),
+            PopulationRaw = document.Population with {
+                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
             Admission = admission,

@@ -1,0 +1,181 @@
+<Project>
+    <!--
+        The shared shader-compile recipe. DXC compiles HLSL to SPIR-V (Vulkan) and DXIL (DirectX) from whatever
+        @(VertexShaderSource)/@(FragmentShaderSource)/@(ComputeShaderSource)/@(RayQueryComputeShaderSource) items a
+        consuming project declares in its own csproj — this file adds no item declarations and no project-specific
+        branching. Imported once by Directory.Build.targets into EVERY project; a project declaring none of the four
+        item types never triggers a single Exec. Per-project knobs, set in a project's own PropertyGroup BEFORE this
+        file imports: $(DxcCommand) (default "dxc"), $(PuckShaderDxilEnabled) (default true — governs vertex/fragment
+        DXIL emission), $(PuckComputeShaderDxilEnabled) (default true — governs compute/ray-query DXIL emission).
+        SPIR-V emission is never gated; only DXIL is opt-out, so a project with no DirectX consumer (or whose compute
+        kernels only ever run on Vulkan) can shed bytecode it would otherwise ship unread.
+
+        This is the SAME physical file two ways: an in-repo project imports it transitively through
+        Directory.Build.targets, and an external ByteTerrace.Puck.Shaders package consumer imports the identical file
+        via buildTransitive\ByteTerrace.Puck.Shaders.targets (src/Puck.Shaders/Puck.Shaders.csproj packs it there).
+        Never fork the two paths — a change here reaches both consumers identically.
+    -->
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckWriteShaderHashSidecars"
+    >
+        <ParameterGroup>
+            <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Includes ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderHashSidecars.cs" Type="Class" />
+        </Task>
+    </UsingTask>
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckValidateShaderBytecodeFresh"
+    >
+        <ParameterGroup>
+            <BytecodeFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <Includes ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+        </ParameterGroup>
+        <Task>
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckShaderHashSidecars.cs" Type="Class" />
+        </Task>
+    </UsingTask>
+
+    <PropertyGroup>
+        <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
+        <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
+        <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
+    </PropertyGroup>
+
+    <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
+        <Error Condition="'%(ShaderBytecode.Identity)' != '' and !Exists('%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl')" Text="Shader bytecode '%(ShaderBytecode.Identity)' has no matching HLSL source '%(ShaderBytecode.Filename).hlsl'. Remove stale bytecode or add the source." />
+    </Target>
+
+    <!-- Compiles each declared source to SPIR-V (Vulkan; entry renamed to "main") always, and to DXIL (DirectX)
+         when its category's opt-out property is true. The vk:: binding/push-constant attributes are SPIR-V-only, so
+         every DXIL pass suppresses the "attribute ignored" warnings. Every invocation pins the shared capability
+         floor: -fspv-target-env=vulkan1.3 (SPIR-V 1.6), -T *_6_6 (Shader Model 6.6), explicit -O3, and
+         -enable-16bit-types. $(MSBuildThisFileFullPath) rides Inputs alongside $(MSBuildProjectFullPath): editing
+         this shared recipe must invalidate every consuming project's cached build, not only a csproj edit.
+
+         PuckWriteShaderHashSidecars runs INSIDE this same incremental gate, after every Exec, so a sidecar is
+         rewritten only on an actual recompile — never unconditionally every build, which would make
+         ValidateShaderBytecodeFresh below compare freshly-regenerated truth against itself and never catch
+         anything. Its source hash covers that .hlsl plus every @(ShaderInclude), in item order — a conservative
+         over-approximation (touching any .hlsli invalidates every sidecar, even a kernel that doesn't include it). -->
+    <Target Name="CompileShaders" BeforeTargets="PrepareForBuild"
+            Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)"
+            Outputs="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
+        <!-- Guards the DXC version probe and its <Error> below: a buildTransitive consumer with no shaders and no
+             DXC installed (PackageReference'd only for IShaderModuleLoader/ShaderBytecode) must not fail its build
+             for a compiler it never needed. An empty Inputs/Outputs list is not an incremental skip, so the target
+             body still runs with every batch empty unless this guard keeps the probe itself from firing. Item-list
+             conditions are only legal inside a Target (not on a project-level PropertyGroup/ItemGroup), and only one
+             item list per condition — so the four item types are unioned into one list first, INSIDE this target. -->
+        <ItemGroup>
+            <_PuckShaderItems Include="@(VertexShaderSource);@(FragmentShaderSource);@(ComputeShaderSource);@(RayQueryComputeShaderSource)" />
+        </ItemGroup>
+        <PropertyGroup>
+            <_PuckHasShaderItems Condition="'@(_PuckShaderItems)' != ''">true</_PuckHasShaderItems>
+        </PropertyGroup>
+        <Exec Condition="'$(_PuckHasShaderItems)' == 'true'" Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
+            <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
+        </Exec>
+        <Error Condition="'$(_PuckHasShaderItems)' == 'true' and '$(DxcProbeExitCode)' != '0'" Text="$(MSBuildProjectName) shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
+
+        <!-- Vertex. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).dxil&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
+
+        <!-- Fragment. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(FragmentShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).dxil&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
+
+        <!-- Compute kernels: SPIR-V (Vulkan; entry renamed to "main") and DXIL (DirectX) when enabled. The vk::
+             binding/push-constant attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored"
+             warnings; the register() slots drive the Direct3D 12 root signature. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).spv&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(ComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(ComputeShaderSource.RootDir)%(ComputeShaderSource.Directory)%(ComputeShaderSource.Filename).dxil&quot; &quot;%(ComputeShaderSource.FullPath)&quot;" />
+
+        <!-- Ray-query kernels compile to BOTH backends at Shader Model 6.6 when DXIL is enabled: SPIR-V (Vulkan;
+             the vulkan1.3 target env — SPIR-V 1.6 — subsumes SPV_KHR_ray_query's 1.2 requirement, entry renamed to
+             "main") and DXIL (Direct3D 12 DXR 1.1 inline ray tracing). The vk:: binding/push-constant/image-format
+             attributes are SPIR-V-only, so the DXIL pass suppresses the "attribute ignored" warnings. -->
+        <Exec Condition="'$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).spv&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
+        <Exec Condition="'$(PuckComputeShaderDxilEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(RayQueryComputeShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; -Wno-ignored-attributes -enable-16bit-types -O3 -T cs_6_6 -E CSMain -Fo &quot;%(RayQueryComputeShaderSource.RootDir)%(RayQueryComputeShaderSource.Directory)%(RayQueryComputeShaderSource.Filename).dxil&quot; &quot;%(RayQueryComputeShaderSource.FullPath)&quot;" />
+
+        <!-- The full set of bytecode files this pass just produced, one item per stage/extension combination that
+             was actually enabled — a project declaring no VertexShaderSource contributes zero vertex items via the
+             transform (no Condition needed there), and the two DXIL Conditions mirror the Exec guards above. -->
+        <ItemGroup Condition="'$(DxcProbeExitCode)' == '0'">
+            <_PuckCompiledBytecode Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+                <SourcePath>%(VertexShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+            <_PuckCompiledBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
+                <SourcePath>%(VertexShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+            <_PuckCompiledBytecode Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+                <SourcePath>%(FragmentShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+            <_PuckCompiledBytecode Condition="'$(PuckShaderDxilEnabled)' == 'true'" Include="@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
+                <SourcePath>%(FragmentShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+            <_PuckCompiledBytecode Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+                <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+            <_PuckCompiledBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(ComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
+                <SourcePath>%(ComputeShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+            <_PuckCompiledBytecode Include="@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
+                <SourcePath>%(RayQueryComputeShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+            <_PuckCompiledBytecode Condition="'$(PuckComputeShaderDxilEnabled)' == 'true'" Include="@(RayQueryComputeShaderSource -> '%(RootDir)%(Directory)%(Filename).dxil')">
+                <SourcePath>%(RayQueryComputeShaderSource.FullPath)</SourcePath>
+            </_PuckCompiledBytecode>
+        </ItemGroup>
+        <PuckWriteShaderHashSidecars Condition="'$(DxcProbeExitCode)' == '0'" BytecodeFiles="@(_PuckCompiledBytecode)" Includes="@(ShaderInclude)" />
+    </Target>
+
+    <!-- Universal across all three current consumers (Puck.SdfVm, Puck.Overlays, Puck.Vulkan.Presentation): a
+         project that declares no VertexShaderSource never triggers a vertex Exec above, so re-globbing here is a
+         no-op for a stage that never ran. Fixes the from-clean-build gap for every consumer, not only Puck.SdfVm:
+         MSBuild expands item globs once, before any target runs, so an evaluation-time ShaderBytecode/Content glob
+         cannot see bytecode CompileShaders emits later in the SAME build — a brand-new, not-yet-committed shader
+         would ship with an incomplete Content list otherwise. Owns the shipped Content declaration alone; a
+         consuming project keeps only its own evaluation-time @(ShaderBytecode) glob (needed by
+         ValidateShaderBytecodeSources, which runs before CompileShaders can populate anything), not a second
+         static Content declaration. -->
+    <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths">
+        <ItemGroup>
+            <ShaderBytecode Remove="@(ShaderBytecode)" />
+            <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
+            <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+            <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
+            <!-- A shader set's puck.shader.v1 manifest ships beside its bytecode: a host's ShaderSetCatalog finds a
+                 set by its manifest, so shipping the manifest IS registering the set. -->
+            <Content Include="Assets\Shaders\**\*.puck.shader.json" CopyToOutputDirectory="PreserveNewest" />
+        </ItemGroup>
+    </Target>
+
+    <!-- Closes the gap MSBuild's own Inputs/Outputs timestamp tracking cannot see: a developer edits a .hlsl(i),
+         DXC regenerates .spv/.dxil locally, and only the .hlsl(i) gets `git add`ed — the stale bytecode is what's
+         committed. A fresh `git checkout` writes every file's mtime at checkout time, in checkout-listing order,
+         not commit-recency order, so CompileShaders' newer-than comparison cannot reliably catch this on a clean
+         clone. AfterTargets="CollectShaderBytecode" (not BeforeTargets="PrepareForBuild" alongside
+         ValidateShaderBytecodeSources — that hook has no guaranteed ordering relative to CompileShaders, which uses
+         the same hook, and an ordering loss there would error an ordinary local edit instead of recompiling it),
+         reading the freshly re-globbed @(ShaderBytecode) so a brand-new file compiled this same pass is covered
+         too. No Inputs/Outputs of its own, so it always runs and independently recomputes both hashes from
+         whatever is on disk right now, comparing against each committed .hash sidecar — which CompileShaders above
+         only rewrites on an actual recompile, so a stale committed sidecar survives an up-to-date-by-timestamp skip
+         and gets caught here. -->
+    <Target Name="ValidateShaderBytecodeFresh" AfterTargets="CollectShaderBytecode">
+        <ItemGroup>
+            <_PuckValidateBytecode Include="@(ShaderBytecode)">
+                <SourcePath>%(ShaderBytecode.RootDir)%(ShaderBytecode.Directory)%(ShaderBytecode.Filename).hlsl</SourcePath>
+            </_PuckValidateBytecode>
+        </ItemGroup>
+        <PuckValidateShaderBytecodeFresh BytecodeFiles="@(_PuckValidateBytecode)" Includes="@(ShaderInclude)" />
+    </Target>
+</Project>

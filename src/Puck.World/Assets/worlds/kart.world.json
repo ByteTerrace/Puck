@@ -1,4 +1,5 @@
 {
+  "basis": "default.world.json",
   "$schema": "./puck.world.def.v1.schema.json",
   "simulation": {
     "rateHz": 120
@@ -351,13 +352,6 @@
       },
       "actions": {
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -460,13 +454,6 @@
       },
       "actions": {
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "timerElapsed",
@@ -557,13 +544,6 @@
       },
       "actions": {
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "timerElapsed",
@@ -616,7 +596,7 @@
     {
       "bindingBar": {
         "enabled": true,
-        "hideAfterRestSeconds": 6,
+        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
         "layout": {
           "buttonSize": 0.075,
           "centerGap": 0.1,
@@ -632,13 +612,15 @@
         "modifiers": [],
         "chords": [
           {
-            "group": "play",
+            "group": "default",
             "chord": [],
             "page": {
               "id": "base",
               "entries": [
                 {
-                  "source": "keyboard.arrowUp",
+                  "sources": [
+                    "keyboard.arrowUp"
+                  ],
                   "channel": "pitch",
                   "scale": 1,
                   "activateOn": null,
@@ -646,7 +628,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.arrowUp",
+                  "sources": [
+                    "keyboard.arrowUp"
+                  ],
                   "channel": "pitch",
                   "scale": 1,
                   "activateOn": "Completed",
@@ -654,7 +638,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.arrowDown",
+                  "sources": [
+                    "keyboard.arrowDown"
+                  ],
                   "channel": "pitch",
                   "scale": -1,
                   "activateOn": null,
@@ -662,7 +648,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.arrowDown",
+                  "sources": [
+                    "keyboard.arrowDown"
+                  ],
                   "channel": "pitch",
                   "scale": -1,
                   "activateOn": "Completed",
@@ -670,63 +658,81 @@
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "boost",
                   "activateOn": null,
                   "label": "Boost",
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "boost",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "boost",
                   "activateOn": null,
                   "label": "Boost",
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "boost",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.rightShoulder",
+                  "sources": [
+                    "gamepad.rightShoulder"
+                  ],
                   "channel": "drift",
                   "activateOn": null,
                   "label": "Drift",
                   "icon": null
                 },
                 {
-                  "source": "gamepad.rightShoulder",
+                  "sources": [
+                    "gamepad.rightShoulder"
+                  ],
                   "channel": "drift",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": null,
                   "label": "Dash",
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.rightTrigger",
+                  "sources": [
+                    "gamepad.rightTrigger"
+                  ],
                   "channel": "forward",
                   "scale": 1,
                   "activateOn": null,
@@ -734,7 +740,9 @@
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftTrigger",
+                  "sources": [
+                    "gamepad.leftTrigger"
+                  ],
                   "channel": "forward",
                   "scale": -1,
                   "activateOn": null,
@@ -742,7 +750,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.w",
+                  "sources": [
+                    "keyboard.w"
+                  ],
                   "channel": "forward",
                   "scale": 1,
                   "activateOn": null,
@@ -750,7 +760,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.w",
+                  "sources": [
+                    "keyboard.w"
+                  ],
                   "channel": "forward",
                   "scale": 1,
                   "activateOn": "Completed",
@@ -758,7 +770,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.s",
+                  "sources": [
+                    "keyboard.s"
+                  ],
                   "channel": "forward",
                   "scale": -1,
                   "activateOn": null,
@@ -766,7 +780,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.s",
+                  "sources": [
+                    "keyboard.s"
+                  ],
                   "channel": "forward",
                   "scale": -1,
                   "activateOn": "Completed",
@@ -774,7 +790,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.a",
+                  "sources": [
+                    "keyboard.a"
+                  ],
                   "channel": "turn",
                   "scale": 1,
                   "activateOn": null,
@@ -782,7 +800,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.a",
+                  "sources": [
+                    "keyboard.a"
+                  ],
                   "channel": "turn",
                   "scale": 1,
                   "activateOn": "Completed",
@@ -790,7 +810,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.d",
+                  "sources": [
+                    "keyboard.d"
+                  ],
                   "channel": "turn",
                   "scale": -1,
                   "activateOn": null,
@@ -798,7 +820,9 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.d",
+                  "sources": [
+                    "keyboard.d"
+                  ],
                   "channel": "turn",
                   "scale": -1,
                   "activateOn": "Completed",
@@ -810,23 +834,126 @@
               "icon": null
             },
             "command": null
+          },
+          {
+            "group": "default",
+            "chord": [
+              "tab"
+            ],
+            "page": {
+              "id": "play-wheel",
+              "entries": [
+                {
+                  "sources": [
+                    "gamepad.leftStick"
+                  ],
+                  "command": "player.move"
+                },
+                {
+                  "sources": [
+                    "gamepad.rightStick"
+                  ],
+                  "command": "player.wheel.select"
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.tab"
+                  ],
+                  "command": "player.wheel.commit",
+                  "activateOn": "Completed"
+                }
+              ],
+              "label": "Wheel"
+            }
           }
         ],
         "wheels": [
           {
             "id": "play-primary",
-            "group": "play",
+            "group": "default",
             "holdPages": ["play-wheel"],
             "rings": [
               {
                 "id": "play-wheel-act",
                 "entries": [
-                  { "source": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
-                  { "source": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
-                  { "source": null, "command": "console", "label": "Console", "icon": "edit.op" },
-                  { "source": null, "command": "player.channels", "label": "Channels", "icon": "edit.link" },
-                  { "source": null, "command": "player.where", "label": "Where", "icon": "action.target" },
-                  { "source": null, "command": "player.disengage", "label": "Disengage", "icon": "edit.exit" }
+                  { "sources": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
+                  { "sources": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
+                  { "sources": null, "command": "console", "label": "Console", "icon": "edit.op" },
+                  { "sources": null, "command": "player.channels", "label": "Channels", "icon": "edit.link" },
+                  { "sources": null, "command": "player.where", "label": "Where", "icon": "action.target" },
+                  { "sources": null, "command": "player.disengage", "label": "Disengage", "icon": "edit.exit" }
                 ],
                 "label": "Act",
                 "icon": null
@@ -848,15 +975,9 @@
       "document": {
         "schema": "puck.creation.v1",
         "name": "ground",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.33,
-              "y": 0.52,
-              "z": 0.24
-            },
+            "color": "#54853D",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -867,28 +988,13 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -899,23 +1005,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "b795d9778c470fe40f2408d95d3bd8f347f9dc0436fb97666502be69b2c8e0cb"
+      }
     },
     {
       "id": "wall",
       "document": {
         "schema": "puck.creation.v1",
         "name": "wall",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.5,
-              "y": 0.5,
-              "z": 0.55
-            },
+            "color": "#80808C",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -926,28 +1025,13 @@
             "id": 0,
             "name": "wall",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0.6,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 10,
-              "y": 1.2,
-              "z": 0.5
-            },
+            "position": [0, 0.6, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [10, 1.2, 0.5],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -958,23 +1042,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "d16d027caf934f1b8adb6ba22d22bee870288d24c471cf48445fa0d2e15c10bb"
+      }
     },
     {
       "id": "pylon",
       "document": {
         "schema": "puck.creation.v1",
         "name": "pylon",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.85,
-              "y": 0.5,
-              "z": 0.15
-            },
+            "color": "#D98026",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -985,28 +1062,13 @@
             "id": 0,
             "name": "pylon",
             "type": "Cylinder",
-            "position": {
-              "x": 0,
-              "y": 0.8,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.4,
-              "y": 1.6,
-              "z": 0.4
-            },
+            "position": [0, 0.8, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.4, 1.6, 0.4],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1017,23 +1079,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "64ada3e500baa94e1e6eb1d21d7d29de8c2da928fae7772012a02930bee2ecb2"
+      }
     },
     {
       "id": "ramp-shallow",
       "document": {
         "schema": "puck.creation.v1",
         "name": "ramp-shallow",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.6,
-              "y": 0.45,
-              "z": 0.3
-            },
+            "color": "#99734C",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1044,28 +1099,13 @@
             "id": 0,
             "name": "ramp-shallow",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0.3,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": false,
-              "x": 0.087156,
-              "y": 0,
-              "z": 0,
-              "w": 0.996195
-            },
-            "scale": {
-              "x": 5,
-              "y": 0.5,
-              "z": 8
-            },
+            "position": [0, 0.3, 0],
+            "rotation": [0.087156, 0, 0, 0.996195],
+            "scale": [5, 0.5, 8],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1076,23 +1116,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "bbe92dcb98eccb6feb16978d0f154605700e1e21511b41c8fc6c8d7019e705f8"
+      }
     },
     {
       "id": "ramp-steep",
       "document": {
         "schema": "puck.creation.v1",
         "name": "ramp-steep",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.65,
-              "y": 0.4,
-              "z": 0.25
-            },
+            "color": "#A66640",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1103,28 +1136,13 @@
             "id": 0,
             "name": "ramp-steep",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0.3,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": false,
-              "x": 0.21644,
-              "y": 0,
-              "z": 0,
-              "w": 0.976296
-            },
-            "scale": {
-              "x": 5,
-              "y": 0.5,
-              "z": 8
-            },
+            "position": [0, 0.3, 0],
+            "rotation": [0.21644, 0, 0, 0.976296],
+            "scale": [5, 0.5, 8],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1135,23 +1153,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "7ecd4a4fd58bfef83aed20d69b292c0803694378a359a9f179dff7b444b4298f"
+      }
     },
     {
       "id": "bank",
       "document": {
         "schema": "puck.creation.v1",
         "name": "bank",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.4,
-              "z": 0.5
-            },
+            "color": "#8C6680",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1162,28 +1173,13 @@
             "id": 0,
             "name": "bank",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0.6,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": false,
-              "x": 0.21644,
-              "y": 0,
-              "z": 0,
-              "w": 0.976296
-            },
-            "scale": {
-              "x": 6,
-              "y": 0.5,
-              "z": 3
-            },
+            "position": [0, 0.6, 0],
+            "rotation": [0.21644, 0, 0, 0.976296],
+            "scale": [6, 0.5, 3],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1194,23 +1190,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "b01626d6c269a7521bce4ba51f74c53fd874c95db55ea41f863d0d6a0c8b941d"
+      }
     },
     {
       "id": "gate",
       "document": {
         "schema": "puck.creation.v1",
         "name": "gate",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.2,
-              "y": 0.8,
-              "z": 0.85
-            },
+            "color": "#33CCD9",
             "emissive": 0.6,
             "specular": 0,
             "shininess": 0
@@ -1221,28 +1210,13 @@
             "id": 0,
             "name": "gate",
             "type": "Torus",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": false,
-              "x": 0.707107,
-              "y": 0,
-              "z": 0,
-              "w": 0.707107
-            },
-            "scale": {
-              "x": 3,
-              "y": 3,
-              "z": 3
-            },
+            "position": [0, 0, 0],
+            "rotation": [0.707107, 0, 0, 0.707107],
+            "scale": [3, 3, 3],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1253,23 +1227,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "6bcca78ec57c6679eda71f86b357d9f1f6efc31d51a3c8962a9a73106cd56cb1"
+      }
     },
     {
       "id": "water-pad",
       "document": {
         "schema": "puck.creation.v1",
         "name": "water-pad",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.2,
-              "y": 0.4,
-              "z": 0.8
-            },
+            "color": "#3366CC",
             "emissive": 0.1,
             "specular": 0,
             "shininess": 0
@@ -1280,28 +1247,13 @@
             "id": 0,
             "name": "water-pad",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0.1,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 14,
-              "y": 0.2,
-              "z": 14
-            },
+            "position": [0, 0.1, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [14, 0.2, 14],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1312,23 +1264,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "3bb2b0b99d6e62fca7e4386ccf5ec74ee136788b2ffe9fa8c4acedca3977d41b"
+      }
     },
     {
       "id": "portal-frame",
       "document": {
         "schema": "puck.creation.v1",
         "name": "portal-frame",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.12,
-              "y": 0.12,
-              "z": 0.14
-            },
+            "color": "#1F1F24",
             "emissive": 0,
             "specular": 0.2,
             "shininess": 12
@@ -1339,28 +1284,13 @@
             "id": 0,
             "name": "frame",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 3,
-              "y": 2,
-              "z": 0.15
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [3, 2, 0.15],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1380,8 +1310,7 @@
             }
           ]
         }
-      },
-      "hash": "38f7fd73097ea5d2a0e03896d76737a0ad91e50038020f43b3d1f17426e6afaa"
+      }
     }
   ],
   "placements": [
@@ -1996,7 +1925,16 @@
     },
     "panels": []
   },
-  "state": [],
+  "state": {
+    "world": [],
+    "body": [
+      {
+        "name": "dashCooldown",
+        "kind": "Timer",
+        "initial": 0
+      }
+    ]
+  },
   "schema": "puck.world.def.v1",
   "documentId": "kart",
   "playerDefaults": {
@@ -2040,7 +1978,6 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-      "arming": "RightButton",
       "stickLookRate": 2.6
     }
   },

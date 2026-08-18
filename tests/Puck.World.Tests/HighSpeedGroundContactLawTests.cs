@@ -69,7 +69,7 @@ public sealed class HighSpeedGroundContactLawTests {
     public void DynamicDepenetrationCannotPushAStandingBodyThroughTheFloor() {
         var source = ThinFloorDocument();
         var definition = source with {
-            Kits = source.Kits.Select(selector: kit => kit with { BodyContact = WorldBodyContactMode.Solid }).ToArray(),
+            KitsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = WorldBodyContactMode.Solid }).ToArray(),
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
 
@@ -166,6 +166,10 @@ public sealed class HighSpeedGroundContactLawTests {
         }
     }
 
+    // CreationGeometry's unit box half-extent is 1 (was 0.34); this ratio (old unit + round) / (new unit + round)
+    // keeps the compiled floor's world-space reach the same as before the unit-size table changed.
+    private const float BoxUnitRatio = (0.38f / 1.04f);
+
     private static WorldDefinition ThinFloorDocument(bool requireField = false) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var shape = new ShapeDocument(
@@ -174,7 +178,7 @@ public sealed class HighSpeedGroundContactLawTests {
             Type: AvatarPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
-            Scale: new Vector3(x: 24f, y: 0.1f, z: 24f),
+            Scale: (new Vector3(x: 24f, y: 0.1f, z: 24f) * BoxUnitRatio),
             Material: 0,
             Blend: SdfBlendOp.Union,
             Smooth: 0f,
@@ -182,23 +186,21 @@ public sealed class HighSpeedGroundContactLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "thin-floor",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [shape],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "thin-floor");
-        var creation = new WorldCreation(Id: "floor", Document: canonical.Document, Hash: canonical.Hash);
+        var creation = new WorldCreation(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
 
         return source with {
-            Collision = source.Collision with {
+            CollisionRaw = source.Collision with {
                 Requirements = (requireField ? [WorldContactRequirement.SmoothUnionContact] : []),
             },
-            Kits = source.Kits.Select(selector: kit => kit with {
+            KitsRaw = source.Kits.Select(selector: kit => kit with {
                 Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MaxFallSpeed = 40f },
             }).ToArray(),
-            Creations = [creation],
-            Placements = [new WorldPlacement(Id: "floor", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            CreationsRaw = [creation],
+            PlacementsRaw = [new WorldPlacement(Id: "floor", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
     }
 }

@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 namespace Puck.Cli.Canary;
 
 /// <summary><c>puck canary</c> — bounded, two-leg behavioral proofs against the real Puck.World executable.</summary>
-internal static class CanaryCommand {
+internal static partial class CanaryCommand {
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 420);
 
     private const string ScratchPrefix = "puck-canary-";
@@ -48,7 +48,7 @@ internal static class CanaryCommand {
     private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, string repositoryRoot, bool explicitAll) {
         var suiteClock = Stopwatch.StartNew();
 
-        SweepScratch();
+        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
 
         if (explicitAll) {
             Console.WriteLine(value: $"canary: explicit --all selected {manifests.Count} proof(s), including any declared environmental requirements; it does not change the automatic set.");
@@ -92,12 +92,55 @@ internal static class CanaryCommand {
 
         Console.WriteLine(value: $"canary: built artifact {artifact}");
 
+        // A stub-shaped leg launches Puck.Launcher.Stub, never Puck.World.dll directly, from a leg-private install
+        // tree — built once here, exactly like Puck.World above, only when a selected manifest actually needs it.
+        string? stubArtifact = null;
+
+        if (manifests.Any(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Stub))) {
+            var stubProject = Path.Combine(path1: repositoryRoot, path2: "src", path3: "Puck.Launcher.Stub", path4: "Puck.Launcher.Stub.csproj");
+
+            stubArtifact = Path.Combine(paths: [repositoryRoot, "src", "Puck.Launcher.Stub", "bin", "Release", "net10.0", "Puck.Launcher.Stub.exe"]);
+
+            Console.WriteLine(value: "canary: building Puck.Launcher.Stub once (Release).");
+
+            var stubBuild = CliProcess.RunCaptured(
+                fileName: "dotnet",
+                arguments: ["build", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
+                input: string.Empty,
+                timeout: RemainingBudget(clock: suiteClock)
+            );
+
+            if (stubBuild.TimedOut || (stubBuild.ExitCode != 0)) {
+                Console.Error.WriteLine(value: (stubBuild.TimedOut
+                    ? $"ERROR: the one Puck.Launcher.Stub build exceeded the {SuiteBudget.TotalSeconds:0}-second whole-suite budget."
+                    : $"ERROR: the one Puck.Launcher.Stub build exited {stubBuild.ExitCode}."));
+                PrintCaptured(result: stubBuild);
+
+                return 2;
+            }
+            if (!File.Exists(path: stubArtifact)) {
+                Console.Error.WriteLine(value: $"ERROR: the Puck.Launcher.Stub build exited 0 but did not produce the exact artifact {stubArtifact}.");
+
+                return 2;
+            }
+
+            Console.WriteLine(value: $"canary: built artifact {stubArtifact}");
+        }
+
         var failed = false;
         var infrastructureFailed = false;
 
         foreach (var manifest in manifests) {
-            var positive = RunLeg(manifest: manifest, leg: manifest.Positive, artifact: artifact, suiteClock: suiteClock);
-            var discriminating = RunLeg(manifest: manifest, leg: manifest.Discriminating, artifact: artifact, suiteClock: suiteClock);
+            CanaryLegRun positive;
+            CanaryLegRun discriminating;
+
+            if (manifest.BootShape == CanaryBootShape.Stub) {
+                positive = RunStubLeg(discriminating: false, manifest: manifest, stubArtifact: stubArtifact!, suiteClock: suiteClock, worldArtifact: artifact);
+                discriminating = RunStubLeg(discriminating: true, manifest: manifest, stubArtifact: stubArtifact!, suiteClock: suiteClock, worldArtifact: artifact);
+            } else {
+                positive = RunEitherLeg(artifact: artifact, leg: manifest.Positive, manifest: manifest, suiteClock: suiteClock);
+                discriminating = RunEitherLeg(artifact: artifact, leg: manifest.Discriminating, manifest: manifest, suiteClock: suiteClock);
+            }
 
             ReportLeg(id: manifest.Id, result: positive);
             ReportLeg(id: manifest.Id, result: discriminating);
@@ -106,7 +149,7 @@ internal static class CanaryCommand {
             var discriminatingPassed = discriminating.Passed;
 
             infrastructureFailed |= ((positive.InfrastructureError is not null) || (discriminating.InfrastructureError is not null));
-            var positiveOnDiscriminating = CanaryAssertions.Evaluate(leg: manifest.Positive, transcript: discriminating.Transcript);
+            var positiveOnDiscriminating = CanaryAssertions.Evaluate(authorityTranscripts: discriminating.AuthorityTranscripts, leg: manifest.Positive, primaryTranscript: discriminating.Transcript);
             var turnedRed = !positiveOnDiscriminating.Passed;
 
             if (turnedRed) {
@@ -141,6 +184,10 @@ internal static class CanaryCommand {
 
         return 0;
     }
+    private static CanaryLegRun RunEitherLeg(string artifact, CanaryLeg leg, CanaryManifest manifest, Stopwatch suiteClock) =>
+        ((leg.Authorities.Count != 0)
+            ? RunFederatedMeshLeg(artifact: artifact, leg: leg, manifest: manifest, suiteClock: suiteClock)
+            : RunLeg(artifact: artifact, leg: leg, manifest: manifest, suiteClock: suiteClock));
     private static CanaryLegRun RunLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, Stopwatch suiteClock) {
         try {
             return RunLegCore(artifact: artifact, leg: leg, manifest: manifest, suiteClock: suiteClock);
@@ -157,7 +204,13 @@ internal static class CanaryCommand {
         var stateDirectory = Path.Combine(path1: runDirectory, path2: "state");
         var stdoutPath = Path.Combine(path1: runDirectory, path2: "stdout.log");
         var stderrPath = Path.Combine(path1: runDirectory, path2: "stderr.log");
-        var input = File.ReadAllText(path: leg.ScriptPath).Replace(oldValue: "{run}", newValue: runDirectory.Replace(newChar: '/', oldChar: '\\'), comparisonType: StringComparison.Ordinal);
+        // {run} names the per-leg ephemeral scratch directory (a script-written output path); {fixtures} names
+        // the manifest's OWN checked-in directory (a script-read input path, e.g. a document a script loads by
+        // name) — the process this line's text feeds does not inherit the repository root as its own working
+        // directory, so a script cannot address either by a bare relative path.
+        var input = File.ReadAllText(path: leg.ScriptPath)
+            .Replace(oldValue: "{fixtures}", newValue: manifest.DirectoryPath.Replace(newChar: '/', oldChar: '\\'), comparisonType: StringComparison.Ordinal)
+            .Replace(oldValue: "{run}", newValue: runDirectory.Replace(newChar: '/', oldChar: '\\'), comparisonType: StringComparison.Ordinal);
         var executionWorld = leg.WorldPath;
         var authorityExecutionWorld = leg.AuthorityWorldPath;
         string? clientFederationKeyPath = null;
@@ -233,11 +286,12 @@ internal static class CanaryCommand {
         File.WriteAllText(path: stderrPath, contents: process.Stderr, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
         var transcript = new CanaryTranscript(RunDirectory: runDirectory, Stderr: SplitLines(text: process.Stderr), Stdout: SplitLines(text: process.Stdout));
-        var assertions = CanaryAssertions.Evaluate(leg: leg, transcript: transcript);
+        var assertions = CanaryAssertions.Evaluate(leg: leg, primaryTranscript: transcript);
         var invariants = EvaluateRunnerInvariants(executionWorld: executionWorld, leg: leg, manifest: manifest, process: process, transcript: transcript);
 
         return new CanaryLegRun(
             Assertions: assertions,
+            AuthorityTranscripts: ImmutableEmptyAuthorityTranscripts,
             ExitCode: process.ExitCode,
             InfrastructureError: null,
             Invariants: invariants,
@@ -247,6 +301,8 @@ internal static class CanaryCommand {
             Transcript: transcript
         );
     }
+
+    private static readonly IReadOnlyDictionary<string, CanaryTranscript> ImmutableEmptyAuthorityTranscripts = new Dictionary<string, CanaryTranscript>(comparer: StringComparer.Ordinal);
 
     /// <summary>One authority's throwaway federation-identity keypair — a fresh ECDSA P-256 key, its self-certifying
     /// domain fingerprint, and its SPKI bytes ready to pin into a peer's admission row.</summary>
@@ -348,6 +404,226 @@ internal static class CanaryCommand {
         // therefore still boots from the pristine, unmodified checked-in asset.
         return ((leg.Connect ? leg.WorldPath : Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: leg.WorldPath))), authorityTarget);
     }
+    // A federated mesh leg (leg.Authorities.Count != 0, CANARY-SHAPE.md's N-ary shape): every authority is a
+    // listener bound to its own dynamic loopback port, none dials out, and neighbours resolve each other by reading
+    // a sibling document's own host.authority — the same adjacency/references mechanism a two-authority leg already
+    // relies on, generalized from one companion to N. All N processes launch concurrently and run to completion
+    // before any assertion reads a transcript.
+    private static CanaryLegRun RunFederatedMeshLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, Stopwatch suiteClock) {
+        var runDirectory = CreateRunDirectory(id: manifest.Id, leg: leg.Name);
+        var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
+
+        Directory.CreateDirectory(path: federatedDirectory);
+
+        // Every authority's world.json lives beside the leg's own (the quilt documents are siblings), so one sweep
+        // of the leg's own directory seeds every authority's copy before any of them is individually patched.
+        var sourceDirectory = Path.GetDirectoryName(path: leg.WorldPath)!;
+
+        foreach (var source in Directory.GetFiles(path: sourceDirectory, searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*.world.json")) {
+            File.Copy(sourceFileName: source, destFileName: Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: source)), overwrite: true);
+        }
+
+        var identities = new Dictionary<string, FederationIdentity>(comparer: StringComparer.Ordinal);
+        var endpoints = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var patchedWorldPaths = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var keyPaths = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        foreach (var role in leg.Authorities) {
+            identities[role.Id] = GenerateFederationIdentity();
+            endpoints[role.Id] = $"127.0.0.1:{GetFreeLoopbackPort()}";
+        }
+
+        foreach (var role in leg.Authorities) {
+            var target = Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: role.WorldPath));
+
+            if (!File.Exists(path: target)) {
+                File.Copy(sourceFileName: role.WorldPath, destFileName: target, overwrite: true);
+            }
+
+            PatchMeshAuthorityDocument(endpoints: endpoints, identities: identities, selfId: role.Id, targetPath: target);
+            patchedWorldPaths[role.Id] = target;
+
+            var keyPath = Path.Combine(path1: runDirectory, path2: $"{role.Id}-federation.key");
+
+            File.WriteAllBytes(path: keyPath, bytes: identities[role.Id].Pkcs8);
+            keyPaths[role.Id] = keyPath;
+        }
+
+        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        var scriptTexts = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        foreach (var role in leg.Authorities) {
+            var input = File.ReadAllText(path: role.ScriptPath)
+                .Replace(oldValue: "{fixtures}", newValue: manifest.DirectoryPath.Replace(newChar: '\\', oldChar: '/'), comparisonType: StringComparison.Ordinal)
+                .Replace(oldValue: "{run}", newValue: runDirectory.Replace(newChar: '\\', oldChar: '/'), comparisonType: StringComparison.Ordinal);
+
+            if (!input.EndsWith(value: '\n')) {
+                input += Environment.NewLine;
+            }
+
+            // Every authority carries the SAME runner-owned terminal observation a single-process leg does — see
+            // EvaluateFederatedInvariants below, which checks each authority's own zero-rejected tally independently.
+            input += $"wire.errors{Environment.NewLine}";
+            scriptTexts[role.Id] = input;
+        }
+
+        var remaining = RemainingBudget(clock: suiteClock);
+        var timeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
+
+        if (timeout <= TimeSpan.Zero) {
+            return CanaryLegRun.BudgetExpired(leg: leg, runDirectory: runDirectory);
+        }
+
+        var tasks = new Dictionary<string, Task<CliProcessResult>>(comparer: StringComparer.Ordinal);
+
+        foreach (var role in leg.Authorities) {
+            var stateDirectory = Path.Combine(path1: runDirectory, path2: $"state-{role.Id}");
+            var arguments = new List<string> {
+                artifact,
+                "--world", patchedWorldPaths[role.Id],
+                "--federation-key-file", keyPaths[role.Id],
+                "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
+                "--state-dir", stateDirectory,
+                "--headless", ((manifest.BootShape == CanaryBootShape.Headless) ? "true" : "false"),
+            };
+            var script = scriptTexts[role.Id];
+
+            tasks[role.Id] = Task.Run(function: () => CliProcess.RunCaptured(arguments: arguments, fileName: "dotnet", input: script, timeout: timeout));
+        }
+
+        try {
+            Task.WaitAll(tasks: [.. tasks.Values]);
+        } catch (AggregateException exception) {
+            return CanaryLegRun.InfrastructureFailure(leg: leg, reason: (exception.InnerException?.Message.ReplaceLineEndings(replacementText: " ") ?? exception.Message), runDirectory: runDirectory);
+        }
+
+        var transcripts = new Dictionary<string, CanaryTranscript>(comparer: StringComparer.Ordinal);
+
+        foreach (var (authorityId, task) in tasks) {
+            var result = task.Result;
+
+            File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: $"{authorityId}-stdout.log"), contents: result.Stdout, encoding: utf8NoBom);
+            File.WriteAllText(path: Path.Combine(path1: runDirectory, path2: $"{authorityId}-stderr.log"), contents: result.Stderr, encoding: utf8NoBom);
+            transcripts[authorityId] = new CanaryTranscript(RunDirectory: runDirectory, Stderr: SplitLines(text: result.Stderr), Stdout: SplitLines(text: result.Stdout));
+        }
+
+        var primaryId = leg.Authorities.First(predicate: role => (PathsEqual(left: role.WorldPath, right: leg.WorldPath) && PathsEqual(left: role.ScriptPath, right: leg.ScriptPath))).Id;
+        var primaryTranscript = transcripts[primaryId];
+        var assertions = CanaryAssertions.Evaluate(authorityTranscripts: transcripts, leg: leg, primaryTranscript: primaryTranscript);
+        var invariants = EvaluateFederatedInvariants(manifestTimeoutSeconds: manifest.TimeoutSeconds, patchedWorldPaths: patchedWorldPaths, primaryId: primaryId, leg: leg, tasks: tasks, transcripts: transcripts);
+        var anyTimedOut = tasks.Values.Any(predicate: static task => task.Result.TimedOut);
+        var anyNonZeroExit = tasks.Values.Any(predicate: static task => (task.Result.ExitCode != 0));
+
+        return new CanaryLegRun(
+            Assertions: assertions,
+            AuthorityTranscripts: transcripts,
+            ExitCode: (anyNonZeroExit ? tasks.Values.First(predicate: static task => (task.Result.ExitCode != 0)).Result.ExitCode : 0),
+            InfrastructureError: null,
+            Invariants: invariants,
+            Leg: leg,
+            RunDirectory: runDirectory,
+            TimedOut: anyTimedOut,
+            Transcript: primaryTranscript
+        );
+    }
+    private static IReadOnlyList<CanaryAssertionResult> EvaluateFederatedInvariants(
+        CanaryLeg leg,
+        int manifestTimeoutSeconds,
+        string primaryId,
+        IReadOnlyDictionary<string, string> patchedWorldPaths,
+        IReadOnlyDictionary<string, Task<CliProcessResult>> tasks,
+        IReadOnlyDictionary<string, CanaryTranscript> transcripts
+    ) {
+        var results = new List<CanaryAssertionResult>(capacity: (leg.Authorities.Count * 3));
+
+        // The manifest's commands[] claims are authored against the leg's own (primary) script, so full per-verb,
+        // per-occurrence, per-stream accounting only applies to that one authority — a non-primary authority's
+        // script is unclaimed and gets only the health checks below.
+        results.AddRange(collection: EvaluateCommandAccounting(commands: leg.Commands, outputLines: tasks[primaryId].Result.OutputLines));
+
+        foreach (var role in leg.Authorities) {
+            var result = tasks[role.Id].Result;
+            var transcript = transcripts[role.Id];
+
+            results.Add(item: new CanaryAssertionResult(Detail: $"{role.Id} process exited 0 (actual {result.ExitCode})", Passed: (!result.TimedOut && (result.ExitCode == 0))));
+            results.Add(item: new CanaryAssertionResult(Detail: $"{role.Id} completed before {manifestTimeoutSeconds}s timeout", Passed: !result.TimedOut));
+
+            var origin = $"[world] definition: {patchedWorldPaths[role.Id]} (--world)";
+
+            results.Add(item: new CanaryAssertionResult(Detail: $"{role.Id} stderr names the exact absolute --world origin", Passed: transcript.Stderr.Any(predicate: line => string.Equals(a: line, b: origin, comparisonType: StringComparison.Ordinal))));
+
+            var terminal = transcript.Stdout.Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[wire.errors:")).ToArray();
+
+            results.Add(item: new CanaryAssertionResult(
+                Detail: $"{role.Id} runner-owned terminal observation is exact '[wire.errors: 0 rejected]'",
+                Passed: ((terminal.Length != 0) && string.Equals(a: terminal[^1], b: "[wire.errors: 0 rejected]", comparisonType: StringComparison.Ordinal))
+            ));
+        }
+
+        return results;
+    }
+    private static int GetFreeLoopbackPort() {
+        var listener = new System.Net.Sockets.TcpListener(localaddr: System.Net.IPAddress.Loopback, port: 0);
+
+        try {
+            listener.Start();
+
+            return ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        } finally {
+            listener.Stop();
+        }
+    }
+    // Patches one authority's copied world document in place: its own listen/authority endpoint, and one
+    // SignsDirectly admission row per OTHER authority in the mesh so WorldAttestedAuthenticator can verify every
+    // peer's signed claim against a key pinned by this document — the N-ary generalization of PrepareFederatedWorlds'
+    // single companion row above. Reads the pristine composed document (basis + this authority's own delta) BEFORE
+    // any of these edits land, so an authored capacity/admission floor the basis already carries is kept, not lost.
+    private static void PatchMeshAuthorityDocument(string targetPath, string selfId, IReadOnlyDictionary<string, string> endpoints, IReadOnlyDictionary<string, FederationIdentity> identities) {
+        var root = (JsonNode.Parse(json: File.ReadAllText(path: targetPath))?.AsObject()
+            ?? throw new InvalidOperationException(message: $"authority world '{targetPath}' is not a JSON object"));
+        var composedCapacity = 8;
+        var composedNetworkPlayers = 4;
+        var composedAdmission = new JsonArray();
+
+        if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: targetPath, reason: out _, tree: out var composed)) {
+            if (composed!["population"] is JsonObject composedPopulation) {
+                composedCapacity = Math.Max(val1: composedCapacity, val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity));
+                composedNetworkPlayers = Math.Max(val1: composedNetworkPlayers, val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers));
+            }
+            if (composed["admission"] is JsonArray composedRows) {
+                foreach (var row in composedRows) {
+                    composedAdmission.Add(item: row?.DeepClone());
+                }
+            }
+        }
+
+        if (root["host"] is not JsonObject host) {
+            host = new JsonObject();
+            root["host"] = host;
+        }
+
+        host["listen"] = endpoints[selfId];
+        host["authority"] = endpoints[selfId];
+
+        if (root["population"] is not JsonObject population) {
+            population = new JsonObject();
+            root["population"] = population;
+        }
+
+        population["capacity"] = composedCapacity;
+        population["networkPlayers"] = composedNetworkPlayers;
+
+        foreach (var (peerId, peerEndpoint) in endpoints) {
+            if (peerId == selfId) {
+                continue;
+            }
+
+            composedAdmission.Add(value: AdmissionRow(peer: identities[peerId], peerSubject: peerEndpoint));
+        }
+
+        root["admission"] = composedAdmission;
+        File.WriteAllText(path: targetPath, contents: root.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
 
     private sealed class AuthorityCompanion : IDisposable {
         private readonly Process m_process;
@@ -438,11 +714,22 @@ internal static class CanaryCommand {
             Passed: transcript.Stderr.Any(predicate: line => string.Equals(a: line, b: origin, comparisonType: StringComparison.Ordinal))
         ));
 
-        var expectedRefusals = leg.Commands.Count(predicate: static claim => (claim.Outcome == CanaryCommandOutcome.Refused));
-        var byVerb = leg.Commands.GroupBy(keySelector: static claim => claim.Verb, comparer: StringComparer.Ordinal);
+        results.AddRange(collection: EvaluateCommandAccounting(commands: leg.Commands, outputLines: process.OutputLines));
+
+        return results;
+    }
+    // Per-verb command-claim accounting shared by a single-process leg and a federated mesh leg's primary
+    // authority: every authored occurrence's response is found by its exact "[verb:" prefix (either stream —
+    // OutputLines carries both, sequence-ordered) and checked against its declared stream (accepted implies
+    // stdout unless StreamOverride says otherwise; refused always implies stderr). wire.errors additionally
+    // carries the runner-owned terminal call, one beyond whatever occurrences the script itself authored.
+    private static IReadOnlyList<CanaryAssertionResult> EvaluateCommandAccounting(IReadOnlyList<CanaryCommandClaim> commands, IReadOnlyList<CliProcessOutputLine> outputLines) {
+        var results = new List<CanaryAssertionResult>();
+        var expectedRefusals = commands.Count(predicate: static claim => (claim.Outcome == CanaryCommandOutcome.Refused));
+        var byVerb = commands.GroupBy(keySelector: static claim => claim.Verb, comparer: StringComparer.Ordinal);
 
         foreach (var group in byVerb) {
-            var responseEvents = process.OutputLines
+            var responseEvents = outputLines
                 .Where(predicate: line => line.Line.StartsWith(value: $"[{group.Key}:", comparisonType: StringComparison.Ordinal))
                 .ToList();
             var claims = group.OrderBy(keySelector: static claim => claim.Occurrence).ToList();
@@ -456,7 +743,9 @@ internal static class CanaryCommand {
 
             if (countPassed) {
                 for (var index = 0; (index < claims.Count); index++) {
-                    var expectedStream = ((claims[index].Outcome == CanaryCommandOutcome.Accepted) ? CliProcessOutputStream.Stdout : CliProcessOutputStream.Stderr);
+                    var expectedStream = (((claims[index].StreamOverride ?? ((claims[index].Outcome == CanaryCommandOutcome.Accepted) ? CanaryStream.Stdout : CanaryStream.Stderr)) == CanaryStream.Stdout)
+                        ? CliProcessOutputStream.Stdout
+                        : CliProcessOutputStream.Stderr);
 
                     results.Add(item: new CanaryAssertionResult(
                         Detail: $"{group.Key} occurrence {claims[index].Occurrence} was {claims[index].Outcome.ToString().ToLowerInvariant()}",
@@ -466,7 +755,7 @@ internal static class CanaryCommand {
             }
         }
 
-        var terminalResponses = process.OutputLines
+        var terminalResponses = outputLines
             .Where(predicate: static line => line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[wire.errors:"))
             .ToArray();
         var expectedTerminal = $"[wire.errors: {expectedRefusals} rejected]";
@@ -615,28 +904,13 @@ internal static class CanaryCommand {
 
         throw new IOException(message: "Could not create a fresh random canary run directory after 8 attempts.");
     }
-    private static void SweepScratch() {
-        var threshold = DateTime.UtcNow.AddHours(value: -6);
-
-        try {
-            foreach (var directory in Directory.EnumerateDirectories(path: Path.GetTempPath(), searchPattern: $"{ScratchPrefix}*", searchOption: SearchOption.TopDirectoryOnly)) {
-                try {
-                    if (Directory.GetCreationTimeUtc(path: directory) < threshold) {
-                        Directory.Delete(path: directory, recursive: true);
-                    }
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    // A best-effort age-bounded sweep never makes this run fail or touches a fresh sibling run.
-                }
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // Enumerating temp is best-effort for the same reason as deleting an old entry.
-        }
-    }
     private static TimeSpan RemainingBudget(Stopwatch clock) {
         var remaining = (SuiteBudget - clock.Elapsed);
 
         return ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromMilliseconds(value: 1));
     }
+    private static bool PathsEqual(string left, string right) =>
+        (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Equals(x: left, y: right);
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.ReplaceLineEndings(replacementText: "\n").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
     private static void PrintCaptured(CliProcessResult result) {
@@ -682,6 +956,7 @@ internal static class CanaryCommand {
     private sealed record CanarySelection(string? Capability, IReadOnlyList<string> Ids, CanarySelectionKind Kind);
     private sealed record CanaryLegRun(
         CanaryEvaluation Assertions,
+        IReadOnlyDictionary<string, CanaryTranscript> AuthorityTranscripts,
         int ExitCode,
         string? InfrastructureError,
         IReadOnlyList<CanaryAssertionResult> Invariants,
@@ -696,6 +971,7 @@ internal static class CanaryCommand {
             InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: $"the {SuiteBudget.TotalSeconds:0}-second whole-suite budget was exhausted before this leg started");
         public static CanaryLegRun InfrastructureFailure(CanaryLeg leg, string runDirectory, string reason) => new(
             Assertions: new CanaryEvaluation(Results: []),
+            AuthorityTranscripts: ImmutableEmptyAuthorityTranscripts,
             ExitCode: -1,
             InfrastructureError: reason,
             Invariants: [],

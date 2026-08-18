@@ -1,0 +1,40 @@
+{
+  "$schema": "puck.shader.v1",
+  "name": "push-constant-layout",
+  "description": "The push-constant packing-rule fixture.",
+  "stages": { "compute": "push-constant-layout.comp" },
+  "bindings": [
+    { "kind": "storageBuffer", "vulkanBinding": 0, "directXRegister": "u0" }
+  ],
+  "targetFloor": { "vulkan": "1.3", "shaderModel": "6.6" },
+  "config": {
+    "a": { "type": "float", "default": 1 },
+    "b": { "type": "float2", "default": [1, 2], "min": 0, "max": 10 },
+    "c": { "type": "float", "default": 3 },
+    "d": { "type": "float3", "default": [1, 2, 3] },
+    "f": { "type": "float" },
+    "h": { "type": "float4", "default": [0, 0, 0, 1] },
+    "i": { "type": "int", "default": -5, "min": -10, "max": 10 },
+    "j": { "type": "float3", "default": [0, 0, 0] },
+    "m": { "type": "uint", "default": 7 },
+    "rate": { "type": "uint", "default": 60 }
+  },
+  "pushConstants": {
+    "stages": ["compute"],
+    "fields": [
+      { "name": "a", "type": "float", "source": "config.a" },
+      { "name": "b", "type": "float2", "source": "config.b" },
+      { "name": "c", "type": "float", "source": "config.c" },
+      { "name": "d", "type": "float3", "source": "config.d" },
+      { "name": "e", "type": "uint", "source": "tick", "quantizeHz": 24 },
+      { "name": "f", "type": "float", "source": "config.f" },
+      { "name": "g", "type": "float2", "source": "resolution" },
+      { "name": "h", "type": "float4", "source": "config.h" },
+      { "name": "i", "type": "int", "source": "config.i" },
+      { "name": "j", "type": "float3", "source": "config.j" },
+      { "name": "k", "type": "uint2", "source": "tick", "quantizeHz": "config.rate" },
+      { "name": "l", "type": "uint", "source": "frame" },
+      { "name": "m", "type": "uint", "source": "config.m" }
+    ]
+  }
+}

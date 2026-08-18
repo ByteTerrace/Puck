@@ -1,6 +1,8 @@
 {
-  "description": "The editor/authoring policy row \u2014 headroom, placement scale envelope, candidate targeting, the sole-editor layout split, and the drag-preview deadline, authored as data (see WorldAuthoringDefaults) \u2014 a required section every document carries.",
-  "type": "object",
+  "type": [
+    "object",
+    "null"
+  ],
   "properties": {
     "authoringHeadroomScreens": {
       "description": "Boot-consumed. The extra screen slots the probe reserves, bounded by the engine\u0027s MaxScreenSurfaces ceiling.",
@@ -50,5 +52,6 @@
     "previewDeadlineFrames",
     "derivedFaceScreens"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "default": null
 }

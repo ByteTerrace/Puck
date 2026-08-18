@@ -333,7 +333,7 @@ public sealed class WorldMetadataSectionLawTests {
             z: 0f
         )),
         });
-        var spawnMovedDocument = (baseDocument with { SpawnPoints = [movedSpawn, .. baseDocument.SpawnPoints.Skip(count: 1)] });
+        var spawnMovedDocument = (baseDocument with { SpawnPointsRaw = [movedSpawn, .. baseDocument.SpawnPoints.Skip(count: 1)] });
 
         var populationC = new WorldPopulation(definition: baseDocument);
         var populationD = new WorldPopulation(definition: spawnMovedDocument);

@@ -68,6 +68,10 @@ public sealed record CommandDefinition {
     public CommandBindability Bindability { get; init; }
     /// <summary>Gets the human-readable description shown in help output.</summary>
     public string Description { get; init; }
+    /// <summary>Gets whether this is a HELD verb: the handler reads the phase (active on Started/Active, released
+    /// on Completed/Canceled), so a plain-bound entry — no <c>activateOn</c> — delivers both edges, exactly as a
+    /// channel destination does. An author binds it once; only an explicit <c>activateOn</c> narrows to one edge.</summary>
+    public bool Held { get; init; }
     /// <summary>Gets the command map that classifies source-driven activation.</summary>
     public string Map { get; init; }
     /// <summary>Gets the publicly readable facts about this command — what <see cref="CommandRegistry.Definitions"/>
@@ -78,7 +82,8 @@ public sealed record CommandDefinition {
         Routing: Routing,
         Bindability: Bindability,
         InputScope: InputScope,
-        Map: Map
+        Map: Map,
+        Held: Held
     );
     /// <summary>Gets the unique name used to identify and dispatch the command.</summary>
     public string Name { get; init; }
@@ -114,6 +119,7 @@ public sealed record CommandDefinition {
     /// <see cref="CommandRouting.Simulation"/> for a command whose effect mutates the deterministic simulation.
     /// </param>
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
+    /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
     /// <returns>A new <see cref="CommandDefinition"/> backed by a bare-verb text command.</returns>
     public static CommandDefinition Verb(
         string name,
@@ -124,7 +130,8 @@ public sealed record CommandDefinition {
         string map = CommandMaps.Global,
         IReadOnlyList<string>? aliases = null,
         CommandRouting routing = CommandRouting.Immediate,
-        CommandInputScope inputScope = CommandInputScope.Focused
+        CommandInputScope inputScope = CommandInputScope.Focused,
+        bool held = false
     ) {
         return new CommandDefinition(
             Name: name,
@@ -139,6 +146,7 @@ public sealed record CommandDefinition {
             Map: map
         ) {
             Aliases = (aliases ?? []),
+            Held = held,
             InputScope = inputScope,
             Routing = routing,
         };
@@ -176,6 +184,7 @@ public sealed record CommandDefinition {
     /// no physical source, while the text path computes its own impulse value from this declared kind, so a typed
     /// call carries the same kind a bound one would.</param>
     /// <param name="inputScope">Whether source-driven activation requires ordinary terminal focus.</param>
+    /// <param name="held">Whether the verb is HELD (see <see cref="Held"/>): a plain-bound entry delivers both edges.</param>
     /// <returns>A new wire-native <see cref="CommandDefinition"/>.</returns>
     public static CommandDefinition WithWireArgs(
         string name,
@@ -186,7 +195,8 @@ public sealed record CommandDefinition {
         CommandRouting routing = CommandRouting.Immediate,
         bool ackOnly = false,
         CommandValueKind valueKind = CommandValueKind.Digital,
-        CommandInputScope inputScope = CommandInputScope.Focused
+        CommandInputScope inputScope = CommandInputScope.Focused,
+        bool held = false
     ) {
         var rest = new Argument<string[]>(name: "args") {
             Arity = ArgumentArity.ZeroOrMore,
@@ -217,6 +227,7 @@ public sealed record CommandDefinition {
             Map: map
         ) {
             AcknowledgementOnly = ackOnly,
+            Held = held,
             InputScope = inputScope,
             Routing = routing,
             WireArgsHandler = handler,

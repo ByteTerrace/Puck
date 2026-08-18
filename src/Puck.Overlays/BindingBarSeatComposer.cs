@@ -59,7 +59,7 @@ public static class BindingBarSeatComposer {
             var modifier = view.Modifiers[index];
 
             destination[index] = new OverlayBindingModifier(
-                Glyph: OverlayGamepadGlyphs.ResolveModifierSource(source: modifier.Source),
+                Glyph: OverlayGamepadGlyphs.ResolveModifierSource(source: modifier.Sources[0]),
                 Held: modifier.Required
             );
         }

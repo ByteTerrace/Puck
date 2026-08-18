@@ -84,12 +84,12 @@ public sealed class IdentityProjectionWireLawTests {
                 MoveSpeedState: WorldCellName.Parse(candidate: "ownMoveSpeed"),
                 TurnSpeedState: WorldCellName.Parse(candidate: "ownTurnSpeed"),
                 Controllers: []),
-            State = [
+            StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(Name: WorldCellName.Parse(candidate: "ownMoveSpeed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 4.5).Value)]),
                 new WorldStateRow(Name: WorldCellName.Parse(candidate: "ownTurnSpeed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: FixedQ4816.FromDouble(value: 2.25).Value)]),
                 new WorldStateRow(Name: WorldCellName.Parse(candidate: PrivateStateRow), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: WorldStateRow.SlotKey), Value: 91L)]),
-            ],
-            Grants = [
+            ]),
+            GrantsRaw = [
                 new WorldGrant(Principal: WorldPrincipal.Document(id: PrivateChatPeer), Capability: WorldCapability.Mutate, Subject: GrantSubject.Section(section: WorldSection.State), Exclusive: false),
             ],
         };

@@ -13,7 +13,7 @@ internal enum FixedManifoldSlotDisposition {
 }
 /// <summary>One persistent manifold slot: the geometry a candidate wrote into it, and the impulse it accumulates
 /// across steps.</summary>
-internal struct FixedManifoldSlot {
+internal struct FixedManifoldSlot : IManifoldSlotEvictionKey {
     /// <summary>Whether the slot holds a live association.</summary>
     internal bool Occupied;
     /// <summary>The associated candidate's source identity.</summary>
@@ -64,6 +64,9 @@ internal struct FixedManifoldSlot {
     internal long TangentImpulseXRaw;
     /// <summary>The per-step working tangential impulse raw along <see cref="Tangent2"/>, at Q48.16.</summary>
     internal long TangentImpulseYRaw;
+
+    readonly int IManifoldSlotEvictionKey.LastTouchedStep => LastTouchedStep;
+    readonly long IManifoldSlotEvictionKey.NormalImpulseRaw => NormalImpulseRaw;
 }
 
 /// <summary>
@@ -241,29 +244,11 @@ public sealed class FixedManifoldSlotTable {
     }
 
     private int Evict() {
-        var victim = -1;
-
-        for (var index = 0; (index < Capacity); ++index) {
-            if (m_claimed[index]) {
-                continue;
-            }
-
-            if (victim < 0) {
-                victim = index;
-
-                continue;
-            }
-
-            ref readonly var candidate = ref m_slots[index];
-            ref readonly var current = ref m_slots[victim];
-
-            if (
-                (candidate.LastTouchedStep < current.LastTouchedStep) ||
-                ((candidate.LastTouchedStep == current.LastTouchedStep) && (candidate.NormalImpulseRaw < current.NormalImpulseRaw))
-            ) {
-                victim = index;
-            }
-        }
+        var victim = FixedManifoldEviction.SelectVictim(
+            capacity: Capacity,
+            claimed: m_claimed,
+            slots: m_slots
+        );
 
         if (victim < 0) {
             return -1;

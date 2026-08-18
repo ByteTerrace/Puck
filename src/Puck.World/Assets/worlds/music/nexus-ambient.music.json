@@ -1,0 +1,30 @@
+{
+  "schema": "puck.music.v1",
+  "name": "nexus-ambient",
+  "tempo": {
+    "beatsPerBar": 4,
+    "ticksPerBeat": 25200
+  },
+  "segments": [
+    {
+      "id": "calm",
+      "transitions": [
+        {
+          "to": "alert",
+          "when": "region.enter",
+          "at": "BarEnd"
+        }
+      ]
+    },
+    {
+      "id": "alert",
+      "transitions": [
+        {
+          "to": "calm",
+          "when": "region.exit",
+          "at": "BarEnd"
+        }
+      ]
+    }
+  ]
+}

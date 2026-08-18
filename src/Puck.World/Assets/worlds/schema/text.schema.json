@@ -1,5 +1,4 @@
 {
-  "description": "The optional named, hash-pinned font catalog shared by creation text runs and screen text decals.",
   "type": [
     "object",
     "null"

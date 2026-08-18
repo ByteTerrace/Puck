@@ -61,7 +61,7 @@ and by argument, and a change that would once have been gated should say in
 its own commit what was and was not checked.
 
 The one narrow cross-backend check that exists is `puck parity`: for each
-authored pattern world under `docs/verification/parity/` (gradient, edges,
+authored pattern world under `tests/Puck.Parity/` (gradient, edges,
 modifiers, glyphs — each stressing one contract slice) plus the shipped default
 world,
 it boots the real `Puck.World` windowed on Vulkan and on Direct3D 12,
@@ -336,6 +336,10 @@ all verification work here. Each keeps one compressed instance as evidence.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change
   a metric.
+- No source file over 2500 lines: `FileLengthAnalyzer` fails the build (LEN001)
+  unless `FileLengths.json` already records the file, and a recorded file may
+  only shrink (LEN002/LEN003). Split, then `puck lengths --write` — the ledger
+  never grows.
 - Derive descriptor counts, pool sizes, strides, and capacities from the data
   that defines them.
 - .NET 10 is the only target. Consult `dotnet10-performance` before preserving

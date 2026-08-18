@@ -1,0 +1,221 @@
+[
+  {
+    "Id": "fft.impulse-dc-nyquist-exact",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.FixedFourierPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.FixedFourierPlan", "Name": "Length" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "an impulse's spectrum is EXACTLY One at every bin, a constant (DC) input's spectrum is EXACTLY length*value at bin zero and EXACTLY zero at every other bin, and an alternating +/-value (Nyquist) input's spectrum is EXACTLY length*value at the top bin and EXACTLY zero elsewhere, at lengths 2 through 256.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "these three are exact rather than bounded because every twiddle they touch is exactly +/-1 or +/-i, at which FixedComplex.operator* takes a leaf-product path whose two products are (value, 0) or (0, value) and whose sum-then-round therefore rounds NOTHING: the one-rounding kernel's rounding is a no-op on an already-exact input. A general bin (fft.round-trip-bound, fft.linearity-bound, fft.parseval-bound) touches a twiddle that is neither, so those are measured bounds instead.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.round-trip-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Inverse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Inverse(Forward(x)) recovers x within 64 raw Q16 ULPs per component, at lengths 1 through 256, over Pcg32XshRr-seeded operands in raw [-2^20, 2^20] (about +/-16.0). The bound is MEASURED: an independent calibration run at this exact envelope, seed source and length set observed a worst case of 39 ULPs at length 128; 64 is that measurement with margin, not a value chosen to make the case pass.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the bound is stated AT this amplitude. Round-trip error scales with operand magnitude — each twiddle's own ~0.5 ULP quantization error (from FixedQ4816.SinCos) multiplies through the signal at every stage, so a caller working at a larger amplitude should expect proportionally larger absolute error, not this same ceiling. Forward's own XML doc states the argument.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.round-trip-bound-deep",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR of fft.round-trip-bound at strictly stronger operands — lengths 512 through 4096 rather than 1 through 256, with a wider measured bound (96 ULPs; the calibration run's worst case at this length range was 62 ULPs at length 4096) because more butterfly stages accumulate more per-stage rounding.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.linearity-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Forward(a) + Forward(b) agrees with Forward(a + b) within 24 raw Q16 ULPs per component, at lengths 1 through 256, over the same seeded envelope as fft.round-trip-bound. MEASURED: the calibration run's worst case at this length range was 13 ULPs at length 256; 24 is that measurement with margin. Unlike ntt.linearity-exact, the fixed-point transform's twiddle multiplies round independently on the a, b and a+b runs, so the two sides need not agree bit-for-bit even though the ideal (unrounded) DFT is exactly linear.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.linearity-bound-deep",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR of fft.linearity-bound at strictly stronger operands — lengths 512 through 4096 — with a wider measured bound (96 ULPs; the calibration run's worst case at this length range was 62 ULPs at length 4096).",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.parseval-bound",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "sum(|x_n|^2) * length agrees with sum(|X_k|^2) — Parseval's identity for Forward's unscaled convention — within 4*10^11 raw Q32 units, at lengths 1 through 256 over the seeded envelope. Both sides are computed EXACTLY in BigInteger from the integer raw components (a raw squared is an exact integer, and their sum is exact), so the bound is on the fixed-point transform's own rounding and nothing else — no floating point enters the comparison at any point. MEASURED: the calibration run's worst case at this length range was about 2.6*10^11 at length 256.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.parseval-bound-deep",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "MIRROR of fft.parseval-bound at strictly stronger operands — lengths 512 through 4096 — with a wider measured bound (6*10^13 raw Q32 units; the calibration run's worst case at this length range was about 4.0*10^13 at length 4096).",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.self-referential-bit-identity",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Inverse" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "two Forward runs and two Inverse runs on identical input, in this process, return bit-identical results, at lengths 1 through 256. Rule 4's determinism contract: same input, same code version, bit-identical output on every run — this is the same-process purity half of that promise; it observes hidden mutable state or an operand-independent result and nothing else, and is never a pinned historical value (a correction to the kernel is expected to move the ACTUAL bits, never the fact that two runs agree with each other).",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.radix2-vs-direct-sum",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "FusedSubstrate",
+        "Subject": "FixedFourierTransform.Forward's radix-2 decimation-in-time butterfly network, at lengths 1 through 32",
+        "Against": "a direct O(N^2) DFT sum built in this claim body from the SAME FixedComplex.FromAngle and FixedComplex.operator* kernels Forward's twiddle table and butterflies use, but with a completely different summation schedule: no bit-reversal permutation, no stage decomposition, one running FixedComplex accumulator per output bin over all N terms rather than log2(N) pairwise combines. Agreement within 200 raw Q16 ULPs — MEASURED: a calibration run at this envelope observed a worst case of 107 ULPs at length 32; both sides round through the same one-rounding multiply, so exact equality is not expected, and the direct sum's own rounding count (up to N per bin, against the radix-2 network's log2(N) per bin) is why the bound is wider than the round-trip and linearity ones",
+        "Shared": "FixedComplex.FromAngle (built on FixedQ4816.SinCos) and FixedComplex.operator*, the IDENTICAL members, not sibling copies",
+        "Citation": "scalar.* pins FixedQ4816.SinCos's own accuracy; complex.* pins FixedComplex.operator*'s one-rounding contract. What this leg adds beyond those is the radix-2 SCHEDULE — the bit-reversal permutation and the stage-by-stage twiddle-stride indexing — which neither of those families touches: a swapped bit-reversal pair, a wrong twiddle stride, or a stage boundary off by one reddens this case while leaving scalar.* and complex.* green.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.real-wrappers-are-faithful-embeddings",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "ForwardReal" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "InverseReal" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ForwardReal(real) is EXACTLY bit-identical to Forward applied to real embedded with zero imaginary parts, and InverseReal's output is EXACTLY the real component of what Inverse produces on the same spectrum, at lengths 1 through 256. A wiring statement about the two convenience wrappers, not an accuracy one — it is exact by construction rather than bounded, and would catch a wrapper that dropped a sample, embedded the wrong component, or read the wrong half of Inverse's output.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "fft.length-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.FixedFourierPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "Inverse" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "ForwardReal" },
+      { "Type": "Puck.Maths.FixedFourierTransform", "Name": "InverseReal" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every documented refusal, asserted by exception TYPE and by the parameter name it reports: FixedFourierPlan.Create at zero, a negative length and a non-power-of-two length (5); Forward and Inverse given a span whose length does not equal the plan's; ForwardReal given a real or destination span of the wrong length; InverseReal given a spectrum or destination span of the wrong length.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

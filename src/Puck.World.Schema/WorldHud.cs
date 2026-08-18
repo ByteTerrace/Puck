@@ -122,8 +122,9 @@ public sealed record WorldHudElement(
 /// <param name="Style">The panel's chrome recipe.</param>
 /// <param name="Elements">The panel's child elements (default empty), each a whole-row unit under
 /// <see cref="WorldHudCapacity.MaxElementsPerPanel"/>.</param>
+/// <param name="Visible">The panel's visibility condition over presentation facts, or <see langword="null"/> for always.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer Layer, WorldHudPanelStyle Style, IReadOnlyList<WorldHudElement> Elements) {
+public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer Layer, WorldHudPanelStyle Style, IReadOnlyList<WorldHudElement> Elements, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
     private readonly IReadOnlyList<WorldHudElement> m_elements = (Elements ?? []);
 
     /// <summary>Gets the panel's child elements. The absence-coalesce lives in the accessor for the same reason
@@ -159,7 +160,8 @@ public enum WorldHudCursorRole : byte {
 /// a hovered row.</param>
 /// <param name="SizePx">The drawn cursor's ring radius, pixels.</param>
 /// <param name="Role">The bare cursor's palette role; hover lights the accent tier regardless.</param>
-public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCursorRole Role) {
+/// <param name="Visible">The drawn cursor's visibility condition, or <see langword="null"/> for always.</param>
+public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCursorRole Role, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
     /// <summary>Gets the built-in default an unauthored row falls back to: a plaza-scale hover reach, a small ring,
     /// the primary text hue.</summary>
     public static WorldHudCursor Default { get; } = new(
@@ -176,7 +178,9 @@ public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCur
 /// <see cref="WorldHudCursor.Default"/> (the optional-section null-coalesce convention). Whole-row replace
 /// semantics apply: a <c>SetHudDefaults</c> authored without it clears any earlier authored policy back to the
 /// default.</param>
-public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = null) {
+/// <param name="Visible">The visibility condition every world-scope panel is gated by, beside its own, or
+/// <see langword="null"/> for always.</param>
+public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
     /// <summary>Gets the built-in default: enabled, no authored panels (see <see cref="WorldHudSection.Default"/>).</summary>
     public static WorldHudDefaults Default { get; } = new(Enabled: true);
 }
@@ -201,31 +205,23 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
         init => m_panels = (value ?? []);
     }
 }
-/// <summary>The world-scope and seat-scope HUD schema caps and the schema→render expansion cost — read by
-/// <see cref="WorldDefinitionValidator"/> for both visited and identity-owned worlds, and by
-/// <c>Puck.Overlays.OverlayChannelLeases</c>'s combined reservation (that project cannot reference this one, so its
-/// reservation constants restate these numbers by hand, checked by the static assertion there). The seat-scope
-/// reservation (one panel × <see cref="MaxElementsPerSeatPanel"/> elements × every local seat) was sized ahead of
-/// any author; an identity-owned world's first HUD panel is the first author to spend from it.</summary>
+/// <summary>The document contract's HUD ceilings — what a world may author at world scope and what an identity-owned
+/// world may author at seat scope — read by <see cref="WorldDefinitionValidator"/> for both. The presentation derives
+/// its overlay reservations from these same constants through the composition root (they cross the layering as
+/// constructor data, never restated); the render cost each authored element expands into is the overlay writer's own
+/// constant.</summary>
 public static class WorldHudCapacity {
-    /// <summary>A <see cref="WorldHudElementKind.Gauge"/> element's render-element cost (fill + track + label).</summary>
-    public const int GaugeElementCost = 3;
-    /// <summary>A <see cref="WorldHudElementKind.Gauge"/> element's glyph-word ceiling (its label).</summary>
-    public const int GaugeWordCost = 16;
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
-    /// <summary>The per-seat player-scope panel's element-row ceiling — one panel per profile, capped smaller than
-    /// the world scope's <see cref="MaxElementsPerPanel"/> because it is confined to a single seat's viewport rather
-    /// than the whole screen.</summary>
+    /// <summary>The per-seat player-scope panel's element-row ceiling — capped smaller than the world scope's
+    /// <see cref="MaxElementsPerPanel"/> because it is confined to a single seat's viewport rather than the whole
+    /// screen.</summary>
     public const int MaxElementsPerSeatPanel = 12;
+    /// <summary>The seat-scope panel-row ceiling: how many <c>hud.panels</c> rows an identity-owned world may author.
+    /// <see cref="WorldIdentity.Hud"/> is that one panel.</summary>
+    public const int MaxSeatPanels = 1;
     /// <summary>The world-scope panel-row ceiling.</summary>
     public const int MaxWorldPanels = 4;
-    /// <summary>A <see cref="WorldHudElementKind.Rect"/> element's render-element cost.</summary>
-    public const int RectElementCost = 1;
-    /// <summary>A <see cref="WorldHudElementKind.Text"/> element's render-element cost.</summary>
-    public const int TextElementCost = 1;
-    /// <summary>A <see cref="WorldHudElementKind.Text"/> element's glyph-word ceiling.</summary>
-    public const int TextWordCost = 64;
 }
 /// <summary>The approved closed v1 binding vocabulary a <see cref="WorldHudElement.Binding"/> names — validated at
 /// document validation (refuse-unknown by name) and resolved render-side, once per frame, by the writer.</summary>

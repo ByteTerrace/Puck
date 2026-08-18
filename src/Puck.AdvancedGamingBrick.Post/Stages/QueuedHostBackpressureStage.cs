@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// dropping any previously accepted work. A thin wrapper that exercises the Advanced core through the shared
 /// <see cref="QueuedHostContractProbe"/> so both batteries gate the one substrate.
 /// </summary>
-internal sealed class QueuedHostBackpressureStage : IPostStage {
+internal sealed class QueuedHostBackpressureStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-backpressure";

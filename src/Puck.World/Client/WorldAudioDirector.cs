@@ -5,20 +5,12 @@ using Puck.Abstractions.Machines;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.Audio.Mixing;
 using Puck.World.Audio;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
-/// <summary>One seat's resolved view-camera pose for the listener policy — filled by the frame source from the same
-/// rig resolution the seat renders through (the editor rig when the seat edits), so "focus" listens where the active
-/// view looks. That rig anchors on the seat's perceived body (<see cref="WorldPerceptionAnchor"/> — the bound body,
-/// or the routed body while possessing), so the listener follows a possession anchor swap by construction, together
-/// with the camera.</summary>
-/// <param name="Joined">Whether the seat is joined this frame.</param>
-/// <param name="Eye">The resolved camera eye, world space.</param>
-/// <param name="Forward">The resolved camera forward (eye → target), world space.</param>
-internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Vector3 Forward);
 /// <summary>
 /// The client-side audio director — the seam between the world document and the mixer's emitter vocabulary.
 /// <see cref="ReconcileSpeakers"/> derives the emitter table from the delivered definition (speaker rows by
@@ -29,7 +21,7 @@ internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Ve
 /// produced frame — entity roots from the snapshot view, entity parts from the active look's published transform
 /// slots, and placements
 /// from the stamped transform (the animator's current frame for animated rows) — and publishes a
-/// <see cref="WorldAudioSnapshot"/> over a ≥4-deep slab rotation.
+/// <see cref="AudioSnapshot"/> over a ≥4-deep slab rotation.
 /// </summary>
 /// <remarks>
 /// <para><b>The v1 trigger policy (deliberate, documented):</b> every synth-fed emitter fires exactly one seeded
@@ -45,7 +37,7 @@ internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Ve
 /// publishes. Machine sources bind through <see cref="MachineSourceResolver"/>: each <see cref="Publish"/> diffs the
 /// binder's live machines by reference for every machine-fed plan row, so a boot/eject/live-swap rebinds the mixer
 /// source and a machine booting late into a referenced slot self-heals — the keys
-/// (<see cref="WorldAudioSourceKey.Machine"/> by slot) stay stable across swaps.</para>
+/// (<see cref="AudioSourceKey.Machine"/> by slot) stay stable across swaps.</para>
 /// <para><b>Threading:</b> derivation and publishing stay on the window-pump thread, and the resolver is only
 /// ever invoked there (it reads the binder's pump-owned slot table). The device pump adds two cross-thread callers —
 /// <see cref="AttachMixer"/>/<see cref="DetachMixer"/> from the render service's governor and
@@ -53,19 +45,19 @@ internal readonly record struct WorldSeatCameraPose(bool Joined, Vector3 Eye, Ve
 /// plan serializes on one reentrant gate. The gate is uncontended in steady state (reconciles are rare, a mix block
 /// is microseconds), which is the deliberate trade: one honest lock instead of a lock-free mixer-mutation protocol.</para>
 /// </remarks>
-internal sealed class WorldAudioDirector {
+internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFeed {
     /// <summary>The default per-publish clock advance for cue aging: one 240 Hz sim step (the offline drivers'
     /// cadence — one publish per mixed 200-frame block). The live frame source passes its real presentation delta.</summary>
     public const float DefaultPublishDeltaSeconds = (1f / 240f);
     /// <summary>The life cap for a cue voicing a looping patch (no authored duration): 2 s of audio frames. A cue is
     /// a transient by definition — a finite patch's life derives from its own envelope (data); only the loop cap is
     /// an invariant.</summary>
-    public const long LoopingCueLifeFrames = (2L * WorldAudioMixer.SampleRate);
+    public const long LoopingCueLifeFrames = (2L * AudioMixer.SampleRate);
     /// <summary>The slab-rotation depth: the consumer holds one snapshot for one ~5.33 ms block; the
     /// producer needs ≥33 ms to lap four slabs — safe by an order of magnitude.</summary>
     public const int SnapshotRotation = 4;
     /// <summary>The transient cue-emitter pool size — capacity structure like the snapshot's emitter cap, an
-    /// engine invariant rather than world data: these slots are reserved off <see cref="WorldAudioSnapshot.DefaultMaxEmitters"/>
+    /// engine invariant rather than world data: these slots are reserved off <see cref="AudioSnapshot.DefaultMaxEmitters"/>
     /// (the reconcile overflow warning charges them), so a full derived plan can never starve a cue. A cue arriving
     /// with the pool full evicts the transient nearest its own expiry (its voice releases with the departed emitter).</summary>
     public const int TransientCueCapacity = 4;
@@ -74,13 +66,13 @@ internal sealed class WorldAudioDirector {
 
     private readonly WorldStampPool? m_animator;
     private readonly WorldClient? m_client;
-    private readonly WorldAudioSnapshot[] m_slabs;
+    private readonly AudioSnapshot[] m_slabs;
 
     private ulong m_cueOrdinal;
     private WorldDefinition? m_definition;
     // Set on attach: the next pump-thread sync re-applies every cached binding into the (new) mixer.
     private bool m_machineBindingsDirty;
-    private WorldAudioMixer? m_mixer;
+    private AudioMixer? m_mixer;
     private ulong m_nextTriggerSequence;
     // The world.volume session lever (the render-levers asymmetry): null until touched — the document's
     // MasterGain then owns the live gain (reconcile follows it; the offline drivers stay purely document-driven);
@@ -88,7 +80,7 @@ internal sealed class WorldAudioDirector {
     private float? m_sessionMasterVolume;
     private int m_slabIndex;
 
-    private readonly PublishBuffer<WorldAudioSnapshot> m_buffer = new();
+    private readonly PublishBuffer<AudioSnapshot> m_buffer = new();
     private readonly List<EmitterPlan> m_plan = new();
     // The stable-id registry: emitter key → (id, identity signature). Survives reconciles so property edits keep
     // their mixer ramp state; an identity change re-keys (a fresh id ramps in from silence).
@@ -96,7 +88,7 @@ internal sealed class WorldAudioDirector {
     private readonly List<PendingTrigger> m_pendingTriggers = new();
     // The mixer-facing patch registration set (world patch rows by id + inline creation-sound patches by emitter
     // key) — applied on attach and on every reconcile while attached.
-    private readonly List<(string Id, WorldVoicePatch Patch)> m_patchSet = new();
+    private readonly List<(string Id, VoicePatch Patch)> m_patchSet = new();
     // The headless tune hosts, by tune id (live only while a mixer is attached).
     private readonly Dictionary<string, TuneHost> m_tuneHosts = new(comparer: StringComparer.Ordinal);
     // The live machine bindings by screen slot: which IAudioMachine each Machine-source key currently drains.
@@ -127,10 +119,10 @@ internal sealed class WorldAudioDirector {
     public WorldAudioDirector(WorldClient? client, WorldStampPool? animator) {
         m_client = client;
         m_animator = animator;
-        m_slabs = new WorldAudioSnapshot[SnapshotRotation];
+        m_slabs = new AudioSnapshot[SnapshotRotation];
 
         for (var index = 0; (index < SnapshotRotation); index++) {
-            m_slabs[index] = new WorldAudioSnapshot();
+            m_slabs[index] = new AudioSnapshot();
         }
     }
 
@@ -200,7 +192,7 @@ internal sealed class WorldAudioDirector {
 
         if (
             arrived &&
-            (plan.Source.Kind == WorldAudioSourceKind.Synth) &&
+            (plan.Source.Kind == AudioSourceKind.Synth) &&
             (plan.Source.Id is { } patchId)
         ) {
             // The seed folds the key and the identity signature: the same authored content reproduces the voice bit
@@ -220,15 +212,15 @@ internal sealed class WorldAudioDirector {
         Admit(
             plan: new EmitterPlan {
                 Key = key,
-                Kind = WorldAudioEmitterKind.Point,
+                Kind = AudioEmitterKind.Point,
                 Anchor = anchor,
                 MinRadius = FixedQ4816.Zero,
                 MaxRadius = FixedQ4816.FromDouble(value: (emission.Radius ?? audio.DefaultSpeakerRadius)),
                 Curve = CurveOf(token: audio.DefaultCurve),
                 FadeFrames = 0,
                 GainQ16 = GainQ16(gain: emission.Level),
-                Channel = WorldAudioChannel.Mix,
-                Source = WorldAudioSourceKey.Synth(patchId: emission.PatchId),
+                Channel = AudioChannel.Mix,
+                Source = AudioSourceKey.Synth(patchId: emission.PatchId),
             },
             signatureToken: $"emission|{PatchHash(
                 definition: definition,
@@ -319,14 +311,14 @@ internal sealed class WorldAudioDirector {
         }
 
         foreach (var tuneId in (orphaned ?? [])) {
-            mixer.RemoveSource(key: WorldAudioSourceKey.Tune(id: tuneId));
+            mixer.RemoveSource(key: AudioSourceKey.Tune(id: tuneId));
             m_tuneHosts[tuneId].Source.Dispose();
             _ = m_tuneHosts.Remove(key: tuneId);
         }
 
         foreach (var plan in m_plan) {
             if (
-                (plan.Source.Kind == WorldAudioSourceKind.Tune) &&
+                (plan.Source.Kind == AudioSourceKind.Tune) &&
                 (plan.Source.Id is { } tuneId) &&
                 !m_tuneHosts.ContainsKey(key: tuneId) &&
                 (FindTune(
@@ -380,30 +372,30 @@ internal sealed class WorldAudioDirector {
             ));
         }
     }
-    private static string ChannelToken(WorldAudioChannel channel) => channel switch {
-        WorldAudioChannel.Left => "left",
-        WorldAudioChannel.Right => "right",
+    private static string ChannelToken(AudioChannel channel) => channel switch {
+        AudioChannel.Left => "left",
+        AudioChannel.Right => "right",
         _ => "mix",
     };
     // The distinct external (machine/tune) source identities the derived plan taps — the mixer binds one source slot
     // per identity, so this is the plan's real demand on the bounded source table. Synth-fed rows register a patch,
     // not a source, so they do not count here.
     private int CountDistinctExternalSources() {
-        var seen = new HashSet<WorldAudioSourceKey>();
+        var seen = new HashSet<AudioSourceKey>();
 
         foreach (var plan in m_plan) {
-            if (plan.Source.Kind is WorldAudioSourceKind.Machine or WorldAudioSourceKind.Tune) {
+            if (plan.Source.Kind is AudioSourceKind.Machine or AudioSourceKind.Tune) {
                 _ = seen.Add(item: plan.Source);
             }
         }
 
         return seen.Count;
     }
-    private static TuneHost CreateTuneHost(WorldTune tune, WorldAudioMixer mixer) {
+    private static TuneHost CreateTuneHost(WorldTune tune, AudioMixer mixer) {
         var source = new TuneMachineSource(document: tune.Document);
 
         mixer.SetSource(
-            key: WorldAudioSourceKey.Tune(id: tune.Id),
+            key: AudioSourceKey.Tune(id: tune.Id),
             source: source
         );
 
@@ -424,25 +416,25 @@ internal sealed class WorldAudioDirector {
                 comparisonType: StringComparison.Ordinal
             )) {
                 return ((patch.DurationFrames > 0)
-                    ? ((((long)patch.DurationFrames) + patch.ReleaseFrames) + WorldAudioMixer.FramesPerSimStep)
+                    ? ((((long)patch.DurationFrames) + patch.ReleaseFrames) + AudioMixer.FramesPerSimStep)
                     : LoopingCueLifeFrames
                 );
             }
         }
 
-        return WorldAudioMixer.FramesPerSimStep;
+        return AudioMixer.FramesPerSimStep;
     }
-    private static WorldAudioAttenuationCurve CurveOf(string token) =>
+    private static AudioAttenuationCurve CurveOf(string token) =>
         (string.Equals(
             a: token,
             b: WorldAudioDefaults.CurveLinear,
             comparisonType: StringComparison.Ordinal
         )
-            ? WorldAudioAttenuationCurve.Linear
-            : WorldAudioAttenuationCurve.Smoothstep
+            ? AudioAttenuationCurve.Linear
+            : AudioAttenuationCurve.Smoothstep
         );
-    private static string CurveToken(WorldAudioAttenuationCurve curve) =>
-        ((curve == WorldAudioAttenuationCurve.Linear)
+    private static string CurveToken(AudioAttenuationCurve curve) =>
+        ((curve == AudioAttenuationCurve.Linear)
             ? WorldAudioDefaults.CurveLinear
             : WorldAudioDefaults.CurveSmoothstep
         );
@@ -463,11 +455,11 @@ internal sealed class WorldAudioDirector {
                 // never collide with a world patch row's id (the "sound:" prefix is not a legal row reference).
                 var key = $"sound:{placement.Id}:{sound.Name}";
 
-                m_patchSet.Add(item: (Id: key, Patch: WorldVoicePatch.FromDocument(document: sound.Patch)));
+                m_patchSet.Add(item: (Id: key, Patch: WorldVoicePatchFactory.FromDocument(document: sound.Patch)));
                 Admit(
                     plan: new EmitterPlan {
                         Key = key,
-                        Kind = WorldAudioEmitterKind.Point,
+                        Kind = AudioEmitterKind.Point,
                         Anchor = EmitterAnchor.PlacementPoint(
                         placementId: placement.Id,
                         shapeId: sound.ShapeId,
@@ -482,8 +474,8 @@ internal sealed class WorldAudioDirector {
                         Curve = CurveOf(token: audio.DefaultCurve),
                         FadeFrames = 0,
                         GainQ16 = GainQ16(gain: (sound.Level ?? 1f)),
-                        Channel = WorldAudioChannel.Mix,
-                        Source = WorldAudioSourceKey.Synth(patchId: key),
+                        Channel = AudioChannel.Mix,
+                        Source = AudioSourceKey.Synth(patchId: key),
                     },
                     signatureToken: $"sound|{creation.Hash}"
                 );
@@ -519,9 +511,9 @@ internal sealed class WorldAudioDirector {
             var source = SourceKey(source: speaker.Feed.Source);
             var gain = GainQ16(gain: speaker.Feed.Gain);
             var channel = (speaker.Feed.Channel switch {
-                WorldSpeakerFeed.ChannelLeft => WorldAudioChannel.Left,
-                WorldSpeakerFeed.ChannelRight => WorldAudioChannel.Right,
-                _ => WorldAudioChannel.Mix,
+                WorldSpeakerFeed.ChannelLeft => AudioChannel.Left,
+                WorldSpeakerFeed.ChannelRight => AudioChannel.Right,
+                _ => AudioChannel.Mix,
             });
 
             switch (speaker) {
@@ -529,7 +521,7 @@ internal sealed class WorldAudioDirector {
                     Admit(
                         plan: new EmitterPlan {
                             Key = key,
-                            Kind = WorldAudioEmitterKind.Bed,
+                            Kind = AudioEmitterKind.Bed,
                             Anchor = EmitterAnchor.FixedPoint(position: bed.Center),
                             MinRadius = FixedQ4816.FromDouble(value: bed.InnerRadius),
                             MaxRadius = FixedQ4816.FromDouble(value: bed.Radius),
@@ -598,11 +590,11 @@ internal sealed class WorldAudioDirector {
 
         m_transients.RemoveAt(index: victim);
     }
-    private static int FadeFrames(float seconds) => ((int)MathF.Round(x: (seconds * WorldAudioMixer.SampleRate)));
+    private static int FadeFrames(float seconds) => ((int)MathF.Round(x: (seconds * AudioMixer.SampleRate)));
     private WorldTune? FindReferencedTune(WorldDefinition definition, string tuneId) {
         foreach (var plan in m_plan) {
             if (
-                (plan.Source.Kind == WorldAudioSourceKind.Tune) &&
+                (plan.Source.Kind == AudioSourceKind.Tune) &&
                 string.Equals(
                 a: plan.Source.Id,
                 b: tuneId,
@@ -667,9 +659,9 @@ internal sealed class WorldAudioDirector {
 
         return string.Empty;
     }
-    private EmitterPlan PointPlan(string key, EmitterAnchor anchor, WorldSpeakerAttenuation? attenuation, WorldAudioDefaults audio, int gain, WorldAudioChannel channel, WorldAudioSourceKey source) => new() {
+    private EmitterPlan PointPlan(string key, EmitterAnchor anchor, WorldSpeakerAttenuation? attenuation, WorldAudioDefaults audio, int gain, AudioChannel channel, AudioSourceKey source) => new() {
         Key = key,
-        Kind = WorldAudioEmitterKind.Point,
+        Kind = AudioEmitterKind.Point,
         Anchor = anchor,
         // Points shoulder from their center (min 0); the attenuation radius (row or audio-defaults) is the finite
         // support edge — a full-gain inner band is a bed concept.
@@ -686,7 +678,7 @@ internal sealed class WorldAudioDirector {
     // the slab's already-resolved listener (distance 0 = full gain, and the mixer's on-top-of-listener pan hold
     // centers it); emitter follows the named speaker's live plan pose and support radius (falling back to the
     // listener while the speaker is absent).
-    private void PublishTransients(WorldAudioSnapshot slab, ReadOnlySpan<DynamicTransform> transforms, float deltaSeconds) {
+    private void PublishTransients(AudioSnapshot slab, ReadOnlySpan<DynamicTransform> transforms, float deltaSeconds) {
         if (m_transients.Count == 0) {
             return;
         }
@@ -694,7 +686,7 @@ internal sealed class WorldAudioDirector {
         var elapsedFrames = ((long)MathF.Round(x: (MathF.Max(
             x: deltaSeconds,
             y: 0f
-        ) * WorldAudioMixer.SampleRate)));
+        ) * AudioMixer.SampleRate)));
 
         for (var index = (m_transients.Count - 1); (index >= 0); index--) {
             var transient = m_transients[index];
@@ -732,17 +724,17 @@ internal sealed class WorldAudioDirector {
                     break;
             }
 
-            _ = slab.TryAddEmitter(emitter: new WorldAudioEmitter(
+            _ = slab.TryAddEmitter(emitter: new AudioEmitter(
                 Id: transient.Id,
-                Kind: WorldAudioEmitterKind.Point,
+                Kind: AudioEmitterKind.Point,
                 Position: position,
                 MinRadius: minRadius,
                 MaxRadius: maxRadius,
                 Curve: curve,
                 FadeFrames: 0,
                 GainQ16: transient.GainQ16,
-                Channel: WorldAudioChannel.Mix,
-                Source: WorldAudioSourceKey.Synth(patchId: transient.PatchId)
+                Channel: AudioChannel.Mix,
+                Source: AudioSourceKey.Synth(patchId: transient.PatchId)
             ));
 
             transient.RemainingFrames -= elapsedFrames;
@@ -771,7 +763,7 @@ internal sealed class WorldAudioDirector {
             // An unanchored static world-point framing has a directly resolvable listener pose.
             if (camera.Anchor is null) {
                 return (((camera.Rig.Motion is WorldCameraMotion.Static { WorldAxes: true } motion) && (camera.Rig.Aim is WorldCameraAim.WorldPoint aim))
-                    ? (Eye: motion.Position, Forward: (aim.Target - motion.Position))
+                    ? (Eye: motion.Position.Value, Forward: (aim.Target.Value - motion.Position.Value))
                     : ((Vector3 Eye, Vector3 Forward)?)null
                 );
             }
@@ -825,7 +817,7 @@ internal sealed class WorldAudioDirector {
 
         return null;
     }
-    private WorldAudioListener ResolveListener(ReadOnlySpan<WorldSeatCameraPose> seats, ReadOnlySpan<DynamicTransform> transforms) {
+    private AudioListener ResolveListener(ReadOnlySpan<WorldSeatCameraPose> seats, ReadOnlySpan<DynamicTransform> transforms) {
         var (eye, forward) = ResolveListenerPose(
             seats: seats,
             transforms: transforms
@@ -846,7 +838,7 @@ internal sealed class WorldAudioDirector {
             ).Normalize();
         }
 
-        return new WorldAudioListener(
+        return new AudioListener(
             Position: FixedVector3.FromVector3(value: eye),
             Yaw: m_lastListenerYaw
         );
@@ -934,11 +926,11 @@ internal sealed class WorldAudioDirector {
             _ = m_registry.Remove(key: key);
         }
     }
-    private static WorldAudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
-        WorldSpeakerSource.Machine machine => WorldAudioSourceKey.Machine(slot: machine.ScreenIndex),
-        WorldSpeakerSource.Tune tune => WorldAudioSourceKey.Tune(id: tune.TuneId),
-        WorldSpeakerSource.Synth synth => WorldAudioSourceKey.Synth(patchId: synth.PatchId),
-        _ => WorldAudioSourceKey.None,
+    private static AudioSourceKey SourceKey(WorldSpeakerSource source) => source switch {
+        WorldSpeakerSource.Machine machine => AudioSourceKey.Machine(slot: machine.ScreenIndex),
+        WorldSpeakerSource.Tune tune => AudioSourceKey.Tune(id: tune.TuneId),
+        WorldSpeakerSource.Synth synth => AudioSourceKey.Synth(patchId: synth.PatchId),
+        _ => AudioSourceKey.None,
     };
     // The source half of an emitter's identity signature: the source shape plus the referenced asset's content HASH
     // (the restart discriminator — a tune/patch content change re-keys the emitter; a gain edit does not).
@@ -955,24 +947,24 @@ internal sealed class WorldAudioDirector {
         _ => "none",
     };
     // One speaker row's live binding status: what its source identity resolves to RIGHT NOW (under the gate).
-    private string SourceStatus(in WorldAudioSourceKey source) => source.Kind switch {
-        WorldAudioSourceKind.Machine => (m_machineBindings.ContainsKey(key: source.Slot)
+    private string SourceStatus(in AudioSourceKey source) => source.Kind switch {
+        AudioSourceKind.Machine => (m_machineBindings.ContainsKey(key: source.Slot)
         ? "bound"
         : "silent(no-machine)"),
-        WorldAudioSourceKind.Tune => (((source.Id is { } tuneId) && m_tuneHosts.ContainsKey(key: tuneId))
+        AudioSourceKind.Tune => (((source.Id is { } tuneId) && m_tuneHosts.ContainsKey(key: tuneId))
         ? "bound"
         : ((m_mixer is null)
             ? "silent(no-device)"
             : "silent(no-tune)")),
-        WorldAudioSourceKind.Synth => (((source.Id is { } patchId) && HasPatch(patchId: patchId))
+        AudioSourceKind.Synth => (((source.Id is { } patchId) && HasPatch(patchId: patchId))
         ? "bound"
         : "faulted(no-patch)"),
         _ => "silent(no-source)",
     };
-    private static string SourceToken(in WorldAudioSourceKey source) => source.Kind switch {
-        WorldAudioSourceKind.Machine => $"machine:{source.Slot}",
-        WorldAudioSourceKind.Tune => $"tune:{source.Id}",
-        WorldAudioSourceKind.Synth => $"synth:{source.Id}",
+    private static string SourceToken(in AudioSourceKey source) => source.Kind switch {
+        AudioSourceKind.Machine => $"machine:{source.Slot}",
+        AudioSourceKind.Tune => $"tune:{source.Id}",
+        AudioSourceKind.Synth => $"synth:{source.Id}",
         _ => "none",
     };
     // A static placement anchor's stamped position — the ONE shared resolver cameras and speakers both read.
@@ -998,7 +990,7 @@ internal sealed class WorldAudioDirector {
         }
 
         foreach (var plan in m_plan) {
-            if (plan.Source.Kind != WorldAudioSourceKind.Machine) {
+            if (plan.Source.Kind != AudioSourceKind.Machine) {
                 continue;
             }
 
@@ -1011,7 +1003,7 @@ internal sealed class WorldAudioDirector {
 
             if (live is null) {
                 if (bound) {
-                    mixer.RemoveSource(key: WorldAudioSourceKey.Machine(slot: slot));
+                    mixer.RemoveSource(key: AudioSourceKey.Machine(slot: slot));
                     _ = m_machineBindings.Remove(key: slot);
                 }
             } else if (
@@ -1028,12 +1020,12 @@ internal sealed class WorldAudioDirector {
                     Source: source
                 );
                 mixer.SetSource(
-                    key: WorldAudioSourceKey.Machine(slot: slot),
+                    key: AudioSourceKey.Machine(slot: slot),
                     source: source
                 );
             } else if (m_machineBindingsDirty) {
                 mixer.SetSource(
-                    key: WorldAudioSourceKey.Machine(slot: slot),
+                    key: AudioSourceKey.Machine(slot: slot),
                     source: binding.Source
                 );
             }
@@ -1047,7 +1039,7 @@ internal sealed class WorldAudioDirector {
 
             foreach (var plan in m_plan) {
                 if (
-                    (plan.Source.Kind == WorldAudioSourceKind.Machine) &&
+                    (plan.Source.Kind == AudioSourceKind.Machine) &&
                     (plan.Source.Slot == slot)
                 ) {
                     referenced = true;
@@ -1062,7 +1054,7 @@ internal sealed class WorldAudioDirector {
         }
 
         foreach (var slot in m_machineBindingScratch) {
-            mixer.RemoveSource(key: WorldAudioSourceKey.Machine(slot: slot));
+            mixer.RemoveSource(key: AudioSourceKey.Machine(slot: slot));
             _ = m_machineBindings.Remove(key: slot);
         }
 
@@ -1183,7 +1175,7 @@ internal sealed class WorldAudioDirector {
     /// on the next pump-thread publish (their resolver reads pump-owned binder state) — at most one frame of
     /// machine silence after an attach.</summary>
     /// <param name="mixer">The mixer to bind sources into.</param>
-    public void AttachMixer(WorldAudioMixer mixer) {
+    public void AttachMixer(AudioMixer mixer) {
         ArgumentNullException.ThrowIfNull(argument: mixer);
 
         lock (m_gate) {
@@ -1210,7 +1202,7 @@ internal sealed class WorldAudioDirector {
                     provider: CultureInfo.InvariantCulture,
                     handler: $"{((index == 0)
                     ? " "
-                    : " | ")}{plan.Id} {plan.Key} {((plan.Kind == WorldAudioEmitterKind.Bed)
+                    : " | ")}{plan.Id} {plan.Key} {((plan.Kind == AudioEmitterKind.Bed)
                     ? "bed"
                     : "point")} {SourceToken(source: plan.Source)} {ChannelToken(channel: plan.Channel)} gain={(((double)plan.GainQ16) / 65536.0):0.###} min={((double)plan.MinRadius):0.###} max={((double)plan.MaxRadius):0.###} curve={CurveToken(curve: plan.Curve)}"
                 );
@@ -1265,7 +1257,7 @@ internal sealed class WorldAudioDirector {
                     provider: CultureInfo.InvariantCulture,
                     handler: $"{(wrote
                     ? " | "
-                    : " ")}{name} {((plan.Kind == WorldAudioEmitterKind.Bed)
+                    : " ")}{name} {((plan.Kind == AudioEmitterKind.Bed)
                     ? "bed"
                     : "point")} {SourceToken(source: plan.Source)} {SourceStatus(source: plan.Source)} pos={position} inMix={((plan.LastResolved && plan.LastInSupport)
                     ? "y"
@@ -1297,14 +1289,14 @@ internal sealed class WorldAudioDirector {
     public void DetachMixer() {
         lock (m_gate) {
             foreach (var host in m_tuneHosts.Values) {
-                m_mixer?.RemoveSource(key: WorldAudioSourceKey.Tune(id: host.TuneId));
+                m_mixer?.RemoveSource(key: AudioSourceKey.Tune(id: host.TuneId));
                 host.Source.Dispose();
             }
 
             m_tuneHosts.Clear();
 
             foreach (var slot in m_machineBindings.Keys) {
-                m_mixer?.RemoveSource(key: WorldAudioSourceKey.Machine(slot: slot));
+                m_mixer?.RemoveSource(key: AudioSourceKey.Machine(slot: slot));
             }
 
             m_machineBindings.Clear();
@@ -1331,7 +1323,7 @@ internal sealed class WorldAudioDirector {
     /// <param name="deltaSeconds">The clock advance since the previous publish — ages the transient cue pool. The
     /// default is one sim step (the offline drivers publish once per mixed block); the live frame source passes its
     /// clamped presentation delta.</param>
-    public WorldAudioSnapshot Publish(ReadOnlySpan<DynamicTransform> transforms, ReadOnlySpan<WorldSeatCameraPose> seats, float deltaSeconds = DefaultPublishDeltaSeconds) {
+    public AudioSnapshot Publish(ReadOnlySpan<DynamicTransform> transforms, ReadOnlySpan<WorldSeatCameraPose> seats, float deltaSeconds = DefaultPublishDeltaSeconds) {
         lock (m_gate) {
             SyncMachineSources();
 
@@ -1382,7 +1374,7 @@ internal sealed class WorldAudioDirector {
                     value2: listenerEye
                 ) < (maxRadius * maxRadius));
                 m_plan[index] = plan;
-                _ = slab.TryAddEmitter(emitter: new WorldAudioEmitter(
+                _ = slab.TryAddEmitter(emitter: new AudioEmitter(
                     Id: plan.Id,
                     Kind: plan.Kind,
                     Position: FixedVector3.FromVector3(value: position),
@@ -1444,7 +1436,7 @@ internal sealed class WorldAudioDirector {
             BuildCueTable(audio: audio);
 
             foreach (var patch in definition.Patches) {
-                m_patchSet.Add(item: (Id: patch.Id, Patch: WorldVoicePatch.FromDocument(document: patch.Document)));
+                m_patchSet.Add(item: (Id: patch.Id, Patch: WorldVoicePatchFactory.FromDocument(document: patch.Document)));
             }
 
             DeriveSpeakers(
@@ -1462,22 +1454,22 @@ internal sealed class WorldAudioDirector {
             RetireDepartedKeys();
 
             // The reserved transient pool is charged against the snapshot cap: the plan may only fill what cues never need.
-            if (m_plan.Count > (WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)) {
-                Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {(WorldAudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)}-row plan budget ({WorldAudioSnapshot.DefaultMaxEmitters}-row snapshot table minus the {TransientCueCapacity} reserved cue transients) — the overflow renders silent]");
+            if (m_plan.Count > (AudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)) {
+                Console.Error.WriteLine(value: $"[world.audio: {m_plan.Count} derived emitters exceed the {(AudioSnapshot.DefaultMaxEmitters - TransientCueCapacity)}-row plan budget ({AudioSnapshot.DefaultMaxEmitters}-row snapshot table minus the {TransientCueCapacity} reserved cue transients) — the overflow renders silent]");
             }
 
             // Validate the WHOLE derived plan against the mixer's bounded registries at the compose
             // boundary — the patch set (per-emitter synth voices) and the distinct external-source identities the plan
             // taps — so an overfull registry is a loud, contained warn here rather than a silent drop the mixer only
             // discovers row-by-row at bind time.
-            if (m_patchSet.Count > WorldAudioMixer.MaxPatches) {
-                Console.Error.WriteLine(value: $"[world.audio: {m_patchSet.Count} derived synth patches exceed the {WorldAudioMixer.MaxPatches}-slot mixer patch table — the overflow renders silent]");
+            if (m_patchSet.Count > AudioMixer.MaxPatches) {
+                Console.Error.WriteLine(value: $"[world.audio: {m_patchSet.Count} derived synth patches exceed the {AudioMixer.MaxPatches}-slot mixer patch table — the overflow renders silent]");
             }
 
             var distinctSources = CountDistinctExternalSources();
 
-            if (distinctSources > WorldAudioMixer.MaxSources) {
-                Console.Error.WriteLine(value: $"[world.audio: {distinctSources} derived machine/tune sources exceed the {WorldAudioMixer.MaxSources}-slot mixer source table — the overflow renders silent]");
+            if (distinctSources > AudioMixer.MaxSources) {
+                Console.Error.WriteLine(value: $"[world.audio: {distinctSources} derived machine/tune sources exceed the {AudioMixer.MaxSources}-slot mixer source table — the overflow renders silent]");
             }
 
             ApplyMixerBindings();
@@ -1565,7 +1557,7 @@ internal sealed class WorldAudioDirector {
     public void SubmitTrigger(string patchId, ulong seed, int gainQ16, int emitterId) {
         lock (m_gate) {
             m_pendingTriggers.Add(item: new PendingTrigger {
-                Trigger = new WorldSynthTrigger(
+                Trigger = new SynthTrigger(
                 Sequence: ++m_nextTriggerSequence,
                 PatchId: patchId,
                 Seed: seed,
@@ -1639,7 +1631,7 @@ internal sealed class WorldAudioDirector {
     /// <summary>Copies the latest published snapshot, when one exists (the raw consumer seam; the device pump uses
     /// <see cref="TryMixBlock"/>, which folds the snapshot read and the mix under the gate).</summary>
     /// <param name="snapshot">The latest snapshot.</param>
-    public bool TrySnapshot(out WorldAudioSnapshot snapshot) => m_buffer.TrySnapshot(frame: out snapshot);
+    public bool TrySnapshot(out AudioSnapshot snapshot) => m_buffer.TrySnapshot(frame: out snapshot);
 
     private enum EmitterAnchorKind : byte {
         Fixed,
@@ -1676,22 +1668,22 @@ internal sealed class WorldAudioDirector {
     private struct EmitterPlan {
         public string Key;
         public int Id;
-        public WorldAudioEmitterKind Kind;
+        public AudioEmitterKind Kind;
         public EmitterAnchor Anchor;
         public FixedQ4816 MinRadius;
         public FixedQ4816 MaxRadius;
-        public WorldAudioAttenuationCurve Curve;
+        public AudioAttenuationCurve Curve;
         public int FadeFrames;
         public int GainQ16;
-        public WorldAudioChannel Channel;
-        public WorldAudioSourceKey Source;
+        public AudioChannel Channel;
+        public AudioSourceKey Source;
         public Vector3 LastPosition;
         public bool LastResolved;
         public bool LastInSupport;
     }
     private readonly record struct EmitterIdentity(int Id, ulong Signature);
     private struct PendingTrigger {
-        public WorldSynthTrigger Trigger;
+        public SynthTrigger Trigger;
         public int RemainingPublishes;
     }
     private enum CuePlacement : byte {

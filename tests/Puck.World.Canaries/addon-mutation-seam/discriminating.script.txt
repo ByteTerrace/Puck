@@ -1,0 +1,5 @@
+world.wait 5
+world.hud
+world.addons
+replay.record seamphase2disc
+replay.status

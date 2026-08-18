@@ -37,8 +37,6 @@ public sealed class WorldTextAuthoringLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "sign",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: null,
             Frames: null,
@@ -55,7 +53,7 @@ public sealed class WorldTextAuthoringLawTests {
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "sign");
 
-        return new WorldCreation(Id: "sign", Document: canonical.Document, Hash: canonical.Hash);
+        return new WorldCreation(Id: "sign", Document: canonical.Document, HashRaw: canonical.Hash);
     }
 
     [Fact]
@@ -141,7 +139,7 @@ public sealed class WorldTextAuthoringLawTests {
     [Fact]
     public void TextScreenSourceValidates() {
         var screen = TextScreen(source: new WorldScreenSource.Text(Lines: ["HELLO", "WORLD"], Foreground: "#FFCC00"));
-        var definition = Fixtures.BuildDocument() with { Text = Catalog(), Screens = [screen] };
+        var definition = Fixtures.BuildDocument() with { Text = Catalog(), ScreensRaw = [screen] };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
     }
@@ -167,7 +165,7 @@ public sealed class WorldTextAuthoringLawTests {
             ),
         };
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: original.Id);
-        var creation = original with { Document = canonical.Document, Hash = canonical.Hash };
+        var creation = original with { Document = canonical.Document, HashRaw = canonical.Hash };
         var placement = new WorldPlacement(
             Id: "sign-placement",
             CreationId: creation.Id,
@@ -178,30 +176,30 @@ public sealed class WorldTextAuthoringLawTests {
         );
         var definition = Fixtures.BuildDocument() with {
             Text = Catalog(),
-            Creations = [creation],
-            Placements = [placement],
+            CreationsRaw = [creation],
+            PlacementsRaw = [placement],
         };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
     }
     [Fact]
     public void TextScreenRefusesWithoutCatalogUnknownFontGridAndColor() {
-        var noCatalog = Fixtures.BuildDocument() with { Screens = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"]))] };
+        var noCatalog = Fixtures.BuildDocument() with { ScreensRaw = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"]))] };
         var unknownFont = Fixtures.BuildDocument() with {
             Text = Catalog(),
-            Screens = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"], Font: "display"))],
+            ScreensRaw = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"], Font: "display"))],
         };
         var overBudget = Fixtures.BuildDocument() with {
             Text = Catalog(),
-            Screens = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"], Columns: 80, Rows: 24))],
+            ScreensRaw = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"], Columns: 80, Rows: 24))],
         };
         var overflowingLine = Fixtures.BuildDocument() with {
             Text = Catalog(),
-            Screens = [TextScreen(source: new WorldScreenSource.Text(Lines: ["WIDE"], Columns: 3))],
+            ScreensRaw = [TextScreen(source: new WorldScreenSource.Text(Lines: ["WIDE"], Columns: 3))],
         };
         var badColor = Fixtures.BuildDocument() with {
             Text = Catalog(),
-            Screens = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"], Background: "black"))],
+            ScreensRaw = [TextScreen(source: new WorldScreenSource.Text(Lines: ["HI"], Background: "black"))],
         };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: noCatalog, neighbours: null, reason: out var noCatalogReason));
@@ -220,8 +218,8 @@ public sealed class WorldTextAuthoringLawTests {
         var creation = TextCreationWithFrames();
         var definition = Fixtures.BuildDocument() with {
             Text = Catalog(),
-            Creations = [creation],
-            Placements = [new WorldPlacement(Id: "marquee", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f)],
+            CreationsRaw = [creation],
+            PlacementsRaw = [new WorldPlacement(Id: "marquee", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f)],
         };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
@@ -233,8 +231,6 @@ public sealed class WorldTextAuthoringLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "marquee",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [new ShapeDocument(
                 Id: 1,
@@ -261,7 +257,7 @@ public sealed class WorldTextAuthoringLawTests {
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "marquee");
 
-        return new WorldCreation(Id: "marquee", Document: canonical.Document, Hash: canonical.Hash);
+        return new WorldCreation(Id: "marquee", Document: canonical.Document, HashRaw: canonical.Hash);
     }
 
     [Fact]
@@ -303,7 +299,7 @@ public sealed class WorldTextAuthoringLawTests {
     [Fact]
     public void CreationTextRequiresCatalogAndDeclaredFont() {
         var creation = TextCreation(font: "display");
-        var withoutCatalog = Fixtures.BuildDocument() with { Creations = [creation] };
+        var withoutCatalog = Fixtures.BuildDocument() with { CreationsRaw = [creation] };
         var unknownFont = withoutCatalog with { Text = Catalog() };
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: withoutCatalog, neighbours: null, reason: out var missingReason));

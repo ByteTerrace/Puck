@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Assets.Documents;
 
 namespace Puck.Forge.Authoring;
 

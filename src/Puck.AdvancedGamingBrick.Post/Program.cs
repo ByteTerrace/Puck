@@ -60,7 +60,10 @@ var context = new PostContext(
     gamesRoot: gamesRoot,
     testRomRoot: testRomRoot
 );
-var report = new PostBattery(stages: stages).Run(context: context);
+var report = new PostBattery<PostContext>(
+    banner: "Puck.AdvancedGamingBrick.Post - AdvancedGamingBrick machine power-on self-test",
+    stages: stages
+).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
 return report.ExitCode;
 // Loads a BIOS image from PUCK_AGB_BIOS when present and correctly sized, so the BIOS-dependent stages (BIOS IRQ
@@ -107,13 +110,13 @@ static string? ResolveRoot(string[] args, string flag, string variable) {
         ? fromEnvironment
         : null);
 }
-static bool TierMatches(IPostStage stage, string? tierFilter) =>
+static bool TierMatches(IPostStage<PostContext> stage, string? tierFilter) =>
     (string.IsNullOrEmpty(value: tierFilter) || string.Equals(
     a: stage.Tier.ToString(),
     b: tierFilter,
     comparisonType: StringComparison.OrdinalIgnoreCase
 ));
-static bool NameMatches(IPostStage stage, string? nameFilter) =>
+static bool NameMatches(IPostStage<PostContext> stage, string? nameFilter) =>
     (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
     comparisonType: StringComparison.OrdinalIgnoreCase,
     value: nameFilter

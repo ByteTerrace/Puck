@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// randomized operand patterns the hand-written suites miss. The group skips when the directory is absent; a failure
 /// lists exactly which ROMs failed.
 /// </summary>
-internal sealed class ArmFuzzStage : IPostStage {
+internal sealed class ArmFuzzStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "arm-fuzz";

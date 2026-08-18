@@ -12,7 +12,7 @@ public enum FixedPairManifoldSlotDisposition {
 /// <summary>One persistent manifold slot for a two-body contact: the geometry a candidate wrote into it, and the
 /// impulse it accumulates across steps. Both anchors are carried because, unlike a single-body
 /// <see cref="FixedManifoldSlot"/>, neither side of a dynamic-dynamic contact is the caller's own absolute frame.</summary>
-public struct FixedPairManifoldSlot {
+public struct FixedPairManifoldSlot : IManifoldSlotEvictionKey {
     /// <summary>Whether the slot holds a live association.</summary>
     public bool Occupied;
     /// <summary>The associated candidate's source identity.</summary>
@@ -42,6 +42,9 @@ public struct FixedPairManifoldSlot {
     public int LastTouchedStep;
     /// <summary>What the slot is doing this step.</summary>
     public FixedPairManifoldSlotDisposition Disposition;
+
+    readonly int IManifoldSlotEvictionKey.LastTouchedStep => LastTouchedStep;
+    readonly long IManifoldSlotEvictionKey.NormalImpulseRaw => NormalImpulseRaw;
 }
 /// <summary>
 /// The persistent manifold slots one BODY PAIR carries, and the deterministic association that maps this step's
@@ -82,29 +85,11 @@ public sealed class FixedPairManifoldSlotTable {
     }
 
     private int Evict() {
-        var victim = -1;
-
-        for (var index = 0; (index < Capacity); ++index) {
-            if (m_claimed[index]) {
-                continue;
-            }
-
-            if (victim < 0) {
-                victim = index;
-
-                continue;
-            }
-
-            ref readonly var candidate = ref m_slots[index];
-            ref readonly var current = ref m_slots[victim];
-
-            if (
-                (candidate.LastTouchedStep < current.LastTouchedStep) ||
-                ((candidate.LastTouchedStep == current.LastTouchedStep) && (candidate.NormalImpulseRaw < current.NormalImpulseRaw))
-            ) {
-                victim = index;
-            }
-        }
+        var victim = FixedManifoldEviction.SelectVictim(
+            capacity: Capacity,
+            claimed: m_claimed,
+            slots: m_slots
+        );
 
         if (victim < 0) {
             return -1;

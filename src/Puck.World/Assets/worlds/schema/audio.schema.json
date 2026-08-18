@@ -1,6 +1,8 @@
 {
-  "description": "The audio host-section defaults (master gain, point-attenuation coalescing, bed fade, the listener policy \u2014 see WorldAudioDefaults) \u2014 a required section every document carries.",
-  "type": "object",
+  "type": [
+    "object",
+    "null"
+  ],
   "properties": {
     "masterGain": {
       "description": "The master gain the mix path applies over every emitter (1 = unity), bounded by MaxLevel.",
@@ -70,5 +72,6 @@
     "listener",
     "cues"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "default": null
 }

@@ -11,8 +11,10 @@
       ]
     },
     "WorldQualityPreset": {
-      "description": "One graphics-quality preset \u2014 the bundle of render levers the world.quality verb writes for a named tier (the individual world.shadows/.ao/.render-scale verbs still override afterward).",
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "shadows": {
           "description": "The soft-shadow tier the preset selects.",
@@ -34,6 +36,292 @@
       },
       "additionalProperties": false
     },
+    "WorldRenderSun": {
+      "description": "One directional sun. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "direction": {
+          "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
+          "default": null
+        },
+        "weight": {
+          "description": "The sun\u0027s diffuse weight.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "color": {
+          "description": "The sun\u0027s linear #RRGGBB color.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldRenderAmbient": {
+      "description": "The ambient (hemisphere) term. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "base": {
+          "description": "The ambient floor.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hemisphere": {
+          "description": "The hemisphere gradient, scaling surface normal Y.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "color": {
+          "description": "The ambient linear #RRGGBB color.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldRenderLighting": {
+      "description": "The scene\u0027s directional sun and ambient term \u2014 threads unchanged into the engine\u0027s existing per-frame lighting fields (SdfFrame.SunDirection/SunWeight/SunColor/AmbientBase/ AmbientHemisphere/AmbientColor). Every field, at every level, is optional individually \u2014 an absent one resolves to SdfFrame\u0027s pinned default for that field, so an unauthored section, or a partially authored one, renders exactly as a world that declares neither.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "sun": {
+          "$ref": "#/$defs/WorldRenderSun",
+          "description": "The directional sun.",
+          "default": null
+        },
+        "ambient": {
+          "$ref": "#/$defs/WorldRenderAmbient",
+          "description": "The ambient (hemisphere) term.",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldRenderSkySun": {
+      "description": "The visible sun disc \u2014 an additive highlight about the lighting sun\u0027s direction.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "discRadians": {
+          "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Controls the falloff sharpness: a smaller disc reads sharper.",
+          "type": "number"
+        },
+        "intensity": {
+          "description": "The disc\u0027s peak additive brightness.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "discRadians",
+        "intensity"
+      ],
+      "additionalProperties": false
+    },
+    "WorldRenderSkyTwinkle": {
+      "description": "Scintillation: a hash-chosen share of the stars dip and recover on the simulation clock, each at its own harmonic and phase of one authored rate, so no two twinkle in step. Presentation-only, keyed on the tick.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "share": {
+          "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
+          "type": "number"
+        },
+        "depth": {
+          "description": "How far a twinkling star dips below its steady brightness, in [0, 1]: 0 holds steady, 1 dips to black.",
+          "type": "number"
+        },
+        "rate": {
+          "description": "The fundamental scintillation rate in hertz; each star twinkles at a small harmonic of it.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "share",
+        "depth",
+        "rate"
+      ],
+      "additionalProperties": false
+    },
+    "WorldRenderSkyStars": {
+      "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection. No texture, no session state \u2014 the identical density/seed always draws the identical field.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "density": {
+          "description": "The star grid\u0027s cell count per octahedral axis. A higher value packs more, smaller stars.",
+          "type": "number"
+        },
+        "brightness": {
+          "description": "The peak per-star brightness.",
+          "type": "number"
+        },
+        "seed": {
+          "description": "The hash seed folded into every cell \u2014 a different seed reshuffles the field.",
+          "type": "integer"
+        },
+        "twinkle": {
+          "$ref": "#/$defs/WorldRenderSkyTwinkle",
+          "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
+          "default": null
+        }
+      },
+      "required": [
+        "density",
+        "brightness",
+        "seed"
+      ],
+      "additionalProperties": false
+    },
+    "WorldRenderSkyClouds": {
+      "description": "The procedural cloud layer: a deterministic hashed-lattice noise (warped, four octaves) on a plane above the camera, thresholded by coverage, drawn over the gradient, sun disc and stars and fading into the horizon. No texture, no session state \u2014 the identical settings and seed always draw the identical layer at the identical tick.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "coverage": {
+          "description": "The fraction of the sky the layer covers, in [0, 1]. Zero draws none.",
+          "type": "number"
+        },
+        "softness": {
+          "description": "The width of a cloud\u0027s edge, in (0, 1]: small is hard-edged cumulus, large is a diffuse haze.",
+          "type": "number"
+        },
+        "scale": {
+          "description": "The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1 spans about 45\u00B0 overhead). Larger is broader clouds.",
+          "type": "number"
+        },
+        "seed": {
+          "description": "The hash seed folded into the lattice \u2014 a different seed reshapes the layer.",
+          "type": "integer"
+        },
+        "color": {
+          "description": "The cloud colour, as #RRGGBB or a state.\u003Crow\u003E.\u003Ckey\u003E binding. Optional; absent is white.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "drift": {
+          "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
+          "default": null
+        },
+        "spin": {
+          "description": "The layer\u0027s rotation about the zenith in radians per second \u2014 the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "curl": {
+          "description": "The Coriolis twist: how far, in radians, the layer is wound about the zenith at 45\u00B0 elevation, the winding falling off toward the horizon and the zenith so bands spiral in rather than shear apart. Positive winds counter-clockwise. Optional; absent is none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shear": {
+          "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
+          "default": null
+        }
+      },
+      "required": [
+        "coverage",
+        "softness",
+        "scale",
+        "seed"
+      ],
+      "additionalProperties": false
+    },
+    "WorldRenderSky": {
+      "description": "The procedural sky \u2014 a three-stop gradient, sun disc, star field, and distance fog, authored as world data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed, until it authors one.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "zenith": {
+          "description": "The straight-up sky color, as #RRGGBB. Optional; absent takes the pinned zenith.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "horizon": {
+          "description": "The horizon-band color (the gradient\u0027s middle stop), as #RRGGBB. Optional; absent takes the midpoint between the pinned ground and zenith.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "ground": {
+          "description": "The straight-down (nadir) color, as #RRGGBB. Optional; absent takes the pinned ground.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "fogDensity": {
+          "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "sun": {
+          "$ref": "#/$defs/WorldRenderSkySun",
+          "description": "The visible sun disc, drawn about the lighting sun\u0027s direction. Optional; absent draws no disc.",
+          "default": null
+        },
+        "stars": {
+          "$ref": "#/$defs/WorldRenderSkyStars",
+          "description": "The procedural star field. Optional; absent draws no stars.",
+          "default": null
+        },
+        "clouds": {
+          "$ref": "#/$defs/WorldRenderSkyClouds",
+          "description": "The procedural cloud layer. Optional; absent draws no clouds.",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "WorldScreenSourceNone": {
       "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
       "properties": {
@@ -44,7 +332,7 @@
       "additionalProperties": false
     },
     "WorldScreenSourceTestPattern": {
-      "description": "The deterministic animated test pattern (TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
+      "description": "The deterministic animated test pattern (Puck.SdfVm.Views.TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
       "properties": {
         "$type": {
           "const": "testPattern"
@@ -287,7 +575,7 @@
           "default": null
         },
         "columns": {
-          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SdfVm.SdfWorldEngine.MaxScreenDecalCells).",
+          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).",
           "type": [
             "integer",
             "null"
@@ -904,9 +1192,34 @@
       ],
       "additionalProperties": false
     },
+    "WorldDistribution": {
+      "description": "A spatial region composed with the deterministic sequence that fills it.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "region": {
+          "$ref": "#/$defs/WorldDistributionRegion",
+          "description": "The region to fill."
+        },
+        "fill": {
+          "$ref": "#/$defs/WorldSequence",
+          "description": "The per-index fill sequence."
+        }
+      },
+      "required": [
+        "region",
+        "fill"
+      ],
+      "additionalProperties": false
+    },
     "WorldPopulationVariation": {
       "description": "The three independently authored sequences that seed a body\u0027s producer state.",
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "phase": {
           "$ref": "#/$defs/WorldSequence",
@@ -925,6 +1238,33 @@
         "phase",
         "weave",
         "activity"
+      ],
+      "additionalProperties": false
+    },
+    "WorldSequenceNullable": {
+      "description": "A deterministic index-to-sample declaration shared by distributions, row assignment, color, and population variation. The document selects the sequence and its phase; the engine owns its exact arithmetic.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The sequence name: None, Index, Additive, R1, or R2.",
+          "type": "string"
+        },
+        "offset": {
+          "description": "The signed phase added to the caller\u0027s stable index before sampling.",
+          "type": "integer"
+        },
+        "step": {
+          "description": "The turn-sized increment for Additive; zero for every other sequence.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "offset",
+        "step"
       ],
       "additionalProperties": false
     },
@@ -1645,6 +1985,22 @@
       ],
       "additionalProperties": false
     },
+    "ActionEffectJudge": {
+      "description": "Stages a rhythm-judge grading fact for the body whose trigger fired \u2014 the entity index, the judge window set, and the firing tick are collected during the body\u0027s advance (the same staged-output shape Generate uses) and drained by WorldServer.Step immediately after the body step, where they are graded against the world\u0027s musical clock. The grade is never computed here \u2014 this effect only names which judge row applies.",
+      "properties": {
+        "$type": {
+          "const": "judge"
+        },
+        "judgeRef": {
+          "description": "The declared judges row name (a puck.judge.v1 reference) whose hit windows grade the press.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "judgeRef"
+      ],
+      "additionalProperties": false
+    },
     "WorldHudRect": {
       "description": "A normalized rect (origin top-left, Y down) \u2014 a WorldHudPanel\u0027s rect is in screen space [0, 1] \u00D7 [0, 1]; a WorldHudElement\u0027s rect is in its owning panel\u0027s local [0, 1] \u00D7 [0, 1] space.",
       "type": "object",
@@ -1667,6 +2023,158 @@
         }
       },
       "additionalProperties": false
+    },
+    "OverlayFact": {
+      "description": "A presentation fact an overlay element\u0027s OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.",
+      "enum": [
+        "SeatInput",
+        "PointerMotion",
+        "WheelOpen",
+        "ConsoleOpen",
+        "EditorActive"
+      ]
+    },
+    "OverlayPredicateNow": {
+      "description": "The fact holds this frame.",
+      "properties": {
+        "$type": {
+          "const": "now"
+        },
+        "fact": {
+          "$ref": "#/$defs/OverlayFact"
+        }
+      },
+      "required": [
+        "fact"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateRecently": {
+      "description": "The fact held within the last WindowSeconds.",
+      "properties": {
+        "$type": {
+          "const": "recently"
+        },
+        "fact": {
+          "$ref": "#/$defs/OverlayFact"
+        },
+        "windowSeconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "fact",
+        "windowSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateAll": {
+      "description": "Every predicate holds.",
+      "properties": {
+        "$type": {
+          "const": "all"
+        },
+        "predicates": {
+          "$ref": "#/$defs/OverlayPredicateListNonNullable"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OverlayPredicateNullable"
+      }
+    },
+    "OverlayPredicateAny": {
+      "description": "At least one predicate holds.",
+      "properties": {
+        "$type": {
+          "const": "any"
+        },
+        "predicates": {
+          "$ref": "#/$defs/OverlayPredicateList"
+        }
+      },
+      "required": [
+        "predicates"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicateNot": {
+      "description": "The predicate does not hold.",
+      "properties": {
+        "$type": {
+          "const": "not"
+        },
+        "predicate": {
+          "$ref": "#/$defs/OverlayPredicate"
+        }
+      },
+      "required": [
+        "predicate"
+      ],
+      "additionalProperties": false
+    },
+    "OverlayPredicate": {
+      "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OverlayPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateNot"
+        }
+      ]
+    },
+    "OverlayPredicateNullable": {
+      "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OverlayPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateNot"
+        }
+      ]
+    },
+    "OverlayPredicateListNonNullable": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OverlayPredicateNullable"
+      }
     },
     "WorldHudStyleToken": {
       "description": "A WorldHudElement\u0027s color role \u2014 a curated authored subset of Puck.Overlays.OverlayColorRole (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete role).",
@@ -1773,6 +2281,11 @@
             "Chip"
           ]
         },
+        "visible": {
+          "$ref": "#/$defs/OverlayPredicateNullable",
+          "description": "The panel\u0027s visibility condition over presentation facts, or null for always.",
+          "default": null
+        },
         "elements": {
           "$ref": "#/$defs/WorldHudElementList",
           "description": "Gets the panel\u0027s child elements. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
@@ -1816,28 +2329,6 @@
       },
       "required": [
         "id"
-      ],
-      "additionalProperties": false
-    },
-    "WorldDistribution": {
-      "description": "A spatial region composed with the deterministic sequence that fills it.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "region": {
-          "$ref": "#/$defs/WorldDistributionRegion",
-          "description": "The region to fill."
-        },
-        "fill": {
-          "$ref": "#/$defs/WorldSequence",
-          "description": "The per-index fill sequence."
-        }
-      },
-      "required": [
-        "region",
-        "fill"
       ],
       "additionalProperties": false
     },
@@ -2220,6 +2711,9 @@
           "$ref": "#/$defs/ActionEffectGenerate"
         },
         {
+          "$ref": "#/$defs/ActionEffectJudge"
+        },
+        {
           "$ref": "#/$defs/ActionEffectUpsertHudPanel"
         },
         {
@@ -2249,36 +2743,42 @@
         "null"
       ],
       "properties": {
-        "gate": {
-          "$ref": "#/$defs/ActionPredicate",
-          "description": "The predicate that must hold to fire, or null for always."
-        },
-        "latchSeconds": {
-          "description": "How long a press stays pending waiting for the gate. 0 means this tick only \u2014 the press fires if the gate is open on its own edge tick and is dropped otherwise. Legitimate only on OnPress: the release channel latches nothing, so a non-zero value on OnRelease is refused by name at validation rather than parsed and discarded.",
-          "type": "number"
-        },
         "effects": {
           "$ref": "#/$defs/ActionEffectList",
           "description": "The effects applied on fire, in order."
+        },
+        "gate": {
+          "$ref": "#/$defs/ActionPredicate",
+          "description": "The predicate that must hold to fire, or null for always.",
+          "default": null
+        },
+        "latchSeconds": {
+          "description": "How long a press stays pending waiting for the gate. 0 means this tick only \u2014 the press fires if the gate is open on its own edge tick and is dropped otherwise. Legitimate only on OnPress: the release channel latches nothing, so a non-zero value on OnRelease is refused by name at validation rather than parsed and discarded.",
+          "type": "number",
+          "default": 0
         }
       },
       "required": [
-        "gate",
-        "latchSeconds",
         "effects"
       ],
       "additionalProperties": false
     },
+    "DocumentIdentifierList": {
+      "type": "array"
+    },
     "WorldRowAssignment": {
       "description": "The row-to-entity assignment declaration \u2014 nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry\u0027s fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row).",
-      "type": "object",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "sequence": {
           "$ref": "#/$defs/WorldSequence",
           "description": "The sequence that selects a row."
         },
         "rows": {
-          "$ref": "#/$defs/StringList",
+          "$ref": "#/$defs/DocumentIdentifierList",
           "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
         }
       },
@@ -2329,11 +2829,17 @@
         "null"
       ],
       "properties": {
-        "source": {
+        "sources": {
           "type": [
-            "string",
+            "array",
             "null"
-          ]
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         },
         "command": {
           "type": [
@@ -2392,7 +2898,7 @@
         }
       },
       "required": [
-        "source"
+        "sources"
       ],
       "additionalProperties": false
     },
@@ -2422,6 +2928,13 @@
           "default": null
         },
         "icon": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "inherits": {
           "type": [
             "string",
             "null"
@@ -2551,6 +3064,148 @@
       "required": [
         "radius",
         "curve"
+      ],
+      "additionalProperties": false
+    },
+    "ActionFactNullable": {
+      "enum": [
+        "Grounded",
+        "Airborne",
+        "Rising",
+        "Falling",
+        "AffectedBy",
+        "Submerged",
+        "AtSurface",
+        null
+      ]
+    },
+    "ActionStateEnvelopeRange": {
+      "description": "An inclusive numeric interval.",
+      "properties": {
+        "$type": {
+          "const": "range"
+        },
+        "minimum": {
+          "description": "The least admitted value.",
+          "type": "number"
+        },
+        "maximum": {
+          "description": "The greatest admitted value.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "minimum",
+        "maximum"
+      ],
+      "additionalProperties": false
+    },
+    "ActionStateEnvelopeSet": {
+      "description": "A closed numeric set. Values are authored labels encoded in the slot\u0027s deterministic numeric domain.",
+      "properties": {
+        "$type": {
+          "const": "set"
+        },
+        "values": {
+          "description": "The admitted values.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    "ActionStateEnvelope": {
+      "description": "The authored values a player-writable durable slot admits in this world.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActionStateEnvelopeRange"
+        },
+        {
+          "$ref": "#/$defs/ActionStateEnvelopeSet"
+        }
+      ]
+    },
+    "ActionStateSlot": {
+      "description": "Declares one named body-state slot shared by every kit action in the world. The carrying WorldStateSection lane selects whether it belongs to the body or its identity.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The stable slot name predicates and effects reference.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Whether the slot stores a counter or a remaining timer.",
+          "enum": [
+            "Counter",
+            "Timer"
+          ]
+        },
+        "initial": {
+          "description": "The initial counter value or timer duration in seconds.",
+          "type": "number",
+          "default": 0
+        },
+        "resetFact": {
+          "$ref": "#/$defs/ActionFactNullable",
+          "description": "An optional body fact that resets the slot to Initial while it holds.",
+          "default": null
+        },
+        "playerWritable": {
+          "description": "Whether the identity driving the body may submit a value for the slot.",
+          "type": "boolean",
+          "default": false
+        },
+        "envelope": {
+          "$ref": "#/$defs/ActionStateEnvelope",
+          "description": "The visited world\u0027s admitted effective values. Required for a player-writable slot.",
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "WorldMusicRow": {
+      "description": "One music-score asset reference row \u2014 a puck.music.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the same convention WorldAddonRow.ModulePath already establishes for a machine-local asset shipped beside the executable), and the SHA-256 hex64 pin of the referenced document\u0027s own canonical bytes. Never embedded: the document is loaded, canonicalized, and hash-verified where it is compiled (Server.WorldServer\u0027s construction), the same load-then-pin discipline Puck.Text.FontAtlasSourceResolver.ResolvePinnedContained already applies to a font asset.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The row\u0027s stable name \u2014 its mutation address.",
+          "type": "string"
+        },
+        "source": {
+          "description": "The referenced document\u0027s file path.",
+          "type": "string"
+        },
+        "hash": {
+          "description": "The SHA-256 hex64 of the referenced document\u0027s canonical bytes.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "hash"
       ],
       "additionalProperties": false
     }

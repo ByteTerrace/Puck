@@ -1,4 +1,4 @@
-using System.Numerics;
+using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 using Puck.Forge.Authoring;
 
@@ -86,7 +86,7 @@ public abstract record WorldSpeaker(
     /// <param name="Position">The emitter position, world space.</param>
     /// <param name="Feed">The feed it plays.</param>
     /// <param name="Attenuation">The attenuation policy, or <see langword="null"/> for the audio defaults.</param>
-    public sealed record Fixed(string Name, Vector3 Position, WorldSpeakerFeed Feed, WorldSpeakerAttenuation? Attenuation = null)
+    public sealed record Fixed(string Name, DocumentVector3 Position, WorldSpeakerFeed Feed, WorldSpeakerAttenuation? Attenuation = null)
         : WorldSpeaker(
         Name: Name,
         Feed: Feed,
@@ -101,7 +101,7 @@ public abstract record WorldSpeaker(
     /// <param name="Offset">The attachment point relative to the anchor's resolved pose, in anchor-local axes.</param>
     /// <param name="Feed">The feed it plays.</param>
     /// <param name="Attenuation">The attenuation policy, or <see langword="null"/> for the audio defaults.</param>
-    public sealed record Anchored(string Name, WorldAnchor Anchor, Vector3 Offset, WorldSpeakerFeed Feed, WorldSpeakerAttenuation? Attenuation = null)
+    public sealed record Anchored(string Name, WorldAnchor Anchor, DocumentVector3 Offset, WorldSpeakerFeed Feed, WorldSpeakerAttenuation? Attenuation = null)
         : WorldSpeaker(
         Name: Name,
         Feed: Feed,
@@ -120,7 +120,7 @@ public abstract record WorldSpeaker(
     /// <param name="Feed">The feed it plays.</param>
     public sealed record Bed(
         string Name,
-        Vector3 Center,
+        DocumentVector3 Center,
         float Radius,
         float InnerRadius,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FadeSeconds,
@@ -191,6 +191,10 @@ public sealed record WorldAudioCue(
     public const string MutationApplied = "mutation.applied";
     /// <summary>A world mutation rejected (validator/guard/capacity — never a grant denial).</summary>
     public const string MutationRejected = "mutation.rejected";
+    /// <summary>A music segment transition committed. Reserved: no cue row consumes it yet (the same posture as
+    /// <see cref="PlayerJump"/>), but a <c>puck.music.v1</c> transition's own <c>when</c> field never uses this
+    /// token — it names the transition FIRING, not a condition a transition arms on.</summary>
+    public const string MusicTransition = "music.transition";
     /// <summary>The spatial placement token — the cue sounds at the event's world position.</summary>
     public const string PlacementAtSite = "at-site";
     /// <summary>The named-speaker placement prefix (<c>emitter:&lt;speaker-name&gt;</c>).</summary>
@@ -210,6 +214,11 @@ public sealed record WorldAudioCue(
     public const string ScreenBoot = "screen.boot";
     /// <summary>A machine boot/lifecycle fault on a screen slot (missing content, unresolved engine).</summary>
     public const string ScreenFault = "screen.fault";
+    /// <summary>A body entered a named region — a <c>puck.music.v1</c> transition's <c>when</c> field names this to
+    /// arm on the region-events feed's <c>RegionEnter</c> family.</summary>
+    public const string RegionEnter = "region.enter";
+    /// <summary>A body left a named region. See <see cref="RegionEnter"/>.</summary>
+    public const string RegionExit = "region.exit";
     /// <summary>A local seat joined the roster.</summary>
     public const string SeatJoin = "seat.join";
 
@@ -226,6 +235,9 @@ public sealed record WorldAudioCue(
         ScreenBoot,
         ScreenFault,
         SeatJoin,
+        MusicTransition,
+        RegionEnter,
+        RegionExit,
     ];
 
     /// <summary>Determines whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>

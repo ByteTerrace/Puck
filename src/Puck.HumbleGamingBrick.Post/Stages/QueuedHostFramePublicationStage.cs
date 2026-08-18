@@ -8,7 +8,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// disposal waits until the uploader has finished consuming its caller-owned pixels. A thin wrapper that exercises the
 /// SM83 core through the shared <see cref="QueuedHostContractProbe"/> so both batteries gate the one substrate.
 /// </summary>
-internal sealed class QueuedHostFramePublicationStage : IPostStage {
+internal sealed class QueuedHostFramePublicationStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-frame-publication";

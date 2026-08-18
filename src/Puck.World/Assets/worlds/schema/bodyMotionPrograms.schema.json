@@ -1,6 +1,8 @@
 {
-  "description": "The versioned fixed-phase body motion programs kits select by name.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "An authored fixed-phase body motion program.",
     "type": [
@@ -58,7 +60,8 @@
             "AddState",
             "StartTimer",
             "Designate",
-            "Generate"
+            "Generate",
+            "Judge"
           ]
         }
       },
@@ -133,5 +136,6 @@
       "operations"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

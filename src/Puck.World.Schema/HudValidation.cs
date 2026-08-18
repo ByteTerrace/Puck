@@ -7,8 +7,9 @@ namespace Puck.World;
 /// construction rather than by convention — the same discipline <c>Client.Sdf.SdfRefusal</c> uses for
 /// <c>sdf.decode</c>.</summary>
 internal enum HudRefusal {
-    /// <summary>The section's panel count exceeds <see cref="WorldHudCapacity.MaxWorldPanels"/>.</summary>
-    [Refusal(door: "hud.validate", condition: "the section's panel count exceeds WorldHudCapacity.MaxWorldPanels", kind: RefusalKind.Verdict)]
+    /// <summary>The section's panel count exceeds its scope's ceiling — <see cref="WorldHudCapacity.MaxWorldPanels"/>
+    /// for a world document, <see cref="WorldHudCapacity.MaxSeatPanels"/> for an identity-owned one.</summary>
+    [Refusal(door: "hud.validate", condition: "the section's panel count exceeds its scope's ceiling: WorldHudCapacity.MaxWorldPanels for a world document, WorldHudCapacity.MaxSeatPanels for an identity-owned one", kind: RefusalKind.Verdict)]
     TooManyPanels,
 
     /// <summary>Two panel rows share the same id.</summary>

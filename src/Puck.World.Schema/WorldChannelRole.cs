@@ -20,4 +20,13 @@ public enum ChannelRole : byte {
 
     /// <summary>Roll rate about the body's forward, +1 / -1.</summary>
     Roll,
+    /// <summary>The world +X component of a commanded facing direction — with <see cref="FaceY"/> and
+    /// <see cref="FaceZ"/> a world-frame vector; nonzero, it is the direction the body faces this tick, ahead of
+    /// movement-facing. All zero commands nothing.</summary>
+    FaceX,
+    /// <summary>The world +Y (up) component of a commanded facing direction. Carried for attitude-bearing bodies; the
+    /// yaw snap reads only the planar pair, so a grounded body ignores it.</summary>
+    FaceY,
+    /// <summary>The world +Z component of a commanded facing direction (see <see cref="FaceX"/>).</summary>
+    FaceZ,
 }

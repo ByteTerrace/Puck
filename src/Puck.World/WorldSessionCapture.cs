@@ -45,8 +45,8 @@ internal static class WorldSessionCapture {
         IReadOnlyList<TAsset> assets,
         Func<TAsset, string> id,
         Func<TAsset, TDocument> document,
-        Func<TDocument, string, Puck.Forge.Authoring.CanonicalDocument<TDocument>> canonicalize,
-        Func<TAsset, Puck.Forge.Authoring.CanonicalDocument<TDocument>, TAsset> replace) {
+        Func<TDocument, string, Puck.Assets.Documents.CanonicalDocument<TDocument>> canonicalize,
+        Func<TAsset, Puck.Assets.Documents.CanonicalDocument<TDocument>, TAsset> replace) {
         if (assets.Count == 0) {
             return assets;
         }
@@ -79,7 +79,7 @@ internal static class WorldSessionCapture {
                 document: document,
                 source: source
             ),
-            replace: static (creation, canonical) => (creation with { Document = canonical.Document, Hash = canonical.Hash })
+            replace: static (creation, canonical) => (creation with { Document = canonical.Document, HashRaw = canonical.Hash })
         );
     // Fold the two host live levers (world.target's present Hz, world.timing's armed state) into the host section; every
     // boot-only field is preserved as authored.
@@ -112,7 +112,7 @@ internal static class WorldSessionCapture {
     // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
     // world byte-clean through a boot-and-save round-trip even though its boot census is zero.
     private static WorldPopulationDefaults CapturePopulation(WorldPopulation population, WorldPopulationDefaults defaults) => (defaults with {
-        DefaultPeerSource = population.DefaultPeerSource,
+        DefaultPeerSourceRaw = population.DefaultPeerSource,
     });
     // Fold the live render levers into the document's render-lever boot defaults, quantizing the continuous shadow reach
     // and render scale back to their tiered document homes and preserving the quality-preset table (session-inert).
@@ -391,38 +391,40 @@ internal static class WorldSessionCapture {
         ArgumentNullException.ThrowIfNull(argument: pacing);
 
         return (definition with {
-            Render = CaptureRender(
+            RenderRaw = CaptureRender(
             render: render,
             defaults: definition.Render
         ),
-            Population = CapturePopulation(
+            PopulationRaw = CapturePopulation(
             population: population,
             defaults: definition.Population
         ),
-            Screens = CaptureScreens(
+            ScreensRaw = CaptureScreens(
             screens: definition.Screens,
             binder: binder
         ),
             // The live cable-link set folds into the Links section (declared + runtime), so a save reproduces the groups.
-            Links = CaptureLinks(
+            LinksRaw = CaptureLinks(
             binder: binder,
             definition: definition
         ),
-            Creations = CaptureCreations(creations: definition.Creations),
-            Tunes = CaptureTunes(tunes: definition.Tunes),
-            Patches = CapturePatches(patches: definition.Patches),
-            Audio = CaptureAudio(
+            CreationsRaw = CaptureCreations(creations: definition.Creations),
+            TunesRaw = CaptureTunes(tunes: definition.Tunes),
+            PatchesRaw = CapturePatches(patches: definition.Patches),
+            AudioRaw = CaptureAudio(
             audio: audio,
             defaults: definition.Audio
         ),
-            Host = CaptureHost(
+            HostRaw = CaptureHost(
             host: definition.Host,
             pacing: pacing
         ),
-            State = CaptureState(
+            StateRaw = ((definition.StateRaw ?? new WorldStateSection()) with {
+                World = CaptureState(
             rows: definition.State,
             tick: tick
         ),
+            }),
         });
     }
     /// <summary>A cheap, verb-time (never per-tick) description of which session dimensions have drifted from the loaded

@@ -20,12 +20,12 @@ public sealed class MarketTerminalListingMigrationLawTests {
 
     [Fact]
     public void PreFieldTerminalListing_MigratesOnLoad_AndPrunesOnRetention() {
-        var document = BuildDocumentWithListing(status: WorldMarketListingStatus.Cancelled, resolvedTick: null, retentionSeconds: 1f);
+        var document = BuildDocumentWithListing(resolvedTick: null, retentionSeconds: 1f, status: WorldMarketListingStatus.Cancelled);
 
         // On the RAW (un-migrated) document, TryValidate refuses — proves this fixture genuinely reproduces the
         // pre-field shape the validator's invariant rejects, not an already-well-formed document in disguise.
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var preMigrationReason, neighbours: null));
-        Assert.Contains(expectedSubstring: "resolvedTick", actualString: preMigrationReason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var preMigrationReason));
+        Assert.Contains(actualString: preMigrationReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "resolvedTick");
 
         // ResolvedTick carries JsonIgnore(WhenWritingNull), so serializing this document omits the field entirely —
         // the SAME bytes shape a save written before the field existed would carry on disk.
@@ -58,12 +58,12 @@ public sealed class MarketTerminalListingMigrationLawTests {
         // Active + a resolvedTick present is the OTHER half of the invariant — a shape the migration never produces
         // and must never paper over, discriminating "the field was simply never written" from "this document is
         // wrong".
-        var document = BuildDocumentWithListing(status: WorldMarketListingStatus.Active, resolvedTick: 5L, retentionSeconds: 1f);
+        var document = BuildDocumentWithListing(resolvedTick: 5L, retentionSeconds: 1f, status: WorldMarketListingStatus.Active);
         var path = WriteTempWorldFile(document: document, suffix: "control");
 
         try {
             Assert.False(condition: WorldDefinitionFileSource.TryLoad(path: path, definition: out _, contentHash: out _, reason: out var reason));
-            Assert.Contains(expectedSubstring: "resolvedTick", actualString: reason, comparisonType: StringComparison.Ordinal);
+            Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "resolvedTick");
         } finally {
             TryDeleteFile(path: path);
         }
@@ -78,19 +78,19 @@ public sealed class MarketTerminalListingMigrationLawTests {
             RetentionSeconds: retentionSeconds,
             Listings: [
                 new WorldMarketListing(
-                    Id: 1,
-                    Seller: Seller,
-                    ItemRow: MarketFixtures.AppleRow,
-                    Quantity: 1,
-                    CurrencyRow: MarketFixtures.GoldRow,
-                    Format: WorldMarketFormat.Buyout,
-                    StartPrice: 0,
                     BuyoutPrice: 10,
-                    DeadlineTick: 60,
-                    Status: status,
+                    CurrencyRow: MarketFixtures.GoldRow,
                     CurrentBid: 0,
                     CurrentBidder: null,
-                    ResolvedTick: resolvedTick
+                    DeadlineTick: 60,
+                    Format: WorldMarketFormat.Buyout,
+                    Id: 1,
+                    ItemRow: MarketFixtures.AppleRow,
+                    Quantity: 1,
+                    ResolvedTick: resolvedTick,
+                    Seller: Seller,
+                    StartPrice: 0,
+                    Status: status
                 ),
             ],
             NextListingId: 2
@@ -102,7 +102,7 @@ public sealed class MarketTerminalListingMigrationLawTests {
         var bytes = WorldDefinitionSerialization.Serialize(definition: document);
         var path = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-world-tests-market-{suffix}-{Guid.NewGuid():N}.json");
 
-        File.WriteAllBytes(path: path, bytes: bytes);
+        File.WriteAllBytes(bytes: bytes, path: path);
 
         return path;
     }

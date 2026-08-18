@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// environment variable (only the TCHK10 dump matches the patch offsets); the stage skips when it is unset or missing.
 /// The same runner backs the <c>--ags</c> diagnostic (which prints the per-cell stream and timing diagnostics).
 /// </summary>
-internal sealed class AgsStage : IPostStage {
+internal sealed class AgsStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "ags";

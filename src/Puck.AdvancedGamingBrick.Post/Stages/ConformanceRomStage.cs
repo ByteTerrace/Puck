@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// the nes exerciser) are the primary external correctness oracle for the CPU, bus, and cartridge. The group skips (never
 /// fails) when the ROM corpus is absent, so the POST still runs anywhere; a failure lists exactly which ROMs failed.
 /// </summary>
-internal sealed class ConformanceRomStage : IPostStage {
+internal sealed class ConformanceRomStage : IPostStage<PostContext> {
     private readonly string m_group;
     private readonly IReadOnlyList<(string RelativePath, string Name)> m_cases;
 

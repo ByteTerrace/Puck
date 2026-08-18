@@ -1,0 +1,7 @@
+world.wait 5
+world.grant addon:hudbuilder mutate section:hud verbs:UpsertHudPanel,UpsertHudElement budget:4
+world.wait 15
+world.hud
+world.addons
+replay.record seamphase2
+replay.status

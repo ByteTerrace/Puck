@@ -1,6 +1,8 @@
 {
-  "description": "The document-authored grant rows (default empty) \u2014 capability holds a world ships with, reviewable here rather than only typed at a console (see WorldGrant). Applied at boot, in order, through the same Server.WorldServer.Grant path world.grant submits through, on top of the permissive seed \u2014 never in place of it. Empty (the default) is byte-identical to every world authored before this section existed: nothing here changes boot behavior unless a row is actually added.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One grant row \u2014 the wire payload of world.grant/world.revoke: a principal holds a capability over a subject, optionally exclusive (the engagement latch generalized \u2014 acquiring an exclusive grant a live holder owns is rejected). Revoke ignores Exclusive. The same shape doubles as the document row of Grants \u2014 a world shipping a hold reviewably rather than only typing it live \u2014 applied at boot through the identical Server.WorldServer.Grant path world.grant submits through, so an illegitimate or conflicting authored row prints the same loud accept/reject line an operator would see typing it. One shape, one decision procedure, whichever door authority walks through.",
     "type": "object",
@@ -67,5 +69,6 @@
       }
     },
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

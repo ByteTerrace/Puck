@@ -11,8 +11,8 @@ namespace Puck.World.Tests;
 /// (<see cref="MarketPartyAuthorityLawTests"/>) is proved elsewhere; this suite isolates the key-derivation
 /// question alone.</summary>
 public sealed class MarketPeerGenerationIsolationLawTests {
-    private static readonly WorldPrincipal PeerGeneration1 = WorldPrincipal.Peer(index: 4, generation: 1);
-    private static readonly WorldPrincipal PeerGeneration2 = WorldPrincipal.Peer(index: 4, generation: 2);
+    private static readonly WorldPrincipal PeerGeneration1 = WorldPrincipal.Peer(generation: 1, index: 4);
+    private static readonly WorldPrincipal PeerGeneration2 = WorldPrincipal.Peer(generation: 2, index: 4);
 
     // Seeds the same 0-based population index (4) with two independent apple balances, keyed the way the fixed
     // TryPlayerCellKey addresses a peer ("<index>_<generation>") — the fixture asserts the isolation the production
@@ -28,7 +28,7 @@ public sealed class MarketPeerGenerationIsolationLawTests {
         var seededAppleRow = (appleRow with { Cells = seededCells });
         var otherRows = baseDocument.State.Where(predicate: row => (row.Name != MarketFixtures.AppleRow)).ToList();
 
-        return (baseDocument with { State = [seededAppleRow, .. otherRows] });
+        return baseDocument.WithWorldState(rows: [seededAppleRow, .. otherRows]);
     }
     private static long AppleCellOf(WorldDefinition definition, WorldPrincipal peer) {
         var row = WorldDefinitionRows.FindStateRow(rows: definition.State, name: MarketFixtures.AppleRow)!;

@@ -22,7 +22,8 @@ public readonly record struct CommandEntry {
     /// <param name="dispatch">Whether this entry's handler fires when the snapshot is applied.</param>
     /// <param name="text">The original text line for a simulation-routed console command; <see langword="null"/> for physical input.</param>
     /// <param name="device">The local device that produced this command.</param>
-    /// <param name="source">The provider-neutral physical source that produced this command; <see langword="null"/> for injected/synthesized input with no physical control behind it.</param>
+    /// <param name="source">The deterministic binding owner: a provider-neutral physical source, or a stable
+    /// synthesized destination id for a chord or toggle. <see langword="null"/> for non-binding injections.</param>
     /// <param name="assignedSlot">Whether the physical signal that produced this entry created its device-to-slot assignment.</param>
     /// <param name="principal">The identity acting through this entry, as stamped by its ingress door.</param>
     internal CommandEntry(
@@ -83,11 +84,12 @@ public readonly record struct CommandEntry {
     /// both doors.
     /// </summary>
     public CommandPrincipal Principal { get; internal init; }
-    /// <summary>The provider-neutral physical source id that produced this entry (e.g. <c>keyboard.w</c>), or
-    /// <see langword="null"/> when no physical control is behind it. Unlike
+    /// <summary>The deterministic binding owner that produced this entry: a provider-neutral physical source id
+    /// (e.g. <c>keyboard.w</c>) or a stable synthesized destination id for a chord or toggle. It is
+    /// <see langword="null"/> for an injection with no binding owner. Unlike
     /// <see cref="Device"/>, this is deterministic BINDING vocabulary, not a per-connection identity — a consumer that
-    /// must distinguish two DIFFERENT physical controls dispatching the SAME command (e.g. two keys both bound to
-    /// one channel) reads this, never <see cref="Device"/>. Use <see cref="Origin"/> for ingress.</summary>
+    /// must distinguish independent contributions dispatching commands reads this, never <see cref="Device"/>.
+    /// Use <see cref="Origin"/> for ingress.</summary>
     public string? Source { get; internal init; }
     /// <summary>The original text line for a simulation-routed console command. <see langword="null"/> for physical
     /// input. This is deterministic snapshot payload; it lets argument-bearing verbs execute at their assigned

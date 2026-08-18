@@ -144,14 +144,17 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
                 );
 
                 if (isHovered) {
+                    // The marker sits on the sector's own angle, just outside the ring.
+                    var markerRadius = (centerline + (cellHeight * 1.6f));
+
                     builder.WriteRect(
                         alpha: LabelAlpha,
                         h: (MarkerHalf * 2f),
                         radius: MarkerHalf,
                         role: OverlayColorRole.Accent,
                         w: (MarkerHalf * 2f),
-                        x: (labelX - MarkerHalf),
-                        y: (labelY - (cellHeight * 1.6f))
+                        x: ((seat.CenterX + (MathF.Sin(x: angle) * markerRadius)) - MarkerHalf),
+                        y: ((seat.CenterY - (MathF.Cos(x: angle) * markerRadius)) - MarkerHalf)
                     );
                 }
 

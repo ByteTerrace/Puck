@@ -1,14 +1,114 @@
-using System.Globalization;
 using System.Numerics;
+using Puck.Forge.Authoring;
 
 namespace Puck.World;
 
 /// <summary>
 /// Shared color math for the world: the HSV→RGB conversion the population's simulated-avatar palette
-/// (<c>world.population</c>) uses, plus the uppercase <c>#RRGGBB</c> formatting the persisted owned-world
-/// identity catalog stores.
+/// (<c>world.population</c>) uses, the uppercase <c>#RRGGBB</c> formatting the persisted owned-world identity
+/// catalog stores, and the one authored-color grammar every color-bearing document field speaks — a
+/// <c>#RRGGBB</c> literal, or a <c>state.&lt;row&gt;</c> / <c>state.&lt;row&gt;.&lt;key&gt;</c> binding (the HUD's
+/// state grammar) naming a <see cref="CellKind.Text"/> cell that holds one. A bound color is state: named once,
+/// read everywhere it is bound, and moved live by <c>world.state.cell.set</c>.
 /// </summary>
 public static class WorldColor {
+    /// <summary>Resolves an authored color against the live document — a hex literal parses directly, a state
+    /// binding reads its Text cell — falling back when the value is neither, the cell is absent, or its text is not
+    /// a hex color (the validator refuses all three at author time; a live cell edit can still put a non-color there).</summary>
+    /// <param name="definition">The live definition the binding reads.</param>
+    /// <param name="value">The authored color, or <see langword="null"/>.</param>
+    /// <param name="fallback">The color used when <paramref name="value"/> resolves to nothing.</param>
+    public static Vector3 Resolve(WorldDefinition definition, string? value, Vector3 fallback) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!TryParseBinding(
+            key: out var key,
+            row: out var row,
+            value: value
+        )) {
+            return HexColor.Parse(
+                fallback: fallback,
+                value: value
+            );
+        }
+
+        return ((WorldStateReader.TryRead(
+            definition: definition,
+            key: key,
+            rawValue: out _,
+            row: out var stateRow,
+            rowName: row,
+            text: out var text,
+            tick: 0UL
+        ) && (stateRow.Kind == CellKind.Text))
+            ? HexColor.Parse(
+                fallback: fallback,
+                value: text
+            )
+            : fallback);
+    }
+    /// <summary>Returns whether an authored color is admissible against a document: a <c>#RRGGBB</c> literal, or a
+    /// state binding naming a declared Text cell whose text is one.</summary>
+    /// <param name="definition">The definition the binding is checked against.</param>
+    /// <param name="value">The authored color.</param>
+    public static bool IsAuthorable(WorldDefinition definition, string? value) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!TryParseBinding(
+            key: out var key,
+            row: out var row,
+            value: value
+        )) {
+            return HexColor.TryParse(
+                rgb: out _,
+                value: value
+            );
+        }
+
+        return (
+            WorldStateReader.TryRead(
+                definition: definition,
+                key: key,
+                rawValue: out _,
+                row: out var stateRow,
+                rowName: row,
+                text: out var text,
+                tick: 0UL
+            ) &&
+            (stateRow.Kind == CellKind.Text) &&
+            HexColor.TryParse(
+                rgb: out _,
+                value: text
+            )
+        );
+    }
+    /// <summary>Parses the state-binding arm of the color grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
+    /// <c>state.&lt;row&gt;.&lt;key&gt;</c>. A hex literal, or anything else, is not a binding.</summary>
+    /// <param name="value">The authored color.</param>
+    /// <param name="row">The bound row name.</param>
+    /// <param name="key">The bound cell key, or <see langword="null"/> for the row's slot cell.</param>
+    public static bool TryParseBinding(string? value, out string row, out string? key) {
+        row = string.Empty;
+        key = null;
+
+        if (
+            string.IsNullOrEmpty(value: value) ||
+            !HudBindingVocabulary.TryParse(
+                binding: out var binding,
+                token: value
+            ) ||
+            (binding.Kind != HudBindingKind.StateNamed)
+        ) {
+            return false;
+        }
+
+        row = binding.StateName!;
+        key = binding.StateCellKey;
+
+        return true;
+    }
+    /// <summary>The refusal every color-bearing field shares.</summary>
+    public const string Grammar = "must be #RRGGBB, or state.<row>[.<key>] naming a Text cell that holds one";
     /// <summary>Converts an HSV triple (each component in <c>[0, 1]</c>) straight to an uppercase <c>#RRGGBB</c> hex
     /// string.</summary>
     /// <param name="h">Hue in <c>[0, 1)</c>.</param>
@@ -69,12 +169,7 @@ public static class WorldColor {
     /// matching the catalog's stored convention.</summary>
     /// <param name="rgb">The RGB color.</param>
     /// <returns>The <c>#RRGGBB</c> hex string.</returns>
-    public static string RgbToHex(Vector3 rgb) {
-        return string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"#{((int)MathF.Round(x: (rgb.X * 255f))):X2}{((int)MathF.Round(x: (rgb.Y * 255f))):X2}{((int)MathF.Round(x: (rgb.Z * 255f))):X2}"
-        );
-    }
+    public static string RgbToHex(Vector3 rgb) => HexColor.Format(rgb: rgb);
     /// <summary>Returns an authored generated color for a 0-based index.</summary>
     /// <param name="index">The 0-based sequence index.</param>
     /// <param name="defaults">The authored color sequence.</param>

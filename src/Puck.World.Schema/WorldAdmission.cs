@@ -92,6 +92,20 @@ public sealed record WorldAdmissionVerdict {
     public IReadOnlyList<WorldAdmissionGrant> Templates { get; }
     /// <summary>Gets how much of this authority's document the admitted peer receives.</summary>
     public WorldDisclosureTier Tier { get; }
+
+    /// <summary>Reconstructs a verdict from its own public fields — a checkpoint restore's one door onto an
+    /// otherwise assembly-internal constructor, since the value it restores travelled through a wire codec rather
+    /// than a fresh admission-door decision.</summary>
+    /// <param name="identityDomain">The verified identity's domain.</param>
+    /// <param name="identitySubject">The verified identity's subject.</param>
+    /// <param name="templates">The admitting entry's own authored grant templates.</param>
+    /// <param name="tier">How much of the authority's document the admitted peer receives.</param>
+    public static WorldAdmissionVerdict Restore(string identityDomain, string identitySubject, IReadOnlyList<WorldAdmissionGrant> templates, WorldDisclosureTier tier) => new(
+        identityDomain: identityDomain,
+        identitySubject: identitySubject,
+        templates: templates,
+        tier: tier
+    );
 }
 /// <summary>One row of the <c>admission</c> section — durable configuration naming one identity or issuer this world
 /// admits over its TCP socket, and what a peer verified under it is minted (see <see cref="Grants"/>). Never a live

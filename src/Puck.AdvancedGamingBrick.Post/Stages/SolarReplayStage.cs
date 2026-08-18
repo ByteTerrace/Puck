@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// is absent — no solar-sensor dump ships with the repo, so a clean machine never sees a red stage from this one. The
 /// self-contained proof of the solar device's OWN protocol (no ROM asset needed) is the sibling <see cref="SolarDeviceStage"/>.
 /// </summary>
-internal sealed class SolarReplayStage : IPostStage {
+internal sealed class SolarReplayStage : IPostStage<PostContext> {
     /// <summary>The environment variable naming the commercial solar-sensor ROM this stage replays a light script against.</summary>
     private const string RomEnvironmentVariable = "PUCK_AGB_SOLARROM";
     // Frames to advance: enough to cover a boot + several seconds of the varying-light script.

@@ -25,7 +25,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// running extra cycles and diverging by construction.
 /// </para>
 /// </summary>
-internal sealed class LinkChurnStage : IPostStage {
+internal sealed class LinkChurnStage : IPostStage<PostContext> {
     private const ulong BudgetStep = 256;
     private const byte IdleDelay = 64;
     private const byte MasterSendBase = 0x10;

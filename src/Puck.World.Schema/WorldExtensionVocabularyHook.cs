@@ -12,8 +12,7 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// <para><b>REQUIRED, not optional — deliberately the opposite of
-/// <see cref="BindingVocabularyHook.VocabularyCheck"/>, and the same contract as
-/// <see cref="BindingVocabularyHook.DefaultDocument"/>.</b> That check is genuinely absent-tolerant because what sits
+/// <see cref="BindingVocabularyHook.VocabularyCheck"/>.</b> That check is genuinely absent-tolerant because what sits
 /// behind it (<c>WorldAffordances.Validate</c>) is itself a no-op until the composition root finishes building its
 /// command registry: a null there means "too early", a real state with a defined answer. Nothing behind THIS hook has
 /// such a window — the registered extension set is a static list available at module-initializer time — so absence can
@@ -31,6 +30,13 @@ public static class WorldExtensionVocabularyHook {
     /// (<see cref="Abstractions.Machines.IScreenMachineEngine"/>). Installed once by the composition root's module
     /// initializer; read through <see cref="IsRegisteredScreenMachineEngine"/>, never directly.</summary>
     public static Func<string, bool>? ScreenMachineEngineCheck { get; set; }
+    /// <summary>Answers whether a key names a shipped post-render extension (a shader set found by its
+    /// <c>puck.shader.v1</c> manifest — this project cannot reference <c>Puck.Shaders</c>, so the catalog never
+    /// appears here). Installed once by the composition root's module initializer, the same required,
+    /// never-absent-tolerant shape as <see cref="ScreenMachineEngineCheck"/>: the shipped set is a directory scan
+    /// available at module-initializer time, so absence can only mean no composition root installed it. Read
+    /// through <see cref="IsRegisteredPostRenderExtension"/>, never directly.</summary>
+    public static Func<string, bool>? PostRenderExtensionCheck { get; set; }
 
     /// <summary>Determines whether <paramref name="engineId"/> names a registered screen-machine engine.</summary>
     /// <param name="engineId">The candidate engine id.</param>
@@ -41,6 +47,17 @@ public static class WorldExtensionVocabularyHook {
         return ((ScreenMachineEngineCheck is { } check)
             ? check(engineId)
             : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.ScreenMachineEngineCheck was never installed — Puck.World's module initializer should have wired it before any validator ran; a screen-machine engine key cannot be checked here, and is never assumed valid.")
+        );
+    }
+    /// <summary>Determines whether <paramref name="extensionId"/> names a registered post-render extension.</summary>
+    /// <param name="extensionId">The candidate extension id.</param>
+    /// <returns><see langword="true"/> when an extension is registered under that id.</returns>
+    /// <exception cref="InvalidOperationException"><see cref="PostRenderExtensionCheck"/> was never installed. The
+    /// check is never skipped: skipping it would pass a document no host can run.</exception>
+    public static bool IsRegisteredPostRenderExtension(string extensionId) {
+        return ((PostRenderExtensionCheck is { } check)
+            ? check(extensionId)
+            : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.PostRenderExtensionCheck was never installed — Puck.World's module initializer should have wired it before any validator ran; a post-render extension key cannot be checked here, and is never assumed valid.")
         );
     }
 }

@@ -9,9 +9,7 @@ public interface IGpuPipelineFactory {
     /// <param name="renderTarget">The render target the pipeline will render into.</param>
     /// <param name="vertexShaderModule">The vertex shader module.</param>
     /// <param name="fragmentShaderModule">The fragment shader module.</param>
-    /// <param name="pushConstantBinding">The push constant range, or <see langword="null"/> for none.</param>
-    /// <param name="textureSamplerCount">The number of combined image-sampler descriptors.</param>
-    /// <param name="enableStorageBuffer">Whether to include a storage buffer binding.</param>
+    /// <param name="description">The pipeline's vertex input, sampler, storage-buffer, and push-constant shape.</param>
     /// <param name="width">The viewport width, in pixels.</param>
     /// <param name="height">The viewport height, in pixels.</param>
     /// <returns>A new, owning <see cref="IGpuPipeline"/>.</returns>
@@ -20,9 +18,7 @@ public interface IGpuPipelineFactory {
         IGpuRenderTarget renderTarget,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuPushConstantBinding? pushConstantBinding,
-        uint textureSamplerCount,
-        bool enableStorageBuffer,
+        GpuGraphicsPipelineDescription description,
         uint width,
         uint height
     );

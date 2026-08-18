@@ -29,6 +29,16 @@ public enum CellKind : byte {
     /// <see cref="WorldStateCell.Value"/>.</summary>
     Text,
 }
+/// <summary>The root <c>state</c> declaration. It is the document's abstract state inventory; compilation lowers
+/// each lane into the storage appropriate to its ownership and access pattern.</summary>
+/// <param name="World">Document-owned cell rows. These remain mutation-addressable through <c>state:&lt;name&gt;</c>.</param>
+/// <param name="Body">Per-body ephemeral counters and timers, compiled into each body's bounded ordinal arrays.</param>
+/// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
+public sealed record WorldStateSection(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateRow>? World = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Body = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Identity = null
+);
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>
 /// within its carrying <see cref="WorldStateRow"/>. A row whose cells hold exactly one entry keyed
@@ -544,6 +554,9 @@ public static class WorldStateReservedCells {
 /// all), or to a keyed row (no single value to show) draws empty at render time rather than failing validation.
 /// </remarks>
 public static class WorldStateCapacity {
+    /// <summary>The combined body- and identity-state slot ceiling. Compilation allocates fixed parallel arrays of
+    /// this authored length per body, so the document gate bounds both memory and checkpoint width before runtime.</summary>
+    public const int MaxBodySlots = 128;
     /// <summary>The implicit per-row cell-count ceiling — applies to every <see cref="WorldStateRow.Cells"/>,
     /// slot-shaped or keyed alike (a slot never approaches it: exactly one cell), even when the author omits
     /// <see cref="WorldStateRow.Capacity"/>, so a row can never state no bound at all (unbounded growth is refused by

@@ -1,7 +1,7 @@
 using System.Globalization;
 using Puck.Commands;
 using Puck.World.Protocol;
-using Puck.World.Qr;
+using Puck.Assets.Qr;
 using Puck.World.Server;
 
 namespace Puck.World;

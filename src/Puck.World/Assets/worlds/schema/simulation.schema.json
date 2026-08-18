@@ -1,5 +1,4 @@
 {
-  "description": "The simulation section (default null = DefaultRateHz, 240 Hz \u2014 see SimulationRateHz) \u2014 the authoritative server\u0027s fixed step rate. Optional, for the same reason Rules is: a required section would refuse every world checked in before it existed. Echoed by world.status\u0027s rate field. boot-only: no WorldSection axis and no MutationKind, exactly like References/Portals \u2014 nothing mutates it live.",
   "type": [
     "object",
     "null"

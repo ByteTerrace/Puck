@@ -13,7 +13,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// SingleStepTests/sm83 never carries a pending-interrupt STOP vector (see <see cref="Sm83SstStage"/>'s conflict-skip
 /// note).
 /// </summary>
-internal sealed class Sm83StopPendingInterruptStage : IPostStage {
+internal sealed class Sm83StopPendingInterruptStage : IPostStage<PostContext> {
     // 0x0100: STOP (10), pad byte (00 — decodes as NOP if left for the next fetch, as the pending-interrupt case does).
     private static readonly byte[] Program = [0x10, 0x00];
 

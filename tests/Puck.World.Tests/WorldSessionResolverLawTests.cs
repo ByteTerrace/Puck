@@ -43,7 +43,7 @@ public sealed class WorldSessionResolverLawTests {
             new(Id: WorldSafeName.Parse(candidate: "epsilon"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 4)], Tags: ["explorers"]),
         };
 
-        return Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Kinds: [kind], Groups: groups, Ownership: []) };
+        return Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
     }
     private static WorldDestination GlobalDestination(string name = "camp") =>
         new(Name: WorldSafeName.Parse(candidate: name), Reference: DestinationReference, Durability: WorldDestinationDurability.Ephemeral);
@@ -72,8 +72,8 @@ public sealed class WorldSessionResolverLawTests {
         var destination = GlobalDestination();
         var cohort = Cohort((1, null));
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: cohort, resolved: out var first, reason: out _));
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: cohort, resolved: out var second, reason: out _));
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: destination, reason: out _, referencedDocument: RefDoc, resolved: out var first, sourceDefinition: definition));
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: destination, reason: out _, referencedDocument: RefDoc, resolved: out var second, sourceDefinition: definition));
 
         Assert.True(condition: first.IsNewGeneration, userMessage: "the FIRST resolution of a destination must mint a new generation");
         Assert.False(condition: second.IsNewGeneration, userMessage: "the SECOND resolution against the same still-active generation must reuse it, never mint again");
@@ -87,7 +87,7 @@ public sealed class WorldSessionResolverLawTests {
         var destination = GlobalDestination();
         var cohort = Cohort((1, null));
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: cohort, resolved: out var first, reason: out _));
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: destination, reason: out _, referencedDocument: RefDoc, resolved: out var first, sourceDefinition: definition));
 
         // The instance the first resolution named just went away (WorldInstanceHost.TryStop/ReapIfEmpty's apply
         // path, mirrored here by calling the notification directly) — the resolver's cache entry for this
@@ -95,7 +95,7 @@ public sealed class WorldSessionResolverLawTests {
         // reuse of a name nothing answers to any more.
         resolver.NotifyInstanceRetired(instanceName: first.InstanceName);
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: RefDoc, cohort: cohort, resolved: out var second, reason: out _));
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: destination, reason: out _, referencedDocument: RefDoc, resolved: out var second, sourceDefinition: definition));
 
         Assert.True(condition: second.IsNewGeneration, userMessage: "resolving again after retirement must mint a NEW generation, not reuse the retired one");
         Assert.NotEqual(expected: first.GenerationId, actual: second.GenerationId);
@@ -171,7 +171,7 @@ public sealed class WorldSessionResolverLawTests {
             new(Id: WorldSafeName.Parse(candidate: "north"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)], Tags: ["shared"]),
             new(Id: WorldSafeName.Parse(candidate: "south"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)], Tags: ["shared"]),
         };
-        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Kinds: [kind], Groups: groups, Ownership: []) };
+        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         var destination = TaggedGroupDestination(name: "lodge-cohort", tag: "shared");
 
         Laws.RefusalWithControl(
@@ -201,12 +201,12 @@ public sealed class WorldSessionResolverLawTests {
             new(Id: WorldSafeName.Parse(candidate: "b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 1)]),
             new(Id: WorldSafeName.Parse(candidate: "a~group_b"), KindName: "party", Members: [WorldPrincipal.Seat(slot: 2)]),
         };
-        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Kinds: [kind], Groups: groups, Ownership: []) };
+        var definition = Fixtures.BuildDocument() with { Groups = new WorldGroupsSection(Groups: groups, Kinds: [kind], Ownership: []) };
         // PERSISTED — no generation-ordinal suffix, so nothing but the composition itself could keep these apart
         // (an Ephemeral pair would coincidentally disambiguate via the resolver's own global generation counter,
         // which defeats the point of this law).
-        var destinationOne = NamedGroupDestination(groupId: "b", name: "d~group_a", durability: WorldDestinationDurability.Persisted);
-        var destinationTwo = NamedGroupDestination(groupId: "a~group_b", name: "d", durability: WorldDestinationDurability.Persisted);
+        var destinationOne = NamedGroupDestination(durability: WorldDestinationDurability.Persisted, groupId: "b", name: "d~group_a");
+        var destinationTwo = NamedGroupDestination(durability: WorldDestinationDurability.Persisted, groupId: "a~group_b", name: "d");
 
         Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destinationOne, referencedDocument: RefDoc, cohort: Cohort((1, null)), resolved: out var first, reason: out var firstReason), userMessage: firstReason);
         Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destinationTwo, referencedDocument: RefDoc, cohort: Cohort((2, null)), resolved: out var second, reason: out var secondReason), userMessage: secondReason);
@@ -279,7 +279,7 @@ public sealed class WorldSessionResolverLawTests {
 
         // CONTROL — re-deriving the SAME still-valid cohort at "drain time" agrees with the frozen key.
         Assert.True(condition: resolver.TryDeriveScopeKey(sourceDefinition: definition, destination: destination, cohort: Cohort((1, null)), scopeKey: out var unchangedScopeKey, reason: out var unchangedReason), userMessage: unchangedReason);
-        Assert.Equal(expected: frozenScopeKey, actual: unchangedScopeKey);
+        Assert.Equal(actual: unchangedScopeKey, expected: frozenScopeKey);
 
         // DRIFT — re-deriving against a cohort whose membership no longer holds (Seat 2 was never "alpha"'s member)
         // either refuses outright or (if it resolves against some OTHER group) disagrees with the frozen key; either
@@ -306,11 +306,11 @@ public sealed class WorldSessionResolverLawTests {
         // name, exactly as ApplyTransfer's own failure path does).
         var abortedDestination = GlobalDestination(name: "camp-aborted");
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: abortedDestination, referencedDocument: RefDoc, cohort: cohort, resolved: out var aborted, reason: out var abortedReason), userMessage: abortedReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: abortedDestination, reason: out var abortedReason, referencedDocument: RefDoc, resolved: out var aborted, sourceDefinition: definition), userMessage: abortedReason);
 
         resolver.AbortGeneration(instanceName: aborted.InstanceName);
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: abortedDestination, referencedDocument: RefDoc, cohort: cohort, resolved: out var afterAbort, reason: out var afterAbortReason), userMessage: afterAbortReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: abortedDestination, reason: out var afterAbortReason, referencedDocument: RefDoc, resolved: out var afterAbort, sourceDefinition: definition), userMessage: afterAbortReason);
         Assert.True(condition: afterAbort.IsNewGeneration, userMessage: "aborting a generation whose instance never started must let the next resolve mint a genuinely fresh one");
         Assert.NotEqual(expected: aborted.GenerationId, actual: afterAbort.GenerationId);
 
@@ -319,8 +319,8 @@ public sealed class WorldSessionResolverLawTests {
         // difference between the two resolves.
         var reusedDestination = GlobalDestination(name: "camp-reused");
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: reusedDestination, referencedDocument: RefDoc, cohort: cohort, resolved: out var reused, reason: out var reusedReason), userMessage: reusedReason);
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: reusedDestination, referencedDocument: RefDoc, cohort: cohort, resolved: out var stillReused, reason: out var stillReusedReason), userMessage: stillReusedReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: reusedDestination, reason: out var reusedReason, referencedDocument: RefDoc, resolved: out var reused, sourceDefinition: definition), userMessage: reusedReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: reusedDestination, reason: out var stillReusedReason, referencedDocument: RefDoc, resolved: out var stillReused, sourceDefinition: definition), userMessage: stillReusedReason);
         Assert.False(condition: stillReused.IsNewGeneration);
         Assert.Equal(expected: reused.GenerationId, actual: stillReused.GenerationId);
     }
@@ -338,7 +338,7 @@ public sealed class WorldSessionResolverLawTests {
 
         Assert.False(condition: resolver.TryGetActive(destinationName: destination.Name.Value, durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: RefDoc, resolved: out _), userMessage: "a pair nothing has resolved yet must report no active generation");
 
-        Assert.True(condition: resolver.TryAdopt(destination: destination, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: RefDoc, instanceName: "boot", resolved: out var adopted, reason: out var adoptReason), userMessage: adoptReason);
+        Assert.True(condition: resolver.TryAdopt(destination: destination, instanceName: "boot", reason: out var adoptReason, referencedDocument: RefDoc, resolved: out var adopted, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: adoptReason);
         Assert.Equal(expected: "boot", actual: adopted.InstanceName);
         Assert.False(condition: adopted.IsNewGeneration, userMessage: "adopting a RUNNING instance is never a fresh mint");
 
@@ -369,7 +369,7 @@ public sealed class WorldSessionResolverLawTests {
 
         // An origin scan that (hypothetically) later found "boot" sharing this destination's document must NOT
         // overwrite the generation a genuine mint already installed — the resolver's own cache wins.
-        Assert.True(condition: resolver.TryAdopt(destination: destination, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: RefDoc, instanceName: "boot", resolved: out var adoptAttempt, reason: out var adoptReason), userMessage: adoptReason);
+        Assert.True(condition: resolver.TryAdopt(destination: destination, instanceName: "boot", reason: out var adoptReason, referencedDocument: RefDoc, resolved: out var adoptAttempt, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: adoptReason);
         Assert.Equal(expected: minted.InstanceName, actual: adoptAttempt.InstanceName);
         Assert.Equal(expected: minted.GenerationId, actual: adoptAttempt.GenerationId);
         Assert.NotEqual(expected: "boot", actual: adoptAttempt.InstanceName);
@@ -402,8 +402,8 @@ public sealed class WorldSessionResolverLawTests {
         const string documentY = "worlds/play-modified.world.json";
         var cohort = Cohort((1, null));
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destinationFromDocumentX, referencedDocument: documentX, cohort: cohort, resolved: out var fromX, reason: out var xReason), userMessage: xReason);
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destinationFromDocumentY, referencedDocument: documentY, cohort: cohort, resolved: out var fromY, reason: out var yReason), userMessage: yReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: destinationFromDocumentX, reason: out var xReason, referencedDocument: documentX, resolved: out var fromX, sourceDefinition: definition), userMessage: xReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: destinationFromDocumentY, reason: out var yReason, referencedDocument: documentY, resolved: out var fromY, sourceDefinition: definition), userMessage: yReason);
 
         Assert.True(condition: fromY.IsNewGeneration, userMessage: "a SECOND document's identically-named row must mint its OWN generation, never reuse the first document's — the bug this law is red against under the old (name, scope) key");
         Assert.NotEqual(expected: fromX.InstanceName, actual: fromY.InstanceName);
@@ -411,15 +411,15 @@ public sealed class WorldSessionResolverLawTests {
 
         // Each document's own TryGetActive sees only ITS OWN generation — the other document's row is invisible at
         // its own referenced-document identity.
-        Assert.True(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: documentX, resolved: out var activeX));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, referencedDocument: documentX, resolved: out var activeX, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: fromX.InstanceName, actual: activeX.InstanceName);
-        Assert.True(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: documentY, resolved: out var activeY));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, referencedDocument: documentY, resolved: out var activeY, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: fromY.InstanceName, actual: activeY.InstanceName);
 
         // Retiring one document's instance never touches the other's independent cache entry.
         resolver.NotifyInstanceRetired(instanceName: fromX.InstanceName);
-        Assert.False(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: documentX, resolved: out _));
-        Assert.True(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: documentY, resolved: out var stillActiveY));
+        Assert.False(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, referencedDocument: documentX, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "home", durability: WorldDestinationDurability.Ephemeral, referencedDocument: documentY, resolved: out var stillActiveY, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: fromY.GenerationId, actual: stillActiveY.GenerationId);
     }
     // The "return means home" seam's OWN mechanism, proven at the layer this project can reach: TryGetActive gates
@@ -443,17 +443,17 @@ public sealed class WorldSessionResolverLawTests {
 
         // "boot" is adopted for destination 'home-origin' against the SHIPPED document — mirrors WorldInstanceHost's
         // own boot-instance registration (TryAdopt called once, up front, for the boot instance's own document).
-        Assert.True(condition: resolver.TryAdopt(destination: destination, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: bootDocument, instanceName: "boot", resolved: out _, reason: out var adoptReason), userMessage: adoptReason);
+        Assert.True(condition: resolver.TryAdopt(destination: destination, instanceName: "boot", reason: out var adoptReason, referencedDocument: bootDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: adoptReason);
 
         // SAME resolved document (the shipped play.world.json, exactly like a dungeon's own 'home' row naming it) —
         // sees the adoption and would reuse it via the ordinary ResolveAndEnqueueCoalescedTransfers gate.
-        Assert.True(condition: resolver.TryGetActive(destinationName: "home-origin", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: bootDocument, resolved: out var sameDocActive));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "home-origin", durability: WorldDestinationDurability.Ephemeral, referencedDocument: bootDocument, resolved: out var sameDocActive, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: "boot", actual: sameDocActive.InstanceName);
 
         // DIFFERENT resolved document (a modified copy booted from elsewhere, naming the SAME destination name and
         // scope) — must NEVER see "boot" as already active; live-verified (2026-08-09) to instead mint a fresh
         // instance rather than adopt.
-        Assert.False(condition: resolver.TryGetActive(destinationName: "home-origin", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: modifiedCopyDocument, resolved: out _), userMessage: "a different referenced document must never see another document's adopted generation as its own");
+        Assert.False(condition: resolver.TryGetActive(destinationName: "home-origin", durability: WorldDestinationDurability.Ephemeral, referencedDocument: modifiedCopyDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: "a different referenced document must never see another document's adopted generation as its own");
 
         Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: destination, referencedDocument: modifiedCopyDocument, cohort: Cohort((1, null)), resolved: out var minted, reason: out var mintedReason), userMessage: mintedReason);
         Assert.True(condition: minted.IsNewGeneration);
@@ -472,16 +472,16 @@ public sealed class WorldSessionResolverLawTests {
         var destinationOne = GlobalDestination(name: "home-a");
         var destinationTwo = GlobalDestination(name: "home-b");
 
-        Assert.True(condition: resolver.TryAdopt(destination: destinationOne, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, instanceName: "shared-instance", resolved: out _, reason: out var oneReason), userMessage: oneReason);
-        Assert.True(condition: resolver.TryAdopt(destination: destinationTwo, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, instanceName: "shared-instance", resolved: out _, reason: out var twoReason), userMessage: twoReason);
+        Assert.True(condition: resolver.TryAdopt(destination: destinationOne, instanceName: "shared-instance", reason: out var oneReason, referencedDocument: sharedDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: oneReason);
+        Assert.True(condition: resolver.TryAdopt(destination: destinationTwo, instanceName: "shared-instance", reason: out var twoReason, referencedDocument: sharedDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: twoReason);
 
-        Assert.True(condition: resolver.TryGetActive(destinationName: "home-a", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, resolved: out _));
-        Assert.True(condition: resolver.TryGetActive(destinationName: "home-b", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, resolved: out _));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "home-a", durability: WorldDestinationDurability.Ephemeral, referencedDocument: sharedDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "home-b", durability: WorldDestinationDurability.Ephemeral, referencedDocument: sharedDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey));
 
         resolver.NotifyInstanceRetired(instanceName: "shared-instance");
 
-        Assert.False(condition: resolver.TryGetActive(destinationName: "home-a", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, resolved: out _), userMessage: "retiring an instance adopted by TWO destinations must clear BOTH keys, not just the last one installed");
-        Assert.False(condition: resolver.TryGetActive(destinationName: "home-b", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: sharedDocument, resolved: out _), userMessage: "retiring an instance adopted by TWO destinations must clear BOTH keys, not just the last one installed");
+        Assert.False(condition: resolver.TryGetActive(destinationName: "home-a", durability: WorldDestinationDurability.Ephemeral, referencedDocument: sharedDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: "retiring an instance adopted by TWO destinations must clear BOTH keys, not just the last one installed");
+        Assert.False(condition: resolver.TryGetActive(destinationName: "home-b", durability: WorldDestinationDurability.Ephemeral, referencedDocument: sharedDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: "retiring an instance adopted by TWO destinations must clear BOTH keys, not just the last one installed");
     }
     // CANONICAL IDENTITY, NOT THE VERBATIM LOCATOR (Codex follow-up to adversarial-review finding 3). The resolver
     // itself is I/O-free by construction (this type's own class remarks: "no dependency on the composition root at
@@ -528,8 +528,8 @@ public sealed class WorldSessionResolverLawTests {
         var persistedDestination = PersistedGlobalDestination(name: "shared-name");
         var cohort = Cohort((1, null));
 
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: ephemeralDestination, referencedDocument: RefDoc, cohort: cohort, resolved: out var ephemeral, reason: out var ephemeralReason), userMessage: ephemeralReason);
-        Assert.True(condition: resolver.TryResolve(sourceDefinition: definition, destination: persistedDestination, referencedDocument: RefDoc, cohort: cohort, resolved: out var persisted, reason: out var persistedReason), userMessage: persistedReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: ephemeralDestination, reason: out var ephemeralReason, referencedDocument: RefDoc, resolved: out var ephemeral, sourceDefinition: definition), userMessage: ephemeralReason);
+        Assert.True(condition: resolver.TryResolve(cohort: cohort, destination: persistedDestination, reason: out var persistedReason, referencedDocument: RefDoc, resolved: out var persisted, sourceDefinition: definition), userMessage: persistedReason);
 
         Assert.True(condition: persisted.IsNewGeneration, userMessage: "a persisted row sharing name+scope+document with an already-resolved ephemeral row must still mint its OWN generation, never reuse the ephemeral one");
         Assert.NotEqual(expected: ephemeral.GenerationId, actual: persisted.GenerationId);
@@ -537,15 +537,15 @@ public sealed class WorldSessionResolverLawTests {
 
         // TryGetActive keyed by durability sees only its own row — an ephemeral lookup never finds the persisted
         // generation and vice versa, even though name+scope+document all agree.
-        Assert.True(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: RefDoc, resolved: out var activeEphemeral));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Ephemeral, referencedDocument: RefDoc, resolved: out var activeEphemeral, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: ephemeral.InstanceName, actual: activeEphemeral.InstanceName);
-        Assert.True(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Persisted, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: RefDoc, resolved: out var activePersisted));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Persisted, referencedDocument: RefDoc, resolved: out var activePersisted, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: persisted.InstanceName, actual: activePersisted.InstanceName);
 
         // Retiring the ephemeral instance never touches the persisted row's own independent cache entry.
         resolver.NotifyInstanceRetired(instanceName: ephemeral.InstanceName);
-        Assert.False(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Ephemeral, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: RefDoc, resolved: out _));
-        Assert.True(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Persisted, scopeKey: WorldSessionResolver.GlobalScopeKey, referencedDocument: RefDoc, resolved: out var stillActivePersisted));
+        Assert.False(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Ephemeral, referencedDocument: RefDoc, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey));
+        Assert.True(condition: resolver.TryGetActive(destinationName: "shared-name", durability: WorldDestinationDurability.Persisted, referencedDocument: RefDoc, resolved: out var stillActivePersisted, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: persisted.GenerationId, actual: stillActivePersisted.GenerationId);
     }
 }

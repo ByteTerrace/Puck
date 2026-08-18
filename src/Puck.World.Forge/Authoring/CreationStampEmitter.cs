@@ -268,11 +268,14 @@ public static class CreationStampEmitter {
                 normal: transform.ReflectionNormal
             );
             var shapeScale = EffectiveScale(value: shape.Scale);
-            var chain = builder
-                .ResetPoint()
-                .Translate(offset: transform.Origin)
-                .Rotate(rotation: transform.Rotation)
-                .Scale(scale: new Vector3(value: transform.Scale))
+            var chain = ShapeDomainOps.Apply(
+                chain: builder
+                    .ResetPoint()
+                    .Translate(offset: transform.Origin)
+                    .Rotate(rotation: transform.Rotation)
+                    .Scale(scale: new Vector3(value: transform.Scale)),
+                domain: shape.Domain
+            )
                 .Translate(offset: shapePosition)
                 .Rotate(rotation: shapeRotation);
 
@@ -335,11 +338,14 @@ public static class CreationStampEmitter {
                 shape: shape
             );
             var shapeScale = EffectiveFixedScale(value: shape.Scale).ToVector3();
-            var chain = builder
-                .ResetPoint()
-                .Translate(offset: transform.Origin.ToVector3())
-                .Rotate(rotation: stampRotation)
-                .Scale(scale: new Vector3(value: ((float)((double)stampScale))))
+            var chain = ShapeDomainOps.ApplyFixedSupported(
+                chain: builder
+                    .ResetPoint()
+                    .Translate(offset: transform.Origin.ToVector3())
+                    .Rotate(rotation: stampRotation)
+                    .Scale(scale: new Vector3(value: ((float)((double)stampScale)))),
+                domain: shape.Domain
+            )
                 .Translate(offset: shapePosition.ToVector3())
                 .Rotate(rotation: shapeRotation);
 
@@ -373,6 +379,55 @@ public static class CreationStampEmitter {
             _ = chain.PopField();
         }
     }
+    // A run's creation-space frame: authored directly, or a riding run's unit-local frame carried by its shape.
+    private static (Vector3 Position, Quaternion Rotation) RunFrame(CreationDocument document, TextRunDocument run) {
+        if (run.ShapeId is not { } shapeId) {
+            return (run.Position, run.Rotation);
+        }
+
+        foreach (var shape in (document.Shapes ?? [])) {
+            if (shape.Id != shapeId) {
+                continue;
+            }
+
+            return (
+                (shape.Position + Vector3.Transform(
+                    value: (run.Position * EffectiveScale(value: shape.Scale)),
+                    rotation: shape.Rotation
+                )),
+                Quaternion.Normalize(value: (shape.Rotation.Value * run.Rotation.Value))
+            );
+        }
+
+        return (run.Position, run.Rotation);
+    }
+    /// <summary>Returns whether a creation's parts compose against each other — a shape blend other than Union, or an
+    /// engraved text run. A stamp of such a creation must be emitted inside one field scope
+    /// (<see cref="SdfProgramBuilder.PushField"/>/<see cref="SdfProgramBuilder.PopField"/>): its carves then bite only
+    /// the creation's own field, and the result unions into the world, instead of biting whatever the program emitted
+    /// before the stamp.</summary>
+    /// <param name="document">The creation document.</param>
+    public static bool ComposesInternally(CreationDocument document) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        foreach (var shape in (document.Shapes ?? [])) {
+            if ((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) {
+                return true;
+            }
+        }
+
+        foreach (var run in (document.TextRuns ?? [])) {
+            if (string.Equals(
+                a: run.Mode,
+                b: TextRunDocument.ModeEngrave,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Emits every authored text run under the same stamp transform as <see cref="Emit"/>.</summary>
     /// <param name="builder">The target program builder.</param>
     /// <param name="document">The creation document.</param>
@@ -386,14 +441,17 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(materialFor);
 
         foreach (var run in (document.TextRuns ?? [])) {
-            var position = run.Position;
+            var (position, rotation) = RunFrame(
+                document: document,
+                run: run
+            );
             var localRight = Vector3.Transform(
                 value: Vector3.UnitX,
-                rotation: run.Rotation
+                rotation: rotation
             );
             var localUp = Vector3.Transform(
                 value: Vector3.UnitY,
-                rotation: run.Rotation
+                rotation: rotation
             );
 
             if (transform.ReflectionNormal is { } authoredNormal) {
@@ -462,17 +520,22 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(materialFor);
 
         foreach (var run in (document.TextRuns ?? [])) {
+            var (position, rotation) = RunFrame(
+                document: document,
+                run: run
+            );
+
             _ = builder.Text(
                 atlas: fontFor(arg: run.Font),
                 text: run.Text,
-                origin: (run.Position * scale),
+                origin: (position * scale),
                 right: Vector3.Transform(
                     value: Vector3.UnitX,
-                    rotation: run.Rotation
+                    rotation: rotation
                 ),
                 up: Vector3.Transform(
                     value: Vector3.UnitY,
-                    rotation: run.Rotation
+                    rotation: rotation
                 ),
                 worldEmHeight: (run.EmHeight * scale),
                 material: materialFor(arg: run),

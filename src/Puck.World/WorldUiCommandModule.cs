@@ -98,10 +98,6 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
         var status = bindingBarControl.Status(slot: slot);
         var authoring = status.Authoring;
         var layout = authoring.ResolvedLayout;
-        var timeoutTicks = (status.HideAfterRestTicks.IsNever
-            ? "never"
-            : status.HideAfterRestTicks.Ticks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-        );
         var overrideWord = ((status.Override is null)
             ? "auto"
             : (status.Override.Value
@@ -111,7 +107,9 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
 
         return new CommandResult(Output: FormattableString.Invariant(formattable: $"[world.binding-bar p{player}: source {status.Source} authored {(authoring.Enabled
             ? "on"
-            : "off")} rest {authoring.HideAfterRestSeconds:0.###}s/{timeoutTicks}ticks override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} idleTicks {status.IdleTicks} layout buttonSize {layout.ButtonSize:0.###} centerGap {layout.CenterGap:0.###} anchorOffsetY {layout.AnchorOffsetY:0.###} glyphOffsetRatio {layout.GlyphOffsetRatio:0.###} glyphSizeRatio {layout.GlyphSizeRatio:0.###} scale {layout.Scale:0.###}]"));
+            : "off")} visible {((authoring.Visible is null)
+            ? "always"
+            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} layout buttonSize {layout.ButtonSize:0.###} centerGap {layout.CenterGap:0.###} anchorOffsetY {layout.AnchorOffsetY:0.###} glyphOffsetRatio {layout.GlyphOffsetRatio:0.###} glyphSizeRatio {layout.GlyphSizeRatio:0.###} scale {layout.Scale:0.###}]"));
     }
 
     /// <inheritdoc/>

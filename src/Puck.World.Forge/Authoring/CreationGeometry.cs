@@ -8,39 +8,44 @@ namespace Puck.Forge.Authoring;
 /// a creation's <see cref="ShapeDocument"/> emits through, so a shape renders byte-for-byte the same geometry in every
 /// stamp, workbench, and bake regardless of which project draws it. This is the render-side sibling of the
 /// <see cref="CreationCanonicalizer"/> hash contract: the hash pins a creation's DATA identity; this table pins what
-/// that data MEANS as geometry. The canonical primitive dimension table. Changing any value changes the meaning of
-/// every persisted creation — a schema-scale act. THIS table is the authority.
+/// that data MEANS as geometry. THIS table is the authority, and it is the ONLY place that decides a primitive's unit
+/// shape — every entry below is sized so an authored <c>scale</c> of <c>(1,1,1)</c> IS the primitive's unit size and
+/// every other scale reads as a direct multiple of it (the unit-size law): Sphere r=1; Box half-extents (1,1,1);
+/// Capsule r=1, endpoint (0, 0.5, 0) — <c>scale.y</c> is the cylindrical section's length, <c>scale.x</c>/<c>z</c> the
+/// radius (total height = 2·radius + length); Cylinder r=1, half-height 1; Cone base r=1, half-height 1 (apex radius
+/// 0); Ellipsoid radii (1,1,1); RoundCone lower r=1, upper r=0.5, height 1; Torus major 1, minor 0.4. Changing any
+/// value changes the meaning of every persisted creation — a schema-scale act.
 /// </summary>
 public static class CreationGeometry {
     private const float BoxRound = 0.04f;
-    private const float CapsuleRadius = 0.20f;
-    private const float ConeHalfHeight = 0.36f;
-    private const float ConeRadius = 0.30f;
-    private const float CylinderHalfHeight = 0.36f;
-    private const float CylinderRadius = 0.30f;
-    private const float RoundConeHeight = 0.52f;
-    private const float RoundConeLowerRadius = 0.22f;
-    private const float RoundConeUpperRadius = 0.05f;
-    // The canonical unit-scale dimensions (a contract, not a preference: every persisted creation was authored and
-    // previewed against exactly these numbers — see the type summary).
-    private const float SphereRadius = 0.38f;
-    private const float TorusMajor = 0.30f;
-    private const float TorusMinor = 0.12f;
+    private const float CapsuleRadius = 1f;
+    private const float ConeHalfHeight = 1f;
+    private const float ConeRadius = 1f;
+    private const float CylinderHalfHeight = 1f;
+    private const float CylinderRadius = 1f;
+    private const float RoundConeHeight = 1f;
+    private const float RoundConeLowerRadius = 1f;
+    private const float RoundConeUpperRadius = 0.5f;
+    // The canonical unit-scale dimensions (a contract, not a preference: every persisted creation is authored and
+    // previewed against exactly these numbers — see the type summary's unit table).
+    private const float SphereRadius = 1f;
+    private const float TorusMajor = 1f;
+    private const float TorusMinor = 0.4f;
 
     private static readonly Vector3 BoxHalfExtents = new(
-        x: 0.34f,
-        y: 0.34f,
-        z: 0.34f
+        x: 1f,
+        y: 1f,
+        z: 1f
     );
     private static readonly Vector3 CapsuleEndpoint = new(
         x: 0f,
-        y: 0.55f,
+        y: 0.5f,
         z: 0f
     );
     private static readonly Vector3 EllipsoidRadii = new(
-        x: 0.42f,
-        y: 0.28f,
-        z: 0.34f
+        x: 1f,
+        y: 1f,
+        z: 1f
     );
 
     // The authored line structure of a run's text: line-feed-separated line count, the largest per-line scalar count,
@@ -168,9 +173,9 @@ public static class CreationGeometry {
     }
     /// <summary>Emits a primitive at an authored per-axis scale, preferring a native distance spelling over the
     /// renderer-only non-uniform scale transform. Boxes bake their extents, spheres and ellipsoids bake their radii,
-    /// and axially symmetric cylinders and cones bake their radial and vertical dimensions. A plane's zero set is
-    /// scale-invariant. Other anisotropic shapes retain the generic transform for rendering, but physical field
-    /// evaluators deliberately refuse that conservative march bound until the VM gains a native spelling.</summary>
+    /// and axially symmetric capsules, cylinders, and cones bake their radial and vertical dimensions. A plane's zero
+    /// set is scale-invariant. Other anisotropic shapes retain the generic transform for rendering, but physical
+    /// field evaluators deliberately refuse that conservative march bound until the VM gains a native spelling.</summary>
     /// <param name="chain">The builder chain after translation and rotation.</param>
     /// <param name="type">The primitive to emit.</param>
     /// <param name="scale">The authored per-axis scale. Components use the builder's magnitude/nonzero convention.</param>
@@ -229,6 +234,17 @@ public static class CreationGeometry {
             blend: blend,
             material: material,
             radii: (EllipsoidRadii * effectiveScale),
+            smooth: smooth
+        ),
+            AvatarPrimitive.Capsule when (effectiveScale.X == effectiveScale.Z) => chain.Capsule(
+            blend: blend,
+            endpoint: new Vector3(
+                x: 0f,
+                y: (CapsuleEndpoint.Y * effectiveScale.Y),
+                z: 0f
+            ),
+            material: material,
+            radius: (CapsuleRadius * effectiveScale.X),
             smooth: smooth
         ),
             AvatarPrimitive.Cylinder when (effectiveScale.X == effectiveScale.Z) => chain.Cylinder(

@@ -121,7 +121,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     [MutationKind(ordinal: 16, section: WorldSection.Bindings)]
     public sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
     /// <summary>Upserts a creation asset row addressed by <see cref="WorldCreation.Id"/>. The compose boundary
-    /// canonicalizes the row's document (doc + hash always come from the same <see cref="Puck.Forge.Authoring.CanonicalDocument{TDocument}"/>)
+    /// canonicalizes the row's document (doc + hash always come from the same <see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}"/>)
     /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
     /// compute is never accepted.</summary>
     /// <param name="Principal">The acting identity.</param>

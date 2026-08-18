@@ -87,12 +87,12 @@ public sealed class SerialLinkSession : IDisposable {
         : this(
         // Validated before either port is connected: an oversized credit must fail here, never after the cable is
         // already wired (there is no seam left to disconnect it through once construction has thrown).
-        first: RequireCreditFits(
+        first: LinkSessionStepper.RequireCreditFits(
             credit: resumeToken.FirstCredit,
             instance: first,
             side: "first"
         ),
-        second: RequireCreditFits(
+        second: LinkSessionStepper.RequireCreditFits(
             credit: resumeToken.SecondCredit,
             instance: second,
             side: "second"
@@ -100,22 +100,6 @@ public sealed class SerialLinkSession : IDisposable {
     ) {
         m_firstTarget = (m_first.Clock.CycleCount - resumeToken.FirstCredit);
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
-    }
-
-    // CycleCount - credit is unsigned subtraction: an oversized credit (a mismatched or corrupted token) would
-    // otherwise wrap to a target billions of cycles away instead of failing here. Runs as a constructor-initializer
-    // argument, before the plain constructor connects either port.
-    private static MachineInstance RequireCreditFits(MachineInstance instance, ulong credit, string side) {
-        ArgumentNullException.ThrowIfNull(argument: instance);
-
-        if (credit > instance.Machine.Clock.CycleCount) {
-            throw new ArgumentException(
-                message: $"the resume token's {side} credit ({credit}) exceeds the machine's cycle count ({instance.Machine.Clock.CycleCount}).",
-                paramName: "resumeToken"
-            );
-        }
-
-        return instance;
     }
 
     /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically —
@@ -128,35 +112,13 @@ public sealed class SerialLinkSession : IDisposable {
             instance: this
         );
 
-        m_firstTarget += tCycles;
-        m_secondTarget += tCycles;
-
-        while (true) {
-            var firstRemaining = Remaining(
-                machine: m_first,
-                target: m_firstTarget
-            );
-            var secondRemaining = Remaining(
-                machine: m_second,
-                target: m_secondTarget
-            );
-
-            if (
-                (firstRemaining == 0UL) &&
-                (secondRemaining == 0UL)
-            ) {
-                return;
-            }
-
-            // Step whichever machine is further behind its target so neither ever observes the other more than one
-            // instruction stale; the tie goes to the first machine — a fixed, state-free rule, so the interleave (and
-            // therefore every bit exchanged) replays identically for identical inputs.
-            if (firstRemaining >= secondRemaining) {
-                StepOnce(machine: m_first);
-            } else {
-                StepOnce(machine: m_second);
-            }
-        }
+        LinkSessionStepper.Run(
+            first: m_first,
+            firstTarget: ref m_firstTarget,
+            second: m_second,
+            secondTarget: ref m_secondTarget,
+            tCycles: tCycles
+        );
     }
     /// <summary>Severs the cable and returns the credit token a later credit-preserving reconnect needs. Each machine's
     /// credit is its instruction overshoot at this instant — the T-cycles it has already run past its cumulative link
@@ -201,20 +163,5 @@ public sealed class SerialLinkSession : IDisposable {
 
         SerialComponent.Disconnect(port: m_firstPort);
         SerialComponent.Disconnect(port: m_secondPort);
-    }
-
-    private static ulong Remaining(Machine machine, ulong target) {
-        var elapsed = machine.Clock.CycleCount;
-
-        return ((elapsed < target)
-            ? (target - elapsed)
-            : 0UL);
-    }
-    private static void StepOnce(Machine machine) {
-        if (machine.HasBusMaster) {
-            machine.StepInstruction();
-        } else {
-            machine.StepTick();
-        }
     }
 }

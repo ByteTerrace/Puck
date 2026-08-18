@@ -1,0 +1,14 @@
+world.sdf.load {fixtures}\case-sphere-radius.sdf.json
+world.sdf.load {fixtures}\case-capsule-radius.sdf.json
+world.sdf.load {fixtures}\case-cylinder-radius.sdf.json
+world.sdf.load {fixtures}\case-cylinder-halfheight.sdf.json
+world.sdf.load {fixtures}\case-torus-majorradius.sdf.json
+world.sdf.load {fixtures}\case-torus-minorradius.sdf.json
+world.sdf.load {fixtures}\case-box-halfextents.sdf.json
+world.sdf.load {fixtures}\case-box-round.sdf.json
+world.sdf.load {fixtures}\case-material-albedo.sdf.json
+world.sdf.load {fixtures}\case-material-emissive.sdf.json
+world.sdf.load {fixtures}\case-material-specular.sdf.json
+world.sdf.load {fixtures}\case-material-shininess.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.refusals sdf.decode

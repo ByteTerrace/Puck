@@ -66,6 +66,39 @@ public sealed class TextCommandSessionTests {
         ));
     }
     [Fact]
+    public void AHeldSessionRotatesWhileAnotherDrainsFifoPerSessionPreserved() {
+        var seen = new List<CommandContext>();
+        var registry = new CommandRegistry(modules: [new SessionModule(seen: seen)]);
+        var source = new TextCommandSource(registry: registry);
+        var held = true;
+        var heldResults = new List<string>();
+        var freeResults = new List<string>();
+        var heldSession = source.CreateSession(
+            principal: CommandPrincipal.Console,
+            hold: () => held,
+            onResult: (line, _) => heldResults.Add(item: line)
+        );
+        var freeSession = source.CreateSession(
+            principal: CommandPrincipal.Console,
+            onResult: (line, _) => freeResults.Add(item: line)
+        );
+
+        heldSession.Enqueue(line: "probe first");
+        heldSession.Enqueue(line: "probe second");
+        freeSession.Enqueue(line: "probe free");
+        source.Collect();
+
+        // While held, none of the held session's own lines drain; the free session's own drains independently.
+        Assert.Empty(collection: heldResults);
+        Assert.Equal(actual: freeResults, expected: ["probe free"]);
+
+        held = false;
+        source.Collect();
+
+        // Once released, the held session's queued lines drain in the order they were enqueued.
+        Assert.Equal(actual: heldResults, expected: ["probe first", "probe second"]);
+    }
+    [Fact]
     public void ReleasedFocusDispatchesOnlyFocusExemptCommandsAndIgnoresKeyRepeat() {
         var dispatched = new List<string>();
         var registry = new CommandRegistry(modules: [new FocusModule(dispatched: dispatched)]);

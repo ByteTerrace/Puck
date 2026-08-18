@@ -55,13 +55,13 @@ public sealed class DynamicBodyContactLawTests {
     }
     private static WorldFixture TwoBodies(WorldBodyContactMode mode) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
-        var definition = source with { Kits = source.Kits.Select(selector: kit => kit with { BodyContact = mode }).ToArray() };
+        var definition = source with { KitsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = mode }).ToArray() };
         var fixture = Fixtures.FreshServer(definition: definition);
         var left = WorldPrincipal.Seat(slot: 0);
         var right = WorldPrincipal.Seat(slot: 1);
 
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(right, right.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(right, right.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         return fixture;
     }
 }

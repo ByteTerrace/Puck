@@ -1,4 +1,40 @@
 {
-  "description": "The state section (default empty) \u2014 genre-neutral named cells (see WorldStateRow): score, rounds, inventory, flags, or a keyed table (a slot is a table with one key \u2014 the primitive threat tables and the signed-attestation bearer high-water mark both want). It is simulation state: every row\u0027s whole shape mutates only through WorldMutation.UpsertStateRow/WorldMutation.RemoveStateRow, or \u2014 for a per-cell write only \u2014 WorldMutation.UpsertStateCell/WorldMutation.RemoveStateCell; the same journaled/undoable/saved pipeline every other section rides. A genre world is different data here, never a new message shape or an engine-interpreted name.",
-  "type": "array"
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "world": {
+      "description": "Document-owned cell rows. These remain mutation-addressable through state:\u003Cname\u003E.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null
+    },
+    "body": {
+      "description": "Per-body ephemeral counters and timers, compiled into each body\u0027s bounded ordinal arrays.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "./common.schema.json#/$defs/ActionStateSlot"
+      },
+      "default": null
+    },
+    "identity": {
+      "description": "Per-body counters and timers synchronized through the durable identity-document seam.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "./common.schema.json#/$defs/ActionStateSlot"
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null
 }

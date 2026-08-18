@@ -1,0 +1,1797 @@
+using System.Numerics;
+using Puck.Hosting;
+using Puck.Maths;
+using Puck.World.Protocol;
+
+namespace Puck.World.Server;
+
+public sealed partial class WorldBody {
+    /// <summary>Advances the body by one exact host-owned simulation step from its single merged intent: a live tape
+    /// segment if one is queued, otherwise the tick's submitted intent. The selected program chooses fixed domain
+    /// operations while the host retains phase order and the contact point.</summary>
+    /// <param name="tick">The explicit simulation tick whose staged durable inputs may enter.</param>
+    /// <param name="stepTicks">The exact engine ticks this call advances.</param>
+    /// <param name="engageProbeOrdinal">The context-sensitive-button interception (the RPG A-button): a channel
+    /// ordinal to test for a rising edge against this same tick's composed intent, before any integration runs, or
+    /// <see langword="null"/> for no probe (every body away from an engageable-by-channel screen, and every world
+    /// with none — the default, zero-cost path). <see cref="Puck.World.Server.WorldServer.Step"/> resolves eligibility
+    /// (screen radius, machine-bearing, un-engaged, authority) before calling this and supplies the ordinal only when
+    /// eligible; a fired edge here only reports it — the caller performs the actual
+    /// <see cref="Puck.World.Server.WorldEngagement.Engage"/> afterward, through the same authority path a manual
+    /// <c>player.engage</c> takes.</param>
+    /// <param name="entityIndex">The source body's population index.</param>
+    /// <param name="effectTargets">The pre-step entity target image.</param>
+    /// <param name="effectOutputs">Receives non-self effects for post-advance application.</param>
+    /// <param name="designationOutputs">Receives authored target-register submissions.</param>
+    /// <param name="generatorInvocations">Receives staged <c>generate</c> effect firings, enqueued through the
+    /// ordinary mutation pipeline after the whole population advance.</param>
+    /// <param name="judgeInvocations">Receives staged <c>judge</c> effect firings — graded and folded into the
+    /// server's last-grade table immediately after the whole population advance, against that step's own
+    /// <c>ElapsedTicks</c> rather than any tick this method captures.</param>
+    /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick
+    /// (the caller should engage); otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
+    internal bool Advance(ulong tick, ulong stepTicks, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+
+        // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
+        // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
+        m_previousPosition = m_position;
+
+        ApplyDurableInput(tick: tick);
+        MaterializeDefaultLanePresses(stepTicks: stepTicks);
+
+        // The full merged intent for this sub-step: NextIntent expresses the whole precedence (movement channels —
+        // tape > submitted, gated by the possession latch — with the action-track lanes overlaid).
+        var intent = NextIntent(stepTicks: stepTicks);
+
+        // Captured EVERY Advance, regardless of capture policy — the context-routes widening's mirror form
+        // (capture:false) needs this body's resolved intent for its route's translation/passthrough even while the
+        // avatar keeps integrating below. Reading it costs nothing beyond a struct copy already computed above.
+        m_engagedIntent = intent;
+
+        // The SAME edge test ProcessLaneActions uses below (bit crossing the ordinal's threshold, previous tick's bit
+        // clear) — computed here, ahead of integration, so a fired edge can preempt it entirely rather than firing a
+        // bound action (a jump) the same tick it engages.
+        var engageEdge = ((engageProbeOrdinal is { } probeOrdinal)
+            && (intent[probeOrdinal] >= m_channelThresholds[probeOrdinal])
+            && !m_previousChannelBit[probeOrdinal]);
+
+        if (
+            m_engaged ||
+            engageEdge
+        ) {
+            // Captured (m_engaged, i.e. capture:true), OR this tick's press is being diverted into an engage instead
+            // of reaching the body (engageEdge): either way the resolved intent never reaches the avatar (no pose
+            // integration, so the snapshot holds it stable). The action track below still advances, so a timed press
+            // drains identically whether the intent drives the avatar or the route target.
+        } else {
+            // moveSpeed goes through ResolveMoveSpeed's per-arm dispatch — grounded reads the rate live off the
+            // seated profile every frame (an identity.motion edit is real-time; a profileless stand-in falls back to the
+            // tuning's speed), clamped by the kit's own authored MoveSpeedEnvelope when declared; vehicle
+            // deliberately never reads the profile and instead clamps the kit's OWN TopSpeed through its
+            // TopSpeedEnvelope. Either arm, the clamp lands BEFORE ExecuteProgram ever sees the value, so the sim
+            // never observes an unclamped speed, and EffectiveMoveSpeed's read-back echo performs the SAME resolve.
+            // No envelope (the default) is a no-op clamp elided entirely: today's behavior, byte-identical.
+            var moveSpeed = ResolveMoveSpeed();
+            var turnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.TurnSpeed);
+
+            ExecuteProgram(
+                designationOutputs: designationOutputs,
+                effectOutputs: effectOutputs,
+                effectTargets: effectTargets,
+                entityIndex: entityIndex,
+                generatorInvocations: generatorInvocations,
+                intent: intent,
+                judgeInvocations: judgeInvocations,
+                moveSpeed: moveSpeed,
+                stepTicks: stepTicks,
+                turnSpeed: turnSpeed
+            );
+
+            // The timed impulse overlay rides after the selected program, through its own accumulator.
+            if (m_overlayRemaining > 0) {
+                var overlayTicks = Math.Min(
+                    val1: stepTicks,
+                    val2: m_overlayRemaining
+                );
+
+                m_position += m_overlayAccumulator.Integrate(
+                    elapsedTicks: overlayTicks,
+                    ratePerSecond: m_overlayVelocity
+                );
+                m_overlayRemaining -= overlayTicks;
+
+                if (m_overlayRemaining == 0) {
+                    m_overlayVelocity = default;
+                    m_overlayAccumulator.Reset();
+                }
+            }
+        }
+
+        // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
+        for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
+            m_previousChannelBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
+        }
+
+        for (var lane = 0; (lane < ActionLaneCount); lane++) {
+            m_laneTimers[lane] = SubtractSaturating(
+                value: m_laneTimers[lane],
+                amount: stepTicks
+            );
+        }
+
+        // The held-channel image is a one-tick publish, like the submitted intent: the client republishes it every
+        // submission, so a missed tick reads no channels rather than a stale hold.
+        m_heldChannels = default;
+        m_affectingSubject = -1;
+
+        return engageEdge;
+    }
+    /// <summary>Applies one deterministic body-contact depenetration without turning it into a teleport.</summary>
+    internal void ApplyDynamicContact(FixedVector3 correction) {
+        if (correction == FixedVector3.Zero) {
+            return;
+        }
+
+        m_position += correction;
+        var normal = correction.Normalize();
+        var velocity = (m_planarVelocity + (UnitY * m_verticalVelocity));
+        var inward = FixedVector3.Dot(
+            left: velocity,
+            right: normal
+        );
+
+        if (inward < FixedQ4816.Zero) {
+            velocity -= (normal * inward);
+            m_planarVelocity = new FixedVector3(
+                X: velocity.X,
+                Y: FixedQ4816.Zero,
+                Z: velocity.Z
+            );
+            if (m_verticalVelocity != velocity.Y) {
+                m_verticalVelocity = velocity.Y;
+                m_verticalVelocityAccumulator.Reset();
+            }
+        }
+    }
+    internal bool ApplyTargetedEffect(int sourceIndex, CompiledBodyInstruction instruction) {
+        var slot = ((instruction.StateName is null)
+            ? -1
+            : FindActionState(name: instruction.StateName)
+        );
+        var applied = true;
+
+        switch (instruction.Operation) {
+            case BodyMotionOp.SetVerticalVelocity:
+                m_verticalVelocity = instruction.Value;
+                m_verticalVelocityAccumulator.Reset();
+                break;
+            case BodyMotionOp.ScaleVerticalVelocity:
+                m_verticalVelocity *= instruction.Value;
+                m_verticalVelocityAccumulator.Reset();
+                break;
+            case BodyMotionOp.PlanarImpulse:
+                m_overlayVelocity = (m_orientation.Rotate(vector: instruction.Direction) * instruction.Value);
+                m_overlayRemaining = instruction.DurationTicks;
+                m_overlayAccumulator.Reset();
+                break;
+            case BodyMotionOp.SetState when ((slot >= 0) && (m_actionStateDefinitions[slot].Kind == ActionStateKind.Counter)):
+                ApplyRawState(
+                    slot: slot,
+                    requested: instruction.Value.Value,
+                    writer: "foreign-effect",
+                    reason: "setState"
+                );
+                MarkDurableDirty(slot: slot);
+                break;
+            case BodyMotionOp.AddState when ((slot >= 0) && (m_actionStateDefinitions[slot].Kind == ActionStateKind.Counter)):
+                var beforeAdd = m_actionStateValues[slot];
+                ApplyRawState(
+                    slot: slot,
+                    requested: (m_actionStateValues[slot] + instruction.Value).Value,
+                    writer: "foreign-effect",
+                    reason: "addState"
+                );
+                MarkDurableDirty(
+                    slot: slot,
+                    kind: WorldDocumentWriteKind.Add,
+                    operand: (m_actionStateValues[slot] - beforeAdd)
+                );
+                break;
+            case BodyMotionOp.StartTimer when ((slot >= 0) && (m_actionStateDefinitions[slot].Kind == ActionStateKind.Timer)):
+                ApplyRawState(
+                    reason: "startTimer",
+                    requested: checked((long)instruction.DurationTicks),
+                    slot: slot,
+                    writer: "foreign-effect"
+                );
+                MarkDurableDirty(slot: slot);
+                break;
+            default:
+                applied = false;
+                break;
+        }
+        if (applied) {
+            m_affectingSubject = sourceIndex;
+        }
+        return applied;
+    }
+    internal void ExecuteProducer(CompiledBodyProducer producer, ref BodyProducerState state, in BodyProducerSensors sensors, ulong stepTicks) {
+        var scratch = new BodyMotionScratch {
+            Producer = producer,
+            ProducerSensors = sensors,
+            ProducerState = state,
+            SensorTarget = BodySensorTarget.None,
+            StepTicks = stepTicks,
+            TurnSpeed = (Profile?.FixedTurnSpeed ?? m_tuning.TurnSpeed),
+        };
+
+        for (var phase = 0; (phase < producer.Program.Phases.Length); phase++) {
+            foreach (var op in producer.Program.Phases[phase]) {
+                var instruction = new CompiledBodyInstruction(
+                    Operation: op,
+                    Value: default,
+                    Direction: default,
+                    DurationTicks: 0UL,
+                    StateSlot: -1
+                );
+
+                ExecuteOperation(
+                    instruction: in instruction,
+                    scratch: ref scratch
+                );
+            }
+        }
+
+        state = scratch.ProducerState;
+        StageProducerIntent(intent: in scratch.Intent);
+    }
+
+    // The swim model's ONE vertical owner: both the medium's target and the response-row convergence happen HERE,
+    // never split into a separate stage — a second constant-rate owner of the same channel always beats the first,
+    // which would leave an idle body short of its float line or let a held ascent breach it. The medium's own
+    // target folds into the commanded thrust target BEFORE the convergence runs — below the bob
+    // band the target is a constant trim drift (Buoyancy, clamped to the terminal speeds); inside the band and
+    // above it (breach recovery) the target is a proportional settle toward the float line — displacement times
+    // SurfaceSettleRate — capped upward at the
+    // buoyant drift (continuity at the band edge) and downward at the sink terminal. The sum of medium target and
+    // staged thrust (ComputeSwimTargetVelocity's SwimVerticalTarget) converges through the SAME matching response
+    // row's engage/release rate the planar half rides — engage while the vertical stick is deflected, release while
+    // centered — so a held ascent parks where thrust and settle balance instead of racing to the surface. The two
+    // swim facts are written here, read one tick behind by gates, exactly like m_grounded.
+    private void ApplyBuoyancyAndSurface(ref BodyMotionScratch scratch) {
+        if (
+            (m_swimTuning is not { } swim) ||
+            !m_hasWaterline
+        ) {
+            return;
+        }
+
+        var surfaceRest = (m_waterline - swim.FloatDepth);
+        var error = (surfaceRest - m_position.Y);
+        FixedQ4816 medium;
+
+        if (m_position.Y < (surfaceRest - swim.FloatDepth)) {
+            medium = FixedQ4816.Clamp(
+                value: swim.Buoyancy,
+                minimum: -swim.MaxSinkSpeed,
+                maximum: swim.MaxRiseSpeed
+            );
+        } else {
+            var upwardCap = ((swim.Buoyancy > FixedQ4816.Zero)
+                ? swim.Buoyancy
+                : FixedQ4816.Zero
+            );
+
+            medium = FixedQ4816.Clamp(
+                value: (error * swim.SurfaceSettleRate),
+                minimum: -swim.MaxSinkSpeed,
+                maximum: upwardCap
+            );
+        }
+
+        var target = FixedQ4816.Clamp(
+            value: (scratch.SwimVerticalTarget + medium),
+            minimum: -swim.MaxSinkSpeed,
+            maximum: swim.MaxRiseSpeed
+        );
+        var response = m_tuning.Response;
+
+        if (response.Length == 0) {
+            m_verticalVelocity = target;
+        } else {
+            var matched = false;
+
+            // ShapePlanarVelocity already ticked the recency clocks this step (phase 2 precedes 4); this scan only
+            // SELECTS (first open row wins, same rule the planar half follows).
+            foreach (var row in response) {
+                if (!MotionGateOpen(gate: row.Gate)) {
+                    continue;
+                }
+
+                var hasVerticalInput = (Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.MoveUp
+                ) != FixedQ4816.Zero);
+                var rate = (hasVerticalInput
+                    ? row.EngageRate
+                    : row.ReleaseRate
+                );
+                var maxDelta = m_swimThrustRampAccumulator.Integrate(
+                    elapsedTicks: scratch.StepTicks,
+                    ratePerSecond: rate
+                );
+
+                m_verticalVelocity = MoveTowardScalar(
+                    current: m_verticalVelocity,
+                    maxDelta: maxDelta,
+                    target: target
+                );
+                matched = true;
+
+                break;
+            }
+
+            if (!matched) {
+                m_verticalVelocity = target;
+            }
+        }
+
+        m_submerged = (m_position.Y < m_waterline);
+        m_atSurface = (m_submerged && (((error < FixedQ4816.Zero)
+            ? -error
+            : error) <= swim.FloatDepth));
+    }
+    private void ApplyEffects(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch) {
+        foreach (var effect in effects) {
+            if (effect.Target == ActionTarget.Self) {
+                ExecuteOperation(
+                    instruction: in effect,
+                    scratch: ref scratch
+                );
+                continue;
+            }
+
+            var target = scratch.EffectTargets.Resolve(target: effect.Target);
+
+            if (
+                (target >= 0) &&
+                (scratch.EffectOutputs is not null)
+            ) {
+                scratch.EffectOutputs.Add(item: new BodyEffectOutput(
+                    Instruction: effect,
+                    SourceIndex: scratch.EntityIndex,
+                    TargetIndex: target
+                ));
+            }
+        }
+    }
+    private void ApplyVerticalDecay(ref BodyMotionScratch scratch) {
+        if (m_verticalVelocity != FixedQ4816.Zero) {
+            scratch.Velocity = scratch.Velocity with { Y = (scratch.Velocity.Y + m_verticalVelocity) };
+
+            if (m_verticalVelocity > FixedQ4816.Zero) {
+                var bleed = m_verticalVelocityAccumulator.Integrate(
+                    ratePerSecond: -m_tuning.RiseGravity,
+                    elapsedTicks: scratch.StepTicks
+                );
+                var next = (m_verticalVelocity + bleed);
+
+                m_verticalVelocity = ((next < FixedQ4816.Zero)
+                    ? FixedQ4816.Zero
+                    : next
+                );
+            } else {
+                var bleed = m_verticalVelocityAccumulator.Integrate(
+                    ratePerSecond: m_tuning.RiseGravity,
+                    elapsedTicks: scratch.StepTicks
+                );
+                var next = (m_verticalVelocity + bleed);
+
+                m_verticalVelocity = ((next > FixedQ4816.Zero)
+                    ? FixedQ4816.Zero
+                    : next
+                );
+            }
+
+            if (m_verticalVelocity == FixedQ4816.Zero) {
+                m_verticalVelocityAccumulator.Reset();
+            }
+        }
+    }
+    // Direct vertical traversal and ballistic motion are separate channels. While MoveUp is held, direct drive is
+    // the complete vertical request and the jump/fall accumulator is cleared; on release, the direct term vanishes
+    // in this same tick and gravity resumes from rest. A trigger therefore cannot become stored upward velocity,
+    // while the same authored program can still jump, land, and fly.
+    private void ApplyVerticalDrive(ref BodyMotionScratch scratch) {
+        var drive = Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveUp
+        );
+
+        if (drive == FixedQ4816.Zero) {
+            return;
+        }
+
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        scratch.DirectVerticalVelocity = (drive * scratch.MoveSpeed);
+    }
+    private void ApplyVerticalGravity(ulong stepTicks) {
+        var gravity = ((m_verticalVelocity > FixedQ4816.Zero)
+            ? m_tuning.RiseGravity
+            : m_tuning.FallGravity
+        );
+
+        var gravityStep = m_verticalVelocityAccumulator.Integrate(
+            elapsedTicks: stepTicks,
+            ratePerSecond: -gravity
+        );
+        var terminalVelocity = -m_tuning.MaxFallSpeed;
+        var acceleratedVelocity = (m_verticalVelocity + gravityStep);
+
+        if (acceleratedVelocity < terminalVelocity) {
+            m_verticalVelocity = terminalVelocity;
+            m_verticalVelocityAccumulator.Reset();
+        } else {
+            m_verticalVelocity = acceleratedVelocity;
+        }
+
+    }
+    // The shared hard-teleport commit: clear the affected integration carries. Face only resets rotation; Warp resets
+    // position and vertical state but preserves rotation; full Pose/Reconcile operations reset every carry. SetBodyMotionProgram
+    // resets the pose carries and only resets vertical state when switching to grounded.
+    private void CommitTeleport(bool resetPosition = true, bool resetVertical = true, bool resetRotation = true) {
+        if (resetPosition) {
+            m_positionAccumulator.Reset();
+            // A hard reposition cancels any in-flight impulse overlay (a warp never carries a dash across).
+            m_overlayVelocity = default;
+            m_overlayRemaining = 0;
+            m_overlayAccumulator.Reset();
+            // Same discontinuity reason as the velocity resets below: without this, a warped body's swept
+            // portal-crossing segment would ghost from the pre-warp position through every frame in between. The
+            // caller has already written the new m_position by the time CommitTeleport runs, so this collapses the
+            // segment to a point exactly at the landing spot — the degenerate case the swept test reduces to.
+            m_previousPosition = m_position;
+        }
+
+        if (resetRotation) {
+            m_rotationAccumulator.Reset();
+        }
+
+        if (resetVertical) {
+            ResetVertical();
+        }
+    }
+    // An angle in radians normalized into [0, 360) degrees, so an echo is a stable compass reading (a -10° pitch reads
+    // as 350°, level as 0°).
+    private static float CompassDegrees(float radians) {
+        var degrees = (radians * (180f / MathF.PI));
+
+        return (degrees - (360f * MathF.Floor(x: (degrees / 360f))));
+    }
+    private void ComputeLocalTargetVelocity(ref BodyMotionScratch scratch) {
+        // The free program shares the kit's declared movement frame. Under World, the client has ALREADY rotated
+        // the planar pair through camera yaw, so rotating it through body attitude again is a second composition
+        // (the source of direction-dependent flight and apparent vertical loss after a handoff). World also makes
+        // MoveUp literal world Y, keeping an upright hover body's ascent independent of its rendered facing. Heading
+        // retains true 6DOF body-local flight.
+        var facing = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+            ? -UnitZ
+            : scratch.Orientation.Rotate(vector: -UnitZ)
+        );
+        var right = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+            ? UnitX
+            : scratch.Orientation.Rotate(vector: UnitX)
+        );
+        var up = ((m_tuning.MoveFrame == MotionMoveFrame.World)
+            ? UnitY
+            : scratch.Orientation.Rotate(vector: UnitY)
+        );
+
+        var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
+
+        scratch.Velocity = ((((facing * forward) + (right * strafe)) + (up * Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveUp
+        ))) * scratch.MoveSpeed);
+        scratch.TargetVelocity = scratch.Velocity;
+    }
+    private void ComputePlanarTargetVelocity(ref BodyMotionScratch scratch) {
+        var effectiveMoveSpeed = (((m_sprintChannelOrdinal >= 0) && (scratch.Intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
+            ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
+            : scratch.MoveSpeed
+        );
+        var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
+
+        scratch.TargetVelocity = (((scratch.Facing * forward) + (scratch.Right * strafe)) * effectiveMoveSpeed);
+    }
+    // The (forward, strafe) intent pair clamped to the unit disc: two digital keys (or a square-clamped stick) at
+    // full deflection are one direction at full speed, never √2 of it. Inside the disc the pair passes through
+    // untouched, so a stick's magnitude still meters speed.
+    private (FixedQ4816 Forward, FixedQ4816 Strafe) PlanarIntent(in PlayerIntent intent) {
+        var forward = Role(
+            intent: in intent,
+            role: ChannelRole.MoveForward
+        );
+        var strafe = Role(
+            intent: in intent,
+            role: ChannelRole.MoveStrafe
+        );
+        var lengthSquared = ((forward * forward) + (strafe * strafe));
+
+        if (lengthSquared <= FixedQ4816.One) {
+            return (forward, strafe);
+        }
+
+        var length = FixedQ4816.Sqrt(value: lengthSquared);
+
+        return ((forward / length), (strafe / length));
+    }
+    // --- The swim model (the medium's stages). ---
+    // The 3D thrust target in the body's yaw frame: the planar half rides the SAME facing/right the grounded target
+    // uses (a pure-yaw frame carries no Y, so planar thrust never leaks into the vertical channel), the vertical half
+    // is the explicit MoveUp channel scaled down by the authored fraction. The sprint burst scales the WHOLE vector —
+    // the same held-channel read the grounded target applies to its planar half.
+    private void ComputeSwimTargetVelocity(ref BodyMotionScratch scratch) {
+        var effectiveSpeed = (((m_sprintChannelOrdinal >= 0) && (scratch.Intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]))
+            ? (scratch.MoveSpeed * m_tuning.SprintMultiplier)
+            : scratch.MoveSpeed
+        );
+
+        var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
+
+        scratch.TargetVelocity = (((scratch.Facing * forward) + (scratch.Right * strafe)) * effectiveSpeed);
+        scratch.SwimVerticalTarget = ((m_swimTuning is { } swim)
+            ? ((Role(
+                intent: in scratch.Intent,
+                role: ChannelRole.MoveUp
+            ) * effectiveSpeed) * swim.VerticalThrustFraction)
+            : FixedQ4816.Zero
+        );
+    }
+    // The canonical orientation decomposed to Tait-Bryan angles (radians), the exact inverse of OrientationFromEuler's
+    // Ry(yaw)·Rx(pitch)·Rz(roll) construction (the codebase-wide yaw-about-+Y / pitch-about-+X / roll-about-+Z
+    // convention). Yaw is atan2 of the facing's horizontal components; pitch is the facing's elevation; roll is the bank
+    // read from the body right/up vectors' vertical parts. A pure-yaw attitude yields pitch = roll = 0.
+    private (float Yaw, float Pitch, float Roll) EulerRadians() {
+        var orientation = m_orientation.ToQuaternion();
+        var forward = Vector3.Transform(
+            value: -Vector3.UnitZ,
+            rotation: orientation
+        );
+        var up = Vector3.Transform(
+            value: Vector3.UnitY,
+            rotation: orientation
+        );
+        var right = Vector3.Transform(
+            value: Vector3.UnitX,
+            rotation: orientation
+        );
+        var yaw = MathF.Atan2(
+            x: -forward.Z,
+            y: -forward.X
+        );
+        var pitch = MathF.Asin(x: Math.Clamp(
+            max: 1f,
+            min: -1f,
+            value: forward.Y
+        ));
+        var roll = MathF.Atan2(
+            x: up.Y,
+            y: right.Y
+        );
+
+        return (Yaw: yaw, Pitch: pitch, Roll: roll);
+    }
+    private void ExecuteOperation(in CompiledBodyInstruction instruction, ref BodyMotionScratch scratch) {
+        switch (instruction.Operation) {
+            case BodyMotionOp.SenseNearestInCone:
+                SenseTarget(
+                    candidate: scratch.ProducerSensors.Candidate,
+                    scratch: ref scratch
+                );
+                break;
+            case BodyMotionOp.ProduceWanderIntent:
+                ProduceWanderIntent(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ProduceAttendIntent:
+                ProduceAttendIntent(scratch: ref scratch);
+                break;
+            case BodyMotionOp.FaceSensorTarget:
+                FaceSensorTarget(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ResolveYawAttitudeAndPlanarFrame:
+                ResolveYawAttitudeAndPlanarFrame(scratch: ref scratch);
+                break;
+            case BodyMotionOp.IntegrateLocalAttitude:
+                IntegrateLocalAttitude(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ComputePlanarTargetVelocity:
+                ComputePlanarTargetVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ComputeLocalTargetVelocity:
+                ComputeLocalTargetVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ComputeSwimTargetVelocity:
+                ComputeSwimTargetVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ShapePlanarVelocity:
+                scratch.Velocity = ShapePlanarVelocity(
+                    intent: in scratch.Intent,
+                    stepTicks: scratch.StepTicks,
+                    target: scratch.TargetVelocity
+                );
+                break;
+            case BodyMotionOp.SnapYawToPlanarIntent:
+                SnapYawToPlanarIntent(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ResolveVehicleFrame:
+                ResolveVehicleFrame(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ShapeVehicleVelocity:
+                ShapeVehicleVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.RunActionTriggers:
+                ProcessLaneActions(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ApplyVerticalGravity:
+                ApplyVerticalGravity(stepTicks: scratch.StepTicks);
+                break;
+            case BodyMotionOp.ApplyVerticalDecay:
+                ApplyVerticalDecay(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ApplyBuoyancyAndSurface:
+                ApplyBuoyancyAndSurface(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ApplyVerticalDrive:
+                ApplyVerticalDrive(scratch: ref scratch);
+                break;
+            case BodyMotionOp.IntegratePlanarAndVerticalVelocity:
+                IntegratePlanarAndVerticalVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.IntegrateScratchVelocity:
+                IntegrateScratchVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.CommitPose:
+                m_position = scratch.NextPosition;
+                m_orientation = scratch.Orientation;
+                break;
+            case BodyMotionOp.SetVerticalVelocity:
+                m_verticalVelocity = instruction.Value;
+                m_verticalVelocityAccumulator.Reset();
+                break;
+            case BodyMotionOp.ScaleVerticalVelocity:
+                m_verticalVelocity *= instruction.Value;
+                m_verticalVelocityAccumulator.Reset();
+                break;
+            case BodyMotionOp.PlanarImpulse:
+                m_overlayVelocity = (scratch.Orientation.Rotate(vector: instruction.Direction) * instruction.Value);
+                m_overlayRemaining = instruction.DurationTicks;
+                m_overlayAccumulator.Reset();
+                break;
+            case BodyMotionOp.SetState:
+                ApplyRawState(
+                    slot: instruction.StateSlot,
+                    requested: instruction.Value.Value,
+                    writer: "world-effect",
+                    reason: "setState"
+                );
+                MarkDurableDirty(slot: instruction.StateSlot);
+                break;
+            case BodyMotionOp.AddState:
+                var beforeAdd = m_actionStateValues[instruction.StateSlot];
+                ApplyRawState(
+                    slot: instruction.StateSlot,
+                    requested: (m_actionStateValues[instruction.StateSlot] + instruction.Value).Value,
+                    writer: "world-effect",
+                    reason: "addState"
+                );
+                MarkDurableDirty(
+                    slot: instruction.StateSlot,
+                    kind: WorldDocumentWriteKind.Add,
+                    operand: (m_actionStateValues[instruction.StateSlot] - beforeAdd)
+                );
+                break;
+            case BodyMotionOp.StartTimer:
+                ApplyRawState(
+                    slot: instruction.StateSlot,
+                    requested: checked((long)instruction.DurationTicks),
+                    writer: "world-effect",
+                    reason: "startTimer"
+                );
+                MarkDurableDirty(slot: instruction.StateSlot);
+                break;
+            case BodyMotionOp.Designate:
+                var subject = scratch.EffectTargets.Resolve(target: instruction.Target);
+                if (
+                    (subject >= 0) &&
+                    (instruction.StateName is { } register) &&
+                    (scratch.DesignationOutputs is not null)
+                ) {
+                    scratch.DesignationOutputs.Add(item: new WorldDesignation(
+                        EntityIndex: scratch.EntityIndex,
+                        Register: register,
+                        Subject: GrantSubject.Body(index: subject)
+                    ));
+                }
+                break;
+            case BodyMotionOp.Generate:
+                // STAGED, never applied here: the destination is a document row, so the firing joins the ordinary
+                // mutation pipeline after the whole population advance (see WorldGeneratorInvocation).
+                if (
+                    (instruction.StateName is { } siteRow) &&
+                    (scratch.GeneratorInvocations is not null)
+                ) {
+                    scratch.GeneratorInvocations.Add(item: new WorldGeneratorInvocation(Row: siteRow));
+                }
+                break;
+            case BodyMotionOp.Judge:
+                // STAGED, never graded here: grading needs the world's musical clock, which this body does not
+                // hold — the fact joins WorldServer.Step's drain immediately after the whole population advance
+                // (see WorldJudgeInvocation).
+                if (
+                    (instruction.StateName is { } judgeRef) &&
+                    (scratch.JudgeInvocations is not null)
+                ) {
+                    scratch.JudgeInvocations.Add(item: new WorldJudgeInvocation(
+                        EntityIndex: scratch.EntityIndex,
+                        JudgeRef: judgeRef
+                    ));
+                }
+                break;
+            default:
+                throw new InvalidOperationException(message: $"Body program reached uncompiled opcode value {((int)instruction.Operation)}.");
+        }
+    }
+    private void ExecuteProgram(PlayerIntent intent, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, List<BodyEffectOutput>? effectOutputs, List<WorldDesignation>? designationOutputs, List<WorldGeneratorInvocation>? generatorInvocations, List<WorldJudgeInvocation>? judgeInvocations) {
+        var scratch = new BodyMotionScratch {
+            DesignationOutputs = designationOutputs,
+            EffectOutputs = effectOutputs,
+            EffectTargets = effectTargets,
+            EntityIndex = entityIndex,
+            GeneratorInvocations = generatorInvocations,
+            Intent = intent,
+            JudgeInvocations = judgeInvocations,
+            MoveSpeed = moveSpeed,
+            NextPosition = m_position,
+            Orientation = m_orientation,
+            StepTicks = stepTicks,
+            TurnSpeed = turnSpeed,
+            Up = m_up,
+        };
+
+        for (var phase = 0; (phase < m_bodyMotionProgram.Phases.Length); phase++) {
+            foreach (var op in m_bodyMotionProgram.Phases[phase]) {
+                var instruction = new CompiledBodyInstruction(
+                    Operation: op,
+                    Value: default,
+                    Direction: default,
+                    DurationTicks: 0UL,
+                    StateSlot: -1
+                );
+
+                ExecuteOperation(
+                    instruction: in instruction,
+                    scratch: ref scratch
+                );
+            }
+
+            if (phase == 5) {
+                ResolveProgramContacts(scratch: ref scratch);
+            }
+        }
+    }
+    private static FixedQ4816 ExtractYaw(FixedQuaternion orientation) {
+        var forward = orientation.Rotate(vector: -UnitZ);
+
+        return FixedQ4816.Atan2(
+            y: -forward.X,
+            x: -forward.Z
+        );
+    }
+    private void FaceSensorTarget(ref BodyMotionScratch scratch) {
+        if (
+            !scratch.SensorTarget.Exists ||
+            (m_roleOrdinals.Turn < 0)
+        ) {
+            return;
+        }
+
+        var dx = (scratch.SensorTarget.Position.X - m_position.X);
+        var dz = (scratch.SensorTarget.Position.Z - m_position.Z);
+        var targetYaw = FixedQ4816.Atan2(
+            x: -dz,
+            y: -dx
+        );
+        var yawRate = (scratch.Producer!.Scalar(name: "inwardGain") * WrapPi(angle: (targetYaw - FixedYaw)));
+        var turn = FixedQ4816.Clamp(
+            value: (yawRate / scratch.Producer.Scalar(name: "turnScale")),
+            minimum: NegativeOne,
+            maximum: FixedQ4816.One
+        );
+
+        scratch.Intent = scratch.Intent.WithChannel(
+            ordinal: m_roleOrdinals.Turn,
+            value: turn
+        );
+    }
+    // The free integration — full 6DOF in the body frame. Compose the yaw/pitch/roll rates (each × turnSpeed) into a
+    // body-frame delta and post-multiply it into the attitude (q ← normalize(q · Δq), so the rates rotate about the
+    // body's own axes), then fly along the fresh body axes: velocity = (forward·MoveForward + right·MoveStrafe +
+    // up·MoveUp) · moveSpeed, with no ground pin and no gravity. The bound actions run after the attitude update, so a
+    // fired vertical impulse (the surge) rides this tick; the written channel bleeds to zero at the tuning's rise
+    // gravity (no fall phase).
+    private void IntegrateLocalAttitude(ref BodyMotionScratch scratch) {
+        var angularStep = m_rotationAccumulator.Integrate(
+            ratePerSecond: new FixedVector3(
+                X: (Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.Turn
+                ) * scratch.TurnSpeed),
+                Y: (Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.Pitch
+                ) * scratch.TurnSpeed),
+                Z: (Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.Roll
+                ) * scratch.TurnSpeed)
+            ),
+            elapsedTicks: scratch.StepTicks
+        );
+        var delta = ((FixedQuaternion.FromAxisAngle(
+            axis: UnitY,
+            angle: angularStep.X
+        )
+            * FixedQuaternion.FromAxisAngle(
+            axis: UnitX,
+            angle: angularStep.Y
+        ))
+            * FixedQuaternion.FromAxisAngle(
+            axis: UnitZ,
+            angle: angularStep.Z
+        ));
+
+        scratch.Orientation = (m_orientation * delta).Normalize();
+    }
+    private void IntegratePlanarAndVerticalVelocity(ref BodyMotionScratch scratch) {
+        scratch.Velocity = (m_planarVelocity + (scratch.Up * (m_verticalVelocity + scratch.DirectVerticalVelocity)));
+        var step = m_positionAccumulator.Integrate(
+            elapsedTicks: scratch.StepTicks,
+            ratePerSecond: scratch.Velocity
+        );
+
+        scratch.NextPosition = (m_position + step);
+    }
+    private void IntegrateScratchVelocity(ref BodyMotionScratch scratch) {
+        scratch.NextPosition = (m_position + m_positionAccumulator.Integrate(
+            elapsedTicks: scratch.StepTicks,
+            ratePerSecond: scratch.Velocity
+        ));
+    }
+    private static FixedQ4816 MoveTowardScalar(FixedQ4816 current, FixedQ4816 target, FixedQ4816 maxDelta) {
+        var delta = (target - current);
+
+        return ((FixedQ4816.Abs(value: delta) <= maxDelta)
+            ? target
+            : (current + ((delta > FixedQ4816.Zero)
+                ? maxDelta
+                : -maxDelta))
+        );
+    }
+    private PlayerIntent NextIntent(ulong stepTicks) {
+        var movement = default(PlayerIntent);
+        var resolved = false;
+
+        while (
+            !resolved &&
+            (m_tapeCount > 0)
+        ) {
+            ref var segment = ref m_tape[m_tapeHead];
+
+            if (!(segment.RemainingTicks > 0)) {
+                DropFrontSegment();
+
+                continue;
+            }
+
+            // Charge this whole tick against the front segment; durations were quantized upward to whole host ticks at
+            // enqueue, so no fractional tail or floating accumulator exists here.
+            segment.RemainingTicks = SubtractSaturating(
+                amount: stepTicks,
+                value: segment.RemainingTicks
+            );
+            movement = segment.Intent;
+            resolved = true;
+
+            if (!(segment.RemainingTicks > 0)) {
+                DropFrontSegment();
+            }
+        }
+
+        if (!resolved) {
+            movement = ((!m_source.IsIdle && m_hasSubmittedIntent)
+                ? m_submittedIntent
+                : ((SourceNamesProducer(source: m_source) && m_hasProducerIntent)
+                    ? m_producerIntent
+                    : default
+            ));
+        }
+
+        // Both one-tick images are a one-step publish, even when a tape or the source masked them this time. Their
+        // producers must republish on the next authoritative step, matching the snapshot discipline of every other
+        // input source.
+        m_submittedIntent = default;
+        m_hasSubmittedIntent = false;
+        m_producerIntent = default;
+        m_hasProducerIntent = false;
+
+        // Overlay the action track, per ordinal: a wire timer (player.press) overlays UNCONDITIONALLY — the poke
+        // stays a poke regardless of intent source — replacing whatever the movement tier resolved for that ordinal;
+        // otherwise a non-role ordinal additionally takes the live-held device image, admitted under
+        // Live only (role ordinals never carry a held-device overlay — a seat submits them directly
+        // inside `movement`). Two simultaneous composition contributors join via WorldChannelTable.ComposeHeld's
+        // shape-aware rule: unipolar/binary reproduce the old ActionLanes OR (maximum magnitude, both operands in
+        // [0, One]); bipolar sums the two instead, so a resting (zero) side can never overwrite a genuinely negative
+        // one the way a numeric max used to.
+        var channels = movement.Channels;
+        var heldOverlay = default(ChannelValues);
+        var liveHeld = (m_hasTransferHeldChannels
+            ? m_transferHeldChannels
+            : m_heldChannels
+        );
+
+        for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
+            if (m_laneTimers[ordinal] > 0) {
+                channels[ordinal] = m_channelTimerValues[ordinal];
+            } else if (
+                m_source.IsLive &&
+                !m_roleChannels[ordinal]
+            ) {
+                heldOverlay[ordinal] = liveHeld[ordinal];
+                channels[ordinal] = FixedQ4816.FromRawBits(value: WorldChannelTable.ComposeHeld(
+                    a: channels[ordinal].Value,
+                    b: liveHeld[ordinal].Value,
+                    shape: m_channelShapes[ordinal]
+                ));
+            }
+        }
+
+        m_channelReadHeld = new PlayerIntent(Channels: heldOverlay);
+        m_channelReadComposed = new PlayerIntent(Channels: channels);
+
+        return m_channelReadComposed;
+    }
+    // Build a canonical orientation from Tait-Bryan angles (radians): yaw about world up (+Y), then pitch about the body
+    // right (+X), then roll about the body forward (+Z) — the codebase-wide convention, the exact inverse EulerRadians
+    // decomposes. Roll is about local +Z uniformly here and in the free integrator, so the pose set by player.pose and
+    // the attitude flown by player.fly share one sign convention.
+    private static FixedQuaternion OrientationFromEuler(FixedQ4816 yaw, FixedQ4816 pitch, FixedQ4816 roll) {
+        return ((FixedQuaternion.FromAxisAngle(
+            angle: yaw,
+            axis: UnitY
+        )
+            * FixedQuaternion.FromAxisAngle(
+            angle: pitch,
+            axis: UnitX
+        ))
+            * FixedQuaternion.FromAxisAngle(
+            angle: roll,
+            axis: UnitZ
+        )).Normalize();
+    }
+    private static FixedQ4816 PerStep(FixedQ4816 value, ulong stepTicks) {
+        if ((EngineTicks.PerSecond % stepTicks) != 0UL) {
+            throw new ArgumentException(
+                message: $"The fixed-step period {stepTicks} must divide {EngineTicks.PerSecond} engine ticks exactly.",
+                paramName: nameof(stepTicks)
+            );
+        }
+
+        return (value / FixedQ4816.FromInteger(value: checked((long)(EngineTicks.PerSecond / stepTicks))));
+    }
+    private void ProduceAttendIntent(ref BodyMotionScratch scratch) {
+        if (!scratch.SensorTarget.Exists) {
+            return;
+        }
+
+        var producer = scratch.Producer!;
+        var standoff = producer.Scalar(name: "standoffRadius");
+        var forward = ((scratch.SensorTarget.DistanceSquared > (standoff * standoff))
+            ? producer.Scalar(name: "approach")
+            : FixedQ4816.Zero
+        );
+        var up = (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
+            ? FixedQ4816.Clamp(
+                value: ((scratch.ProducerState.PreferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
+                minimum: NegativeOne,
+                maximum: FixedQ4816.One
+            )
+            : FixedQ4816.Zero
+        );
+
+        scratch.Intent = m_roleOrdinals.Intent(
+            moveForward: forward,
+            moveStrafe: producer.Scalar(name: "orbit"),
+            moveUp: up
+        );
+    }
+    private void ProduceWanderIntent(ref BodyMotionScratch scratch) {
+        var producer = scratch.Producer!;
+        var state = scratch.ProducerState;
+
+        state.Phase += PerStep(
+            stepTicks: scratch.StepTicks,
+            value: state.WeaveFrequency
+        );
+        state.ActivityPhase += PerStep(
+            stepTicks: scratch.StepTicks,
+            value: state.ActivityRate
+        );
+
+        var planarX = m_position.X;
+        var planarZ = m_position.Z;
+        var yawRate = (producer.Scalar(name: "weaveAmplitude") * FixedQ4816.Sin(angle: state.Phase));
+        var radius = FixedQ4816.Sqrt(value: ((planarX * planarX) + (planarZ * planarZ)));
+
+        if (radius > producer.Scalar(name: "softRadius")) {
+            var inwardYaw = FixedQ4816.Atan2(
+                x: planarZ,
+                y: planarX
+            );
+
+            yawRate += (producer.Scalar(name: "inwardGain") * WrapPi(angle: (inwardYaw - FixedYaw)));
+        }
+
+        var turn = FixedQ4816.Clamp(
+            value: (yawRate / producer.Scalar(name: "turnScale")),
+            minimum: NegativeOne,
+            maximum: FixedQ4816.One
+        );
+        var wave = FixedQ4816.Sin(angle: state.ActivityPhase);
+        var altitudeCorrection = FixedQ4816.Clamp(
+            value: ((state.PreferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
+            minimum: NegativeOne,
+            maximum: FixedQ4816.One
+        );
+
+        if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
+            scratch.Intent = m_roleOrdinals.Intent(
+                moveForward: producer.Scalar(name: "forward"),
+                moveStrafe: (wave * producer.Scalar(name: "strafeWave")),
+                turn: turn,
+                moveUp: (altitudeCorrection + (wave * producer.Scalar(name: "upWave"))),
+                pitch: (wave * producer.Scalar(name: "pitchWave")),
+                roll: (-turn * producer.Scalar(name: "rollTurn"))
+            );
+        } else {
+            var angularIntent = FixedQ4816.Clamp(
+                value: (turn + (wave * producer.Scalar(name: "turnWave"))),
+                minimum: NegativeOne,
+                maximum: FixedQ4816.One
+            );
+            var forward = producer.Scalar(name: "forward");
+            var strafe = (wave * producer.Scalar(name: "strafeWave"));
+
+            if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+                // A producer owns a body-relative steering decision even when a seat-facing kit consumes world-frame
+                // axes. Resolve that decision through the same yaw convention SnapYawToPlanarIntent reads; otherwise
+                // the Turn channel is deliberately inert under World and every wanderer can only march toward -Z.
+                var targetYaw = (FixedYaw + PerStep(
+                    stepTicks: scratch.StepTicks,
+                    value: (angularIntent * scratch.TurnSpeed)
+                ));
+
+                var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
+                // The Turn role carries the same angular intent, so the heading integrates toward targetYaw (the
+                // facing snap turns the ATTITUDE only; without this the wanderer's heading would never advance).
+                scratch.Intent = m_roleOrdinals.Intent(
+                    moveForward: ((forward * cosYaw) + (strafe * sinYaw)),
+                    moveStrafe: ((-forward * sinYaw) + (strafe * cosYaw)),
+                    turn: angularIntent
+                );
+            } else {
+                scratch.Intent = m_roleOrdinals.Intent(
+                    moveForward: forward,
+                    moveStrafe: strafe,
+                    turn: angularIntent
+                );
+            }
+
+            var press = producer.Channel(name: "press");
+            var threshold = producer.Scalar(name: "pressThreshold");
+
+            if (
+                (press >= 0) &&
+                (threshold > FixedQ4816.Zero) &&
+                (wave > threshold)
+            ) {
+                scratch.Intent = scratch.Intent.WithChannel(
+                    ordinal: press,
+                    value: FixedQ4816.One
+                );
+            }
+        }
+
+        scratch.ProducerState = state;
+    }
+    // Reset the grounded vertical state to a clean rest on the plane — called by every hard teleport, so a jump never
+    // survives an authoritative reposition. The action track (held/timed lanes) is left alone: a teleport moves the
+    // body, not the player's buttons.
+    private void ResetVertical() {
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        m_positionAccumulator.ResetY();
+        m_grounded = true;
+
+        // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the grounded
+        // ramp and the vehicle arm's decomposed channels alike), and the response table's recency clocks.
+        m_planarVelocity = default;
+        m_planarRampAccumulator.Reset();
+        m_vehicleLongAccumulator.Reset();
+        m_vehicleLatAccumulator.Reset();
+        m_vehicleResidualAccumulator.Reset();
+        Array.Clear(array: m_motionRecency);
+
+        // The swim carries are momentum and medium facts on the same terms — a warp never carries a dive across, and
+        // a body warped out of the water must not read Submerged until the surface stage says so again.
+        m_swimThrustRampAccumulator.Reset();
+        m_submerged = false;
+        m_atSurface = false;
+    }
+    // The one seat-time resolve, per arm. Shared by Advance (which feeds this into the program) and
+    // EffectiveMoveSpeed (which only reads it back) so the two can never compute two different answers to "what
+    // speed is this body actually moving at". A new model arm (swim) adds its own case here, alongside its
+    // SetTuning case (see CompiledMotionArm's remarks).
+    private FixedQ4816 ResolveMoveSpeed() {
+        switch (m_motionArm) {
+            case CompiledMotionArm.Grounded:
+            case CompiledMotionArm.Swim:
+                // Swim compiles into the SAME shared m_tuning slots grounded reads (see SetTuning's remarks), so it
+                // rides this same case rather than forking its own.
+                var resolved = (Profile?.FixedMoveSpeed ?? m_tuning.MoveSpeed);
+
+                return (m_tuning.MoveSpeedEnvelope?.Clamp(value: resolved) ?? resolved);
+            case CompiledMotionArm.Vehicle:
+                // Deliberately never reads Profile — a kart's speed is the kit's, a design fact per arm, not an
+                // omission. TopSpeed is the base rate the (optional) TopSpeedEnvelope pins; boost multiplies AFTER
+                // this resolve (see ShapeVehicleVelocity), never inside it.
+                return (m_vehicleTuning.TopSpeedEnvelope?.Clamp(value: m_vehicleTuning.TopSpeed) ?? m_vehicleTuning.TopSpeed);
+            default:
+                throw new NotSupportedException(message: $"Motion arm '{m_motionArm}' has no compiled move-speed resolve.");
+        }
+    }
+    // Position/planar contact response applies to ANY collider-bearing body regardless of motion model — a flying
+    // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
+    // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState: only a
+    // program that itself integrates gravity (ApplyVerticalGravity) has ceded its vertical channel to contact
+    // resolution. A program that instead owns that channel directly (free's ApplyVerticalDecay bleed; the coming
+    // swim arm) must keep it — folding the resolved velocity back in every tick regardless would feed a decay
+    // channel's own prior value back into itself, an unbounded loop rather than a correction (the defect this
+    // gate exists to close). m_grounded/m_lastContactCount stay informational for every model (RunActionTriggers'
+    // ActionFact.Grounded/Airborne reads them under any program), since they never feed back into an integration.
+    private void ResolveProgramContacts(ref BodyMotionScratch scratch) {
+        if (
+            (m_contactField is { } field) &&
+            (m_collider is { } collider)
+        ) {
+            var resolvedVelocity = scratch.Velocity;
+            var contactResolution = ((field is IEntityContactField entityField)
+                ? entityField.ResolveEntitySweep(
+                    entityIndex: scratch.EntityIndex,
+                    previousPosition: m_position,
+                    position: ref scratch.NextPosition,
+                    velocity: ref resolvedVelocity,
+                    orientation: in scratch.Orientation,
+                    volumes: collider.Volumes
+                )
+                : field.ResolveSweep(
+                    previousPosition: m_position,
+                    position: ref scratch.NextPosition,
+                    velocity: ref resolvedVelocity,
+                    orientation: in scratch.Orientation,
+                    volumes: collider.Volumes
+                )
+            );
+
+            m_grounded = contactResolution.Grounded;
+            m_lastContactCount = (m_grounded
+                ? 1
+                : 0
+            );
+            // scratch.Intent's raw MoveForward/MoveStrafe roles are the idle signal — resolved once by NextIntent
+            // before ANY op runs, so it is available and current at this exact point regardless of the compiled
+            // program's op order (unlike scratch.TargetVelocity/scratch.Velocity, which a Compute*TargetVelocity op
+            // may not have written yet this tick depending on where contact resolution sits in that order, and which
+            // — once written — is the RESPONSE-RAMPED result the wall itself just clipped: using either would risk
+            // a feedback loop, a wall stopping the body read back as "input released").
+            UpdateObstructionWitness(
+                rawObstruction: contactResolution.ObstructionNormal,
+                intent: in scratch.Intent,
+                position: scratch.NextPosition,
+                stepTicks: scratch.StepTicks
+            );
+
+            if (!m_bodyMotionProgram.OwnsVerticalContactState) {
+                return;
+            }
+
+            var resolvedNormal = FixedVector3.Dot(
+                left: resolvedVelocity,
+                right: scratch.Up
+            );
+
+            m_planarVelocity = (resolvedVelocity - (scratch.Up * resolvedNormal));
+
+            // The direct term is one tick of authored input, not persistent motion state. Never fold contact's
+            // clipped drive into the ballistic channel: holding down against a floor would otherwise store an equal
+            // upward launch for the frame the trigger was released.
+            if (scratch.DirectVerticalVelocity != FixedQ4816.Zero) {
+                m_verticalVelocity = FixedQ4816.Zero;
+                m_verticalVelocityAccumulator.Reset();
+                if (m_grounded) {
+                    m_positionAccumulator.ResetY();
+                }
+                return;
+            }
+
+            if (resolvedNormal != m_verticalVelocity) {
+                m_verticalVelocity = resolvedNormal;
+                m_verticalVelocityAccumulator.Reset();
+            }
+
+            if (m_grounded) {
+                m_positionAccumulator.ResetY();
+            }
+        } else {
+            m_grounded = false;
+            m_lastContactCount = 0;
+            m_obstructionWitness = FixedVector3.Zero;
+            m_obstructionWitnessGraceTicks = 0;
+        }
+    }
+    // The body up axis this grounded step integrates against. The contact field answers it (constant +Y from the
+    // analytic provider AND from a field provider without GradientDerivedUp; the surface gradient only when the world
+    // authors that requirement); a degenerate field query leaves the held value
+    // untouched rather than snapping to something arbitrary. Only a collider-bearing kit with a field pays the query;
+    // everything else keeps +Y, so the flat world never calls TryUp and integrates byte-identically.
+    private FixedVector3 ResolveUp() {
+        if (
+            (m_contactField is { } field) &&
+            (m_collider is not null) &&
+            field.TryUp(
+            position: in m_position,
+            up: out var up
+        )
+        ) {
+            m_up = up;
+        }
+
+        return m_up;
+    }
+    // --- The vehicle arm (the ResolveVehicleFrame/ShapeVehicleVelocity ops). ---
+
+    // The vehicle frame (phase 0): resolve up, integrate speed-scaled steering into the heading, and (under a
+    // positive PitchRate) integrate the Pitch channel into the clamped pitch scalar; facing/right derive from the
+    // fresh yaw(+pitch) attitude. Steering authority rises linearly from zero at standstill to full at
+    // SteerReferenceSpeed, falls linearly to SteerFalloff× at the RESOLVED (envelope-clamped) top speed — the SAME
+    // scratch.MoveSpeed ResolveMoveSpeed filled before phase 0, never a second TopSpeed read, so a clamped kit's
+    // falloff anchor moves with its clamp instead of an unreachable authored TopSpeed — reverses sign with
+    // reversing travel (a car backing up, not a turret), and scales by DriftSteerScale while the drift channel
+    // reads held.
+    private void ResolveVehicleFrame(ref BodyMotionScratch scratch) {
+        scratch.Up = ResolveUp();
+
+        var tuning = m_vehicleTuning;
+        // The signed longitudinal speed against the PREVIOUS attitude — shaping runs after this frame op, so the
+        // one-tick-old velocity is the deterministic witness available here.
+        var previousFacing = m_orientation.Rotate(vector: -UnitZ);
+        var longitudinal = FixedVector3.Dot(
+            left: m_planarVelocity,
+            right: previousFacing
+        );
+        var speed = FixedQ4816.Abs(value: longitudinal);
+        var authority = ((speed >= tuning.SteerReferenceSpeed)
+            ? FixedQ4816.One
+            : (speed / tuning.SteerReferenceSpeed)
+        );
+
+        if (
+            (speed > tuning.SteerReferenceSpeed) &&
+            (scratch.MoveSpeed > tuning.SteerReferenceSpeed)
+        ) {
+            var over = FixedQ4816.Clamp(
+                value: ((speed - tuning.SteerReferenceSpeed) / (scratch.MoveSpeed - tuning.SteerReferenceSpeed)),
+                minimum: FixedQ4816.Zero,
+                maximum: FixedQ4816.One
+            );
+
+            authority = (FixedQ4816.One + (over * (tuning.SteerFalloff - FixedQ4816.One)));
+        }
+
+        if (longitudinal < FixedQ4816.Zero) {
+            authority = -authority;
+        }
+
+        if (DriftHeld(intent: in scratch.Intent)) {
+            authority *= tuning.DriftSteerScale;
+        }
+
+        var yawRate = ((Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.Turn
+        ) * tuning.SteerRate) * authority);
+        var pitchRate = ((tuning.PitchRate > FixedQ4816.Zero)
+            ? (Role(
+                intent: in scratch.Intent,
+                role: ChannelRole.Pitch
+            ) * tuning.PitchRate)
+            : FixedQ4816.Zero
+        );
+        var angleStep = m_rotationAccumulator.Integrate(
+            ratePerSecond: new FixedVector3(
+                X: yawRate,
+                Y: pitchRate,
+                Z: FixedQ4816.Zero
+            ),
+            elapsedTicks: scratch.StepTicks
+        );
+
+        m_yaw += angleStep.X;
+        m_vehiclePitch = FixedQ4816.Clamp(
+            value: (m_vehiclePitch + angleStep.Y),
+            minimum: -MaxVehiclePitch,
+            maximum: MaxVehiclePitch
+        );
+
+        var attitude = ((m_vehiclePitch == FixedQ4816.Zero)
+            ? FixedQuaternion.FromAxisAngle(
+                angle: m_yaw,
+                axis: UnitY
+            )
+            : (FixedQuaternion.FromAxisAngle(
+                angle: m_yaw,
+                axis: UnitY
+            ) * FixedQuaternion.FromAxisAngle(
+                angle: m_vehiclePitch,
+                axis: UnitX
+            )).Normalize()
+        );
+
+        scratch.Orientation = ((scratch.Up == UnitY)
+            ? attitude
+            : (FixedQuaternion.FromTo(
+                from: UnitY,
+                to: scratch.Up
+            ) * attitude)
+        );
+        scratch.Facing = scratch.Orientation.Rotate(vector: -UnitZ);
+        scratch.Right = scratch.Orientation.Rotate(vector: UnitX);
+    }
+    // The grounded integration — planar math for the horizontal axes plus the bound vertical action on the other.
+    // Horizontal: under MotionMoveFrame.Heading (the default, tank controls) turn the heading, step along the fresh
+    // facing/right (instant velocity — no ground/air acceleration yet). A pure-yaw facing/right carry no Y, so the
+    // horizontal step never disturbs the vertical axis the action owns. Under MotionMoveFrame.World the two channels
+    // are ALREADY world-frame (the seat composed its camera yaw client-side before submission — determinism: no
+    // camera state ever enters the sim), so the heading integrator is bypassed entirely and facing only ever moves
+    // via FacingSnap, below. Trigger instructions may write vertical velocity before gravity and integration. The
+    // MoveUp/Pitch/Roll channels stay inert; contact geometry owns the resting altitude.
+    private void ResolveYawAttitudeAndPlanarFrame(ref BodyMotionScratch scratch) {
+        scratch.Up = ResolveUp();
+
+        if (m_tuning.MoveFrame == MotionMoveFrame.World) {
+            // World-frame movement means the TRANSLATION axes are already resolved by the seat; it does not make
+            // the authored Turn role inert. Integrate facing independently so an author can choose camera-facing
+            // strafe (FacingSnap=false plus right-stick.x -> Turn) or movement-facing locomotion (FacingSnap=true,
+            // whose later SnapYawToPlanarIntent remains the final word while movement is nonzero).
+            //
+            // The tick movement stops, the body KEEPS the way it was facing: the attitude the facing snap left it in
+            // becomes the heading (what you see is what "forward" now is), rather than swinging back to the heading
+            // it moved against. Read from the persisted attitude, no flag: an idle body's attitude was rebuilt from
+            // m_yaw last tick, so the two agree within rounding and nothing is adopted.
+            if (
+                m_tuning.FacingSnap &&
+                (Role(intent: in scratch.Intent, role: ChannelRole.MoveForward) == FixedQ4816.Zero) &&
+                (Role(intent: in scratch.Intent, role: ChannelRole.MoveStrafe) == FixedQ4816.Zero)
+            ) {
+                var facingYaw = ExtractYaw(orientation: m_orientation);
+
+                if (FixedQ4816.Abs(value: WrapPi(angle: (facingYaw - m_yaw))) > FacingAdoptEpsilon) {
+                    m_yaw = facingYaw;
+                }
+            }
+
+            var worldAngleStep = m_rotationAccumulator.Integrate(
+                ratePerSecond: new FixedVector3(
+                    X: (Role(
+                        intent: in scratch.Intent,
+                        role: ChannelRole.Turn
+                    ) * scratch.TurnSpeed),
+                    Y: FixedQ4816.Zero,
+                    Z: FixedQ4816.Zero
+                ),
+                elapsedTicks: scratch.StepTicks
+            );
+
+            m_yaw += worldAngleStep.X;
+            scratch.Orientation = FixedQuaternion.FromAxisAngle(
+                angle: m_yaw,
+                axis: UnitY
+            );
+            scratch.Facing = -UnitZ;
+            scratch.Right = UnitX;
+            return;
+        }
+
+        var angleStep = m_rotationAccumulator.Integrate(
+            ratePerSecond: new FixedVector3(
+                X: (Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.Turn
+                ) * scratch.TurnSpeed),
+                Y: FixedQ4816.Zero,
+                Z: FixedQ4816.Zero
+            ),
+            elapsedTicks: scratch.StepTicks
+        );
+
+        m_yaw += angleStep.X;
+        var yawRotation = FixedQuaternion.FromAxisAngle(
+            angle: m_yaw,
+            axis: UnitY
+        );
+
+        scratch.Orientation = ((scratch.Up == UnitY)
+            ? yawRotation
+            : (FixedQuaternion.FromTo(
+                from: UnitY,
+                to: scratch.Up
+            ) * yawRotation)
+        );
+        scratch.Facing = scratch.Orientation.Rotate(vector: -UnitZ);
+        scratch.Right = scratch.Orientation.Rotate(vector: UnitX);
+    }
+    private void SenseTarget(BodySensorTarget candidate, ref BodyMotionScratch scratch) {
+        var producer = scratch.Producer!;
+        var current = scratch.ProducerSensors.CurrentTarget;
+
+        if (producer.Target?.Source is BodyTargetSource.Designated) {
+            scratch.SensorTarget = candidate;
+        } else {
+            var release = producer.Scalar(name: "releaseRadius");
+
+            if (
+                current.Exists &&
+                (current.DistanceSquared <= (release * release))
+            ) {
+                scratch.SensorTarget = current;
+            } else {
+                scratch.SensorTarget = candidate;
+            }
+        }
+
+        scratch.ProducerState.AcquiredTarget = scratch.SensorTarget.Index;
+    }
+    // --- The response table (the Shape stage). ---
+    // Converge the ramped planar velocity on the commanded target through the matching response row's engage/release
+    // rate. An empty table snaps instantly (today's exact behavior, the only path an unopted world takes, byte-identical).
+    // A body matching no row also snaps (the always-row is optional). The has-input axis — a property of the command,
+    // not a body fact — picks the engage (stick deflected) or release (stick centered) rate.
+    private FixedVector3 ShapePlanarVelocity(FixedVector3 target, in PlayerIntent intent, ulong stepTicks) {
+        var response = m_tuning.Response;
+
+        if (response.Length == 0) {
+            m_planarVelocity = target;
+
+            return target;
+        }
+
+        // Refresh the shared response recency clocks (a Recently window refills while its fact holds, decays otherwise).
+        for (var slot = 0; (slot < m_motionRecency.Length); slot++) {
+            m_motionRecency[slot] = (FactHolds(fact: m_tuning.ResponseRecencyFacts[slot])
+                ? m_tuning.ResponseRecencyWindows[slot]
+                : SubtractSaturating(
+                    value: m_motionRecency[slot],
+                    amount: stepTicks
+                )
+            );
+        }
+
+        var hasInput = ((Role(
+            intent: in intent,
+            role: ChannelRole.MoveForward
+        ) != FixedQ4816.Zero) || (Role(
+            intent: in intent,
+            role: ChannelRole.MoveStrafe
+        ) != FixedQ4816.Zero));
+
+        foreach (var row in response) {
+            if (!MotionGateOpen(gate: row.Gate)) {
+                continue;
+            }
+
+            var rate = (hasInput
+                ? row.EngageRate
+                : row.ReleaseRate
+            );
+            var maxDelta = m_planarRampAccumulator.Integrate(
+                elapsedTicks: stepTicks,
+                ratePerSecond: rate
+            );
+
+            m_planarVelocity = FixedVector3.MoveToward(
+                current: m_planarVelocity,
+                maxDelta: maxDelta,
+                target: target
+            );
+
+            return m_planarVelocity;
+        }
+
+        m_planarVelocity = target;
+
+        return target;
+    }
+    // The vehicle shaping (phase 2): decompose the carried velocity into body-frame longitudinal/lateral/residual
+    // components, converge each at its own authored rate, and recompose — the anisotropy a kart's feel needs and
+    // grounded's isotropic MoveToward cannot express. Longitudinal follows the bipolar throttle (accelerate toward
+    // the commanded fraction of scratch.MoveSpeed — the RESOLVED, envelope-clamped base top speed, the same value
+    // EffectiveMoveSpeed echoes, never the raw authored TopSpeed; back-throttle brakes while moving forward and
+    // reverses from rest at the unenveloped ReverseTopSpeed; the over-speed excess bleeds at CoastDrag, which is
+    // also the centered-throttle coast). A held boost multiplies scratch.MoveSpeed AFTER the clamp, on top of the
+    // resolved base rate, never inside it — the envelope pins the base, boost rides on top. Lateral and residual
+    // slip converge to zero at Grip — DriftGrip while drifting. A contact-pinned variant (PitchRate zero) has no
+    // drive or grip authority while airborne: a launched kart holds its velocity and gravity owns the arc.
+    private void ShapeVehicleVelocity(ref BodyMotionScratch scratch) {
+        var tuning = m_vehicleTuning;
+        var throttle = Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveForward
+        );
+        var hasAuthority = ((tuning.PitchRate > FixedQ4816.Zero) || m_grounded);
+        var velocity = m_planarVelocity;
+        var longitudinal = FixedVector3.Dot(
+            left: velocity,
+            right: scratch.Facing
+        );
+        var lateral = FixedVector3.Dot(
+            left: velocity,
+            right: scratch.Right
+        );
+        var residual = ((velocity - (scratch.Facing * longitudinal)) - (scratch.Right * lateral));
+
+        if (hasAuthority) {
+            FixedQ4816 target, rate;
+
+            if (throttle > FixedQ4816.Zero) {
+                var commanded = (BoostHeld(intent: in scratch.Intent)
+                    ? (scratch.MoveSpeed * tuning.BoostMultiplier)
+                    : scratch.MoveSpeed
+                );
+
+                target = (throttle * commanded);
+                rate = ((longitudinal <= target)
+                    ? tuning.Accel
+                    : tuning.CoastDrag
+                );
+            } else if (throttle < FixedQ4816.Zero) {
+                if (longitudinal > FixedQ4816.Zero) {
+                    target = FixedQ4816.Zero;
+                    rate = tuning.Brake;
+                } else {
+                    target = (throttle * tuning.ReverseTopSpeed);
+                    rate = tuning.Accel;
+                }
+            } else {
+                target = FixedQ4816.Zero;
+                rate = tuning.CoastDrag;
+            }
+
+            longitudinal = MoveTowardScalar(
+                current: longitudinal,
+                target: target,
+                maxDelta: m_vehicleLongAccumulator.Integrate(
+                    elapsedTicks: scratch.StepTicks,
+                    ratePerSecond: rate
+                )
+            );
+
+            var grip = (DriftHeld(intent: in scratch.Intent)
+                ? tuning.DriftGrip
+                : tuning.Grip
+            );
+
+            lateral = MoveTowardScalar(
+                current: lateral,
+                target: FixedQ4816.Zero,
+                maxDelta: m_vehicleLatAccumulator.Integrate(
+                    elapsedTicks: scratch.StepTicks,
+                    ratePerSecond: grip
+                )
+            );
+            residual = FixedVector3.MoveToward(
+                current: residual,
+                target: default,
+                maxDelta: m_vehicleResidualAccumulator.Integrate(
+                    elapsedTicks: scratch.StepTicks,
+                    ratePerSecond: grip
+                )
+            );
+        }
+
+        m_planarVelocity = (((scratch.Facing * longitudinal) + (scratch.Right * lateral)) + residual);
+        scratch.TargetVelocity = m_planarVelocity;
+    }
+    // A commanded facing (FaceX/FaceY/FaceZ, a world-frame direction) is the final word on the HEADING whenever its
+    // planar part is nonzero — the body turns to it, heading and attitude both. Otherwise, under World frame +
+    // FacingSnap, the body's ATTITUDE alone turns to face its commanded travel while the heading (m_yaw — the Turn
+    // role's integral, and the frame a heading-framed seat moves in) holds: a strafe angles the body toward its
+    // travel without changing which way "forward" is, and the attitude returns to the heading the tick movement
+    // stops (ResolveYawAttitudeAndPlanarFrame rebuilds it from m_yaw every tick). Both snaps share one convention:
+    // yaw = atan2 of a world planar direction, facing (-sin yaw, -cos yaw). FaceY is elevation — no yaw to take
+    // from it.
+    private void SnapYawToPlanarIntent(ref BodyMotionScratch scratch) {
+        var faceX = Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.FaceX
+        );
+        var faceZ = Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.FaceZ
+        );
+
+        if (
+            (faceX != FixedQ4816.Zero) ||
+            (faceZ != FixedQ4816.Zero)
+        ) {
+            SnapYaw(
+                scratch: ref scratch,
+                yaw: FixedQ4816.Atan2(
+                    y: -faceX,
+                    x: -faceZ
+                )
+            );
+
+            return;
+        }
+
+        if (
+            (m_tuning.MoveFrame != MotionMoveFrame.World) ||
+            !m_tuning.FacingSnap ||
+            ((Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveForward
+        ) == FixedQ4816.Zero) && (Role(
+            intent: in scratch.Intent,
+            role: ChannelRole.MoveStrafe
+        ) == FixedQ4816.Zero))
+        ) {
+            return;
+        }
+
+        SnapFacing(
+            scratch: ref scratch,
+            yaw: FixedQ4816.Atan2(
+                y: -Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.MoveStrafe
+                ),
+                x: Role(
+                    intent: in scratch.Intent,
+                    role: ChannelRole.MoveForward
+                )
+            )
+        );
+    }
+    private void SnapYaw(ref BodyMotionScratch scratch, FixedQ4816 yaw) {
+        m_yaw = yaw;
+        SnapFacing(
+            scratch: ref scratch,
+            yaw: yaw
+        );
+    }
+    // The attitude alone — the heading (m_yaw) is untouched.
+    private static void SnapFacing(ref BodyMotionScratch scratch, FixedQ4816 yaw) {
+        scratch.Orientation = FixedQuaternion.FromAxisAngle(
+            angle: yaw,
+            axis: UnitY
+        );
+    }
+    // Resolve this sub-step's full intent by the IntentSource merge rule: a live tape segment takes precedence for the
+    // movement channels (consumed whole-frame, dropped when its time runs out; expired/empty front segments are
+    // skipped first, so a drained tape falls through the same frame it empties); with the tape dry, the tick's
+    // submitted intent (admitted unless Idle), else the producer image (iff the source names it), else zero. The
+    // action-track lanes are then overlaid, so a wire player.press jumps a tape-driven runner.
+    // Whether an intent source names a server-side producer whose staged image fills gaps.
+    private static bool SourceNamesProducer(IntentSource source) => source.IsProducer;
+    private static ulong SubtractSaturating(ulong value, ulong amount) => ((value > amount)
+        ? (value - amount)
+        : 0UL
+    );
+    /// <summary>Updates the latched <c>world.contacts</c> obstruction witness from this tick's raw solver result. A
+    /// fresh non-walkable push always (re)latches immediately and refills the grace window. Absent one, the
+    /// existing latch clears immediately the instant either releasing condition holds — the raw planar move intent
+    /// (<paramref name="intent"/>'s MoveForward/MoveStrafe roles, resolved once by <c>NextIntent</c> before any op
+    /// runs — never a program-computed velocity, which may not be written yet at this exact point depending on op
+    /// order, and which — once written — is the response-ramped result the wall itself just clipped, risking a
+    /// feedback loop where a wall stopping the body reads back as "input released") has gone idle, or the body has
+    /// meaningfully moved since the latch was captured — so the witness can never claim an obstruction the body has
+    /// actually left or stopped pressing against. Short of either, the latch survives a solver pass reporting no
+    /// push at all by spending down a brief grace window before giving up — ordinary query noise near a surface
+    /// (the field provider's SDF gradient can land exactly on a quantization boundary, or a body settled into a
+    /// blended wall/ground corner can drift in and out of the walkable classification for many consecutive ticks
+    /// while genuinely never clearing) must not flicker the witness while the body is provably still pinned and
+    /// still pressing.</summary>
+    private void UpdateObstructionWitness(FixedVector3 rawObstruction, in PlayerIntent intent, FixedVector3 position, ulong stepTicks) {
+        if (rawObstruction != FixedVector3.Zero) {
+            m_obstructionWitness = rawObstruction;
+            m_obstructionWitnessPosition = position;
+            m_obstructionWitnessGraceTicks = ObstructionLatchGraceTicks;
+
+            return;
+        }
+
+        if (m_obstructionWitness == FixedVector3.Zero) {
+            return;
+        }
+
+        var forward = Role(
+            intent: in intent,
+            role: ChannelRole.MoveForward
+        );
+        var strafe = Role(
+            intent: in intent,
+            role: ChannelRole.MoveStrafe
+        );
+        var idle = ((FixedQ4816.Abs(value: forward) <= ObstructionLatchIdleThreshold) && (FixedQ4816.Abs(value: strafe) <= ObstructionLatchIdleThreshold));
+        var displaced = ((position - m_obstructionWitnessPosition).LengthSquared > ObstructionLatchDisplacementSquared);
+
+        if (
+            idle ||
+            displaced
+        ) {
+            m_obstructionWitness = FixedVector3.Zero;
+            m_obstructionWitnessGraceTicks = 0;
+
+            return;
+        }
+
+        m_obstructionWitnessGraceTicks = SubtractSaturating(
+            amount: stepTicks,
+            value: m_obstructionWitnessGraceTicks
+        );
+
+        if (m_obstructionWitnessGraceTicks == 0) {
+            m_obstructionWitness = FixedVector3.Zero;
+        }
+    }
+    private static FixedQ4816 WrapPi(FixedQ4816 angle) => (angle - (TwoPi * FixedQ4816.Floor(value: ((angle + Pi) / TwoPi))));
+
+    private struct BodyMotionScratch {
+        public PlayerIntent Intent;
+        public CompiledBodyProducer? Producer;
+        public BodyProducerState ProducerState;
+        public BodyProducerSensors ProducerSensors;
+        public BodySensorTarget SensorTarget;
+        public FixedQ4816 MoveSpeed;
+        public FixedQ4816 TurnSpeed;
+        public ulong StepTicks;
+        public FixedVector3 Up;
+        public FixedVector3 Facing;
+        public FixedVector3 Right;
+        public FixedVector3 TargetVelocity;
+        public FixedQ4816 DirectVerticalVelocity;
+        public FixedQ4816 SwimVerticalTarget;
+        public FixedVector3 Velocity;
+        public FixedVector3 NextPosition;
+        public FixedQuaternion Orientation;
+        public int EntityIndex;
+        public BodyEffectTargets EffectTargets;
+        public List<BodyEffectOutput>? EffectOutputs;
+        public List<WorldDesignation>? DesignationOutputs;
+        public List<WorldGeneratorInvocation>? GeneratorInvocations;
+        public List<WorldJudgeInvocation>? JudgeInvocations;
+    }
+}

@@ -1,0 +1,81 @@
+{
+  "id": "seamless-four-corners-circuit",
+  "title": "A single process rings all four Four Corners ground worlds by named instance",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 12,
+  "timeoutSeconds": 25,
+  "binding": "One process, one world (quilt-nw), no companion authority and no federation: each hop poses and drives the SAME traveler inside the next ground world's own named instance (instance:6~global2~<id>), and the automatic adjacency crossing that follows closes the ring — nw's east edge into ne, ne's own south edge into se, se's own west edge into sw, sw's own north edge back onto boot (nw) — with zero rejected commands throughout. The discriminating leg poses the traveler at the same four spots but never drives it, so no crossing ever fires and every named instance beyond the first stays unmaterialized: addressing it is cleanly refused (six refusals, in the same shape the positive leg never sees).",
+  "fixtures": [],
+  "positive": {
+    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "player.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.adjacencies", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "player.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "player.fly", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "player.fly", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.adjacencies", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "nw's own east edge crosses automatically", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": true },
+      { "type": "line", "name": "ne's own south edge crosses automatically", "stream": "stdout", "match": "contains", "text": "[world.adjacency: '6~global2~ne/south' seat 1 crossed", "present": true },
+      { "type": "line", "name": "se's own west edge crosses automatically", "stream": "stdout", "match": "contains", "text": "[world.adjacency: '6~global2~se/west' seat 1 crossed", "present": true },
+      { "type": "line", "name": "sw's own north edge closes the ring back onto nw", "stream": "stdout", "match": "contains", "text": "[world.adjacency: '6~global2~sw/north' seat 1 crossed", "present": true },
+      { "type": "line", "name": "the final arrival lands back on the boot instance", "stream": "stdout", "match": "contains", "text": "-> 'boot' seat 1 arrived", "present": true },
+      { "type": "line", "name": "the returned traveler is a local body again", "stream": "stdout", "match": "contains", "text": "anchor=body:0", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.adjacencies", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.adjacencies", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 2, "outcome": "refused" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 2, "outcome": "refused" },
+      { "verb": "wire.errors", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 3, "outcome": "refused" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 3, "outcome": "refused" },
+      { "verb": "wire.errors", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "player.pose", "occurrence": 4, "outcome": "refused" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "player.where", "occurrence": 4, "outcome": "refused" },
+      { "verb": "world.adjacencies", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "without a drive nw's own east edge never crosses", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": false },
+      { "type": "line", "name": "an unreached named instance refuses to pose", "stream": "stderr", "match": "contains", "text": "is not active — see world.instance.seats", "present": true },
+      { "type": "line", "name": "an unreached named instance refuses to read", "stream": "stderr", "match": "contains", "text": "is not an active population entry", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

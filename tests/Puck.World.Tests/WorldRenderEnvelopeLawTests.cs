@@ -11,11 +11,11 @@ public sealed class WorldRenderEnvelopeLawTests {
     public void RegistrationsComposeAndDisposeIndependently() {
         var envelope = new WorldRenderEnvelope();
         var definition = Fixtures.BuildDocument();
-        var accepting = envelope.Configure(programWordCapacity: 10, instanceCapacity: 10, measure: static _ => (Words: 10, Instances: 10));
-        var refusing = envelope.Configure(programWordCapacity: 10, instanceCapacity: 10, measure: static _ => (Words: 11, Instances: 10));
+        var accepting = envelope.Configure(instanceCapacity: 10, measure: static _ => (Words: 10, Instances: 10), programWordCapacity: 10);
+        var refusing = envelope.Configure(instanceCapacity: 10, measure: static _ => (Words: 11, Instances: 10), programWordCapacity: 10);
 
         Assert.False(condition: envelope.TryFit(candidate: definition, reason: out var refusal));
-        Assert.Contains(expectedSubstring: "program words 11 exceed", actualString: refusal);
+        Assert.Contains(actualString: refusal, expectedSubstring: "program words 11 exceed");
 
         refusing.Dispose();
 

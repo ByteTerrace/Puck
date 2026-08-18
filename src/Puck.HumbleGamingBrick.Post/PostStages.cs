@@ -5,7 +5,7 @@ namespace Puck.HumbleGamingBrick.Post;
 internal static class PostStages {
     /// <summary>Creates the ordered stage list.</summary>
     /// <returns>The stages, in run order.</returns>
-    public static IPostStage[] Create() =>
+    public static IPostStage<PostContext>[] Create() =>
         [
             // Tier A — core self-tests (self-contained synthetic ROM; run anywhere).
             new DeterminismStage(),
@@ -44,6 +44,9 @@ internal static class PostStages {
             // Tier A — the resume constructor refuses a credit that exceeds the machine's cycle count rather than
             // wrapping the pacing target with unsigned arithmetic (self-contained synthetic ROM; run anywhere).
             new SerialResumeCreditGuardStage(),
+            // Tier A — the infrared resume constructor refuses an oversized credit the same way, and does so before either
+            // transceiver is wired (self-contained synthetic ROM; run anywhere).
+            new InfraredResumeCreditGuardStage(),
             // Tier B — reference-ROM correctness (conformance ROMs via the $A000 result block; skip when the corpus is absent).
             new ConformanceRomStage(
         group: "cpu-instrs",

@@ -1,6 +1,8 @@
 {
-  "description": "The hud section \u2014 the world-scope HUD panel rows plus their defaults (see WorldHudSection). presentation-only: overlay geometry and bindings, never simulation state. Defaults to Default (enabled, no authored panels) \u2014 byte-identical boot behavior for every world authored before this section existed.",
-  "type": "object",
+  "type": [
+    "object",
+    "null"
+  ],
   "properties": {
     "defaults": {
       "description": "The section defaults.",
@@ -33,6 +35,11 @@
                 "Accent",
                 "Phosphor"
               ]
+            },
+            "visible": {
+              "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
+              "description": "The drawn cursor\u0027s visibility condition, or null for always.",
+              "default": null
             }
           },
           "required": [
@@ -41,6 +48,11 @@
             "role"
           ],
           "additionalProperties": false,
+          "default": null
+        },
+        "visible": {
+          "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
+          "description": "The visibility condition every world-scope panel is gated by, beside its own, or null for always.",
           "default": null
         }
       },
@@ -83,6 +95,11 @@
               "Chip"
             ]
           },
+          "visible": {
+            "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
+            "description": "The panel\u0027s visibility condition over presentation facts, or null for always.",
+            "default": null
+          },
           "elements": {
             "$ref": "./common.schema.json#/$defs/WorldHudElementList",
             "description": "Gets the panel\u0027s child elements. The absence-coalesce lives in the accessor for the same reason Response\u0027s does."
@@ -103,5 +120,6 @@
     "defaults",
     "panels"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "default": null
 }

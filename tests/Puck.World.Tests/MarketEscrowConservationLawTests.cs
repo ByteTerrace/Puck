@@ -20,21 +20,21 @@ public sealed class MarketEscrowConservationLawTests {
         var applesBefore = TotalApples(fixture: fixture);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller,
-            Seller: Seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 3,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 10,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller,
+            Quantity: 3,
+            Seller: Seller,
+            StartPrice: 10
         ));
         fixture.Step();
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: OutbidBidder, Bidder: OutbidBidder, ListingId: 1, Amount: 20));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 20, Bidder: OutbidBidder, ListingId: 1, Principal: OutbidBidder));
         fixture.Step();
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Winner, Bidder: Winner, ListingId: 1, Amount: 30));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 30, Bidder: Winner, ListingId: 1, Principal: Winner));
         fixture.Step();
 
         for (var index = 0; (index < 300); index++) {
@@ -63,9 +63,9 @@ public sealed class MarketEscrowConservationLawTests {
 
     private static long TotalGold(WorldFixture fixture) {
         var definition = fixture.Server.Definition;
-        var holders = ((MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: Seller)
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: OutbidBidder))
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.GoldRow, principal: Winner));
+        var holders = ((MarketFixtures.CellValueOf(definition: definition, principal: Seller, row: MarketFixtures.GoldRow)
+            + MarketFixtures.CellValueOf(definition: definition, principal: OutbidBidder, row: MarketFixtures.GoldRow))
+            + MarketFixtures.CellValueOf(definition: definition, principal: Winner, row: MarketFixtures.GoldRow));
         var feeReserve = (definition.Market?.FeeReserve ?? 0L);
         var escrowedInActiveListings = SumActiveListingBids(definition: definition);
 
@@ -73,9 +73,9 @@ public sealed class MarketEscrowConservationLawTests {
     }
     private static long TotalApples(WorldFixture fixture) {
         var definition = fixture.Server.Definition;
-        var holders = ((MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: Seller)
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: OutbidBidder))
-            + MarketFixtures.CellValueOf(definition: definition, row: MarketFixtures.AppleRow, principal: Winner));
+        var holders = ((MarketFixtures.CellValueOf(definition: definition, principal: Seller, row: MarketFixtures.AppleRow)
+            + MarketFixtures.CellValueOf(definition: definition, principal: OutbidBidder, row: MarketFixtures.AppleRow))
+            + MarketFixtures.CellValueOf(definition: definition, principal: Winner, row: MarketFixtures.AppleRow));
         var escrowedInActiveListings = SumActiveListingQuantities(definition: definition);
 
         return (holders + escrowedInActiveListings);

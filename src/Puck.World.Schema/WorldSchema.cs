@@ -9,22 +9,6 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
-/// <summary>Implemented by a hand-written <see cref="JsonConverter{T}"/> that reads/writes its CLR type as a JSON
-/// string — one <see cref="JsonSchemaExporter"/> cannot otherwise introspect (see <see cref="WorldSchema"/>'s own
-/// remarks), so it never emits a <c>type</c> or <c>enum</c> constraint for it. A converter opts into a constraint by
-/// implementing this interface, which is how <see cref="WorldSchema"/> discovers the vocabulary mechanically —
-/// asking <see cref="JsonSerializerOptions.GetConverter(Type)"/> for the resolved converter and querying it — rather
-/// than a generator-side type→token map that would drift the moment a new closed-vocabulary converter is added
-/// without a matching generator edit.</summary>
-public interface IJsonSchemaStringConverter {
-    /// <summary>Every token this converter's <c>Read</c> accepts, spelled exactly as its own parser matches them
-    /// (case rules included — the converter's parse acceptance, not merely what its <c>Write</c> happens to emit,
-    /// since the two can differ: a member a <c>Write</c> switch's fallback arm could produce but <c>Read</c> never
-    /// accepts must not appear here). <see langword="null"/> for a converter that accepts free-form string content
-    /// with no fixed vocabulary (its own validation applies beyond the schema's <c>"type":"string"</c>) — the
-    /// schema then gets a <c>type</c> constraint alone, no <c>enum</c>.</summary>
-    IReadOnlyList<string>? SchemaTokens { get; }
-}
 /// <summary>
 /// Generates the JSON Schema for <c>puck.world.def.v1</c> (<see cref="WorldDefinition"/>) directly from the live
 /// C# model and its XML documentation — never hand-maintained, so an editor's completion, enum values, <c>$type</c>
@@ -60,6 +44,8 @@ public static class WorldSchema {
     public const string ProjectionSchemaId = WorldProjectionDocument.SchemaVersion;
     /// <summary>The schema's stable identity — the same tag <see cref="WorldDefinition.SchemaVersion"/> carries.</summary>
     public const string SchemaId = WorldDefinition.SchemaVersion;
+    /// <summary>The silo schema's stable identity — the same tag <see cref="WorldSiloDefinition.SchemaVersion"/> carries.</summary>
+    public const string SiloSchemaId = WorldSiloDefinition.SchemaVersion;
     /// <summary>The directory (relative to the root schema file) every section and <see cref="CommonDefsFileName"/> live in.</summary>
     public const string SectionsDirectoryName = "schema";
 
@@ -88,6 +74,11 @@ public static class WorldSchema {
     /// e.g. <c>ActionPredicate.CompareState</c>) — <see cref="Bundle"/> then fully duplicates that def's content at
     /// every site instead of sharing one copy, matching what the un-split generator actually produced.</param>
     public sealed record SplitSchema(JsonObject Root, IReadOnlyList<(string Name, JsonNode Node)> Sections, JsonObject Common, IReadOnlyDictionary<string, string?> DefAnchors);
+    /// <summary>One shipped post-render extension — a shader set's id and its config JSON Schema — spliced into
+    /// <c>render.extensions[]</c> so an entry's <c>config</c> validates by its <c>id</c>.</summary>
+    /// <param name="Id">The extension id a document's <c>render.extensions[].id</c> names.</param>
+    /// <param name="ConfigSchema">The set's config JSON Schema (<c>Puck.Shaders.ShaderSetManifest.ConfigJsonSchema</c>).</param>
+    public sealed record PostRenderExtensionSchema(string Id, JsonObject ConfigSchema);
 
     private static void AppendChildren(StringBuilder builder, XElement element) {
         foreach (var child in element.Nodes()) {
@@ -234,13 +225,74 @@ public static class WorldSchema {
             return baseName;
         }
 
+        // The exporter materializes T and nullable T as distinct shapes but reports the same TypeInfo.Type for
+        // both. Give that meaningful distinction a meaningful name instead of leaking traversal order through a
+        // numeric suffix in the generated schema.
+        var qualifiedName = $"{baseName}{(AllowsNull(node: node) ? "Nullable" : "NonNullable")}";
+
+        if (state.UsedNames.Add(item: qualifiedName)) {
+            return qualifiedName;
+        }
+
         for (var suffix = 2; ; suffix++) {
-            var candidate = $"{baseName}{suffix}";
+            var candidate = $"{qualifiedName}{suffix}";
 
             if (state.UsedNames.Add(item: candidate)) {
                 return candidate;
             }
         }
+    }
+    private static bool AllowsNull(JsonNode node) {
+        if (node is not JsonObject obj) {
+            return false;
+        }
+        if (
+            (obj["type"] is JsonValue scalarType) &&
+            scalarType.TryGetValue<string>(value: out var typeName) &&
+            string.Equals(
+                a: typeName,
+                b: "null",
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            return true;
+        }
+
+        foreach (var key in new[] { "type", "enum", "anyOf", "oneOf" }) {
+            if (obj[key] is not JsonArray values) {
+                continue;
+            }
+            foreach (var value in values) {
+                if (value is null) {
+                    return true;
+                }
+                if (
+                    (value is JsonValue token) &&
+                    token.TryGetValue<string>(value: out var text) &&
+                    string.Equals(
+                        a: text,
+                        b: "null",
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    return true;
+                }
+                if (
+                    (value is JsonObject arm) &&
+                    (arm["type"] is JsonValue armType) &&
+                    armType.TryGetValue<string>(value: out var armTypeName) &&
+                    string.Equals(
+                        a: armTypeName,
+                        b: "null",
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
     private static string CollapseWhitespace(string text) =>
         string.Join(
@@ -539,6 +591,41 @@ public static class WorldSchema {
         originByNode[result] = currentPath;
 
         return result;
+    }
+    // Splices the shipped extension vocabulary into #/properties/render/properties/extensions/items: `id` becomes an
+    // enum over the shipped ids, and one `allOf` arm per id constrains `config` to that set's own schema when `id`
+    // matches. The exporter cannot know the vocabulary — it is a deploy fact (which manifests ship), not a type
+    // fact — so the caller supplies it.
+    private static void ApplyPostRenderExtensions(IReadOnlyList<PostRenderExtensionSchema> extensions, JsonObject root) {
+        if (root["properties"]?["render"]?["properties"]?["extensions"]?["items"] is not JsonObject items) {
+            return;
+        }
+        if (items["properties"]?["id"] is not JsonObject id) {
+            return;
+        }
+
+        var ids = new JsonArray();
+        var arms = new JsonArray();
+
+        foreach (var extension in extensions) {
+            ids.Add(item: ((JsonNode)JsonValue.Create(value: extension.Id)));
+            arms.Add(item: ((JsonNode)new JsonObject {
+                ["if"] = new JsonObject {
+                    ["properties"] = new JsonObject {
+                        ["id"] = new JsonObject { ["const"] = extension.Id },
+                    },
+                    ["required"] = new JsonArray("id"),
+                },
+                ["then"] = new JsonObject {
+                    ["properties"] = new JsonObject {
+                        ["config"] = extension.ConfigSchema.DeepClone(),
+                    },
+                },
+            }));
+        }
+
+        id["enum"] = ids;
+        items["allOf"] = arms;
     }
     private static (JsonObject Root, Dictionary<JsonNode, Type> TypesByNode) ExportMergedWithTypes() {
         var index = XmlDocIndex.Value;
@@ -1524,9 +1611,21 @@ public static class WorldSchema {
             DefAnchors: defAnchors
         );
     }
+    // Whether a document root type declares an [JsonExtensionData] member — the root patternProperties carve-out
+    // below applies only to a family that actually has an extension bag to carve a hole for.
+    private static bool HasJsonExtensionData(Type rootType) {
+        foreach (var property in rootType.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
+            if (property.IsDefined(attributeType: typeof(JsonExtensionDataAttribute))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     // Runs once per exported node, bottom-up (children before parents). Attaches a description resolved from the
     // assembly's XML documentation, teaches a custom-token-converted node its own "type"/"enum" (see
-    // ApplyStringVocabulary), and — at the document root only — the Extensions bag's reserved-prefix carve-out.
+    // ApplyStringVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
+    // reserved-prefix carve-out.
     private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode) {
         if (
             (node is JsonObject alreadyRef) &&
@@ -1566,13 +1665,17 @@ public static class WorldSchema {
             );
         }
 
-        if (context.Path.Length == 0) {
+        if (
+            (context.Path.Length == 0) &&
+            HasJsonExtensionData(rootType: context.TypeInfo.Type)
+        ) {
             // The document root's one deliberate strictness exception. Extensions itself never appears as a
             // mapped `properties` entry — STJ routes a [JsonExtensionData] member around ordinary property
             // emission — so additionalProperties:false (already derived by the exporter from WorldJsonContext's
             // UnmappedMemberHandling.Disallow) would otherwise refuse the exact keys the loader accepts. This
             // pattern mirrors DocumentExtensionsPolicy.IsReservedKey by hand — JSON Schema has no way to name a
-            // predicate, so keep the two in sync on sight.
+            // predicate, so keep the two in sync on sight. Gated to a root type that actually declares the member —
+            // a document family with no extension bag (e.g. WorldSiloDefinition) must not advertise one.
             obj["patternProperties"] = new JsonObject {
                 ["^[$_]"] = true,
             };
@@ -1712,8 +1815,17 @@ public static class WorldSchema {
         return root;
     }
     /// <summary>Exports the split JSON Schema for <see cref="WorldDefinition"/>.</summary>
-    public static SplitSchema Export() {
+    /// <param name="postRenderExtensions">The shipped post-render extensions: <c>render.extensions[].id</c> becomes an
+    /// enum over their ids and each entry's <c>config</c> validates against the schema of the set its id names.</param>
+    public static SplitSchema Export(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
+        ArgumentNullException.ThrowIfNull(postRenderExtensions);
+
         var (merged, typesByNode) = ExportMergedWithTypes();
+
+        ApplyPostRenderExtensions(
+            extensions: postRenderExtensions,
+            root: merged
+        );
 
         // The exporter's OWN shortcut for an optional property whose schema Transform would otherwise see as the
         // fully permissive `true` (a custom-converted member — see IJsonSchemaStringConverter's remarks): when such
@@ -1875,8 +1987,11 @@ public static class WorldSchema {
     /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,
     /// deliberately: the projection has no top-level section a person opens on its own, so the split
     /// <see cref="WorldDefinition"/> takes buys nothing here.</summary>
+    /// <param name="postRenderExtensions">The shipped post-render extensions, applied as in <see cref="Export"/>.</param>
     /// <returns>The generated schema root.</returns>
-    public static JsonObject ExportProjection() {
+    public static JsonObject ExportProjection(IReadOnlyList<PostRenderExtensionSchema> postRenderExtensions) {
+        ArgumentNullException.ThrowIfNull(postRenderExtensions);
+
         var index = XmlDocIndex.Value;
         var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
         var exporterOptions = new JsonSchemaExporterOptions {
@@ -1906,6 +2021,61 @@ public static class WorldSchema {
         root.Add(
             propertyName: "title",
             value: "Puck world projection (puck.world.projection.v1)"
+        );
+
+        foreach (var (propertyName, value) in generated) {
+            root.Add(
+                propertyName: propertyName,
+                value: value
+            );
+        }
+
+        RestoreSkippedPropertyAnnotations(
+            index: index,
+            node: root,
+            typesByNode: typesByNode
+        );
+        ApplyPostRenderExtensions(
+            extensions: postRenderExtensions,
+            root: root
+        );
+
+        return root;
+    }
+    /// <summary>Exports the JSON Schema for <see cref="WorldSiloDefinition"/> as one document. Unsplit, like
+    /// <see cref="ExportProjection"/>: a six-field document has no section large enough to earn a file of its
+    /// own.</summary>
+    /// <returns>The generated schema root.</returns>
+    public static JsonObject ExportSilo() {
+        var index = XmlDocIndex.Value;
+        var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => Transform(
+            context: context,
+            index: index,
+            node: node,
+            typesByNode: typesByNode
+        ),
+        };
+        var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+            type: typeof(WorldSiloDefinition),
+            exporterOptions: exporterOptions
+        );
+        var root = schema.AsObject();
+        var generated = root.ToList();
+
+        root.Clear();
+        root.Add(
+            propertyName: "$schema",
+            value: DraftUri
+        );
+        root.Add(
+            propertyName: "$id",
+            value: SiloSchemaId
+        );
+        root.Add(
+            propertyName: "title",
+            value: "Puck world silo (puck.silo.def.v1)"
         );
 
         foreach (var (propertyName, value) in generated) {

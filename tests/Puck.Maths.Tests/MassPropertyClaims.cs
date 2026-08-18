@@ -82,16 +82,16 @@ internal static class MassPropertyClaims {
         var subjectOk = FixedMassProperties.TryBoxBody(
             density: density,
             fractionBitsDensity: fd,
+            fractionBitsInertia: fi,
+            fractionBitsLength: fl,
+            fractionBitsMass: fm,
             halfX: halfX,
             halfY: halfY,
             halfZ: halfZ,
-            fractionBitsLength: fl,
-            fractionBitsMass: fm,
-            fractionBitsInertia: fi,
-            mass: out var mass,
             ixx: out var ixx,
             iyy: out var iyy,
-            izz: out var izz
+            izz: out var izz,
+            mass: out var mass
         );
         var oracleOk = Oracles.TryBoxBody(
             density: density,
@@ -109,11 +109,11 @@ internal static class MassPropertyClaims {
         );
 
         return Compare(
-            subjectOk: subjectOk,
+            expected: [expectedMass, expectedXX, expectedYY, expectedZZ],
+            operands: $"box (density {density}@{fd}, halves ({halfX},{halfY},{halfZ})@{fl} -> mass @{fm}, inertia @{fi})",
             oracleOk: oracleOk,
             subject: [mass, ixx, iyy, izz],
-            expected: [expectedMass, expectedXX, expectedYY, expectedZZ],
-            operands: $"box (density {density}@{fd}, halves ({halfX},{halfY},{halfZ})@{fl} -> mass @{fm}, inertia @{fi})"
+            subjectOk: subjectOk
         );
     }
     /// <summary>The degeneracy that proves the capsule's own coefficients: at a hemisphere-centre distance of zero a
@@ -141,26 +141,26 @@ internal static class MassPropertyClaims {
                 foreach (var lengthScale in lengthScales) {
                     foreach (var resultScale in resultScales) {
                         var capsuleOk = FixedMassProperties.TryCapsuleBody(
+                            axial: out var capsuleAxial,
+                            centerDistance: 0L,
                             density: density,
                             fractionBitsDensity: 0,
-                            radius: radius,
-                            centerDistance: 0L,
+                            fractionBitsInertia: resultScale,
                             fractionBitsLength: lengthScale,
                             fractionBitsMass: resultScale,
-                            fractionBitsInertia: resultScale,
                             mass: out var capsuleMass,
-                            axial: out var capsuleAxial,
-                            perpendicular: out var capsulePerpendicular
+                            perpendicular: out var capsulePerpendicular,
+                            radius: radius
                         );
                         var sphereOk = FixedMassProperties.TrySphereBody(
                             density: density,
                             fractionBitsDensity: 0,
-                            radius: radius,
+                            fractionBitsInertia: resultScale,
                             fractionBitsLength: lengthScale,
                             fractionBitsMass: resultScale,
-                            fractionBitsInertia: resultScale,
+                            inertia: out var sphereInertia,
                             mass: out var sphereMass,
-                            inertia: out var sphereInertia
+                            radius: radius
                         );
                         var operands = $"(density {density}, radius {radius}, length @{lengthScale}, results @{resultScale})";
 
@@ -203,16 +203,16 @@ internal static class MassPropertyClaims {
         var fi = FoldScale(raw: right[3]);
 
         var subjectOk = FixedMassProperties.TryCapsuleBody(
+            axial: out var axial,
+            centerDistance: centerDistance,
             density: density,
             fractionBitsDensity: fd,
-            radius: radius,
-            centerDistance: centerDistance,
+            fractionBitsInertia: fi,
             fractionBitsLength: fl,
             fractionBitsMass: fm,
-            fractionBitsInertia: fi,
             mass: out var mass,
-            axial: out var axial,
-            perpendicular: out var perpendicular
+            perpendicular: out var perpendicular,
+            radius: radius
         );
         var oracleOk = Oracles.TryCapsuleBody(
             axial: out var expectedAxial,
@@ -228,11 +228,11 @@ internal static class MassPropertyClaims {
         );
 
         return Compare(
-            subjectOk: subjectOk,
+            expected: [expectedMass, expectedAxial, expectedPerpendicular],
+            operands: $"capsule (density {density}@{fd}, radius {radius}, centres {centerDistance} @{fl} -> mass @{fm}, inertia @{fi})",
             oracleOk: oracleOk,
             subject: [mass, axial, perpendicular],
-            expected: [expectedMass, expectedAxial, expectedPerpendicular],
-            operands: $"capsule (density {density}@{fd}, radius {radius}, centres {centerDistance} @{fl} -> mass @{fm}, inertia @{fi})"
+            subjectOk: subjectOk
         );
     }
     /// <summary>The compound accumulation of two parts against the origin-first oracle.</summary>
@@ -339,10 +339,10 @@ internal static class MassPropertyClaims {
 
         if (
             !FixedMassProperties.TryInvertMass(
-            mass: reciprocalMass,
             fractionBitsMass: bound,
             fractionBitsOut: 0,
-            inverseMass: out var admitted
+            inverseMass: out var admitted,
+            mass: reciprocalMass
         ) ||
             (admitted != 4L)
         ) {
@@ -351,10 +351,10 @@ internal static class MassPropertyClaims {
 
         if (
             FixedMassProperties.TryInvertMass(
-            mass: reciprocalMass,
             fractionBitsMass: (bound + 1),
             fractionBitsOut: 0,
-            inverseMass: out var overMass
+            inverseMass: out var overMass,
+            mass: reciprocalMass
         ) ||
             (overMass != 0L)
         ) {
@@ -363,10 +363,10 @@ internal static class MassPropertyClaims {
 
         if (
             FixedMassProperties.TryInvertMass(
-            mass: reciprocalMass,
             fractionBitsMass: -1,
             fractionBitsOut: 0,
-            inverseMass: out var negMass
+            inverseMass: out var negMass,
+            mass: reciprocalMass
         ) ||
             (negMass != 0L)
         ) {
@@ -377,12 +377,12 @@ internal static class MassPropertyClaims {
             !FixedMassProperties.TrySphereBody(
             density: 0L,
             fractionBitsDensity: bound,
-            radius: 12345L,
+            fractionBitsInertia: bound,
             fractionBitsLength: bound,
             fractionBitsMass: bound,
-            fractionBitsInertia: bound,
+            inertia: out var sphereInertia,
             mass: out var sphereMass,
-            inertia: out var sphereInertia
+            radius: 12345L
         ) ||
             (sphereMass != 0L) ||
             (sphereInertia != 0L)
@@ -394,12 +394,12 @@ internal static class MassPropertyClaims {
             FixedMassProperties.TrySphereBody(
             density: 0L,
             fractionBitsDensity: (bound + 1),
-            radius: 12345L,
+            fractionBitsInertia: bound,
             fractionBitsLength: bound,
             fractionBitsMass: bound,
-            fractionBitsInertia: bound,
+            inertia: out var overSphereInertia,
             mass: out var overSphereMass,
-            inertia: out var overSphereInertia
+            radius: 12345L
         ) ||
             (overSphereMass != 0L) ||
             (overSphereInertia != 0L)
@@ -411,12 +411,12 @@ internal static class MassPropertyClaims {
             FixedMassProperties.TrySphereBody(
             density: 0L,
             fractionBitsDensity: -1,
-            radius: 12345L,
+            fractionBitsInertia: bound,
             fractionBitsLength: bound,
             fractionBitsMass: bound,
-            fractionBitsInertia: bound,
+            inertia: out var negSphereInertia,
             mass: out var negSphereMass,
-            inertia: out var negSphereInertia
+            radius: 12345L
         ) ||
             (negSphereMass != 0L) ||
             (negSphereInertia != 0L)
@@ -434,10 +434,10 @@ internal static class MassPropertyClaims {
     public static string? InversionRefusesBelowResolution() {
         if (
             FixedMassProperties.TryInvertMass(
-            mass: long.MaxValue,
             fractionBitsMass: 0,
             fractionBitsOut: 0,
-            inverseMass: out var underflowed
+            inverseMass: out var underflowed,
+            mass: long.MaxValue
         ) ||
             (underflowed != 0L)
         ) {
@@ -446,10 +446,10 @@ internal static class MassPropertyClaims {
 
         if (
             FixedMassProperties.TryInvertMass(
-            mass: 0L,
             fractionBitsMass: 16,
             fractionBitsOut: 16,
-            inverseMass: out var zeroMass
+            inverseMass: out var zeroMass,
+            mass: 0L
         ) ||
             (zeroMass != 0L)
         ) {
@@ -459,10 +459,10 @@ internal static class MassPropertyClaims {
         // A unit mass at Q16 inverts to a unit inverse mass at Q16, exactly.
         if (
             !FixedMassProperties.TryInvertMass(
-            mass: 65536L,
             fractionBitsMass: 16,
             fractionBitsOut: 16,
-            inverseMass: out var unit
+            inverseMass: out var unit,
+            mass: 65536L
         ) ||
             (unit != 65536L)
         ) {
@@ -472,20 +472,20 @@ internal static class MassPropertyClaims {
         // A diagonal inertia of 2^40 at zero fraction bits: every entry of the true inverse is below one half.
         if (
             FixedMassProperties.TryInvertInertia(
-            ixx: (1L << 40),
-            iyy: (1L << 40),
-            izz: (1L << 40),
-            ixy: 0L,
-            ixz: 0L,
-            iyz: 0L,
             fractionBitsInertia: 0,
             fractionBitsOut: 0,
             invXX: out var ixxOut,
-            invYY: out var iyyOut,
-            invZZ: out var izzOut,
             invXY: out var ixyOut,
             invXZ: out var ixzOut,
-            invYZ: out var iyzOut
+            invYY: out var iyyOut,
+            invYZ: out var iyzOut,
+            invZZ: out var izzOut,
+            ixx: (1L << 40),
+            ixy: 0L,
+            ixz: 0L,
+            iyy: (1L << 40),
+            iyz: 0L,
+            izz: (1L << 40)
         ) ||
             (ixxOut != 0L) ||
             (iyyOut != 0L) ||
@@ -500,20 +500,20 @@ internal static class MassPropertyClaims {
         // The identity tensor at Q16 inverts to the identity tensor at Q16, exactly.
         if (
             !FixedMassProperties.TryInvertInertia(
-            ixx: 65536L,
-            iyy: 65536L,
-            izz: 65536L,
-            ixy: 0L,
-            ixz: 0L,
-            iyz: 0L,
             fractionBitsInertia: 16,
             fractionBitsOut: 16,
             invXX: out var unitXX,
-            invYY: out var unitYY,
-            invZZ: out var unitZZ,
             invXY: out var unitXY,
             invXZ: out var unitXZ,
-            invYZ: out var unitYZ
+            invYY: out var unitYY,
+            invYZ: out var unitYZ,
+            invZZ: out var unitZZ,
+            ixx: 65536L,
+            ixy: 0L,
+            ixz: 0L,
+            iyy: 65536L,
+            iyz: 0L,
+            izz: 65536L
         ) ||
             (unitXX != 65536L) ||
             (unitYY != 65536L) ||
@@ -623,12 +623,12 @@ internal static class MassPropertyClaims {
         var subjectOk = FixedMassProperties.TrySphereBody(
             density: density,
             fractionBitsDensity: fd,
-            radius: radius,
+            fractionBitsInertia: fi,
             fractionBitsLength: fl,
             fractionBitsMass: fm,
-            fractionBitsInertia: fi,
+            inertia: out var inertia,
             mass: out var mass,
-            inertia: out var inertia
+            radius: radius
         );
         var oracleOk = Oracles.TrySphereBody(
             density: density,
@@ -642,11 +642,11 @@ internal static class MassPropertyClaims {
         );
 
         return Compare(
-            subjectOk: subjectOk,
+            expected: [expectedMass, expectedInertia],
+            operands: $"sphere (density {density}@{fd}, radius {radius}@{fl} -> mass @{fm}, inertia @{fi})",
             oracleOk: oracleOk,
             subject: [mass, inertia],
-            expected: [expectedMass, expectedInertia],
-            operands: $"sphere (density {density}@{fd}, radius {radius}@{fl} -> mass @{fm}, inertia @{fi})"
+            subjectOk: subjectOk
         );
     }
     /// <summary>The four primitive volumes against the independent oracle, at swept dimensions and scales.</summary>

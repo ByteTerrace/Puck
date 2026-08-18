@@ -40,7 +40,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
     // The player.bind destination grammar: channel:<name> declares a channel destination instead of a plain command
     // name. An optional trailing token modifies the destination: scale:<value> (channel only, its scale) or
     // value:<value> (command only, a constant CommandValue.Axis a digital source drives it with — the same
-    // mechanism WorldDefaultBindings.Claim already uses for F1..F4's slot constant, now reachable live). Exactly
+    // mechanism a roster claim row uses for F1..F4's slot constant, now reachable live). Exactly
     // one of the two may ride a given bind; naming both is refused. Naming value: beside a destination whose
     // declared ValueKind is not Axis1D is refused upfront, by name, here (Digital included — every other bindable
     // verb keeps its plain source→command behavior with no constant). The reverse gap — an Axis1D destination with
@@ -48,9 +48,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
     // Digital sample, and the vocabulary gate below (WorldAffordances.Validate/BindingVocabularyCheck) already
     // refuses that mismatch on its own, so value:'s absence needs no second, duplicate check.
     private const string ChannelDestinationPrefix = "channel:";
-    // The player.bind chord grammar: chord:<m1>+<m2>[+...] declares a command chord row in the DEFAULT group;
-    // chord:<group>:<m1>+<m2> targets an explicit group.
+    // The player.bind row grammar: chord:<m1>+<m2>[+...] declares an ORDERED command row (press order) in the
+    // DEFAULT group; held:<m1>+<m2> declares an UNORDERED one; <prefix>:<group>:<m1>+<m2> targets an explicit group.
     private const string ChordPrefix = "chord:";
+    private const string HeldPrefix = "held:";
     private const string ScaleTokenPrefix = "scale:";
     private const string ValueTokenPrefix = "value:";
 
@@ -91,7 +92,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                 return CommandResult.Error(output: "[player.bind: scale:<value> and value:<value> are mutually exclusive — name at most one]");
             }
 
-            return CommandResult.Error(output: "[player.bind: expected <seat> <source> <destination> [scale:<value>|value:<value>] — seat 1..4; <source> may be chord:<m1>+<m2> or chord:<group>:<m1>+<m2>; <destination> a command name or channel:<name>]");
+            return CommandResult.Error(output: "[player.bind: expected <seat> <source> <destination> [scale:<value>|value:<value>] — seat 1..4; <source> may be chord:<m1>+<m2> (press order) or held:<m1>+<m2> (any order), either as <prefix>:<group>:<m1>+<m2>; <destination> a command name or channel:<name>]");
         }
 
         if (!WorldArgs.TryParseIndex(
@@ -205,19 +206,30 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
         var current = m_seatBindings.SessionRebind(slot: slot);
+        var restingPage = m_seatBindings.RestingPage(slot: slot);
         BindingProfileDocument rebind;
         BindingProfileDocument probe;
 
-        if (source.StartsWith(
+        var isChord = source.StartsWith(
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: ChordPrefix
-        )) {
+        );
+        var isHeld = source.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: HeldPrefix
+        );
+
+        if (
+            isChord ||
+            isHeld
+        ) {
             if (!TryParseChordToken(
+                activeGroup: restingPage.Group,
                 group: out var group,
                 members: out var members,
                 token: source
             )) {
-                return CommandResult.Error(output: "[player.bind: a chord source must be chord:<m1>+<m2>[+...] or chord:<group>:<m1>+<m2> — e.g. chord:lt+rt]");
+                return CommandResult.Error(output: "[player.bind: a row source must be chord:<m1>+<m2>[+...] or held:<m1>+<m2>[+...], optionally <prefix>:<group>:<m1>+<m2> — e.g. chord:lt+rt, held:mouse.button1+mouse.button2]");
             }
 
             rebind = UpsertChordRebind(
@@ -226,6 +238,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                 current: current,
                 group: group,
                 members: members,
+                ordered: isChord,
                 scale: scale,
                 value: constantValue
             );
@@ -235,6 +248,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                 current: null,
                 group: group,
                 members: members,
+                ordered: isChord,
                 scale: scale,
                 value: constantValue
             );
@@ -243,6 +257,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                 channel: channel,
                 command: command,
                 current: current,
+                restingPage: restingPage,
                 scale: scale,
                 source: source,
                 value: constantValue
@@ -251,6 +266,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                 channel: channel,
                 command: command,
                 current: null,
+                restingPage: restingPage,
                 scale: scale,
                 source: source,
                 value: constantValue
@@ -325,7 +341,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         var document = m_seatBindings.ComposedDocument(slot: slot);
         var builder = new StringBuilder(value: $"[player.bindings: seat {seat}");
         var defaultGroup = ((document.Chords is { Count: > 0 } chords)
-            ? chords[0].Group
+            ? (string)chords[0].Group
             : string.Empty
         );
         var seen = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -350,16 +366,11 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             _ = builder.Append(value: ',');
         }
 
-        _ = builder.Append(value: " requested=").Append(value: (derivation.RequestedGroup ?? "(none)"));
-
-        if (derivation.RequestedShadowed) {
-            _ = builder.Append(value: " (shadowed)");
-        }
 
         // The default group's resting-page entries first (the classic source→command glance)...
         foreach (var row in (document.Chords ?? [])) {
             if (
-                (row.Chord is { Count: > 0 }) ||
+                !row.IsResting ||
                 (row.Page?.Entries is not { } entries) ||
                 !string.Equals(
                 a: row.Group,
@@ -381,10 +392,15 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                     )
                 );
 
-                // The trigger label — a plain entry echoes its Source (unchanged); an ACTIVATOR entry (no Source)
-                // echoes activator:<mode>[step,step,...] instead, so player.bindings names the primitive honestly
-                // rather than printing a blank/null trigger.
-                var trigger = (entry.Source ?? ((entry.Activator is { } activator)
+                // The trigger label — a sourced entry echoes its Sources comma-joined; an ACTIVATOR entry (no
+                // Sources) echoes activator:<mode>[step,step,...] instead, so player.bindings names the primitive
+                // honestly rather than printing a blank/null trigger.
+                var trigger = (((entry.Sources is { Count: > 0 } entrySources)
+                    ? string.Join(
+                        separator: ',',
+                        values: entrySources
+                    )
+                    : null) ?? ((entry.Activator is { } activator)
                     ? $"activator:{activator.Mode.ToString().ToLowerInvariant()}[{string.Join(
                         separator: ',',
                         values: activator.Sequence
@@ -407,19 +423,36 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             }
         }
 
-        // ...then every chord row with its meaning: chord <group>:[m1+m2]→<command> or →page <id>.
+        // ...then every non-resting row with its meaning: chord <group>:[m1+m2]→… (press order), held <group>:[m1+m2]→…
+        // (any order), or both halves when a row carries both.
         foreach (var row in (document.Chords ?? [])) {
-            if (row.Chord is not { Count: > 0 } chord) {
+            if (row.IsResting) {
                 continue;
             }
 
             _ = builder.Append(value: (any
                 ? " | "
-                : " "))
-                .Append(value: "chord ").Append(value: row.Group).Append(value: ":[").Append(value: string.Join(
-                separator: '+',
-                values: chord
-            )).Append(value: "]→");
+                : " "));
+
+            if (row.Held is { Count: > 0 } heldMembers) {
+                _ = builder.Append(value: "held ").Append(value: row.Group).Append(value: ":[").Append(value: string.Join(
+                    separator: '+',
+                    values: heldMembers
+                )).Append(value: "]");
+            }
+
+            if (row.Chord is { Count: > 0 } chord) {
+                _ = builder.Append(value: ((row.Held is { Count: > 0 })
+                    ? " chord:["
+                    : "chord ")).Append(value: ((row.Held is { Count: > 0 })
+                    ? string.Empty
+                    : (row.Group + ":["))).Append(value: string.Join(
+                    separator: '+',
+                    values: chord
+                )).Append(value: "]");
+            }
+
+            _ = builder.Append(value: "→");
             _ = (row.Command switch {
                 { Channel: { } channel } => builder.Append(value: ChannelLabel(channel: channel)),
                 { } command => builder.Append(value: FormatCommandDestination(
@@ -499,15 +532,15 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             ? $"{command} value:{((double)constant.AsAxis1D):0.###}"
             : command
         );
-    // A session-layer resting-page row (the play group's empty chord) — the row entry rebinds accumulate on.
-    private static bool IsSessionRestingPage(BindingChordDefinition row) {
+    // A session-layer resting-page row of the given group (its empty chord) — the row entry rebinds accumulate on.
+    private static bool IsSessionRestingPage(BindingChordDefinition row, string group) {
         return (
             string.Equals(
             a: row.Group,
-            b: WorldDefaultBindings.PlayGroup,
+            b: group,
             comparisonType: StringComparison.Ordinal
         ) &&
-            (row.Chord is not { Count: > 0 }) &&
+            row.IsResting &&
             (row.Page is not null)
         );
     }
@@ -591,7 +624,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         profile.Bindings = merged;
         if (profile.Document is { } document) {
             profile.ReplaceDocument(document: document with {
-                BindingOverlays = [new WorldBindingOverlay(
+                BindingOverlaysRaw = [new WorldBindingOverlay(
                     Id: "identity",
                     Document: merged
                 )],
@@ -686,12 +719,15 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         return new CommandResult(Output: $"[player.signal: {source} {describedSample}]");
     }
-    // Parse a chord token: chord:<m1>+<m2>[+...] (the default play group) or chord:<group>:<m1>+<m2>.
-    private static bool TryParseChordToken(string token, out string group, out string[] members) {
-        group = WorldDefaultBindings.PlayGroup;
+    // Parse a chord token: chord:<m1>+<m2>[+...] (the seat's active group) or chord:<group>:<m1>+<m2>.
+    private static bool TryParseChordToken(string token, string activeGroup, out string group, out string[] members) {
+        group = activeGroup;
         members = [];
 
-        var body = token[ChordPrefix.Length..];
+        var body = token[token.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            value: ':'
+        )..][1..];
         var groupSplit = body.Split(separator: ':');
 
         if (groupSplit.Length == 2) {
@@ -718,25 +754,34 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         return (members.Length > 0);
     }
-    // Build the seat's session-rebind document with one chord row upserted: keep every prior row except the same
-    // (group, ordered chord) — a later bind of the same chord replaces its meaning (a command with its optional
-    // constant value, or a channel with its optional scale).
-    private static BindingProfileDocument UpsertChordRebind(BindingProfileDocument? current, string group, string[] members, string? command, ChannelRef? channel, float? scale, CommandValue? value) {
+    // Build the seat's session-rebind document with one command row upserted: keep every prior row except the one
+    // with the same identity (group, held set, ordered chord) — a later bind of the same row replaces its meaning (a
+    // command with its optional constant value, or a channel with its optional scale).
+    private static BindingProfileDocument UpsertChordRebind(BindingProfileDocument? current, string group, string[] members, bool ordered, string? command, ChannelRef? channel, float? scale, CommandValue? value) {
         var rows = new List<BindingChordDefinition>();
+        var sortedMembers = members.Order(comparer: StringComparer.Ordinal).ToArray();
 
         foreach (var row in (current?.Chords ?? [])) {
-            if (
+            var rowChord = (row.Chord ?? []);
+            var rowHeld = (row.Held ?? []);
+            var sameIdentity = (
                 string.Equals(
                 a: row.Group,
                 b: group,
                 comparisonType: StringComparison.Ordinal
             ) &&
-                ((row.Chord?.Count ?? 0) == members.Length) &&
-                (row.Chord?.SequenceEqual(
-                second: members,
-                comparer: StringComparer.Ordinal
-            ) ?? false)
-            ) {
+                (ordered
+                ? ((rowHeld.Count == 0) && rowChord.SequenceEqual(
+                    second: members,
+                    comparer: StringComparer.Ordinal
+                ))
+                : ((rowChord.Count == 0) && rowHeld.Order(comparer: StringComparer.Ordinal).SequenceEqual(
+                    second: sortedMembers,
+                    comparer: StringComparer.Ordinal
+                )))
+            );
+
+            if (sameIdentity) {
                 continue;
             }
 
@@ -745,7 +790,12 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         rows.Add(item: new BindingChordDefinition(
             Group: group,
-            Chord: members,
+            Chord: (ordered
+            ? members
+            : null),
+            Held: (ordered
+            ? null
+            : members),
             Command: new BindingCommandDefinition(
                 Command: command,
                 Channel: channel,
@@ -761,21 +811,35 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         );
     }
     // Build the seat's session-rebind document with one resting-page entry replaced: keep every prior rebind row,
-    // filter the target source out of the resting page, append the new source→destination (a command with its
-    // optional constant value, or a channel with its optional scale).
-    private static BindingProfileDocument UpsertRebind(BindingProfileDocument? current, string source, string? command, ChannelRef? channel, float? scale, CommandValue? value) {
+    // strip the target source from whichever entry's Sources currently claims it (dropping the entry whole when that
+    // was its only source), append the new source→destination (a command with its optional constant value, or a
+    // channel with its optional scale) as its own row.
+    private static BindingProfileDocument UpsertRebind(BindingProfileDocument? current, (string Group, string PageId) restingPage, string source, string? command, ChannelRef? channel, float? scale, CommandValue? value) {
         var entries = new List<BindingPageEntryDefinition>();
         var rows = new List<BindingChordDefinition>();
 
         foreach (var row in (current?.Chords ?? [])) {
-            if (IsSessionRestingPage(row: row)) {
+            if (IsSessionRestingPage(
+                group: restingPage.Group,
+                row: row
+            )) {
                 foreach (var entry in (row.Page!.Entries ?? [])) {
-                    if (!string.Equals(
-                        a: entry.Source,
+                    if (entry.Sources is not { Count: > 0 } entrySources) {
+                        entries.Add(item: entry);
+
+                        continue;
+                    }
+
+                    var remaining = entrySources.Where(predicate: entrySource => !string.Equals(
+                        a: entrySource,
                         b: source,
                         comparisonType: StringComparison.OrdinalIgnoreCase
-                    )) {
+                    )).ToArray();
+
+                    if (remaining.Length == entrySources.Count) {
                         entries.Add(item: entry);
+                    } else if (remaining.Length > 0) {
+                        entries.Add(item: entry with { Sources = remaining, });
                     }
                 }
             } else {
@@ -784,7 +848,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         }
 
         entries.Add(item: new BindingPageEntryDefinition(
-            Source: source,
+            Sources: [source],
             Command: command,
             Channel: channel,
             Scale: scale,
@@ -793,10 +857,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         rows.Insert(
             index: 0,
             item: new BindingChordDefinition(
-                Group: WorldDefaultBindings.PlayGroup,
+                Group: restingPage.Group,
                 Chord: [],
                 Page: new BindingPageDefinition(
-                    Id: WorldDefaultBindings.BasePageId,
+                    Id: restingPage.PageId,
                     Entries: entries
                 )
             )
@@ -821,7 +885,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.bindings",
-            description: "Echoes a seat's composed ACTIVE mapping after the engine default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds merge. Leads with the seat's context derivation — group=<active> (<step>) where <step> is context <family>=<state>, requested, or default — then contexts: one segment per admitted family (<family>=<state>→<group> (wins), →<group> (shadowed), or →(no row)) and requested=<group|(none)> (marked (shadowed) when a context row overrides it); then the default group's resting-page trigger→destination entries and every chord row with its meaning (chord <group>:[m1+m2]→<destination> or →page <id>); a destination is a command name (with a trailing value:<v> when the entry carries a constant activation value — see player.bind) or channel:<name>; a trigger is a plain source id, or activator:held[...]/activator:tapped[...] for a row whose trigger is an ordered sequence, with a trailing [toggle] when the entry's mode is Toggle: player.bindings [seat] (optional seat 1..4, default 1).",
+            description: "Echoes a seat's composed ACTIVE mapping after the world overlays ⊕ profile bindings ⊕ live session rebinds merge. Leads with the seat's context derivation — group=<active> (<step>) where <step> is context <family>=<state>, requested, or default — then contexts: one segment per admitted family (<family>=<state>→<group> (wins), →<group> (shadowed), or →(no row)) and requested=<group|(none)> (marked (shadowed) when a context row overrides it); then the default group's resting-page trigger→destination entries and every chord row with its meaning (chord <group>:[m1+m2]→<destination> or →page <id>); a destination is a command name (with a trailing value:<v> when the entry carries a constant activation value — see player.bind) or channel:<name>; a trigger is a plain source id, or activator:held[...]/activator:tapped[...] for a row whose trigger is an ordered sequence, with a trailing [toggle] when the entry's mode is Toggle: player.bindings [seat] (optional seat 1..4, default 1).",
             handler: BindingsHandler
         );
         yield return CommandDefinition.WithWireArgs(

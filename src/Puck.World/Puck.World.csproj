@@ -1,101 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <IsAotCompatible>false</IsAotCompatible>
+        <OutputType>Exe</OutputType>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Composition roots</PuckLayer>
-    </PropertyGroup>
-    <!--
-        Puck.World — the definitive Puck game. A launcher-based windowed app for up to four networked local players —
-        keyboard, gamepads, and console-scripted alike (every player is a networked player; a local device is just one
-        at zero latency) — each with a persisted profile (color + speeds + look-invert), a chased over-the-shoulder
-        camera, its own colored avatar, and its own viewport on the layout ladder (fullscreen → side-by-side →
-        big-top/two-bottom → 2×2 quad as players join). Authored creations and placements render
-        through the shared SDF render assembly. Owned worlds persist as files under the state root and sync to a
-        per-user cloud container through Puck.Storage (the storage.* verbs). Its authoritative simulation uses the Hosting/Launcher
-        fixed-step easy path, per-tick command snapshots, and Puck.Maths fixed point. World-specific behavior has no
-        build-only gate or validate flag and is verified by running the real executable; narrow deterministic
-        headless canaries may gate landing through that ordinary run contract. The engine battery that once gated the shared engine
-        contracts was quarantined on 2026-08-02, so those are unverified too. It ships no shaders of its own; the SDF
-        kernels come from Puck.SdfVm's content (copied transitively into this output).
-    -->
-    <PropertyGroup>
-        <OutputType>Exe</OutputType>
-        <!-- Dynamic PGO's mid-session tier transition repeatedly suspended the 120 Hz pump for 15-18 ms around
-             26-30 seconds into this executable. Keep ordinary optimized tiering, but trade speculative profile-guided
-             re-JIT throughput for stable game-frame latency; measured World CPU work has ample headroom. -->
         <TieredPGO>false</TieredPGO>
-        <!-- The game consumes reflection-based document serialization and built-in COM interop. -->
-        <IsAotCompatible>false</IsAotCompatible>
     </PropertyGroup>
-
     <ItemGroup>
-        <!-- The world document (puck.world.def.v1): the loader reads Assets/worlds/play.world.json beside the
-             executable (AppContext.BaseDirectory) at boot, so copy the Assets tree next to the output. -->
-        <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
+        <PackageReference Include="System.CommandLine" Version="[2.*, )" />
     </ItemGroup>
-
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
-        <!-- The D3D12-host GPU capture transport (WorldScreenBinder) constructs DirectXGpuSurfaceExportFactory and reads
-             the render adapter LUID off IDirectXDeviceContext; the concrete simultaneous-access opener is not on a
-             neutral seam, so World takes the backend directly (Puck.DirectX.Presentation itself is no longer a
-             direct reference — it arrives transitively through Puck.Launcher.Windows, which owns the presenter
-             registration). -->
         <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
-        <!-- The forge, on both halves. The tune compile chain (AudioDocumentCompiler/TuneRom): a WorldTune asset
-             compiles to a headless cart the audio director's acquire/release hosting boots (TuneMachineSource),
-             consumed. And Puck.Forge.Authoring: the puck.creation.v1/puck.audio.v1/puck.synth.v1 document families
-             the world document embeds, their canonicalize boundary, the sculpt model behind the editor, and GridSnap
-             (the drag channel's snap core). -->
-        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
-        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
-        <!-- Puck.World stays one universal build for every host OS (no OS-conditional ProjectReference), so both
-             OS-specific launcher/platform pairs are referenced unconditionally; the OperatingSystem.IsWindows()
-             branches in WorldBootComposition/Program.cs decide which one's methods actually run. -->
         <ProjectReference Include="..\Puck.Launcher.Linux\Puck.Launcher.Linux.csproj" />
         <ProjectReference Include="..\Puck.Launcher.Windows\Puck.Launcher.Windows.csproj" />
+        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <!-- WorldRemoteAuthority/WorldFederatedServerLink frame federation bytes directly against the transport-
-             neutral wire grammar (WireReader/Writer/Frame), already transitive via Puck.World.Protocol. -->
         <ProjectReference Include="..\Puck.Networking\Puck.Networking.csproj" />
-        <!-- The screen-space overlay UI (UnifiedOverlayNode + writers). Its compiled overlay bytecode and fixed,
-             pre-baked UI glyph atlas flow transitively into this output. World-space creation text is separate:
-             worlds bring hash-pinned font files and Puck.Text generates their SDF catalog in process. -->
         <ProjectReference Include="..\Puck.Overlays\Puck.Overlays.csproj" />
-        <!-- The neutral windowing/capture contracts (ConfiguredNativeWindow, IClipboardService,
-             INativeImageCaptureService, Memory.AddPuckAllocator) plus the OS-specific registration statics
-             WorldBootComposition's OperatingSystem.IsWindows() branches choose between. -->
-        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
         <ProjectReference Include="..\Puck.Platform.Linux\Puck.Platform.Linux.csproj" />
         <ProjectReference Include="..\Puck.Platform.Windows\Puck.Platform.Windows.csproj" />
-        <!-- The recording graph (puck.recording.v1): the capture verbs build a RecordingSession from the recording
-             document and the Puck.Platform.Windows/.Linux encoder/audio factories, wired through the launcher capture controller. -->
+        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
         <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
-        <!-- The addon-as-principal keystone. Puck.Scripting is CONSUMED, never modified — Addons/WorldAddonRuntime
-             mounts the world document's addon rows through its AddonHost and pumps them inside WorldServer.Step
-             (Addons/AddonSimulationPump is the one crossing from guest bytes to typed submissions). The pinned
-             Wasmtime [44.0.0] native engine flows transitively. World's own AddonSourceVocabulary narrows
-             Puck.Input's InputSourceVocabulary to the AddonSourceShape subset for the binding-vocabulary check
-             (WorldAffordances). -->
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
         <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
-        <!-- The document model + wire/tape protocol (headless P1 split) and the authoritative server runtime that
-             folds against them. Puck.World is the sole composition root that holds both these AND presentation. -->
         <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
+        <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
+        <ProjectReference Include="..\Puck.World.Console\Puck.World.Console.csproj" />
+        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
         <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
     </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
-        <PackageReference Include="System.CommandLine" Version="[2.*,)" />
+     <ItemGroup>
+        <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

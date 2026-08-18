@@ -59,14 +59,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     uint tileIndex = worldTileIndex(id.z, id.xy, params.tileGrid);
 
-    // A child viewport shows another node's surface — there is no SDF camera to cone-march, and Stage 1 never reads
-    // this slot's cull entry. Stage 2 DOES read it (its `== TileEmpty` test chooses source-copy vs flat fill), and the
-    // tile buffer is device-local and never cleared, so the slot must be DEFINED here: any word that happened to hold
-    // TileEmpty's bit pattern would paint the flat background over a live child surface. sdf-cull-args skips child
-    // viewports, so this 0.0 is invisible to its surviving-tile bbox scan.
+    // A child viewport shows another node's surface — there is no SDF camera to cone-march. No consumer reads this
+    // slot's cull entry: sdf-cull-args skips child viewports in its surviving-tile bbox reduction, Stage 1 returns
+    // for a child viewport before it ever reads the tile buffer, and the compositor no longer consults the cull
+    // buffer at all (the sky pre-pass fills every source pixel, so it needs no tile-empty test). Leaving the slot's
+    // bits alone is safe.
     if (isChildViewport(id.z)) {
-        tiles[tileIndex] = 0.0;
-
         return;
     }
 

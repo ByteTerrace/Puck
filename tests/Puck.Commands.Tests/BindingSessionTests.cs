@@ -38,9 +38,9 @@ public sealed class BindingSessionTests {
     [Fact]
     public void ResultRewritesDisplacesAppendsAndStillCompiles() {
         var document = Document(entries: [
-            new BindingPageEntryDefinition(Source: "pad.south", Command: "jump"),
-            new BindingPageEntryDefinition(Source: "pad.east", Command: "menu"),
-            new BindingPageEntryDefinition(Source: "pad.north", Command: "keep"),
+            new BindingPageEntryDefinition(Sources: ["pad.south"], Command: "jump"),
+            new BindingPageEntryDefinition(Sources: ["pad.east"], Command: "menu"),
+            new BindingPageEntryDefinition(Sources: ["pad.north"], Command: "keep"),
         ]);
         var result = new BindingSessionResult(Captures: [
             new BindingSessionCapture(Command: "jump", Source: "pad.east", MatchedSuggestion: false),
@@ -55,23 +55,23 @@ public sealed class BindingSessionTests {
         var entries = Assert.Single(collection: rewritten.Chords).Page!.Entries;
 
         Assert.Equal(expected: "menu", actual: Assert.Single(collection: displaced).Command);
-        Assert.Equal(expected: "pad.east", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "jump")).Source);
-        Assert.Equal(expected: "pad.north", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "keep")).Source);
-        Assert.Equal(expected: "pad.west", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "new-action")).Source);
+        Assert.Equal(expected: "pad.east", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "jump")).Sources![0]);
+        Assert.Equal(expected: "pad.north", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "keep")).Sources![0]);
+        Assert.Equal(expected: "pad.west", actual: Assert.Single(entries, predicate: static entry => (entry.Command == "new-action")).Sources![0]);
         _ = BindingProfile.Compile(document: rewritten);
     }
     [Fact]
     public void PlanFromPageSkipsActivatorRowsAndReservesModifierSources() {
         var document = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [new BindingModifierDefinition(Id: "shift", Source: "pad.leftTrigger")],
+            Modifiers: [new BindingModifierDefinition(Id: "shift", Sources: ["pad.leftTrigger"])],
             Chords: [new BindingChordDefinition(
                 Group: "play",
                 Chord: [],
                 Page: new BindingPageDefinition(Id: "base", Entries: [
-                    new BindingPageEntryDefinition(Source: "pad.south", Command: "jump"),
+                    new BindingPageEntryDefinition(Sources: ["pad.south"], Command: "jump"),
                     new BindingPageEntryDefinition(
-                        Source: null,
+                        Sources: null,
                         Command: "combo",
                         Activator: new BindingActivatorDefinition(Sequence: ["pad.west", "pad.north"])
                     ),
@@ -95,7 +95,7 @@ public sealed class BindingSessionTests {
     [Fact]
     public void ResultMatchesCommandIdentityCaseInsensitively() {
         var document = Document(entries: [new BindingPageEntryDefinition(
-            Source: "key.old",
+            Sources: ["key.old"],
             Command: "jump"
         )]);
         var result = new BindingSessionResult(Captures: [new BindingSessionCapture(
@@ -112,7 +112,7 @@ public sealed class BindingSessionTests {
         var entry = Assert.Single(collection: Assert.Single(collection: rewritten.Chords).Page!.Entries);
 
         Assert.Equal(expected: "jump", actual: entry.Command);
-        Assert.Equal(expected: "key.new", actual: entry.Source);
+        Assert.Equal(expected: "key.new", actual: entry.Sources![0]);
     }
 
     private static (IReadOnlyList<BindingSessionEvent> Events, IReadOnlyList<BindingSessionCapture> Captures) RunProtocol() {

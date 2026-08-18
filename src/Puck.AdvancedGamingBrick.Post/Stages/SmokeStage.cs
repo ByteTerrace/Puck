@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// dispatch, and the DI composition root. It needs no external ROM; the one BIOS-dependent check skips when only the
 /// zeroed BIOS stub is present.
 /// </summary>
-internal sealed class SmokeStage : IPostStage {
+internal sealed class SmokeStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "smoke";

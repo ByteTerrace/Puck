@@ -9,11 +9,16 @@ namespace Puck.World;
 
 /// <summary>
 /// The audio sections' READ-BACK + LEVER surface: <c>world.speakers</c> (the document rows), <c>audio.state</c> +
-/// <c>speaker.state</c> (live device/per-row status), <c>audio.emitters</c> (the derived emitter table), and
-/// <c>world.volume</c> (the master-volume session lever). This module WRITES nothing: the four sections it reads are
-/// authored through the general <see cref="WorldRowCommandModule"/> — <c>world.row.set</c>/<c>world.row.remove</c>
-/// over <c>speakers</c>/<c>tunes</c>/<c>patches</c>, and <c>world.row.set audio &lt;json&gt;</c> for the keyless
-/// defaults row — so no section is reachable through two doors. A SEPARATE module from
+/// <c>speaker.state</c> (live device/per-row status), <c>audio.emitters</c> (the derived emitter table),
+/// <c>world.volume</c> (the master-volume session lever), and <c>music.state</c> + <c>judge.state</c> (the live
+/// music clock/director state and the declared judge window sets, both routed through seat 1's currently claimed
+/// <see cref="WorldAuthorityEndpoint.Submissions"/> — never the boot instance's own injected link directly — so the
+/// answer tracks a transferred seat the same way <see cref="PlayerCommandModule"/>'s drive-a-player verbs do). This
+/// module WRITES nothing: the four
+/// document sections it reads are authored through the general <see cref="WorldRowCommandModule"/> —
+/// <c>world.row.set</c>/<c>world.row.remove</c> over <c>speakers</c>/<c>tunes</c>/<c>patches</c>, and
+/// <c>world.row.set audio &lt;json&gt;</c> for the keyless defaults row (<c>music</c>/<c>judges</c> are boot-only —
+/// no live write door exists yet) — so no section is reachable through two doors. A SEPARATE module from
 /// <see cref="WorldMutationCommandModule"/> to keep every class under its analyzer ceilings.
 /// </summary>
 /// <remarks><c>world.volume</c> is a session LEVER rather than a mutation, but the same grant discipline reaches it:
@@ -22,7 +27,26 @@ namespace Puck.World;
 /// the gain moves, exactly as <c>world.shadows</c>, <c>world.ao</c>, and <c>world.target</c> do. A principal whose
 /// <c>mutate section:audio</c> grant has been revoked has its volume change refused, not applied; on accept,
 /// <c>world.save</c> folds the live gain into the document's <c>audio.masterGain</c>.</remarks>
-internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink link, WorldAudioDirector director, Audio.WorldAudioRenderService device) : ICommandModule {
+internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink link, WorldAudioDirector director, Audio.WorldAudioRenderService device, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+    // Answers a world-scoped audio query off seat 1's CURRENTLY CLAIMED authority (WorldSeatAuthorityRouter's own
+    // one-writer table), never the boot instance's injected link directly — a seat transferred by a corner crossing
+    // is routed to its new authority the same way PlayerCommandModule's drive-a-player verbs are. Seat 1's route is
+    // published for every boot, so this never throws for want of a claim. The query carries the routed endpoint's
+    // OWN 1-based entity index (never the local roster display number) — its Observe grant check narrows to that
+    // body, the one subject a routed seat is always seeded with, so a transferred seat never needs a standing
+    // world-wide grant just to read music/judge state.
+    private static CommandResult RoutedQuery(Func<int, WorldQuery> query, WorldAuthorityRoute route) {
+        var result = default(CommandResult);
+
+        route.Endpoint.Submissions.Query(
+            query: query((route.EntityIndex + 1)),
+            completion: answer => {
+                result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
+            }
+        );
+
+        return result;
+    }
     // The world.speakers listing: one segment per declared row off the LIVE definition, so a speaker mutation's new
     // source narrates honestly, the same live-definition read world.screens uses.
     private CommandResult SpeakersHandler(CommandContext context, WireArgs args) {
@@ -161,6 +185,28 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             handler: (context, args) => ((args.Count != 0)
             ? CommandResult.Error(output: "[audio.emitters: no arguments — dumps the derived emitter table]")
             : new CommandResult(Output: director.DescribeEmitters()))
+        );
+        yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Unbindable,
+            name: "music.state",
+            description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, and the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music). Follows a transferred seat the same way player.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
+            valueKind: CommandValueKind.Digital,
+            handler: _ => RoutedQuery(
+                query: static index => new WorldQuery.MusicState(Index: index),
+                route: seatRouter.Route(slot: 0)
+            ),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Unbindable,
+            name: "judge.state",
+            description: "Reads the declared judge window sets, and the last judged grade/tick, authoritatively off seat 1's currently claimed authority. Follows a transferred seat the same way player.where does. A query — always echoes.",
+            valueKind: CommandValueKind.Digital,
+            handler: _ => RoutedQuery(
+                query: static index => new WorldQuery.JudgeState(Index: index),
+                route: seatRouter.Route(slot: 0)
+            ),
+            routing: CommandRouting.Immediate
         );
     }
 }

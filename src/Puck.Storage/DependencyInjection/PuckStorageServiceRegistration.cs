@@ -8,6 +8,7 @@ public static class PuckStorageServiceRegistration {
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<IObjectBlobStoreBackend, AzureBlobObjectBlobStoreBackend>());
+        services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<IObjectBlobStoreBackend, DirectoryObjectBlobStoreBackend>());
         services.TryAddSingleton<IObjectBlobStore, ObjectBlobStore>();
     }
 }

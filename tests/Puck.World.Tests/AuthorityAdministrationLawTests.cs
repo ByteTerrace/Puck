@@ -32,8 +32,8 @@ public sealed class AuthorityAdministrationLawTests {
 
         Laws.RefusalWithControl(
             lawId: "authority.grant-administration-own-body-only",
-            deniedOutcome: () => GrantAndObserveHeld(fixture: fixture, actor: actor, recipient: recipient, subject: otherBody),
-            controlOutcome: () => GrantAndObserveHeld(fixture: fixture, actor: actor, recipient: recipient, subject: ownBody));
+            deniedOutcome: () => GrantAndObserveHeld(actor: actor, fixture: fixture, recipient: recipient, subject: otherBody),
+            controlOutcome: () => GrantAndObserveHeld(actor: actor, fixture: fixture, recipient: recipient, subject: ownBody));
     }
 
     private static bool GrantAndObserveHeld(WorldFixture fixture, WorldPrincipal actor, WorldPrincipal recipient, GrantSubject subject) {
@@ -41,6 +41,6 @@ public sealed class AuthorityAdministrationLawTests {
 
         fixture.Server.Grant(grant: grant, actor: actor);
 
-        return fixture.Server.Grants.Allows(principal: recipient, capability: WorldCapability.Drive, subject: subject);
+        return fixture.Server.Grants.Allows(capability: WorldCapability.Drive, principal: recipient, subject: subject);
     }
 }

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm.Views;
@@ -77,13 +78,13 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     /// <param name="height">The render height (default the native panel size).</param>
     /// <param name="resolveScreenSource">Optional first-level screen-source resolver for this projection. Omit it
     /// to bind every screen surface to no-signal, which is also the recursion boundary for child projections.</param>
-    /// <param name="isBudgeted">Whether this view counts against <see cref="ViewStack.RefreshBudget"/>'s round-robin
-    /// share (the default, <see langword="true"/> — an ordinary camera-projection session, tolerant of a stale image
+    /// <param name="isBudgeted">Whether this view counts against <see cref="OffscreenRenderBudget.PerProducedFrame"/>'s
+    /// round-robin share (the default, <see langword="true"/> — an ordinary camera-projection session, tolerant of a stale image
     /// between refreshes). <see langword="false"/> for a WINDOW projection: a stale image would show the destination
     /// scene lagging the viewer's own eye movement, breaking the parallax the projection exists for, so it must
     /// resolve every produced frame instead (see <see cref="IsBudgeted"/>). The document-level ceiling on how many
-    /// simultaneously unbudgeted sessions may exist is <c>Puck.World.WorldSessionWindowCapacity.MaxSimultaneousWindows</c>,
-    /// enforced at validation — this constructor trusts its caller, not a second count here.</param>
+    /// simultaneously unbudgeted sessions may exist is the same <see cref="OffscreenRenderBudget.PerProducedFrame"/>,
+    /// enforced by the host's document validator — this constructor trusts its caller, not a second count here.</param>
     public WorldSessionView(SdfViewGpuServices services, bool hostsOnDirectX, ISdfFrameSource frameSource, uint width = DefaultWidth, uint height = DefaultHeight, Func<int, nint>? resolveScreenSource = null, bool isBudgeted = true) {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
@@ -106,69 +107,20 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     /// room beyond whatever the host's own screen-surface glow accounting already does for a bound image.</remarks>
     public Vector3 RoomGlow => Vector3.Zero;
 
-    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) {
-        if (m_engine is not null) {
-            return;
-        }
-
-        m_kernels ??= SdfWorldKernels.Load(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_hostsOnDirectX));
-
-        var wordCapacity = ((m_frameSource is SdfCompositionFrameSource composed)
-            ? composed.WorstCaseProgramWordCapacity
-            : frame.Program.Words.Length
-        );
-        var instanceCapacity = ((m_frameSource is SdfCompositionFrameSource composedInstances)
-            ? composedInstances.WorstCaseInstanceCapacity
-            : frame.Program.Instances.Count
-        );
-        var dynamicCapacity = ((m_frameSource is SdfCompositionFrameSource composedTransforms)
-            ? composedTransforms.WorstCaseDynamicTransformCapacity
-            : frame.DynamicTransforms.Count
-        );
-
-        var timingFactory = (ViewTiming.Enabled
-            ? m_services.TimingFactory
-            : null
-        );
-        var timingRecorder = (ViewTiming.Enabled
-            ? m_services.TimingRecorder
-            : null
-        );
-
-        m_engine = new SdfWorldEngine(
+    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) =>
+        SdfFilmingViewEngine.EnsureEngine(
             device: device,
+            engine: ref m_engine,
+            frame: frame,
+            frameSource: m_frameSource,
             gpu: gpu,
             height: m_height,
-            kernels: m_kernels.Value,
-            options: new SdfWorldEngineOptions(
-                // A session view never bakes carves — a filming view with an allocated pool it never bakes into
-                // wastes real memory (the historical filmed-carve defect NestedWorldView's own sync pairs entry in
-                // the sdf-world skill documents), so capacity 0 gives a 1-float filler and the shader's conservative
-                // uncarved-hull fallback.
-                BrickPoolVoxelCapacity: 0,
-                DynamicTransformCapacity: dynamicCapacity,
-                InstanceCapacity: instanceCapacity,
-                Program: frame.Program,
-                ProgramWordCapacity: wordCapacity,
-                TimingFactory: timingFactory,
-                TimingRecorder: timingRecorder,
-                ViewportCapacity: ((uint)Math.Max(
-                    val1: 1,
-                    val2: frame.Views.Count
-                ))
-            ),
+            hostsOnDirectX: m_hostsOnDirectX,
+            kernels: ref m_kernels,
+            services: m_services,
+            viewLabel: "session view",
             width: m_width
         );
-
-        if (
-            (timingFactory is not null) &&
-            (timingRecorder is not null)
-        ) {
-            Console.Error.WriteLine(value: (m_engine.TimingEnabled
-                ? $"[view-timing] session view enabled | period {m_engine.TimingCapabilities.PeriodNanoseconds:0.###}ns"
-                : "[view-timing] session view — the device reports no usable GPU timestamps; running untimed."));
-        }
-    }
 
     /// <inheritdoc/>
     public void Dispose() {

@@ -3,6 +3,9 @@ namespace Puck.Cli.Canary;
 internal enum CanaryBootShape {
     Headless,
     Windowed,
+    /// <summary>A multi-boot leg through <c>Puck.Launcher.Stub</c> rather than <c>Puck.World.dll</c> directly — the
+    /// only shape that observes a second process launch. Never automatic (<see cref="CanaryManifest.IsAutomatic"/>).</summary>
+    Stub,
 }
 internal enum CanaryCommandOutcome {
     Accepted,
@@ -41,6 +44,10 @@ internal sealed record CanaryManifest(
 }
 internal sealed record CanaryLeg(
     IReadOnlyList<CanaryAssertion> Assertions,
+    // Non-empty only for a federated mesh leg (see CanaryAuthorityRole): every entry is a listener, none dials out,
+    // and exactly one entry's World/Script equal this leg's own — the entry unscoped assertions read by default.
+    // Empty for the pre-existing shapes (a lone process, or a two-process client/authorityWorld pair).
+    IReadOnlyList<CanaryAuthorityRole> Authorities,
     string? AuthorityWorldPath,
     bool Connect,
     IReadOnlyList<CanaryCommandClaim> Commands,
@@ -48,9 +55,15 @@ internal sealed record CanaryLeg(
     string ScriptPath,
     string WorldPath
 );
-internal sealed record CanaryCommandClaim(string Verb, int Occurrence, CanaryCommandOutcome Outcome);
+// One listener in a federated mesh leg: its own world document, its own driving script, addressed by Id everywhere
+// a manifest assertion or a peer's admission row needs to name it. Deliberately silent about HOW it is hosted — see
+// CANARY-SHAPE.md item 7 — so a future non-Process launch strategy (a Silo grain standing in for one entry) is an
+// addition here, never a reshape of this record or the manifest members that reference an Id.
+internal sealed record CanaryAuthorityRole(string Id, string ScriptPath, string WorldPath);
+internal sealed record CanaryCommandClaim(string Verb, int Occurrence, CanaryCommandOutcome Outcome, CanaryStream? StreamOverride);
 internal abstract record CanaryAssertion(string Name);
 internal sealed record CanaryLineAssertion(
+    string? Authority,
     CanaryLineMatch Match,
     string Name,
     bool Present,
@@ -58,6 +71,7 @@ internal sealed record CanaryLineAssertion(
     string Text
 ) : CanaryAssertion(Name: Name);
 internal sealed record CanaryResponseAssertion(
+    string? Authority,
     int Count,
     IReadOnlyList<CanaryValueExtraction> Extractions,
     string Name,
@@ -66,6 +80,7 @@ internal sealed record CanaryResponseAssertion(
     string Verb
 ) : CanaryAssertion(Name: Name);
 internal sealed record CanarySequenceAssertion(
+    string? Authority,
     string Name,
     IReadOnlyList<CanaryResponseSelector> Responses,
     CanaryStream Stream

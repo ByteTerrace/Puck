@@ -55,6 +55,7 @@ internal sealed class WorldCursorFeed {
     private static readonly string[] ButtonWords = ["-", "L", "R", "LR", "M", "LM", "RM", "LRM"];
 
     private readonly WorldClient m_client;
+    private readonly WorldOverlayFacts m_facts;
     private readonly IHudSource m_hud;
     private readonly WorldEditorPicker m_picker;
     private readonly WorldPointer m_pointer;
@@ -93,8 +94,11 @@ internal sealed class WorldCursorFeed {
     /// <param name="picker">The editor's look-ray picking program, aimed down the cursor ray here.</param>
     /// <param name="hud">The authored HUD structure source (panel rects, the overlay-side hover targets).</param>
     /// <param name="store">The cursor store the overlay reads.</param>
+    /// <param name="facts">The overlay-visibility fact evaluator the cursor policy's <c>visible</c> reads.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldCursorFeed(WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, WorldEditorPicker picker, IHudSource hud, CursorStore store) {
+    public WorldCursorFeed(WorldPointer pointer, PlayerRoster roster, WorldClient client, WorldSeatViewInput viewInput, WorldSeatViewports viewports, WorldEditorPicker picker, IHudSource hud, CursorStore store, WorldOverlayFacts facts) {
+        ArgumentNullException.ThrowIfNull(facts);
+        m_facts = facts;
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: client);
@@ -359,6 +363,17 @@ internal sealed class WorldCursorFeed {
             view: in view
         );
         var hover = string.Empty;
+
+        // The authored cursor policy's own visibility condition hides the cursor like any other decided reason.
+        if (
+            (reason is null) &&
+            !m_facts.Evaluate(
+            predicate: (m_client.Definition.Hud.Defaults?.Cursor ?? WorldHudCursor.Default).Visible,
+            slot: slot
+        )
+        ) {
+            reason = "visible-false";
+        }
 
         if (reason is null) {
             // LIVE-CONSUMED: the world-authored cursor policy (hud.defaults.cursor), read fresh each frame so a

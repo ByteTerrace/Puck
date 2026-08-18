@@ -188,7 +188,7 @@ internal static class SymmetricSolveClaims {
         var d = FoldModerate(raw: left[2]);
         var shift = OutputShift(raw: right[0]);
 
-        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, outputFractionShift: shift, invA: out var sa, invB: out var sb, invD: out var sd);
+        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, invA: out var sa, invB: out var sb, invD: out var sd, outputFractionShift: shift);
         var oracleOk = Oracles.TryInvertSymmetric2(a: a, b: b, d: d, invA: out var oa, invB: out var ob, invD: out var od, outputFractionShift: shift);
 
         if (subjectOk != oracleOk) {
@@ -218,7 +218,7 @@ internal static class SymmetricSolveClaims {
         var d = FoldModerate(raw: left[2]);
         var shift = OutputShift(raw: right[0]);
 
-        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, outputFractionShift: shift, invA: out var sa, invB: out var sb, invD: out var sd);
+        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, invA: out var sa, invB: out var sb, invD: out var sd, outputFractionShift: shift);
         var bareissOk = Oracles.TryBareissInvertSymmetric2(a: a, b: b, d: d, invA: out var ba, invB: out var bb, invD: out var bd, outputFractionShift: shift);
 
         if (subjectOk != bareissOk) {
@@ -345,7 +345,7 @@ internal static class SymmetricSolveClaims {
             return "Solve2 failed to refuse (or left a non-zero out) on the all-zero matrix";
         }
 
-        if (FixedSymmetricSolve.TryInvertSymmetric2(a: 0L, b: 0L, d: 0L, outputFractionShift: 16, invA: out var za, invB: out var zb, invD: out var zd) || (za != 0L) || (zb != 0L) || (zd != 0L)) {
+        if (FixedSymmetricSolve.TryInvertSymmetric2(a: 0L, b: 0L, d: 0L, invA: out var za, invB: out var zb, invD: out var zd, outputFractionShift: 16) || (za != 0L) || (zb != 0L) || (zd != 0L)) {
             return "Invert2 failed to refuse (or left a non-zero out) on the all-zero matrix";
         }
 
@@ -354,7 +354,7 @@ internal static class SymmetricSolveClaims {
             return "Solve2 failed to refuse (or left a non-zero out) on a rank-1 singular matrix";
         }
 
-        if (FixedSymmetricSolve.TryInvertSymmetric2(a: 4L, b: 6L, d: 9L, outputFractionShift: 16, invA: out var ra, invB: out var rb, invD: out var rd) || (ra != 0L) || (rb != 0L) || (rd != 0L)) {
+        if (FixedSymmetricSolve.TryInvertSymmetric2(a: 4L, b: 6L, d: 9L, invA: out var ra, invB: out var rb, invD: out var rd, outputFractionShift: 16) || (ra != 0L) || (rb != 0L) || (rd != 0L)) {
             return "Invert2 failed to refuse (or left a non-zero out) on a rank-1 singular matrix";
         }
 
@@ -404,7 +404,7 @@ internal static class SymmetricSolveClaims {
             return "TryInvertSymmetric3 answered (rather than refusing, or left a non-zero out) at the documented large-magnitude envelope";
         }
 
-        if (FixedSymmetricSolve.TryInvertSymmetric2(a: huge, b: 0L, d: huge, outputFractionShift: outputFractionShift, invA: out var ia2, invB: out var ib2, invD: out var id2) ||
+        if (FixedSymmetricSolve.TryInvertSymmetric2(a: huge, b: 0L, d: huge, invA: out var ia2, invB: out var ib2, invD: out var id2, outputFractionShift: outputFractionShift) ||
             (ia2 != 0L) || (ib2 != 0L) || (id2 != 0L)) {
             return "TryInvertSymmetric2 answered (rather than refusing, or left a non-zero out) at the documented large-magnitude envelope";
         }
@@ -448,7 +448,7 @@ internal static class SymmetricSolveClaims {
             return $"TrySolveSymmetric2 fabricated a solution ({sx},{sy}) for the exactly-singular rank-one lossy-preconditioning witness instead of refusing";
         }
 
-        if (FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, outputFractionShift: 1, invA: out var ia, invB: out var ib, invD: out var id) || (ia != 0L) || (ib != 0L) || (id != 0L)) {
+        if (FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, invA: out var ia, invB: out var ib, invD: out var id, outputFractionShift: 1) || (ia != 0L) || (ib != 0L) || (id != 0L)) {
             return $"TryInvertSymmetric2 fabricated an inverse ({ia},{ib},{id}) for the exactly-singular rank-one lossy-preconditioning witness instead of refusing";
         }
 
@@ -690,7 +690,7 @@ internal static class SymmetricSolveClaims {
         var d = FoldModerate(raw: left[2]);
         var shift = OutputShift(raw: right[0]);
 
-        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, outputFractionShift: shift, invA: out var invA, invB: out var invB, invD: out var invD);
+        var subjectOk = FixedSymmetricSolve.TryInvertSymmetric2(a: a, b: b, d: d, invA: out var invA, invB: out var invB, invD: out var invD, outputFractionShift: shift);
 
         if (!subjectOk) {
             return (((invA == 0L) && (invB == 0L) && (invD == 0L))
@@ -887,11 +887,11 @@ internal static class SymmetricSolveClaims {
             a: a,
             b: b,
             d: d,
+            fractionBitsMatrix: fractionBitsMatrix,
+            fractionBitsOut: fractionBitsOut,
+            fractionBitsVector: fractionBitsVector,
             vX: vX,
             vY: vY,
-            fractionBitsMatrix: fractionBitsMatrix,
-            fractionBitsVector: fractionBitsVector,
-            fractionBitsOut: fractionBitsOut,
             x: out var sx,
             y: out var sy
         );
@@ -1023,7 +1023,7 @@ internal static class SymmetricSolveClaims {
         }
 
         // [[0,1],[1,0]] swaps the components; reading the off-diagonal into only one row would answer (2,0) or (0,1).
-        if (!FixedSymmetricSolve.TryApplySymmetric2(a: 0L, b: 1L, d: 0L, vX: 1L, vY: 2L, fractionBitsMatrix: 0, fractionBitsVector: 0, fractionBitsOut: 0, x: out var sx, y: out var sy) ||
+        if (!FixedSymmetricSolve.TryApplySymmetric2(a: 0L, b: 1L, d: 0L, fractionBitsMatrix: 0, fractionBitsOut: 0, fractionBitsVector: 0, vX: 1L, vY: 2L, x: out var sx, y: out var sy) ||
             (sx != 2L) || (sy != 1L)) {
             return $"apply2 answered ({sx},{sy}) for the exchange matrix against (1,2), expected the swapped (2,1)";
         }
@@ -1034,11 +1034,11 @@ internal static class SymmetricSolveClaims {
                 a: (1L << 62),
                 b: 0L,
                 d: 1L,
+                fractionBitsMatrix: 0,
+                fractionBitsOut: 0,
+                fractionBitsVector: 0,
                 vX: 2L,
                 vY: 1L,
-                fractionBitsMatrix: 0,
-                fractionBitsVector: 0,
-                fractionBitsOut: 0,
                 x: out var overflowX,
                 y: out var overflowY
             ) || (overflowX != 0L) || (overflowY != 0L)) {

@@ -15,9 +15,11 @@ namespace Puck.World;
 /// and is reported rather than silently absorbed.
 /// <para>Nothing interprets a captured value — no dispatch path reads <c>Extensions</c> to drive behavior, and nothing
 /// should. The keys are not inert, though: an unprefixed one now fails validation, so the bag's content decides whether
-/// the document loads at all. This regime applies to document roots only; other document families under
-/// <c>Puck.World.Forge</c> and <c>Puck.Recording</c> carry their own <c>[JsonExtensionData]</c> bags and validate them
-/// through <c>DocumentCanonicalizer.ValidateExtensions</c> instead.</para>
+/// the document loads at all. This regime applies to document roots only; the families riding
+/// <see cref="Puck.Assets.Documents.DocumentCanonicalizer"/> (<c>puck.creation.v1</c>, <c>puck.audio.v1</c>,
+/// <c>puck.synth.v1</c>, <c>puck.release.v1</c>) carry their own <c>[JsonExtensionData]</c> bags and validate them
+/// through <see cref="Puck.Assets.Documents.DocumentCanonicalizer.ValidateExtensions"/> instead; <c>Puck.Recording</c>'s
+/// own <c>[JsonExtensionData]</c> bag on <c>RecordingDocument</c> rides neither regime.</para>
 /// </remarks>
 public static class DocumentExtensionsPolicy {
     /// <summary>True when <paramref name="key"/> is a reserved escape hatch ('$' or '_' prefixed) rather than an

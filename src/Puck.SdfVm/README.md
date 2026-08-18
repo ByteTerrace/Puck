@@ -43,11 +43,13 @@ never a Vulkan or DirectX type by name.
 
 ## 🎬 The render pipeline
 
-Five kernels run per frame: `sdf-instance-cull.comp` (the per-tile instance
-mask) → `sdf-beam.comp` (cone march over the tile-masked field) →
-`sdf-cull-args.comp` → the views kernel (per-camera march) → the composite
-pass (split-screen assembly). `SdfWorldEngine.PassLabels` names them for
-per-pass GPU timing. The views kernel ships in two compiled variants
+Six kernels run per frame: `sdf-sky.comp` (a direct, un-culled pass that
+fills every source pixel with the authored sky, before any tile is culled)
+→ `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
+(cone march over the tile-masked field) → `sdf-cull-args.comp` → the views
+kernel (per-camera march) → the composite pass (split-screen assembly).
+`SdfWorldEngine.PassLabels` names them for per-pass GPU timing. The views
+kernel ships in two compiled variants
 (`SdfViewsKernelVariant.Full`/`.CoreOps`) — the core-ops variant strips the
 exotic op/shape cases to shrink register pressure and raise warp occupancy
 when a program uses none of them.
@@ -59,6 +61,12 @@ per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. `SdfEngineNode` is the
 `Puck.Hosting.IRenderNode` adapter a generic render tree composes — it owns
 device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine.
+`SdfWorldRenderSpec.Decorate` is where a host wraps that node: post-render
+passes are `Puck.Shaders.FullscreenPassNode`s built from `puck.shader.v1`
+manifests shipped in this project's `Assets/Shaders/Sdf/` tree
+(`sdf-film-grain.frag.hlsl` + `sdf-film-grain.puck.shader.json` is the one
+today), selected by a world document's `render.extensions[].id`; this project
+carries no per-pass C#.
 
 ## 🧩 Composition, anchors, and views
 
@@ -85,18 +93,17 @@ compounding frame over frame.
 (`SdfGalleryScene`), the drift monolith
 (`SdfDriftMonolith` — a calibrated cross-backend parity amplifier), and the
 `sdf.bench` synthetic-workload ladder
-(`SdfBenchScene`/`SdfBenchWorkloads`). `src/Puck.SdfVm.Bench` is a standalone
-composition root that boots its own window host and drives that ladder to
-completion as a real GPU/CPU ceiling-measurement harness — a measurement
-tool, not a game.
+(`SdfBenchScene`/`SdfBenchWorkloads`).
 
 ## 🚀 Shader build
 
 `dotnet build src/Puck.SdfVm -c Release` runs the DirectX Shader Compiler
 in place in the source tree and requires `dxc` on the path (override with
 `/p:DxcCommand=path\to\dxc`); commit the regenerated `.spv`/`.dxil` bytecode
-alongside the source change. `ValidateShaderBytecodeSources` fails the build
-on any committed bytecode without a matching same-stem `.hlsl` source.
+and `.hash` sidecars alongside the source change. `ValidateShaderBytecodeSources`
+fails the build on any committed bytecode without a matching same-stem `.hlsl`
+source; `ValidateShaderBytecodeFresh` fails it on bytecode stale against its
+source or its sidecar. The recipe is `build/Shaders.targets` (`Puck.Shaders`).
 
 ## 🧪 Verification
 

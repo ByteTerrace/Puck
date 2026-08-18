@@ -12,7 +12,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// the emitted light of its backdrop-walking synthetic ROM — a monotone function of the cycles run, so a stale
 /// accumulator phase (a different cycle budget) folds to a different value.
 /// </summary>
-internal sealed class QueuedHostTimeTravelStage : IPostStage {
+internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
     private const int RequestedSampleRate = 32_000;
 
     /// <inheritdoc/>

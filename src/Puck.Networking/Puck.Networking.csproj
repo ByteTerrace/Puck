@@ -3,22 +3,8 @@
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>
-    <!--
-        Puck.Networking — the dialect-agnostic wire substrate: the socketless frame grammar
-        (FrameCodec, [u32 length][u8 kind][payload]) and the bounded forward-only reader/writer pair
-        (WireReader/WireWriter) every socket frames its bytes through, plus the named refusal
-        vocabulary (WireRefusal/WireFailure) and the async stream framing (WireFrame) built on them.
-        Also carries the generic Hello/identity handshake grammar (HandshakeWireFormat), the
-        challenge/proof authentication contract (IAuthenticator — no concrete implementation ships
-        here; Prove/TryVerify carry no source-authority parameter, since a verified identity is what
-        the proof itself derives, never a caller's own assertion), and the persistent authenticated
-        request/response lane state machine (PersistentRequestLane/ILaneProtocol) every socket dialect
-        built on this substrate shares.
-        Carries no document or protocol vocabulary of its own — a decoder here is written against a byte budget its
-        caller admits, never against a closed submission-kind catalog, so this project stays reachable from any
-        future wire consumer.
-    -->
     <ItemGroup>
+        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

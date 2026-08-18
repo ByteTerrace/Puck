@@ -8,6 +8,8 @@ namespace Puck.Commands;
 /// carry the phase the command's handler must see.
 /// </summary>
 /// <param name="Command">The name of the command the edge drives.</param>
+/// <param name="Source">The stable synthesized ownership id for the command destination. Different destinations
+/// hold independently; multiple bindings that toggle the same destination share its ownership id.</param>
 /// <param name="Phase">The edge: <see cref="CommandPhase.Started"/> on a real chord completion,
 /// <see cref="CommandPhase.Active"/> when a channel chord is recovered from held digital state, or
 /// <see cref="CommandPhase.Completed"/> on chord break.</param>
@@ -27,13 +29,18 @@ namespace Puck.Commands;
 /// For a momentary press, the router retains this fact without carrying the press into later snapshots, so a modality
 /// transition can deliver a cancellation instead of stranding the handler that consumed its press. Ignored on a
 /// release edge.</param>
+/// <param name="Mode">Whether this synthesized channel edge follows its ordinary hold lifecycle or flips the
+/// router's input-side toggle latch. Toggle edges arrive only as completion presses; physical chord/activator
+/// release does not clear the latched destination.</param>
 public readonly record struct BindingChordEdge(
     string Command,
+    string Source,
     CommandPhase Phase,
     CommandValue Value,
     bool Dispatch,
     bool Momentary = false,
-    bool DispatchRelease = false
+    bool DispatchRelease = false,
+    BindingEntryMode Mode = BindingEntryMode.Hold
 );
 /// <summary>
 /// The seam a chord-aware <see cref="IInputBindings"/> hands its synthesized chord-command edges to the

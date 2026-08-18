@@ -919,24 +919,13 @@ internal static class OracleProbes {
         }
         public byte[] Finish() {
             var poolBase = m_code.Count;
-            var pool = new List<uint>();
-
-            foreach (var (instr, rd, value, label) in m_loads) {
-                var resolved = ((label is null)
-                    ? value
-                    : (RomBase + (((uint)m_labels[label]) * 4u)));
-                var poolIndex = pool.IndexOf(item: resolved);
-
-                if (poolIndex < 0) {
-                    poolIndex = pool.Count;
-                    pool.Add(item: resolved);
-                }
-
-                var literalWord = (poolBase + poolIndex);
-                var offsetBytes = ((literalWord - (instr + 2)) * 4);
-
-                m_code[instr] = 0xE59F0000u | (((uint)rd) << 12) | (((uint)offsetBytes) & 0xFFFu);
-            }
+            var pool = AsmLiteralPool.Resolve(
+                code: m_code,
+                labels: m_labels,
+                loads: m_loads,
+                poolBase: poolBase,
+                romBase: RomBase
+            );
 
             var words = new List<uint>(collection: m_code);
 

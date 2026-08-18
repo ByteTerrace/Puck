@@ -221,7 +221,12 @@ public sealed class PositionalOutputAutomaton {
         var pending = new Queue<int>();
         var transitionRows = new List<int[]>();
 
-        AddState(state: components.Select(selector: component => component.Automaton.StartState).ToArray());
+        AutomatonStateDedup.AddState(
+            indexes: indexes,
+            pending: pending,
+            state: components.Select(selector: component => component.Automaton.StartState).ToArray(),
+            states: states
+        );
         while (pending.Count > 0) {
             var stateIndex = pending.Dequeue();
             var row = new int[system.Radix];
@@ -235,7 +240,12 @@ public sealed class PositionalOutputAutomaton {
                         digit
                     );
                 }
-                row[digit] = AddState(state: target);
+                row[digit] = AutomatonStateDedup.AddState(
+                    indexes: indexes,
+                    pending: pending,
+                    state: target,
+                    states: states
+                );
             }
             while (transitionRows.Count <= stateIndex) { transitionRows.Add(item: []); }
             transitionRows[stateIndex] = row;
@@ -266,24 +276,6 @@ public sealed class PositionalOutputAutomaton {
             system: system,
             transitions: transitions
         );
-
-        int AddState(int[] state) {
-            var key = string.Join(
-                separator: ',',
-                values: state
-            );
-
-            if (indexes.TryGetValue(
-                key: key,
-                value: out var existing
-            )) { return existing; }
-            var index = states.Count;
-
-            states.Add(item: state);
-            indexes[key] = index;
-            pending.Enqueue(item: index);
-            return index;
-        }
     }
     public BigInteger Output(BigInteger value) {
         var state = 0;

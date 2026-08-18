@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using Puck.Audio.Mixing;
 using Puck.Platform.Audio;
 using Puck.World.Client;
 
@@ -9,7 +10,7 @@ namespace Puck.World.Audio;
 /// sound. It owns one mixer instance and one governor thread: the governor opens the platform's default render
 /// endpoint through the factory seam, attaches the mixer to the director on success, and watches the stream; the
 /// endpoint's own pump thread then pulls each ≤256-frame quantum through <see cref="WorldAudioDirector.TryMixBlock"/>
-/// (snapshot hold + <see cref="WorldAudioMixer.MixBlock"/>, zero steady-state allocation, silence while nothing is
+/// (snapshot hold + <see cref="AudioMixer.MixBlock"/>, zero steady-state allocation, silence while nothing is
 /// published). Failure posture is "plays silent, never crashes": a declined open or a mid-stream fault (device
 /// invalidation included) detaches the mixer, counts a rebind attempt, and retries the default endpoint every
 /// <see cref="RebindPeriodMilliseconds"/> until stop. A null factory (non-Windows) parks the service as
@@ -38,7 +39,7 @@ internal sealed class WorldAudioRenderService : IHostedService {
     private int m_rebindAttempts;
     private Thread? m_thread;
 
-    private readonly WorldAudioMixer m_mixer = new();
+    private readonly AudioMixer m_mixer = new();
     private readonly ManualResetEventSlim m_stop = new(initialState: false);
     private string m_state = "stopped";
 
@@ -63,7 +64,7 @@ internal sealed class WorldAudioRenderService : IHostedService {
     /// <summary>Gets the total frames delivered to the endpoint across every device generation.</summary>
     public long FramesDelivered => (Interlocked.Read(location: ref m_framesDelivered) + (Volatile.Read(location: ref m_device)?.FramesDelivered ?? 0));
     /// <summary>Gets the mixer this service owns (the <c>audio.state</c> verb's meter source).</summary>
-    public WorldAudioMixer Mixer => m_mixer;
+    public AudioMixer Mixer => m_mixer;
     /// <summary>Gets how many times the service scheduled a device retry (a declined open or a mid-stream loss).</summary>
     public int RebindAttempts => Volatile.Read(location: ref m_rebindAttempts);
     /// <summary>Gets the device state token: <c>playing</c>, <c>silent</c> (no endpoint), <c>rebinding</c> (lost
@@ -84,9 +85,9 @@ internal sealed class WorldAudioRenderService : IHostedService {
         while (!m_stop.IsSet) {
             var device = m_factory!.TryOpen(
                 fill: Fill,
-                maxQuantumFrames: WorldAudioMixer.MaxBlockFrames,
+                maxQuantumFrames: AudioMixer.MaxBlockFrames,
                 reason: out var reason,
-                sampleRate: WorldAudioMixer.SampleRate
+                sampleRate: AudioMixer.SampleRate
             );
 
             if (device is null) {

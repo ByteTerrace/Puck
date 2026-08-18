@@ -9,7 +9,7 @@ public enum AxisComponent : byte {
     Y,
 }
 /// <summary>
-/// Parses a <see cref="BindingPageEntryDefinition.Source"/>'s optional axis-component suffix — <c>leftStick.x</c>
+/// Parses one of <see cref="BindingPageEntryDefinition.Sources"/>' optional axis-component suffix — <c>leftStick.x</c>
 /// naming the X component of the two-dimensional <c>gamepad.leftStick</c> control, feeding a channel destination
 /// with that component's analog magnitude instead of the constant a bare Axis2D source falls back to (see
 /// <see cref="InputRouter"/>'s <c>ResolveValue</c>). The suffix is a pure string convention over the existing

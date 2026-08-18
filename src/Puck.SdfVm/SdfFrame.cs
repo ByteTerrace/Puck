@@ -62,23 +62,19 @@ public sealed record SdfFrame(
     /// double precision and rounds once (<c>SdfWorldEngine.PackSunFrame</c>) — which reproduces the pinned tangent and
     /// bitangent literals exactly, where a float32 <see cref="Vector3.Normalize"/> lands one ulp off in the
     /// bitangent's Z. Derive it any other way and the default sun stops being a no-op.</remarks>
-    public Vector3 SunDirection { get; init; } = new(
-        x: 0.51343602f,
-        y: 0.79349202f,
-        z: 0.32673201f
-    );
+    public Vector3 SunDirection { get; init; } = DefaultSunDirection;
     /// <summary>The sun's linear RGB color (default white). Multiplies the directional term, so a sunset is a warm
     /// color here rather than a second code path.</summary>
     public Vector3 SunColor { get; init; } = Vector3.One;
     /// <summary>The sun's diffuse weight — the shaders' pinned <c>SunWeight</c> as per-frame data.</summary>
-    public float SunWeight { get; init; } = 0.85f;
+    public float SunWeight { get; init; } = DefaultSunWeight;
     /// <summary>The ambient term's linear RGB color (default white).</summary>
     public Vector3 AmbientColor { get; init; } = Vector3.One;
     /// <summary>The ambient term's constant floor — the shaders' pinned <c>AmbientBase</c> as per-frame data.</summary>
-    public float AmbientBase { get; init; } = 0.25f;
+    public float AmbientBase { get; init; } = DefaultAmbientBase;
     /// <summary>The ambient term's hemisphere gradient, scaling surface normal Y (sky above, darker below) — the
     /// shaders' pinned <c>AmbientHemisphere</c> as per-frame data.</summary>
-    public float AmbientHemisphere { get; init; } = 0.25f;
+    public float AmbientHemisphere { get; init; } = DefaultAmbientHemisphere;
     /// <summary>The object grid's reference frame orientation (the lattice renders in this frame's coordinates).</summary>
     public Quaternion GridObjectFrame { get; init; } = Quaternion.Identity;
 
@@ -231,4 +227,121 @@ public sealed record SdfFrame(
     /// <c>SdfWorldEngine.PackScreenLights</c> and sdf-world.hlsli's <c>worldUseTapNormals</c>); a frame that never sets
     /// it uploads 0 and shades with analytic normals.</summary>
     public bool UseFiniteDifferenceNormals { get; init; }
+    /// <summary>Gets a value indicating whether the procedural sky (three-stop gradient, sun disc, star field) is
+    /// active. The default <see langword="false"/> takes the shader's pinned two-stop gradient through an
+    /// unconditional branch — the identical instructions in the identical order the shader held before this member
+    /// existed — so a frame that never sets it renders bit-identically. Rides the sky-horizon row's <c>.w</c> lane
+    /// (KEEP IN SYNC with <c>SdfWorldEngine.PackSkyFrame</c> and sdf-world.hlsli's <c>worldSkyEnabled</c>).</summary>
+    public bool SkyEnabled { get; init; }
+    /// <summary>The sky gradient's straight-up (zenith) color. Read only while <see cref="SkyEnabled"/>.</summary>
+    public Vector3 SkyZenithColor { get; init; } = DefaultSkyZenithColor;
+    /// <summary>The sky gradient's horizon-band color — the gradient's middle stop. Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public Vector3 SkyHorizonColor { get; init; } = DefaultSkyHorizonColor;
+    /// <summary>The sky gradient's straight-down (nadir/ground) color. Read only while <see cref="SkyEnabled"/>.</summary>
+    public Vector3 SkyGroundColor { get; init; } = DefaultSkyGroundColor;
+    /// <summary>The exponential distance-fog density fading toward the sky color — the shaders' pinned
+    /// <c>FogDensity</c> constant as per-frame data. Read every frame regardless of <see cref="SkyEnabled"/> (fog and
+    /// the gradient are independent levers); the default reproduces the retired constant's exact float32 value, so an
+    /// unset frame's fog term is bit-identical.</summary>
+    public float SkyFogDensity { get; init; } = DefaultSkyFogDensity;
+    /// <summary>The visible sun disc's angular half-radius in radians, in (0, π/2]. Read only while
+    /// <see cref="SkyEnabled"/>; the engine host-bakes it into a <c>pow()</c> exponent
+    /// (<c>SdfWorldEngine.PackSkyFrame</c>) rather than deriving one per pixel.</summary>
+    public float SkySunDiscRadians { get; init; } = DefaultSkySunDiscRadians;
+    /// <summary>The visible sun disc's peak additive brightness. Zero (the default) draws no disc. Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public float SkySunDiscIntensity { get; init; }
+    /// <summary>The star field's cell count per octahedral sky-projection axis. Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public float SkyStarDensity { get; init; } = DefaultSkyStarDensity;
+    /// <summary>The star field's peak per-star brightness. Zero (the default) draws no stars. Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public float SkyStarBrightness { get; init; }
+    /// <summary>The star field's per-cell hash seed. Read only while <see cref="SkyEnabled"/>.</summary>
+    public uint SkyStarSeed { get; init; }
+    /// <summary>The fraction of stars that twinkle, in <c>[0, 1]</c>. Zero (the default) twinkles none. Read only
+    /// while <see cref="SkyEnabled"/>.</summary>
+    public float SkyStarTwinkleShare { get; init; }
+    /// <summary>How far a twinkling star dips below its steady brightness, in <c>[0, 1]</c>. Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public float SkyStarTwinkleDepth { get; init; }
+    /// <summary>The fundamental scintillation rate in hertz — each twinkling star runs at a small harmonic and its own
+    /// phase of it, on the deterministic tick clock (<see cref="SampleIndex"/>). Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public float SkyStarTwinkleRate { get; init; } = DefaultSkyStarTwinkleRate;
+    /// <summary>The cloud layer's colour (linear RGB). Read only while <see cref="SkyEnabled"/>.</summary>
+    public Vector3 SkyCloudColor { get; init; } = Vector3.One;
+    /// <summary>The fraction of the sky the cloud layer covers, in <c>[0, 1]</c>. Zero (the default) draws no
+    /// clouds. Read only while <see cref="SkyEnabled"/>.</summary>
+    public float SkyCloudCoverage { get; init; }
+    /// <summary>The width of a cloud's edge in the noise's unit range, in <c>(0, 1]</c>. Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public float SkyCloudSoftness { get; init; } = DefaultSkyCloudSoftness;
+    /// <summary>The size of one cloud cell in layer units (the layer sits at unit height). Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public float SkyCloudScale { get; init; } = DefaultSkyCloudScale;
+    /// <summary>The cloud lattice's hash seed. Read only while <see cref="SkyEnabled"/>.</summary>
+    public uint SkyCloudSeed { get; init; }
+    /// <summary>The cloud layer's wind in layer units per second along world X and Z, integrated on
+    /// <see cref="SampleIndex"/> (the deterministic tick clock) by the host before upload. Read only while
+    /// <see cref="SkyEnabled"/>.</summary>
+    public Vector2 SkyCloudDrift { get; init; }
+    /// <summary>The cloud layer's rotation about the zenith in radians per second, integrated on
+    /// <see cref="SampleIndex"/> by the host. Read only while <see cref="SkyEnabled"/>.</summary>
+    public float SkyCloudSpin { get; init; }
+    /// <summary>The Coriolis twist: the layer's winding about the zenith in radians at 45° elevation, falling off
+    /// toward the horizon and the zenith. Read only while <see cref="SkyEnabled"/>.</summary>
+    public float SkyCloudCurl { get; init; }
+    /// <summary>The shaping field's wind relative to the cloud field, in layer units per second, integrated on
+    /// <see cref="SampleIndex"/> by the host. Read only while <see cref="SkyEnabled"/>.</summary>
+    public Vector2 SkyCloudShear { get; init; }
+
+    /// <summary>The default fundamental scintillation rate: 1 Hz.</summary>
+    public const float DefaultSkyStarTwinkleRate = 1f;
+    /// <summary>The default cloud edge width: 0.25.</summary>
+    public const float DefaultSkyCloudSoftness = 0.25f;
+    /// <summary>The default cloud cell size: 2 layer units.</summary>
+    public const float DefaultSkyCloudScale = 2f;
+
+    /// <summary>Gets the pinned default sun direction — the exact float32 triple the shaders held as
+    /// <c>SdfSunDirection</c> before the sun became per-frame data. See <see cref="SunDirection"/>'s remarks for why
+    /// it must be reproduced exactly, not merely approximately.</summary>
+    public static Vector3 DefaultSunDirection { get; } = new(
+        x: 0.51343602f,
+        y: 0.79349202f,
+        z: 0.32673201f
+    );
+    /// <summary>Gets the pinned default sun diffuse weight.</summary>
+    public static float DefaultSunWeight { get; } = 0.85f;
+    /// <summary>Gets the pinned default ambient floor.</summary>
+    public static float DefaultAmbientBase { get; } = 0.25f;
+    /// <summary>Gets the pinned default ambient hemisphere gradient.</summary>
+    public static float DefaultAmbientHemisphere { get; } = 0.25f;
+    /// <summary>Gets the pinned default sky zenith color — the shaders' retired two-stop gradient's top color.</summary>
+    public static Vector3 DefaultSkyZenithColor { get; } = new(
+        x: 0.10f,
+        y: 0.13f,
+        z: 0.20f
+    );
+    /// <summary>Gets the default sky horizon color, read only while <see cref="SkyEnabled"/> — the midpoint between
+    /// <see cref="DefaultSkyGroundColor"/> and <see cref="DefaultSkyZenithColor"/>.</summary>
+    public static Vector3 DefaultSkyHorizonColor { get; } = new(
+        x: 0.07f,
+        y: 0.09f,
+        z: 0.135f
+    );
+    /// <summary>Gets the pinned default sky ground (nadir) color — the shaders' retired two-stop gradient's bottom
+    /// color.</summary>
+    public static Vector3 DefaultSkyGroundColor { get; } = new(
+        x: 0.04f,
+        y: 0.05f,
+        z: 0.07f
+    );
+    /// <summary>Gets the pinned default fog density — the shaders' retired <c>FogDensity</c> constant.</summary>
+    public static float DefaultSkyFogDensity { get; } = 0.015f;
+    /// <summary>Gets the default sun-disc angular half-radius in radians, read only while <see cref="SkyEnabled"/>.</summary>
+    public static float DefaultSkySunDiscRadians { get; } = 0.05f;
+    /// <summary>Gets the default star-field cell density, read only while <see cref="SkyEnabled"/>.</summary>
+    public static float DefaultSkyStarDensity { get; } = 48f;
 }

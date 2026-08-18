@@ -1,0 +1,242 @@
+using System.Numerics;
+using Puck.Assets.Documents;
+using System.Text.Json.Serialization;
+using Puck.Forge.Authoring;
+using Puck.Abstractions.Documents;
+using Puck.Maths;
+using Puck.Physics;
+
+namespace Puck.World;
+
+/// <summary>A row's solidity facet — it participates in contact resolution using its own declared shape. Presence is
+/// the whole switch; <see langword="null"/> means decoration — the row is drawn but bodies pass through it.</summary>
+/// <param name="Margin">The signed skin added to the shape for contact purposes. Positive fattens the collider past the
+/// drawn surface; negative lets a body sink in. Compensates the smooth-union blend.</param>
+public sealed record WorldSolid(float Margin);
+/// <summary>A kit's closed body-volume vocabulary. A kit with no collider is not solved against the contact field.</summary>
+[JsonDerivedType(typeof(WorldCollider.Sphere), typeDiscriminator: "sphere")]
+[JsonDerivedType(typeof(WorldCollider.Capsule), typeDiscriminator: "capsule")]
+[JsonDerivedType(typeof(WorldCollider.Box), typeDiscriminator: "box")]
+[JsonDerivedType(typeof(WorldCollider.FromCreation), typeDiscriminator: "fromCreation")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+public abstract record WorldCollider {
+    /// <summary>The largest number of convex volumes one body collider may compile into. This bounds the field
+    /// provider's per-body sample cost, which scales linearly with the volume count.</summary>
+    public const int MaxVolumes = 16;
+
+    private WorldCollider() {
+    }
+
+    /// <summary>A sphere resting on the body root.</summary>
+    /// <param name="Radius">The sphere radius.</param>
+    public sealed record Sphere(float Radius) : WorldCollider;
+    /// <summary>A capsule whose lower sphere rests on the body root.</summary>
+    /// <param name="Endpoint">The body-local vector from the lower sphere center to the upper sphere center.</param>
+    /// <param name="Radius">The capsule radius.</param>
+    public sealed record Capsule(DocumentVector3 Endpoint, float Radius) : WorldCollider;
+    /// <summary>An oriented box resting on the body root before its local rotation is applied.</summary>
+    /// <param name="HalfExtents">The positive half-extents.</param>
+    /// <param name="Rotation">The body-local orientation.</param>
+    public sealed record Box(DocumentVector3 HalfExtents, DocumentQuaternion Rotation) : WorldCollider;
+    /// <summary>The finite primitive bounds emitted by a creation, composed into one compound body collider.</summary>
+    /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/>.</param>
+    public sealed record FromCreation(string CreationId) : WorldCollider;
+}
+/// <summary>The contact solver's world-scale tuning.</summary>
+/// <param name="Requirements">The contact qualities the world requires. An empty list permits analytic primitive
+/// contact; any declared requirement selects the SDF field.</param>
+/// <param name="ContactSkin">The signed skin the solver keeps between a body and every surface (world units).</param>
+/// <param name="MaxIterations">The relaxation iteration count per tick (above 8 is a solver pathology, not a choice).</param>
+/// <param name="MaxSlopeDegrees">The steepest surface a body still counts as standing on. A contact whose normal leans
+/// further from the body's up axis than this pushes the body but never grounds it — the walkable-slope limit.</param>
+/// <param name="GradientProbe">The finite-difference step field contact samples the surface normal with, in world
+/// units; 0 takes the evaluator's own default. Meaningful only when a requirement selects field contact.</param>
+public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requirements, float ContactSkin,
+    int MaxIterations, float MaxSlopeDegrees, float GradientProbe) {
+    /// <summary>Gets the inert contact tuning — no requirements (the cheapest analytic path), a minimal skin, the
+    /// smallest working iteration count, a conservative walkable-slope floor, and the evaluator's own gradient-probe
+    /// default.</summary>
+    public static WorldCollision Default { get; } = new(
+        Requirements: [],
+        ContactSkin: 0.02f,
+        MaxIterations: 4,
+        MaxSlopeDegrees: 60f,
+        GradientProbe: 0f
+    );
+}
+/// <summary>A contact quality authored by the world, independent of the engine implementation that supplies it.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldContactRequirement>))]
+public enum WorldContactRequirement : byte {
+    /// <summary>Blended creation surfaces remain solid across their smooth-union seams.</summary>
+    SmoothUnionContact,
+
+    /// <summary>A body's up direction follows the contacted field gradient rather than world <c>+Y</c>.</summary>
+    GradientDerivedUp,
+}
+/// <summary>Selects the contact implementation implied by authored requirements.</summary>
+public static class WorldContactSelection {
+    /// <summary>Returns whether any authored requirement needs the SDF contact field.</summary>
+    /// <param name="collision">The authored contact requirements and solver tuning.</param>
+    /// <returns><see langword="true"/> when field contact is required; otherwise <see langword="false"/>.</returns>
+    public static bool RequiresField(WorldCollision collision) => (collision.Requirements is { Count: > 0 });
+}
+/// <summary>The one-time fixed-point compilation of a kit's compound body volume.</summary>
+public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volumes) {
+    private static FixedBodyColliderVolume Box(FixedVector3 center, FixedVector3 halfExtents, FixedQuaternion rotation) =>
+        new(
+            Kind: FixedBodyColliderKind.Box,
+            Center: center,
+            Endpoint: FixedVector3.Zero,
+            HalfExtents: halfExtents,
+            Rotation: rotation,
+            Radius: FixedQ4816.Zero
+        );
+    private static FixedBodyColliderVolume Capsule(FixedVector3 lower, FixedVector3 upper, FixedQ4816 radius) =>
+        new(
+            Kind: FixedBodyColliderKind.Capsule,
+            Center: lower,
+            Endpoint: upper,
+            HalfExtents: FixedVector3.Zero,
+            Rotation: FixedQuaternion.Identity,
+            Radius: radius
+        );
+    private static FixedBodyColliderVolume Sphere(FixedVector3 center, FixedQ4816 radius) =>
+        new(
+            Kind: FixedBodyColliderKind.Sphere,
+            Center: center,
+            Endpoint: FixedVector3.Zero,
+            HalfExtents: FixedVector3.Zero,
+            Rotation: FixedQuaternion.Identity,
+            Radius: radius
+        );
+    private static FixedQuaternion ToFixed(Quaternion value) => new FixedQuaternion(
+        X: FixedQ4816.FromDouble(value: value.X),
+        Y: FixedQ4816.FromDouble(value: value.Y),
+        Z: FixedQ4816.FromDouble(value: value.Z),
+        W: FixedQ4816.FromDouble(value: value.W)
+    ).Normalize();
+
+    /// <summary>Compiles authored collider floats and creation primitive copies to fixed point.</summary>
+    public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldCreation> creations) {
+        if (collider is null) {
+            return null;
+        }
+
+        var volumes = new List<FixedBodyColliderVolume>(capacity: WorldCollider.MaxVolumes);
+
+        switch (collider) {
+            case WorldCollider.Sphere sphere: {
+                    var radius = FixedQ4816.FromDouble(value: sphere.Radius);
+
+                    volumes.Add(item: Sphere(
+                        center: new FixedVector3(
+                            X: FixedQ4816.Zero,
+                            Y: radius,
+                            Z: FixedQ4816.Zero
+                        ),
+                        radius: radius
+                    ));
+                    break;
+                }
+            case WorldCollider.Capsule capsule: {
+                    var radius = FixedQ4816.FromDouble(value: capsule.Radius);
+                    var lower = new FixedVector3(
+                        X: FixedQ4816.Zero,
+                        Y: radius,
+                        Z: FixedQ4816.Zero
+                    );
+
+                    volumes.Add(item: Capsule(
+                        lower: lower,
+                        upper: (lower + FixedVector3.FromVector3(value: capsule.Endpoint)),
+                        radius: radius
+                    ));
+                    break;
+                }
+            case WorldCollider.Box box: {
+                    var halfExtents = FixedVector3.FromVector3(value: box.HalfExtents);
+
+                    volumes.Add(item: Box(
+                        center: new FixedVector3(
+                            X: FixedQ4816.Zero,
+                            Y: halfExtents.Y,
+                            Z: FixedQ4816.Zero
+                        ),
+                        halfExtents: halfExtents,
+                        rotation: ToFixed(value: box.Rotation)
+                    ));
+                    break;
+                }
+            case WorldCollider.FromCreation fromCreation: {
+                    var creation = (WorldDefinitionRows.FindCreation(
+                        creations: creations,
+                        id: fromCreation.CreationId
+                    )
+                        ?? throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' is not defined."));
+
+                    CreationStampEmitter.VisitPrimitiveCopies(
+                        document: creation.EngineDocument,
+                        transform: new CreationStampTransform(
+                            Origin: Vector3.Zero,
+                            Rotation: Quaternion.Identity,
+                            Scale: 1f,
+                            ReflectionNormal: null
+                        ),
+                        visitor: copy => {
+                            if (copy.Shape.Type == AvatarPrimitive.Plane) {
+                                throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' contains an unbounded plane.");
+                            }
+
+                            if (
+                                (copy.Shape.Type == AvatarPrimitive.Sphere) &&
+                                (copy.UniformScale > 0f)
+                            ) {
+                                var sphere = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
+
+                                volumes.Add(item: Sphere(
+                                    center: FixedVector3.FromVector3(value: copy.Center),
+                                    radius: FixedQ4816.FromDouble(value: (sphere.HalfExtents.X * copy.UniformScale))
+                                ));
+                            } else {
+                                volumes.Add(item: Box(
+                                    center: FixedVector3.FromVector3(value: copy.Center),
+                                    halfExtents: FixedVector3.FromVector3(value: copy.HalfExtents),
+                                    rotation: FixedQuaternion.Identity
+                                ));
+                            }
+                        }
+                    );
+                    break;
+                }
+            default:
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(collider),
+                    actualValue: collider,
+                    message: "The body collider kind is not defined."
+                );
+        }
+
+        return new FixedWorldCollider(Volumes: volumes.ToArray());
+    }
+}
+/// <summary>The one-time fixed-point compilation of the world's contact tuning — read by the analytic contact field
+/// and the grounded integrator. <see cref="GroundedThreshold"/> is the compiled <c>cos(maxSlopeDegrees)</c> a contact
+/// normal's up-alignment must clear to ground a body (the same test both providers use). <see cref="GradientUp"/> is
+/// the compiled <see cref="WorldContactRequirement.GradientDerivedUp"/> requirement: without it the body up axis stays
+/// world <c>+Y</c>, so a vertical face pushes but never grounds.</summary>
+public readonly record struct FixedWorldCollision(
+    FixedQ4816 ContactSkin,
+    int MaxIterations,
+    FixedQ4816 GroundedThreshold,
+    FixedQ4816 GradientProbe,
+    bool GradientUp
+) {
+    /// <summary>Compiles the authored contact tuning to fixed point.</summary>
+    public static FixedWorldCollision Compile(WorldCollision collision) => new(
+        ContactSkin: FixedQ4816.FromDouble(value: collision.ContactSkin),
+        MaxIterations: collision.MaxIterations,
+        GroundedThreshold: FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: (collision.MaxSlopeDegrees * (Math.PI / 180.0)))),
+        GradientProbe: FixedQ4816.FromDouble(value: collision.GradientProbe),
+        GradientUp: ((collision.Requirements?.Contains(value: WorldContactRequirement.GradientDerivedUp)) ?? false)
+    );
+}

@@ -1,19 +1,22 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>
-/// Ports the law <c>docs/verification/strict-definition-parse/run.ps1</c> proves out-of-process (booting
-/// <c>Puck.World</c> once per fixture and reading its transcript) as an in-process substrate law directly against
-/// <see cref="WorldDefinitionSerialization"/>: an unknown JSON member on a NESTED document row (a
-/// <c>WorldAddonRow</c>, the exact row the strict-parse gap was originally named against) refuses BY NAME, and the
-/// identical document minus that one member parses clean. <see cref="WorldDefinitionSerialization.Deserialize"/>
-/// wraps every parse/validation failure in one <see cref="InvalidDataException"/> (its own documented contract), so
-/// the probe below unwraps to the originating <see cref="JsonException"/> rather than catching the wrapper by
-/// message text. Absorption/deletion of the <c>.ps1</c> runner is a later step — this ports the law alongside it,
-/// per the task charter; the runner itself is untouched.
+/// An in-process substrate law directly against <see cref="WorldDefinitionSerialization"/>: an unknown JSON
+/// member on a NESTED document row (a <c>WorldAddonRow</c>) refuses BY NAME, and the identical document minus
+/// that one member parses clean; a root-level reserved-prefix member survives the same strict default through
+/// <c>WorldDefinition.Extensions</c>'s <c>[JsonExtensionData]</c> carve-out.
+/// <see cref="WorldDefinitionSerialization.Deserialize"/> wraps every parse/validation failure in one
+/// <see cref="InvalidDataException"/> (its own documented contract), so the probe below unwraps to the
+/// originating <see cref="JsonException"/> rather than catching the wrapper by message text. This suite cannot
+/// prove the same strictness for a shipped world/scenario document that authors binding overlays against the
+/// real engine's default vocabulary — see <see cref="TestHookInstaller"/>'s remarks; that sweep needs the real
+/// composition root and is unproven here.
 /// </summary>
 public sealed class StrictParseLawTests {
     [Fact]
@@ -34,25 +37,12 @@ public sealed class StrictParseLawTests {
             controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes()));
     }
     [Fact]
-    public void MissingSeatLook_RefusesByName() {
-        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.MissingSeatLookBytes()));
+    public void MissingSeatLook_ParsesCleanAndResolvesToTheInertDefault() {
+        // A seat's control feel is now optional: absence parses clean and resolves to WorldSeatLook.Default
+        // (zero sensitivity, the drag disarmed) rather than refusing.
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.MissingSeatLookBytes());
 
-        // Named, not merely refused: a document missing its seats' control feel must say which member is absent, or
-        // an author is left diffing against a schema to find out what a generic validation failure meant.
-        //
-        // The refusal now comes from the LOADER rather than the validator — once the context respects required
-        // constructor parameters, an absent seatLook cannot reach validation at all. So this asserts the member's own
-        // name, which both refusals carry, rather than the validator's dotted path, which only one of them does. That
-        // is a strictly earlier and stricter refusal, not a weaker assertion: the member is named either way, and
-        // pinning the wording of whichever layer happens to win would make this test a record of plumbing.
-        Assert.Contains(expectedSubstring: "seatLook", actualString: exception.Message, comparisonType: StringComparison.Ordinal);
-    }
-    [Fact]
-    public void MissingSeatLook_RefusesByName_ControlParsesClean() {
-        Laws.RefusalWithControl(
-            lawId: "strict-parse.player-defaults-missing-seat-look",
-            deniedOutcome: static () => TryParse(bytes: Fixtures.MissingSeatLookBytes()),
-            controlOutcome: static () => TryParse(bytes: Fixtures.DefaultWorldBytes()));
+        Assert.Equal(expected: WorldSeatLook.Default, actual: definition.PlayerDefaults.SeatLook);
     }
     [Fact]
     public void MissingRequiredConstructorMember_RefusesByName() {
@@ -84,6 +74,20 @@ public sealed class StrictParseLawTests {
         _ = rules[0]!.AsObject().Remove(propertyName: "gate");
 
         _ = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: node.ToJsonString()));
+    }
+    [Fact]
+    public void RootReservedPrefixExtension_SurvivesTheStrictDefault() {
+        // WorldDefinition.Extensions carries [JsonExtensionData], which System.Text.Json always honors over the
+        // context-wide UnmappedMemberHandling.Disallow default — the one carve-out RootReservedPrefixExtension
+        // covers on top of the plain unmapped-member refusals above.
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()))!.AsObject();
+
+        node["$probe"] = "root-extension-roundtrip";
+
+        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString()));
+        var roundTripped = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition)))!.AsObject();
+
+        Assert.Equal(expected: "root-extension-roundtrip", actual: roundTripped["$probe"]!.GetValue<string>());
     }
 
     private static bool TryParse(byte[] bytes) {

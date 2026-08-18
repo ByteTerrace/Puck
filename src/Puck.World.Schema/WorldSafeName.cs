@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 

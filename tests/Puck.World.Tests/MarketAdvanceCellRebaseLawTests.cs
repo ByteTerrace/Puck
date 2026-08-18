@@ -21,12 +21,12 @@ public sealed class MarketAdvanceCellRebaseLawTests {
         var baseDocument = MarketFixtures.BuildDocument();
         var goldRow = baseDocument.State.First(predicate: row => (row.Name == MarketFixtures.GoldRow));
         var advancingCells = goldRow.Cells!.Select(selector: cell => (string.Equals(a: cell.Key.Value, b: "1", comparisonType: StringComparison.Ordinal)
-            ? (cell with { Value = 10, Advance = new WorldStateAdvance(RateNumerator: 1, RateDenominator: 1, EpochTick: 0) })
+            ? (cell with { Value = 10, Advance = new WorldStateAdvance(EpochTick: 0, RateDenominator: 1, RateNumerator: 1) })
             : cell)).ToList();
         var advancingGoldRow = (goldRow with { Cells = advancingCells });
         var otherRows = baseDocument.State.Where(predicate: row => (row.Name != MarketFixtures.GoldRow)).ToList();
 
-        return (baseDocument with { State = [advancingGoldRow, .. otherRows] });
+        return baseDocument.WithWorldState(rows: [advancingGoldRow, .. otherRows]);
     }
 
     [Fact]
@@ -34,15 +34,15 @@ public sealed class MarketAdvanceCellRebaseLawTests {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument());
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller,
-            Seller: Seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 1,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller,
+            Quantity: 1,
+            Seller: Seller,
+            StartPrice: 5
         ));
         fixture.Step();
 
@@ -53,18 +53,18 @@ public sealed class MarketAdvanceCellRebaseLawTests {
             fixture.Step();
         }
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Bidder, Bidder: Bidder, ListingId: 1, Amount: 10));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 10, Bidder: Bidder, ListingId: 1, Principal: Bidder));
         fixture.Step();
 
         // The bid applied at tick 100: base 110 - 10 = 100. Reading the same cell back at tick 100 (no further
         // elapsed ticks) must show exactly 100 — the bug shows 200 (100 + 1*(100-0), the un-rebased epoch's elapsed
         // span applying a second time on top of a base that already reflects it).
         Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, rowName: MarketFixtures.GoldRow.Value, key: "1", tick: 100UL, row: out _, rawValue: out var computed, text: out _));
-        Assert.Equal(expected: 100L, actual: computed);
+        Assert.Equal(actual: computed, expected: 100L);
 
         // A further tick's worth of elapsed accrual (tick 101) still applies correctly on top of the rebased base —
         // this control is what rules out "the fix just clamped the value" rather than genuinely rebasing the epoch.
         Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, rowName: MarketFixtures.GoldRow.Value, key: "1", tick: 101UL, row: out _, rawValue: out var oneTickLater, text: out _));
-        Assert.Equal(expected: 101L, actual: oneTickLater);
+        Assert.Equal(actual: oneTickLater, expected: 101L);
     }
 }

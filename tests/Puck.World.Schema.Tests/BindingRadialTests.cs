@@ -141,6 +141,30 @@ public sealed class BindingRadialTests {
         Assert.Equal(expected: BindingWheelSelectionOutcome.Outside, actual: selection.Outcome);
     }
     [Fact]
+    public void ExplicitAxisDeadZoneIsIndependentFromSpatialHubGeometry() {
+        var style = new BindingWheelStyleDefinition(
+            DeadZoneFraction: 0.20f,
+            AxisDeadZone: 0.05f,
+            RingWidthFraction: 0.08f
+        );
+        var axis = BindingWheelGeometry.SelectAxis(
+            vector: new Vector2(x: 0.10f, y: 0f),
+            sectorCount: 4,
+            style: style
+        );
+        var spatial = BindingWheelGeometry.SelectSpatial(
+            vector: new Vector2(x: 10f, y: 0f),
+            sectorCount: 4,
+            ringCount: 1,
+            style: style,
+            mode: BindingWheelSpatialSelectionMode.Angle,
+            unit: 100f
+        );
+
+        Assert.Equal(expected: BindingWheelSelectionOutcome.Sector, actual: axis.Outcome);
+        Assert.Equal(expected: BindingWheelSelectionOutcome.DeadZone, actual: spatial.Outcome);
+    }
+    [Fact]
     public void PlacementIsIndependentFromSelectionSource() {
         var pointer = new Vector2(x: 12f, y: 34f);
         var viewportCenter = new Vector2(x: 400f, y: 300f);
@@ -202,7 +226,12 @@ public sealed class BindingRadialTests {
         var gesture = new BindingWheelGestureState();
 
         gesture.Open();
-        gesture.Select(axis: new Vector2(x: 0.75f, y: -0.25f), sequence: 19L);
+        _ = gesture.TrySelect(
+            axis: new Vector2(x: 0.75f, y: -0.25f),
+            sequence: 19L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        );
 
         Assert.True(condition: gesture.AxisKnown);
         Assert.Equal(expected: 19L, actual: gesture.AxisSequence);
@@ -210,15 +239,135 @@ public sealed class BindingRadialTests {
         gesture.Close();
 
         Assert.False(condition: gesture.AxisKnown);
+        Assert.False(condition: gesture.AxisNeutral);
         Assert.Equal(expected: Vector2.Zero, actual: gesture.Axis);
         Assert.Equal(expected: 0L, actual: gesture.AxisSequence);
 
-        gesture.Select(axis: Vector2.UnitX, sequence: 20L);
+        _ = gesture.TrySelect(
+            axis: Vector2.UnitX,
+            sequence: 20L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        );
         gesture.Open();
 
         Assert.False(condition: gesture.AxisKnown);
+        Assert.False(condition: gesture.AxisNeutral);
         Assert.Equal(expected: Vector2.Zero, actual: gesture.Axis);
         Assert.Equal(expected: 0L, actual: gesture.AxisSequence);
+    }
+    [Fact]
+    public void AxisSelectionRetainsEachThrowAgainstWeakerReturnSpringSamples() {
+        var gesture = new BindingWheelGestureState();
+        var intended = new Vector2(x: 0.82f, y: -0.48f);
+        var repeated = (intended * 0.7f);
+        var rebound = new Vector2(x: -0.234f, y: 0.225f);
+
+        gesture.Open();
+
+        Assert.False(condition: gesture.TrySelect(
+            axis: new Vector2(x: 0.05f, y: -0.04f),
+            sequence: 1L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.True(condition: gesture.TrySelect(
+            axis: intended,
+            sequence: 2L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.False(condition: gesture.TrySelect(
+            axis: rebound,
+            sequence: 3L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(expected: intended, actual: gesture.Axis);
+        Assert.Equal(expected: 2L, actual: gesture.AxisSequence);
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: new Vector2(x: 0.04f, y: -0.03f),
+            sequence: 4L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.False(condition: gesture.TrySelect(
+            axis: rebound,
+            sequence: 5L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(expected: intended, actual: gesture.Axis);
+        Assert.True(condition: gesture.AxisNeutral);
+        Assert.Equal(expected: 4L, actual: gesture.AxisSequence);
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: repeated,
+            sequence: 6L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(expected: repeated, actual: gesture.Axis);
+        Assert.False(condition: gesture.AxisNeutral);
+        Assert.Equal(expected: 6L, actual: gesture.AxisSequence);
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: Vector2.Zero,
+            sequence: 7L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.False(condition: gesture.TrySelect(
+            axis: rebound,
+            sequence: 8L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(expected: repeated, actual: gesture.Axis);
+        Assert.True(condition: gesture.AxisNeutral);
+        Assert.Equal(expected: 7L, actual: gesture.AxisSequence);
+    }
+    [Fact]
+    public void AxisSelectionTracksRotationWithoutRequiringANewMagnitudePeak() {
+        var gesture = new BindingWheelGestureState();
+        var first = new Vector2(x: 0.95f, y: 0f);
+        var rotated = new Vector2(x: 0f, y: 0.80f);
+        var rotatedAgain = new Vector2(x: -0.70f, y: 0f);
+
+        gesture.Open();
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: first,
+            sequence: 1L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.True(condition: gesture.TrySelect(
+            axis: rotated,
+            sequence: 2L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.True(condition: gesture.TrySelect(
+            axis: rotatedAgain,
+            sequence: 3L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+
+        Assert.Equal(expected: rotatedAgain, actual: gesture.Axis);
+        Assert.False(condition: gesture.AxisNeutral);
+        Assert.Equal(expected: 3L, actual: gesture.AxisSequence);
+
+        Assert.True(condition: gesture.TrySelect(
+            axis: Vector2.Zero,
+            sequence: 4L,
+            deadZoneSquared: 0.01f,
+            switchThresholdSquared: 0.16f
+        ));
+        Assert.Equal(expected: rotatedAgain, actual: gesture.Axis);
+        Assert.True(condition: gesture.AxisNeutral);
     }
     [Fact]
     public void SpatialNeutralCapturesTheFirstAvailablePositionWithinEachGesture() {
@@ -337,9 +486,9 @@ public sealed class BindingRadialTests {
     private static BindingProfileDocument Profile() => new(
         Version: BindingProfileDocument.CurrentVersion,
         Modifiers: [
-            new BindingModifierDefinition(Id: "tab", Source: "keyboard.tab"),
-            new BindingModifierDefinition(Id: "lt", Source: "gamepad.leftTrigger"),
-            new BindingModifierDefinition(Id: "rt", Source: "gamepad.rightTrigger"),
+            new BindingModifierDefinition(Id: "tab", Sources: ["keyboard.tab"]),
+            new BindingModifierDefinition(Id: "lt", Sources: ["gamepad.leftTrigger"]),
+            new BindingModifierDefinition(Id: "rt", Sources: ["gamepad.rightTrigger"]),
         ],
         Chords: [
             Page(group: "play", chord: [], id: "base"),
@@ -347,7 +496,7 @@ public sealed class BindingRadialTests {
                 group: "play",
                 chord: ["tab"],
                 id: "tab-page",
-                entries: [new BindingPageEntryDefinition(Source: "gamepad.leftStick", Command: "test.radial.select")]
+                entries: [new BindingPageEntryDefinition(Sources: ["gamepad.leftStick"], Command: "test.radial.select")]
             ),
             Page(group: "play", chord: ["lt"], id: "lt-page"),
             Page(group: "play", chord: ["rt"], id: "rt-page"),
@@ -389,8 +538,8 @@ public sealed class BindingRadialTests {
     private static BindingPageDefinition Ring(string id) => new(
         Id: id,
         Entries: [
-            new BindingPageEntryDefinition(Source: null, Command: TestModule.Command),
-            new BindingPageEntryDefinition(Source: null, Command: TestModule.Command),
+            new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
+            new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
         ]
     );
     private static BindingChordDefinition Page(string group, IReadOnlyList<string> chord, string id, IReadOnlyList<BindingPageEntryDefinition>? entries = null) => new(
@@ -406,8 +555,8 @@ public sealed class BindingRadialTests {
             new BindingPageDefinition(
                 Id: ringId,
                 Entries: [
-                    new BindingPageEntryDefinition(Source: null, Command: TestModule.Command),
-                    new BindingPageEntryDefinition(Source: null, Command: TestModule.Command),
+                    new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
+                    new BindingPageEntryDefinition(Sources: null, Command: TestModule.Command),
                 ]
             ),
         ],
@@ -415,6 +564,7 @@ public sealed class BindingRadialTests {
             PointerSelection: BindingWheelSpatialSelectionMode.HitTarget,
             Placement: BindingWheelPlacement.ViewportCenter,
             DeadZoneFraction: 0.2f,
+            AxisDeadZone: 0.06f,
             RingWidthFraction: 0.08f,
             OuterGraceRingFraction: 0.25f,
             RotationDegrees: 30f,

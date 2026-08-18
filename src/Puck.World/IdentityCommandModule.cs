@@ -235,7 +235,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         // only in this verb (WorldDefinitionValidator.ValidateHudCore applies the seat-scope element cap and the
         // Replace refusal to any document carrying an Identity section, including a boot load or a sync pull, not
         // just this door). A refusal leaves both the document and identity.Hud untouched.
-        var candidate = document with { Hud = document.Hud with { Panels = [panel] } };
+        var candidate = document with { HudRaw = document.Hud with { Panels = [panel] } };
 
         // No neighbour resolver: an owned identity's own document edit (a HUD panel), not a document load.
         if (!WorldDefinitionValidator.TryValidate(

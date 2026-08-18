@@ -9,7 +9,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// hand-stamped solar-sensor game code, no ROM asset, no BIOS), so it always runs — the golden-replay counterpart
 /// (<see cref="SolarReplayStage"/>) needs a real cartridge and skips without one.
 /// </summary>
-internal sealed class SolarDeviceStage : IPostStage {
+internal sealed class SolarDeviceStage : IPostStage<PostContext> {
     // A solar-sensor cart's game code — keys HasSolar (and HasRtc, which real solar-sensor carts also carry; the RTC
     // and light sensor share the GPIO pins but never interfere: RTC only reacts while pin 2 (CS) is high, the light
     // sensor only while pin 2 is low, exactly as this test drives it).

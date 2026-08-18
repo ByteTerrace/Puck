@@ -62,9 +62,7 @@ public sealed record OverlayServices {
         var renderTargetFactory = Resolve<IGpuRenderTargetFactory>();
 
         return new OverlayServices {
-            BytecodeExtension = (hostsOnDirectX
-            ? ".dxil"
-            : ".spv"),
+            BytecodeExtension = ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX),
             CommandRecorder = Resolve<IGpuCommandRecorder>(),
             CreateRenderTarget = (width, height) => renderTargetFactory.Create(
             deviceContext: deviceContext,

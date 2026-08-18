@@ -183,6 +183,15 @@ public static class WorldSubmissionCodec {
         WorldQuery.Properties => 9,
         WorldQuery.Interactions => 10,
         WorldQuery.Contacts => 11,
+        WorldQuery.GrantAllows => 12,
+        WorldQuery.GrantHandleMint => 13,
+        WorldQuery.GrantHandleResolve => 14,
+        WorldQuery.PopulationChannels => 15,
+        WorldQuery.ProfileCatalog => 16,
+        WorldQuery.FindProfile => 17,
+        WorldQuery.PreferredControllerProfile => 18,
+        WorldQuery.MusicState => 19,
+        WorldQuery.JudgeState => 20,
         _ => throw UnknownLeaf(value: value),
     };
     private static Type? QueryType(byte kind) => kind switch {
@@ -197,6 +206,15 @@ public static class WorldSubmissionCodec {
         9 => typeof(WorldQuery.Properties),
         10 => typeof(WorldQuery.Interactions),
         11 => typeof(WorldQuery.Contacts),
+        12 => typeof(WorldQuery.GrantAllows),
+        13 => typeof(WorldQuery.GrantHandleMint),
+        14 => typeof(WorldQuery.GrantHandleResolve),
+        15 => typeof(WorldQuery.PopulationChannels),
+        16 => typeof(WorldQuery.ProfileCatalog),
+        17 => typeof(WorldQuery.FindProfile),
+        18 => typeof(WorldQuery.PreferredControllerProfile),
+        19 => typeof(WorldQuery.MusicState),
+        20 => typeof(WorldQuery.JudgeState),
         _ => null,
     };
     private static WorldAddonLifecycle ReadAddonLifecycle(BinaryReader reader) {
@@ -681,6 +699,7 @@ public static class WorldSubmissionCodec {
         SessionRequest.SetIdentity => 2,
         SessionRequest.SetPopulation => 3,
         SessionRequest.SetPeerSource => 4,
+        SessionRequest.RememberPreferredController => 5,
         _ => throw UnknownLeaf(value: request),
     };
     private static Type? SessionType(byte kind) => kind switch {
@@ -689,6 +708,7 @@ public static class WorldSubmissionCodec {
         2 => typeof(SessionRequest.SetIdentity),
         3 => typeof(SessionRequest.SetPopulation),
         4 => typeof(SessionRequest.SetPeerSource),
+        5 => typeof(SessionRequest.RememberPreferredController),
         _ => null,
     };
     private static SnapPoseMode SnapPoseModeFromWire(byte value) => value switch { 0 => SnapPoseMode.Pose, _ => throw UnknownWire<SnapPoseMode>(value: value) };

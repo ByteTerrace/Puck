@@ -49,15 +49,9 @@
       "document": {
         "schema": "puck.creation.v1",
         "name": "floating-island",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.92,
-              "y": 0.92,
-              "z": 0.92
-            },
+            "color": "#EBEBEB",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -68,28 +62,13 @@
             "id": 0,
             "name": "island",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 27.631578,
-              "y": 0.5,
-              "z": 27.631578
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [27.631578, 0.5, 27.631578],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -100,8 +79,7 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "a1791170eaef708cb42edfd90e0b62e8fd04d0a3863adaac705bb3b26a14efb4"
+      }
     },
     {
       "id": "ground",

@@ -6,7 +6,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// proves it is <em>correct</em> against an external oracle. The group skips (never fails) when the ROM corpus is absent,
 /// so the POST still runs anywhere; a failure lists exactly which ROMs and how they reported.
 /// </summary>
-internal sealed class ConformanceRomStage : IPostStage {
+internal sealed class ConformanceRomStage : IPostStage<PostContext> {
     private readonly string m_group;
     private readonly string m_subPath;
     private readonly ConsoleModel m_model;

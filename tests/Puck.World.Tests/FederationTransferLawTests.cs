@@ -70,21 +70,23 @@ public sealed class FederationTransferLawTests {
             CatalogRig: 7,
             Continuity: EntityContinuity.Continuous,
             Generation: 11,
-            PlacementId: null);
-        var snapshot = new WorldSnapshot(Tick: 17, Revision: 19, StepTicks: 210, Entries: new[] { expected }, Authority: "destination/world");
+            PlacementId: null,
+            Heading: 1.25f);
+        var snapshot = new WorldSnapshot(Authority: "destination/world", Entries: new[] { expected }, Revision: 19, StepTicks: 210, Tick: 17);
 
         Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot), snapshot: out var decoded, failure: out var failure), userMessage: failure.ToString());
         var actual = Assert.Single(collection: decoded.Entries.ToArray());
 
         Assert.Equal(expected: 91, actual: actual.Index);
         Assert.Equal(expected: ((byte)7), actual: actual.CatalogRig);
+        Assert.Equal(expected: 1.25f, actual: actual.Heading);
         Assert.NotEqual(expected: ((byte)actual.Index), actual: actual.CatalogRig);
     }
     [Fact]
     public void RouteWire_PreservesOneCompleteAuthorityEpoch() {
         var expected = new WorldAuthorityRouteDescription(
             Endpoint: "127.0.0.1:42001",
-            Entity: new WorldEntityAddress(Authority: "world/corner-sw", Index: 17, Generation: 23),
+            Entity: new WorldEntityAddress(Authority: "world/corner-sw", Generation: 23, Index: 17),
             Tick: 987654321UL,
             Position: new FixedVector3(
                 X: FixedQ4816.FromDouble(value: -12.25),
@@ -100,7 +102,7 @@ public sealed class FederationTransferLawTests {
             PlacementId: "traveler-shell",
             Definition: Fixtures.BuildDocument());
 
-        var encoded = WorldFederationCodec.EncodeRoute(route: in expected, tier: WorldDisclosureTier.Replica, authority: "world/corner-sw", revision: 0);
+        var encoded = WorldFederationCodec.EncodeRoute(authority: "world/corner-sw", revision: 0, route: in expected, tier: WorldDisclosureTier.Replica);
 
         Assert.True(condition: WorldFederationCodec.TryDecodeRoute(body: encoded, failure: out var failure, route: out var actual), userMessage: failure.ToString());
         Assert.Equal(expected: expected.Endpoint, actual: actual.Endpoint);
@@ -385,7 +387,7 @@ public sealed class FederationTransferLawTests {
         if (!rebindAuthority) {
             mobility = mobility with { Epoch = (mobility.Epoch + 99UL) };
         }
-        var body = WorldFederationCodec.EncodeIntent(sourceAuthority: carriedAuthority, mobility: in mobility, submission: in submission);
+        var body = WorldFederationCodec.EncodeIntent(mobility: in mobility, sourceAuthority: carriedAuthority, submission: in submission);
 
         await WorldFederationCodec.WriteRequestAsync(stream: stream, kind: WorldFederationRequest.Intent, body: body, ct: timeout.Token);
 
@@ -686,7 +688,7 @@ public sealed class FederationTransferLawTests {
         var start = body.FixedPosition;
         var run = default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One);
 
-        fixture.Server.ApplyCommand(command: new WorldCommand.EnqueueSegment(Principal: principal, EntityIndex: bodyIndex, Intent: run, Seconds: 1f));
+        fixture.Server.ApplyCommand(command: new WorldCommand.EnqueueSegment(EntityIndex: bodyIndex, Intent: run, Principal: principal, Seconds: 1f));
         var neutral = new IntentSubmission(Tick: 1, EntityIndex: bodyIndex, Intent: default, Principal: principal);
 
         fixture.Server.PublishFederatedIntent(leaseId: 79, submission: in neutral);
@@ -798,13 +800,13 @@ public sealed class FederationTransferLawTests {
     private static WorldTransferReservationRequest Reservation(string sourceAuthority, ulong transferId, string border) =>
         new(TransferId: transferId, SourceAuthority: sourceAuthority, SourceRateHz: 240, SourceTick: 0, DeadlineSourceTick: 60, Border: border, BorderCapacity: null, PartyAllOrNothing: true, PeerAdmission: false, Members: [new WorldTransferReservationMember(Principal: WorldPrincipal.Console, PreferredSlot: 0, Identity: null, Source: default, BodyColor: default, CatalogRig: 0, Mobility: Mobility(index: 0))]);
     private static WorldMobilityIdentity Mobility(int index, ulong epoch = 0) =>
-        new(Incarnation: new WorldEntityAddress(Authority: "origin/world", Index: index, Generation: 7), Epoch: epoch);
+        new(Incarnation: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: index), Epoch: epoch);
     private static WorldDefinition TransferPopulationDocument() {
         var document = Fixtures.BuildDocument();
 
         return document with {
-            Population = document.Population with {
-                Capacity = (WorldPopulation.LocalSeatCount + 2),
+            PopulationRaw = document.Population with {
+                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],

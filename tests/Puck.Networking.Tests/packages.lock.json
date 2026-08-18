@@ -90,6 +90,11 @@
         "resolved": "5.0.0",
         "contentHash": "dDoKi0PnDz31yAyETfRntsLArTlVAVzUzCIvvEDsDsucrl33Dl8pIJG06ePTJTI3tGpeyHS9Cq7Foc/s4EeKcg=="
       },
+      "System.Formats.Cbor": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "i6cQMkCkGavqCPqjoQIkxVgtbTG59FkWsJppVOQ4QoJ//MNoe/m/3M/BN1SxEmLHGxySM8LiUl5/ppKgOyTWBA=="
+      },
       "xunit.analyzers": {
         "type": "Transitive",
         "resolved": "1.27.0",
@@ -157,12 +162,19 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "ByteTerrace.Puck.Attestation": {
+        "type": "Project",
+        "dependencies": {
+          "System.Formats.Cbor": "[10.*, )"
+        }
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
       "puck.networking": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       }

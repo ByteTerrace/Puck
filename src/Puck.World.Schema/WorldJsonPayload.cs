@@ -83,6 +83,16 @@ public static class WorldJsonPayload {
                 return false;
             }
 
+            if (
+                (parsed is WorldDefinition definition) &&
+                !WorldStateDocumentValues.TryResolve(
+                    definition: definition,
+                    reason: out var spatialReason
+                )
+            ) {
+                throw new InvalidOperationException(message: spatialReason);
+            }
+
             value = parsed;
             error = string.Empty;
 

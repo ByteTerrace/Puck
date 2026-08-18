@@ -33,6 +33,14 @@ public interface IWorldForwardedAuthority {
     /// <param name="reason">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when a route was described.</returns>
     bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason);
+    /// <summary>Describes this arm's destination and traveler credential as data — the address and mobility
+    /// identity a checkpoint capture records and a restore re-materializes a fresh arm from, never the live arm
+    /// itself. Unlike <see cref="TryDescribeRoute"/>, an implementation never touches the network to answer this: a
+    /// remote arm's own last-observed authority text stands in for an exact destination generation, which nothing on
+    /// the restore path needs to re-materialize the arm.</summary>
+    /// <param name="destinationAuthority">The destination authority's own identity text.</param>
+    /// <param name="mobility">The traveler's incarnation and committed ownership epoch this arm forwards under.</param>
+    void DescribeForCheckpoint(out string destinationAuthority, out WorldMobilityIdentity mobility);
 }
 /// <summary>
 /// The forwarded-authority arm for a traveler whose current authority is a <see cref="WorldServer"/> in this
@@ -335,4 +343,9 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             server: m_server,
             sourceAuthority: m_sourceAuthority
         );
+    /// <inheritdoc/>
+    public void DescribeForCheckpoint(out string destinationAuthority, out WorldMobilityIdentity mobility) {
+        destinationAuthority = m_server.AuthorityIdentity;
+        mobility = m_mobility;
+    }
 }

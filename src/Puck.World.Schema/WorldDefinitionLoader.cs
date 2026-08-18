@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Puck.World;
 
 /// <summary>The boot world document plus the console's tracked document origin — the DI singleton
@@ -66,46 +68,144 @@ public static class WorldDefinitionLoader {
     public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
         if (!WorldDefinitionFileSource.TryLoad(
             contentHash: out _,
-            definition: out definition,
+            definition: out var loaded,
             neighbours: neighbours,
             path: path,
             reason: out reason
         )) {
-            return false;
-        }
-
-        if (!WorldDrawBootResolver.TryResolve(
-            definition: definition!,
-            instanceIdentity: instanceIdentity,
-            resolved: out var resolved,
-            out reason
-        )) {
             definition = null;
-            reason = $"{path} draw refused: {reason}";
 
             return false;
         }
 
-        // A resolved draw writes a value the validator has already been told the site's domain admits, so this can
-        // only fire if a domain narrowing went soft. Loud refusal rather than a silent bad boot. The SAME resolver
-        // (or null) the caller passed above proves a boot document's own adjacencies here too — a second pass in
-        // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
-        // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
+        return TryResolveDrawsAndRevalidate(
+            definition: loaded!,
+            instanceIdentity: instanceIdentity,
+            neighbours: neighbours,
+            reason: out reason,
+            resolved: out definition,
+            sourceName: path
+        );
+    }
+    /// <summary>Loads and validates a world document from already-read, already-composed UTF-8 JSON bytes — the
+    /// bytes-level twin of <see cref="TryLoadFile"/>, for a document that arrived from somewhere other than a local
+    /// file (a hosted world's blob-store read). The bytes must already be basis-free: an authored
+    /// <see cref="WorldDocumentBasis.BasisMemberName"/> member refuses by name, since this entry has no directory
+    /// to resolve a chain reference against.</summary>
+    /// <param name="utf8">The document's raw, already-composed UTF-8 JSON bytes.</param>
+    /// <param name="sourceName">The bytes' own source name, echoed in every refusal.</param>
+    /// <param name="definition">The loaded, draw-resolved definition on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="instanceIdentity">The running instance's own identity — the draw seed ladder's instance rung.</param>
+    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads.</param>
+    /// <returns><see langword="true"/> when the bytes loaded and validated.</returns>
+    public static bool TryLoad(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
+        definition = null;
+
+        string json;
+
+        try {
+            using var reader = new StreamReader(
+                stream: new MemoryStream(buffer: utf8.ToArray()),
+                encoding: Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: true
+            );
+
+            json = reader.ReadToEnd();
+        } catch (Exception exception) {
+            reason = $"cannot decode {sourceName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (json.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: $"\"{WorldDocumentBasis.BasisMemberName}\""
+        )) {
+            reason = $"{sourceName} names a '{WorldDocumentBasis.BasisMemberName}' — this entry loads only an already-composed document.";
+
+            return false;
+        }
+
+        if (!WorldJsonPayload.TryParse(
+            json: json,
+            info: WorldJsonContext.Default.WorldDefinition,
+            value: out var parsed,
+            error: out var parseError
+        )) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {parseError}";
+
+            return false;
+        }
+
+        if (!string.Equals(
+            a: parsed.Schema,
+            b: WorldDefinition.SchemaVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: schema '{(parsed.Schema ?? "(absent)")}' is not {WorldDefinition.SchemaVersion}";
+
+            return false;
+        }
+
+        parsed = WorldDefinitionMigrations.Apply(definition: parsed);
+
         if (!WorldDefinitionValidator.TryValidate(
-            definition: resolved,
+            definition: parsed,
+            neighbours: neighbours,
+            reason: out var validateReason
+        )) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {validateReason}";
+
+            return false;
+        }
+
+        return TryResolveDrawsAndRevalidate(
+            definition: parsed,
+            instanceIdentity: instanceIdentity,
+            neighbours: neighbours,
+            resolved: out definition,
+            reason: out reason,
+            sourceName: sourceName
+        );
+    }
+
+    // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate
+    // the drawn result. A resolved draw writes a value the validator has already been told the site's domain admits,
+    // so a post-draw refusal can only fire if a domain narrowing went soft — loud rather than a silent bad boot. The
+    // SAME resolver (or null) the caller supplied proves a boot document's own adjacencies here too; a second pass in
+    // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
+    // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
+    private static bool TryResolveDrawsAndRevalidate(WorldDefinition definition, string sourceName, string instanceIdentity, IWorldNeighbourResolver? neighbours, out WorldDefinition? resolved, out string reason) {
+        if (!WorldDrawBootResolver.TryResolve(
+            definition: definition,
+            instanceIdentity: instanceIdentity,
+            reason: out reason,
+            resolved: out var drawn
+        )) {
+            resolved = null;
+            reason = $"{sourceName} draw refused: {reason}";
+
+            return false;
+        }
+
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: drawn,
             neighbours: neighbours,
             reason: out var resolvedReason
         )) {
-            definition = null;
-            reason = $"{path} produced an invalid document after its draws resolved: {resolvedReason}";
+            resolved = null;
+            reason = $"{sourceName} produced an invalid document after its draws resolved: {resolvedReason}";
 
             return false;
         }
 
-        definition = resolved;
+        resolved = drawn;
+        reason = string.Empty;
 
         return true;
     }
+
     /// <summary>Resolves the active world definition from an explicit file or the shipped default file. Failure to
     /// load either file refuses the boot.</summary>
     /// <param name="explicitPath">The <c>--world</c> path, or <see langword="null"/>/empty for the shipped default

@@ -12,7 +12,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// deterministic clock resumes, never advancing from wall time). This is the contract the demo's
 /// <c>&lt;romPath&gt;.sav</c> persistence (power-on load, debounced flush, save-across-reboot) stands on.
 /// </summary>
-internal sealed class BatterySaveStage : IPostStage {
+internal sealed class BatterySaveStage : IPostStage<PostContext> {
     private const long InteropTimestamp = 0x0123_4567_89AB_CDEF; // recognizable, provably-ignored footer metadata
     private const int PatternLength = 64;
 

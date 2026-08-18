@@ -136,7 +136,7 @@ public static class BindingWheelGeometry {
 
         var distanceSquared = vector.LengthSquared();
 
-        if (distanceSquared <= (style.DeadZoneFraction * style.DeadZoneFraction)) {
+        if (distanceSquared <= (style.AxisDeadZone * style.AxisDeadZone)) {
             return new BindingWheelSelection(
                 Outcome: BindingWheelSelectionOutcome.DeadZone,
                 Sector: -1
@@ -152,10 +152,14 @@ public static class BindingWheelGeometry {
             );
         }
 
+        // An Axis2D selector reports +Y up (the stick convention); the angle math is screen space (+Y down).
         return SelectAngle(
             sectorCount: sectorCount,
             style: style,
-            vector: vector
+            vector: new Vector2(
+                x: vector.X,
+                y: -vector.Y
+            )
         );
     }
     /// <summary>Resolves only the angular component after another policy has accepted the vector and chosen a ring.</summary>

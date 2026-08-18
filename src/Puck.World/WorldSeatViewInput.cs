@@ -20,33 +20,12 @@ internal sealed class WorldSeatViewInput : IWorldPointerConsumer {
         seatRouter.RouteChanged += OnLocationChanged;
     }
 
-    internal static int? ArmingButtonIndex(WorldSeatLookArming arming) => arming switch {
-        WorldSeatLookArming.LeftButton => 0,
-        WorldSeatLookArming.RightButton => 1,
-        WorldSeatLookArming.MiddleButton => 2,
-        _ => null,
-    };
-
     private void OnLocationChanged(int slot) {
-        m_roster.Seat(slot: slot)?.View.Reclamp(control: m_instances.ResolveRoutedDefinition(slot: slot).Views.SeatControl);
+        m_roster.Seat(slot: slot)?.View.Reclamp(views: m_instances.ResolveRoutedDefinition(slot: slot).Views);
     }
 
-    public bool IsSteering(int slot) {
-        var definition = m_instances.ResolveRoutedDefinition(slot: slot);
-        var arming = Preference(
-            definition: definition,
-            slot: slot
-        ).Arming;
-
-        return arming switch {
-            WorldSeatLookArming.None => false,
-            WorldSeatLookArming.Always => true,
-            _ => ((ArmingButtonIndex(arming: arming) is { } button) && m_pointer.IsButtonDown(
-            button: button,
-            slot: slot
-        )),
-        };
-    }
+    /// <summary>Whether pointer motion steers the seat camera this frame — <c>player.orbit</c> or <c>player.steer</c> held.</summary>
+    public bool IsSteering(int slot) => ((m_roster.Seat(slot: slot) is { } seat) && (seat.Orbiting || seat.PointerSteering));
     public void OnPointer(int slot) {
         var definition = m_instances.ResolveRoutedDefinition(slot: slot);
         var preference = Preference(
@@ -70,7 +49,7 @@ internal sealed class WorldSeatViewInput : IWorldPointerConsumer {
             yawScale: preference.YawSensitivity,
             pitchScale: preference.PitchSensitivity,
             preference: preference,
-            control: definition.Views.SeatControl
+            views: definition.Views
         );
     }
     public WorldSeatLook Preference(int slot, WorldDefinition definition) =>

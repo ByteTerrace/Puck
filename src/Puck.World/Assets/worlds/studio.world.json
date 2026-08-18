@@ -1,4 +1,5 @@
 {
+  "basis": "default.world.json",
   "motion": {
     "moveSpeed": 5,
     "turnSpeed": 2.5,
@@ -320,7 +321,6 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-      "arming": "RightButton",
       "stickLookRate": 2.6
     }
   },
@@ -568,16 +568,6 @@
               }
             ]
           },
-          "state": [
-            {
-              "name": "jumpUses",
-              "kind": "Counter",
-              "initial": 0,
-              "resetFact": "Grounded",
-              "lifetime": "Ephemeral",
-              "playerWritable": false
-            }
-          ],
           "onFact": null
         }
       },
@@ -606,7 +596,7 @@
     {
       "bindingBar": {
         "enabled": true,
-        "hideAfterRestSeconds": 6,
+        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
         "layout": {
           "buttonSize": 0.075,
           "centerGap": 0.1,
@@ -622,13 +612,15 @@
         "modifiers": [],
         "chords": [
           {
-            "group": "play",
+            "group": "default",
             "chord": [],
             "page": {
               "id": "base",
               "entries": [
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "command": null,
                   "channel": "jump",
                   "scale": null,
@@ -638,7 +630,9 @@
                   "value": null
                 },
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "command": null,
                   "channel": "jump",
                   "scale": null,
@@ -648,7 +642,9 @@
                   "value": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "command": null,
                   "channel": "jump",
                   "scale": null,
@@ -658,7 +654,9 @@
                   "value": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "command": null,
                   "channel": "jump",
                   "scale": null,
@@ -668,7 +666,9 @@
                   "value": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "command": null,
                   "channel": "dash",
                   "scale": null,
@@ -678,7 +678,9 @@
                   "value": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "command": null,
                   "channel": "dash",
                   "scale": null,
@@ -688,7 +690,9 @@
                   "value": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "command": null,
                   "channel": "run",
                   "scale": null,
@@ -698,7 +702,9 @@
                   "value": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "command": null,
                   "channel": "run",
                   "scale": null,
@@ -708,7 +714,9 @@
                   "value": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "command": null,
                   "channel": "run",
                   "scale": null,
@@ -718,7 +726,9 @@
                   "value": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "command": null,
                   "channel": "run",
                   "scale": null,
@@ -732,13 +742,116 @@
               "icon": null
             },
             "command": null
+          },
+          {
+            "group": "default",
+            "chord": [
+              "tab"
+            ],
+            "page": {
+              "id": "play-wheel",
+              "entries": [
+                {
+                  "sources": [
+                    "gamepad.leftStick"
+                  ],
+                  "command": "player.move"
+                },
+                {
+                  "sources": [
+                    "gamepad.rightStick"
+                  ],
+                  "command": "player.wheel.select"
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.tab"
+                  ],
+                  "command": "player.wheel.commit",
+                  "activateOn": "Completed"
+                }
+              ],
+              "label": "Wheel"
+            }
           }
         ],
         "contexts": null,
         "wheels": [
           {
             "id": "play-primary",
-            "group": "play",
+            "group": "default",
             "holdPages": [
               "play-wheel"
             ],
@@ -747,7 +860,7 @@
                 "id": "play-wheel-act",
                 "entries": [
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "editor.enter",
                     "channel": null,
                     "scale": null,
@@ -757,7 +870,7 @@
                     "value": null
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "editor.status",
                     "channel": null,
                     "scale": null,
@@ -767,7 +880,7 @@
                     "value": null
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "console",
                     "channel": null,
                     "scale": null,
@@ -777,7 +890,7 @@
                     "value": null
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "player.channels",
                     "channel": null,
                     "scale": null,
@@ -787,7 +900,7 @@
                     "value": null
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "player.where",
                     "channel": null,
                     "scale": null,
@@ -797,7 +910,7 @@
                     "value": null
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "player.disengage",
                     "channel": null,
                     "scale": null,
@@ -828,15 +941,9 @@
       "document": {
         "schema": "puck.creation.v1",
         "name": "ground",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.58,
-              "y": 0.58,
-              "z": 0.6
-            },
+            "color": "#949499",
             "emissive": 0,
             "specular": 0.02,
             "shininess": 4
@@ -847,28 +954,13 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -879,83 +971,52 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "a87378a970159bae62adf5b4665733e351b777e07fede7df1f6c18b183250956"
+      }
     },
     {
       "id": "player",
       "document": {
         "schema": "puck.creation.v1",
         "name": "player",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.92,
-              "y": 0.76,
-              "z": 0.62
-            },
+            "color": "#EBC29E",
             "emissive": 0,
             "specular": 0.05,
             "shininess": 8
           },
           {
-            "albedo": {
-              "x": 0.22,
-              "y": 0.38,
-              "z": 0.68
-            },
+            "color": "#3861AD",
             "emissive": 0,
             "specular": 0.08,
             "shininess": 10
           },
           {
-            "albedo": {
-              "x": 0.86,
-              "y": 0.7,
-              "z": 0.28
-            },
+            "color": "#DBB247",
             "emissive": 0,
             "specular": 0.45,
             "shininess": 32
           },
           {
-            "albedo": {
-              "x": 0.42,
-              "y": 0.26,
-              "z": 0.14
-            },
+            "color": "#6B4224",
             "emissive": 0,
             "specular": 0.1,
             "shininess": 12
           },
           {
-            "albedo": {
-              "x": 0.34,
-              "y": 0.25,
-              "z": 0.19
-            },
+            "color": "#574030",
             "emissive": 0,
             "specular": 0.12,
             "shininess": 12
           },
           {
-            "albedo": {
-              "x": 0.08,
-              "y": 0.09,
-              "z": 0.12
-            },
+            "color": "#14171F",
             "emissive": 0,
             "specular": 0.3,
             "shininess": 24
           },
           {
-            "albedo": {
-              "x": 0.3,
-              "y": 0.33,
-              "z": 0.42
-            },
+            "color": "#4C546B",
             "emissive": 0,
             "specular": 0.06,
             "shininess": 8
@@ -966,28 +1027,13 @@
             "id": 0,
             "name": "hips",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0,
-              "y": 0.93,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.36,
-              "y": 0.34,
-              "z": 0.34
-            },
+            "position": [0, 0.93, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.36, 0.34, 0.34],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.05,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -997,28 +1043,13 @@
             "id": 1,
             "name": "waist",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0,
-              "y": 1.06,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.32,
-              "y": 0.32,
-              "z": 0.31
-            },
+            "position": [0, 1.06, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.32, 0.32, 0.31],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.06,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1028,28 +1059,13 @@
             "id": 2,
             "name": "chest",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0,
-              "y": 1.2,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.44,
-              "y": 0.46,
-              "z": 0.38
-            },
+            "position": [0, 1.2, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.44, 0.46, 0.38],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.06,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1059,28 +1075,13 @@
             "id": 3,
             "name": "shoulders",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0,
-              "y": 1.275,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.52,
-              "y": 0.2,
-              "z": 0.36
-            },
+            "position": [0, 1.275, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.52, 0.2, 0.36],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.05,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1090,28 +1091,13 @@
             "id": 4,
             "name": "neck",
             "type": "Cylinder",
-            "position": {
-              "x": 0,
-              "y": 1.35,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.16,
-              "y": 0.2,
-              "z": 0.16
-            },
+            "position": [0, 1.35, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.16, 0.2, 0.16],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.03,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1121,28 +1107,13 @@
             "id": 5,
             "name": "head",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0,
-              "y": 1.575,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.41,
-              "y": 0.72,
-              "z": 0.52
-            },
+            "position": [0, 1.575, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.41, 0.72, 0.52],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.035,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1152,28 +1123,13 @@
             "id": 6,
             "name": "hair",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0,
-              "y": 1.63,
-              "z": 0.03
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.435,
-              "y": 0.64,
-              "z": 0.545
-            },
+            "position": [0, 1.63, 0.03],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.435, 0.64, 0.545],
             "material": 3,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1183,28 +1139,13 @@
             "id": 7,
             "name": "fringe",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0,
-              "y": 1.715,
-              "z": -0.07
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.38,
-              "y": 0.24,
-              "z": 0.28
-            },
+            "position": [0, 1.715, -0.07],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.38, 0.24, 0.28],
             "material": 3,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1214,28 +1155,13 @@
             "id": 8,
             "name": "eye-left",
             "type": "Ellipsoid",
-            "position": {
-              "x": -0.062,
-              "y": 1.585,
-              "z": -0.152
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.072,
-              "y": 0.115,
-              "z": 0.072
-            },
+            "position": [-0.062, 1.585, -0.152],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.072, 0.115, 0.072],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1245,28 +1171,13 @@
             "id": 9,
             "name": "eye-right",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0.062,
-              "y": 1.585,
-              "z": -0.152
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.072,
-              "y": 0.115,
-              "z": 0.072
-            },
+            "position": [0.062, 1.585, -0.152],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.072, 0.115, 0.072],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1276,28 +1187,13 @@
             "id": 10,
             "name": "tunic",
             "type": "Cone",
-            "position": {
-              "x": 0,
-              "y": 0.99,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.76,
-              "y": 0.54,
-              "z": 0.76
-            },
+            "position": [0, 0.99, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.76, 0.54, 0.76],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.04,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1307,28 +1203,13 @@
             "id": 11,
             "name": "belt",
             "type": "Torus",
-            "position": {
-              "x": 0,
-              "y": 1.04,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.41,
-              "y": 0.22,
-              "z": 0.4
-            },
+            "position": [0, 1.04, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.41, 0.22, 0.4],
             "material": 2,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1338,28 +1219,13 @@
             "id": 12,
             "name": "collar",
             "type": "Torus",
-            "position": {
-              "x": 0,
-              "y": 1.312,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.3,
-              "y": 0.18,
-              "z": 0.3
-            },
+            "position": [0, 1.312, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.3, 0.18, 0.3],
             "material": 2,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1369,28 +1235,13 @@
             "id": 13,
             "name": "thigh-left",
             "type": "Ellipsoid",
-            "position": {
-              "x": -0.128,
-              "y": 0.71,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.235,
-              "y": 0.72,
-              "z": 0.27
-            },
+            "position": [-0.128, 0.71, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.235, 0.72, 0.27],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.04,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1400,28 +1251,13 @@
             "id": 14,
             "name": "thigh-right",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0.128,
-              "y": 0.71,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.235,
-              "y": 0.72,
-              "z": 0.27
-            },
+            "position": [0.128, 0.71, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.235, 0.72, 0.27],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.04,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1431,28 +1267,13 @@
             "id": 15,
             "name": "shin-left",
             "type": "Ellipsoid",
-            "position": {
-              "x": -0.132,
-              "y": 0.335,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.2,
-              "y": 0.62,
-              "z": 0.23
-            },
+            "position": [-0.132, 0.335, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.2, 0.62, 0.23],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.035,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1462,28 +1283,13 @@
             "id": 16,
             "name": "shin-right",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0.132,
-              "y": 0.335,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.2,
-              "y": 0.62,
-              "z": 0.23
-            },
+            "position": [0.132, 0.335, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.2, 0.62, 0.23],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.035,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1493,28 +1299,13 @@
             "id": 17,
             "name": "boot-left",
             "type": "Box",
-            "position": {
-              "x": -0.134,
-              "y": 0.072,
-              "z": -0.05
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.19,
-              "y": 0.16,
-              "z": 0.4
-            },
+            "position": [-0.134, 0.072, -0.05],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.19, 0.16, 0.4],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1524,28 +1315,13 @@
             "id": 18,
             "name": "boot-right",
             "type": "Box",
-            "position": {
-              "x": 0.134,
-              "y": 0.072,
-              "z": -0.05
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.19,
-              "y": 0.16,
-              "z": 0.4
-            },
+            "position": [0.134, 0.072, -0.05],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.19, 0.16, 0.4],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1555,28 +1331,13 @@
             "id": 19,
             "name": "upper-arm-left",
             "type": "Ellipsoid",
-            "position": {
-              "x": -0.262,
-              "y": 1.15,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.2,
-              "y": 0.56,
-              "z": 0.22
-            },
+            "position": [-0.262, 1.15, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.2, 0.56, 0.22],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.035,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1586,28 +1347,13 @@
             "id": 20,
             "name": "upper-arm-right",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0.262,
-              "y": 1.15,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.2,
-              "y": 0.56,
-              "z": 0.22
-            },
+            "position": [0.262, 1.15, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.2, 0.56, 0.22],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.035,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1617,28 +1363,13 @@
             "id": 21,
             "name": "forearm-left",
             "type": "Ellipsoid",
-            "position": {
-              "x": -0.283,
-              "y": 0.875,
-              "z": -0.01
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.175,
-              "y": 0.5,
-              "z": 0.19
-            },
+            "position": [-0.283, 0.875, -0.01],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.175, 0.5, 0.19],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.03,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1648,28 +1379,13 @@
             "id": 22,
             "name": "forearm-right",
             "type": "Ellipsoid",
-            "position": {
-              "x": 0.283,
-              "y": 0.875,
-              "z": -0.01
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.175,
-              "y": 0.5,
-              "z": 0.19
-            },
+            "position": [0.283, 0.875, -0.01],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.175, 0.5, 0.19],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.03,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1679,28 +1395,13 @@
             "id": 23,
             "name": "hand-left",
             "type": "Sphere",
-            "position": {
-              "x": -0.292,
-              "y": 0.705,
-              "z": -0.015
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.2,
-              "y": 0.22,
-              "z": 0.2
-            },
+            "position": [-0.292, 0.705, -0.015],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.2, 0.22, 0.2],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.02,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1710,28 +1411,13 @@
             "id": 24,
             "name": "hand-right",
             "type": "Sphere",
-            "position": {
-              "x": 0.292,
-              "y": 0.705,
-              "z": -0.015
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.2,
-              "y": 0.22,
-              "z": 0.2
-            },
+            "position": [0.292, 0.705, -0.015],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.2, 0.22, 0.2],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.02,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1741,28 +1427,13 @@
             "id": 25,
             "name": "hair-sweep",
             "type": "RoundCone",
-            "position": {
-              "x": 0,
-              "y": 1.675,
-              "z": 0.055
-            },
-            "rotation": {
-              "isIdentity": false,
-              "x": 0.6087614,
-              "y": 0,
-              "z": 0,
-              "w": 0.7933533
-            },
-            "scale": {
-              "x": 0.44,
-              "y": 0.4,
-              "z": 0.44
-            },
+            "position": [0, 1.675, 0.055],
+            "rotation": [0.6087614, 0, 0, 0.7933533],
+            "scale": [0.44, 0.4, 0.44],
             "material": 3,
             "blend": "SmoothUnion",
             "smooth": 0.05,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1772,28 +1443,13 @@
             "id": 26,
             "name": "nose",
             "type": "Sphere",
-            "position": {
-              "x": 0,
-              "y": 1.545,
-              "z": -0.168
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.055,
-              "y": 0.055,
-              "z": 0.055
-            },
+            "position": [0, 1.545, -0.168],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.055, 0.055, 0.055],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.02,
             "group": 1,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1826,33 +1482,22 @@
             "shapeId": 24
           }
         ]
-      },
-      "hash": "a0bb6acfbe636a174d01f21ebfb9e014a01636a2f402bd71f9100e0fe2788ce2"
+      }
     },
     {
       "id": "archway-frame",
       "document": {
         "schema": "puck.creation.v1",
         "name": "archway-frame",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.16,
-              "y": 0.15,
-              "z": 0.17
-            },
+            "color": "#29262B",
             "emissive": 0,
             "specular": 0.2,
             "shininess": 12
           },
           {
-            "albedo": {
-              "x": 0.05,
-              "y": 0.08,
-              "z": 0.12
-            },
+            "color": "#0D141F",
             "emissive": 0.12,
             "specular": 0.4,
             "shininess": 24
@@ -1863,28 +1508,13 @@
             "id": 0,
             "name": "screen",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 3.6765,
-              "y": 4.4118,
-              "z": 0.1471
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [3.6765, 4.4118, 0.1471],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1894,28 +1524,13 @@
             "id": 1,
             "name": "pillar-left",
             "type": "Box",
-            "position": {
-              "x": -1.5,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.7353,
-              "y": 4.4118,
-              "z": 0.8824
-            },
+            "position": [-1.5, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.7353, 4.4118, 0.8824],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1925,28 +1540,13 @@
             "id": 2,
             "name": "pillar-right",
             "type": "Box",
-            "position": {
-              "x": 1.5,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 0.7353,
-              "y": 4.4118,
-              "z": 0.8824
-            },
+            "position": [1.5, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.7353, 4.4118, 0.8824],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1956,28 +1556,13 @@
             "id": 3,
             "name": "lintel",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 1.75,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 5.1471,
-              "y": 0.7353,
-              "z": 0.8824
-            },
+            "position": [0, 1.75, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [5.1471, 0.7353, 0.8824],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1997,8 +1582,7 @@
             }
           ]
         }
-      },
-      "hash": "940a107ce0d23818fd96451fc101874fbd56cf8b04545ccfe31ccc8875d510e5"
+      }
     }
   ],
   "placements": [
@@ -2217,7 +1801,18 @@
     },
     "panels": []
   },
-  "state": [],
+  "state": {
+    "world": [],
+    "body": [
+      {
+        "name": "jumpUses",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded",
+        "playerWritable": false
+      }
+    ]
+  },
   "inputHold": {
     "ceilingSeconds": 0.5,
     "lowerAfterSeconds": 0.25,

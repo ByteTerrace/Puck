@@ -35,7 +35,7 @@ public sealed class MarketRetentionArchivalLawTests {
             RetentionSeconds: retentionSeconds
         );
 
-        return (Fixtures.BuildDocument() with { State = [gold, apple], Market = market });
+        return (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with { Market = market });
     }
 
     [Fact]
@@ -47,18 +47,18 @@ public sealed class MarketRetentionArchivalLawTests {
 
         for (var id = 1; (id <= FillCount); id++) {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-                Principal: Seller,
-                Seller: Seller,
-                ItemRow: MarketFixtures.AppleRow,
-                Quantity: 1,
-                CurrencyRow: MarketFixtures.GoldRow,
-                Format: WorldMarketFormat.Buyout,
-                StartPrice: 0,
                 BuyoutPrice: 5,
-                DurationSeconds: 60f
+                CurrencyRow: MarketFixtures.GoldRow,
+                DurationSeconds: 60f,
+                Format: WorldMarketFormat.Buyout,
+                ItemRow: MarketFixtures.AppleRow,
+                Principal: Seller,
+                Quantity: 1,
+                Seller: Seller,
+                StartPrice: 0
             ));
             fixture.Step();
-            fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Principal: Seller, Canceler: Seller, ListingId: id));
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Canceler: Seller, ListingId: id, Principal: Seller));
             fixture.Step();
         }
 
@@ -66,15 +66,15 @@ public sealed class MarketRetentionArchivalLawTests {
 
         // Before retention elapses, the cap still refuses — the sweep has had no chance to archive anything yet.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller,
-            Seller: Seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 1,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.Buyout,
-            StartPrice: 0,
             BuyoutPrice: 5,
-            DurationSeconds: 60f
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: 60f,
+            Format: WorldMarketFormat.Buyout,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller,
+            Quantity: 1,
+            Seller: Seller,
+            StartPrice: 0
         ));
         fixture.Step();
 
@@ -90,15 +90,15 @@ public sealed class MarketRetentionArchivalLawTests {
 
         // The next listing now fits — proving the archived rows actually freed capacity.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller,
-            Seller: Seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 1,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.Buyout,
-            StartPrice: 0,
             BuyoutPrice: 5,
-            DurationSeconds: 60f
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: 60f,
+            Format: WorldMarketFormat.Buyout,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller,
+            Quantity: 1,
+            Seller: Seller,
+            StartPrice: 0
         ));
         fixture.Step();
 
@@ -139,15 +139,15 @@ public sealed class MarketRetentionArchivalLawTests {
         Assert.Equal(expected: FillCount, actual: (fixture.Server.Definition.Market?.Listings?.Count ?? 0));
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller,
-            Seller: Seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 1,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: 60f
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: 60f,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller,
+            Quantity: 1,
+            Seller: Seller,
+            StartPrice: 5
         ));
         fixture.Step();
 

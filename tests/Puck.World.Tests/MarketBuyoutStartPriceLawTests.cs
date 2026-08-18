@@ -36,8 +36,8 @@ public sealed class MarketBuyoutStartPriceLawTests {
         };
         var document = (MarketFixtures.BuildDocument() with { Market = market });
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null));
-        Assert.Contains(expectedSubstring: "startPrice", actualString: reason, comparisonType: System.StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: System.StringComparison.Ordinal, expectedSubstring: "startPrice");
     }
     [Fact]
     public void BuyoutListingWithZeroStartPrice_ValidatesWholeDocument() {
@@ -59,15 +59,15 @@ public sealed class MarketBuyoutStartPriceLawTests {
         };
         var document = (MarketFixtures.BuildDocument() with { Market = market });
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: reason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: reason);
     }
     [Fact]
     public void CreateBuyoutListing_NonzeroStartPrice_RefusedByName_ZeroSucceeds() {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller, Seller: Seller, ItemRow: MarketFixtures.AppleRow, Quantity: 1, CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.Buyout, StartPrice: 25, BuyoutPrice: 50, DurationSeconds: MarketFixtures.MinDurationSeconds
+            BuyoutPrice: 50, CurrencyRow: MarketFixtures.GoldRow, DurationSeconds: MarketFixtures.MinDurationSeconds, Format: WorldMarketFormat.Buyout, ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller, Quantity: 1, Seller: Seller, StartPrice: 25
         ));
         fixture.Step();
 
@@ -75,8 +75,8 @@ public sealed class MarketBuyoutStartPriceLawTests {
 
         // Control: the documented canonical inert value (0) succeeds.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller, Seller: Seller, ItemRow: MarketFixtures.AppleRow, Quantity: 1, CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.Buyout, StartPrice: 0, BuyoutPrice: 50, DurationSeconds: MarketFixtures.MinDurationSeconds
+            BuyoutPrice: 50, CurrencyRow: MarketFixtures.GoldRow, DurationSeconds: MarketFixtures.MinDurationSeconds, Format: WorldMarketFormat.Buyout, ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller, Quantity: 1, Seller: Seller, StartPrice: 0
         ));
         fixture.Step();
 

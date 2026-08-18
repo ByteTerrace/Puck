@@ -12,13 +12,17 @@ namespace Puck.Vulkan;
 /// </summary>
 public sealed class VulkanGpuComputePipelineFactory(IVulkanComputePipelineApi computePipelineApi) : IGpuComputePipelineFactory {
     /// <inheritdoc/>
-    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, IReadOnlyList<GpuComputeBinding> bindings, GpuPushConstantBinding? pushConstantBinding, GpuSamplerFilter samplerFilter = GpuSamplerFilter.Linear) {
-        // samplerFilter is a Direct3D 12 static-sampler concern; on Vulkan the sampler is a bound descriptor whose
-        // filter the caller chose at CreateSampler time, so the combined-image-sampler layout binding is filter-agnostic.
-        _ = samplerFilter;
-
+    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
+        // description.SamplerFilter is a Direct3D 12 static-sampler concern; on Vulkan the sampler is a bound
+        // descriptor whose filter the caller chose at CreateSampler time, so the combined-image-sampler layout
+        // binding is filter-agnostic.
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(computeShaderModule);
+        ArgumentNullException.ThrowIfNull(description);
+
+        var bindings = description.Bindings;
+        var pushConstantBinding = description.PushConstantBinding;
+
         ArgumentNullException.ThrowIfNull(bindings);
         GpuComputeBinding.ValidateSet(bindings: bindings);
 

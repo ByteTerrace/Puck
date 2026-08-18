@@ -34,6 +34,7 @@ internal sealed class WorldPointer {
     private readonly int[] m_hasPosition = new int[PlayerRoster.MaxSlots];
     private readonly float[] m_motionX = new float[PlayerRoster.MaxSlots];
     private readonly float[] m_motionY = new float[PlayerRoster.MaxSlots];
+    private readonly ulong[] m_motionSequence = new ulong[PlayerRoster.MaxSlots];
     private readonly float[] m_positionX = new float[PlayerRoster.MaxSlots];
     private readonly float[] m_positionY = new float[PlayerRoster.MaxSlots];
     // Monotonic per-slot: see SystemReleaseCount's remarks for the consumer contract this exists for.
@@ -108,6 +109,7 @@ internal sealed class WorldPointer {
             return;
         }
 
+        _ = Interlocked.Increment(location: ref m_motionSequence[slot]);
         Add(
             location: ref m_motionX[slot],
             amount: delta.X
@@ -148,6 +150,13 @@ internal sealed class WorldPointer {
             ((Volatile.Read(location: ref m_buttons[slot]) & (1 << button)) != 0)
         );
     }
+    /// <summary>Gets a seat's motion report count — a peek that never drains, so a consumer can tell "moved since I
+    /// last looked" without disturbing <see cref="TakeMotion"/>'s accumulator.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public ulong MotionSequence(int slot) => (InRange(slot: slot)
+        ? Interlocked.Read(location: ref m_motionSequence[slot])
+        : 0UL
+    );
     /// <summary>Gets a seat's last known absolute cursor position in client pixels, or
     /// <see cref="Vector2.Zero"/> before the platform has reported one.</summary>
     /// <param name="slot">The 0-based seat slot.</param>

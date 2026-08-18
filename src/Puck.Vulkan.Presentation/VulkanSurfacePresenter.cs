@@ -1,6 +1,7 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
+using Puck.Hosting;
 namespace Puck.Vulkan.Presentation;
 
 /// <summary>
@@ -94,35 +95,13 @@ public sealed class VulkanSurfacePresenter : ISurfacePresenter, IPresentSurfaceR
             return surface;
         }
 
-        var format = ToGpuFormat(format: surface.Format);
-        var imageHandle = surface.ImageHandle;
-
-        if (surface.IsSharedHandle) {
-            m_captureImport ??= m_surfaceTransferFactory.CreateImport(deviceContext: m_renderer);
-            imageHandle = m_captureImport.Import(
-                deviceContext: m_renderer,
-                format: format,
-                height: surface.Height,
-                sharedHandle: surface.SharedHandle,
-                width: surface.Width
-            ).ImageHandle;
-        }
-
-        m_captureReadback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_renderer);
-        var pixels = m_captureReadback.Read(
-            bytesPerPixel: 4,
+        return SurfaceReadbackCapture.ReadSurface(
+            captureImport: ref m_captureImport,
+            captureReadback: ref m_captureReadback,
             deviceContext: m_renderer,
-            format: format,
-            height: surface.Height,
-            sourceImageHandle: imageHandle,
-            width: surface.Width
-        );
-
-        return Surface.CpuPixels(
-            format: surface.Format,
-            height: surface.Height,
-            pixels: pixels,
-            width: surface.Width
+            surface: surface,
+            surfaceTransferFactory: m_surfaceTransferFactory,
+            toGpuFormat: ToGpuFormat
         );
     }
     /// <inheritdoc/>

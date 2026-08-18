@@ -21,7 +21,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// cart LED latch) serializes and the credit-preserving token continues the exact pacing.
 /// </para>
 /// </summary>
-internal sealed class InfraredExchangeStage : IPostStage {
+internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     private const ulong BudgetStep = 256;
     private const int StepCount = 512;
 

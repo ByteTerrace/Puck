@@ -7,7 +7,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <c>AgbLinkSession</c>'s resume constructor already performs. A wrapped target would leave the resumed session
 /// chasing a target billions of cycles away instead of failing fast on the mismatched token.
 /// </summary>
-internal sealed class SerialResumeCreditGuardStage : IPostStage {
+internal sealed class SerialResumeCreditGuardStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "serial-resume-credit-guard";

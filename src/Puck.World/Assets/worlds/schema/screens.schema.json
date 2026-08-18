@@ -1,6 +1,8 @@
 {
-  "description": "The diegetic screens standing in the plaza \u2014 pure data the frame source emits as screen slabs and the binder feeds; a screen the world never authors, only declares.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One diegetic screen in the world \u2014 a screen slab emitted by SdfProgramBuilder whose lit face samples a bound source (or the procedural fallback when unbound). The frame (Origin/Right/ Up \u002B HalfWidth/HalfHeight) is the sampled surface frame and must match the slab\u0027s placement; the frame source bakes the geometry translate from it.",
     "type": [
@@ -217,5 +219,6 @@
       "route"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

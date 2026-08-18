@@ -1,4 +1,4 @@
 {
   "$ref": "./common.schema.json#/$defs/WorldRowAssignment",
-  "description": "The look\u2192entity assignment policy, the same WorldRowAssignment primitive Assignment uses for kits."
+  "default": null
 }

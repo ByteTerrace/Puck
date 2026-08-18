@@ -1,0 +1,10 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "$ref": "./common.schema.json#/$defs/WorldMusicRow"
+  },
+  "default": null
+}

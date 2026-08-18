@@ -3,4 +3,10 @@
         <PuckKind>Validation</PuckKind>
         <PuckLayer>Validation</PuckLayer>
     </PropertyGroup>
+    <ItemGroup>
+        <!-- MachineSnapshot<>/SnapshotDivergence (HashDivergenceReport's shared byte-walk) and Fnv1aHash (the
+             snapshot-hash comparison). -->
+        <ProjectReference Include="..\Puck.GamingBricks\Puck.GamingBricks.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
 </Project>

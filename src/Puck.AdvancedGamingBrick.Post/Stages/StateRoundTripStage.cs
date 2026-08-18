@@ -9,7 +9,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// any divergence is a genuine hole in the state coverage, since the core is fully deterministic. The micro-ROMs are
 /// direct-boot and BIOS-independent, so this runs on the zeroed stub as well as a real BIOS.
 /// </summary>
-internal sealed class StateRoundTripStage : IPostStage {
+internal sealed class StateRoundTripStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "state-round-trip";

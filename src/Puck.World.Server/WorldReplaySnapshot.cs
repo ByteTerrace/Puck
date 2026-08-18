@@ -772,8 +772,8 @@ public sealed class WorldReplaySnapshot {
         for (var index = 0; (index < departedCount); index++) {
             var slot = reader.ReadInt32();
 
-            if (((uint)slot) >= WorldPopulation.LocalSeatCount) {
-                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: transfer departed-slot {slot} is out of range (expected 0..{(WorldPopulation.LocalSeatCount - 1)}).");
+            if (((uint)slot) >= WorldPopulationLimits.LocalSeatCount) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: transfer departed-slot {slot} is out of range (expected 0..{(WorldPopulationLimits.LocalSeatCount - 1)}).");
             }
 
             departedBootSlots[index] = slot;
@@ -1696,8 +1696,8 @@ public sealed class WorldReplaySnapshot {
                 // An out-of-range slot indexes straight into WorldPopulation's local-seat array during Drive
                 // (Join's own range check only refuses the session reply; SetSeatProfile does not check again),
                 // so it is refused here, before that reach, rather than crashing the host with an index exception.
-                if (((uint)slot) >= WorldPopulation.LocalSeatCount) {
-                    throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is out of range (expected 0..{(WorldPopulation.LocalSeatCount - 1)}).");
+                if (((uint)slot) >= WorldPopulationLimits.LocalSeatCount) {
+                    throw new InvalidDataException(message: $"Corrupt .puckreplay recording: seat slot {slot} is out of range (expected 0..{(WorldPopulationLimits.LocalSeatCount - 1)}).");
                 }
 
                 // The set is compared BY SLOT at re-drive (Drive re-joins each recorded slot once), so two seats

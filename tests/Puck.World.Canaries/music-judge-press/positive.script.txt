@@ -1,0 +1,10 @@
+console off 1
+world.wait 5
+player.press judge 1 0.05 1
+world.wait 20
+judge.state
+world.wait 60
+player.press judge 1 0.05 1
+world.wait 20
+judge.state
+wire.errors

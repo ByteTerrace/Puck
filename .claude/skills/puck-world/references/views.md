@@ -50,21 +50,67 @@ Every world requires:
     "pitchSensitivity": 0.001,
     "invertYaw": false,
     "invertPitch": false,
-    "arming": "RightButton",
-    "stickLookRate": 2.6
+    "stickLookRate": 2.6,
+    "gyro": {
+      "scale": 1.0,
+      "deadZone": [0.02, 0.02, 0.02],
+      "invertX": false,
+      "invertY": false,
+      "invertZ": false,
+      "yaw": [0, -1, -1],
+      "pitch": [1, 0, 0]
+    }
   }
 }
 ```
+
+What arms a pointer drag is a binding, not a feel: `player.orbit` (held —
+pointer motion orbits the camera) and `player.steer` (held — orbits AND the body
+faces where the camera looks) are bound on both edges like any held command
+(a press row plus an `activateOn: Completed` row on the same source). The engine
+default binds `mouse.button2 → player.orbit`. `player.steer` writes the camera's
+facing into channels claiming the `FaceX`/`FaceY`/`FaceZ` roles and the sim's
+facing snap turns the body, so binding it needs those three channels declared and
+`seatControl.yawReference: World` (the validator refuses otherwise).
 
 `seatControl.yawReference` is `World` for standard camera-relative movement or
 `Body` for an explicitly body-relative camera. Pitch values are radians,
 finite, ordered, and within `[-pi/2, pi/2]`.
 
 `seatLook` carries pointer radians-per-pixel, right-stick radians-per-second,
-inversion, and pointer arming (`None`, `Always`, `LeftButton`, `RightButton`,
-`MiddleButton`). A joined identity's preference travels; otherwise the routed
-world's default applies. Neither can override the routed world's
-`seatControl`.
+gyro projection, and inversion. `gyro.deadZone` and `invertX/Y/Z` act on each
+physical axis independently; the dot products against the full 3D `yaw` and
+`pitch` weight vectors then produce semantic look-right/look-up rates. Thus all
+three axes can participate, be combined, or be remapped without code changes.
+A joined identity's preference travels; otherwise the routed world's default
+applies. Neither can override the routed world's `seatControl`.
+
+Motion input is a separate, generic toggled mode. The standard profile binds
+`LT → North` to `player.motion.controls`, and `gamepad.gyro` to
+`player.motion.angular`. Each North press toggles the mode; it remains active
+after the buttons release. The command is intentionally not gyro-named so a
+later orientation/tilt-to-move adapter can share it. `LT → RB → LB` explicitly
+fires the same `player.look.swap` action as `LT → LB`; the shorter `LT + RB`
+chord holds `player.look.free`: right-stick
+yaw/pitch continues to orbit the camera, but yaw does not write body heading
+and left-stick movement resolves against authoritative character heading until
+either button releases. The hold also suppresses automatic camera follow.
+Keyboard `LT + Left Ctrl` retains held recenter.
+
+Binding contexts can derive a complete control group from gameplay state. A
+family named `state:<row>` reads the routed world's declared state row after a
+delivered revision: scalar rows publish one value to every seat, while keyed
+rows read the controlled body's entity-index cell. Numeric states use their
+canonical author-facing spelling (`0`, `1`, `12.5`, `true`, `false`); text uses
+its exact value. Continuously advancing rows are refused as control contexts,
+so a mapping changes only through an explicit, journaled state write. World
+rules can therefore select controls with ordinary `setState`/`addState`
+effects, and `player.bindings` reports the resulting family/state/group winner.
+If a portable profile reaches a world that does not declare its referenced state
+row, that family contributes no match and normal context precedence continues.
+Changing the winning group is a complete input boundary: held commands, toggles,
+chord arms, and page latches from the previous group are cleared before the new
+group can accept input.
 
 ## Runtime ownership and order
 
@@ -74,17 +120,29 @@ orbit table, binding-side feel cache, or renderer-local orbit/smoothing copy.
 
 For each fixed tick:
 
-1. Routed look input is integrated once into the seat state. Device convention
-   is `+X = look right`, `+Y = look up`; inversion is applied once there.
+1. Routed stick look and toggled gyro angular velocity are combined into one
+   semantic look-rate sample and integrated once into the seat state. Gyro
+   dead-zone, physical-axis inversion, and 3D projection happen before the
+   existing final semantic yaw/pitch inversion.
 2. `WorldClient` rotates left-stick movement through that logical yaw when the
    selected kit authors `moveFrame: World`.
-3. The ordinary intent roles cross the wire; camera state never does.
-4. Local or traveler rendering resolves the authored rig through the same
+3. Standard `player.move.strafe` preserves heading, and the kit disables
+   movement-facing attitude snap, so lateral left-stick input is a true strafe.
+   It resolves against live look yaw every tick, so forward travel turns with
+   the right stick; `player.move` remains the latched movement-facing alternative.
+4. `player.look.steer` writes camera yaw to `FaceX`/`FaceZ` after movement
+   composition, turning an upright body while vertical input remains camera
+   pitch; `player.look` remains camera-only free orbit.
+5. The ordinary intent roles cross the wire; camera state never does.
+6. Local or traveler rendering resolves the authored rig through the same
    seat state. Visual smoothing and collision clearance never feed movement.
 
-The right stick never writes `Turn`. Explicit bindings may still write `Turn`,
-and vehicle kits may interpret their left-stick roles according to their own
-motion program.
+The standard right stick binds `player.look.steer`: horizontal input writes
+`FaceX`/`FaceZ`, vertical input only changes camera pitch, and neither writes
+`Turn`. Authors may bind `player.look` for free orbit, explicit bindings may
+still write `Turn`, and vehicle kits may interpret their left-stick roles
+according to their own motion program. The standard left-stick press toggles
+the `run` channel; West and Left Shift remain ordinary hold-to-run sources.
 
 ## Rigs and layouts
 
@@ -123,7 +181,8 @@ basis.
 ## Verbs
 
 - `world.view.camera [player]` — reads the routed structure, portable
-  preference, and the exact live yaw/pitch state used by movement/rendering.
+  preference, held free-look state, motion-control gate/sample, and the exact
+  live yaw/pitch state used by movement/rendering.
 - `world.view.state` — reads active layout, selection reason, transition, and
   slot occupants.
 - `world.view.pointer` — reads pointer position, viewport mapping, visibility,
@@ -150,9 +209,11 @@ world.view.pointer
 ```
 
 The camera read-back reports pitch limits and live angles in degrees; authored
-payloads remain radians. A discriminating control must move the right stick,
-observe yaw/pitch change, then move the left stick and prove the body advances
-along the new logical camera forward while `Turn` remains zero. Repeat across
+payloads remain radians. A discriminating control must move right-stick X and
+observe camera yaw plus upright body facing change while `Turn` remains zero;
+right-stick Y must change pitch without tilting the body. Then move left-stick X
+and prove lateral translation without a facing change; while holding left-stick
+forward, move right-stick X and prove the trajectory turns with heading. Repeat across
 a traveler crossing to prove the same seat state and destination structure are
 used. Refusal controls: omit `views.seatControl`, submit the old mixed
 `seatLook` members, invert the pitch interval, or name an unknown yaw reference.

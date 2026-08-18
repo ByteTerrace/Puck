@@ -1,5 +1,4 @@
 {
-  "description": "The identity carried when this is an owned world.",
   "type": [
     "object",
     "null"

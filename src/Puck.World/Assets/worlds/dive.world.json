@@ -1,4 +1,5 @@
 {
+  "basis": "default.world.json",
   "$schema": "./puck.world.def.v1.schema.json",
   "simulation": {
     "rateHz": 60
@@ -335,7 +336,7 @@
     {
       "bindingBar": {
         "enabled": true,
-        "hideAfterRestSeconds": 6,
+        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
         "layout": {
           "buttonSize": 0.075,
           "centerGap": 0.1,
@@ -351,34 +352,42 @@
         "modifiers": [],
         "chords": [
           {
-            "group": "play",
+            "group": "default",
             "chord": [],
             "page": {
               "id": "base",
               "entries": [
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "burst",
                   "activateOn": null,
                   "label": "Burst",
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "burst",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "burst",
                   "activateOn": null,
                   "label": "Burst",
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "burst",
                   "activateOn": "Completed",
                   "label": null,
@@ -389,23 +398,126 @@
               "icon": null
             },
             "command": null
+          },
+          {
+            "group": "default",
+            "chord": [
+              "tab"
+            ],
+            "page": {
+              "id": "play-wheel",
+              "entries": [
+                {
+                  "sources": [
+                    "gamepad.leftStick"
+                  ],
+                  "command": "player.move"
+                },
+                {
+                  "sources": [
+                    "gamepad.rightStick"
+                  ],
+                  "command": "player.wheel.select"
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.tab"
+                  ],
+                  "command": "player.wheel.commit",
+                  "activateOn": "Completed"
+                }
+              ],
+              "label": "Wheel"
+            }
           }
         ],
         "wheels": [
           {
             "id": "play-primary",
-            "group": "play",
+            "group": "default",
             "holdPages": ["play-wheel"],
             "rings": [
               {
                 "id": "play-wheel-act",
                 "entries": [
-                  { "source": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
-                  { "source": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
-                  { "source": null, "command": "console", "label": "Console", "icon": "edit.op" },
-                  { "source": null, "command": "player.channels", "label": "Channels", "icon": "edit.link" },
-                  { "source": null, "command": "player.where", "label": "Where", "icon": "action.target" },
-                  { "source": null, "command": "player.disengage", "label": "Disengage", "icon": "edit.exit" }
+                  { "sources": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
+                  { "sources": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
+                  { "sources": null, "command": "console", "label": "Console", "icon": "edit.op" },
+                  { "sources": null, "command": "player.channels", "label": "Channels", "icon": "edit.link" },
+                  { "sources": null, "command": "player.where", "label": "Where", "icon": "action.target" },
+                  { "sources": null, "command": "player.disengage", "label": "Disengage", "icon": "edit.exit" }
                 ],
                 "label": "Act",
                 "icon": null
@@ -427,15 +539,9 @@
       "document": {
         "schema": "puck.creation.v1",
         "name": "basin",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.24,
-              "y": 0.36,
-              "z": 0.42
-            },
+            "color": "#3D5C6B",
             "emissive": 0,
             "specular": 0.1,
             "shininess": 8
@@ -446,28 +552,13 @@
             "id": 0,
             "name": "floor",
             "type": "Plane",
-            "position": {
-              "x": 0,
-              "y": -12,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
+            "position": [0, -12, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -477,28 +568,13 @@
             "id": 1,
             "name": "wall-north",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": -6,
-              "z": -20.75
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 82.894737,
-              "y": 17.763158,
-              "z": 1.973684
-            },
+            "position": [0, -6, -20.75],
+            "rotation": [0, 0, 0, 1],
+            "scale": [82.894737, 17.763158, 1.973684],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -508,28 +584,13 @@
             "id": 2,
             "name": "wall-south",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": -6,
-              "z": 20.75
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 82.894737,
-              "y": 17.763158,
-              "z": 1.973684
-            },
+            "position": [0, -6, 20.75],
+            "rotation": [0, 0, 0, 1],
+            "scale": [82.894737, 17.763158, 1.973684],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -539,28 +600,13 @@
             "id": 3,
             "name": "wall-west",
             "type": "Box",
-            "position": {
-              "x": -30.75,
-              "y": -6,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1.973684,
-              "y": 17.763158,
-              "z": 52.631579
-            },
+            "position": [-30.75, -6, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.973684, 17.763158, 52.631579],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -570,28 +616,13 @@
             "id": 4,
             "name": "wall-east",
             "type": "Box",
-            "position": {
-              "x": 30.75,
-              "y": -6,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1.973684,
-              "y": 17.763158,
-              "z": 52.631579
-            },
+            "position": [30.75, -6, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.973684, 17.763158, 52.631579],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -602,23 +633,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "c24b174039498e215eddd172fbf7e90906267da7c451a18362403372252226ee"
+      }
     },
     {
       "id": "portal-frame",
       "document": {
         "schema": "puck.creation.v1",
         "name": "portal-frame",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.12,
-              "y": 0.12,
-              "z": 0.14
-            },
+            "color": "#1F1F24",
             "emissive": 0,
             "specular": 0.2,
             "shininess": 12
@@ -629,28 +653,13 @@
             "id": 0,
             "name": "frame",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 3,
-              "y": 2,
-              "z": 0.15
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [3, 2, 0.15],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -670,8 +679,7 @@
             }
           ]
         }
-      },
-      "hash": "38f7fd73097ea5d2a0e03896d76737a0ad91e50038020f43b3d1f17426e6afaa"
+      }
     }
   ],
   "placements": [
@@ -818,7 +826,9 @@
     },
     "panels": []
   },
-  "state": [],
+  "state": {
+    "world": []
+  },
   "schema": "puck.world.def.v1",
   "documentId": "dive",
   "playerDefaults": {
@@ -862,7 +872,6 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-      "arming": "RightButton",
       "stickLookRate": 2.6
     }
   },

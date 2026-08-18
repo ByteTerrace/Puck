@@ -15,27 +15,27 @@ public sealed class MarketCompensationLawTests {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller,
-            Seller: Seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 4,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller,
+            Quantity: 4,
+            Seller: Seller,
+            StartPrice: 5
         ));
         fixture.Step();
 
         // Escrowed mid-flight: the seller's apples are already down, the listing carries them.
         Assert.Equal(expected: (MarketFixtures.SellerStartingApples - 4), actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.AppleRow, principal: Seller));
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Bidder, Bidder: Bidder, ListingId: 1, Amount: 15));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 15, Bidder: Bidder, ListingId: 1, Principal: Bidder));
         fixture.Step();
 
         Assert.Equal(expected: (MarketFixtures.BidderStartingGold - 15), actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: Bidder));
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Principal: Seller, Canceler: Seller, ListingId: 1));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Canceler: Seller, ListingId: 1, Principal: Seller));
         fixture.Step();
 
         var cancelled = MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1)!;
@@ -50,15 +50,15 @@ public sealed class MarketCompensationLawTests {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller,
-            Seller: Seller,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 6,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller,
+            Quantity: 6,
+            Seller: Seller,
+            StartPrice: 5
         ));
         fixture.Step();
 

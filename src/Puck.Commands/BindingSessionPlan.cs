@@ -50,21 +50,22 @@ public sealed record BindingSessionPlan(
             );
         }
 
-        // An activator-triggered entry (BindingPageEntryDefinition.Activator, no Source) has no single "suggested
-        // source" this simple capture-one-press model can prompt for — a guided session walks single-source
-        // entries only, so it is skipped rather than reduced to a misleading suggestion.
-        var sourcedEntries = page.Entries.Where(predicate: static entry => (entry.Source is not null)).ToList();
+        // An activator-triggered entry (BindingPageEntryDefinition.Activator, no Sources) has no single "suggested
+        // source" this simple capture-one-press model can prompt for — a guided session walks sourced entries only
+        // (suggesting the row's FIRST source), so an activator row is skipped rather than reduced to a misleading
+        // suggestion.
+        var sourcedEntries = page.Entries.Where(predicate: static entry => (entry.Sources is { Count: > 0 })).ToList();
 
         if (sourcedEntries.Count == 0) {
             throw new ArgumentException(
-                message: $"page \"{pageId}\" has no single-source entries to walk",
+                message: $"page \"{pageId}\" has no sourced entries to walk",
                 paramName: nameof(pageId)
             );
         }
 
         return new BindingSessionPlan(
             RequiredPresses: requiredPresses,
-            ReservedSources: [.. document.Modifiers.Select(selector: static modifier => modifier.Source)],
+            ReservedSources: [.. document.Modifiers.SelectMany(selector: static modifier => modifier.Sources)],
             Steps: [.. sourcedEntries.Select(selector: static entry => new BindingSessionStep(
                     ActivateOn: entry.ActivateOn,
                     Command: ((entry.Channel is { } channel)
@@ -72,7 +73,7 @@ public sealed record BindingSessionPlan(
             : entry.Command!),
                     Icon: entry.Icon,
                     Label: entry.Label,
-                    SuggestedSource: entry.Source!
+                    SuggestedSource: entry.Sources![0]
                 ))]
         );
     }

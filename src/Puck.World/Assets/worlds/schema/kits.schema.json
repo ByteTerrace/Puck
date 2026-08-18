@@ -1,23 +1,22 @@
 {
-  "description": "The world\u0027s locomotion kits \u2014 one row per way of moving (see WorldKit); the Assignment policy distributes entities across the rows.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
-    "description": "One locomotion kit \u2014 a world-definition row naming a way of moving: the body motion program it runs under, the motion model its bodies compile, its producer arguments, and its action-lane bindings. Every game-flavored movement noun is a row of this data, never an engine enum; the census echo prints these names.",
+    "description": "One locomotion kit \u2014 a world-definition row naming a way of moving: the body motion program it runs under, the motion model its bodies compile, its producer arguments, and its action-lane bindings. Every game-flavored movement noun is a row of this data, never an engine enum; the census echo prints these names. Name is the kit\u0027s kebab-case name (the census echo token); BodyMotionProgram names the body motion program the kit\u0027s bodies execute; Motion is the locomotion model the kit\u0027s bodies compile (a seat\u0027s profile speeds still override its speed fields) \u2014 see WorldMotionModel.",
     "type": [
       "object",
       "null"
     ],
     "properties": {
       "name": {
-        "description": "The kit\u0027s kebab-case name (the census echo token).",
         "type": "string"
       },
       "bodyMotionProgram": {
-        "description": "The name of the body motion program the kit\u0027s bodies execute.",
         "type": "string"
       },
       "motion": {
-        "description": "The locomotion model the kit\u0027s bodies compile (a seat\u0027s profile speeds still override its speed fields) \u2014 see WorldMotionModel.",
         "type": "object",
         "required": [
           "$type"
@@ -77,7 +76,7 @@
                 "default": "World"
               },
               "facingSnap": {
-                "description": "Under World only: whether the body\u0027s facing snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) rather than holding its heading. Ignored under Heading, where facing is the integrated heading by construction. true is the default.",
+                "description": "Under World only: whether the body\u0027s drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) \u2014 the body angles toward its travel, a strafe included \u2014 while its HEADING (the Turn role\u0027s integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.",
                 "type": "boolean",
                 "default": true
               },
@@ -99,6 +98,10 @@
                   "Heading",
                   "World"
                 ]
+              },
+              "declaredTurnSpeed": {
+                "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
+                "type": "number"
               }
             },
             "required": [
@@ -219,6 +222,10 @@
                   "Heading",
                   "World"
                 ]
+              },
+              "declaredTurnSpeed": {
+                "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
+                "type": "number"
               }
             },
             "required": [
@@ -326,6 +333,10 @@
                   "Heading",
                   "World"
                 ]
+              },
+              "declaredTurnSpeed": {
+                "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
+                "type": "number"
               }
             },
             "required": [
@@ -345,8 +356,10 @@
         ]
       },
       "producers": {
-        "description": "Producer parameter maps keyed by authored producer-program name.",
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "additionalProperties": {
           "description": "One kit\u0027s named arguments for an authored producer program.",
           "type": [
@@ -377,11 +390,14 @@
             "channels"
           ],
           "additionalProperties": false
-        }
+        },
+        "default": null
       },
       "actions": {
-        "description": "The kit\u0027s composition bindings, keyed by declared channel name (validated against the world\u0027s channel table \u2014 a kit naming an undeclared channel is a dead name; a declared composition channel with no entry here stays legal and inert per body). Compositions key off channel name, never a lane ordinal.",
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "additionalProperties": {
           "description": "A lane\u0027s full binding: the press trigger and the release trigger. What a channel does is this data \u2014 the engine implements only the facts, predicates, and effects.",
           "type": [
@@ -391,128 +407,12 @@
           "properties": {
             "onPress": {
               "$ref": "./common.schema.json#/$defs/ActionTrigger",
-              "description": "The rising-edge trigger, or null."
+              "description": "The rising-edge trigger, or null.",
+              "default": null
             },
             "onRelease": {
               "$ref": "./common.schema.json#/$defs/ActionTrigger",
-              "description": "The falling-edge trigger (evaluated immediately, never latched), or null."
-            },
-            "state": {
-              "description": "Named persistent state declarations used by this action and shared by matching names across the kit.",
-              "type": [
-                "array",
-                "null"
-              ],
-              "items": {
-                "description": "Declares one named persistent state slot shared by the kit\u0027s actions.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "name": {
-                    "description": "The stable slot name predicates and effects reference.",
-                    "type": "string"
-                  },
-                  "kind": {
-                    "description": "Whether the slot stores a counter or a remaining timer.",
-                    "enum": [
-                      "Counter",
-                      "Timer"
-                    ]
-                  },
-                  "initial": {
-                    "description": "The initial counter value or timer duration in seconds.",
-                    "type": "number",
-                    "default": 0
-                  },
-                  "resetFact": {
-                    "description": "An optional body fact that resets the slot to Initial while it holds.",
-                    "enum": [
-                      "Grounded",
-                      "Airborne",
-                      "Rising",
-                      "Falling",
-                      "AffectedBy",
-                      "Submerged",
-                      "AtSurface",
-                      null
-                    ],
-                    "default": null
-                  },
-                  "lifetime": {
-                    "description": "Where the slot survives.",
-                    "enum": [
-                      "Ephemeral",
-                      "Durable"
-                    ],
-                    "default": "Ephemeral"
-                  },
-                  "playerWritable": {
-                    "description": "Whether the identity driving the body may submit a value for the slot.",
-                    "type": "boolean",
-                    "default": false
-                  },
-                  "envelope": {
-                    "description": "The visited world\u0027s admitted effective values. Required for a player-writable slot.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "required": [
-                      "$type"
-                    ],
-                    "anyOf": [
-                      {
-                        "description": "An inclusive numeric interval.",
-                        "properties": {
-                          "$type": {
-                            "const": "range"
-                          },
-                          "minimum": {
-                            "description": "The least admitted value.",
-                            "type": "number"
-                          },
-                          "maximum": {
-                            "description": "The greatest admitted value.",
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "minimum",
-                          "maximum"
-                        ],
-                        "additionalProperties": false
-                      },
-                      {
-                        "description": "A closed numeric set. Values are authored labels encoded in the slot\u0027s deterministic numeric domain.",
-                        "properties": {
-                          "$type": {
-                            "const": "set"
-                          },
-                          "values": {
-                            "description": "The admitted values.",
-                            "type": "array",
-                            "items": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "required": [
-                          "values"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ],
-                    "default": null
-                  }
-                },
-                "required": [
-                  "name",
-                  "kind"
-                ],
-                "additionalProperties": false
-              },
+              "description": "The falling-edge trigger (evaluated immediately, never latched), or null.",
               "default": null
             },
             "onFact": {
@@ -562,15 +462,11 @@
               "default": null
             }
           },
-          "required": [
-            "onPress",
-            "onRelease"
-          ],
           "additionalProperties": false
-        }
+        },
+        "default": null
       },
       "collider": {
-        "description": "The kit\u0027s body volume solved against the world contact field, or null for a kit with no volume (never solved against the field). Omitted from the wire when null.",
         "type": [
           "object",
           "null"
@@ -625,14 +521,7 @@
                 "description": "The positive half-extents."
               },
               "rotation": {
-                "description": "The body-local orientation.",
-                "type": "object",
-                "properties": {
-                  "isIdentity": {
-                    "type": "boolean"
-                  }
-                },
-                "additionalProperties": false
+                "description": "The body-local orientation."
               }
             },
             "required": [
@@ -661,7 +550,6 @@
         "default": null
       },
       "bodyContact": {
-        "description": "Whether bodies wearing this kit overlap one another or participate in physical depenetration. World geometry still uses Collider in either mode.",
         "enum": [
           "Overlap",
           "Solid"
@@ -672,10 +560,9 @@
     "required": [
       "name",
       "bodyMotionProgram",
-      "motion",
-      "producers",
-      "actions"
+      "motion"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

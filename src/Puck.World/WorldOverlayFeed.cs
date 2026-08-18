@@ -189,7 +189,7 @@ internal sealed class WorldOverlayFeed {
     // The sculpting seat's target line: the model's live edit target (shape / chain goal / brush).
     private static string ComposeSculptTargetLine(Puck.Forge.Authoring.SculptModel model) {
         if (model.TargetIsGoal) {
-            var chain = model.TargetGoalChain!;
+            var chain = model.TargetGoalChain!.Value;
 
             return string.Create(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
@@ -275,22 +275,40 @@ internal sealed class WorldOverlayFeed {
         );
 
         for (var index = 0; (index < chords.Count); index++) {
+            // Held members join with '+' (any order); chord members with '>' (press order); both halves separated by a space.
             var chord = chords[index];
-            var members = new string[chord.Chord.Count];
+            var heldIds = (chord.Held ?? []);
+            var held = new string[heldIds.Count];
+            var ordered = new string[chord.Chord.Count];
 
-            for (var memberIndex = 0; (memberIndex < members.Length); memberIndex++) {
-                var id = chord.Chord[memberIndex];
-
-                members[memberIndex] = (ModifierLabelFor(
-                    id: id,
+            for (var memberIndex = 0; (memberIndex < held.Length); memberIndex++) {
+                held[memberIndex] = (ModifierLabelFor(
+                    id: heldIds[memberIndex],
                     view: view
-                ) ?? id.ToUpperInvariant());
+                ) ?? heldIds[memberIndex].ToUpperInvariant());
             }
 
-            lines[index] = $"{string.Join(
+            for (var memberIndex = 0; (memberIndex < ordered.Length); memberIndex++) {
+                ordered[memberIndex] = (ModifierLabelFor(
+                    id: chord.Chord[memberIndex],
+                    view: view
+                ) ?? chord.Chord[memberIndex].ToUpperInvariant());
+            }
+
+            var heldText = string.Join(
                 separator: '+',
-                values: members
-            )} {(chord.Label ?? chord.Command)}";
+                values: held
+            );
+            var orderedText = string.Join(
+                separator: '>',
+                values: ordered
+            );
+
+            lines[index] = $"{(((held.Length > 0) && (ordered.Length > 0))
+                ? ((heldText + " ") + orderedText)
+                : ((held.Length > 0)
+                    ? heldText
+                    : orderedText))} {(chord.Label ?? chord.Command)}";
         }
 
         m_hintLines[slot] = lines;

@@ -18,5 +18,8 @@
         <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\..\src\Puck.Launcher\Puck.Launcher.csproj" />
+        <!-- StubDecisionTableTests exercises the stub's pure selection policy directly — a Test-kind project may
+             reference any ranked project regardless of row, and the stub's own closure stays empty. -->
+        <ProjectReference Include="..\..\src\Puck.Launcher.Stub\Puck.Launcher.Stub.csproj" />
     </ItemGroup>
 </Project>

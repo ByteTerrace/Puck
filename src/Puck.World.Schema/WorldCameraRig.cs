@@ -1,4 +1,4 @@
-using System.Numerics;
+using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 
@@ -22,17 +22,17 @@ public abstract record WorldCameraMotion {
     /// <param name="Offset">The eye offset in world or reference-local axes.</param>
     /// <param name="WorldAxes">Whether <paramref name="Offset"/> uses world axes.</param>
     /// <param name="SpreadPullback">The group-spread multiplier applied to the offset.</param>
-    public sealed record Follow(Vector3 Offset, bool WorldAxes, float SpreadPullback) : WorldCameraMotion;
+    public sealed record Follow(DocumentVector3 Offset, bool WorldAxes, float SpreadPullback) : WorldCameraMotion;
     /// <summary>Orbits a reference-frame pivot.</summary>
     /// <param name="Distance">The orbit distance.</param>
     /// <param name="Yaw">The orbit heading in radians.</param>
     /// <param name="Pitch">The orbit tilt in radians.</param>
     /// <param name="PivotOffset">The world-axis offset from the reference-frame origin to the pivot.</param>
-    public sealed record Orbit(float Distance, float Yaw, float Pitch, Vector3 PivotOffset) : WorldCameraMotion;
+    public sealed record Orbit(float Distance, float Yaw, float Pitch, DocumentVector3 PivotOffset) : WorldCameraMotion;
     /// <summary>Holds an eye position in world or reference-local axes.</summary>
     /// <param name="Position">The eye position or offset.</param>
     /// <param name="WorldAxes">Whether <paramref name="Position"/> is an absolute world position.</param>
-    public sealed record Static(Vector3 Position, bool WorldAxes) : WorldCameraMotion;
+    public sealed record Static(DocumentVector3 Position, bool WorldAxes) : WorldCameraMotion;
     /// <summary>Evaluates a durable camera track through separate playback state.</summary>
     /// <param name="Definition">The durable keyframes, interpolation, and clock domain.</param>
     /// <param name="Playback">The playback start and loop policy.</param>
@@ -48,13 +48,13 @@ public abstract record WorldCameraAim {
     /// <summary>Looks at an offset from the resolved reference frame.</summary>
     /// <param name="Offset">The target offset.</param>
     /// <param name="WorldAxes">Whether <paramref name="Offset"/> uses world axes.</param>
-    public sealed record Anchor(Vector3 Offset, bool WorldAxes) : WorldCameraAim;
+    public sealed record Anchor(DocumentVector3 Offset, bool WorldAxes) : WorldCameraAim;
     /// <summary>Looks along the reference frame's forward axis.</summary>
     /// <param name="FocusDistance">The finite target distance along forward.</param>
     public sealed record Forward(float FocusDistance) : WorldCameraAim;
     /// <summary>Looks at a fixed world-space point.</summary>
     /// <param name="Target">The world-space target.</param>
-    public sealed record WorldPoint(Vector3 Target) : WorldCameraAim;
+    public sealed record WorldPoint(DocumentVector3 Target) : WorldCameraAim;
 }
 /// <summary>Defines presentation-only camera optics.</summary>
 /// <param name="FieldOfViewRadians">The vertical field of view in radians.</param>
@@ -62,7 +62,7 @@ public sealed record WorldCameraLens(float FieldOfViewRadians);
 /// <summary>One camera-track keyframe at a clock-relative tick.</summary>
 /// <param name="Tick">The non-negative track-relative tick.</param>
 /// <param name="Position">The camera position at the tick.</param>
-public sealed record WorldCameraTrackKeyframe(ulong Tick, Vector3 Position);
+public sealed record WorldCameraTrackKeyframe(ulong Tick, DocumentVector3 Position);
 /// <summary>A durable camera track with an explicit clock domain.</summary>
 /// <param name="ClockDomain">The clock that advances the track.</param>
 /// <param name="Interpolation">The interpolation applied between adjacent keyframes.</param>

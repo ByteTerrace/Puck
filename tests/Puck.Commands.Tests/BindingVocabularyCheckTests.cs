@@ -18,7 +18,7 @@ public sealed class BindingVocabularyCheckTests {
                         Id: "base",
                         Entries: [
                             new BindingPageEntryDefinition(
-                                Source: null,
+                                Sources: null,
                                 Command: "x",
                                 Activator: new BindingActivatorDefinition(Sequence: null!)
                             ),
@@ -59,7 +59,7 @@ public sealed class BindingVocabularyCheckTests {
     [Fact]
     public void AValueLessActivatorDispatchesDigitalForKindValidation() {
         var document = Document(entry: new BindingPageEntryDefinition(
-            Source: null,
+            Sources: null,
             Command: "axis.command",
             Activator: new BindingActivatorDefinition(Sequence: ["key.a"])
         ));
@@ -81,7 +81,7 @@ public sealed class BindingVocabularyCheckTests {
     }
     [Fact]
     public void AnUnaddressableTextSourceIsRefusedEvenWhenItsKindIsKnown() {
-        var document = Document(entry: new BindingPageEntryDefinition(Source: "keyboard.text", Command: "type"));
+        var document = Document(entry: new BindingPageEntryDefinition(Sources: ["keyboard.text"], Command: "type"));
         var errors = new List<string>();
 
         BindingVocabularyCheck.Validate(

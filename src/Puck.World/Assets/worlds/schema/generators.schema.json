@@ -1,5 +1,4 @@
 {
-  "description": "The generators section (default empty) \u2014 stochastic sources declared under a name (see WorldGeneratorRow) for any number of WorldDraw sites to reference. A source is a pure declaration and holds no position: the cursor and dealt decks live on each drawing site, which is what lets two sites share one table and still draw independently. Optional, for the same reason Rules is.",
   "type": [
     "array",
     "null"

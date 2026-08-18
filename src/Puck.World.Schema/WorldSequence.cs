@@ -21,13 +21,40 @@ public sealed record WorldSequence(string Name, int Offset, float Step) {
     public const string R1 = "r1";
     /// <summary>The exact two-dimensional plastic-number low-discrepancy sequence.</summary>
     public const string R2 = "r2";
+
+    /// <summary>Gets the inert sequence every absent sequence-typed field resolves to — <see cref="Index"/> at
+    /// zero offset and step, selecting row 0 of whatever it addresses.</summary>
+    public static WorldSequence IndexDefault { get; } = new(
+        Name: Index,
+        Offset: 0,
+        Step: 0f
+    );
+    /// <summary>Gets the inert sequence for a fill site that requires <see cref="Additive"/> — zero offset and a
+    /// unit step (the validator refuses a zero step; a whole-turn step samples the identical zero phase for every
+    /// index, the additive-sequence equivalent of no variation).</summary>
+    public static WorldSequence AdditiveDefault { get; } = new(
+        Name: Additive,
+        Offset: 0,
+        Step: 1f
+    );
 }
 /// <summary>The three independently authored sequences that seed a body's producer state.</summary>
 /// <param name="Phase">The angular phase sequence.</param>
 /// <param name="Weave">The scalar weave-frequency variation sequence.</param>
 /// <param name="Activity">The paired activity-rate and altitude variation sequence.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPopulationVariation(WorldSequence Phase, WorldSequence Weave, WorldSequence Activity);
+public sealed record WorldPopulationVariation(WorldSequence Phase, WorldSequence Weave, WorldSequence Activity) {
+    /// <summary>Gets the inert variation — every axis samples the same value regardless of index.</summary>
+    public static WorldPopulationVariation Default { get; } = new(
+        Phase: WorldSequence.AdditiveDefault,
+        Weave: WorldSequence.AdditiveDefault,
+        Activity: new WorldSequence(
+            Name: WorldSequence.R2,
+            Offset: 0,
+            Step: 0f
+        )
+    );
+}
 /// <summary>Exact runtime sampling for <see cref="WorldSequence"/> declarations.</summary>
 public static class WorldSequenceSampling {
     private const double TwoPi = (2.0 * Math.PI);

@@ -69,6 +69,14 @@ public sealed class WorldOwnedWorldSync {
     // private): WorldStorageNeighbourResolver addresses a neighbour's blob under this SAME namespace, and quoting
     // one constant is how the two never drift apart.
     internal const string WorldsNamespace = "puck/worlds";
+    // A sibling of WorldsNamespace, never a child of it, so the desktop catalog's puck/worlds/-prefixed List can
+    // never discover a hosted checkpoint or journal page as a phantom owned world.
+    internal const string HostedNamespace = "puck/hosted";
+    // The platform's public content edge rewrites a /public/* GET onto this prefix in the account, so a hosted
+    // definition or projection meant to be publicly reachable has to live under it; every other hosted leaf (a
+    // checkpoint, a journal page) is simulation state and stays under HostedNamespace, reachable only with the
+    // identity's own storage token.
+    internal const string HostedPrivateNamespace = ("private/" + HostedNamespace);
 
     // Bounds a discovery transport exception's message to one flat console line — see DiscoverCloudIds' catch.
     private const int DiscoveryDetailLengthLimit = 200;
@@ -917,6 +925,27 @@ public sealed class WorldOwnedWorldSync {
         Key: $"{BasisNamespace}/{name}",
         ObjectId: containerId
     );
+    /// <summary>Computes the blob address one hosted world's leaf addresses — <c>definition.json</c>/<c>projection.json</c>
+    /// under <see cref="HostedPrivateNamespace"/> (the publishable pair), every other leaf (a checkpoint,
+    /// <c>checkpoints/latest</c>, a journal page) under <see cref="HostedNamespace"/>.</summary>
+    /// <param name="containerId">The owning identity's per-user container id.</param>
+    /// <param name="world">The hosted world's own id.</param>
+    /// <param name="leaf">The leaf path under the world's own hosted namespace segment (e.g. <c>"definition.json"</c>,
+    /// <c>"checkpoints/latest"</c>).</param>
+    /// <returns>The blob address.</returns>
+    public static ObjectBlobAddress HostedAddressFor(Guid containerId, WorldSafeName world, string leaf) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: leaf);
+
+        var root = ((leaf is "definition.json" or "projection.json")
+            ? HostedPrivateNamespace
+            : HostedNamespace
+        );
+
+        return new ObjectBlobAddress(
+            Key: $"{root}/{world.Value}/{leaf}",
+            ObjectId: containerId
+        );
+    }
     /// <summary>Pulls one owned world (or every local/tracked/cloud-discovered one when <paramref name="id"/> is null)
     /// from the cloud, validating each through the boot loader's gate before adopting it. A whole-catalog pull lists
     /// the cloud <c>puck/worlds/</c> namespace first and folds in any id it does not already know, so a cloud-only world

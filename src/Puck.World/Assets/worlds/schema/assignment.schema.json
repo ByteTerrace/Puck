@@ -1,4 +1,4 @@
 {
   "$ref": "./common.schema.json#/$defs/WorldRowAssignment",
-  "description": "The kit\u2192entity assignment policy (the realized policy-as-data seam)."
+  "default": null
 }

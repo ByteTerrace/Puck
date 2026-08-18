@@ -1,5 +1,4 @@
 {
-  "description": "The generation section (default null = Default, world seed 0) \u2014 the draw seed ladder\u0027s world rung (see ComputeSeedState). Optional, for the same reason Rules is.",
   "type": [
     "object",
     "null"

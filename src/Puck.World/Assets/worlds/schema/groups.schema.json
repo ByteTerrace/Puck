@@ -1,5 +1,4 @@
 {
-  "description": "The groups section (default null = none) \u2014 the group\u002Bmembership binding substrate: the group-kind policy catalog and the group roster (see WorldGroupsSection). Optional, for the same reason Rules is: a new required section would refuse every existing document at boot for declaring nothing.",
   "type": [
     "object",
     "null"

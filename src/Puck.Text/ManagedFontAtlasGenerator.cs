@@ -330,6 +330,11 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
             var cellY = ((index / grid.Columns) * cellHeight);
             var glyphLeft = MathF.Floor(x: glyph.Glyph.Left);
             var glyphTop = MathF.Floor(x: glyph.Glyph.Top);
+            // The glyph is drawn at the cell's top-left; its bounds are its own padded box, not the grid cell (the
+            // widest glyph's), so a layout's visual extents — what centering and right-alignment measure — are the
+            // letter's, and the rest of the cell is never sampled.
+            var glyphWidth = checked(((((int)MathF.Ceiling(x: glyph.Glyph.Right)) - ((int)glyphLeft)) + (2 * request.Options.Padding)));
+            var glyphHeight = checked(((((int)MathF.Ceiling(x: glyph.Glyph.Bottom)) - ((int)glyphTop)) + (2 * request.Options.Padding)));
             var planeLeft = ((glyphLeft - request.Options.Padding) / request.Options.FontPixelSize);
             var planeTop = (-(glyphTop - request.Options.Padding) / request.Options.FontPixelSize);
 
@@ -349,15 +354,15 @@ public sealed class ManagedFontAtlasGenerator : IFontAtlasGenerator {
                 key: glyph.GlyphId,
                 value: (
                     Atlas: new FontAtlasBounds(
-                    Bottom: (cellY + cellHeight),
+                    Bottom: (cellY + glyphHeight),
                     Left: cellX,
-                    Right: (cellX + cellWidth),
+                    Right: (cellX + glyphWidth),
                     Top: cellY
                 ),
                     Plane: new FontAtlasBounds(
                     Left: planeLeft,
-                    Bottom: (planeTop - (((float)cellHeight) / request.Options.FontPixelSize)),
-                    Right: (planeLeft + (((float)cellWidth) / request.Options.FontPixelSize)),
+                    Bottom: (planeTop - (((float)glyphHeight) / request.Options.FontPixelSize)),
+                    Right: (planeLeft + (((float)glyphWidth) / request.Options.FontPixelSize)),
                     Top: planeTop
                 )
                 )

@@ -75,6 +75,76 @@
       ]
     },
     {
+      "Id": "Puck.Maths.AutomaticIntegerSequence..ctor(Puck.Maths.IntegerNumerationSystem,Puck.Maths.DeterministicOutputAutomaton,System.ReadOnlySpan<System.Numerics.BigInteger>)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.Automaton",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.HasSignedUnitOutput",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.Numeration",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.OutputAlphabetSize",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.OutputSymbolAt(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.OutputSymbolAt(System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.OutputValue(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.ValueAt(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.AutomaticIntegerSequence.ValueAt(System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
       "Id": "Puck.Maths.BeattyQuantization.CertifySlope(Puck.Maths.QuadraticSurd,System.Int32)",
       "State": "covered",
       "CoveredBy": [
@@ -3103,6 +3173,55 @@
       ]
     },
     {
+      "Id": "Puck.Maths.DeterministicOutputAutomaton..ctor(System.Int32,System.ReadOnlySpan<System.Int32>,System.ReadOnlySpan<System.Int32>,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.DeterministicOutputAutomaton.AlphabetSize",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.DeterministicOutputAutomaton.OutputSymbol(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.DeterministicOutputAutomaton.Run(System.ReadOnlySpan<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.DeterministicOutputAutomaton.StartState",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.DeterministicOutputAutomaton.StateCount",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.DeterministicOutputAutomaton.Transition(System.Int32,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
       "Id": "Puck.Maths.DigitalNetSampler.BuildBitReversalDirectionNumbers(System.Span<System.UInt32>)",
       "State": "covered",
       "CoveredBy": [
@@ -4472,6 +4591,59 @@
         "dual.additive-group-exact",
         "dual.seeds-and-identities",
         "dual.transcendental-lifts"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierPlan.Create(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.impulse-dc-nyquist-exact",
+        "fft.length-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierPlan.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.impulse-dc-nyquist-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierTransform.Forward(Puck.Maths.FixedFourierPlan,System.Span<Puck.Maths.FixedComplex>)",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.impulse-dc-nyquist-exact",
+        "fft.length-refusals",
+        "fft.linearity-bound",
+        "fft.parseval-bound",
+        "fft.radix2-vs-direct-sum",
+        "fft.round-trip-bound",
+        "fft.self-referential-bit-identity"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierTransform.ForwardReal(Puck.Maths.FixedFourierPlan,System.ReadOnlySpan<Puck.Maths.FixedQ4816>,System.Span<Puck.Maths.FixedComplex>)",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.length-refusals",
+        "fft.real-wrappers-are-faithful-embeddings"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierTransform.Inverse(Puck.Maths.FixedFourierPlan,System.Span<Puck.Maths.FixedComplex>)",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.length-refusals",
+        "fft.round-trip-bound",
+        "fft.self-referential-bit-identity"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedFourierTransform.InverseReal(Puck.Maths.FixedFourierPlan,System.Span<Puck.Maths.FixedComplex>,System.Span<Puck.Maths.FixedQ4816>)",
+      "State": "covered",
+      "CoveredBy": [
+        "fft.length-refusals",
+        "fft.real-wrappers-are-faithful-embeddings"
       ]
     },
     {
@@ -10137,6 +10309,83 @@
       ]
     },
     {
+      "Id": "Puck.Maths.IntegerNumerationKind.Positional",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationKind.QuadraticOstrowski",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationKind.value__",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.AlphabetSize",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.Basis",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.Evaluate(System.Collections.Generic.IReadOnlyList<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.Kind",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.Positional(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.QuadraticOstrowski(Puck.Maths.QuadraticSurd)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.Radix",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.IntegerNumerationSystem.Represent(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
       "Id": "Puck.Maths.InvertibleBitMix.FirstMultiplier",
       "State": "covered",
       "CoveredBy": [
@@ -11390,6 +11639,82 @@
         "presented.interpreted-equals-compiled",
         "presented.reassociation-brackets-inert",
         "presented.reassociation-route-coherent"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NttPlan.Create(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.length-refusals",
+        "ntt.round-trip-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NttPlan.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.round-trip-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.Convolve(Puck.Maths.NttPlan,System.Span<System.UInt64>,System.Span<System.UInt64>,System.Span<System.UInt64>)",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.convolution-vs-oracle",
+        "ntt.length-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.Field",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.linearity-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.Forward(Puck.Maths.NttPlan,System.Span<System.UInt64>)",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.length-refusals",
+        "ntt.linearity-exact",
+        "ntt.round-trip-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.Inverse(Puck.Maths.NttPlan,System.Span<System.UInt64>)",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.length-refusals",
+        "ntt.round-trip-exact"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.MaximumLog2Length",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.prime-and-primitive-root"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.Modulus",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.prime-and-primitive-root"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.PointwiseMultiply(System.ReadOnlySpan<System.UInt64>,System.ReadOnlySpan<System.UInt64>,System.Span<System.UInt64>)",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.convolution-vs-oracle",
+        "ntt.length-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.NumberTheoreticTransform.PrimitiveRoot",
+      "State": "covered",
+      "CoveredBy": [
+        "ntt.prime-and-primitive-root"
       ]
     },
     {
@@ -16209,6 +16534,391 @@
       ]
     },
     {
+      "Id": "Puck.Maths.RadicalShadowAnalysisLimits..ctor(System.Int32,System.Int32,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisLimits.Default",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisLimits.MaximumAutomatonStates",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisLimits.MaximumParameterBitLength",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisLimits.MaximumPellRepresentatives",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisStatus.Eventual",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisStatus.FiniteDomain",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisStatus.Invalid",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisStatus.ResourceLimit",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisStatus.Total",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisStatus.Undecided",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowAnalysisStatus.value__",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowProofKind.ExactAffine",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowProofKind.value__",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerAnalysis.Certificate",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerAnalysis.Detail",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerAnalysis.Law",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerAnalysis.Parameters",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerAnalysis.Status",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerAnalyzer.Analyze(Puck.Maths.RadicalShadowTowerParameters,Puck.Maths.RadicalShadowAnalysisLimits,System.Threading.CancellationToken)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerCertificate..ctor(Puck.Maths.RadicalShadowTowerParameters,Puck.Maths.RadicalShadowProofKind)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerCertificate.Parameters",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerCertificate.ProofKind",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerCompiler.Compile(Puck.Maths.RadicalShadowTowerCertificate,Puck.Maths.RadicalShadowAnalysisLimits,System.Threading.CancellationToken)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerCompiler.CompileTotal(Puck.Maths.RadicalShadowTowerProgram,Puck.Maths.RadicalShadowAnalysisLimits,System.Threading.CancellationToken)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerEvaluator.CorrectionAt(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerEvaluator.CorrectionAt(System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerEvaluator.FloorAt(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerEvaluator.FloorAt(System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerEvaluator.Parameters",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.ActivationThreshold",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.AffineCenterAt(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.AffineFloorAt(System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.Center",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.ChannelNormModulus",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.ChannelNormResidue",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.Kappa",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerLaw.Slope",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerParameters..ctor(System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger,System.Numerics.BigInteger)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerParameters.D",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerParameters.U",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerParameters.V",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerParameters.W",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerProgram..ctor(Puck.Maths.RadicalShadowTowerCertificate,Puck.Maths.AutomaticIntegerSequence)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerProgram.Certificate",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerProgram.Corrections",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowTowerVerifier.TryVerify(Puck.Maths.RadicalShadowTowerProgram,Puck.Maths.VerifiedRadicalShadowTower&,Puck.Maths.RadicalShadowVerificationFailure&,Puck.Maths.RadicalShadowAnalysisLimits,System.Threading.CancellationToken)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.AffineIdentityDoesNotHold",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.AffineSolutionIsNotPositive",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.CorrectionDoesNotMatchProof",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.InvalidRadicand",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.None",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.ResourceLimit",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.UnsupportedProof",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.RadicalShadowVerificationFailure.value__",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
       "Id": "Puck.Maths.RationalMaterial.Add(Puck.Maths.QuadraticSurd,Puck.Maths.QuadraticSurd)",
       "State": "covered",
       "CoveredBy": [
@@ -20968,6 +21678,20 @@
       "CoveredBy": [
         "core.unsigned-integer-contracts",
         "core.unsigned-square-root-uint128-carrier-boundary"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.VerifiedRadicalShadowTower.Law",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.VerifiedRadicalShadowTower.Parameters",
+      "State": "covered",
+      "CoveredBy": [
+        "core.automatic-sequence-and-radical-shadow-exactness"
       ]
     },
     {

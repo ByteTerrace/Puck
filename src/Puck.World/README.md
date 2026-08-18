@@ -12,7 +12,8 @@ split, and this README is the entry point — each sibling owns its own depth:
 | [`Puck.World.Protocol`](../Puck.World.Protocol/README.md) | What a world SAYS — the wire/tape protocol |
 | [`Puck.Networking`](../Puck.Networking/README.md) | The world-agnostic wire substrate — the frame grammar and reader/writer pair |
 | [`Puck.World.Server`](../Puck.World.Server/README.md) | The authoritative runtime: the tick, entity table, grants, addons, owned worlds, storage, replay |
-| `Puck.World` (this project) | The client, presentation, console command modules, assets, and `Program.cs` |
+| [`Puck.World.Client`](../Puck.World.Client/README.md) | The per-machine client half: seats, the entity view, the editor, and the binding-authoring layer |
+| `Puck.World` (this project) | The audio director, the frame source, presentation, console command modules, assets, and `Program.cs` |
 
 The product intent (the overworld, the reveal ladder) lives in
 [`CLAUDE.md`](../../CLAUDE.md) and [`docs/vision.md`](../../docs/vision.md);
@@ -80,8 +81,8 @@ dotnet run --project src/Puck.World -c Release -- --headless --exit-after-second
 separate product (the unification contract): the SAME console verb surface
 drives both shapes, minus whatever presentation composed. The command
 VOCABULARY itself must be identical in every shape — the document validators
-check a world's `bindingOverlays` (and the engine-default document's own
-wheels/editor/sculpt pages, which every world compiles in unconditionally)
+check a world's `bindingOverlays` (the shipped `default.world.json` template's
+editor/sculpt pages included, for every world naming it as a basis)
 against whatever this composition registers, so a genuinely presentation-only
 verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
 UNKNOWN over headless stdin, while `editor.*`/`sculpt.*` are CORE-registered
@@ -102,13 +103,34 @@ in EVERY shape, `AddWorldPresentation` only when a window is composed.
 
 ## Seat controls and camera authoring
 
-Play seats use standard dual-stick semantics: left stick moves in the logical
-camera plane and right stick changes yaw/pitch; right stick never doubles as
-body turn. `views.seatRig` authors framing, `views.seatControl` authors the
+Play seats use standard third-person action semantics: left stick moves in the
+live logical camera plane while preserving heading (lateral input strafes, and
+holding forward while turning bends the trajectory with the view); right
+stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
+orbit/look and never write `Turn`. Authors can pair `player.move` with
+`player.look` for movement-facing/free-orbit alternatives, or use
+`player.move.strafe` with `player.look.steer` for the standard action scheme.
+Pressing the left stick toggles the `run` channel; West and Left Shift retain
+hold-to-run behavior. Holding LT and pressing the left stick toggles autorun
+through the `forward` channel; the chord consumes that press, so it does not
+also flip the bare-stick run toggle.
+Holding LT + RB temporarily makes the standard right stick camera-only free
+look; left-stick movement remains relative to character heading while held.
+`views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `playerDefaults.seatLook` authors portable sensitivity/inversion/arming/rate.
 `world.view.camera [player]` reads the same seat-owned state movement and both
 local/travel renderers use. The old mixed seat-look shape is not accepted.
+
+Binding contexts can also select complete control groups from gameplay state.
+A context family named `state:<row>` reads that declared world-state row: a
+scalar row publishes one value to every seat, while a keyed row reads the
+controlled body's entity-index cell. Ordinary rule `setState`/`addState`
+effects therefore switch mappings through the same validated, replayed state
+pipeline as the rest of gameplay. `player.bindings` reports the published
+state, matched group, and precedence winner. A missing row contributes no match,
+which keeps portable profile layers usable across worlds. When the winning group
+changes, held commands and chord/page latches from the old group are cleared.
 
 ## The console
 
@@ -171,14 +193,14 @@ Facts a script needs:
   no-signal state even headless — every server-safe command module including
   `ScreenCommandModule`, and the WHOLE editor/sculpt verb surface — session,
   drag, workbench, picker, targeting, and every `editor.*`/`sculpt.*` command
-  module — for command-vocabulary parity: the engine-default binding document
-  commits that vocabulary in every boot shape regardless of what any world
-  document authors) vs. everything genuinely presentation-only (the GPU host,
+  module — for command-vocabulary parity: a world's binding document commits
+  that vocabulary in every boot shape, and the validator checks it against what
+  the shape registers) vs. everything genuinely presentation-only (the GPU host,
   render root, overlays, the audio device, gamepads). `WorldUiCommandModule`
   and `WorldWheelCommandModule` are CORE-registered too but resolve their one
   presentation dependency as OPTIONAL and refuse BY NAME at use headless.
 - The windowed and headless host blocks are OS-branched calls into the
-  launcher/platform family rather than a single `WorldHost.cs`:
+  launcher/platform family rather than a single consolidated host file:
   `WorldBootComposition.AddWorldPresentation` calls
   `Puck.Launcher.Windows.AddWindowsHostedPresentation`/
   `Puck.Launcher.Linux.AddLinuxHostedPresentation` (windowing, allocator, the
@@ -192,11 +214,12 @@ Facts a script needs:
   intents, the shared server-step shell runs, then the client post-step
   (screens, the editor's per-tick latch). Headless: the shared server-step
   shell alone — no `WorldClient`, no screens, no editor.
-  `WorldServerStepShell.cs` is the shared step BOTH wrap: `WorldServer.Step`,
-  then the replay tape's `NoteTick` and the console wait gate's `PublishTick`
-  — one place tape/wait-gate semantics live, so a boot-shape swap can never
-  fork them. `Puck.Launcher.FixedStepPump` (not in this project) owns the
-  accumulator both boot shapes' hosted services drive it through.
+  `Puck.World.Server.WorldServerStepShell.Step` (not in this project) is the
+  shared step both wrap: `WorldServer.Step`, then the replay tape's `NoteTick`
+  and a caller-supplied `Action<ulong>` — here, the console wait gate's
+  `PublishTick` — one shared step so a boot-shape swap can never fork tape/
+  wait-gate semantics. `Puck.Launcher.FixedStepPump` (not in this project)
+  owns the accumulator both boot shapes' hosted services drive it through.
 - `WorldInstanceHost.cs` / `WorldInstance.cs` — the process's running world
   instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own
@@ -244,33 +267,47 @@ Facts a script needs:
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`
   and `WorldWheelCommandModule.cs` are core-registered but refuse by name at
   use when their presentation dependency is absent. Terminal-owned `console`
-  and world-owned `player.wheel.*` are stock wheel-hold-page rows the
-  engine-default document commits in every boot shape.
+  is registered in every boot shape; `player.wheel.*` are the rows a world's
+  own wheel-hold page binds.
 - `WorldDefinitionLoader.cs` — resolves and validates the boot world
   document; `RecordingDocumentSource.cs` does the same for
   `puck.recording.v1`.
-- [`Client/`](Client/README.md) — the per-machine client half: seats and
-  device intents, the snapshot-fed entity view and render interpolation, the
-  frame source, the in-session editor and sculpt workbench, the audio
-  director.
+- [`Puck.World.Client`](../Puck.World.Client/README.md) — the per-machine
+  client half: seats and device intents, the snapshot-fed entity view and
+  render interpolation, the in-session editor and sculpt workbench, the
+  binding-authoring layer, frame composition (`WorldFrameSource.cs`), scene
+  emission (`WorldSceneEmitter.cs`), and offscreen view composition
+  (`WorldViewComposer.cs`) — the three read the root's `WorldAudioDirector`
+  only through `IWorldAudioFrameFeed`/`IWorldAudioCueSink`, never the concrete
+  type.
+- `WorldAudioDirector.cs` — derives the emitter table from the delivered
+  definition with stable ids, resolves emitter poses per produced frame, and
+  publishes `AudioSnapshot`s to the mixer (see
+  [`Audio/README.md`](Audio/README.md)). Stays here rather than in
+  `Puck.World.Client` because it imports `Puck.World.Audio` types directly;
+  the composition root passes it to `Puck.World.Client` types through the two
+  narrow interfaces above.
 - [`Audio/`](Audio/README.md) — the deterministic mixer core, synth voices,
   and the WASAPI output device.
 - `WorldScreenBinder.cs` and `ScreenCommandModule.cs` — the diegetic screens
   (below).
-- `WorldRenderSettings.cs`, `WorldRenderProbe.cs`,
-  `WorldDynamicGeometryCeilings.cs` — the live render levers and the probed
-  capacity envelope live placement is validated against.
-- `WorldAvatarCatalog.cs`, `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs` —
-  the deterministic avatar catalog (a distinct animated humanoid rig per
-  population slot, authored without RNG state) and rig compilation.
+- `WorldRenderProbe.cs` — the probed capacity envelope live placement is
+  validated against.
 - `WorldRecordingCommandModule.cs` — the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/` — the checked-in worlds (`worlds/*.world.json`, count them there
-  rather than here: `play` — the hub and boot default — `dive`, `kart`, `jump`
+  rather than here: `default` — a partial `basis` template carrying the one
+  shipped binding document (movement, roster, editor and sculpt groups, and
+  the `contexts` rows that map roster and editor states to them); the engine
+  itself ships no bindings, so a world names this basis, authors its own, or
+  has none — `play` — the hub and boot default — `dive`, `kart`, `jump`
   — the four-world charter's whole game roster, 2026-08-06 — plus `studio`, a
   non-game dev canvas for character work reached only with `--world`: neutral
   floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout
-  composing front/three-quarter/side/back at once; and the `quilt-*` documents,
+  composing front/three-quarter/side/back at once; `null` — the standard
+  control scheme's proving ground — a `basis` delta over `standard`, the
+  partial template carrying the shared `channels`, `bodyMotionPrograms`,
+  `kits`, and `bindingOverlays` any world may layer over; and the `quilt-*` documents,
   test content for adjacency and corner-crossing work, outside the
   charter roster and not game worlds — each a `basis` delta over the
   `quilt-base` template, the worked example of document composition; see
@@ -298,6 +335,12 @@ settles to its live value with its projected epoch reset to 0, so a reload
 resumes exactly where the save observed it instead of reading frozen — the
 live document itself is never touched), and `world.status` reports source,
 counts, drift, and the journal length.
+
+The root `state` section is the one authoring inventory for every ownership
+mode: `world` rows are document cells, `body` rows are ephemeral per-body
+counters/timers, and `identity` rows use the durable identity seam. Body and
+identity declarations compile into fixed ordinal arrays per body; actions only
+reference those names and carry no nested state declarations.
 
 Solid creation placements use the renderer's canonical shape emission under
 both contact providers. `world.contacts` reports the analytic collider census
@@ -341,7 +384,8 @@ contract.
 Dense reading text authors as a screen instead: either a `screens[]` row or a
 placement's creation-face override may use `{ "$type": "text", "lines": [...],
 "font": ..., "columns": ..., "rows": ..., "foreground": "#RRGGBB",
-"background": "#RRGGBB" }`. It renders through the engine's per-cell
+"background": "#RRGGBB" }` (either color may instead bind to a text state cell,
+`state.<row>.<key>`). It renders through the engine's per-cell
 glyph-decal tier off the same packed font atlas — a fixed monospace cell grid
 (capped by the engine's per-screen decal cell budget), sampled at shade time
 with no per-glyph geometry cost, bypassing the CRT image pipeline. Signs,
@@ -445,6 +489,28 @@ facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field — read both `world.gpu` and `world.fps`
 at the intended population and view layout.
 
+Two document sections author the scene's lighting instead of a verb, re-read
+on every definition revision (a live edit lands on the next frame):
+`render.lighting` sets the directional sun and ambient term; `render.sky` sets
+the procedural sky gradient, sun disc, star field (each star hash-dealt its own
+blackbody colour and apparent luminosity; `stars.twinkle { share, depth, rate }`
+scintillates a share of them on the tick clock), cloud layer (`clouds
+{ coverage, softness, scale, seed, color, drift, spin, curl, shear }` — a
+hashed, warped noise layer over everything above it; drift translates it,
+spin turns it about the zenith, curl winds it Coriolis-fashion, shear slides
+the shaping field so clouds re-form as they travel — all on the tick clock),
+and distance fog.
+Both are
+optional, and every field within them is optional individually — absent
+renders the pinned defaults unchanged. `render.cycle`
+keys both over a state row: `{ "state": "timeOfDay", "keys": [ { "at": 0.25,
+"lighting": {…}, "sky": {…} }, … ] }` — the row's live value (its fractional
+part, so an advancing row wraps once per unit) picks the two bracketing keys
+and every lighting/sky field interpolates between them; a key states only the
+fields it moves, the rest hold from the previous key. The clock is simulation
+state (an advancing `state` row — deterministic, replayed, settable with
+`world.row.set state`); the interpolation is presentation.
+
 ## Engine boundaries worth knowing
 
 - `SdfProgramBuilder.MaxInstances = 16384`: per-tile mask width scales with
@@ -452,7 +518,7 @@ at the intended population and view layout.
   probes capacity floors at construction.
 - The per-pixel soft-shadow gather addresses ≤1024 instances; beyond that the
   engine falls back to coarser camera-tile masking.
-- `ViewStack.MaxRegisteredViews = 64`: do not register a rendered view per
+- `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
   population entry.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.
 
@@ -486,14 +552,23 @@ scripted caller can therefore always tell "written" from "never happened",
 which the pre-2026-08-05 echo (a bare path, printed at arming time) could
 not.
 
-Committed, re-runnable batteries cover specific load-bearing seams, under
-`docs/verification/`: `undo-all-or-nothing`, `strict-definition-parse`,
-`sdf-decode-sign-refusal`, `doc-links`, `addon-mutation-seam`, and
-`four-world-boot-smoke`. `four-corners-sharded` is the stronger five-authority
-adjacency/federation stress run: four ground worlds plus the floating island,
-with human and autonomous handoffs, retained controls and camera routing,
-cross-host contact, derived corner peers, and routed read-backs. Each
-builds what it needs and exits nonzero on a miss. `ordered-domain`,
+Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
+manifests under `tests/Puck.World.Canaries/` — `sdf-decode-sign-refusal`
+(all twelve builder-mirrored sign fields), `world-seat-binding-recompose`
+(a forced seat recompose against a registered command, cleanly, with no
+binding-narration), and `addon-mutation-seam` (the grant-door outcome matrix
+plus a real compiled WASM guest's chained mutate and boot-anchored replay
+arming — see `src/Puck.Cli/README.md`'s `puck canary` section for the
+`stream` override that lets a `world.grant` claim bind its stderr-narrated
+confirmation) among them. Strict-parse and mutation-all-or-nothing are
+proved in-process by
+`tests/Puck.World.Tests/{StrictParseLawTests,MutationAllOrNothingLawTests}.cs`,
+and cited repository paths are checked by `puck doc-links`.
+`four-corners-sharded` is the stronger five-authority federation proof: four
+ground worlds plus the floating island, each its own real process on its own
+dynamic loopback endpoint, with one human-driven body ringing all four
+ground authorities purely through the router that follows a body wherever it
+now lives. `ordered-domain`,
 `headless-boot`, `lane-present-deletion`, `hud-document`, and
 `engagement-dissolution` have no committed battery at all — validate them by
 running the app. Principal/grant enforcement and engage/disengage authority

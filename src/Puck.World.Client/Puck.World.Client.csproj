@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Audio\Puck.Audio.csproj" />
+        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
+        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Overlays\Puck.Overlays.csproj" />
+        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
+        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
+        <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
+        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+    </ItemGroup>
+</Project>

@@ -3,7 +3,7 @@ using System.Numerics;
 namespace Puck.Forge.Authoring;
 
 /// <summary>
-/// Pure, static IK math for a sculpt model's chain rig (<see cref="SculptChain"/> captures rest geometry and calls in
+/// Pure, static IK math for a sculpt model's chain rig (<see cref="ChainRig"/> captures rest geometry and calls in
 /// here every time a goal moves). Deliberately in <c>System.Numerics</c> floats — this is HOST-SIDE AUTHORING/RENDER
 /// math, never simulation state, so it never belongs in <c>Puck.Maths</c>' fixed-point world. The two-bone solver is
 /// analytic: the mid joint sits at the circle-circle intersection of the two bone-length spheres centered on the root

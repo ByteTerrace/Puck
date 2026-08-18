@@ -5,11 +5,22 @@
         <PuckLayer>Engine services</PuckLayer>
         <RootNamespace>Puck.Launcher</RootNamespace>
     </PropertyGroup>
+    <PropertyGroup>
+        <!-- UpdateService deserializes puck.release.v1 through reflection-based JsonSerializer metadata (the same
+             DocumentJsonOptions.Shared every document store rides). -->
+        <IsAotCompatible>false</IsAotCompatible>
+    </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <!-- The release manifest's canonical bytes/hash (Release/ReleaseManifest.cs) and content-addressed
+             delta staging (Release/ContentAddressedUpdateStager.cs). -->
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <!-- AttestationReleaseVerifier checks a release manifest's signature via the sequence replay-defence
+             route (Release/AttestationReleaseVerifier.cs). -->
+        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
     </ItemGroup>

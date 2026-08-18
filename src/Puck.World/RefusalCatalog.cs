@@ -10,18 +10,19 @@ namespace Puck.World;
 /// on-demand read-back (<c>world.refusals</c> is Immediate and reads no simulation state), never a per-tick cost, and
 /// the doors themselves pay nothing for it — a refusal's own throw site names an enum member exactly as it always
 /// would; nothing here runs until an operator asks.</summary>
-/// <remarks>Scans four assemblies, not one: the split between <c>Puck.World.Schema</c>, <c>Puck.World.Server</c>,
-/// <c>Puck.World.Addons</c>, and this composition root put refusal-tagged enums in Puck.World.Schema
-/// (e.g. <c>WorldGrant</c>'s), Puck.World.Server (<c>WorldReplayRefusal</c>), Puck.World.Addons
-/// (<c>AddonMutateRefusal</c>), and this composition root (<c>Client.Sdf.SdfRefusal</c>). A single-assembly scan
-/// would silently stop seeing three quarters of the catalog; the assembly list below is anchored on one known type
-/// per assembly rather than an AppDomain-wide scan, so it names exactly what it means to cover.</remarks>
+/// <remarks>Scans five assemblies, not one: the split between <c>Puck.World.Schema</c>, <c>Puck.World.Server</c>,
+/// <c>Puck.World.Addons</c>, <c>Puck.World.Client</c>, and this composition root put refusal-tagged enums in
+/// Puck.World.Schema (e.g. <c>WorldGrant</c>'s), Puck.World.Server (<c>WorldReplayRefusal</c>), Puck.World.Addons
+/// (<c>AddonMutateRefusal</c>), Puck.World.Client (<c>Sdf.SdfRefusal</c>), and this composition root. A
+/// single-assembly scan would silently stop seeing most of the catalog; the assembly list below is anchored on one
+/// known type per assembly rather than an AppDomain-wide scan, so it names exactly what it means to cover.</remarks>
 internal static class RefusalCatalog {
     private static readonly Assembly[] Assemblies = [
         typeof(RefusalCatalog).Assembly,
         typeof(RefusalAttribute).Assembly,
         typeof(WorldServer).Assembly,
         typeof(AddonMutateRefusal).Assembly,
+        typeof(Client.Sdf.SdfRefusal).Assembly,
     ];
 
     private static IReadOnlyList<RefusalCatalogEntry>? Entries;

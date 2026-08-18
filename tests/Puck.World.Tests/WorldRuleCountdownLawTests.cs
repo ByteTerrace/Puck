@@ -10,13 +10,13 @@ public sealed class WorldRuleCountdownLawTests {
     public void CountdownUsesLiveStepWidthAndSaturatesFinalPartialStep() {
         var countdownName = WorldCellName.Parse(candidate: "cooldown");
         var definition = Fixtures.BuildDocument() with {
-            State = [
+            StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
                     Name: countdownName,
                     Kind: CellKind.Int,
                     NonNegative: true,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 1183L)])
-            ],
+            ]),
             Rules = [
                 new WorldRule(
                     Name: WorldCellName.Parse(candidate: "cooldown-tick"),
@@ -38,22 +38,22 @@ public sealed class WorldRuleCountdownLawTests {
         var denied = DurationDocument(seconds: decimal.MaxValue);
         var control = DurationDocument(seconds: 1m);
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, reason: out var reason, neighbours: null));
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var reason));
         Assert.Contains(expectedSubstring: nameof(WorldRuleRefusal.DurationEngineTicksOutOfRange), actualString: reason, comparisonType: StringComparison.Ordinal);
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, reason: out var controlReason, neighbours: null), userMessage: controlReason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var controlReason), userMessage: controlReason);
     }
 
     private static WorldDefinition DurationDocument(decimal seconds) {
         var countdownName = WorldCellName.Parse(candidate: "cooldown");
 
         return Fixtures.BuildDocument() with {
-            State = [
+            StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
                     Name: countdownName,
                     Kind: CellKind.Int,
                     NonNegative: true,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey)])
-            ],
+            ]),
             Rules = [
                 new WorldRule(
                     Name: WorldCellName.Parse(candidate: "arm-cooldown"),

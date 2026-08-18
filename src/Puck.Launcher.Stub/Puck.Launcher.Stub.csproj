@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Launcher.Stub</AssemblyName>
+        <IsAotCompatible>false</IsAotCompatible>
+        <OutputType>Exe</OutputType>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Composition roots</PuckLayer>
+        <RootNamespace>Puck.Launcher.Stub</RootNamespace>
+    </PropertyGroup>
+</Project>

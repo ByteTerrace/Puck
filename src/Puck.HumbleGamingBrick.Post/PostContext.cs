@@ -1,6 +1,6 @@
 namespace Puck.HumbleGamingBrick.Post;
 
-/// <summary>The shared per-run context handed to every <see cref="IPostStage"/>: the directory stages write their
+/// <summary>The shared per-run context handed to every <see cref="IPostStage{PostContext}"/>: the directory stages write their
 /// artifacts to, and the resolved roots of the external reference-ROM and SST vector corpora (or <see langword="null"/>
 /// when one is absent, in which case its Tier-B stages skip rather than fail). Tier-A stages need neither — they run
 /// on a self-contained synthetic ROM.</summary>

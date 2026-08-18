@@ -80,6 +80,15 @@ var federationKeyFileOption = new Option<string?>(name: "--federation-key-file")
     DefaultValueFactory = static _ => null,
     Description = "A deployment-secret file holding this authority's own PKCS8 ECDSA P-256 private key (raw DER bytes) — the SignsDirectly signing identity peers pin against this world's host.authority (or its \"boot\" instance identity when host.authority is absent). Absent disables federation while leaving ordinary admitted-peer listening available.",
 };
+// AddSelfUpdate is always registered (channel/cacheRoot/checkInterval/keepVersions come from the world document's
+// update section — see WorldUpdateDefaults — and the trust anchor is the build-pinned constant below). This
+// narrows to the two facets a document must never author — the release-source directory and the trust anchor —
+// the same test/ops control-plane category as --federation-key-file. Absent, self-update stays wired but harmless:
+// the release source resolves to an empty directory and the trust anchor stays the refusing placeholder.
+var updateConfigFileOption = new Option<string?>(name: "--update-config-file") {
+    DefaultValueFactory = static _ => null,
+    Description = "A test/ops-only override for the release-source directory and the trust anchor (ReleaseSourceDirectory/TrustAnchor*) — see Puck.Launcher.Release.SelfUpdateConfigFile. Absent, self-update runs against an empty release source and the refusing build-time placeholder trust anchor.",
+};
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
@@ -93,6 +102,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     recordingOption,
     storageDiscoveryUriOption,
     storageUriOption,
+    updateConfigFileOption,
     userIdOption,
     widthOption,
     worldOption,
@@ -174,7 +184,8 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
     // never has to also change what every LOCAL entity in this world is addressed under.
     var federationSubject = ((worldSource.Definition.Host.Authority is { Length: > 0 } authored)
         ? authored
-        : Puck.World.WorldDefinitionLoader.BootInstanceName);
+        : Puck.World.WorldDefinitionLoader.BootInstanceName
+    );
 
     try {
         var pkcs8 = File.ReadAllBytes(path: Path.GetFullPath(path: federationKeyFile));
@@ -271,19 +282,16 @@ services.AddSingleton(implementationFactory: static provider => WorldStorageSync
     store: provider.GetRequiredService<Puck.Storage.IObjectBlobStore>(),
     worlds: provider.GetRequiredService<Puck.World.Server.WorldOwnedWorlds>()
 ));
-// The player's controls as DATA: the engine-default binding document (WASD/arrows movement, Space/South/East
-// gestures, Enter/F1-F4 roster, sticks, Start),
-// composed per seat with the world's binding overlays, the seat's profile bindings, and its live session rebinds. One
+// The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
+// Assets/worlds/default.world.json as its basis for the standard movement/roster/editor/sculpt rows, or authors its
+// own, or has none), composed per seat with the seat's profile bindings and its live session rebinds. One
 // WorldSeatBindings resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
 // IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal. Constructed here
-// (before the container builds) with the engine default and boot overlays; the roster, the rebind verbs, and the
-// post-step overlay sync push the per-seat and overlay layers in as they change.
+// (before the container builds) with the boot overlays; the roster, the rebind verbs, and the post-step overlay sync
+// push the per-seat and overlay layers in as they change.
 // The per-seat control-feel store is built here too, seeded from the boot document's own authored feel — the
 // resolution every seat sits at until a profile is delivered for it, from wherever that profile arrives.
-var seatBindings = new WorldSeatBindings(
-    engineDefault: WorldDefaultBindings.BuildDocument(),
-    definition: worldSource.Definition
-);
+var seatBindings = new WorldSeatBindings(definition: worldSource.Definition);
 services.AddSingleton(implementationInstance: seatBindings);
 // Boot shape resolves before registration: the authoritative core registers in every shape; the GPU host, render
 // root, overlays, audio device, screens/machines, gamepads, and editor register only when presentation is
@@ -328,6 +336,69 @@ if (hostSettings.Headless) {
     // shell). Rendering consumes interpolation state only.
     services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
 }
+// Self-update: channel/cacheRoot/checkInterval/keepVersions come from the world document's own update section
+// (WorldUpdateDefaults) — a deployment-facet field carrying no simulation-state weight, matching WorldHostDefaults'
+// own posture. The trust anchor is a build-pinned composition-root constant, never a document field: a synced
+// puck.world.def.v1 a player's own storage container could rewrite is not a trust anchor. It stays the refusing
+// ReleaseTrustAnchor.Placeholder until a real release-signing chain is minted for this build.
+var updateSection = worldSource.Definition.Update;
+var updateCacheRoot = (updateSection?.CacheRoot ?? Path.Combine(
+    path1: Puck.World.Server.WorldStateRoot.Resolve(),
+    path2: "updates"
+));
+var updateCheckInterval = ((updateSection?.CheckIntervalSeconds is { } updateCheckSeconds)
+    ? ((updateCheckSeconds > 0)
+        ? TimeSpan.FromSeconds(value: updateCheckSeconds)
+        : (TimeSpan?)null)
+    : null
+);
+var releaseTrustAnchor = Puck.Launcher.Release.ReleaseTrustAnchor.Placeholder;
+Puck.Launcher.Release.IReleaseSource releaseSource = new Puck.Launcher.Release.DirectoryReleaseSource(root: Path.Combine(
+    path1: updateCacheRoot,
+    path2: "release-source"
+));
+if (parseResult.GetValue(option: updateConfigFileOption) is { } updateConfigFile) {
+    if (!Puck.Launcher.Release.SelfUpdateConfigFile.TryLoad(
+        config: out var updateConfig,
+        error: out var updateError,
+        path: updateConfigFile
+    )) {
+        Console.Error.WriteLine(value: $"--update-config-file could not be read: {updateError}");
+
+        return 1;
+    }
+
+    releaseTrustAnchor = updateConfig!.ToTrustAnchor();
+    releaseSource = updateConfig.ToReleaseSource();
+    updateCacheRoot = (updateConfig.CacheRoot ?? updateCacheRoot);
+}
+// The stub reads its own selected version from `<cacheRoot>/current` (FileUpdateApplier's own contract: cacheRoot
+// IS the stub's install root). Reporting that same value back as InstalledVersion is what makes version-monotonicity
+// verification mean something beyond "this build's fixed assembly version" once staging is real; a cacheRoot with no
+// stub-managed install (no `current` file yet) falls back to the compiled assembly version.
+var updateCurrentPointerPath = Path.Combine(
+    path1: updateCacheRoot,
+    path2: "current"
+);
+var updateInstalledVersion = (File.Exists(path: updateCurrentPointerPath)
+    ? File.ReadAllText(path: updateCurrentPointerPath).Trim()
+    : string.Empty
+);
+if (updateInstalledVersion.Length == 0) {
+    updateInstalledVersion = (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0");
+}
+services.AddSelfUpdate(
+    options: new Puck.Launcher.Release.UpdateOptions(
+        App: "puck.world",
+        CacheRoot: updateCacheRoot,
+        Channel: (updateSection?.Channel ?? "stable"),
+        CheckInterval: updateCheckInterval,
+        InstalledVersion: updateInstalledVersion,
+        KeepVersions: (updateSection?.KeepVersions ?? 2),
+        TrustAnchor: releaseTrustAnchor
+    ),
+    releaseSource: releaseSource
+);
 var host = builder.Build();
 // The every-shape post-build wiring step: affordance install, the boot document's genuine binding-vocabulary
 // re-validation (WorldAffordances.Installed is only true from here on — see WorldPostBuildWiring.Install's remarks

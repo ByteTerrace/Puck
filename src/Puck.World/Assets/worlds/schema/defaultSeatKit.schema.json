@@ -1,4 +1,7 @@
 {
-  "description": "The kit row (by name) every seat body constructs from.",
-  "type": "string"
+  "type": [
+    "string",
+    "null"
+  ],
+  "default": null
 }

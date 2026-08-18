@@ -1,6 +1,8 @@
 {
-  "description": "The host-section defaults \u2014 how the world asks to be presented (window/backend/present/pacing/ timing/genlock \u2014 see WorldHostDefaults). The CLI window/backend flags override it at boot (a deployment surface laid over the author\u0027s intent).",
-  "type": "object",
+  "type": [
+    "object",
+    "null"
+  ],
   "properties": {
     "presentation": {
       "description": "Which boot shape the world composes \u2014 see WorldHostPresentation. Defaults to Windowed, so every world authored before this field existed boots byte-identically; the --headless CLI flag reflects None for a single run without editing the document.",
@@ -110,5 +112,6 @@
     "genlock",
     "listen"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "default": null
 }

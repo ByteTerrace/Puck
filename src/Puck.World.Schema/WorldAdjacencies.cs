@@ -1,4 +1,4 @@
-using System.Numerics;
+using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -21,7 +21,7 @@ public enum WorldAdjacencyUnavailable : byte {
 /// <param name="OutwardPitchDegrees">The outward elevation, in degrees (+90 = +Y, -90 = -Y).</param>
 /// <param name="Width">The full span along the boundary's local right axis.</param>
 /// <param name="Height">The full span along the boundary's local up axis.</param>
-public sealed record WorldAdjacencyBoundary(Vector3 Center, float OutwardYawDegrees, float OutwardPitchDegrees, float Width, float Height) {
+public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float OutwardYawDegrees, float OutwardPitchDegrees, float Width, float Height) {
     private static readonly FixedVector3 X = new(
         X: FixedQ4816.One,
         Y: FixedQ4816.Zero,

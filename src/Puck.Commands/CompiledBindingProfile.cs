@@ -21,6 +21,7 @@ public sealed class CompiledBindingProfile {
     private readonly ImmutableArray<string> m_groups;
     private readonly Dictionary<string, int> m_modifierIndexBySource;
     private readonly ImmutableArray<BindingModifierDefinition> m_modifiers;
+    private readonly int[][] m_pageRowsByGroup;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
     private readonly Dictionary<int, BindingWheelView> m_wheelViewByRow;
@@ -29,9 +30,12 @@ public sealed class CompiledBindingProfile {
     // meaning row may additionally carry row-scoped Activators — entries whose trigger is an ordered sequence
     // (BindingActivatorDefinition) rather than a plain Source, so they are excluded from Table and evaluated
     // out-of-band by PagedInputBindings' own RowActivatorTracker per (activator, slot).
+    // Held: modifier indices that must be down in any order. Chord: modifier indices pressed in this order, tested
+    // on the held order with the Held members removed. Depth = Held.Length + Chord.Length.
     internal sealed record CompiledChordRow(
         int GroupIndex,
         int[] Chord,
+        int[] Held,
         IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>>? Table,
         BindingPageView? View,
         CompiledCommandEdge? Command,
@@ -39,14 +43,19 @@ public sealed class CompiledBindingProfile {
     );
     // The one precomputed command-edge payload shape shared by a command chord row and a row activator: the press
     // fires Command with PressValue, the release clears it with ReleaseValue (an inactive value of the same kind);
-    // DispatchRelease mirrors HoldRelease. Reassertable marks a channel destination: it may recover continuous
-    // state from a digital Active sample without turning that sample into a command edge.
+    // DispatchRelease mirrors HoldRelease for a held command and is always true for a toggled channel, whose next
+    // completion synthesizes its release. Source is the command destination's precomputed synthetic ownership id:
+    // parallel synthesized holds release independently, while all togglers of one destination share its latch owner.
+    // Reassertable marks a held channel destination: it may recover continuous state from a digital Active sample
+    // without turning that sample into a command edge. Mode remains input-side.
     internal sealed record CompiledCommandEdge(
         string Command,
         bool DispatchRelease,
         CommandValue PressValue,
         CommandValue ReleaseValue,
-        bool Reassertable
+        bool Reassertable,
+        BindingEntryMode Mode,
+        string Source
     );
     // A compiled row activator: the shared command edge plus the sequence/mode/timeout a RowActivatorTracker
     // resolves, plus a GLOBAL index (0..ActivatorCount-1, unique across the whole compiled profile) a slot's
@@ -67,43 +76,77 @@ public sealed class CompiledBindingProfile {
     internal ReadOnlySpan<int> CommandRowsOf(int groupIndex) {
         return m_commandRowsByGroup[groupIndex];
     }
-    /// <summary>Determines whether a chord is a press-order prefix of a held-modifier order.</summary>
-    /// <param name="chord">The chord's modifier indices.</param>
+    /// <summary>Determines whether a held-modifier order COMPLETES a row: <see cref="Matches"/> holds and the down
+    /// set is exactly the row's members — the command-row firing condition.</summary>
+    /// <param name="row">The row.</param>
     /// <param name="heldOrder">The held modifier indices, in press order.</param>
-    internal static bool IsPrefix(ReadOnlySpan<int> chord, ReadOnlySpan<int> heldOrder) {
+    internal static bool Completes(CompiledChordRow row, ReadOnlySpan<int> heldOrder) {
         return (
-            (chord.Length <= heldOrder.Length) &&
-            heldOrder[..chord.Length].SequenceEqual(other: chord)
+            (heldOrder.Length == (row.Held.Length + row.Chord.Length)) &&
+            Matches(
+            heldOrder: heldOrder,
+            row: row
+        )
         );
     }
-    /// <summary>Resolves the active page row for a group and held-modifier order: the page row with the longest
-    /// chord that is a press-order prefix of <paramref name="heldOrder"/>, falling back to the group's resting
+    /// <summary>Determines whether a row's members are satisfied by a held-modifier order: every held member is
+    /// down, and the chord is a press-order prefix of the order once the held members are removed from it.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="heldOrder">The held modifier indices, in press order.</param>
+    internal static bool Matches(CompiledChordRow row, ReadOnlySpan<int> heldOrder) {
+        foreach (var member in row.Held) {
+            if (!heldOrder.Contains(value: member)) {
+                return false;
+            }
+        }
+
+        var chord = row.Chord;
+        var matched = 0;
+
+        foreach (var held in heldOrder) {
+            if (row.Held.AsSpan().Contains(value: held)) {
+                continue;
+            }
+
+            if (matched == chord.Length) {
+                break;
+            }
+
+            if (held != chord[matched]) {
+                return false;
+            }
+
+            matched++;
+        }
+
+        return (matched == chord.Length);
+    }
+    /// <summary>Resolves the active page row for a group and held-modifier order: the deepest page row
+    /// <see cref="Matches"/> accepts (most members; the first declared on a tie), falling back to the group's resting
     /// page. Command rows never answer this — they fire edges, they do not table sources.</summary>
     /// <param name="groupIndex">The active group index.</param>
     /// <param name="heldOrder">The held modifier indices, in press order.</param>
     /// <returns>The resolved page row index.</returns>
     internal int PageRowOf(int groupIndex, ReadOnlySpan<int> heldOrder) {
         var best = m_restingRowByGroup[groupIndex];
-        var bestLength = 0;
+        var bestDepth = 0;
 
-        for (var rowIndex = 0; (rowIndex < m_rows.Length); rowIndex++) {
+        foreach (var rowIndex in m_pageRowsByGroup[groupIndex]) {
             var row = m_rows[rowIndex];
+            var depth = (row.Held.Length + row.Chord.Length);
 
             if (
-                (row.GroupIndex != groupIndex) ||
-                (row.Table is null) ||
-                (row.Chord.Length <= bestLength)
+                (depth <= bestDepth) ||
+                !Matches(
+                heldOrder: heldOrder,
+                row: row
+            )
             ) {
                 continue;
             }
 
-            if (IsPrefix(
-                chord: row.Chord,
-                heldOrder: heldOrder
-            )) {
-                best = rowIndex;
-                bestLength = row.Chord.Length;
-            }
+            best = rowIndex;
+            bestDepth = depth;
         }
 
         return best;
@@ -160,6 +203,18 @@ public sealed class CompiledBindingProfile {
         );
     }
 
+    /// <summary>Gets a group's resting (empty-chord) page id, or <see langword="null"/> when the profile declares no
+    /// such group.</summary>
+    /// <param name="group">The group name (ordinal comparison).</param>
+    public string? RestingPageIdOf(string group) {
+        return (TryGetGroup(
+            group: group,
+            groupIndex: out var groupIndex
+        )
+            ? m_rows[m_restingRowByGroup[groupIndex]].View?.PageId
+            : null
+        );
+    }
     /// <summary>Attempts to resolve a group name to its index.</summary>
     /// <param name="group">The group name (ordinal comparison).</param>
     /// <param name="groupIndex">The group's index into <see cref="Groups"/>, when found.</param>
@@ -179,10 +234,12 @@ public sealed class CompiledBindingProfile {
         CompiledChordRow[] rows,
         int[] restingRowByGroup,
         int[][] commandRowsByGroup,
+        int[][] pageRowsByGroup,
         int activatorCount,
         Dictionary<int, BindingWheelView> wheelViewByRow
     ) {
         m_commandRowsByGroup = commandRowsByGroup;
+        m_pageRowsByGroup = pageRowsByGroup;
         m_groupIndexByName = groupIndexByName;
         m_groups = ImmutableArray.CreateRange(items: groups);
         m_modifierIndexBySource = modifierIndexBySource;

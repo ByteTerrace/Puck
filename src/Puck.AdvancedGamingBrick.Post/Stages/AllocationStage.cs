@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// baseline, then advances a further span of frames and asserts the delta is exactly zero — so a future
 /// closure-in-a-tick-path or LINQ-in-a-mapper regression surfaces as a red battery instead of a demo GC spike.
 /// </summary>
-internal sealed class AllocationStage : IPostStage {
+internal sealed class AllocationStage : IPostStage<PostContext> {
     private const int MeasureFrames = 600;
     private const int WarmFrames = 120;
 

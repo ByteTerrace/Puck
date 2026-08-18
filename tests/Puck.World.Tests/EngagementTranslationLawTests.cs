@@ -22,7 +22,7 @@ public sealed class EngagementTranslationLawTests {
             ),
         };
 
-        using var fixture = Fixtures.FreshServer(definition: (definition with { Screens = [screen] }));
+        using var fixture = Fixtures.FreshServer(definition: (definition with { ScreensRaw = [screen] }));
 
         var positive = fixture.Server.Engagement.Translate(
             intent: default(PlayerIntent)

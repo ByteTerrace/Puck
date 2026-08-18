@@ -11,7 +11,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// a caller could trust for a round no console can recover mid-shift. A control leg confirms the identical session
 /// still suspends cleanly once the transfer completes (both ports idle).
 /// </summary>
-internal sealed class SerialSuspendIdleGuardStage : IPostStage {
+internal sealed class SerialSuspendIdleGuardStage : IPostStage<PostContext> {
     private const ushort SerialControlAddress = 0xFF02;
     // TransferActive (bit 7) | ClockSelect (bit 0): an internal-clock transfer, armed and not yet shifted.
     private const byte ArmInternalTransfer = 0x81;

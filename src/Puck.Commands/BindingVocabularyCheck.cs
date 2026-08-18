@@ -105,6 +105,11 @@ public static class BindingVocabularyCheck {
         ArgumentNullException.ThrowIfNull(argument: document);
         ArgumentNullException.ThrowIfNull(argument: errors);
 
+        var declaredModifierIds = new HashSet<string>(
+            collection: (document.Modifiers ?? []).Select(selector: static modifier => modifier.Id),
+            comparer: StringComparer.Ordinal
+        );
+
         foreach (var row in (document.Chords ?? [])) {
             if (row is null) {
                 continue;
@@ -123,7 +128,7 @@ public static class BindingVocabularyCheck {
                     }
 
                     if (
-                        (entry.Source is null) &&
+                        (entry.Sources is not { Count: > 0 }) &&
                         (entry.Activator is null)
                     ) {
                         continue;
@@ -133,7 +138,7 @@ public static class BindingVocabularyCheck {
                     // sourceKind answering null is exactly "unknown control name", the refusal this check exists
                     // to catch (BindingProfile.Compile knows nothing of the physical vocabulary; this is where it
                     // is enforced). Falls through to the same channel/command checks below, keyed by the entry's
-                    // resolved label instead of a (nonexistent) Source.
+                    // resolved label instead of (nonexistent) Sources.
                     if (
                         (entry.Activator is { } activator) &&
                         (sourceKind is not null)
@@ -159,33 +164,31 @@ public static class BindingVocabularyCheck {
 
                     var label = entry.TriggerLabel;
 
-                    if (
-                        (entry.Source is { } entrySource) &&
-                        !(sourceAddressable?.Invoke(arg: entrySource) ?? true)
-                    ) {
-                        errors.Add(item: $"page \"{page.Id}\" binds unaddressable control \"{entrySource}\"");
-                    }
+                    foreach (var rawSource in (entry.Sources ?? [])) {
+                        if (!(sourceAddressable?.Invoke(arg: rawSource) ?? true)) {
+                            errors.Add(item: $"page \"{page.Id}\" binds unaddressable control \"{rawSource}\"");
+                        }
 
-                    // An axis-COMPONENT source's vocabulary half: the BASE control (with the .x/.y suffix parsed
-                    // off — BindingProfile.Compile already refused a malformed suffix structurally) must name a
-                    // real, two-dimensional control. An unresolvable base is "unknown control name"; a resolvable
-                    // but non-Axis2D base is a distinct "malformed axis component" finding.
-                    if (
-                        (entry.Source is { } rawSource) &&
-                        (sourceKind is not null) &&
-                        BindingSourceComponent.TrySplit(
-                        baseSource: out var baseSource,
-                        component: out var component,
-                        source: rawSource
-                    ) &&
-                        (component is not null)
-                    ) {
-                        var baseKind = sourceKind(arg: baseSource);
+                        // An axis-COMPONENT source's vocabulary half: the BASE control (with the .x/.y suffix
+                        // parsed off — BindingProfile.Compile already refused a malformed suffix structurally) must
+                        // name a real, two-dimensional control. An unresolvable base is "unknown control name"; a
+                        // resolvable but non-Axis2D base is a distinct "malformed axis component" finding.
+                        if (
+                            (sourceKind is not null) &&
+                            BindingSourceComponent.TrySplit(
+                            baseSource: out var baseSource,
+                            component: out var component,
+                            source: rawSource
+                        ) &&
+                            (component is not null)
+                        ) {
+                            var baseKind = sourceKind(arg: baseSource);
 
-                        if (baseKind is null) {
-                            errors.Add(item: $"page \"{page.Id}\" binds {rawSource} to an axis component, but \"{baseSource}\" names unknown control");
-                        } else if (baseKind != CommandValueKind.Axis2D) {
-                            errors.Add(item: $"page \"{page.Id}\" binds {rawSource} to an axis component, but \"{baseSource}\" is not a two-dimensional axis control");
+                            if (baseKind is null) {
+                                errors.Add(item: $"page \"{page.Id}\" binds {rawSource} to an axis component, but \"{baseSource}\" names unknown control");
+                            } else if (baseKind != CommandValueKind.Axis2D) {
+                                errors.Add(item: $"page \"{page.Id}\" binds {rawSource} to an axis component, but \"{baseSource}\" is not a two-dimensional axis control");
+                            }
                         }
                     }
 
@@ -209,36 +212,53 @@ public static class BindingVocabularyCheck {
                         continue;
                     }
 
-                    var dispatched = (entry.Value?.Kind ?? ((entry.Activator is not null)
+                    // A constant Value or an activator's synthesized press value dispatches the SAME kind
+                    // regardless of which source triggers the row, so one check suffices; an ordinary sourced row's
+                    // dispatched kind is each source's OWN declared kind, checked per source so a row combining
+                    // sources of different physical kinds is caught.
+                    if (
+                        (entry.Value?.Kind ?? ((entry.Activator is not null)
                         ? CompiledBindingProfile.PressValue(
                             channelScale: null,
                             explicitValue: null
                         ).Kind
-                        : ((entry.Source is { } sourceForKind)
-                            ? sourceKind?.Invoke(arg: sourceForKind)
-                            : null)));
-
-                    CheckCommand(
-                        command: command,
-                        commandName: entry.Command,
-                        dispatched: dispatched,
-                        errors: errors,
-                        unknownError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which names no registered command",
-                        unbindableError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which is not bindable",
-                        mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared)}"
-                    );
+                        : (CommandValueKind?)null)) is { } fixedDispatch
+                    ) {
+                        CheckCommand(
+                            command: command,
+                            commandName: entry.Command,
+                            dispatched: fixedDispatch,
+                            errors: errors,
+                            unknownError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which names no registered command",
+                            unbindableError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which is not bindable",
+                            mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {label} to \"{entry.Command}\", which takes {Word(kind: declared)}"
+                        );
+                    } else {
+                        foreach (var dispatchSource in (entry.Sources ?? [])) {
+                            CheckCommand(
+                                command: command,
+                                commandName: entry.Command,
+                                dispatched: sourceKind?.Invoke(arg: dispatchSource),
+                                errors: errors,
+                                unknownError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which names no registered command",
+                                unbindableError: $"page \"{page.Id}\" binds {label} to \"{entry.Command}\", which is not bindable",
+                                mismatchError: (actual, declared) => $"page \"{page.Id}\" sends {Word(kind: actual)} from {dispatchSource} to \"{entry.Command}\", which takes {Word(kind: declared)}"
+                            );
+                        }
+                    }
                 }
             }
 
-            foreach (var chordSource in (row.Chord ?? [])) {
+            foreach (var member in row.Members) {
                 if (
-                    !string.IsNullOrEmpty(value: chordSource) &&
-                    !(sourceAddressable?.Invoke(arg: chordSource) ?? true)
+                    !string.IsNullOrEmpty(value: member) &&
+                    !declaredModifierIds.Contains(item: member) &&
+                    !(sourceAddressable?.Invoke(arg: member) ?? true)
                 ) {
-                    errors.Add(item: $"chord [{string.Join(
+                    errors.Add(item: $"row [{string.Join(
                         separator: '+',
-                        values: (row.Chord ?? [])
-                    )}] (group \"{row.Group}\") names unaddressable control \"{chordSource}\"");
+                        values: row.Members
+                    )}] (group \"{row.Group}\") names \"{member}\", which is neither a declared modifier nor an addressable control");
                 }
             }
 
@@ -249,9 +269,9 @@ public static class BindingVocabularyCheck {
                         channelBinary: channelBinary,
                         channelExists: channel,
                         errors: errors,
-                        prefix: $"chord [{string.Join(
+                        prefix: $"row [{string.Join(
                             separator: '+',
-                            values: (row.Chord ?? [])
+                            values: row.Members
                         )}] (group \"{row.Group}\") folds into channel",
                         scale: chordCommand.Scale
                     );
@@ -266,9 +286,9 @@ public static class BindingVocabularyCheck {
                     continue;
                 }
 
-                var chordLabel = $"chord [{string.Join(
+                var chordLabel = $"row [{string.Join(
                     separator: '+',
-                    values: (row.Chord ?? [])
+                    values: row.Members
                 )}] (group \"{row.Group}\")";
                 // A command-meaning chord (a channel one continues above) dispatches the same press value
                 // BindingProfile.Compile builds; validate the kind it will actually send.

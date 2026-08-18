@@ -6,7 +6,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// exercises the same fork seam that a two-machine link co-simulation and rollback rely on — an independent machine from
 /// a common point that stays in lock-step under identical input.
 /// </summary>
-internal sealed class ForkDeterminismStage : IPostStage {
+internal sealed class ForkDeterminismStage : IPostStage<PostContext> {
     private const int TailFrames = 200;
     private const int WarmFrames = 200;
 

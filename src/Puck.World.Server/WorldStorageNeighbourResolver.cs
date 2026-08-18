@@ -4,14 +4,25 @@ using Puck.Storage;
 
 namespace Puck.World.Server;
 
+/// <summary>Which of <see cref="WorldOwnedWorldSync"/>'s two blob namespaces a <see cref="WorldStorageNeighbourResolver"/>
+/// addresses a resolved neighbour under.</summary>
+public enum WorldStorageNamespace {
+    /// <summary>The owned-worlds catalog namespace (<see cref="WorldOwnedWorldSync.AddressFor"/>) — a neighbour may
+    /// carry a basis chain.</summary>
+    Worlds,
+
+    /// <summary>The hosted-world namespace (<see cref="WorldOwnedWorldSync.HostedAddressFor"/>) — a neighbour is
+    /// always stored already composed.</summary>
+    Hosted,
+}
 /// <summary>
 /// The cloud-backed <see cref="IWorldNeighbourResolver"/> — reads a named neighbour's document as an ordinary blob
-/// read, reusing <see cref="WorldOwnedWorldSync"/>'s own address shape (the same <see cref="WorldOwnedWorldSync.WorldsNamespace"/>
-/// prefix, quoted rather than duplicated) instead of inventing a second resolution mechanism. A
-/// <see cref="WorldReference.Document"/> value must be the canonical file name emitted for a
-/// <see cref="WorldSafeName"/>-shaped owned-world id. The resolver parses that id and calls
-/// <see cref="WorldOwnedWorldSync.AddressFor"/>, so a reader cannot drift from the writer's encoding or reach an
-/// object the owned-world writer could never have produced.
+/// read, reusing <see cref="WorldOwnedWorldSync"/>'s own address shape (the same namespace prefix, quoted rather than
+/// duplicated) instead of inventing a second resolution mechanism. A <see cref="WorldReference.Document"/> value must
+/// be the canonical file name emitted for a <see cref="WorldSafeName"/>-shaped world id. The resolver parses that id
+/// and calls <see cref="WorldOwnedWorldSync.AddressFor"/> or <see cref="WorldOwnedWorldSync.HostedAddressFor"/>
+/// (selected by <see cref="WorldStorageNamespace"/>), so a reader cannot drift from the writer's encoding or reach an
+/// object the writer could never have produced.
 /// </summary>
 /// <remarks>
 /// Read-only, by design: this resolver never adopts, never tracks a version token, and never writes — it exists only
@@ -28,6 +39,7 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);
 
     private readonly Guid m_containerId;
+    private readonly WorldStorageNamespace m_namespace;
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
 
@@ -35,12 +47,14 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
     /// <param name="store">The blob store.</param>
     /// <param name="target">The storage target (the per-user cloud endpoint).</param>
     /// <param name="containerId">The per-user container id the identity resolver produced.</param>
+    /// <param name="namespace">Which of the two blob namespaces to address a resolved neighbour under.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
-    public WorldStorageNeighbourResolver(IObjectBlobStore store, ObjectStorageTarget target, Guid containerId) {
+    public WorldStorageNeighbourResolver(IObjectBlobStore store, ObjectStorageTarget target, Guid containerId, WorldStorageNamespace @namespace = WorldStorageNamespace.Worlds) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
 
         m_containerId = containerId;
+        m_namespace = @namespace;
         m_store = store;
         m_target = target;
     }
@@ -75,9 +89,16 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: $"document '{document}' is not a canonical owned-world file name — {nameReason}");
         }
 
-        var address = WorldOwnedWorldSync.AddressFor(
-            containerId: m_containerId,
-            id: id
+        var address = ((m_namespace == WorldStorageNamespace.Hosted)
+            ? WorldOwnedWorldSync.HostedAddressFor(
+                containerId: m_containerId,
+                leaf: "definition.json",
+                world: id
+            )
+            : WorldOwnedWorldSync.AddressFor(
+                containerId: m_containerId,
+                id: id
+            )
         );
 
         ObjectBlobContent? content;

@@ -13,12 +13,20 @@ internal sealed class EmptyHidDeviceSource : IHidDeviceSource {
     public IEnumerable<HidDeviceInfo> EnumerateInterfaces() => [];
     public IHidDevice? Open(string devicePath) => null;
 }
+/// <summary>
+/// An in-memory HID transport. Reads honor the <see cref="IHidDevice"/> contract: a report enqueued while a
+/// read is pending completes that read, and a timed read returns zero only once its timeout elapses. A test that
+/// must order its observations against the device's silence watchdog holds read timeouts, which keeps every
+/// timed read pending until a report arrives or the hold is released.
+/// </summary>
 internal sealed class TestHidDevice : IHidDevice {
     private readonly TaskCompletionSource m_disposedSignal = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ConcurrentQueue<byte[]> m_reports = new();
 
     private int m_activeReads;
     private bool m_disposed;
+    private TaskCompletionSource? m_readTimeoutHold;
+    private TaskCompletionSource m_reportArrived = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
     public string DevicePath { get; init; } = "test:hid";
 
@@ -39,7 +47,21 @@ internal sealed class TestHidDevice : IHidDevice {
     public List<byte[]> Writes { get; } = [];
     public List<byte[]> FeatureWrites { get; } = [];
 
-    public void EnqueueReport(params byte[] report) => m_reports.Enqueue(item: report);
+    public void EnqueueReport(params byte[] report) {
+        m_reports.Enqueue(item: report);
+        // Publish the arrival after the enqueue: a reader that snapshotted the previous pulse before probing the
+        // queue either dequeues this report or is woken by this completion, never neither.
+        _ = Interlocked.Exchange(
+            location1: ref m_reportArrived,
+            value: new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously)
+        ).TrySetResult();
+    }
+    /// <summary>Keeps timed reads pending until a report arrives or <see cref="ReleaseReadTimeouts"/> runs.</summary>
+    public void HoldReadTimeouts() =>
+        m_readTimeoutHold ??= new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+    /// <summary>Lets pending and future timed reads expire after their timeout again.</summary>
+    public void ReleaseReadTimeouts() =>
+        _ = Interlocked.Exchange(location1: ref m_readTimeoutHold, value: null)?.TrySetResult();
     public ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken) =>
         ReadCoreAsync(buffer: buffer, cancellationToken: cancellationToken, timeoutInMilliseconds: null);
     public ValueTask<int> ReadAsync(
@@ -49,6 +71,13 @@ internal sealed class TestHidDevice : IHidDevice {
         CancellationToken cancellationToken = default
     ) => ReadCoreAsync(buffer: buffer, cancellationToken: cancellationToken, timeoutInMilliseconds: timeoutInMilliseconds);
 
+    private async Task ExpireAsync(int timeoutInMilliseconds, CancellationToken cancellationToken) {
+        if (Volatile.Read(location: ref m_readTimeoutHold) is { } hold) {
+            await hold.Task.WaitAsync(cancellationToken: cancellationToken);
+        }
+
+        await Task.Delay(cancellationToken: cancellationToken, millisecondsDelay: timeoutInMilliseconds);
+    }
     private async ValueTask<int> ReadCoreAsync(Memory<byte> buffer, int? timeoutInMilliseconds, CancellationToken cancellationToken) {
         _ = Interlocked.Increment(location: ref m_activeReads);
         _ = ReadEntered.TrySetResult();
@@ -60,21 +89,31 @@ internal sealed class TestHidDevice : IHidDevice {
                 return 0;
             }
 
-            if (m_reports.TryDequeue(result: out var report)) {
-                report.CopyTo(destination: buffer);
+            var expiry = ((timeoutInMilliseconds is { } timeout)
+                ? ExpireAsync(cancellationToken: cancellationToken, timeoutInMilliseconds: timeout)
+                : null
+            );
 
-                return report.Length;
+            while (true) {
+                // Snapshot the arrival pulse before probing the queue so an enqueue between the probe and the
+                // await still wakes this read.
+                var arrival = Volatile.Read(location: ref m_reportArrived).Task;
+
+                if (m_reports.TryDequeue(result: out var report)) {
+                    report.CopyTo(destination: buffer);
+
+                    return report.Length;
+                }
+
+                if (expiry is null) {
+                    await arrival.WaitAsync(cancellationToken: cancellationToken);
+                } else if (expiry == await Task.WhenAny(arrival, expiry)) {
+                    // Propagates cancellation the way a timed delay does.
+                    await expiry;
+
+                    return 0;
+                }
             }
-
-            if (timeoutInMilliseconds is { } timeout) {
-                await Task.Delay(cancellationToken: cancellationToken, millisecondsDelay: timeout);
-
-                return 0;
-            }
-
-            await Task.Delay(cancellationToken: cancellationToken, millisecondsDelay: Timeout.Infinite);
-
-            return 0;
         } finally {
             _ = Interlocked.Decrement(location: ref m_activeReads);
         }

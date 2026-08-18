@@ -1,6 +1,8 @@
 {
-  "description": "The contact-solver tuning (see WorldCollision) \u2014 it affects the simulation.",
-  "type": "object",
+  "type": [
+    "object",
+    "null"
+  ],
   "properties": {
     "requirements": {
       "description": "The contact qualities the world requires. An empty list permits analytic primitive contact; any declared requirement selects the SDF field.",
@@ -37,5 +39,6 @@
     "maxSlopeDegrees",
     "gradientProbe"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "default": null
 }

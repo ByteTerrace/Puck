@@ -1,0 +1,43 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "null-seat",
+  "population": { "localSeats": 1 },
+  "bodyMotionPrograms": [
+    {
+      "name": "traverse",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "ApplyVerticalGravity",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": [
+    {
+      "name": "stander",
+      "bodyMotionProgram": "traverse",
+      "motion": {
+        "$type": "grounded",
+        "moveSpeed": 4,
+        "turnSpeed": 2.5,
+        "riseGravity": 28,
+        "fallGravity": 46,
+        "maxFallSpeed": 40,
+        "response": [],
+        "sprintMultiplier": 1
+      },
+      "collider": {
+        "$type": "sphere",
+        "radius": 0.5
+      },
+      "bodyContact": "Solid"
+    }
+  ],
+  "defaultSeatKit": "stander"
+}

@@ -26,15 +26,15 @@ public sealed class MarketPartyAuthorityLawTests {
 
         // The attack: seat1 (Attacker) lists seat0's (Victim's) apples, naming itself as Principal and Victim as Seller.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Attacker,
-            Seller: Victim,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 3,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Attacker,
+            Quantity: 3,
+            Seller: Victim,
+            StartPrice: 5
         ));
         fixture.Step();
 
@@ -43,15 +43,15 @@ public sealed class MarketPartyAuthorityLawTests {
 
         // Control 1: the victim acting for themselves succeeds.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Victim,
-            Seller: Victim,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 3,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Victim,
+            Quantity: 3,
+            Seller: Victim,
+            StartPrice: 5
         ));
         fixture.Step();
 
@@ -84,15 +84,15 @@ public sealed class MarketPartyAuthorityLawTests {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Victim,
-            Seller: Victim,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 3,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MinDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MinDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Victim,
+            Quantity: 3,
+            Seller: Victim,
+            StartPrice: 5
         ));
         fixture.Step();
 
@@ -100,14 +100,14 @@ public sealed class MarketPartyAuthorityLawTests {
         var goldBefore = MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: ThirdParty);
 
         // The attack: seat1 (Attacker) bids as seat2 (ThirdParty) against the listing.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Attacker, Bidder: ThirdParty, ListingId: listingId, Amount: 10));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 10, Bidder: ThirdParty, ListingId: listingId, Principal: Attacker));
         fixture.Step();
 
         Assert.Equal(expected: 0L, actual: MarketFixtures.FindListing(definition: fixture.Server.Definition, id: listingId)!.CurrentBid);
         Assert.Equal(expected: goldBefore, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: ThirdParty));
 
         // Control 1: the third party bidding for themselves succeeds.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: ThirdParty, Bidder: ThirdParty, ListingId: listingId, Amount: 10));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 10, Bidder: ThirdParty, ListingId: listingId, Principal: ThirdParty));
         fixture.Step();
 
         Assert.Equal(expected: 10L, actual: MarketFixtures.FindListing(definition: fixture.Server.Definition, id: listingId)!.CurrentBid);
@@ -125,22 +125,22 @@ public sealed class MarketPartyAuthorityLawTests {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Victim,
-            Seller: Victim,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 3,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.Buyout,
-            StartPrice: 0,
             BuyoutPrice: 30,
-            DurationSeconds: MarketFixtures.MaxDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MaxDurationSeconds,
+            Format: WorldMarketFormat.Buyout,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Victim,
+            Quantity: 3,
+            Seller: Victim,
+            StartPrice: 0
         ));
         fixture.Step();
 
         var goldBefore = MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: ThirdParty);
 
         // The attack: seat1 (Attacker) buys out as seat2 (ThirdParty).
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.BuyoutMarketListing(Principal: Attacker, Buyer: ThirdParty, ListingId: 1));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.BuyoutMarketListing(Buyer: ThirdParty, ListingId: 1, Principal: Attacker));
         fixture.Step();
 
         Assert.Equal(expected: WorldMarketListingStatus.Active, actual: MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1)!.Status);
@@ -158,29 +158,29 @@ public sealed class MarketPartyAuthorityLawTests {
         using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Victim,
-            Seller: Victim,
-            ItemRow: MarketFixtures.AppleRow,
-            Quantity: 4,
-            CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English,
-            StartPrice: 5,
             BuyoutPrice: null,
-            DurationSeconds: MarketFixtures.MaxDurationSeconds
+            CurrencyRow: MarketFixtures.GoldRow,
+            DurationSeconds: MarketFixtures.MaxDurationSeconds,
+            Format: WorldMarketFormat.English,
+            ItemRow: MarketFixtures.AppleRow,
+            Principal: Victim,
+            Quantity: 4,
+            Seller: Victim,
+            StartPrice: 5
         ));
         fixture.Step();
 
         var applesEscrowed = MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.AppleRow, principal: Victim);
 
         // The attack: seat1 (Attacker) cancels naming seat0 (Victim, the real seller) as Canceler.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Principal: Attacker, Canceler: Victim, ListingId: 1));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Canceler: Victim, ListingId: 1, Principal: Attacker));
         fixture.Step();
 
         Assert.Equal(expected: WorldMarketListingStatus.Active, actual: MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1)!.Status);
         Assert.Equal(expected: applesEscrowed, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.AppleRow, principal: Victim));
 
         // Control: the victim (the real seller) cancelling for themselves succeeds.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Principal: Victim, Canceler: Victim, ListingId: 1));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CancelMarketListing(Canceler: Victim, ListingId: 1, Principal: Victim));
         fixture.Step();
 
         Assert.Equal(expected: WorldMarketListingStatus.Cancelled, actual: MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1)!.Status);

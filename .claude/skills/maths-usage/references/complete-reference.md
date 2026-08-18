@@ -27,7 +27,7 @@ simulation value path with binary fixed-point scalars, vectors, rotations and
 world positions; reproducible randomness that can be saved mid-sequence and
 resumed; exact finite fields; exact integer and real-quadratic arithmetic; and a
 presented-algebra tier for graph, lattice and language questions. It is
-organized as **seven wings** — one folder and one README each — plus a set of
+organized as **eight wings** — one folder and one README each — plus a set of
 root-level types. The **human** entry point (prose, worked examples, the full
 root catalogue) is
 [src/Puck.Maths/README.md](../../../../src/Puck.Maths/README.md); this file is the
@@ -42,6 +42,7 @@ agent's.
 | Grids and index spaces — hex cells, tile/chunk order, rings and shells, an exact 2×2 integer transform | [Geometry](../../../../src/Puck.Maths/Geometry/README.md) | `HexagonalCoordinate`, `HilbertCurve`, `LayerSequence`, `ModularTransform` | "At a glance" |
 | The subject is a graph, a lattice, a language or a finite structure rather than a number — reachability, convolution and inversion, pattern matching, homology, group orbits | [Oracle](../../../../src/Puck.Maths/Oracle/README.md) | One presented-algebra product over swappable materials: `Presentations`, `PresentedAlgebra`, `DivisibilityAlgebra`, `TokenPattern`/`PatternMatcher`, `ExteriorCalculus`/`IntegerHomology`, `ReflectionSystem`/`PresentedGroup` | "Choosing an entry point", then "Contracts every consumer inherits" |
 | An exploratory or open-problem question — continued-fraction tails, Sturmian and quasicrystal words, Fibonacci and metallic means, real-quadratic orders | [Research](../../../../src/Puck.Maths/Research/README.md) | Exact, certificate-bearing, off the hot path; a budget-exhausted search (`SearchLimitReached`) is never conflated with a proof or a counterexample | "At a glance" — and the namespace split stated above it |
+| A frequency-domain transform, or an exact cyclic convolution | [Transforms](../../../../src/Puck.Maths/Transforms/README.md) | `NumberTheoreticTransform`/`NttPlan` (exact, over `PrimeField64`), `FixedFourierTransform`/`FixedFourierPlan` (fixed-point, over `FixedComplex`) | "At a glance" |
 | A per-tick state hash, an exact allocation over intervals, bucket routing, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `QuadraticSurd`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [the root README](../../../../src/Puck.Maths/README.md) — "The root-level catalogue", then "Integer routines" |
 
 **Depth lives in the wing READMEs**, and this skill never restates their

@@ -168,13 +168,13 @@ public static class InputSources {
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string MiddleButton = "mouse.button3";
         /// <summary>Relative mouse motion in device units.</summary>
-        [InputSourceValue(kind: CommandValueKind.Axis2D)]
+        [InputSourceValue(kind: CommandValueKind.Axis2D, Relative = true)]
         public const string Motion = "mouse.motion";
         /// <summary>The right mouse button (button 2).</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string RightButton = "mouse.button2";
         /// <summary>Wheel motion in notches: X is horizontal and Y is vertical.</summary>
-        [InputSourceValue(kind: CommandValueKind.Axis2D)]
+        [InputSourceValue(kind: CommandValueKind.Axis2D, Relative = true)]
         public const string Wheel = "mouse.wheel";
 
         /// <summary>Gets the source id for a numbered mouse button.</summary>
@@ -201,7 +201,8 @@ public static class InputSources {
     /// three-dimensional axis (angular velocity), and the fused pose an orientation.
     /// </summary>
     public static class Gamepad {
-        /// <summary>The three-dimensional acceleration signal. See <see cref="Gyro"/>'s remarks on why its kind alone makes it unaddressable.</summary>
+        /// <summary>The three-dimensional acceleration signal. Native bindings can address the full value; an
+        /// addon's two-lane input record cannot.</summary>
         [InputSourceValue(kind: CommandValueKind.Axis3D)]
         public const string Accelerometer = "gamepad.accelerometer";
         /// <summary>The back, select, or create button.</summary>
@@ -235,9 +236,9 @@ public static class InputSources {
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string Guide = "gamepad.guide";
         /// <summary>
-        /// The three-dimensional angular-velocity signal. Its <see cref="CommandValueKind.Axis3D"/> kind carries
-        /// one more component than an addon record's <c>(valueX, valueY)</c> pair holds, so it resolves as
-        /// unaddressable through its kind alone (see <see cref="InputSourceValueAttribute"/>'s remarks).
+        /// The three-dimensional angular-velocity signal. Native bindings carry its full
+        /// <see cref="CommandValueKind.Axis3D"/> value directly; an addon input act must reject it because that
+        /// record has only a <c>(valueX, valueY)</c> payload (see <see cref="InputSourceValueAttribute"/>'s remarks).
         /// </summary>
         [InputSourceValue(kind: CommandValueKind.Axis3D)]
         public const string Gyro = "gamepad.gyro";
@@ -262,7 +263,8 @@ public static class InputSources {
         /// <summary>The microphone mute button.</summary>
         [InputSourceValue(kind: CommandValueKind.Digital)]
         public const string Mute = "gamepad.mute";
-        /// <summary>The fused device orientation. Its <see cref="CommandValueKind.Orientation"/> kind carries a whole quaternion, so it too resolves as unaddressable through its kind alone.</summary>
+        /// <summary>The fused device orientation. Native bindings carry the quaternion directly; an addon's
+        /// two-lane input record cannot.</summary>
         [InputSourceValue(kind: CommandValueKind.Orientation)]
         public const string Orientation = "gamepad.orientation";
         /// <summary>The Quick Access Menu (QAM) button (Steam Controller Triton).</summary>

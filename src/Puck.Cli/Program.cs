@@ -5,11 +5,14 @@ using Puck.Cli.Architecture;
 using Puck.Cli.Bench;
 using Puck.Cli.Canary;
 using Puck.Cli.Citations;
+using Puck.Cli.DocLinks;
 using Puck.Cli.Format;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Landing;
+using Puck.Cli.Lengths;
 using Puck.Cli.Packaging;
 using Puck.Cli.Parity;
+using Puck.Cli.PublishRelease;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
 using Puck.Cli.Search;
@@ -30,11 +33,14 @@ return args switch {
     ["canary", .. var canaryArgs] => CanaryCommand.Run(args: canaryArgs),
     ["citations", .. var citationsArgs] => CitationsCommand.Run(args: citationsArgs),
     ["declarations", .. var declarationsArgs] => DeclarationsCommand.Run(args: declarationsArgs),
+    ["doc-links", .. var docLinksArgs] => DocLinksCommand.Run(args: docLinksArgs),
     ["format", .. var formatArgs] => FormatCommand.Run(args: formatArgs),
     ["font-atlas", .. var fontAtlasArgs] => FontAtlasCommand.Run(args: fontAtlasArgs),
     ["landing", .. var landingArgs] => LandingCommand.Run(args: landingArgs),
+    ["lengths", .. var lengthsArgs] => LengthsCommand.Run(args: lengthsArgs),
     ["packages", .. var packagesArgs] => PackagesCommand.Run(args: packagesArgs),
     ["parity", .. var parityArgs] => ParityCommand.Run(args: parityArgs),
+    ["publish", .. var publishArgs] => PublishCommand.Run(args: publishArgs),
     ["references", .. var referencesArgs] => ReferencesCommand.Run(args: referencesArgs),
     ["scan", .. var scanArgs] => ScanCommand.Run(args: scanArgs),
     ["schema", .. var schemaArgs] => SchemaCommand.Run(args: schemaArgs),
@@ -57,11 +63,14 @@ static int Usage() {
               canary        run bounded positive-and-discriminating Puck.World proofs
               citations     cited verb tokens checked against vocabularies swept from the code
               declarations  declaration inventory read off the parsed syntax, no build
+              doc-links     relative markdown link and cited repository path check
               format        source rewriters for conventions .editorconfig cannot express
               font-atlas    managed OpenType font/collection to SDF atlas generation
               landing       refuse a commit that drops a landing you never worked from
+              lengths       the file-length ledger FileLengthAnalyzer reads: --check or --write
               packages      published ByteTerrace.Puck.* NuGet package report, id/description/tags
               parity        cross-backend composed-frame comparison against the real Puck.World
+              publish       write an unsigned puck.release.v1 release-source tree from a built RID's output
               references    references, implementers and overrides of a symbol, solution-wide
               scan          source sweep: comments, comment smells, locks, clones
               schema        generated JSON Schema for puck.world.def.v1, checked and regenerated

@@ -22,31 +22,31 @@ namespace Puck.World;
 /// camera verbs are presentation-only and stay Immediate.</remarks>
 internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSession session, WorldSeatBindings seatBindings, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldWorkbench workbench) : ICommandModule {
     /// <summary>The rise channel (Right Shoulder, both edges) — held vertical ascent while flying.</summary>
-    public const string AscendCommand = "editor.ascend";
+    public const string AscendCommand = Puck.World.Client.EditorCommandNames.AscendCommand;
     /// <summary>The camera-mode act: <c>editor.camera [fly|orbit]</c>. Bound with no argument on the editor base
     /// page's South (toggles fly ⇄ orbit); bound with a constant Axis1D value on the camera page's South (fly, +1)
     /// and West (orbit, -1) for the explicit selection; typed with a literal <c>fly</c>/<c>orbit</c> token for the
     /// same explicit selection, or with none at all to toggle.</summary>
-    public const string CameraToggleCommand = "editor.camera";
+    public const string CameraToggleCommand = Puck.World.Client.EditorCommandNames.CameraToggleCommand;
     /// <summary>The sink channel (Left Shoulder, both edges) — held vertical descent while flying.</summary>
-    public const string DescendCommand = "editor.descend";
+    public const string DescendCommand = Puck.World.Client.EditorCommandNames.DescendCommand;
     /// <summary>The mode entry act — bound on the default page (Gamepad Back), committed by the play wheel's
     /// Editor sector (hold Tab), and typed as <c>editor.enter [seat]</c>.</summary>
-    public const string EnterCommand = "editor.enter";
+    public const string EnterCommand = Puck.World.Client.EditorCommandNames.EnterCommand;
     /// <summary>The mode exit act — bound on the editor base page (East / Back), committed by the editor wheel's
     /// Exit sector (hold Tab), and typed as <c>editor.exit [seat]</c>.</summary>
-    public const string ExitCommand = "editor.exit";
+    public const string ExitCommand = Puck.World.Client.EditorCommandNames.ExitCommand;
     /// <summary>The Axis2D command the editor pages bind the right stick to (+X looks right, +Y looks up). Same
     /// routing contract as <see cref="MoveCommand"/>.</summary>
-    public const string LookCommand = "editor.stick.look";
+    public const string LookCommand = Puck.World.Client.EditorCommandNames.LookCommand;
     /// <summary>The Axis2D command the editor pages bind the left stick to (+Y flies forward, +X strafes right) —
     /// routed into the editing seat's camera; not meant to be typed.</summary>
-    public const string MoveCommand = "editor.stick.move";
+    public const string MoveCommand = Puck.World.Client.EditorCommandNames.MoveCommand;
     /// <summary>The speed verb: <c>editor.cam.speed &lt;unitsPerSecond|faster|slower&gt;</c>. D-pad Up/Down on the
     /// editor pages bind it with a constant Axis1D value (+1 faster, -1 slower) in place of an argument.</summary>
-    public const string SpeedCommand = "editor.cam.speed";
+    public const string SpeedCommand = Puck.World.Client.EditorCommandNames.SpeedCommand;
     /// <summary>The mode read-back — bound on the editor base page (West) and typed as <c>editor.status [seat]</c>.</summary>
-    public const string StatusCommand = "editor.status";
+    public const string StatusCommand = Puck.World.Client.EditorCommandNames.StatusCommand;
 
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldEditorSession m_session = session;
@@ -89,13 +89,13 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
     /// a bound dispatch's constant value: a step-twin binding row folds onto an argument-bearing verb by carrying
     /// <c>CommandValue.Axis(+1)</c>/<c>Axis(-1)</c> in place of an argument (the mechanism behind every
     /// <c>.next</c>/<c>.prev</c>/<c>.up</c>/<c>.down</c>/<c>.grow</c>/<c>.shrink</c> twin killed in this wave — see
-    /// <c>editor.select</c>, <c>editor.sculpt.select/scale/material/frame/smooth</c>). Every such verb declares
+    /// <c>editor.select</c>, <c>editor.sculpt.select/scale/material/blend/primitive/frame</c>). Every such verb declares
     /// <c>valueKind: CommandValueKind.Axis1D</c> at registration (see <see cref="CommandDefinition.WithWireArgs"/>'s
     /// doctrine comment) so <see cref="BindingVocabularyCheck"/> admits the row — which means
     /// <see cref="CommandContext.Value"/>'s kind can no longer discriminate bound from typed (the text path's own
     /// impulse value now reads Axis1D too). The discriminator is <see cref="CommandContext.Source"/> instead — the
-    /// provider-neutral physical source id, non-null only for a real bound dispatch, documented null for every text
-    /// path. Internal — every sibling sculpt module shares this fold.</summary>
+    /// deterministic physical or synthesized binding owner, documented null for every text path. Internal — every
+    /// sibling sculpt module shares this fold.</summary>
     /// <param name="context">The invocation context (its <see cref="CommandContext.Value"/> carries the bound constant
     /// when <see cref="CommandContext.Source"/> is non-null).</param>
     /// <param name="args">The verb args.</param>
@@ -288,7 +288,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             EditorModeOutcome.Applied => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} editing — group editor, sticks fly, LT camera page, East/Back exits]"),
             EditorModeOutcome.AlreadyThere => new CommandResult(Output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is already editing]"),
             EditorModeOutcome.Pending => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is pending — confirm an identity first (South/Enter or player.identity)]"),
-            EditorModeOutcome.NoBindingGroup => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)}'s profile declares no '{WorldEditorBindings.GroupId}' binding group, so editor verbs would resolve against the play page — the mode was NOT entered]"),
+            EditorModeOutcome.NoBindingGroup => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)}'s document maps no group to the {WorldContextFamilies.Editor}={WorldContextFamilies.EditorEditing} context, so editor verbs would resolve against the play page — the mode was NOT entered]"),
             // Every outcome is named individually — a catch-all reporting a fixed reason would announce a future new
             // outcome under someone else's cause, and a refusal naming the wrong cause is worse than silence.
             EditorModeOutcome.NotJoined => CommandResult.Error(output: $"[editor.enter: seat {PlayerRoster.DisplayNumber(slot: slot)} is not joined — see world.players]"),
@@ -646,6 +646,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             name: AscendCommand,
             description: "Holds the editing seat's vertical RISE channel while its button is down (Right Shoulder, both edges). A held control, not a typed verb — script the camera with editor.cam.pose.",
             valueKind: CommandValueKind.Digital,
+            held: true,
             handler: context => VerticalHandler(
                 ascend: true,
                 context: context,
@@ -657,6 +658,7 @@ internal sealed class EditorCommandModule(PlayerRoster roster, WorldEditorSessio
             name: DescendCommand,
             description: "Holds the editing seat's vertical SINK channel while its button is down (Left Shoulder, both edges). A held control, not a typed verb — script the camera with editor.cam.pose.",
             valueKind: CommandValueKind.Digital,
+            held: true,
             handler: context => VerticalHandler(
                 ascend: false,
                 context: context,

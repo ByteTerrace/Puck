@@ -1,0 +1,51 @@
+{
+  "id": "addon-mutation-seam",
+  "title": "A granted verb-masked guest mutates the HUD, chained, and closes boot-anchored replay arming",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 10,
+  "timeoutSeconds": 25,
+  "binding": "The positive leg grants addon:hudbuilder a verb-masked mutate over section:hud on a world that mounts the real compiled hudbuilder guest; the guest asks for the handle, submits UpsertHudPanel, reads back Applied, then submits a chained UpsertHudElement, and world.hud reflects both. Boot-anchored replay arming then refuses because the addon has pumped. The discriminating leg boots a world with no addon mounted at all, so nothing ever pumps, no grant is ever issued, and replay.record instead succeeds.",
+  "fixtures": [],
+  "positive": {
+    "world": "wasm/puck-addon-hudbuilder/worlds/hudbuilder-world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.grant", "occurrence": 1, "outcome": "accepted", "stream": "stderr" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.hud", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.addons", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "replay.record", "occurrence": 1, "outcome": "refused" },
+      { "verb": "replay.status", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the verb-masked grant is confirmed, named, on stderr", "stream": "stderr", "match": "exact", "text": "[world.grant: addon:hudbuilder mutate section:hud]", "present": true },
+      { "type": "line", "name": "the first act applies", "stream": "stderr", "match": "exact", "text": "[world.mutation: UpsertHudPanel 'hudbuilder' applied]", "present": true },
+      { "type": "line", "name": "the chained second act applies only after reading back Applied", "stream": "stderr", "match": "exact", "text": "[world.mutation: UpsertHudElement 'hudbuilder'.'line2' applied]", "present": true },
+      { "type": "line", "name": "world.hud reads back the panel the guest built", "stream": "stdout", "match": "contains", "text": "world.hud.panel 'hudbuilder' layer=over style=panel", "present": true },
+      { "type": "line", "name": "both elements landed on the same panel", "stream": "stdout", "match": "contains", "text": "elements=2/24", "present": true },
+      { "type": "line", "name": "replay.record refuses to arm once the guest has pumped", "stream": "stderr", "match": "contains", "text": "refused to arm — an addon has already had an admitted execution attempted", "present": true },
+      { "type": "line", "name": "the refused arm leaves the tape idle", "stream": "stdout", "match": "exact", "text": "[replay.status: idle]", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.hud", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.addons", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "replay.record", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "replay.status", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "no addon is mounted", "stream": "stdout", "match": "exact", "text": "[world.addons: no addons]", "present": true },
+      { "type": "line", "name": "no panel exists", "stream": "stdout", "match": "contains", "text": "panels 0/", "present": true },
+      { "type": "line", "name": "with nothing ever pumped, replay.record arms cleanly", "stream": "stdout", "match": "contains", "text": "[replay.record: recording 'seamphase2disc'", "present": true },
+      { "type": "line", "name": "the tape is genuinely armed", "stream": "stdout", "match": "contains", "text": "[replay.status: recording 'seamphase2disc'", "present": true },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

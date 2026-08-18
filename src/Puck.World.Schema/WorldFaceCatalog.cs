@@ -71,6 +71,15 @@ public sealed class WorldFaceCatalog {
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
     private static readonly FixedQ4816 DegreesToRadians = FixedQ4816.FromDouble(value: (Math.PI / 180.0));
+    // Puck.Forge.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
+    // swap/negate, never Quaternion.CreateFromAxisAngle) — the value every author-frame shape's own rotation carries
+    // when the author declared none.
+    private static readonly Quaternion EngineFrameHalfTurn = new(
+        x: 0f,
+        y: 1f,
+        z: 0f,
+        w: 0f
+    );
     private static readonly FixedQ4816 FallbackHalfDepthFixed = FixedQ4816.FromDouble(value: FallbackHalfDepth);
     private static readonly FixedQ4816 FallbackHalfHeightFixed = FixedQ4816.FromDouble(value: FallbackHalfHeight);
     private static readonly FixedQ4816 FallbackHalfWidthFixed = FixedQ4816.FromDouble(value: FallbackHalfWidth);
@@ -162,7 +171,7 @@ public sealed class WorldFaceCatalog {
 
             foreach (var face in (creation.Document.Behavior?.Faces ?? [])) {
                 var shape = FindShape(
-                    document: creation.Document,
+                    document: creation.EngineDocument,
                     id: face.ShapeId
                 );
                 var source = (FindOverride(
@@ -233,17 +242,29 @@ public sealed class WorldFaceCatalog {
         var scale = FixedQ4816.FromDouble(value: placement.Scale);
         var yawDegrees = FixedQ4816.FromDouble(value: placement.YawDegrees);
 
-        // Authored cardinal yaw with an unrotated face has an exact axis-aligned frame. Sending those angles through
-        // pi, SinCos, quaternion rotation, and normalization introduces a small perpendicular component, so reciprocal
-        // quilt faces that occupy the same plane derive different seam points. Preserve the exact authored geometry.
+        // Authored cardinal yaw with an unrotated (or half-turned) face has an exact axis-aligned frame. Sending those
+        // angles through pi, SinCos, quaternion rotation, and normalization introduces a small perpendicular
+        // component, so reciprocal quilt faces that occupy the same plane derive different seam points. Preserve the
+        // exact authored geometry. A shape's own rotation is HalfTurn (0,1,0,0), never Identity, whenever it entered
+        // the engine through Puck.Forge.Authoring.CreationFrame — the author-frame conversion pre-multiplies every
+        // shape by exactly that quaternion, so an author's OWN unrotated shape is this exact value, not Identity, on
+        // every real creation. Both are pure Y rotations Right/Normal negate under exactly, so both stay on this path.
+        var shapeIsIdentity = ((shape is null) || shape.Rotation.Equals(other: Quaternion.Identity));
+        var shapeIsHalfTurn = ((shape is not null) && shape.Rotation.Equals(other: EngineFrameHalfTurn));
+
         if (
-            ((shape is null) || shape.Rotation.Equals(other: Quaternion.Identity)) &&
+            (shapeIsIdentity || shapeIsHalfTurn) &&
             TryCardinalBasis(
             normal: out var cardinalNormal,
             right: out var cardinalRight,
             yawDegrees: yawDegrees
         )
         ) {
+            if (shapeIsHalfTurn) {
+                cardinalNormal = -cardinalNormal;
+                cardinalRight = -cardinalRight;
+            }
+
             if (shape is null) {
                 return new WorldFaceFrame(
                     HalfDepth: FallbackHalfDepthFixed,

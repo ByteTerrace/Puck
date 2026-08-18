@@ -684,10 +684,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
             return SdfExtrude2D(
                 distance2D: SdfRoundedRectangle2D(
-                    p: point2D,
-                    halfWidth: halfWidth,
+                    cornerRadius: cornerRadius,
                     halfHeight: halfHeight,
-                    cornerRadius: cornerRadius
+                    halfWidth: halfWidth,
+                    p: point2D
                 ),
                 z: p.Z,
                 halfDepth: liftAmount
@@ -703,10 +703,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
 
         return SdfRoundedRectangle2D(
-            p: point2D,
-            halfWidth: halfWidth,
+            cornerRadius: cornerRadius,
             halfHeight: halfHeight,
-            cornerRadius: cornerRadius
+            halfWidth: halfWidth,
+            p: point2D
         );
     }
     private static FixedQ4816 SdfRoundedRectangle2D(FixedVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 cornerRadius) {

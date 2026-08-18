@@ -1,6 +1,5 @@
 using Puck.Maths;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 using Xunit;
 
@@ -24,23 +23,23 @@ public sealed class WorldFrameProducerLawTests {
         };
         var kit = sourceKit with {
             Motion = sourceMotion with { MoveFrame = MotionMoveFrame.World, FacingSnap = true },
-            Producers = new Dictionary<string, BodyProgramParameters> {
+            ProducersRaw = new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = Fixtures.TravelerWanderParameters with { Scalars = scalars },
             },
         };
         var population = document.Population with {
-            Capacity = (WorldPopulation.LocalSeatCount + 1),
+            CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1),
             NetworkPlayers = 1,
-            DefaultPeerSource = IntentSource.Producer(name: "wander"),
-            Distribution = new WorldDistribution(
-                Region: new WorldDistributionRegion.Points(Names: ["seat-2"], HalfExtent: 0f),
+            DefaultPeerSourceRaw = IntentSource.Producer(name: "wander"),
+            DistributionRaw = new WorldDistribution(
+                Region: new WorldDistributionRegion.Points(HalfExtent: 0f, Names: ["seat-2"]),
                 Fill: new WorldSequence(Name: WorldSequence.R2, Offset: 0, Step: 0f)),
         };
 
-        using var fixture = Fixtures.FreshServer(definition: document with { Kits = [kit], Population = population });
+        using var fixture = Fixtures.FreshServer(definition: document with { KitsRaw = [kit], PopulationRaw = population });
 
         Assert.Equal(expected: 1, actual: fixture.Server.Population.SetSimulatedCount(count: 1));
-        var body = fixture.Server.Population.EntryBody(index: WorldPopulation.LocalSeatCount)!;
+        var body = fixture.Server.Population.EntryBody(index: WorldPopulationLimits.LocalSeatCount)!;
         var start = body.FixedPosition;
 
         for (var tick = 0; (tick < 240); tick++) {

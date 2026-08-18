@@ -90,11 +90,11 @@ public sealed record BindingSessionResult(
                     key: effectiveCommand,
                     value: out var capture
                 )) {
-                    entries.Add(item: entry with { Source = capture.Source, });
+                    entries.Add(item: entry with { Sources = [capture.Source], });
                     _ = appliedCommands.Add(item: effectiveCommand);
                 } else if (
-                    (entry.Source is { } entrySource) &&
-                    capturedSources.Contains(item: entrySource)
+                    (entry.Sources is { Count: > 0 } entrySources) &&
+                    entrySources.Any(predicate: capturedSources.Contains)
                 ) {
                     displacedEntries.Add(item: entry);
                 } else {
@@ -110,7 +110,7 @@ public sealed record BindingSessionResult(
                         Command: capture.Command,
                         Icon: capture.Icon,
                         Label: capture.Label,
-                        Source: capture.Source
+                        Sources: [capture.Source]
                     ));
                     _ = appliedCommands.Add(item: capture.Command);
                 }

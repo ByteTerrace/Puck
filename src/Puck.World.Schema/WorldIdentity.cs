@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Forge.Authoring;
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
@@ -200,19 +201,6 @@ public sealed class WorldIdentity {
             reason: out reason
         );
     }
-    private static bool TryParseHex(string hex, out int color) {
-        color = 0;
-        return (
-            (hex is { Length: 7 }) &&
-            (hex[0] == '#') &&
-            int.TryParse(
-            s: hex.AsSpan(start: 1),
-            style: NumberStyles.HexNumber,
-            provider: CultureInfo.InvariantCulture,
-            result: out color
-        )
-        );
-    }
     private void WriteFixed(WorldCellName? slot, FixedQ4816 value) {
         if (slot is { } name) {
             WriteState(row: new WorldStateRow(
@@ -249,26 +237,14 @@ public sealed class WorldIdentity {
     /// <param name="hex">The <c>#RRGGBB</c> hex color to parse.</param>
     /// <param name="fallbackHex">The <c>#RRGGBB</c> hex color used when <paramref name="hex"/> does not parse.</param>
     /// <returns>The parsed RGB color, or a neutral gray when neither <paramref name="hex"/> nor <paramref name="fallbackHex"/> parses.</returns>
-    public static Vector3 ParseColor(string hex, string fallbackHex) {
-        var value = (TryParseHex(
-            color: out var parsed,
-            hex: hex
-        )
-            ? parsed
-            : (TryParseHex(
-                color: out var fallback,
-                hex: fallbackHex
-            )
-                ? fallback
-                : 0x808080
-        ));
-
-        return new Vector3(
-            x: (((value >> 16) & 0xff) / 255f),
-            y: (((value >> 8) & 0xff) / 255f),
-            z: ((value & 0xff) / 255f)
+    public static Vector3 ParseColor(string hex, string fallbackHex) =>
+        HexColor.Parse(
+            fallback: HexColor.Parse(
+                fallback: new Vector3(value: 0.5f),
+                value: fallbackHex
+            ),
+            value: hex
         );
-    }
     /// <summary>Mints a detached replay identity with bit-exact rates.</summary>
     /// <param name="name">The display name.</param>
     /// <param name="moveSpeed">The deterministic locomotion speed.</param>
@@ -391,6 +367,6 @@ public sealed class WorldIdentity {
             comparisonType: StringComparison.Ordinal
         )).Append(element: row).ToArray();
 
-        Document = Document with { State = state };
+        Document = Document.WithWorldState(rows: state);
     }
 }

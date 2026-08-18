@@ -22,7 +22,8 @@ public readonly record struct CommandContext {
     /// <param name="text">An optional text payload supplied by the activation.</param>
     /// <param name="registry">The registry that dispatched the invocation.</param>
     /// <param name="deviceId">The device that produced the activation, for source-driven input.</param>
-    /// <param name="source">The provider-neutral physical source that produced the activation; <see langword="null"/> for text/injected invocations with no physical control behind them.</param>
+    /// <param name="source">The deterministic binding owner: a provider-neutral physical source, or a stable
+    /// synthesized destination id for a chord or toggle. <see langword="null"/> for text/injected invocations.</param>
     /// <param name="slot">The logical player lane that owns the invocation.</param>
     /// <param name="assignedSlot">Whether this invocation's physical signal created its device-to-slot assignment.</param>
     /// <param name="principal">The identity acting through this invocation, as stamped by its ingress door.</param>
@@ -61,8 +62,8 @@ public readonly record struct CommandContext {
     /// text path.</summary>
     public InputDeviceId DeviceId { get; internal init; }
     /// <summary>How this invocation entered the command pipeline. Use this, rather than the presence of
-    /// <see cref="Source"/>, to distinguish submitted text from an authored binding: a presentation-driven or
-    /// synthesized binding has no physical source but is still a binding.</summary>
+    /// <see cref="Source"/>, to distinguish submitted text from an authored binding: a presentation-driven binding
+    /// can have no source, while a synthesized chord binding carries a logical ownership source.</summary>
     public CommandOrigin Origin { get; internal init; }
     /// <summary>The parse result when submitted text required full parsing. This is also <see langword="null"/> for
     /// wire-native text, so it describes parser work rather than command origin.</summary>
@@ -82,11 +83,12 @@ public readonly record struct CommandContext {
     /// rather than <see cref="DeviceId"/>, when choosing simulation state: device identities are local annotations
     /// and are not serialized into recordings. The immediate/text path defaults to slot <c>0</c>.</summary>
     public int Slot { get; internal init; }
-    /// <summary>The provider-neutral physical source id that produced this invocation (e.g. <c>keyboard.w</c>), or
-    /// <see langword="null"/> when no physical control is behind it. Unlike
+    /// <summary>The deterministic binding owner that produced this invocation: a provider-neutral physical source id
+    /// (e.g. <c>keyboard.w</c>) or a stable synthesized destination id for a chord or toggle. It is
+    /// <see langword="null"/> when the invocation has no binding owner. Unlike
     /// <see cref="DeviceId"/> (a per-connection identity, excluded from simulation state), this is deterministic
-    /// binding vocabulary — the field a handler reads only when it must distinguish two DIFFERENT physical controls
-    /// dispatching the SAME command (e.g. two keys bound to one channel). Use <see cref="Origin"/> for ingress.</summary>
+    /// binding vocabulary — the field a handler reads when it must distinguish independent held contributions.
+    /// Use <see cref="Origin"/> for ingress.</summary>
     public string? Source { get; internal init; }
     /// <summary>An optional text payload supplied by the activation.</summary>
     public string? Text { get; internal init; }

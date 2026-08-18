@@ -96,7 +96,9 @@ public sealed class InputRouter {
     // by. Slot and command id are the enclosing dictionary keys, so they are not repeated here.
     private readonly record struct HeldControlId(InputDeviceId Device, string Source);
     private readonly record struct HeldContribution(HeldControlId Control, CommandEntry Entry);
-    private readonly record struct ResolvedBinding(CommandBinding Binding, ushort CommandId);
+    // A toggle is owned by its logical destination rather than whichever physical control happened to flip it.
+    // Precompute that synthetic source with the binding-list lowering so the per-signal path allocates nothing.
+    private readonly record struct ResolvedBinding(CommandBinding Binding, ushort CommandId, string? ToggleSource);
     private sealed class SnapshotEntryBuffer {
         internal int Count;
         internal CommandEntry[] Items = [];
@@ -286,13 +288,37 @@ public sealed class InputRouter {
             return;
         }
 
+        var dispatch = edge.Dispatch;
+        var phase = edge.Phase;
+        var value = edge.Value;
+
+        if (edge.Mode == BindingEntryMode.Toggle) {
+            if (phase != CommandPhase.Started) {
+                return;
+            }
+
+            var latchKey = (slot, commandId);
+            var turningOn = !m_toggleLatches.GetValueOrDefault(key: latchKey);
+
+            m_toggleLatches[latchKey] = turningOn;
+            phase = (turningOn
+                ? CommandPhase.Started
+                : CommandPhase.Completed
+            );
+            dispatch = (turningOn || edge.DispatchRelease);
+            if (!turningOn) {
+                value = CommandValue.Inactive(kind: value.Kind);
+            }
+        }
+
         var entry = new CommandEntry(
             commandId: commandId,
             device: device,
-            dispatch: edge.Dispatch,
+            dispatch: dispatch,
             origin: CommandOrigin.Binding,
-            phase: edge.Phase,
-            value: edge.Value
+            phase: phase,
+            source: edge.Source,
+            value: value
         );
 
         WorkingFor(
@@ -305,7 +331,7 @@ public sealed class InputRouter {
         // scheduled one tick later), and it must not run the release-side removal either (it never marked
         // anything to remove, and nothing else's held entry should be disturbed by an edge that isn't a real
         // Completed transition).
-        if (edge.Phase is CommandPhase.Started or CommandPhase.Active) {
+        if (phase is CommandPhase.Started or CommandPhase.Active) {
             if (!edge.Momentary) {
                 var state = HeldFor(
                     commandId: commandId,
@@ -318,7 +344,7 @@ public sealed class InputRouter {
                 });
                 state.HasEntry = true;
             } else if (
-                (edge.Phase == CommandPhase.Started) &&
+                (phase == CommandPhase.Started) &&
                 edge.DispatchRelease
             ) {
                 // A tapped channel carries no Active reassertion, but its scheduled release still owns
@@ -431,6 +457,25 @@ public sealed class InputRouter {
             }
         }
 
+        // A control going inactive releases every hold it feeds, whatever the current page resolves it to: a page
+        // flip between the press and the release must not strand the earlier page's command with a stale sample.
+        // A control observed while its device's focus is released (a terminal open) is the same case: the page
+        // resolves nothing for it, so its page-bound holds drop now and re-establish from the still-down reassert
+        // once focus returns.
+        if (
+            focusExemptOnly ||
+            (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) ||
+            !signal.Value.IsActive
+        ) {
+            ReleaseStrandedHolds(
+                alwaysActiveBindings: alwaysActiveBindings,
+                control: physicalControl,
+                pageBindings: pageBindings,
+                slot: slot,
+                workingBySlot: workingBySlot
+            );
+        }
+
         var pageBindingCount = pageBindings.Length;
         var alwaysActiveBindingCount = alwaysActiveBindings.Length;
 
@@ -446,6 +491,11 @@ public sealed class InputRouter {
         // this remembers the flip's resolved phase per command id so the second binding reuses it instead of
         // flipping again (which would net a silent no-op).
         Dictionary<ushort, CommandPhase>? toggleFlipsThisSignal = null;
+        // Ownership is judged as it stood when the signal ARRIVED, for every binding alike: the same pair authors a
+        // press row and a release row on one source, and the press row's own release bookkeeping (RemoveControl
+        // below) must not strip the ownership the release row is about to test — else the release row is skipped
+        // and the hold sticks. Recorded per command id, since ownership is per command.
+        Dictionary<ushort, bool>? ownershipAtArrival = null;
 
         for (var bindingIndex = 0; (bindingIndex < (pageBindingCount + alwaysActiveBindingCount)); bindingIndex++) {
             var resolved = ((bindingIndex < pageBindingCount)
@@ -454,6 +504,7 @@ public sealed class InputRouter {
             );
             var binding = resolved.Binding;
             var commandId = resolved.CommandId;
+            var dispatchSource = (resolved.ToggleSource ?? signal.Source);
 
             if (
                 focusExemptOnly &&
@@ -468,11 +519,18 @@ public sealed class InputRouter {
             );
             var controlId = physicalControl;
             var sourceCommandActive = ((commandId < activeCommands.Length) && activeCommands[commandId]);
-            var ownsHeldState = IsHeldByControl(
-                commandId: commandId,
-                control: controlId,
-                slot: slot
-            );
+
+            if (!(ownershipAtArrival ??= []).TryGetValue(
+                key: commandId,
+                value: out var ownsHeldState
+            )) {
+                ownsHeldState = IsHeldByControl(
+                    commandId: commandId,
+                    control: controlId,
+                    slot: slot
+                );
+                ownershipAtArrival[commandId] = ownsHeldState;
+            }
             var isContribution = ((binding.ChannelScale is not null) && (binding.Mode == BindingEntryMode.Hold));
 
             // A digital Active sample is state recovery, never a command edge. Continuous channel destinations may
@@ -565,16 +623,16 @@ public sealed class InputRouter {
                 }
             }
 
-            // A channel destination is a held contribution, so its ordinary (ActivateOn:null) binding owns BOTH
-            // halves of the hold. In particular, an axis such as a trigger commonly ends with Completed+zero. If
-            // that edge is filtered like an ordinary press-bound verb, this router clears its carried sample while
-            // the destination never hears the release and retains the last non-zero contribution forever. Authors
-            // should not have to duplicate every channel row with an ActivateOn:Completed twin merely to make a
-            // physical control stop. An explicit ActivateOn remains exactly edge-selective.
+            // A channel destination — and a HELD verb (CommandMetadata.Held) — is a held contribution, so its ordinary
+            // (ActivateOn:null) binding owns BOTH halves of the hold. In particular, an axis such as a trigger commonly
+            // ends with Completed+zero. If that edge is filtered like an ordinary press-bound verb, this router clears
+            // its carried sample while the destination never hears the release and retains the last non-zero
+            // contribution forever. Authors bind a hold once, never a release twin. An explicit ActivateOn remains
+            // exactly edge-selective.
             var dispatch = ((binding.ActivateOn is { } required)
                 ? (phase == required)
                 : ((phase is CommandPhase.Started or CommandPhase.Active) ||
-                    ((binding.ChannelScale is not null) && (phase is CommandPhase.Completed or CommandPhase.Canceled)))
+                    (((binding.ChannelScale is not null) || m_registry.IsHeldCommand(commandId: commandId)) && (phase is CommandPhase.Completed or CommandPhase.Canceled)))
             );
             var wasCommandHeld = (isDigital && IsControlDownFor(
                 commandId: commandId,
@@ -629,7 +687,7 @@ public sealed class InputRouter {
                 dispatch: dispatch,
                 origin: CommandOrigin.Binding,
                 phase: phase,
-                source: signal.Source,
+                source: dispatchSource,
                 value: value,
                 assignedSlot: assignedSlot
             );
@@ -656,7 +714,7 @@ public sealed class InputRouter {
                             Origin: CommandOrigin.Binding,
                             Principal: default,
                             Slot: slot,
-                            Source: signal.Source
+                            Source: dispatchSource
                         ) {
                             DispatchWhenMapInactive = true,
                         });
@@ -1198,6 +1256,122 @@ public sealed class InputRouter {
             discardCapturedSignals: false
         );
     }
+    // Drops every non-contribution hold this control fed whose command the signal no longer resolves to, folding
+    // an inactive entry into the lane so the command hears its release.
+    private void ReleaseStrandedHolds(Dictionary<int, List<CommandEntry>> workingBySlot, int slot, HeldControlId control, ResolvedBinding[] pageBindings, ResolvedBinding[] alwaysActiveBindings) {
+        if (!m_heldBySlot.TryGetValue(
+            key: slot,
+            value: out var held
+        )) {
+            return;
+        }
+
+        List<ushort>? stranded = null;
+        List<(ushort CommandId, CommandEntry Entry)>? strandedContributions = null;
+
+        foreach (var (commandId, state) in held) {
+            // A toggle latch is destination-owned after its press. Its carried entry retains the originating
+            // device/source only for diagnostics and focus/device cancellation; a later physical release — including
+            // one consumed by a more-specific chord — must never classify the latch as that control's stranded hold.
+            var feedsEntry = (
+                state.HasEntry &&
+                !m_toggleLatches.GetValueOrDefault(key: (slot, commandId)) &&
+                (state.Entry.Device == control.Device) &&
+                string.Equals(
+                a: state.Entry.Source,
+                b: control.Source,
+                comparisonType: StringComparison.Ordinal
+            )
+            );
+            CommandEntry? contribution = null;
+
+            if (state.Contributions is { } contributions) {
+                foreach (var candidate in contributions) {
+                    if (candidate.Control == control) {
+                        contribution = candidate.Entry;
+
+                        break;
+                    }
+                }
+            }
+
+            if (
+                !feedsEntry &&
+                (contribution is null)
+            ) {
+                continue;
+            }
+
+            var resolvesHere = false;
+
+            foreach (var resolved in pageBindings) {
+                if (resolved.CommandId == commandId) {
+                    resolvesHere = true;
+
+                    break;
+                }
+            }
+
+            foreach (var resolved in alwaysActiveBindings) {
+                if (resolved.CommandId == commandId) {
+                    resolvesHere = true;
+
+                    break;
+                }
+            }
+
+            if (resolvesHere) {
+                continue;
+            }
+
+            if (feedsEntry) {
+                (stranded ??= []).Add(item: commandId);
+            }
+
+            if (contribution is { } strandedContribution) {
+                (strandedContributions ??= []).Add(item: (commandId, strandedContribution));
+            }
+        }
+
+        if (
+            (stranded is null) &&
+            (strandedContributions is null)
+        ) {
+            return;
+        }
+
+        var working = WorkingFor(
+            slot: slot,
+            workingBySlot: workingBySlot
+        );
+
+        foreach (var commandId in (stranded ?? [])) {
+            var entry = held[commandId].Entry;
+
+            working.Add(item: entry with {
+                Dispatch = true,
+                Phase = CommandPhase.Completed,
+                Value = CommandValue.Inactive(kind: entry.Value.Kind),
+            });
+            DropHeld(
+                commandId: commandId,
+                slot: slot
+            );
+        }
+
+        foreach (var (commandId, entry) in (strandedContributions ?? [])) {
+            working.Add(item: entry with {
+                Dispatch = true,
+                Phase = CommandPhase.Completed,
+                Value = CommandValue.Inactive(kind: entry.Value.Kind),
+            });
+            RemoveContribution(
+                commandId: commandId,
+                control: control,
+                slot: slot
+            );
+        }
+    }
     private void RemoveContribution(int slot, ushort commandId, HeldControlId control) {
         if (
             !m_heldBySlot.TryGetValue(
@@ -1272,7 +1446,10 @@ public sealed class InputRouter {
 
             candidates[validCount++] = new ResolvedBinding(
                 Binding: binding,
-                CommandId: commandId
+                CommandId: commandId,
+                ToggleSource: ((binding.Mode == BindingEntryMode.Toggle)
+                ? BindingSourceIdentity.ForCommand(command: binding.Command)
+                : null)
             );
         }
 

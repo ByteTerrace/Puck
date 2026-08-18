@@ -245,6 +245,21 @@ public sealed class WorldTcpHost : IDisposable {
         }
     }
     private async Task HandleConnectionAsync(TcpClient client, CancellationToken ct) {
+        // Ambient for the connection's whole lifetime — every downstream await runs under the same logical call
+        // context, and Task.Run's caller (AcceptLoopAsync) never observes it (a fresh execution-context branch per
+        // accepted socket).
+        WorldNarrationScope.Current = m_server.AuthorityIdentity;
+
+        try {
+            await HandleConnectionCoreAsync(
+                client: client,
+                ct: ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } finally {
+            WorldNarrationScope.Current = null;
+        }
+    }
+    private async Task HandleConnectionCoreAsync(TcpClient client, CancellationToken ct) {
         client.NoDelay = true;
 
         var remoteEndpoint = (client.Client.RemoteEndPoint?.ToString() ?? "unknown");

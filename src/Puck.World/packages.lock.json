@@ -416,6 +416,8 @@
       "ByteTerrace.Puck.Assets": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.IO.Hashing": "[10.*, )"
         }
       },
@@ -425,9 +427,16 @@
           "System.Formats.Cbor": "[10.*, )"
         }
       },
+      "ByteTerrace.Puck.Audio": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.CommandLine": "[2.*, )"
         }
@@ -491,7 +500,9 @@
       "ByteTerrace.Puck.Shaders": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.SignedDistance": {
@@ -535,6 +546,8 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "Microsoft.Extensions.Hosting": "[10.*, )",
           "Puck.Input": "[1.0.0, )"
@@ -562,6 +575,7 @@
       "puck.networking": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
@@ -643,6 +657,38 @@
           "Puck.World.Server": "[1.0.0, )"
         }
       },
+      "puck.world.client": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Audio": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
+          "Puck.Input": "[1.0.0, )",
+          "Puck.Launcher": "[1.0.0, )",
+          "Puck.Overlays": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )",
+          "Puck.World.Forge": "[1.0.0, )",
+          "Puck.World.Protocol": "[1.0.0, )",
+          "Puck.World.Schema": "[1.0.0, )"
+        }
+      },
+      "puck.world.console": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "Puck.Launcher": "[1.0.0, )",
+          "Puck.Networking": "[1.0.0, )",
+          "Puck.World.Protocol": "[1.0.0, )",
+          "Puck.World.Schema": "[1.0.0, )",
+          "Puck.World.Server": "[1.0.0, )"
+        }
+      },
       "puck.world.forge": {
         "type": "Project",
         "dependencies": {
@@ -666,6 +712,7 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
@@ -677,11 +724,16 @@
       "puck.world.server": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.AdvancedGamingBrick": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Audio": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
           "Puck.Networking": "[1.0.0, )",
+          "Puck.SdfVm": "[1.0.0, )",
           "Puck.Storage": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )"

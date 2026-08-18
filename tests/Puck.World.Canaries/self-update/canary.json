@@ -1,0 +1,36 @@
+{
+  "id": "self-update",
+  "title": "The self-update stub checks, applies, and relaunches on the new version; a broken version reverts to last-good",
+  "bootShape": "stub",
+  "requirements": [],
+  "seconds": 3,
+  "timeoutSeconds": 25,
+  "binding": "Both legs run through a leg-private Puck.Launcher.Stub install: the positive leg's first boot signs a throwaway 2.0.0 release, runs update.check/update.apply against it, and its second boot observes the stub launch the applied version; the discriminating leg pre-stages a 2.0.0 with no executable at all, so its first boot observes the stub refuse to launch it and its second boot observes the generation-safe revert to the pre-existing 1.0.0.",
+  "fixtures": [],
+  "positive": {
+    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "update.check", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "update.apply", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "apply reports applied", "stream": "stdout", "match": "contains", "text": "[update.apply: applied", "present": true },
+      { "type": "filesDiffer", "name": "the pointer ends on the applied version", "before": "current-after", "after": "expected-2.0.0.txt", "different": false },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "the broken version refuses to launch", "stream": "stderr", "match": "contains", "text": "does not exist", "present": true },
+      { "type": "filesDiffer", "name": "the pointer reverts to the last-good version", "before": "current-after", "after": "expected-1.0.0.txt", "different": false },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

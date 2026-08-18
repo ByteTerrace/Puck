@@ -1,5 +1,6 @@
 using System.Globalization;
 using Puck.Commands;
+using Puck.Input;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -22,15 +23,15 @@ namespace Puck.World;
 /// refuses by name at use when it is absent, rather than the module going unregistered.</remarks>
 internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFeed? feed = null) : ICommandModule {
     /// <summary>The author-bindable explicit cancel act.</summary>
-    public const string CancelCommand = "player.wheel.cancel";
+    public const string CancelCommand = Puck.World.Client.WorldWheelCommandNames.CancelCommand;
     /// <summary>The release-commit act — bound on the wheel hold pages' Tab release edge, and typed as
     /// <c>player.wheel.commit [player]</c> (committing whatever the open wheel currently hovers).</summary>
-    public const string CommitCommand = "player.wheel.commit";
+    public const string CommitCommand = Puck.World.Client.WorldWheelCommandNames.CommitCommand;
     /// <summary>The ring-cycle act — bound on the wheel hold pages (Arrow Up/Down, D-pad Up/Down) with a constant
     /// Axis1D direction, and typed as <c>player.wheel.ring [next|prev] [player]</c>.</summary>
-    public const string RingCommand = "player.wheel.ring";
+    public const string RingCommand = Puck.World.Client.WorldWheelCommandNames.RingCommand;
     /// <summary>The author-bindable Axis2D radial selection act.</summary>
-    public const string SelectCommand = "player.wheel.select";
+    public const string SelectCommand = Puck.World.Client.WorldWheelCommandNames.SelectCommand;
 
     private readonly WorldWheelFeed? m_feed = feed;
     private readonly PlayerRoster m_roster = roster;
@@ -123,7 +124,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.view.wheel: player={PlayerRoster.DisplayNumber(slot: status.Slot)} open=true id={status.Id} group={status.Group} rings={status.RingCount} active={(status.ActiveRing + 1)} '{status.ActiveRingLabel}' hover={hover} pointer={status.PointerSelection} ringSelection={status.RingSelection} placement={status.Placement} center={status.Center.X:0.#},{status.Center.Y:0.#}{(status.CenterKnown
+            handler: $"[world.view.wheel: player={PlayerRoster.DisplayNumber(slot: status.Slot)} open=true id={status.Id} group={status.Group} rings={status.RingCount} active={(status.ActiveRing + 1)} '{status.ActiveRingLabel}' hover={hover} pointer={status.PointerSelection} ringSelection={status.RingSelection} selectorDeadZone={status.SelectorDeadZone:0.###} switchFraction={status.SwitchFraction:0.###} neutralGrace={status.SelectionGraceSeconds:0.###}s placement={status.Placement} center={status.Center.X:0.#},{status.Center.Y:0.#}{(status.CenterKnown
             ? string.Empty
             : " (unanchored)")}]"
         );
@@ -214,7 +215,8 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
 
         feed.Select(
             slot: context.Slot,
-            axis: context.Value.AsAxis2D
+            axis: context.Value.AsAxis2D,
+            relative: ((context.Source is { } source) && InputSourceVocabulary.IsRelative(sourceId: source))
         );
 
         return CommandResult.None;
@@ -251,7 +253,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SelectCommand,
-            description: "Aims the open radial for the binding's seat from an authored Axis2D source. Bind either stick (or another Axis2D provider) on each radial hold page; no gamepad control is hard-coded by the presenter.",
+            description: "Aims the open radial for the binding's seat from an authored Axis2D source — a stick's deflection read as-is, a relative source (mouse.motion) accumulated from the moment the radial opened. Bind either on each radial hold page; nothing is hard-coded by the presenter.",
             handler: SelectHandler,
             valueKind: CommandValueKind.Axis2D
         );

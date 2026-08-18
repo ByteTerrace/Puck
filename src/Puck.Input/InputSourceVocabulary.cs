@@ -33,9 +33,17 @@ namespace Puck.Input;
 public static class InputSourceVocabulary {
     private static readonly Dictionary<string, CommandValueKind> KindsBySourceId;
     private static readonly HashSet<string> ExplicitlyUnaddressableSourceIds;
+    private static readonly HashSet<string> RelativeSourceIds;
 
     static InputSourceVocabulary() {
-        (KindsBySourceId, ExplicitlyUnaddressableSourceIds) = BuildTables();
+        (KindsBySourceId, ExplicitlyUnaddressableSourceIds, RelativeSourceIds) = BuildTables();
+    }
+
+    /// <summary>Indicates whether <paramref name="sourceId"/> declares <see cref="InputSourceValueAttribute.Relative"/>
+    /// — each sample a delta, not a deflection.</summary>
+    /// <param name="sourceId">The provider-neutral source id text.</param>
+    public static bool IsRelative(string sourceId) {
+        return RelativeSourceIds.Contains(item: sourceId);
     }
 
     /// <summary>Attempts to resolve <paramref name="sourceId"/> against the engine's canonical source-id surface
@@ -79,33 +87,37 @@ public static class InputSourceVocabulary {
     // time, thrown loud and unconditional the same way CommandRegistry's constructor throws on a duplicate command
     // name. declaredBy is the one map both destination tables are gated through, so the guard is symmetric by
     // construction instead of needing a matching check duplicated at each Add call.
-    private static (Dictionary<string, CommandValueKind> Kinds, HashSet<string> ExplicitlyUnaddressable) BuildTables() {
+    private static (Dictionary<string, CommandValueKind> Kinds, HashSet<string> ExplicitlyUnaddressable, HashSet<string> Relative) BuildTables() {
         var declaredBy = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
         var kinds = new Dictionary<string, CommandValueKind>(comparer: StringComparer.Ordinal);
         var explicitlyUnaddressable = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var relative = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         ClassifyGroup(
             declaredBy: declaredBy,
             explicitlyUnaddressable: explicitlyUnaddressable,
+            relative: relative,
             kinds: kinds,
             type: typeof(InputSources.Keyboard)
         );
         ClassifyGroup(
             declaredBy: declaredBy,
             explicitlyUnaddressable: explicitlyUnaddressable,
+            relative: relative,
             kinds: kinds,
             type: typeof(InputSources.Mouse)
         );
         ClassifyGroup(
             declaredBy: declaredBy,
             explicitlyUnaddressable: explicitlyUnaddressable,
+            relative: relative,
             kinds: kinds,
             type: typeof(InputSources.Gamepad)
         );
 
-        return (kinds, explicitlyUnaddressable);
+        return (kinds, explicitlyUnaddressable, relative);
     }
-    private static void ClassifyGroup(Dictionary<string, string> declaredBy, HashSet<string> explicitlyUnaddressable, Dictionary<string, CommandValueKind> kinds, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] Type type) {
+    private static void ClassifyGroup(Dictionary<string, string> declaredBy, HashSet<string> explicitlyUnaddressable, Dictionary<string, CommandValueKind> kinds, HashSet<string> relative, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] Type type) {
         foreach (var field in type.GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)) {
             if (
                 !field.IsLiteral ||
@@ -138,6 +150,10 @@ public static class InputSourceVocabulary {
                     key: sourceId,
                     value: declaredValue.Kind
                 );
+
+                if (declaredValue.Relative) {
+                    _ = relative.Add(item: sourceId);
+                }
             }
         }
     }

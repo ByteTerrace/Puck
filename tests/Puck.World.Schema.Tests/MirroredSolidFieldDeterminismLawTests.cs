@@ -28,8 +28,6 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "metric-box-law",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [shape],
             Frames: null
@@ -58,7 +56,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         Assert.Equal(expected: new Vector4(w: 1f, x: 1f, y: 1f, z: 1f), actual: scales[0].Data0);
         var expectedRound = (0.04f * fixedThinAxis);
 
-        Assert.Equal(expected: new Vector4(w: expectedRound, x: ((0.38f * 24f) - expectedRound), y: (0.34f * fixedThinAxis), z: ((0.38f * 24f) - expectedRound)), actual: box.Data0);
+        Assert.Equal(expected: new Vector4(w: expectedRound, x: ((1.04f * 24f) - expectedRound), y: ((1.04f * fixedThinAxis) - expectedRound), z: ((1.04f * 24f) - expectedRound)), actual: box.Data0);
         _ = new SdfFieldEvaluator(program: program);
     }
     [Fact]
@@ -90,7 +88,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             ((candidate.Op == SdfOp.ShapeBlend) && (((SdfShapeType)candidate.Shape) == SdfShapeType.Cylinder)));
 
         Assert.DoesNotContain(collection: program.Instructions, filter: candidate => (candidate.Op == SdfOp.Scale));
-        Assert.Equal(expected: new Vector4(w: 0f, x: (0.30f * 0.4f), y: (0.36f * 1.6f), z: 0f), actual: cylinder.Data0);
+        Assert.Equal(expected: new Vector4(w: 0f, x: (1f * 0.4f), y: (1f * 1.6f), z: 0f), actual: cylinder.Data0);
         _ = new SdfFieldEvaluator(program: program);
     }
     [Fact]
@@ -134,8 +132,6 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "mirrored-solid-law",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [shape],
             Frames: null
@@ -182,8 +178,6 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "mirrored-frame-equivalence-law",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [shape],
             Frames: null

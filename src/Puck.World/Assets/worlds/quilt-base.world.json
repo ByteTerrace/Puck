@@ -1,4 +1,5 @@
 {
+  "basis": "default.world.json",
   "$schema": "./puck.world.def.v1.schema.json",
   "simulation": {
     "rateHz": 60
@@ -455,14 +456,6 @@
       },
       "actions": {
         "jump": {
-          "state": [
-            {
-              "name": "jumpUses",
-              "kind": "Counter",
-              "initial": 0,
-              "resetFact": "Grounded"
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -534,7 +527,7 @@
     {
       "bindingBar": {
         "enabled": true,
-        "hideAfterRestSeconds": 6,
+        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
         "layout": {
           "buttonSize": 0.075,
           "centerGap": 0.1,
@@ -550,13 +543,15 @@
         "modifiers": [],
         "chords": [
           {
-            "group": "play",
+            "group": "default",
             "chord": [],
             "page": {
               "id": "base",
               "entries": [
                 {
-                  "source": "gamepad.rightTrigger",
+                  "sources": [
+                    "gamepad.rightTrigger"
+                  ],
                   "channel": "up",
                   "scale": 1,
                   "activateOn": null,
@@ -564,7 +559,9 @@
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftTrigger",
+                  "sources": [
+                    "gamepad.leftTrigger"
+                  ],
                   "channel": "up",
                   "scale": -1,
                   "activateOn": null,
@@ -572,7 +569,9 @@
                   "icon": null
                 },
                 {
-                  "source": "gamepad.rightStick.x",
+                  "sources": [
+                    "gamepad.rightStick.x"
+                  ],
                   "channel": "turn",
                   "scale": -1,
                   "activateOn": null,
@@ -580,70 +579,90 @@
                   "icon": null
                 },
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "channel": "jump",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "channel": "jump",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "channel": "jump",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "channel": "jump",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "run",
                   "activateOn": null,
                   "label": "Sprint",
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "run",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "run",
                   "activateOn": null,
                   "label": "Sprint",
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "run",
                   "activateOn": "Completed",
                   "label": null,
@@ -654,12 +673,115 @@
               "icon": null
             },
             "command": null
+          },
+          {
+            "group": "default",
+            "chord": [
+              "tab"
+            ],
+            "page": {
+              "id": "play-wheel",
+              "entries": [
+                {
+                  "sources": [
+                    "gamepad.leftStick"
+                  ],
+                  "command": "player.move"
+                },
+                {
+                  "sources": [
+                    "gamepad.rightStick"
+                  ],
+                  "command": "player.wheel.select"
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.arrowDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadUp"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring+",
+                  "icon": "edit.next",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "gamepad.dpadDown"
+                  ],
+                  "command": "player.wheel.ring",
+                  "activateOn": "Started",
+                  "label": "Ring-",
+                  "icon": "edit.prev",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      -1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.tab"
+                  ],
+                  "command": "player.wheel.commit",
+                  "activateOn": "Completed"
+                }
+              ],
+              "label": "Wheel"
+            }
           }
         ],
         "wheels": [
           {
             "id": "play-primary",
-            "group": "play",
+            "group": "default",
             "holdPages": [
               "play-wheel"
             ],
@@ -668,37 +790,37 @@
                 "id": "play-wheel-act",
                 "entries": [
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "editor.enter",
                     "label": "Editor",
                     "icon": "edit.place"
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "editor.status",
                     "label": "Status",
                     "icon": "action.target"
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "console",
                     "label": "Console",
                     "icon": "edit.op"
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "player.channels",
                     "label": "Channels",
                     "icon": "edit.link"
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "player.where",
                     "label": "Where",
                     "icon": "action.target"
                   },
                   {
-                    "source": null,
+                    "sources": null,
                     "command": "player.disengage",
                     "label": "Disengage",
                     "icon": "edit.exit"
@@ -724,15 +846,9 @@
       "document": {
         "schema": "puck.creation.v1",
         "name": "ground",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.2,
-              "y": 0.45,
-              "z": 0.85
-            },
+            "color": "#3373D9",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -743,28 +859,13 @@
             "id": 0,
             "name": "ground",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 31.578947,
-              "y": 0.1,
-              "z": 31.578947
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [31.578947, 0.1, 31.578947],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -775,23 +876,16 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "2f0f4fe6d186b445fce962d7466cf8176aa03f600d48e2311f9e21fd2023f3c4"
+      }
     },
     {
       "id": "wall",
       "document": {
         "schema": "puck.creation.v1",
         "name": "wall",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.53,
-              "z": 0.5
-            },
+            "color": "#8C8780",
             "emissive": 0,
             "specular": 0.1,
             "shininess": 8
@@ -802,28 +896,13 @@
             "id": 0,
             "name": "slab",
             "type": "Box",
-            "position": {
-              "x": 0,
-              "y": 2.1143,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 73.4,
-              "y": 5.4639,
-              "z": 1.3529
-            },
+            "position": [0, 2.1143, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [73.4, 5.4639, 1.3529],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -834,8 +913,7 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "7fb96d4f261b349cf7eda7bfbe591f09afb2215968c4e37a67496a6867fa0d85"
+      }
     }
   ],
   "placements": [
@@ -991,7 +1069,17 @@
     },
     "panels": []
   },
-  "state": [],
+  "state": {
+    "world": [],
+    "body": [
+      {
+        "name": "jumpUses",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded"
+      }
+    ]
+  },
   "schema": "puck.world.def.v1",
   "documentId": "quilt-nw",
   "playerDefaults": {
@@ -1035,7 +1123,6 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-      "arming": "RightButton",
       "stickLookRate": 2.6
     }
   },

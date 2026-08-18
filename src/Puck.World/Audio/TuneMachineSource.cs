@@ -1,3 +1,4 @@
+using Puck.Audio.Mixing;
 using Puck.Forge.Authoring;
 using Puck.Forge.Tune;
 using Puck.HumbleGamingBrick;
@@ -40,7 +41,7 @@ public sealed class TuneMachineSource : IAudioBlockSource, IDisposable {
             compose: static services => services.AddHumbleGamingBrickComponents()
         );
         m_sink = m_machine.GetRequiredService<IAudioSink>();
-        m_sink.Configure(sampleRate: WorldAudioMixer.SampleRate);
+        m_sink.Configure(sampleRate: AudioMixer.SampleRate);
         m_machine.Machine.Run(tCycles: (BootPrerollFrames * CyclesPerVideoFrame));
     }
 
@@ -59,10 +60,10 @@ public sealed class TuneMachineSource : IAudioBlockSource, IDisposable {
 
         m_cycleAccumulator += (frames * CyclesPerSecond);
 
-        var run = (m_cycleAccumulator / WorldAudioMixer.SampleRate);
+        var run = (m_cycleAccumulator / AudioMixer.SampleRate);
 
         m_machine.Machine.Run(tCycles: ((ulong)run));
-        m_cycleAccumulator -= (run * WorldAudioMixer.SampleRate);
+        m_cycleAccumulator -= (run * AudioMixer.SampleRate);
 
         return (m_sink.ReadSamples(destination: interleavedStereo[..(frames * 2)]) / 2);
     }

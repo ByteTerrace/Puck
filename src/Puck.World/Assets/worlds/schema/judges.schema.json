@@ -1,0 +1,11 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "$ref": "./common.schema.json#/$defs/WorldMusicRow",
+    "description": "One judge-window-set asset reference row \u2014 a puck.judge.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the same convention WorldMusicRow uses), and the SHA-256 hex64 pin of the referenced document\u0027s own canonical bytes. Referenced by an action lane or interaction opting into rhythm judgment; never a section every world carries."
+  },
+  "default": null
+}

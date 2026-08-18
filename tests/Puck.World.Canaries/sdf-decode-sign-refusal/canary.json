@@ -1,0 +1,84 @@
+{
+  "id": "sdf-decode-sign-refusal",
+  "title": "sdf.decode refuses a negative radius/half-extent/round/material channel at decode, by field, at any op/material index",
+  "binding": "The positive leg loads twelve fixtures, each carrying exactly one negative shape or material field at index 1 (index 0 is always a valid entry), and asserts the exact NumberNegative refusal naming that field and index, then a thirteenth, entirely valid document loads clean. The discriminating leg replays the identical verb sequence against the valid document thirteen times, so every refusal assertion above must turn red.",
+  "bootShape": "windowed",
+  "requirements": ["gpu"],
+  "seconds": 10,
+  "timeoutSeconds": 30,
+  "fixtures": [
+    "case-sphere-radius.sdf.json",
+    "case-capsule-radius.sdf.json",
+    "case-cylinder-radius.sdf.json",
+    "case-cylinder-halfheight.sdf.json",
+    "case-torus-majorradius.sdf.json",
+    "case-torus-minorradius.sdf.json",
+    "case-box-halfextents.sdf.json",
+    "case-box-round.sdf.json",
+    "case-material-albedo.sdf.json",
+    "case-material-emissive.sdf.json",
+    "case-material-specular.sdf.json",
+    "case-material-shininess.sdf.json",
+    "valid-control.sdf.json"
+  ],
+  "positive": {
+    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.sdf.load", "occurrence": 1, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 2, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 3, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 4, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 5, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 6, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 7, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 8, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 9, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 10, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 11, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 12, "outcome": "refused" },
+      { "verb": "world.sdf.load", "occurrence": 13, "outcome": "accepted" },
+      { "verb": "world.refusals", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "sphere-radius-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].radius: -1 must be non-negative.]" },
+      { "type": "line", "name": "capsule-radius-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].radius: -1 must be non-negative.]" },
+      { "type": "line", "name": "cylinder-radius-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].radius: -1 must be non-negative.]" },
+      { "type": "line", "name": "cylinder-halfheight-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].halfHeight: -1 must be non-negative.]" },
+      { "type": "line", "name": "torus-majorradius-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].majorRadius: -1 must be non-negative.]" },
+      { "type": "line", "name": "torus-minorradius-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].minorRadius: -1 must be non-negative.]" },
+      { "type": "line", "name": "box-halfextents-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].halfExtents: [-1, 1, 1] every component must be non-negative.]" },
+      { "type": "line", "name": "box-round-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: ops[1].round: -1 must be non-negative.]" },
+      { "type": "line", "name": "material-albedo-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].albedo: [-1, 0, 0] every component must be non-negative.]" },
+      { "type": "line", "name": "material-emissive-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].emissive: -1 must be non-negative.]" },
+      { "type": "line", "name": "material-specular-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].specular: -1 must be non-negative.]" },
+      { "type": "line", "name": "material-shininess-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].shininess: -1 must be non-negative.]" },
+      { "type": "line", "name": "valid-control-loaded", "stream": "stdout", "match": "contains", "text": "1 op(s), 1 material(s), fnv1a" },
+      { "type": "line", "name": "refusals-catalog-declares-numbernegative", "stream": "stdout", "match": "contains", "text": "sdf.decode/NumberNegative" }
+    ]
+  },
+  "discriminating": {
+    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.sdf.load", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 6, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 7, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 8, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 9, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 10, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 11, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 12, "outcome": "accepted" },
+      { "verb": "world.sdf.load", "occurrence": 13, "outcome": "accepted" },
+      { "verb": "world.refusals", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "every-load-succeeded", "stream": "stdout", "match": "contains", "text": "1 op(s), 1 material(s), fnv1a" },
+      { "type": "line", "name": "no-refusal-fired", "stream": "stderr", "present": false, "match": "contains", "text": "must be non-negative" }
+    ]
+  }
+}

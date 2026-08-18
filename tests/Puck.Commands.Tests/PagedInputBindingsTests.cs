@@ -9,7 +9,7 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void ToggleChannelFlipsOnPressAndIgnoresPhysicalRelease() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
-            Source: "key.toggle",
+            Sources: ["key.toggle"],
             Channel: new ChannelRef.Name(Value: "movement"),
             Mode: BindingEntryMode.Toggle
         )]);
@@ -44,7 +44,7 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void HeldActivatorOpensInOrderAndClosesWhenAMemberReleases() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
-            Source: null,
+            Sources: null,
             Command: ActionCommand,
             Activator: new BindingActivatorDefinition(Sequence: ["key.a", "key.b"])
         )]);
@@ -74,7 +74,7 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void TappedActivatorFiresNowAndReleasesOnTheNextTick() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
-            Source: null,
+            Sources: null,
             Command: ActionCommand,
             Activator: new BindingActivatorDefinition(
                 Sequence: ["key.a", "key.b"],
@@ -107,7 +107,7 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void ScheduledEdgeDrainReusesItsRetainedBuffer() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
-            Source: null,
+            Sources: null,
             Command: ActionCommand,
             Activator: new BindingActivatorDefinition(
                 Sequence: ["key.a", "key.b"],
@@ -132,7 +132,7 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void ResetAllDropsADeferredTappedRelease() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
-            Source: null,
+            Sources: null,
             Command: ActionCommand,
             Activator: new BindingActivatorDefinition(
                 Sequence: ["key.a"],
@@ -150,8 +150,8 @@ public sealed class PagedInputBindingsTests {
         var profile = BindingProfile.Compile(document: new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [
-                new BindingModifierDefinition(Id: "left", Source: "key.left"),
-                new BindingModifierDefinition(Id: "right", Source: "key.right"),
+                new BindingModifierDefinition(Id: "left", Sources: ["key.left"]),
+                new BindingModifierDefinition(Id: "right", Sources: ["key.right"]),
             ],
             Chords: [
                 new BindingChordDefinition(
@@ -196,7 +196,7 @@ public sealed class PagedInputBindingsTests {
     public void ModifierTrackerReportsOnlyHeldOrderChanges() {
         var profile = BindingProfile.Compile(document: new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [new BindingModifierDefinition(Id: "left", Source: "key.left")],
+            Modifiers: [new BindingModifierDefinition(Id: "left", Sources: ["key.left"])],
             Chords: [new BindingChordDefinition(
                 Group: "play",
                 Chord: [],
@@ -213,11 +213,40 @@ public sealed class PagedInputBindingsTests {
         Assert.False(condition: tracker.Apply(signal: in release));
     }
     [Fact]
+    public void MultiSourceModifierStaysHeldWhileOneOfItsSourcesRemainsDown() {
+        var profile = BindingProfile.Compile(document: new BindingProfileDocument(
+            Version: BindingProfileDocument.CurrentVersion,
+            Modifiers: [new BindingModifierDefinition(Id: "wheel", Sources: ["gamepad.leftShoulder", "keyboard.tab"])],
+            Chords: [new BindingChordDefinition(
+                Group: "play",
+                Chord: [],
+                Page: new BindingPageDefinition(Id: "base", Entries: [])
+            )]
+        ));
+        var tracker = new BindingChordTracker(profile: profile);
+
+        // The FIRST source to press joins the held order.
+        Assert.True(condition: tracker.Apply(signal: InputSignal.Press(source: "gamepad.leftShoulder")));
+        Assert.Equal(expected: [0], actual: tracker.HeldOrder.ToArray());
+
+        // A second source pressing while the modifier is already held is a no-op (still one held modifier).
+        Assert.False(condition: tracker.Apply(signal: InputSignal.Press(source: "keyboard.tab")));
+        Assert.Equal(expected: [0], actual: tracker.HeldOrder.ToArray());
+
+        // Releasing the FIRST source while the SECOND is still down does not release the modifier.
+        Assert.False(condition: tracker.Apply(signal: InputSignal.Release(source: "gamepad.leftShoulder")));
+        Assert.Equal(expected: [0], actual: tracker.HeldOrder.ToArray());
+
+        // Releasing the LAST down source releases the modifier.
+        Assert.True(condition: tracker.Apply(signal: InputSignal.Release(source: "keyboard.tab")));
+        Assert.Equal(expected: 0, actual: tracker.HeldOrder.Length);
+    }
+    [Fact]
     public void ReloadCancelsRouterHoldsAndDropsDeferredActivatorEdges() {
         var bindings = Bindings(entries: [
-            new BindingPageEntryDefinition(Source: "key.hold", Command: ActionCommand),
+            new BindingPageEntryDefinition(Sources: ["key.hold"], Command: ActionCommand),
             new BindingPageEntryDefinition(
-                Source: null,
+                Sources: null,
                 Command: ActionCommand,
                 Activator: new BindingActivatorDefinition(
                     Sequence: ["key.tap"],
@@ -249,10 +278,10 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void DigitalReassertionRecoversAChannelWithoutFiringCommandsOrActivators() {
         var bindings = Bindings(entries: [
-            new BindingPageEntryDefinition(Source: "key.edge", Command: ActionCommand),
-            new BindingPageEntryDefinition(Source: "key.drive", Channel: new ChannelRef.Name(Value: "movement")),
+            new BindingPageEntryDefinition(Sources: ["key.edge"], Command: ActionCommand),
+            new BindingPageEntryDefinition(Sources: ["key.drive"], Channel: new ChannelRef.Name(Value: "movement")),
             new BindingPageEntryDefinition(
-                Source: null,
+                Sources: null,
                 Command: ActionCommand,
                 Activator: new BindingActivatorDefinition(Sequence: ["key.a", "key.b"])
             ),
@@ -293,7 +322,7 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void TransientAxisChannelReleasesOnTheFollowingTickInsteadOfBecomingHeld() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
-            Source: "mouse.motion.x",
+            Sources: ["mouse.motion.x"],
             Channel: new ChannelRef.Name(Value: "movement")
         )]);
         var router = Router(bindings: bindings, definitions: [(ChannelCommand, CommandValueKind.Axis1D)]);
@@ -316,7 +345,7 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void SuppressedTransientChannelSampleNeverBecomesCarriedState() {
         var bindings = Bindings(entries: [new BindingPageEntryDefinition(
-            Source: "mouse.motion.x",
+            Sources: ["mouse.motion.x"],
             Channel: new ChannelRef.Name(Value: "movement"),
             ActivateOn: CommandPhase.Completed
         )]);
@@ -335,8 +364,8 @@ public sealed class PagedInputBindingsTests {
             document: new BindingProfileDocument(
                 Version: BindingProfileDocument.CurrentVersion,
                 Modifiers: [
-                    new BindingModifierDefinition(Id: "first", Source: "key.first"),
-                    new BindingModifierDefinition(Id: "second", Source: "key.second"),
+                    new BindingModifierDefinition(Id: "first", Sources: ["key.first"]),
+                    new BindingModifierDefinition(Id: "second", Sources: ["key.second"]),
                 ],
                 Chords: [
                     new BindingChordDefinition(
@@ -353,7 +382,7 @@ public sealed class PagedInputBindingsTests {
                         Group: "play",
                         Chord: ["first", "second"],
                         Page: new BindingPageDefinition(Id: "held-page", Entries: [
-                            new BindingPageEntryDefinition(Source: "key.drive", Channel: new ChannelRef.Name(Value: "movement")),
+                            new BindingPageEntryDefinition(Sources: ["key.drive"], Channel: new ChannelRef.Name(Value: "movement")),
                         ])
                     ),
                 ]
@@ -388,7 +417,7 @@ public sealed class PagedInputBindingsTests {
         static PagedInputBindings ChordBindings(BindingCommandDefinition command) => new(profile: BindingProfile.Compile(
             document: new BindingProfileDocument(
                 Version: BindingProfileDocument.CurrentVersion,
-                Modifiers: [new BindingModifierDefinition(Id: "hold", Source: "key.hold")],
+                Modifiers: [new BindingModifierDefinition(Id: "hold", Sources: ["key.hold"])],
                 Chords: [
                     new BindingChordDefinition(Group: "play", Chord: [], Page: new BindingPageDefinition(Id: "base", Entries: [])),
                     new BindingChordDefinition(Group: "play", Chord: ["hold"], Command: command),
@@ -415,13 +444,13 @@ public sealed class PagedInputBindingsTests {
     }
     [Fact]
     public void ReleaseAfterReloadCannotFireANewReleaseOnlyCommand() {
-        var initial = Bindings(entries: [new BindingPageEntryDefinition(Source: "key.hold", Command: ActionCommand)]);
+        var initial = Bindings(entries: [new BindingPageEntryDefinition(Sources: ["key.hold"], Command: ActionCommand)]);
         var router = Router(bindings: initial, definitions: [(ActionCommand, CommandValueKind.Digital)]);
 
         router.Capture(signal: InputSignal.Press(source: "key.hold"));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
         initial.Reload(profile: Profile(entries: [new BindingPageEntryDefinition(
-            Source: "key.hold",
+            Sources: ["key.hold"],
             Command: ActionCommand,
             ActivateOn: CommandPhase.Completed
         )]));
@@ -473,13 +502,13 @@ public sealed class PagedInputBindingsTests {
     [Fact]
     public void CompiledProfileDefensivelyOwnsAuthoredCollections() {
         var modifiers = new List<BindingModifierDefinition> {
-            new(Id: "shift", Source: "key.shift"),
+            new(Id: "shift", Sources: ["key.shift"]),
         };
         var sequence = new List<string> { "key.a", "key.b", };
         var entries = new List<BindingPageEntryDefinition> {
-            new(Source: "key.action", Command: ActionCommand),
+            new(Sources: ["key.action"], Command: ActionCommand),
             new(
-                Source: null,
+                Sources: null,
                 Command: ActionCommand,
                 Activator: new BindingActivatorDefinition(Sequence: sequence)
             ),
@@ -565,8 +594,8 @@ public sealed class PagedInputBindingsTests {
     }
     private static BindingPageDefinition Ring(string id) {
         return new BindingPageDefinition(Id: id, Entries: [
-            new BindingPageEntryDefinition(Source: null, Command: ActionCommand),
-            new BindingPageEntryDefinition(Source: null, Command: ActionCommand),
+            new BindingPageEntryDefinition(Sources: null, Command: ActionCommand),
+            new BindingPageEntryDefinition(Sources: null, Command: ActionCommand),
         ]);
     }
     private static void Resolve(PagedInputBindings bindings, InputSignal signal) {
@@ -600,5 +629,61 @@ public sealed class PagedInputBindingsTests {
                 );
             }
         }
+    }
+    [Fact]
+    public void HeldCommandAuthoredAsAPressRowAndAReleaseRowDispatchesItsRelease() {
+        var profile = BindingProfile.Compile(
+            document: new BindingProfileDocument(
+                Version: BindingProfileDocument.CurrentVersion,
+                Modifiers: [new BindingModifierDefinition(Id: "lmb", Sources: ["mouse.button1"])],
+                Chords: [new BindingChordDefinition(
+                    Group: "play",
+                    Chord: [],
+                    Page: new BindingPageDefinition(Id: "base", Entries: [
+                        new BindingPageEntryDefinition(Sources: ["mouse.button1"], Command: ActionCommand),
+                        new BindingPageEntryDefinition(Sources: ["mouse.button1"], Command: ActionCommand, ActivateOn: CommandPhase.Completed),
+                    ])
+                )]
+            ),
+            channelCommandName: static _ => ChannelCommand
+        );
+        var bindings = new PagedInputBindings(profile: profile);
+        var router = Router(bindings: bindings, definitions: [(ActionCommand, CommandValueKind.Digital)]);
+
+        router.Capture(signal: InputSignal.Press(source: "mouse.button1"));
+        var pressed = Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries;
+        Assert.Contains(collection: pressed, filter: e => e.Dispatch && (e.Phase == CommandPhase.Started));
+
+        router.Capture(signal: InputSignal.Release(source: "mouse.button1"));
+        var lanes = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes;
+        Assert.NotEmpty(collection: lanes);
+        Assert.Contains(collection: lanes[0].Entries, filter: e => e.Dispatch && (e.Phase == CommandPhase.Completed));
+    }
+    [Fact]
+    public void MultiSourceRowPressesAndReleasesFromEitherControlIndependently() {
+        var bindings = Bindings(entries: [
+            new BindingPageEntryDefinition(Sources: ["gamepad.buttonSouth", "keyboard.space"], Command: ActionCommand),
+            new BindingPageEntryDefinition(Sources: ["gamepad.buttonSouth", "keyboard.space"], Command: ActionCommand, ActivateOn: CommandPhase.Completed),
+        ]);
+        var router = Router(bindings: bindings, definitions: [(ActionCommand, CommandValueKind.Digital)]);
+
+        router.Capture(signal: InputSignal.Press(source: "gamepad.buttonSouth"));
+        var padPress = Assert.Single(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries;
+        Assert.Contains(collection: padPress, filter: e => e.Dispatch && (e.Phase == CommandPhase.Started));
+
+        router.Capture(signal: InputSignal.Release(source: "gamepad.buttonSouth"));
+        var padRelease = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes;
+        Assert.NotEmpty(collection: padRelease);
+        Assert.Contains(collection: padRelease[0].Entries, filter: e => e.Dispatch && (e.Phase == CommandPhase.Completed));
+
+        // The keyboard source presses and releases on its own, unaffected by the gamepad source's earlier cycle.
+        router.Capture(signal: InputSignal.Press(source: "keyboard.space"));
+        var keyPress = Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries;
+        Assert.Contains(collection: keyPress, filter: e => e.Dispatch && (e.Phase == CommandPhase.Started));
+
+        router.Capture(signal: InputSignal.Release(source: "keyboard.space"));
+        var keyRelease = router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes;
+        Assert.NotEmpty(collection: keyRelease);
+        Assert.Contains(collection: keyRelease[0].Entries, filter: e => e.Dispatch && (e.Phase == CommandPhase.Completed));
     }
 }

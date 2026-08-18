@@ -15,7 +15,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// or reordered without a version bump now fails this stage loudly instead of just shifting bytes.
 /// </para>
 /// </summary>
-internal sealed class SnapshotRoundTripStage : IPostStage {
+internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
     private const int TailFrames = 200;
     private const int WarmFrames = 200;
 

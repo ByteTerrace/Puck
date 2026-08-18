@@ -1,7 +1,7 @@
 # Puck.Launcher.Windows
 
 The Windows GPU-host block a composition root shares across windowed entry
-points (`Puck.World`, `Puck.SdfVm.Bench`).
+points (`Puck.World`).
 
 ## `WindowsPresentationRegistration.AddWindowsHostedPresentation(services, hostsOnDirectX)`
 

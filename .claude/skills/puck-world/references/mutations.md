@@ -50,7 +50,7 @@ The exact per-tick order, transcribed from `Step`:
    the target body's next tick.
 14. `EmitSnapshot`: deliver the tick's `WorldSnapshot`.
 
-The shared shell is `src/Puck.World/WorldServerStepShell.cs`: drain pending
+The shared shell is `src/Puck.World.Server/WorldServerStepShell.cs`: drain pending
 TCP work → `WorldServer.Step` → `WorldConsoleWaitGate.PublishTick` (the
 `world.wait` clock counts completed simulation ticks) → replay `NoteTick`
 when armed. `WorldSimulation` wraps it with seat-intent submission before the
@@ -143,8 +143,10 @@ table — a row added there grants nothing until relaunch.
   solid buildability — everything but the per-entry authority check, which the
   every-section hold already re-proves). ALL-OR-NOTHING: any entry failing any
   gate refuses the whole undo, names the failing entry's index and reason on
-  stderr, and installs NOTHING. There is no per-mutation inverse. Battery:
-  `docs/verification/undo-all-or-nothing/run.ps1`.
+  stderr, and installs NOTHING. There is no per-mutation inverse. Proven
+  in-process by `tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`
+  against the shared apply gate; the replay loop's own early-return on a
+  genuine mid-replay failure is unproven (see that law's own remarks).
 - **Save** (`world.save`): writes the canonical session snapshot (live levers,
   census, runtime screen inserts fold into their document homes) and compacts
   the journal.

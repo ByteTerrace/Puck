@@ -6,6 +6,7 @@ with hand-rolled first-positional verb dispatch:
 | Verb | What it is |
 |---|---|
 | [`puck canary`](#puck-canary--real-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
+| [`puck citations`](#puck-citations--cited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
 | [`puck search`](#puck-search--content-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
 | [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet). |
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
@@ -14,6 +15,7 @@ with hand-rolled first-positional verb dispatch:
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck declarations`](#puck-declarations--declaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
+| [`puck lengths`](#puck-lengths--file-length-ledger) | checks or regenerates `FileLengths.json`, the ledger the file-length build error (LEN001–LEN004) reads; the ledger only shrinks. |
 | [`puck packages`](#puck-packages--published-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report — id/description/tags — checked and regenerated against `docs/site/index.html`. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlib--wasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library — currently `FixedQ4816`'s Rust port and known-answer vectors. |
 | [`puck worktree-base`](#puck-worktree-base--worktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
@@ -103,6 +105,12 @@ BOM-less UTF-8 stdin, closes the pipe, drains both streams, checks the absolute
 `--world` boot-origin line, enforces per-leg and whole-suite budgets, and kills
 the process tree on timeout.
 
+A `bootShape: "stub"` manifest is the one exception to "runs that exact
+artifact sequentially": its leg runs through `Puck.Launcher.Stub` from a
+leg-private, disposable `<run>/install/` tree, never the shared build path,
+and observes two successive process launches rather than one — the
+`self-update` canary is the only user today.
+
 ```
 puck canary                         run the automatic set (headless, no environmental requirements)
 puck canary <id> ...                explicitly run named proofs
@@ -114,9 +122,13 @@ puck canary --capability <class>    filter automatic/headless/windowed or an env
 The selection forms are mutually exclusive and every execution selection must
 be nonempty. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its
-verb and occurrence. Assertions cover stream-specific exact/contained lines,
-verb/occurrence/exact-cardinality responses, ordered sequences, named response
-field extraction, equality/inequality, inclusive bounds, minimum margins, and
+verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
+its confirmation there instead of stdout — the shape server narration
+(`[world.grant: …]`, `[world.revoke: …]`) always uses regardless of
+accept/refuse, unlike an ordinary accepted command's stdout read-back.
+Assertions cover stream-specific exact/contained lines, verb/occurrence/
+exact-cardinality responses, ordered sequences, named response field
+extraction, equality/inequality, inclusive bounds, minimum margins, and
 byte-level file equality/inequality. A manifest may start a companion authority
 world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
 and assertions for per-leg capture paths. There are no regex programs, loops,
@@ -124,18 +136,39 @@ callbacks, conditionals, shell, or embedded scripts.
 Exit codes are 0 for all proofs held, 1 for an observed proof failure, and 2 for
 usage, manifest, build, or infrastructure refusal.
 
-This is not a universal verification gate. The richer PowerShell batteries
-`undo-all-or-nothing`, `strict-definition-parse`,
-`sdf-decode-sign-refusal`, `doc-links`, `addon-mutation-seam`, and
-`four-world-boot-smoke` remain named, on-demand, and ungated. They are not
-wrapped, ported, or executed by `puck canary`.
+A leg may instead declare `authorities`: an array of `{id, world, script}`
+naming at least two listeners, none dialing out — the N-ary generalization of
+the singular `authorityWorld`/`connect` companion pair above, mutually
+exclusive with it. Every entry gets its own dynamically allocated loopback
+endpoint and generated federation identity, pinned into every other entry's
+admission rows the same way a two-process leg's companion is; the entries
+launch concurrently and run to completion before any assertion reads a
+transcript. Exactly one entry's `world`/`script` must equal the leg's own —
+the entry an assertion with no `authority` selector reads by default — and a
+`line`/`response`/`sequence` assertion may add `"authority": "<id>"` to read
+a different entry's transcript instead. A federated leg's `seconds`/
+`timeoutSeconds` ceilings are wider (concurrently-spawned processes on a
+shared machine see real spawn/handshake variance a single process does not).
+`tests/Puck.World.Canaries/addon-mutation-seam` is the `stream` override's
+first user; `tests/Puck.World.Canaries/four-corners-sharded` is `authorities`'
+first user — five real processes (four ground worlds plus the floating
+island), one human-driven body ringing all four ground authorities. Not yet
+expressible in that same canary, owed to future widening rather than a
+runner limitation: vertical/island crossing, retained dual-stick camera and
+movement control across a handoff, autonomous producer-driven travellers,
+derived diagonal corner peers, and a cross-authority contact-pair settling
+observation. A killed or mispointed authority turning the corresponding
+transfer/address observation red is out of scope for any two-leg manifest
+by the format's own rule (a manifest is exactly `positive`/`discriminating`);
+a Silo-hosted (rather than `dotnet run`) authority entry is a documented
+future transport arm, not a reshape of `authorities`' current members.
 
 ---
 
 ## `puck parity` — cross-backend composed-frame comparison
 
 For every corpus entry — the authored pattern worlds under
-[docs/verification/parity/](../../docs/verification/parity/README.md)
+[tests/Puck.Parity/](../../tests/Puck.Parity/README.md)
 (gradient, edges, modifiers, glyphs, each stressing one contract slice) plus the
 shipped default world — `puck parity` boots the real `Puck.World` windowed
 twice, once on Vulkan and once on Direct3D 12, arms `world.screenshot` at the
@@ -149,8 +182,9 @@ Two different patterns rendered by the same backend must fail the same
 envelope — a comparator that cannot refuse cannot report green.
 
 ```
-puck parity                         run the pattern corpus plus the shipped default world
-puck parity --world <path>          additionally run the named world as a corpus entry
+puck parity                                 run the pattern corpus plus the shipped default world
+puck parity --world <path>                  additionally run the named world as a corpus entry
+puck parity --generate [--hashes id=hex64,...]   regenerate tests/Puck.Parity/*.world.json from their pattern definitions
 ```
 
 The runner builds `Puck.World` once, runs each leg from fresh state with its
@@ -161,6 +195,71 @@ display and both GPU devices, and it covers composed-frame agreement only —
 nothing about the SDF ISA, document schemas, or deterministic numerics.
 Exit codes are 0 for parity held and the discriminator refused, 1 for an
 observed failure, and 2 for usage, build, or infrastructure refusal.
+
+`--generate` rebuilds every pattern world from its shape/material/screen
+definitions in `ParityCorpusGenerator.cs` — edit that file, never the JSON, the
+same discipline `tests/Puck.Parity/README.md` states for editing a pattern. A
+regenerated creation's canonical hash cannot be derived by the generator (the
+validator's canonicalizer sits outside `Puck.Cli`); boot the affected world
+once, read the canonical hash the validator's own refusal names, and pass every
+pattern's hash back via `--hashes id=hex64,...` (an id with no override is
+stamped with the all-zero placeholder).
+
+---
+
+## `puck citations` — cited verb token check
+
+Sweeps `.claude/skills/**/*.md` for `` `backticked` `` tokens and `src/**/*.cs`
+for `<c>…</c>` tokens, keeps those shaped like a console verb (a family the
+console actually uses, dotted), and resolves each against: the console-verb
+enumeration, verb names spelled literally in registrations, every other
+verb-shaped string literal under `src/`, and every world-document field path
+the generated section schemas under `src/Puck.World/Assets/worlds/schema/`
+declare (`storage.userId`, `audio.masterGain`) — a document field is cited
+exactly like a verb and the generated schema is the vocabulary that cannot
+drift from the shape.
+
+```
+puck citations                       enumerate the console live, then check every citation
+puck citations --enumeration <path>  check against a supplied verb list (one name per line) instead
+```
+
+With no `--enumeration`, the console-verb vocabulary is booted rather than
+read from a file: this verb builds `Puck.World` once (Release) and runs it
+twice — headless, then windowed — piping `help` over stdin to each and
+unioning the two vocabularies, because some command modules register only
+under one boot shape. If a verb spelled literally in a registration is absent
+from that union, the run refuses (exit 3) rather than report — checking
+citations against an incomplete vocabulary would accuse correct documentation
+of quoting dead verbs.
+
+Exit codes: 0 every citation resolved, 1 unresolved citations (each named),
+2 usage error, no repository root, or the enumeration boot/build refused,
+3 the enumeration is provably incomplete and nothing was reported against it.
+
+---
+
+## `puck doc-links` — relative link and path check
+
+Checks a fixed documentation set (the world-project READMEs, the repository
+root README, and the top-level `docs/` orientation set) for citations that
+stopped resolving: relative markdown links, backticked rooted repository
+paths (`src/...`, `docs/...`, `tests/...`, `build/...`), and backticked bare
+filenames (looked up in an index swept from `src/`, `docs/`, `tests/`,
+`build/`, and `.claude/skills/` — enforced under `src/`, advisory elsewhere,
+since a `docs/` document legitimately names out-of-repo files).
+
+```
+puck doc-links                check the world-documentation set this verb ships with
+puck doc-links <doc> ...      check exactly the named repository-relative markdown files instead
+```
+
+One control runs before any document — a deliberately nonexistent path must
+fail resolution — so a green run proves the checker can turn red. Unlike
+`puck citations`, this covers file/path citations, never console-verb tokens.
+
+Exit codes: 0 every citation resolved, 1 one or more citations did not
+resolve, 2 usage or no repository root.
 
 ---
 
@@ -366,6 +465,12 @@ declaring record's own `<param>` (most members are documented that way — a
 positional record's XML doc lives on the record declaration, not the
 property), then a type `<summary>` for a node with no containing property
 (an array's item schema, a `$type` arm).
+
+`render.extensions[]` takes its `id` vocabulary and per-id `config` schema
+from the shipped `puck.shader.v1` manifests under `src/*/Assets/Shaders`
+(`Puck.Shaders.ShaderSetManifest.ConfigJsonSchema`) — one `if`/`then` arm per
+id — so an entry's config validates by id in an editor, and adding a shader
+set changes the schema (`--check` catches a manifest edit not regenerated).
 
 The output is SPLIT, not one file: a small root plus one file per top-level
 document section (`kits.schema.json`, `screens.schema.json`, …), plus
@@ -624,6 +729,28 @@ refuse `artifacts` and agent worktrees under `.claude/worktrees`, so a paired
 sweep covers one tree — and its parse with `scan`.
 
 ---
+
+## `puck lengths` — file-length ledger
+
+Every compilation carries `FileLengthAnalyzer` (in `Puck.Analyzers`, wired like `VerifiedCode.json`): a source
+file over the ceiling in `FileLengths.json` fails the build with **LEN001** unless the ledger records it, a
+recorded file that grows past its recorded length fails with **LEN002**, a recorded file that has dropped to the
+ceiling or below fails with **LEN003** until its entry is removed, and a missing or off-schema ledger fails with
+**LEN004**. The ledger therefore only shrinks: a new file may not start life over the ceiling, and a file already
+over it may only get shorter. Generated trees (`*.g.cs`, auto-generated headers) are outside the rule. The count
+is line breaks plus one.
+
+The analyzer sees one compilation at a time, so an entry whose file was deleted or moved never reaches it; this
+verb walks the tracked `src/`, `tests/`, and `build/` trees instead.
+
+```
+puck lengths [--check]   report stale, grown, and unrecorded-over-ceiling files; exit 1 on any
+puck lengths --write     rewrite FileLengths.json from the tree: remove stale entries, lower shrunken ones;
+                         refuses (exit 1, naming the file) to raise a recorded length or record a new file
+```
+
+Splitting a recorded file is the expected way to change the ledger: shrink it, run `puck lengths --write`, and the
+entry lowers or disappears. Raising the ceiling itself is a deliberate edit to `FileLengths.json`.
 
 ## `puck packages` — published NuGet package report
 

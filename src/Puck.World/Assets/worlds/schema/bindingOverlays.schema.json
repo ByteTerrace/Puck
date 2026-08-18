@@ -1,6 +1,8 @@
 {
-  "description": "The per-world binding overlays (default empty) layered over the engine default beneath each seat\u0027s profile bindings.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay) is what the validator compiles.",
     "type": [
@@ -30,8 +32,14 @@
                 "id": {
                   "type": "string"
                 },
-                "source": {
-                  "type": "string"
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
                 },
                 "pressThreshold": {
                   "type": "number",
@@ -58,7 +66,7 @@
               },
               "required": [
                 "id",
-                "source"
+                "sources"
               ],
               "additionalProperties": false
             }
@@ -75,13 +83,17 @@
                   "type": "string"
                 },
                 "chord": {
-                  "type": "array",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
                   "items": {
                     "type": [
                       "string",
                       "null"
                     ]
-                  }
+                  },
+                  "default": null
                 },
                 "page": {
                   "$ref": "./common.schema.json#/$defs/BindingPageDefinition",
@@ -130,15 +142,49 @@
                     },
                     "value": {
                       "default": null
+                    },
+                    "mode": {
+                      "enum": [
+                        "Hold",
+                        "Toggle"
+                      ],
+                      "default": "Hold"
                     }
                   },
                   "additionalProperties": false,
                   "default": null
+                },
+                "held": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null
+                },
+                "isResting": {
+                  "type": "boolean"
+                },
+                "members": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
                 }
               },
               "required": [
-                "group",
-                "chord"
+                "group"
               ],
               "additionalProperties": false
             }
@@ -287,6 +333,18 @@
                       ],
                       "additionalProperties": false,
                       "default": null
+                    },
+                    "axisDeadZone": {
+                      "type": "number",
+                      "default": 0.08
+                    },
+                    "selectionGraceSeconds": {
+                      "type": "number",
+                      "default": 0.5
+                    },
+                    "switchFraction": {
+                      "type": "number",
+                      "default": 0.4
                     }
                   },
                   "additionalProperties": false,
@@ -322,11 +380,6 @@
             "description": "Whether the bar is shown when no live override hides it.",
             "type": "boolean",
             "default": true
-          },
-          "hideAfterRestSeconds": {
-            "description": "The idle duration after which the bar hides; zero disables rest hiding.",
-            "type": "number",
-            "default": 0
           },
           "layout": {
             "description": "The bar layout; null uses Default.",
@@ -370,6 +423,11 @@
             ],
             "additionalProperties": false,
             "default": null
+          },
+          "visible": {
+            "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
+            "description": "The bar\u0027s visibility condition over presentation facts, or null for always.",
+            "default": null
           }
         },
         "additionalProperties": false,
@@ -381,5 +439,6 @@
       "document"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

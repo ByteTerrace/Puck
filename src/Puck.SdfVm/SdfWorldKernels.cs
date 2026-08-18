@@ -1,16 +1,19 @@
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The compiled compute kernels of the SDF world pipeline, in chain order: <c>sdf-beam.comp</c> (tile-cull
-/// cone-march prepass), <c>sdf-instance-cull.comp</c> (the per-tile instance-mask pass — its own kernel so its cell
-/// walk's register footprint never taxes the cone march's occupancy), <c>sdf-cull-args.comp</c> (GPU-written indirect
-/// dispatch args: the surviving-tile bbox), <c>sdf-world-views.comp</c> (per-view render, dispatched indirectly from
-/// those args) plus its core-ops compiled variant <c>sdf-world-views-core.comp</c> (the exotic-ISA strip
-/// <see cref="SdfWorldEngine.UploadProgram"/> selects per program — see <see cref="SdfViewsKernelVariant"/>), and
-/// <c>sdf-world-composite.comp</c> (source-agnostic region composite). One backend's set — SPIR-V
-/// for Vulkan, DXIL for Direct3D 12; <see cref="Load(string)"/> reads whichever the extension selects from the
-/// deployed assets.
+/// The compiled compute kernels of the SDF world pipeline, in chain order: <c>sdf-sky.comp</c> (the sky pre-pass —
+/// fills every source pixel with the authored sky before any tile is culled, dispatched directly against Stage 1's
+/// own bindings array, so a beam-culled tile's compositor copy is never stale device memory),
+/// <c>sdf-beam.comp</c> (tile-cull cone-march prepass), <c>sdf-instance-cull.comp</c> (the per-tile instance-mask
+/// pass — its own kernel so its cell walk's register footprint never taxes the cone march's occupancy),
+/// <c>sdf-cull-args.comp</c> (GPU-written indirect dispatch args: the surviving-tile bbox), <c>sdf-world-views.comp</c>
+/// (per-view render, dispatched indirectly from those args) plus its core-ops compiled variant
+/// <c>sdf-world-views-core.comp</c> (the exotic-ISA strip <see cref="SdfWorldEngine.UploadProgram"/> selects per
+/// program — see <see cref="SdfViewsKernelVariant"/>), and <c>sdf-world-composite.comp</c> (source-agnostic region
+/// composite). One backend's set — SPIR-V for Vulkan, DXIL for Direct3D 12; <see cref="Load(string)"/> reads whichever
+/// the extension selects from the deployed assets.
 /// </summary>
+/// <param name="Sky">The sky pre-pass kernel.</param>
 /// <param name="Beam">The tile-cull prepass kernel.</param>
 /// <param name="InstanceCull">The per-tile instance-mask kernel.</param>
 /// <param name="CullArgs">The cull-args reduction kernel.</param>
@@ -20,6 +23,7 @@ namespace Puck.SdfVm;
 /// <param name="BrickBake">The standalone carve-union brick baker (<c>sdf-brick-bake.comp</c>) — dispatched only when
 /// the engine provisions a brick pool (carve-bake plan §3).</param>
 public readonly record struct SdfWorldKernels(
+    ReadOnlyMemory<byte> Sky,
     ReadOnlyMemory<byte> Beam,
     ReadOnlyMemory<byte> InstanceCull,
     ReadOnlyMemory<byte> CullArgs,
@@ -53,6 +57,7 @@ public readonly record struct SdfWorldKernels(
             Composite: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-composite.comp{bytecodeExtension}")),
             CullArgs: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-cull-args.comp{bytecodeExtension}")),
             InstanceCull: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-instance-cull.comp{bytecodeExtension}")),
+            Sky: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-sky.comp{bytecodeExtension}")),
             Views: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views.comp{bytecodeExtension}")),
             ViewsCore: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views-core.comp{bytecodeExtension}"))
         );

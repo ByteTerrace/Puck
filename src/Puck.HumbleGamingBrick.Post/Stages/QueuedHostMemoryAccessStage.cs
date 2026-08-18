@@ -10,7 +10,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// never fault the queue. The scratch address (<c>0xC200</c>) is a work-RAM byte the synthetic ROM never writes; its
 /// deterministic WRAM-fill page (<c>0xC000</c>–<c>0xC0FF</c>) is the compared reproducibility region.
 /// </summary>
-internal sealed class QueuedHostMemoryAccessStage : IPostStage {
+internal sealed class QueuedHostMemoryAccessStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "queued-host-memory-access";

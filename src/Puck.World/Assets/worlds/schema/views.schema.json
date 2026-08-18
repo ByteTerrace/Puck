@@ -1,6 +1,8 @@
 {
-  "description": "The window-composition defaults \u2014 the seat framing every seat wakes on plus the authored named layouts (see WorldViewDefaults). An empty layout list falls the composer through to the built-in seat ladder.",
-  "type": "object",
+  "type": [
+    "object",
+    "null"
+  ],
   "properties": {
     "seatRig": {
       "$ref": "./common.schema.json#/$defs/WorldCameraRig",
@@ -24,6 +26,37 @@
         "maxPitch": {
           "description": "The maximum live pitch offset in radians.",
           "type": "number"
+        },
+        "follow": {
+          "description": "The follow camera: with no look input the camera yaw eases in behind the body\u0027s heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World \u2014 a body-relative yaw already rides the body.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "rate": {
+              "description": "The exponential rate (per second) the camera yaw closes on the heading \u2014 about 63% of the remaining angle per 1/rate seconds; larger is a stiffer follow.",
+              "type": "number"
+            },
+            "whileIdle": {
+              "description": "Whether the follow also runs while the body has no movement input. false (the default) is the classic feel: after a free-look the camera stays where you left it until you move.",
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "rate"
+          ],
+          "additionalProperties": false,
+          "default": null
+        },
+        "swapRate": {
+          "description": "The rate the camera boom closes over a player.look.swap, in the same unit as seatRig.smoothRate: 0 is instant (the boom re-seeds at the turned pose \u2014 a cut), a positive value eases the half-turn at that rate until it lands. Optional; absent leaves the swap to the rig\u0027s own smoothRate.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [
@@ -110,5 +143,6 @@
     "seatControl",
     "layouts"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "default": null
 }

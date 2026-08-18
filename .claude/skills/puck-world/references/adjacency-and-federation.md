@@ -266,24 +266,22 @@ dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Rele
 ```
 
 Run `puck canary seamless-adjacency` for the automatic crossing and stationary
-real-path proof, and `puck canary quilt-nw-gap-corner-strip` for the four-way
-corner specifically: quilt-nw-gap drops both of NW's direct adjacencies, so a
+real-path proof, `puck canary quilt-nw-gap-corner-strip` for the four-way
+corner specifically (quilt-nw-gap drops both of NW's direct adjacencies, so a
 body resting past NW's own east and south edges — where the local field is
 identically absent in both legs — is grounded only when at least one direct
-edge still delivers the corner, isolating that continuity from local geometry.
-Run the stronger topology stress proof directly:
-
-```text
-pwsh -NoProfile -File docs/verification/four-corners-sharded/run.ps1
-```
-
-That runner starts five distinct loopback authorities (four ground worlds and
-the floating island) and must prove horizontal and vertical handoffs, one full
-four-ground-world human circuit, vertical human probes, retained dual-stick and
-held-button input, routed camera and query state, cross-host body contact,
-autonomous travellers, derived diagonal peers, and zero wire errors. `play.ps1`
-opens the same five-authority topology for owner playtesting; visual feel
-remains owner acceptance, not a headless substitute.
+edge still delivers the corner, isolating that continuity from local geometry),
+and `puck canary four-corners-sharded` for the topology stress proof: five real
+`Puck.World` processes (four ground worlds and the floating island), each
+binding its own dynamic loopback endpoint and trusting the others' generated
+federation identity, with one human-driven body ringing all four ground
+authorities (nw's east edge into ne, ne's south edge into se, se's west edge
+into sw, sw's own north edge closing the ring back onto nw) purely through the
+router that follows a body wherever it now lives. Vertical/island crossing,
+retained dual-stick camera/movement control, autonomous producer travellers,
+derived diagonal peers, and cross-authority contact-pair settling are not
+exercised by this canary; widening its scripts to cover them is future work,
+not a runner limitation.
 
 For federation transport changes, both sides need the same
 `--federation-key-file`; inspect both stdout and stderr. Authentication must

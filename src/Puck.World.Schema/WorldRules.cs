@@ -677,7 +677,7 @@ public static class WorldRuleCompiler {
         _ => throw new WorldRuleException(
         refusal: WorldRuleRefusal.EffectKindInadmissible,
         ruleName: ruleName,
-        detail: $"'{effect.GetType().Name}' has no world-scope meaning — only 'setState', 'addState', 'countdownState', 'generate', 'upsertHudPanel', 'removeHudPanel', 'upsertPlacement', 'removePlacement' and 'save' are admitted (the velocity, impulse, designate and timer effects all address a body's own state)"
+        detail: $"'{effect.GetType().Name}' has no world-scope meaning — only 'setState', 'addState', 'countdownState', 'generate', 'upsertHudPanel', 'removeHudPanel', 'upsertPlacement', 'removePlacement' and 'save' are admitted (the velocity, impulse, designate, timer and judge effects all address a body's own state)"
     ),
     };
     private static string DescribeCellKind(CellKind kind) => kind.ToString().ToLowerInvariant();

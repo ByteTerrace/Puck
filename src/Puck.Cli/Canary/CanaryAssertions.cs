@@ -8,13 +8,23 @@ internal sealed record CanaryEvaluation(IReadOnlyList<CanaryAssertionResult> Res
     public bool Passed => Results.All(predicate: static result => result.Passed);
 }
 internal static class CanaryAssertions {
-    public static CanaryEvaluation Evaluate(CanaryLeg leg, CanaryTranscript transcript) {
+    // authorityTranscripts resolves an assertion's optional authority id to that authority's own transcript; a null
+    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer always reads
+    // primaryTranscript.RunDirectory regardless of authority, since capture paths are leg-scoped, not per-process.
+    public static CanaryEvaluation Evaluate(CanaryLeg leg, CanaryTranscript primaryTranscript, IReadOnlyDictionary<string, CanaryTranscript>? authorityTranscripts = null) {
         var results = new List<CanaryAssertionResult>(capacity: leg.Assertions.Count);
         var values = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
+        // An authority id absent from the map (replaying a federated positive leg's assertions against a
+        // non-federated or differently-shaped discriminating leg) resolves to an empty transcript rather than
+        // throwing — the observation is simply absent, which fails "present" checks the same way a genuine miss does.
+        CanaryTranscript Resolve(string? authority) => ((authority is null)
+            ? primaryTranscript
+            : (authorityTranscripts?.GetValueOrDefault(key: authority) ?? new CanaryTranscript(RunDirectory: primaryTranscript.RunDirectory, Stderr: [], Stdout: [])));
+
         foreach (var assertion in leg.Assertions) {
             if (assertion is CanaryResponseAssertion response) {
-                results.Add(item: EvaluateResponse(assertion: response, transcript: transcript, values: values));
+                results.Add(item: EvaluateResponse(assertion: response, transcript: Resolve(authority: response.Authority), values: values));
             }
         }
 
@@ -23,16 +33,16 @@ internal static class CanaryAssertions {
                 case CanaryResponseAssertion:
                     break;
                 case CanaryLineAssertion line:
-                    results.Add(item: EvaluateLine(assertion: line, transcript: transcript));
+                    results.Add(item: EvaluateLine(assertion: line, transcript: Resolve(authority: line.Authority)));
                     break;
                 case CanarySequenceAssertion sequence:
-                    results.Add(item: EvaluateSequence(assertion: sequence, transcript: transcript));
+                    results.Add(item: EvaluateSequence(assertion: sequence, transcript: Resolve(authority: sequence.Authority)));
                     break;
                 case CanaryRelationAssertion relation:
                     results.Add(item: EvaluateRelation(assertion: relation, values: values));
                     break;
                 case CanaryFileDifferenceAssertion files:
-                    results.Add(item: EvaluateFileDifference(assertion: files, transcript: transcript));
+                    results.Add(item: EvaluateFileDifference(assertion: files, transcript: primaryTranscript));
                     break;
             }
         }

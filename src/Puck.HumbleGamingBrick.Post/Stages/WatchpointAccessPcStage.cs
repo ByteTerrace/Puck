@@ -17,7 +17,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// over-running the budget or step count never runs off into unmapped memory.
 /// </para>
 /// </summary>
-internal sealed class WatchpointAccessPcStage : IPostStage {
+internal sealed class WatchpointAccessPcStage : IPostStage<PostContext> {
     private const ushort LoopPc = 0x0108;
     private const ushort ReadInstructionPc = 0x0105;
     private const byte ReadValue = 0x33;

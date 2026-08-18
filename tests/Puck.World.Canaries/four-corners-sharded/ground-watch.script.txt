@@ -1,0 +1,5 @@
+world.wait 60
+wire.errors reset
+world.adjacencies
+world.wait 60
+world.adjacencies

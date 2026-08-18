@@ -270,6 +270,7 @@ public static class WorldFederationCodec {
         var index = reader.ReadInt32();
         var position = reader.ReadFiniteVector(field: $"snapshot entity {ordinal} position");
         var orientation = reader.ReadQuaternion();
+        var heading = reader.ReadSingle();
         var bodyColor = reader.ReadFiniteVector(field: $"snapshot entity {ordinal} body color");
         var active = reader.ReadBoolean();
         var kit = reader.ReadByte();
@@ -312,7 +313,8 @@ public static class WorldFederationCodec {
                 Seconds: seconds
             ),
             generation,
-            placementId
+            placementId,
+            heading
         );
     }
     private static WorldEntityAddress ReadEntityAddress(ref WireReader reader) =>
@@ -752,6 +754,7 @@ public static class WorldFederationCodec {
             writer.WriteInt32(value: entry.Index);
             writer.WriteVector(value: entry.Position);
             writer.WriteQuaternion(value: entry.Orientation);
+            writer.WriteSingle(value: entry.Heading);
             writer.WriteVector(value: entry.BodyColor);
             writer.WriteBoolean(value: entry.Active);
             writer.WriteByte(value: entry.Kit);

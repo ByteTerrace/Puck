@@ -8,7 +8,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// so the number lands in the report and can be tracked across changes (the before/after that makes a tick-path
 /// optimisation a fact rather than a claim).
 /// </summary>
-internal sealed class ThroughputStage : IPostStage {
+internal sealed class ThroughputStage : IPostStage<PostContext> {
     private const int BenchFrames = 2_000;
     private const int WarmFrames = 60;
 

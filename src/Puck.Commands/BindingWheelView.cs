@@ -12,13 +12,19 @@ namespace Puck.Commands;
 /// <param name="Rings">The ring views, innermost first.</param>
 /// <param name="Style">The validated presentation policy.</param>
 /// <param name="Excursion">Compiler-precomputed neutral-relative thresholds, or null for explicit ring selection.</param>
+/// <param name="SelectorDeadZoneSquared">The compiled squared Axis2D admission threshold: the excursion dead zone
+/// for excursion-selected rings, otherwise the style's Axis2D dead zone.</param>
+/// <param name="SelectorSwitchThresholdSquared">The compiled squared magnitude an opposite-side excursion must
+/// reach after neutral.</param>
 public sealed record BindingWheelView(
     string Id,
     string Group,
     IReadOnlyList<string> HoldPageIds,
     IReadOnlyList<BindingWheelRingView> Rings,
     BindingWheelStyleDefinition Style,
-    BindingWheelExcursionView? Excursion
+    BindingWheelExcursionView? Excursion,
+    float SelectorDeadZoneSquared,
+    float SelectorSwitchThresholdSquared
 );
 /// <summary>Squared neutral-relative range boundaries compiled once for allocation-free selector resolution.</summary>
 /// <param name="DeadZoneSquared">The authored inclusive dead zone, squared.</param>

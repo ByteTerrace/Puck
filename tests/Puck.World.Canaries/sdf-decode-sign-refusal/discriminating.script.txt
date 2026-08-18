@@ -1,0 +1,14 @@
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.sdf.load {fixtures}\valid-control.sdf.json
+world.refusals sdf.decode

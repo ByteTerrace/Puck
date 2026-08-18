@@ -17,6 +17,10 @@
          transitively-arriving edge is checked the same as a declared one. -->
     <Import Project="$(MSBuildThisFileDirectory)build\Puck.Architecture.targets" />
 
+    <!-- The shared shader-compile recipe (DXC to SPIR-V + DXIL, item-driven, opt-out DXIL). Imported once for
+         every project; a project declaring no shader items never triggers a single Exec. -->
+    <Import Project="$(MSBuildThisFileDirectory)build\Shaders.targets" />
+
     <!-- NuGet packaging policy for blessed projects. Imported here (after each project's body) so a
          csproj's own <IsPackable>true</IsPackable> is visible to the flag-guarded groups inside. -->
     <Import Project="$(MSBuildThisFileDirectory)build\Packaging.targets" />

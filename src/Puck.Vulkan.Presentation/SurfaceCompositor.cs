@@ -27,7 +27,7 @@ public sealed class SurfaceCompositor : IDisposable {
     private const uint SamplerBindingIndex = 0;
     private const string VertexShaderFileName = "fullscreen.vert.spv";
 
-    private static readonly byte[] FullscreenTriangleVertexData = CreateFullscreenTriangleVertexData();
+    private static readonly byte[] FullscreenTriangleVertexData = FullscreenTriangle.CreateVertexData();
 
     private readonly IVulkanCommandBufferRecordingApi m_commandBufferRecordingApi;
     private readonly IVulkanCommandResourcesFactory m_commandResourcesFactory;
@@ -367,36 +367,6 @@ public sealed class SurfaceCompositor : IDisposable {
         m_blitFragmentShader = null;
         m_vertexShader?.Dispose();
         m_vertexShader = null;
-    }
-    private static byte[] CreateFullscreenTriangleVertexData() {
-        var vertices = new (float X, float Y)[]
-        {
-            (-1f, -1f),
-            (3f, -1f),
-            (-1f, 3f),
-        };
-        var vertexData = new byte[((sizeof(float) * 2) * vertices.Length)];
-
-        for (var index = 0; (index < vertices.Length); index++) {
-            var offset = ((index * sizeof(float)) * 2);
-
-            _ = BitConverter.TryWriteBytes(
-                destination: vertexData.AsSpan(
-                    length: sizeof(float),
-                    start: offset
-                ),
-                value: vertices[index].X
-            );
-            _ = BitConverter.TryWriteBytes(
-                destination: vertexData.AsSpan(
-                    length: sizeof(float),
-                    start: (offset + sizeof(float))
-                ),
-                value: vertices[index].Y
-            );
-        }
-
-        return vertexData;
     }
 
     /// <summary>Releases the compositor's device-derived blit resources on the CURRENT resource device during device-loss

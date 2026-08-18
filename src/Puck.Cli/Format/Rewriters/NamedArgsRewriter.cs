@@ -111,8 +111,12 @@ internal sealed class NamedArgsRewriter : CSharpSyntaxRewriter {
                 continue;
             }
 
+            // A parameter declared as a verbatim identifier (`object? @object`) has the bare keyword as its
+            // symbol name; written back without the `@` it is a keyword again, not an argument name.
+            var parameterName = parameters[index].Name;
+            var identifier = ((SyntaxFacts.GetKeywordKind(text: parameterName) != SyntaxKind.None) ? $"@{parameterName}" : parameterName);
             var nameColon = SyntaxFactory
-                .NameColon(name: SyntaxFactory.IdentifierName(name: parameters[index].Name))
+                .NameColon(name: SyntaxFactory.IdentifierName(name: identifier))
                 .WithColonToken(colonToken: SyntaxFactory.Token(kind: SyntaxKind.ColonToken).WithTrailingTrivia(trivia: SyntaxFactory.Space));
             var refKind = (argument.RefKindKeyword.IsKind(kind: SyntaxKind.None)
                 ? default

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Assets.Documents;
 using Puck.Forge.Authoring;
 using Puck.Commands;
 using Puck.World.Client;
@@ -21,11 +22,11 @@ namespace Puck.World;
 /// cache's front door.</remarks>
 internal sealed class EditorCreationCommandModule(WorldEditorSession session, WorldEditorDrag drag, WorldClient client, IServerLink link) : ICommandModule {
     /// <summary>The armed-creation cycle-next act (D-pad Right on the place page).</summary>
-    public const string NextCommand = "editor.creation.next";
+    public const string NextCommand = Puck.World.Client.EditorCreationCommandNames.NextCommand;
     /// <summary>The armed-creation cycle-previous act (D-pad Left on the place page).</summary>
-    public const string PrevCommand = "editor.creation.prev";
+    public const string PrevCommand = Puck.World.Client.EditorCreationCommandNames.PrevCommand;
     /// <summary>The creation ghost act (North on the place page): a ghost placement of the armed creation.</summary>
-    public const string SpawnCommand = "editor.spawn.creation";
+    public const string SpawnCommand = Puck.World.Client.EditorCreationCommandNames.SpawnCommand;
 
     private readonly WorldEditorSession m_session = session;
     private readonly WorldEditorDrag m_drag = drag;
@@ -131,7 +132,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
 
         var id = ((args.Count >= 2)
             ? args[1].ToString()
-            : (canonical.Document.Name ?? "creation")
+            : (canonical.Document.Name?.Value ?? "creation")
         );
         var slot = ((context.Origin == CommandOrigin.Binding)
             ? context.Slot
@@ -146,7 +147,7 @@ internal sealed class EditorCreationCommandModule(WorldEditorSession session, Wo
             Creation: new WorldCreation(
                 Id: id,
                 Document: canonical.Document,
-                Hash: canonical.Hash
+                HashRaw: canonical.Hash
             )
         ));
 

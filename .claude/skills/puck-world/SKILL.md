@@ -37,16 +37,33 @@ console is only a MIRROR of that pipe — nothing that draws (including a HUD
 away. Verify game behavior by RUNNING the game, never by a build gate
 (`CLAUDE.md` rule 3).
 
-## The six projects
+## The seven projects
 
 | Project | Owns | Key types |
 |---|---|---|
 | `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records, `WorldDefinitionValidator`, `WorldDefinitionSerialization`; authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`WorldPrincipal`, admission entries) |
-| `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport` |
+| `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — all four namespaced `Puck.World.Server` still, moved here as files without a rename |
 | `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
 | `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `WorldMachineHost`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
 | `src/Puck.World.Addons` | The addon guest host | `WorldAddonRuntime`, `WorldAddonMutationDecoder`, `WorldAddonWire`, `AddonMutateRefusal` |
-| `src/Puck.World` | The sole composition root | `Program.cs`, the client (`Client/`), presentation and the screen-output binder, `Audio/`, every `*CommandModule`, and the shipped world/scenario documents under `Assets/` |
+| `src/Puck.World.Client` | The presentation-facing client seam, physically split out of `Puck.World` | `PlayerRoster`/`WorldClient`/`SeatController`, the editor (`WorldEditorSession`/`WorldEditorTargeting`/`WorldEditorDrag`/`WorldEditorPicker`/`WorldWorkbench`), `WorldFrameSource` (the composed-frame producer)/`WorldSceneEmitter`/`WorldViewComposer`, `WorldSessionSceneEmitter`/`WorldAdjacencySceneEmitter`/`WorldSdfDocumentEmitter`, the stamp/animation pool (`WorldStampPool`/`WorldPlacementStamper`/`WorldScreenStamper`), the SDF document intake (`Sdf/SdfDocumentDecoder`/`SdfDocumentModel`/`SdfRefusal`), `IWorldAudioFrameFeed`/`IWorldAudioCueSink` (the narrow seams the frame/scene producers hold the root's `WorldAudioDirector` through, the `IWorldAudioLever` pattern), and the binding-authoring layer (`WorldSeatBindings`/`WorldEditorBindings`/`WorldDefaultBindings`/`WorldAffordances`/`CommandVocabulary`). References `Puck.World.Protocol` and `Puck.Audio`, never `Puck.World.Server`. |
+| `src/Puck.World` | The sole composition root | `Program.cs`, `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`), `WorldAudioDirector` (stays here — imports `Puck.World.Audio` types directly; implements Client's `IWorldAudioFrameFeed`/`IWorldAudioCueSink`/`IWorldAudioLever` for the frame/scene producers and the session-lever sink), presentation and the screen-output binder, `Audio/` (document intake, tune hosting, the render device — the mixer core and voice synth live in `src/Puck.Audio`), every `*CommandModule` (nine of them forward their command-name constants to `Puck.World.Client.CommandVocabulary`, the single source), and the shipped world/scenario documents under `Assets/` |
+
+`src/Puck.Audio` is an eighth, sibling engine-services project (not one of
+the seven above): the deterministic fixed-point mixer/voice-synth core
+(`Puck.Audio.Mixing` — `AudioMixer`/`VoiceSynth`/
+`AudioSnapshot`/`MachineAudioRate`) plus sim-state music
+(`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/`RhythmJudge`/
+`MusicSenseEdge`, stepped from `WorldServer.Step` right after
+`WorldEventFeed.Collect()`), referenced by `Puck.World.Server` (machine audio
+rate; `WorldMusicJudgeAssetLoader` resolves each `WorldMusicRow`/`WorldJudgeRow`
+reference's `puck.music.v1`/`puck.judge.v1` document off disk, and
+`MusicDirectorFactory` compiles the loaded documents into the sim-side shapes
+and projects `WorldEventFeed.Edges` into `MusicSenseEdge`) and `Puck.World`
+(presentation glue). It parses no document. `music.state`/`judge.state` are
+`WorldAudioCommandModule` query verbs routed through seat 1's currently
+claimed `WorldSeatAuthorityRouter` route — a transferred seat is followed the
+same way `PlayerCommandModule`'s drive-a-player verbs are.
 
 Dependency rules are enforced by the architecture gate (`PUCKARCH`
 diagnostics from `build/Architecture.props`): `Puck.World.Schema` references
@@ -64,8 +81,9 @@ that legitimately cross: `BindingVocabularyHook` (a `[ModuleInitializer]`
 injection so Schema validators reach the input vocabulary; the sibling
 `MutationKindVocabularyHook` crosses the identical seam so a
 `MutationKindMask` field can round-trip its kind names against Protocol's
-mutation-kind catalog), and hand-mirrored
-constants in `Puck.Overlays.OverlayChannelLeases` (see
+mutation-kind catalog), and the overlay capacity the composition root hands
+`Puck.Overlays` as constructor data
+(`Puck.World.Client.WorldOverlayCapacity.FromSchema()` — see
 [references/hud.md](references/hud.md)). Each project's README is the
 current developer reference — start there for narrative depth this skill
 deliberately does not duplicate.
@@ -186,10 +204,15 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 - `replay.verify` MATCH proves the authoritative pose trajectory only —
   nothing about document, grant-table, or HUD state
   ([references/replay.md](references/replay.md)).
-- Committed batteries: the runners under `docs/verification/`
-  (undo-all-or-nothing, strict-definition-parse, sdf-decode-sign-refusal,
-  doc-links, addon-mutation-seam, four-world-boot-smoke,
-  four-corners-sharded) — re-run the ones your change touches. The
+- Committed proofs: `puck canary` manifests under `tests/Puck.World.Canaries/`
+  for every load-bearing seam, including `world.grant`-driven claims (a
+  command claim's `stream` override lets an accepted outcome expect its
+  confirmation on stderr, the shape server narration always uses) and
+  multi-authority federation (`four-corners-sharded`: a leg's `authorities`
+  array names N real listener processes, each with its own dynamic endpoint
+  and generated identity, and a `line`/`response`/`sequence` assertion's
+  `authority` selector reads a specific one's transcript) — re-run whichever
+  proofs your change touches. The
   acting-principal/administration and engage/disengage-authority contracts
   are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
   `EngageAuthorityLawTests`); a retired battery leaves no record directory
@@ -262,7 +285,7 @@ choosing fixed-point primitives on sim value paths.
   (`WorldRenderEnvelope.TryFit` is the apply-time capacity gate).
 - The per-pixel soft-shadow gather addresses ≤1024 instances; beyond that
   the engine falls back to coarser camera-tile masking.
-- `ViewStack.MaxRegisteredViews = 64` — never register a rendered view per
+- `OffscreenRenderBudget.RegisteredViews = 64` (Puck.Abstractions.Presentation; the validator caps `cameras` by the same constant) — never register a rendered view per
   population entry.
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`:
   the document-global CPU/instance-grid ceiling. The separately recorded

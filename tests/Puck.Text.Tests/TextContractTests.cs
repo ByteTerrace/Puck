@@ -68,10 +68,12 @@ public sealed class TextContractTests {
             text: "AA\nA"
         );
 
-        // Line 1 spans [0, 2]; the single-glyph line 2 centers under it at [0.5, 1.5].
+        // The block's midpoint sits on the origin: line 1 spans [-1, 1]; the single-glyph line 2 centers under it at
+        // [-0.5, 0.5].
         Assert.Equal(3, layout.Placements.Count);
-        Assert.Equal(0.5f, layout.Placements[2].PlaneBounds.Left);
-        Assert.Equal(0.5f, layout.Placements[2].BaselineOrigin.X);
+        Assert.Equal(-1f, layout.Placements[0].PlaneBounds.Left);
+        Assert.Equal(-0.5f, layout.Placements[2].PlaneBounds.Left);
+        Assert.Equal(-0.5f, layout.Placements[2].BaselineOrigin.X);
     }
     [Fact]
     public void LayoutRightAlignmentMeetsWidestLineRightEdge() {
@@ -81,7 +83,9 @@ public sealed class TextContractTests {
             text: "AA\nA"
         );
 
-        Assert.Equal(2f, layout.Placements[2].PlaneBounds.Right);
+        // The block's right edge sits on the origin; every line's right edge meets it.
+        Assert.Equal(0f, layout.Placements[1].PlaneBounds.Right);
+        Assert.Equal(0f, layout.Placements[2].PlaneBounds.Right);
     }
     [Fact]
     public void LayoutTrackingAddsPerGlyphAdvance() {
@@ -124,8 +128,9 @@ public sealed class TextContractTests {
             text: "A\nB"
         );
 
-        Assert.Equal(0f, layout.Placements[0].PlaneBounds.Left);
-        Assert.Equal(0.5f, layout.Placements[1].PlaneBounds.Left);
+        // A's visual span [-1, 1] is the block; B centers inside it at [-0.5, 0.5].
+        Assert.Equal(-1f, layout.Placements[0].PlaneBounds.Left);
+        Assert.Equal(-0.5f, layout.Placements[1].PlaneBounds.Left);
         Assert.Equal(2f, layout.Width);
     }
     [Fact]

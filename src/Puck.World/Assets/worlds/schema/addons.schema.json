@@ -1,6 +1,8 @@
 {
-  "description": "The data-side addon descriptors (default empty), consumed when addons mount as principals.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One data-side addon descriptor the world carries \u2014 a World-local row carrying Name/ModulePath/Hash/Fuel/ Enabled/Requests, with no Puck.Scripting reference. Consumed when addons mount as principals into Server.WorldAddonRuntime.",
     "type": [
@@ -100,5 +102,6 @@
       "enabled"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

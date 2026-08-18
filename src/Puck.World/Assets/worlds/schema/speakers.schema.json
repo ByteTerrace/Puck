@@ -1,6 +1,8 @@
 {
-  "description": "The placeable speaker rows (default empty) \u2014 the camera family\u0027s audio sibling (see WorldSpeaker): name-keyed transducers whose feeds tap shared sources.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One placeable speaker in the world \u2014 the camera family\u0027s sibling: abstract, name-keyed, $type-discriminated, whole-row UpsertSpeaker/RemoveSpeaker. Routing chiasmus: screens consume cameras; speakers consume audio sources. Omni-only v1 (no cones \u2014 stereo separation is already the feed model). A new speaker kind is a new derived record plus its JsonDerivedTypeAttribute line.",
     "type": [
@@ -141,5 +143,6 @@
         "additionalProperties": false
       }
     ]
-  }
+  },
+  "default": null
 }

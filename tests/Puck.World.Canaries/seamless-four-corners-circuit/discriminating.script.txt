@@ -1,0 +1,27 @@
+# Four Corners seamless-ownership circuit, control leg. Every named instance is posed exactly as the
+# positive leg's first pose per hop, but never driven, so no automatic adjacency crossing ever fires and
+# the named instance an unreached hop tries to address never activated.
+world.wait 5
+wire.errors reset
+world.adjacencies
+
+player.pose -2 0 -12 0 0 0 1
+world.wait 120
+player.where 1
+world.adjacencies
+wire.errors
+
+player.pose 12 0 -2 0 0 0 1 instance:6~global2~ne
+world.wait 120
+player.where 1 instance:6~global2~ne
+wire.errors
+
+player.pose 2 0 12 0 0 0 1 instance:6~global2~se
+world.wait 120
+player.where 1 instance:6~global2~se
+wire.errors
+
+player.pose -12 0 2 0 0 0 1 instance:6~global2~sw
+world.wait 120
+player.where 1 instance:6~global2~sw
+world.adjacencies

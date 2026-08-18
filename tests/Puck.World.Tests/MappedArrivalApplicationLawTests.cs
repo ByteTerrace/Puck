@@ -74,12 +74,12 @@ public sealed class MappedArrivalApplicationLawTests {
         var definition = Fixtures.BuildDocument();
 
         definition = definition with {
-            Channels = [.. definition.Channels, new WorldChannel(Name: "jump", Shape: ChannelShape.Binary, Composition: true)],
+            ChannelsRaw = [.. definition.Channels, new WorldChannel(Name: "jump", Shape: ChannelShape.Binary, Composition: true)],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         var body = fixture.Server.Body(index: actor.Index)!;
         var channels = fixture.Server.Population.Channels;
 
@@ -117,10 +117,10 @@ public sealed class MappedArrivalApplicationLawTests {
         using var fixture = Fixtures.FreshServer();
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         var contactActor = WorldPrincipal.Seat(slot: 1);
 
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(contactActor, contactActor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(contactActor, contactActor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
         var mappedPosition = new FixedVector3(X: FixedQ4816.FromInteger(value: 4), Y: FixedQ4816.FromInteger(value: 7), Z: FixedQ4816.Zero);
@@ -171,7 +171,7 @@ public sealed class MappedArrivalApplicationLawTests {
         using var fixture = Fixtures.FreshServer();
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
         var sourceWidth = EngineTicks.PerRate(ratePerSecond: 60);
@@ -209,7 +209,7 @@ public sealed class MappedArrivalApplicationLawTests {
         using var fixture = Fixtures.FreshServer();
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         var width = EngineTicks.PerRate(ratePerSecond: 60);
 
         fixture.Step(stepTicks: width);
@@ -243,7 +243,7 @@ public sealed class MappedArrivalApplicationLawTests {
         using var fixture = Fixtures.FreshServer();
         var actor = WorldPrincipal.Seat(slot: 0);
 
-        Assert.True(condition: fixture.Server.ApplySession(new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         var body = fixture.Server.Body(index: actor.Index)!;
         var consumedThrough = EngineTicks.PerRate(ratePerSecond: 60);
         var position = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: 20), Z: FixedQ4816.Zero);

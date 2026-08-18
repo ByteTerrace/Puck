@@ -1,5 +1,6 @@
 using System.Text;
 
+using Puck.Shaders;
 using Puck.World;
 
 namespace Puck.Cli.Schema;
@@ -10,7 +11,9 @@ namespace Puck.Cli.Schema;
 // src/Puck.World/Assets/worlds/schema/. All generation and the dedup/split logic live in Puck.World.WorldSchema
 // (src/Puck.World.Schema); this verb only decides where the text goes and, under --check, whether every file agrees
 // with what is on disk — the same drift-detection shape `puck architecture --map` establishes for
-// docs/project-map.md's layering block.
+// docs/project-map.md's layering block. The one input the generator takes from outside the type model is the
+// shipped post-render extension vocabulary: every puck.shader.v1 manifest under src/*/Assets/Shaders, whose id and
+// config schema splice into render.extensions[] so an entry's config validates by id.
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class SchemaCommand {
     private const string HelpText =
@@ -38,18 +41,23 @@ internal static class SchemaCommand {
         (System.Text.Json's JsonSchemaExporter) — never hand-maintained. Descriptions are
         pulled from Puck.World.Schema.xml beside the assembly; when that file is missing the
         schema still writes, with no descriptions, and this verb says so on stderr.
+        render.extensions[] takes its id vocabulary and per-id config schema from the shipped
+        puck.shader.v1 manifests under src/*/Assets/Shaders (Puck.Shaders.ShaderSetManifest).
 
         Written to: src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json (root),
         src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress
-        document, one unsplit file), and src/Puck.World/Assets/worlds/schema/*.schema.json
+        document, one unsplit file), src/Puck.World/Assets/worlds/schema/*.schema.json
         (one file per document section, plus common.schema.json for shapes more than one
-        section references).
+        section references), and src/Puck.World.Silo/Assets/puck.silo.def.v1.schema.json
+        (the silo document, one unsplit file, generated from Puck.World.Schema.WorldSiloDefinition
+        over the same exporter).
         Exit codes: 0 wrote or matched, 1 check found drift, 2 usage error or missing
         repository root.
         """;
     private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
     private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
     private const string SectionsRelativeDirectory = "src/Puck.World/Assets/worlds/schema";
+    private const string SiloRelativePath = "src/Puck.World.Silo/Assets/puck.silo.def.v1.schema.json";
 
     private readonly record struct SchemaFile(string FullPath, string Text);
 
@@ -71,8 +79,12 @@ internal static class SchemaCommand {
         if (!WorldSchema.HasXmlDocumentation) {
             Console.Error.WriteLine(value: "schema: Puck.World.Schema.xml not found beside the assembly — the generated schema will carry no descriptions.");
         }
+        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
+            return 2;
+        }
 
-        var split = WorldSchema.Export();
+        var postRenderExtensions = LoadPostRenderExtensions(repositoryRoot: repositoryRoot);
+        var split = WorldSchema.Export(postRenderExtensions: postRenderExtensions);
 
         if (scanner.Has(name: "bundle")) {
             return Bundle(split: split, path: ((scanner.Positionals.Count > 0) ? scanner.Positionals[0] : null));
@@ -84,18 +96,17 @@ internal static class SchemaCommand {
             return 0;
         }
 
-        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
-            return 2;
-        }
-
         var (root, sections, common, sectionsDirectory) = BuildFileSet(repositoryRoot: repositoryRoot, split: split);
         var projection = new SchemaFile(
             FullPath: Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: ProjectionRelativePath)),
-            Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection()));
+            Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportProjection(postRenderExtensions: postRenderExtensions)));
+        var silo = new SchemaFile(
+            FullPath: Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: SiloRelativePath)),
+            Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportSilo()));
 
         return (scanner.Has(name: "check")
-            ? Check(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory)
-            : Write(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory));
+            ? Check(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory, silo: silo)
+            : Write(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory, silo: silo));
     }
 
     private static int Bundle(WorldSchema.SplitSchema split, string? path) {
@@ -129,11 +140,34 @@ internal static class SchemaCommand {
 
         return (root, sections, common, sectionsDirectory);
     }
+    // Every src/<project>/Assets/Shaders tree is a shipped shader asset tree (the shared shader recipe ships its
+    // manifests beside its bytecode), so their manifests are the extension vocabulary the runtime catalog sees.
+    private static List<WorldSchema.PostRenderExtensionSchema> LoadPostRenderExtensions(string repositoryRoot) {
+        var extensions = new List<WorldSchema.PostRenderExtensionSchema>();
+        var seen = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        foreach (var project in Directory.EnumerateDirectories(path: Path.Combine(path1: repositoryRoot, path2: "src")).Order(comparer: StringComparer.Ordinal)) {
+            var catalog = ShaderSetCatalog.Scan(rootDirectory: Path.Combine(path1: project, path2: "Assets", path3: "Shaders"));
+
+            foreach (var id in catalog.Ids) {
+                if (!seen.TryAdd(key: id, value: project)) {
+                    throw new InvalidDataException(message: $"Shader set '{id}' is shipped by both '{seen[id]}' and '{project}'.");
+                }
+
+                extensions.Add(item: new WorldSchema.PostRenderExtensionSchema(Id: id, ConfigSchema: catalog.Load(id: id).ConfigJsonSchema()));
+            }
+        }
+
+        extensions.Sort(comparison: static (a, b) => string.CompareOrdinal(strA: a.Id, strB: b.Id));
+
+        return extensions;
+    }
     private static string ToNativePath(string relativePath) =>
         relativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/');
-    private static int Write(SchemaFile root, SchemaFile projection, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
+    private static int Write(SchemaFile root, SchemaFile projection, SchemaFile silo, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
         WriteFile(file: root);
         WriteFile(file: projection);
+        WriteFile(file: silo);
 
         foreach (var section in sections) {
             WriteFile(file: section);
@@ -153,7 +187,7 @@ internal static class SchemaCommand {
             }
         }
 
-        Console.Out.WriteLine(value: $"schema: wrote {CliPaths.ToDisplay(fullPath: root.FullPath)} + {CliPaths.ToDisplay(fullPath: projection.FullPath)} + {sections.Count} section file(s) + common.schema.json.");
+        Console.Out.WriteLine(value: $"schema: wrote {CliPaths.ToDisplay(fullPath: root.FullPath)} + {CliPaths.ToDisplay(fullPath: projection.FullPath)} + {CliPaths.ToDisplay(fullPath: silo.FullPath)} + {sections.Count} section file(s) + common.schema.json.");
 
         if (removed.Count > 0) {
             Console.Out.WriteLine(value: $"schema: removed {removed.Count} stale section file(s) no longer produced: {string.Join(separator: ", ", values: removed)}");
@@ -170,11 +204,12 @@ internal static class SchemaCommand {
 
         File.WriteAllText(path: file.FullPath, contents: file.Text, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
-    private static int Check(SchemaFile root, SchemaFile projection, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
+    private static int Check(SchemaFile root, SchemaFile projection, SchemaFile silo, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {
         var problems = new List<string>();
 
         CheckFile(file: root, problems: problems);
         CheckFile(file: projection, problems: problems);
+        CheckFile(file: silo, problems: problems);
 
         foreach (var section in sections) {
             CheckFile(file: section, problems: problems);
@@ -193,7 +228,7 @@ internal static class SchemaCommand {
         }
 
         if (problems.Count == 0) {
-            Console.Out.WriteLine(value: $"schema: {CliPaths.ToDisplay(fullPath: root.FullPath)}, {CliPaths.ToDisplay(fullPath: projection.FullPath)}, and {(sections.Count + 1)} schema/ file(s) match the generated schema.");
+            Console.Out.WriteLine(value: $"schema: {CliPaths.ToDisplay(fullPath: root.FullPath)}, {CliPaths.ToDisplay(fullPath: projection.FullPath)}, {CliPaths.ToDisplay(fullPath: silo.FullPath)}, and {(sections.Count + 1)} schema/ file(s) match the generated schema.");
 
             return 0;
         }

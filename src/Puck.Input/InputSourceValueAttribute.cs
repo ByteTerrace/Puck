@@ -27,4 +27,9 @@ public sealed class InputSourceValueAttribute : Attribute {
 
     /// <summary>The value shape the control's activation carries.</summary>
     public CommandValueKind Kind { get; }
+    /// <summary>Whether each sample is a DELTA from the previous one (relative motion — <c>mouse.motion</c>,
+    /// <c>mouse.wheel</c>) rather than a deflection or level a consumer reads as-is (a stick). A consumer that
+    /// wants a deflection from a relative source integrates its samples itself (a radial's aim accumulates mouse
+    /// motion from the moment it opens, exactly as a stick's deflection is read from centre).</summary>
+    public bool Relative { get; init; }
 }

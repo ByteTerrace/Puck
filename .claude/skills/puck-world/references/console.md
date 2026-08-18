@@ -227,7 +227,7 @@ composing writes. That is a defect class, not a shortcut.
   `recompose rejected` line.
 - `player.bind` can carry a constant for a command destination with `value:<v>`
   (validated against the destination's declared kind; mutually exclusive with
-  `scale:`). It can only address the play group's resting page or a
+  `scale:`). It can only address the default group's resting page or a
   `(group, chord)` row — never a named sub-page, which is a known open gap.
 - No-arg → echo current value. Refusal → same bracketed shape + `IsError`.
 - Choose routing by determinism class, not convenience: anything that

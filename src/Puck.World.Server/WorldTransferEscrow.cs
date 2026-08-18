@@ -102,10 +102,9 @@ public sealed record WorldTransferCommitMember(
     WorldTransferActionContinuity? ActionContinuity = null,
     WorldContinuumTrajectory? Continuum = null
 );
-
 /// <summary>The transfer escrow table shared by colocated and TCP authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
-internal sealed class WorldTransferEscrow {
+public sealed class WorldTransferEscrow {
     private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition, WorldAdmissionVerdict? Arrival);
     private readonly record struct MobilityAdmission(ulong Epoch, WorldPrincipal Principal);
     private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
@@ -127,6 +126,145 @@ internal sealed class WorldTransferEscrow {
     private readonly Dictionary<int, string> m_borderAdmissions = new();
 
     public WorldTransferEscrow(WorldServer server) => m_server = server;
+
+    /// <summary>One outstanding (reserved, not yet committed) lease's checkpointed state.</summary>
+    public sealed record WorldTransferLeaseCheckpoint(WorldTransferKey Key, WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, byte[] DestinationDefinitionJson, WorldAdmissionVerdict? Arrival);
+    /// <summary>One committed transfer's checkpointed member/principal/incarnation rows.</summary>
+    public sealed record WorldTransferCommittedCheckpoint(WorldTransferKey Key, WorldTransferCommitMember[] Members, WorldPrincipal[] Principals, IReadOnlyList<WorldEntityAddress> Incarnations);
+    /// <summary>The escrow's own checkpointed state — every table this row's slice owns.</summary>
+    public sealed record WorldTransferEscrowCheckpoint(
+        IReadOnlyList<WorldTransferLeaseCheckpoint> Leases,
+        IReadOnlyList<WorldTransferCommittedCheckpoint> Committed,
+        IReadOnlyList<(WorldEntityAddress Incarnation, WorldTransferKey Transfer)> LatestCommittedTransfer,
+        IReadOnlyList<(WorldEntityAddress Incarnation, WorldTransferKey Transfer, ulong ExpectedEpoch)> MobilityLeases,
+        IReadOnlyList<(string SourceAuthority, WorldEntityAddress Incarnation, ulong Epoch, WorldPrincipal Principal)> MobilityAdmissions,
+        IReadOnlyList<(int Slot, string Border)> BorderAdmissions
+    );
+
+    /// <summary>Captures every table this escrow owns.</summary>
+    public WorldTransferEscrowCheckpoint Capture() {
+        var leases = new List<WorldTransferLeaseCheckpoint>(capacity: m_leases.Count);
+
+        foreach (var (key, lease) in m_leases) {
+            leases.Add(item: new WorldTransferLeaseCheckpoint(
+                Key: key,
+                Request: lease.Request,
+                DeadlineTick: lease.DeadlineTick,
+                Slots: [.. lease.Slots],
+                DestinationDefinitionJson: WorldDefinitionSerialization.Serialize(definition: lease.DestinationDefinition),
+                Arrival: lease.Arrival
+            ));
+        }
+
+        var committed = new List<WorldTransferCommittedCheckpoint>(capacity: m_committed.Count);
+
+        foreach (var key in m_committed) {
+            committed.Add(item: new WorldTransferCommittedCheckpoint(
+                Key: key,
+                Members: (m_committedMembers.TryGetValue(
+                    key: key,
+                    value: out var members
+                )
+                    ? [.. members]
+                    : []
+                ),
+                Principals: (m_committedPrincipals.TryGetValue(
+                    key: key,
+                    value: out var principals
+                )
+                    ? [.. principals]
+                    : []
+                ),
+                Incarnations: (m_committedIncarnations.TryGetValue(
+                    key: key,
+                    value: out var incarnations
+                )
+                    ? [.. incarnations]
+                    : []
+                )
+            ));
+        }
+
+        return new WorldTransferEscrowCheckpoint(
+            Leases: leases,
+            Committed: committed,
+            LatestCommittedTransfer: [.. m_latestCommittedTransfer.Select(selector: static pair => (pair.Key, pair.Value))],
+            MobilityLeases: [.. m_mobilityLeases.Select(selector: static pair => (pair.Key, pair.Value.Transfer, pair.Value.ExpectedEpoch))],
+            MobilityAdmissions: [.. m_mobilityAdmissions.Select(selector: static pair => (pair.Key.SourceAuthority, pair.Key.Incarnation, pair.Value.Epoch, pair.Value.Principal))],
+            BorderAdmissions: [.. m_borderAdmissions.Select(selector: static pair => (pair.Key, pair.Value))]
+        );
+    }
+    /// <summary>Restores every table this escrow owns from a previously captured checkpoint. Every table is cleared
+    /// first — this replaces the escrow wholesale rather than merging onto it.</summary>
+    public void Restore(WorldTransferEscrowCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+
+        m_leases.Clear();
+        m_committed.Clear();
+        m_committedMembers.Clear();
+        m_committedPrincipals.Clear();
+        m_committedIncarnations.Clear();
+        m_latestCommittedTransfer.Clear();
+        m_mobilityLeases.Clear();
+        m_mobilityAdmissions.Clear();
+        m_borderAdmissions.Clear();
+
+        // Commit's own "definition moved after reservation" guard is a REFERENCE check against the live
+        // m_server.Definition object a live Reserve captured verbatim. A restored lease whose destination content
+        // matches the server's OWN restored definition reuses that SAME object rather than a freshly deserialized
+        // copy, so the guard still recognizes "this is the reservation's own destination" across a checkpoint
+        // round-trip; a lease captured against a document the server has since moved past correctly deserializes its
+        // own (now provably stale) snapshot instead, so the guard still refuses a commit against a moved document.
+        var currentDefinitionHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: m_server.Definition));
+
+        foreach (var lease in checkpoint.Leases) {
+            var destinationDefinition = (string.Equals(
+                a: WorldDefinitionFileSource.ComputeContentHash(content: lease.DestinationDefinitionJson),
+                b: currentDefinitionHash,
+                comparisonType: StringComparison.Ordinal
+            )
+                ? m_server.Definition
+                : WorldDefinitionSerialization.Deserialize(utf8Json: lease.DestinationDefinitionJson)
+            );
+
+            m_leases[lease.Key] = new Lease(
+                Request: lease.Request,
+                DeadlineTick: lease.DeadlineTick,
+                Slots: lease.Slots,
+                DestinationDefinition: destinationDefinition,
+                Arrival: lease.Arrival
+            );
+        }
+
+        foreach (var row in checkpoint.Committed) {
+            _ = m_committed.Add(item: row.Key);
+            m_committedMembers[row.Key] = row.Members;
+            m_committedPrincipals[row.Key] = row.Principals;
+            m_committedIncarnations[row.Key] = [.. row.Incarnations];
+        }
+
+        foreach (var row in checkpoint.LatestCommittedTransfer) {
+            m_latestCommittedTransfer[row.Incarnation] = row.Transfer;
+        }
+
+        foreach (var row in checkpoint.MobilityLeases) {
+            m_mobilityLeases[row.Incarnation] = new MobilityLease(
+                ExpectedEpoch: row.ExpectedEpoch,
+                Transfer: row.Transfer
+            );
+        }
+
+        foreach (var row in checkpoint.MobilityAdmissions) {
+            m_mobilityAdmissions[(row.SourceAuthority, row.Incarnation)] = new MobilityAdmission(
+                Epoch: row.Epoch,
+                Principal: row.Principal
+            );
+        }
+
+        foreach (var row in checkpoint.BorderAdmissions) {
+            m_borderAdmissions[row.Slot] = row.Border;
+        }
+    }
 
     // Whether the arrival verdict's own templates would mint Drive over the body a commit assigns. Resolved through
     // WorldAdmissionGrant.SubjectFor, so this asks exactly what WorldServer.BuildAdmissionGrants will produce.
@@ -757,12 +895,12 @@ internal sealed class WorldTransferEscrow {
 
         PruneDepartedAdmissions();
         var firstSlot = (request.PeerAdmission
-            ? WorldPopulation.LocalSeatCount
+            ? m_server.Population.LocalSeatCount
             : 0
         );
         var consumed = new bool[(request.PeerAdmission
             ? m_server.Population.Capacity
-            : WorldPopulation.LocalSeatCount)];
+            : m_server.Population.LocalSeatCount)];
 
         for (var slot = 0; (slot < consumed.Length); slot++) {
             consumed[slot] = m_server.Population.IsActive(index: slot);

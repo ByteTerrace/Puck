@@ -10,14 +10,14 @@ public sealed class BindingChannelLoweringLawTests {
         var channel = new ChannelRef.Name(Value: "late-destination-channel");
         var document = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [new BindingModifierDefinition(Id: "shift", Source: "key.shift")],
+            Modifiers: [new BindingModifierDefinition(Id: "shift", Sources: ["key.shift"])],
             Chords: [
                 new BindingChordDefinition(
                     Group: "main",
                     Chord: [],
                     Page: new BindingPageDefinition(
                         Id: "base",
-                        Entries: [new BindingPageEntryDefinition(Source: "key.fire", Channel: channel)]
+                        Entries: [new BindingPageEntryDefinition(Sources: ["key.fire"], Channel: channel)]
                     )
                 ),
                 new BindingChordDefinition(

@@ -19,7 +19,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// catch a serial-behavior regression that still happens to be self-consistent across the two runs.
 /// </para>
 /// </summary>
-internal sealed class LinkGameReplayStage : IPostStage {
+internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     // The frozen scripts drive the captured link-session cart (see RomFallbackPath) — a CGB link-from-menu game — from
     // power-on to its two-player link handshake. Both consoles walk the identical menu path, so one script drives both
     // sides. Authored with --link-explore; see the HGB Post README's "link-game-replay" section for the ROM/env-var contract.
@@ -53,7 +53,7 @@ internal sealed class LinkGameReplayStage : IPostStage {
         }
 
         var rom = File.ReadAllBytes(path: romPath);
-        var title = CartridgeTitle(rom: rom);
+        var title = CartridgeTitleReader.CartridgeTitle(rom: rom);
 
         var first = RunLinkedGame(rom: rom);
 
@@ -183,23 +183,5 @@ internal sealed class LinkGameReplayStage : IPostStage {
         return (File.Exists(path: RomFallbackPath)
             ? RomFallbackPath
             : null);
-    }
-    private static string CartridgeTitle(byte[] rom) {
-        var builder = new System.Text.StringBuilder(capacity: 11);
-
-        for (var offset = 0x0134; (offset < 0x013F); ++offset) {
-            var character = rom[offset];
-
-            if (
-                (character == 0) ||
-                (character >= 0x80)
-            ) {
-                break;
-            }
-
-            _ = builder.Append(value: ((char)character));
-        }
-
-        return builder.ToString().Trim();
     }
 }

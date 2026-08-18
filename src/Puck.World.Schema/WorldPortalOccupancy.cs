@@ -58,4 +58,18 @@ public sealed class WorldPortalOccupancy {
     /// <param name="seat">The local seat index.</param>
     public void SeedInside(string placementId, string faceName, int seat) =>
         m_inside[(placementId, faceName, seat)] = true;
+    /// <summary>Captures every latched (placement, face, seat) row currently inside.</summary>
+    public IReadOnlyList<(string PlacementId, string FaceName, int Seat)> Capture() =>
+        [.. m_inside.Where(predicate: static pair => pair.Value).Select(selector: static pair => pair.Key)];
+    /// <summary>Restores every latched row from a previously captured set, replacing whatever this instance already
+    /// holds.</summary>
+    public void Restore(IReadOnlyList<(string PlacementId, string FaceName, int Seat)> rows) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+
+        m_inside.Clear();
+
+        foreach (var row in rows) {
+            m_inside[(row.PlacementId, row.FaceName, row.Seat)] = true;
+        }
+    }
 }

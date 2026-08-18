@@ -19,9 +19,9 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 
 ## The dependency firewall
 
-`Puck.World.Schema` references only `Puck.Abstractions`, `Puck.Attestation`,
-`Puck.Commands`, `Puck.Maths`, `Puck.Physics`, `Puck.Text`, and
-`Puck.World.Forge` (see `Puck.World.Schema.csproj`). An architecture lane profile in
+`Puck.World.Schema` references only `Puck.Abstractions`, `Puck.Assets`,
+`Puck.Attestation`, `Puck.Commands`, `Puck.Maths`, `Puck.Physics`, `Puck.Text`,
+and `Puck.World.Forge` (see `Puck.World.Schema.csproj`). An architecture lane profile in
 `build/Architecture.props` enforces the absences that matter: no GPU backend,
 no presentation project, no `Puck.Overlays`, no `Puck.Input`, no
 `Puck.World.Protocol`, and no `Puck.World.Server`. Adding a forbidden
@@ -29,12 +29,11 @@ reference fails the build with a `PUCKARCH` diagnostic naming the arrival
 path.
 
 Three validation/serialization paths genuinely need knowledge this project is
-denied. Two cross through `BindingVocabularyHook.cs` — a static injection
+denied. One crosses through `BindingVocabularyHook.cs` — a static injection
 point the composition root wires with a module initializer
-(`WorldDataHookInstaller` in `Puck.World`) before `Main` runs: composing a
-candidate binding overlay against the engine default, and linting it against
-the live command/channel vocabulary (both need `Puck.Input`, which this
-project must not see). The third crosses through
+(`WorldDataHookInstaller` in `Puck.World`) before `Main` runs: linting a
+composed binding overlay against the live command/channel vocabulary (which
+needs `Puck.Input`, which this project must not see). The other crosses through
 `MutationKindVocabularyHook.cs`: a `MutationKindMask` field
 (`WorldGrant.KindMask`) needs to round-trip its admitted kinds by NAME
 (`verbs:UpsertStateCell,RemoveStateCell`), and the name↔ordinal catalog
@@ -77,8 +76,12 @@ Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and
 `basis` delta over the eleventh document, the `quilt-base` template (see
 "Document composition" below). The movement platform
 every grounded kit rides is documented on its kit's `WorldMotionModel.Grounded`
-row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`) and
-`WorldCameraRig.SmoothRate`. The motion-model union's second arm is
+row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
+frame its MoveForward/MoveStrafe channel rows are authored in
+(`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
+facing its travel, `Heading` body-relative with `Turn` steering — the stick's
+`player.move` is camera-framed by its own definition, so keyboard-in-heading
+beside stick-in-camera is one document), and `WorldCameraRig.SmoothRate`. The motion-model union's second arm is
 `WorldMotionModel.Vehicle` — anisotropic body-frame drive (longitudinal
 accel/brake/coast, lateral grip/drift, speed-scaled steering, optional pitched
 flight) read by the `ResolveVehicleFrame`/`ShapeVehicleVelocity` operations;
@@ -166,7 +169,8 @@ registration, verify by running) is in
 **Serialization** (`WorldDefinitionSerialization.cs`): `WorldJsonContext` is a
 System.Text.Json source-generated context — camelCase member names, enums by
 name through strict converters (an unknown or numeric enum token is a parse
-error, not a silent default), `Vector3` as a three-element `[x, y, z]` array,
+error, not a silent default), literal vectors/quaternions as
+`[x, y]`/`[x, y, z]`/`[x, y, z, w]` arrays,
 and `$type`-discriminated polymorphic hierarchies for screen sources, cameras,
 scene rows, speakers, and anchors. Parsing is strict everywhere below the
 document root: `UnmappedMemberHandling = Disallow` makes an unmapped member on
@@ -182,34 +186,6 @@ keyed by their `(principal, capability, subject)` triple, because a grant IS
 that triple. `GrantSubject` and `WorldPrincipal` serialize as the same compact
 tokens the console grammar uses (`body:1`, `addon:default`) through their own
 JSON converters.
-
-**`Qr/` — the QR encoder a document field needs to validate.** A
-`WorldScreenSource.Qr` row names a payload string; whether that payload FITS is
-not arithmetic a validator can fake, so the whole ISO/IEC 18004 byte-mode
-encoder lives here rather than beside its renderer: `QrReedSolomon` (the
-standard's field and its prebuilt generator polynomials), `QrCapacityTable`
-(versions 1..10 plus alignment centers), `QrBitWriter`, `QrEncoder` (auto
-version, format/version BCH info), `QrMatrix` (placement, all eight masks scored
-by the spec's four penalty rules, plus a nearest-neighbor B8G8R8A8 raster), and
-`QrErrorCorrection` (the one spelling of the `L`/`M`/`Q`/`H` token). It is pure
-integer math with no wall clock or RNG, so the validator refuses an
-over-capacity payload BY NAME — its byte count against the level's capacity —
-by asking the encoder the same question `screen.source <index> qr` asks it at
-runtime.
-
-**The coding half graduated; the QR half did not.** The field arithmetic and
-the Reed–Solomon coding belong in `Puck.Maths`. `QrGaloisField` — a
-hand-rolled GF(256) log/exp table — was a DUPLICATE of `BinaryField<T>`, which
-already shipped, and is deleted; `QrReedSolomon`'s generator construction and
-synthetic division graduated to `Puck.Maths.ReedSolomon`, generic over every
-carrier `BinaryField<T>` admits and carrying no QR vocabulary. What stays here
-is what is genuinely the standard's: the field it chose (`GF(256)` under
-`0x11D`, which is deliberately NOT the catalog's `BinaryFields.Degree8` at
-`0x11B` — see `QrReedSolomon`'s remarks), the generator element and root
-convention, the block-count table, the capacity and alignment tables, the
-format/version BCH codes, masking, and matrix placement. The graduated
-primitive answers to `tests/Puck.Maths.Tests`' `reed-solomon.*` laws, one of
-which pins ISO/IEC 18004 Annex I's published remainder.
 
 **Canonical write-back.** The `world.save` verb serializes the live definition
 canonically — stable member order, invariant-culture numbers, LF line endings,
@@ -232,14 +208,23 @@ stores them independently beneath the selected state root's `owned-worlds`
 directory.
 
 **Bindings compose in layers.** A seat's effective binding document is the
-engine default, then any world `bindingOverlays` rows, then the seat's
-owned identity world's `bindingOverlays`, then live session rebinds — merged by
+world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
+— the shipped `Assets/worlds/default.world.json` template carries the standard
+movement, roster, editor, and sculpt document; the engine itself ships none,
+and a world authoring none binds nothing), then the seat's owned identity
+world's `bindingOverlays`, then live session rebinds — merged by
 `WorldBindingComposer.cs` with explicit keys (chord rows on the group plus
 the ordered chord; a later layer's row for the same key overrides, wholesale
 when the meaning differs and entry-by-source when both name the same page;
+modifiers on id, a later layer's modifier under a new id that shares a source
+with an earlier one absorbing it and rewriting every chord that held it;
 `contexts` rows — `{family, state, group}`, deriving a seat's active group
 from published engine state — on the `(family, state)` pair, a later layer
-overriding in place and new keys appending).
+overriding in place and new keys appending). The engine names no group: it
+publishes facts (`roster`, `engagement`, `editor` — the editor session's
+`none`/`editing`/`sculpting`) and the document's `contexts` rows say which
+group each selects; a seat with no matching row resolves in the first row's
+group, and `player.bind` lands on the seat's active group's resting page.
 The merged document compiles once per change through the binding stack in
 `Puck.Commands` (`BindingProfile.Compile` — deliberately public and shared,
 never copied here), and there is exactly one consumer of the compiled result,
@@ -275,9 +260,10 @@ brace/escape sequence refuses as `hud.MalformedTemplate`. `HudTemplate.TryParse`
 is the ONLY thing that reads this grammar: `Puck.Overlays` (the render-time
 writer) cannot reference this project, so `Puck.World`'s `WorldHudFeed` parses
 on the structure rebuild and hands the writer PRE-PARSED runs rather than a
-string. The `OverlayChannelLeases` hand-mirror precedent covers
-`WorldHudCapacity`'s CONSTANTS and was deliberately not extended here — a
-mirrored constant can be eyeballed for drift; a mirrored grammar cannot.
+string — the same direction `WorldHudCapacity`'s ceilings travel: the
+composition root hands `Puck.Overlays` an `OverlayCapacity` built from them
+(`Puck.World.Client.WorldOverlayCapacity.FromSchema()`), never a restated
+number.
 
 ## The `water` section — the world's standing-water medium
 
@@ -593,6 +579,39 @@ numeric-kind siblings riding the SAME `UpsertStateCell` mutation kind (its
 optional `Text` payload beside the numeric `Value`), never a second
 mutation kind for the same per-cell write.
 
+**A color field is a `#RRGGBB` literal or a `state.<row>[.<key>]` binding to a
+text cell holding one** — the same grammar, resolved by `WorldColor.Resolve`
+against the hosting world: creation palette entries, `render.lighting`/`render.sky`
+colors and every `render.cycle` key's, a screen text source's
+`foreground`/`background`. `WorldDefinitionValidator` refuses a binding that
+names no declared text cell, or one whose text is not a hex color; the
+`CreationCanonicalizer` admits only the binding's syntax (a creation on its own
+has no world to resolve against — the world validator resolves it at the
+placement). Identity, profile, and `playerDefaults` neutral colors stay literal:
+they persist per identity and travel between worlds. A bound color is live —
+`world.state.cell.set colors sage #C0392B` re-registers palettes and lighting on
+the delivery it composes.
+
+**Spatial values may use the same state grammar.** World and embedded-creation
+vector/quaternion fields accept their ordinary array or a `state.<row>[.<key>]`
+reference to a text cell holding the matching JSON array. For example,
+`"position": "state.spatial.zero3"` may read a cell whose value is
+`"[0, 0, 0]"`, while an identity rotation reads `"[0, 0, 0, 1]"`. Resolution
+happens after the complete world exists (in particular, an embedded creation
+cannot resolve its containing world's state while parsing itself), and the reference remains
+on the document value so canonical save writes the indirection back. A live
+mutation touching a referenced row rehydrates and resolves a fresh candidate
+before validation; a rejected value therefore cannot leak into the live
+creation through record-sharing.
+
+**Binding-group identifiers may be state-backed too.** A chord row, context
+row, or wheel may name its group literally or with the same
+`state.<row>[.<key>]` grammar. The referenced Text cell holds the group name
+directly, so all linked rows can share one value—for example,
+`"group": "state.bindingGroups.defaultActionGroup"`. Changing that cell
+renames every consumer together, then recomposes and validates the complete
+binding profile before the mutation is accepted.
+
 **Reserved `$` names are ENGINE-MINTED ONLY.** A `$`-prefixed ROW name is refused
 outright (nothing mints a row), and a `$`-prefixed CELL key is refused unless it
 is exactly the key that row's shape mints (`$value` on a slot, and nothing
@@ -762,10 +781,11 @@ There is no engine gate over this project. Verify by building
 (`dotnet build Puck.slnx -c Release` — the architecture profile and XML-doc
 diagnostics run there) and by RUNNING `Puck.World` and round-tripping the
 affected document over stdin (`world.status`, `world.save`, `world.load`;
-see [`Puck.World`'s README](../Puck.World/README.md) for the console). One
-committed runner exercises this project's load-bearing behavior end to
-end: `docs/verification/strict-definition-parse/run.ps1` (the strict-parse
-contract). No committed battery covers the HUD document — validate HUD
+see [`Puck.World`'s README](../Puck.World/README.md) for the console). The
+strict-parse contract (an unmapped nested member refuses by name; a root
+reserved-prefix key survives) is proven in-process by
+`tests/Puck.World.Tests/StrictParseLawTests.cs`. No committed battery covers
+the HUD document — validate HUD
 document changes by running the app; see
 [the puck-world skill's hud reference](../../.claude/skills/puck-world/references/hud.md)
 for the recipes.

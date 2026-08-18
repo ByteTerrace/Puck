@@ -3,9 +3,9 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-internal readonly record struct WorldSubmittedInput(bool HasIntent, PlayerIntent Intent, PlayerIntent HeldChannels);
+public readonly record struct WorldSubmittedInput(bool HasIntent, PlayerIntent Intent, PlayerIntent HeldChannels);
 /// <summary>Applies the authored and measured participant input holds before submitted input reaches body simulation.</summary>
-internal sealed class WorldInputHoldRuntime {
+public sealed class WorldInputHoldRuntime {
     private readonly int[] m_authored;
     private readonly bool[] m_equalized;
     private readonly ParticipantState[] m_participants;
@@ -29,7 +29,7 @@ internal sealed class WorldInputHoldRuntime {
          (((submission.Principal.Kind == PrincipalKind.Seat) && (submission.Principal.Index == submission.EntityIndex)) ||
           ((submission.Principal.Kind == PrincipalKind.Peer) && (submission.Principal.Index == submission.EntityIndex))));
     private static WorldPrincipal ParticipantPrincipal(WorldPopulation population, int bodyIndex) =>
-        ((bodyIndex < WorldPopulation.LocalSeatCount)
+        ((bodyIndex < population.LocalSeatCount)
             ? WorldPrincipal.Seat(slot: bodyIndex)
             : population.PeerPrincipal(index: bodyIndex)
         );
@@ -205,6 +205,50 @@ internal sealed class WorldInputHoldRuntime {
         m_maximumSetter = -1;
     }
 
+    /// <summary>One participant slot's checkpointed hold state — see <see cref="Capture"/>.</summary>
+    public readonly record struct WorldInputHoldParticipantCheckpoint(
+        bool Active,
+        WorldPrincipal Principal,
+        int Measured,
+        int Target,
+        int Applied,
+        int LowerTarget,
+        int LowerStableTicks,
+        int HistoryStart,
+        IReadOnlyList<WorldSubmittedInput> History
+    );
+    /// <summary>The runtime's own checkpointed state — see <see cref="Capture"/>.</summary>
+    public sealed record WorldInputHoldCheckpoint(int MaximumSetter, IReadOnlyList<WorldInputHoldParticipantCheckpoint> Participants);
+
+    /// <summary>Captures every participant slot's live hold state.</summary>
+    public WorldInputHoldCheckpoint Capture() {
+        var participants = new WorldInputHoldParticipantCheckpoint[m_participants.Length];
+
+        for (var index = 0; (index < m_participants.Length); index++) {
+            participants[index] = m_participants[index].Capture();
+        }
+
+        return new WorldInputHoldCheckpoint(
+            MaximumSetter: m_maximumSetter,
+            Participants: participants
+        );
+    }
+    /// <summary>Restores every participant slot's live hold state from a previously captured checkpoint.</summary>
+    public void Restore(WorldInputHoldCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+
+        m_maximumSetter = checkpoint.MaximumSetter;
+
+        var count = Math.Min(
+            val1: checkpoint.Participants.Count,
+            val2: m_participants.Length
+        );
+
+        for (var index = 0; (index < count); index++) {
+            m_participants[index].Restore(checkpoint: checkpoint.Participants[index]);
+        }
+    }
+
     private sealed class ParticipantState {
         private readonly List<WorldSubmittedInput> m_history = [];
 
@@ -218,6 +262,29 @@ internal sealed class WorldInputHoldRuntime {
         public WorldPrincipal Principal { get; set; }
         public int Target { get; set; }
 
+        public WorldInputHoldParticipantCheckpoint Capture() => new(
+            Active: Active,
+            Principal: Principal,
+            Measured: Measured,
+            Target: Target,
+            Applied: Applied,
+            LowerTarget: m_lowerTarget,
+            LowerStableTicks: m_lowerStableTicks,
+            HistoryStart: m_historyStart,
+            History: [.. m_history]
+        );
+        public void Restore(WorldInputHoldParticipantCheckpoint checkpoint) {
+            Active = checkpoint.Active;
+            Principal = checkpoint.Principal;
+            Measured = checkpoint.Measured;
+            Target = checkpoint.Target;
+            Applied = checkpoint.Applied;
+            m_lowerTarget = checkpoint.LowerTarget;
+            m_lowerStableTicks = checkpoint.LowerStableTicks;
+            m_historyStart = checkpoint.HistoryStart;
+            m_history.Clear();
+            m_history.AddRange(collection: checkpoint.History);
+        }
         public void MoveApplied(int target, int lowerAfterTicks) {
             if (target > Applied) {
                 Applied = target;

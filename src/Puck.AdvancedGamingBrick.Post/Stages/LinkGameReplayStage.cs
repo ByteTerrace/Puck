@@ -27,7 +27,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// skips cleanly when the ROM (<c>PUCK_AGB_LINK_GAME</c>) or a real boot BIOS (<c>PUCK_AGB_BIOS</c>) is absent.
 /// </para>
 /// </summary>
-internal sealed class LinkGameReplayStage : IPostStage {
+internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     /// <summary>The environment variable naming the commercial multiplayer ROM this stage links two consoles on.</summary>
     private const string RomEnvironmentVariable = "PUCK_AGB_LINK_GAME";
     // The dev-box path the ROM lives at, echoed into the skip message so the stage is discoverable without hunting.

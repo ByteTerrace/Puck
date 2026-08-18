@@ -1,3 +1,5 @@
+using Puck.Abstractions.Recording;
+
 namespace Puck.Platform.Windows.Recording;
 
 // Reads the AV1 bitstream the MFT emits. Two things come out of the same OBU walk: the Matroska `av1C`
@@ -112,7 +114,7 @@ internal static class Av1Bitstream {
         obuType = (headerByte >> 3) & 0xF;
 
         if (hasSizeField == 1) {
-            if (!TryReadLeb128(data: temporalUnit, offset: ref cursor, value: out var size)) {
+            if (!Av1Leb128.TryRead(data: temporalUnit, offset: ref cursor, value: out var size)) {
                 return false;
             }
 
@@ -129,26 +131,6 @@ internal static class Av1Bitstream {
         index = (cursor + payloadLength);
 
         return true;
-    }
-    private static bool TryReadLeb128(ReadOnlySpan<byte> data, ref int offset, out ulong value) {
-        value = 0;
-
-        for (var i = 0; (i < 8); i++) {
-            if (offset >= data.Length) {
-                return false;
-            }
-
-            var b = data[offset];
-
-            offset++;
-            value |= (((ulong)(b & 0x7F)) << (i * 7));
-
-            if ((b & 0x80) == 0) {
-                return true;
-            }
-        }
-
-        return false;
     }
     private static SequenceHeaderFields ParseSequenceHeader(ReadOnlySpan<byte> payload) {
         var reader = new BitReader(data: payload);

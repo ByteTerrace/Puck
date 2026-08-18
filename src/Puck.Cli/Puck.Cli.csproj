@@ -19,8 +19,16 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <!-- The self-update canary's throwaway root/issuing/subject signing chain (CanaryCommand.cs), the same
+             primitive the federation identity chain already mints for its own legs. -->
+        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
+        <!-- puck publish (Publish/PublishCommand.cs) and the self-update canary's stub-boot leg mode both build/read
+             puck.release.v1 documents (ReleaseManifest/ReleaseCanonicalizer) and mint an AttestationReleaseVerifier
+             — reusing the one type rather than a second hand-rolled mirror of it (rule 8). -->
+        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>

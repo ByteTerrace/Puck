@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Puck.Commands;
 
 namespace Puck.World;
@@ -7,9 +8,15 @@ namespace Puck.World;
 /// into one before it goes through the existing <see cref="BindingProfile.Compile"/> once per seat. Chord rows merge
 /// on <c>(group, ordered chord)</c>: a later layer's row for the same key OVERRIDES the earlier one — wholesale when
 /// the meaning kind or page id differs (a page becoming a command, a renamed page), entry-by-source when both are the
-/// SAME page (a later layer's entries for a source REPLACE the earlier layer's entries for that same source; entries
-/// at new sources append — the per-world overlay's single-lane remap). Rows at new keys append; modifiers union by id
-/// (a later layer overrides a same-id modifier); context rows merge on <c>(family, state)</c> in base-layer order with
+/// SAME page (a later layer's row with sources <c>[A, B]</c> REPLACES the earlier layer's entries at A and at B
+/// independently; entries at new sources append — the per-world overlay's single-lane remap). An entry surviving at
+/// every one of its authored sources carries them all, unsplit; one losing some of its sources to a later layer's
+/// narrower row keeps only the sources still its own. Rows at new keys append; modifiers union by id (a later layer
+/// overrides a same-id modifier), and a later
+/// layer's modifier under a NEW id that shares a source with an earlier one ABSORBS it — a source belongs to one
+/// modifier, so sharing one is declaring the same modifier under a new name: the earlier declaration is dropped and
+/// every already-merged row's chord/held reference to it is rewritten to the new id (how a world renames the engine's
+/// <c>tab</c> and every engine page that held on it follows); context rows merge on <c>(family, state)</c> in base-layer order with
 /// appended keys after (see <c>MergeContexts</c>); wheels merge on their id, a later layer's wheel REPLACING the
 /// earlier one's WHOLESALE (a wheel is one presentation surface — half-merging two ring sets would present a radial
 /// neither layer authored; a world that re-authors a named wheel therefore re-authors all of it, the Editor sector
@@ -42,7 +49,7 @@ public static class WorldBindingComposer {
             }
         }
     }
-    private static void MergeModifiers(List<BindingModifierDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer) {
+    private static void MergeModifiers(List<BindingModifierDefinition> into, Dictionary<string, int> index, BindingProfileDocument layer, List<MutableRow> rows, Dictionary<string, int> rowIndex) {
         foreach (var modifier in (layer.Modifiers ?? [])) {
             if (string.IsNullOrEmpty(value: modifier.Id)) {
                 continue;
@@ -53,11 +60,69 @@ public static class WorldBindingComposer {
                 value: out var existing
             )) {
                 into[existing] = modifier;
-            } else {
-                index[modifier.Id] = into.Count;
-                into.Add(item: modifier);
+
+                continue;
+            }
+
+            // Absorb every earlier modifier this one shares a source with (see the class remarks).
+            var absorbed = false;
+
+            for (var position = (into.Count - 1); (position >= 0); position--) {
+                var earlier = into[position];
+
+                if (!SharesSource(
+                    a: earlier,
+                    b: modifier
+                )) {
+                    continue;
+                }
+
+                into.RemoveAt(index: position);
+                _ = index.Remove(key: earlier.Id);
+
+                foreach (var row in rows) {
+                    row.RenameModifier(
+                        from: earlier.Id,
+                        to: modifier.Id
+                    );
+                }
+
+                absorbed = true;
+            }
+
+            if (absorbed) {
+                // Ids inside a modifier's stored slot moved: rebuild the id → position and row-key indexes.
+                index.Clear();
+
+                for (var position = 0; (position < into.Count); position++) {
+                    index[into[position].Id] = position;
+                }
+
+                rowIndex.Clear();
+
+                for (var position = 0; (position < rows.Count); position++) {
+                    rowIndex[rows[position].Key] = position;
+                }
+            }
+
+            index[modifier.Id] = into.Count;
+            into.Add(item: modifier);
+        }
+    }
+    private static bool SharesSource(BindingModifierDefinition a, BindingModifierDefinition b) {
+        foreach (var source in (a.Sources ?? [])) {
+            foreach (var candidate in (b.Sources ?? [])) {
+                if (string.Equals(
+                    a: source,
+                    b: candidate,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) {
+                    return true;
+                }
             }
         }
+
+        return false;
     }
     private static void MergeRows(List<MutableRow> into, Dictionary<string, int> index, BindingProfileDocument layer) {
         foreach (var row in (layer.Chords ?? [])) {
@@ -93,20 +158,28 @@ public static class WorldBindingComposer {
             }
         }
     }
-    // The chord-row merge key: group plus the ordered chord (a NUL separator no group/modifier id can carry), so
-    // ["lt","rt"] and ["rt","lt"] are distinct rows and a same-(group, chord) row across layers merges.
-    private static string RowKey(BindingChordDefinition row) {
-        return $"{row.Group}\0{string.Join(
+    // The row merge key: group, the held set (sorted — order is not part of its identity), and the ordered chord (a
+    // NUL/pipe no group or member id can carry), so ["lt","rt"] and ["rt","lt"] are distinct rows and a same-identity
+    // row across layers merges.
+    private static string RowKey(BindingChordDefinition row) => RowKey(
+        chord: row.Chord,
+        group: row.Group,
+        held: row.Held
+    );
+    private static string RowKey(string group, IReadOnlyList<string>? held, IReadOnlyList<string>? chord) {
+        return $"{group}\0{string.Join(
             separator: ',',
-            values: (row.Chord ?? [])
+            values: (held ?? []).Order(comparer: StringComparer.Ordinal)
+        )}|{string.Join(
+            separator: ',',
+            values: (chord ?? [])
         )}";
     }
 
-    /// <summary>Merges the given layers in order (null layers skipped). At least one non-null layer is required (in
-    /// practice the engine default is always layer 0).</summary>
+    /// <summary>Merges the given layers in order (null layers skipped). No non-null layer composes to the empty
+    /// document — a world authoring no bindings binds nothing.</summary>
     /// <param name="layers">The layers to merge, base-first.</param>
     /// <returns>The merged document (its <see cref="BindingProfileDocument.Version"/> is the first non-null layer's).</returns>
-    /// <exception cref="ArgumentException">Every layer is <see langword="null"/>.</exception>
     public static BindingProfileDocument Compose(params ReadOnlySpan<BindingProfileDocument?> layers) {
         string? version = null;
         var contexts = new List<BindingContextDefinition>();
@@ -141,7 +214,9 @@ public static class WorldBindingComposer {
             MergeModifiers(
                 index: modifierIndexById,
                 into: modifiers,
-                layer: layer
+                layer: layer,
+                rowIndex: rowIndexByKey,
+                rows: rows
             );
             MergeRows(
                 index: rowIndexByKey,
@@ -160,13 +235,6 @@ public static class WorldBindingComposer {
             );
         }
 
-        if (version is null) {
-            throw new ArgumentException(
-                message: "Compose requires at least one non-null layer.",
-                paramName: nameof(layers)
-            );
-        }
-
         var composedRows = new BindingChordDefinition[rows.Count];
 
         for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
@@ -174,7 +242,7 @@ public static class WorldBindingComposer {
         }
 
         return new BindingProfileDocument(
-            Version: version,
+            Version: (version ?? BindingProfileDocument.CurrentVersion),
             Modifiers: modifiers,
             Chords: composedRows,
             Contexts: ((contexts.Count > 0)
@@ -187,15 +255,20 @@ public static class WorldBindingComposer {
     }
 
     // One chord row being composed: its (group, chord) identity plus its current meaning. A page meaning keeps its
-    // entries in first-seen SOURCE order so a later layer's entries for a source replace the earlier layer's IN PLACE
-    // (a stable, deterministic merge) and a new source appends; any other meaning change replaces the row wholesale.
+    // entries in first-seen SOURCE order so a later layer's row replaces the earlier layer's entries AT EACH of its
+    // own listed sources IN PLACE (a stable, deterministic merge) and a new source appends; any other meaning change
+    // replaces the row wholesale. An entry with several sources is stored once per source it claims — the SAME
+    // reference at each key — so ToDefinition can recover, per entry, exactly which of its authored sources still
+    // point back to it.
     private sealed class MutableRow {
-        private readonly IReadOnlyList<string> m_chord;
+        private IReadOnlyList<string>? m_chord;
+        private IReadOnlyList<string>? m_held;
         private readonly string m_group;
 
         private BindingCommandDefinition? m_command;
         private string? m_pageIcon;
         private string? m_pageId;
+        private string? m_pageInherits;
         private string? m_pageLabel;
 
         private readonly List<string> m_sourceOrder = [];
@@ -208,16 +281,20 @@ public static class WorldBindingComposer {
         private readonly List<string> m_activatorOrder = [];
         private readonly Dictionary<string, List<BindingPageEntryDefinition>> m_byActivatorKey = new(comparer: StringComparer.OrdinalIgnoreCase);
 
-        private MutableRow(string group, IReadOnlyList<string> chord) {
+        private MutableRow(string group, IReadOnlyList<string>? chord, IReadOnlyList<string>? held) {
             m_chord = chord;
+            m_held = held;
             m_group = group;
         }
 
         private void Absorb(IReadOnlyList<BindingPageEntryDefinition>? entries, bool replace) {
-            // A later layer (replace) REPLACES all earlier entries for each source it names — but only on that source's
-            // FIRST touch this layer, so a hold/release PAIR the layer carries for one source accumulates rather than
-            // the second entry wiping the first. Sources this layer freshly creates need no clear. Activator entries
-            // (no Source) key on their own (mode, sequence) identity instead — see m_byActivatorKey's own remarks.
+            // A later layer (replace) REPLACES all earlier entries at each source it names — but only on that
+            // source's FIRST touch this layer, so a hold/release PAIR the layer carries for one source accumulates
+            // rather than the second entry wiping the first. Sources this layer freshly creates need no clear.
+            // Activator entries (no Sources) key on their own (mode, sequence) identity instead — see
+            // m_byActivatorKey's own remarks. An entry naming several sources is stored, by reference, at EACH of
+            // them independently, so a later layer's narrower row can steal one of its sources while it keeps the
+            // rest.
             var clearedThisLayer = (replace
                 ? new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase)
                 : null
@@ -256,34 +333,37 @@ public static class WorldBindingComposer {
                     continue;
                 }
 
-                if (string.IsNullOrEmpty(value: entry.Source)) {
-                    continue;
-                }
-
-                if (m_bySource.TryGetValue(
-                    key: entry.Source,
-                    value: out var list
-                )) {
-                    if (
-                        (clearedThisLayer is not null) &&
-                        clearedThisLayer.Add(item: entry.Source)
-                    ) {
-                        list.Clear();
+                foreach (var source in (entry.Sources ?? [])) {
+                    if (string.IsNullOrEmpty(value: source)) {
+                        continue;
                     }
-                } else {
-                    list = [];
-                    m_bySource[entry.Source] = list;
-                    m_sourceOrder.Add(item: entry.Source);
-                    _ = clearedThisLayer?.Add(item: entry.Source);
-                }
 
-                list.Add(item: entry);
+                    if (m_bySource.TryGetValue(
+                        key: source,
+                        value: out var list
+                    )) {
+                        if (
+                            (clearedThisLayer is not null) &&
+                            clearedThisLayer.Add(item: source)
+                        ) {
+                            list.Clear();
+                        }
+                    } else {
+                        list = [];
+                        m_bySource[source] = list;
+                        m_sourceOrder.Add(item: source);
+                        _ = clearedThisLayer?.Add(item: source);
+                    }
+
+                    list.Add(item: entry);
+                }
             }
         }
         private void Adopt(BindingChordDefinition row) {
             m_command = row.Command;
             m_pageIcon = row.Page?.Icon;
             m_pageId = row.Page?.Id;
+            m_pageInherits = row.Page?.Inherits;
             m_pageLabel = row.Page?.Label;
 
             if (row.Page is { } page) {
@@ -294,19 +374,69 @@ public static class WorldBindingComposer {
             }
         }
 
+        public string Key => RowKey(
+            chord: m_chord,
+            group: m_group,
+            held: m_held
+        );
+
+        private static IReadOnlyList<string>? Rename(IReadOnlyList<string>? ids, string from, string to) {
+            if (ids is null) {
+                return null;
+            }
+
+            string[]? renamed = null;
+
+            for (var position = 0; (position < ids.Count); position++) {
+                if (!string.Equals(
+                    a: ids[position],
+                    b: from,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    continue;
+                }
+
+                renamed ??= [.. ids];
+                renamed[position] = to;
+            }
+
+            if (renamed is null) {
+                return ids;
+            }
+
+            if (renamed.Distinct(comparer: StringComparer.Ordinal).Count() != renamed.Length) {
+                throw new ArgumentException(message: $"Modifier \"{to}\" absorbs \"{from}\", but a chord row already carries both — the row would name one modifier twice.");
+            }
+
+            return renamed;
+        }
+        // Rewrites this row's chord/held references from an absorbed modifier id to the absorbing one.
+        public void RenameModifier(string from, string to) {
+            m_chord = Rename(
+                from: from,
+                ids: m_chord,
+                to: to
+            );
+            m_held = Rename(
+                from: from,
+                ids: m_held,
+                to: to
+            );
+        }
         public static MutableRow From(BindingChordDefinition row) {
             var mutable = new MutableRow(
                 group: row.Group,
-                chord: (row.Chord ?? [])
+                chord: row.Chord,
+                held: row.Held
             );
 
             mutable.Adopt(row: row);
 
             return mutable;
         }
-        // Merge a later layer's version of this row. The SAME page (matching id) deep-merges: display metadata
-        // overrides when present, entries replace per source. Anything else — a command meaning, or a page under a
-        // different id — is a wholesale override: exactly one meaning per (group, chord) must survive the merge.
+        // Merge a later layer's version of this row. The SAME page (matching id) deep-merges: display metadata and
+        // inheritance override when present, and entries replace per source. Anything else — a command meaning, or
+        // a page under a different id — is a wholesale override: exactly one meaning per (group, chord) survives.
         public void Merge(BindingChordDefinition row) {
             if (
                 (row.Page is { } page) &&
@@ -318,6 +448,7 @@ public static class WorldBindingComposer {
             )
             ) {
                 m_pageIcon = (page.Icon ?? m_pageIcon);
+                m_pageInherits = (page.Inherits ?? m_pageInherits);
                 m_pageLabel = (page.Label ?? m_pageLabel);
 
                 Absorb(
@@ -339,14 +470,35 @@ public static class WorldBindingComposer {
                 return new BindingChordDefinition(
                     Group: m_group,
                     Chord: m_chord,
-                    Command: command
+                    Command: command,
+                    Held: m_held
                 );
             }
 
             var entries = new List<BindingPageEntryDefinition>();
+            // An entry may be stored at several source keys (see Absorb); emit it exactly once, at its first-seen
+            // source, narrowed to whichever of its authored sources STILL point back to it — an entry untouched by
+            // any later override emits with its full authored Sources, unsplit.
+            var emitted = new HashSet<BindingPageEntryDefinition>(comparer: ReferenceEqualityComparer.Instance);
 
             foreach (var source in m_sourceOrder) {
-                entries.AddRange(collection: m_bySource[source]);
+                foreach (var entry in m_bySource[source]) {
+                    if (!emitted.Add(item: entry)) {
+                        continue;
+                    }
+
+                    var survivingSources = entry.Sources!.Where(predicate: candidate => (m_bySource.TryGetValue(
+                        key: candidate,
+                        value: out var owners
+                    ) && owners.Any(predicate: owner => ReferenceEquals(
+                        objA: owner,
+                        objB: entry
+                    )))).ToImmutableArray();
+
+                    entries.Add(item: ((survivingSources.Length == entry.Sources!.Count)
+                        ? entry
+                        : (entry with { Sources = survivingSources })));
+                }
             }
 
             // Activator entries append after source-keyed entries, in first-seen order — a stable, deterministic
@@ -358,10 +510,12 @@ public static class WorldBindingComposer {
             return new BindingChordDefinition(
                 Group: m_group,
                 Chord: m_chord,
+                Held: m_held,
                 Page: new BindingPageDefinition(
                     Entries: entries,
                     Icon: m_pageIcon,
                     Id: (m_pageId ?? string.Empty),
+                    Inherits: m_pageInherits,
                     Label: m_pageLabel
                 )
             );

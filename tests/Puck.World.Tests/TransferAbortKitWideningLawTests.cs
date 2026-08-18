@@ -73,10 +73,10 @@ public sealed class TransferAbortKitWideningLawTests {
                 FallGravity: 26f,
                 MaxFallSpeed: 30f
             ),
-            Producers: new Dictionary<string, BodyProgramParameters> {
+            ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = Fixtures.TravelerWanderParameters,
             },
-            Actions: new Dictionary<string, ActionSpec> {
+            ActionsRaw: new Dictionary<string, ActionSpec> {
                 // ONE authored action, bound OnFact only (no OnPress/OnRelease needed) — exercises the lane action
                 // runtime's own edge-latch/FactHeld (LaneLatch/LaneFactHeld) AND a DURABLE action-state write
                 // (ActionStateValues/Dirty/DirtyKind/DirtyOperand) through the SAME RunActionTriggers path real
@@ -87,7 +87,6 @@ public sealed class TransferAbortKitWideningLawTests {
                 ["surge"] = new ActionSpec(
                     OnPress: null,
                     OnRelease: null,
-                    State: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f, Lifetime: ActionStateLifetime.Durable)],
                     OnFact: [new ActionFactTrigger(Fact: ActionFact.Falling, Effects: [new ActionEffect.AddState(State: "surgeCounter", Value: 1f)], Mode: ActionTriggerMode.Edge)]
                 ),
             },
@@ -95,10 +94,11 @@ public sealed class TransferAbortKitWideningLawTests {
         );
 
         return Fixtures.BuildDocument() with {
-            Channels = channels,
-            BodyMotionPrograms = [vehicleGround, vehicleGroundAlt, wander],
-            Kits = [kit],
-            DefaultSeatKit = "kart-test",
+            ChannelsRaw = channels,
+            BodyMotionProgramsRaw = [vehicleGround, vehicleGroundAlt, wander],
+            KitsRaw = [kit],
+            DefaultSeatKitRaw = "kart-test",
+            StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
         };
     }
     private static WorldDefinition BuildSwimKitDocument() {
@@ -150,17 +150,16 @@ public sealed class TransferAbortKitWideningLawTests {
                 FloatDepth: 1f,
                 SprintMultiplier: 1f
             ),
-            Producers: new Dictionary<string, BodyProgramParameters> {
+            ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = Fixtures.TravelerWanderParameters,
             },
-            Actions: new Dictionary<string, ActionSpec> {
+            ActionsRaw: new Dictionary<string, ActionSpec> {
                 // Mirrors the vehicle kit's own "surge" action above, gated on Rising instead of Falling (a diver
                 // thrusting upward is the reliable, easily-driven fact here — Falling would work too, but Rising is
                 // what this law already drives for MotionRecency, so one drive proves both).
                 ["surge"] = new ActionSpec(
                     OnPress: null,
                     OnRelease: null,
-                    State: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f, Lifetime: ActionStateLifetime.Durable)],
                     OnFact: [new ActionFactTrigger(Fact: ActionFact.Rising, Effects: [new ActionEffect.AddState(State: "surgeCounter", Value: 1f)], Mode: ActionTriggerMode.Edge)]
                 ),
             },
@@ -168,10 +167,11 @@ public sealed class TransferAbortKitWideningLawTests {
         );
 
         return Fixtures.BuildDocument() with {
-            Channels = channels,
-            BodyMotionPrograms = [swim, swimAlt, wander],
-            Kits = [kit],
-            DefaultSeatKit = "diver-test",
+            ChannelsRaw = channels,
+            BodyMotionProgramsRaw = [swim, swimAlt, wander],
+            KitsRaw = [kit],
+            DefaultSeatKitRaw = "diver-test",
+            StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
             // REQUIRED: WorldDefinitionValidator refuses a Swim-model kit when the world authors no water section.
             Water = new WorldWaterSection(Level: 5f),
         };

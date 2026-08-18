@@ -35,9 +35,9 @@ public sealed class SimulationRateZeroLawTests {
         var zeroRate = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 0) });
         var negativeRate = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: -1) });
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, reason: out var zeroReason, neighbours: null), userMessage: $"rate 0 was expected to validate; refused: {zeroReason}");
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: negativeRate, reason: out var negativeReason, neighbours: null), userMessage: "a negative rate was expected to refuse");
-        Assert.Contains(expectedSubstring: "rateHz", actualString: negativeReason, comparisonType: StringComparison.Ordinal);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, neighbours: null, reason: out var zeroReason), userMessage: $"rate 0 was expected to validate; refused: {zeroReason}");
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: negativeRate, neighbours: null, reason: out var negativeReason), userMessage: "a negative rate was expected to refuse");
+        Assert.Contains(actualString: negativeReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "rateHz");
     }
     [Fact]
     public void ValidatorAtRateZero_SkipsTheDivisorCheck() {
@@ -49,7 +49,7 @@ public sealed class SimulationRateZeroLawTests {
         // return, not a coincidence of modulo arithmetic.
         var zeroRate = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 0) });
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, reason: out var reason, neighbours: null), userMessage: $"rate 0 was expected to validate; refused: {reason}");
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, neighbours: null, reason: out var reason), userMessage: $"rate 0 was expected to validate; refused: {reason}");
     }
     /// <summary>The discriminator this suite's own test audit named missing: nothing above proves the divisor check
     /// still FIRES for a positive rate — <see cref="ValidatorAtRateZero_SkipsTheDivisorCheck"/> and
@@ -60,8 +60,8 @@ public sealed class SimulationRateZeroLawTests {
     public void ValidatorAtPositiveRate_RefusesNonDivisorRate() {
         var nonDivisor = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 241) });
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: nonDivisor, reason: out var reason, neighbours: null), userMessage: "241 Hz does not divide 50400 and was expected to refuse");
-        Assert.Contains(expectedSubstring: "does not divide", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: nonDivisor, neighbours: null, reason: out var reason), userMessage: "241 Hz does not divide 50400 and was expected to refuse");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "does not divide");
     }
     [Fact]
     public void RateZeroDocument_WithOrdinaryInputHold_StillValidates() {
@@ -74,7 +74,7 @@ public sealed class SimulationRateZeroLawTests {
         // ValidateSimulation itself admits the rate.
         var zeroRate = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 0) });
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, reason: out var reason, neighbours: null), userMessage: $"a rate-0 world authoring an ordinary inputHold section was expected to validate; refused: {reason}");
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: zeroRate, neighbours: null, reason: out var reason), userMessage: $"a rate-0 world authoring an ordinary inputHold section was expected to validate; refused: {reason}");
     }
     /// <summary>The discriminator <see cref="RateZeroDocument_WithOrdinaryInputHold_StillValidates"/> itself cannot
     /// provide: that test would pass identically if input-hold validation were deleted wholesale, since it only ever
@@ -88,11 +88,11 @@ public sealed class SimulationRateZeroLawTests {
         var baseDocument = Fixtures.BuildDocument();
         var document = (baseDocument with {
             Simulation = new WorldSimulationDefaults(RateHz: 0),
-            InputHold = (baseDocument.InputHold with { LowerAfterSeconds = 0.000001f }),
+            InputHoldRaw = (baseDocument.InputHold with { LowerAfterSeconds = 0.000001f }),
         });
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse even at rate 0");
-        Assert.Contains(expectedSubstring: "lowerAfterSeconds", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse even at rate 0");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "lowerAfterSeconds");
     }
     /// <summary>The other half of the same discriminator: a non-finite authored value evades every ordered
     /// comparison the old floats-only validator made (<c>NaN &gt; anything</c> and <c>anything &gt; NaN</c> are both
@@ -104,11 +104,11 @@ public sealed class SimulationRateZeroLawTests {
         var baseDocument = Fixtures.BuildDocument();
         var document = (baseDocument with {
             Simulation = new WorldSimulationDefaults(RateHz: 0),
-            InputHold = (baseDocument.InputHold with { CeilingSeconds = float.NaN }),
+            InputHoldRaw = (baseDocument.InputHold with { CeilingSeconds = float.NaN }),
         });
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "a NaN ceilingSeconds was expected to refuse even at rate 0");
-        Assert.Contains(expectedSubstring: "finite", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: "a NaN ceilingSeconds was expected to refuse even at rate 0");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "finite");
     }
     /// <summary>The adversarial review's finding 3, with its own concrete numbers: at 240 Hz, ceilingSeconds
     /// 10,000,000 compiles to 2,400,000,000 ticks — which does not fit <see cref="WorldInputHoldSettings"/>.
@@ -121,14 +121,14 @@ public sealed class SimulationRateZeroLawTests {
     public void PositiveRateDocument_CeilingSecondsOverflowsCompiledRange_Refuses() {
         var baseDocument = Fixtures.BuildDocument();
         var document = (baseDocument with {
-            InputHold = (baseDocument.InputHold with { CeilingSeconds = 10_000_000f, LowerAfterSeconds = 0.25f, DefaultSeconds = 0f }),
+            InputHoldRaw = (baseDocument.InputHold with { CeilingSeconds = 10_000_000f, LowerAfterSeconds = 0.25f, DefaultSeconds = 0f }),
         });
 
         Assert.Equal(expected: 240, actual: document.SimulationRateHz);
         Assert.Throws<OverflowException>(testCode: () => document.InputHold.Compile(ratePerSecond: ((uint)document.SimulationRateHz)));
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "an uncompilable ceilingSeconds was expected to refuse");
-        Assert.Contains(expectedSubstring: "ceilingSeconds", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: "an uncompilable ceilingSeconds was expected to refuse");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "ceilingSeconds");
     }
     /// <summary>The adversarial review's finding 5, at the positive rate its own concrete case names: 240 Hz,
     /// lowerAfterSeconds 0.000001f. The comment above <c>WorldDefinitionValidator.ValidateInputHold</c> used to
@@ -140,22 +140,22 @@ public sealed class SimulationRateZeroLawTests {
     public void PositiveRateDocument_SubRepresentableLowerAfterSeconds_Refuses() {
         var baseDocument = Fixtures.BuildDocument();
         var document = (baseDocument with {
-            InputHold = (baseDocument.InputHold with { LowerAfterSeconds = 0.000001f }),
+            InputHoldRaw = (baseDocument.InputHold with { LowerAfterSeconds = 0.000001f }),
         });
 
         Assert.Equal(expected: 240, actual: document.SimulationRateHz);
         Assert.Equal(expected: 0, actual: document.InputHold.Compile(ratePerSecond: ((uint)document.SimulationRateHz)).LowerAfterTicks);
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, reason: out var reason, neighbours: null), userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse at 240 Hz");
-        Assert.Contains(expectedSubstring: "lowerAfterSeconds", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: document, neighbours: null, reason: out var reason), userMessage: "a sub-representable positive lowerAfterSeconds was expected to refuse at 240 Hz");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "lowerAfterSeconds");
     }
     [Fact]
     public void SecondsFromTicks_RefusesAtRateZero() {
-        Assert.Throws<InvalidOperationException>(testCode: () => WorldSimulationTickConversion.SecondsFromTicks(ticks: 720, ratePerSecond: 0U));
+        Assert.Throws<InvalidOperationException>(testCode: () => WorldSimulationTickConversion.SecondsFromTicks(ratePerSecond: 0U, ticks: 720));
         // The zero-ticks case matters too: a plain division would produce NaN here (not Infinity), and both are
         // non-finite floats that later throw unguarded out of JSON serialization — the refusal must fire on EITHER
         // shape, not just the more obviously-wrong Infinity case.
-        Assert.Throws<InvalidOperationException>(testCode: () => WorldSimulationTickConversion.SecondsFromTicks(ticks: 0, ratePerSecond: 0U));
+        Assert.Throws<InvalidOperationException>(testCode: () => WorldSimulationTickConversion.SecondsFromTicks(ratePerSecond: 0U, ticks: 0));
     }
     /// <summary>The apply-door discriminator this suite's own test audit named missing:
     /// <see cref="SecondsFromTicks_RefusesAtRateZero"/> proves the LOW-LEVEL conversion refuses, but not that a real
@@ -174,7 +174,7 @@ public sealed class SimulationRateZeroLawTests {
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetInputHold(
             Principal: WorldPrincipal.Console,
-            Settings: new WorldInputHoldSettings(CeilingTicks: 120, LowerAfterTicks: 60, DefaultTicks: 0, EqualizeByDefault: true, Participants: [])
+            Settings: new WorldInputHoldSettings(CeilingTicks: 120, DefaultTicks: 0, EqualizeByDefault: true, LowerAfterTicks: 60, Participants: [])
         ));
 
         var exception = Record.Exception(testCode: () => fixture.Server.DrainAdministrative());
@@ -185,12 +185,12 @@ public sealed class SimulationRateZeroLawTests {
     }
     [Fact]
     public void SecondsFromTicks_WorksAtPositiveRate() {
-        Assert.Equal(expected: 3.0f, actual: WorldSimulationTickConversion.SecondsFromTicks(ticks: 720, ratePerSecond: 240U));
+        Assert.Equal(expected: 3.0f, actual: WorldSimulationTickConversion.SecondsFromTicks(ratePerSecond: 240U, ticks: 720));
     }
     [Fact]
     public void CompiledDuration_AtRateZero_PositiveSecondsIsNever_ZeroSecondsIsAuthoredDisabled() {
-        var never = WorldSimulationTickConversion.CompiledDuration(seconds: 3.0f, ratePerSecond: 0U);
-        var disabled = WorldSimulationTickConversion.CompiledDuration(seconds: 0f, ratePerSecond: 0U);
+        var never = WorldSimulationTickConversion.CompiledDuration(ratePerSecond: 0U, seconds: 3.0f);
+        var disabled = WorldSimulationTickConversion.CompiledDuration(ratePerSecond: 0U, seconds: 0f);
 
         Assert.True(condition: never.IsNever);
         Assert.False(condition: disabled.IsNever);
@@ -198,16 +198,16 @@ public sealed class SimulationRateZeroLawTests {
         // The whole point of the type: Never and an authored-disabled zero are NOT the same value, and Ticks on
         // Never is not merely "some number that happens to be 0" — it throws, so no caller can silently read it as
         // a tick count.
-        Assert.NotEqual(expected: never, actual: disabled);
+        Assert.NotEqual(actual: disabled, expected: never);
         Assert.Throws<InvalidOperationException>(testCode: () => never.Ticks);
         Assert.Equal(expected: 0, actual: disabled.Ticks);
     }
     [Fact]
     public void CompiledDuration_AtPositiveRate_MatchesDurationTicks() {
-        var compiled = WorldSimulationTickConversion.CompiledDuration(seconds: 3.0f, ratePerSecond: 240U);
+        var compiled = WorldSimulationTickConversion.CompiledDuration(ratePerSecond: 240U, seconds: 3.0f);
 
         Assert.False(condition: compiled.IsNever);
-        Assert.Equal(expected: checked((int)WorldSimulationTickConversion.DurationTicks(seconds: 3.0f, ratePerSecond: 240U)), actual: compiled.Ticks);
+        Assert.Equal(expected: checked((int)WorldSimulationTickConversion.DurationTicks(ratePerSecond: 240U, seconds: 3.0f)), actual: compiled.Ticks);
         Assert.Equal(expected: 720, actual: compiled.Ticks);
     }
     [Fact]
@@ -409,14 +409,14 @@ public sealed class SimulationRateZeroLawTests {
         // One free peer slot above the four local seats, with room in networkPlayers to admit it — the fixture's own
         // default document pins Capacity to LocalSeatCount specifically to keep the census/inhabitant loop empty
         // (see Fixtures.BuildDocumentCore's own remarks); a peer-path law needs that loop non-empty instead.
-        return (document with { Population = (document.Population with { Capacity = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 }) });
+        return (document with { PopulationRaw = (document.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 }) });
     }
     private static WorldDefinition BuildWithRateAndGrace(int rateHz, float reconnectGraceSeconds) {
         var document = Fixtures.BuildDocument();
 
         return (document with {
             Simulation = new WorldSimulationDefaults(RateHz: rateHz),
-            Population = (document.Population with { ReconnectGraceSeconds = reconnectGraceSeconds }),
+            PopulationRaw = (document.Population with { ReconnectGraceSeconds = reconnectGraceSeconds }),
         });
     }
 }

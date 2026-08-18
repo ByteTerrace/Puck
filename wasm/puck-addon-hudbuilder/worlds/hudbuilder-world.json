@@ -592,13 +592,6 @@
       },
       "actions": {
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "timerElapsed",
@@ -662,13 +655,6 @@
       },
       "actions": {
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "timerElapsed",
@@ -755,14 +741,6 @@
       },
       "actions": {
         "jump": {
-          "state": [
-            {
-              "name": "jumpUses",
-              "kind": "Counter",
-              "initial": 0,
-              "resetFact": "Grounded"
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -808,13 +786,6 @@
           }
         },
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -933,14 +904,6 @@
       },
       "actions": {
         "jump": {
-          "state": [
-            {
-              "name": "jumpUses",
-              "kind": "Counter",
-              "initial": 0,
-              "resetFact": "Grounded"
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -986,13 +949,6 @@
           }
         },
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -1102,14 +1058,6 @@
       },
       "actions": {
         "jump": {
-          "state": [
-            {
-              "name": "jumpUses",
-              "kind": "Counter",
-              "initial": 0,
-              "resetFact": "Grounded"
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -1155,13 +1103,6 @@
           }
         },
         "dash": {
-          "state": [
-            {
-              "name": "dashCooldown",
-              "kind": "Timer",
-              "initial": 0
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -1262,48 +1203,60 @@
         "modifiers": [],
         "chords": [
           {
-            "group": "play",
+            "group": "default",
             "chord": [],
             "page": {
               "id": "base",
               "entries": [
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "channel": "jump",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "channel": "jump",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "channel": "jump",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "channel": "jump",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": "Completed",
                   "label": null,
@@ -1333,11 +1286,7 @@
         "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.33,
-              "y": 0.52,
-              "z": 0.24
-            },
+            "color": "#54853D",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1348,28 +1297,13 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1392,11 +1326,7 @@
         "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.55,
-              "z": 0.58
-            },
+            "color": "#8C8C94",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1407,28 +1337,13 @@
             "id": 0,
             "name": "boulder-1",
             "type": "Sphere",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 2.368421,
-              "y": 2.368421,
-              "z": 2.368421
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [2.368421, 2.368421, 2.368421],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.5,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1451,11 +1366,7 @@
         "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.55,
-              "z": 0.58
-            },
+            "color": "#8C8C94",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1466,28 +1377,13 @@
             "id": 0,
             "name": "boulder-2",
             "type": "Sphere",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 2.894737,
-              "y": 2.894737,
-              "z": 2.894737
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [2.894737, 2.894737, 2.894737],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.5,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1510,11 +1406,7 @@
         "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.55,
-              "z": 0.58
-            },
+            "color": "#8C8C94",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1525,28 +1417,13 @@
             "id": 0,
             "name": "boulder-3",
             "type": "Sphere",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1.5789474,
-              "y": 1.5789474,
-              "z": 1.5789474
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.5789474, 1.5789474, 1.5789474],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.4,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1569,11 +1446,7 @@
         "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.55,
-              "z": 0.58
-            },
+            "color": "#8C8C94",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1584,28 +1457,13 @@
             "id": 0,
             "name": "boulder-4",
             "type": "Sphere",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1.1842105,
-              "y": 1.1842105,
-              "z": 1.1842105
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.1842105, 1.1842105, 1.1842105],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.35,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1628,11 +1486,7 @@
         "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.55,
-              "y": 0.55,
-              "z": 0.58
-            },
+            "color": "#8C8C94",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -1643,28 +1497,13 @@
             "id": 0,
             "name": "boulder-5",
             "type": "Sphere",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1.9736842,
-              "y": 1.9736842,
-              "z": 1.9736842
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.9736842, 1.9736842, 1.9736842],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.4,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -1822,16 +1661,22 @@
     "listen": null
   },
   "views": {
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
     "seatRig": {
       "motion": {
-        "$type": "follow",
-        "offset": [
+        "$type": "orbit",
+        "distance": 5.4589844,
+        "yaw": 0,
+        "pitch": 0.4182243,
+        "pivotOffset": [
           0,
-          2.2,
-          5
-        ],
-        "worldAxes": false,
-        "spreadPullback": 0
+          0,
+          0
+        ]
       },
       "aim": {
         "$type": "anchor",
@@ -1844,7 +1689,8 @@
       },
       "lens": {
         "fieldOfViewRadians": 0.9599311
-      }
+      },
+      "smoothRate": 4
     },
     "layouts": []
   },
@@ -1865,7 +1711,22 @@
     },
     "panels": []
   },
-  "state": [],
+  "state": {
+    "world": [],
+    "body": [
+      {
+        "name": "dashCooldown",
+        "kind": "Timer",
+        "initial": 0
+      },
+      {
+        "name": "jumpUses",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded"
+      }
+    ]
+  },
   "schema": "puck.world.def.v1",
   "documentId": "hudbuilder-world",
   "playerDefaults": {
@@ -1908,11 +1769,8 @@
       "yawSensitivity": 0.001,
       "pitchSensitivity": 0.001,
       "invertYaw": false,
-      "invertPitch": false,
-      "minPitch": -0.35,
-      "maxPitch": 1.2,
-      "arming": "RightButton",
-      "worldAxes": false
+      "invertPitch": false,
+      "stickLookRate": 2.6
     }
   }
 }

@@ -1,0 +1,640 @@
+{
+  "bindingOverlays": [
+    {
+      "bindingBar": {
+        "visible": {
+          "$type": "recently",
+          "fact": "SeatInput",
+          "windowSeconds": 3
+        }
+      },
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "channel": "forward",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d"
+                  ]
+                },
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.motion.angular",
+                  "label": "Motion look",
+                  "sources": [
+                    "gamepad.gyro"
+                  ]
+                },
+                {
+                  "channel": "jump",
+                  "sources": [
+                    "gamepad.buttonSouth",
+                    "keyboard.space"
+                  ]
+                },
+                {
+                  "channel": "run",
+                  "label": "Sprint",
+                  "sources": [
+                    "gamepad.buttonWest",
+                    "keyboard.shiftLeft"
+                  ]
+                },
+                {
+                  "channel": "run",
+                  "label": "Run",
+                  "mode": "Toggle",
+                  "sources": [
+                    "gamepad.leftStickPress"
+                  ]
+                },
+                {
+                  "channel": "up",
+                  "label": "Jetpack",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.rightStickPress",
+                    "keyboard.controlLeft"
+                  ]
+                },
+                {
+                  "channel": "dash",
+                  "label": "Dash",
+                  "sources": [
+                    "gamepad.buttonEast",
+                    "keyboard.e"
+                  ]
+                },
+                {
+                  "channel": "leap",
+                  "label": "Leap",
+                  "sources": [
+                    "gamepad.buttonNorth",
+                    "keyboard.q"
+                  ]
+                },
+                {
+                  "channel": "airLeap",
+                  "label": "Leap",
+                  "sources": [
+                    "gamepad.buttonNorth",
+                    "keyboard.q"
+                  ]
+                },
+                {
+                  "command": "player.orbit",
+                  "label": "Orbit",
+                  "sources": [
+                    "mouse.button1"
+                  ]
+                },
+                {
+                  "command": "player.steer",
+                  "label": "Steer",
+                  "sources": [
+                    "mouse.button2"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.arrowLeft"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.arrowRight"
+                  ]
+                }
+              ],
+              "id": "base"
+            }
+          },
+          {
+            "chord": [
+              "look",
+              "actionWheel"
+            ],
+            "command": {
+              "command": "player.look.swap",
+              "label": "Look behind"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.rightShoulder"
+            ],
+            "command": {
+              "command": "player.look.free",
+              "holdRelease": true,
+              "label": "Free look"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "keyboard.controlLeft"
+            ],
+            "command": {
+              "command": "player.look.recenter",
+              "holdRelease": true,
+              "label": "Recenter"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.buttonNorth"
+            ],
+            "command": {
+              "command": "player.motion.controls",
+              "label": "Toggle motion controls"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "gamepad.leftStickPress"
+            ],
+            "command": {
+              "channel": "forward",
+              "label": "Autorun",
+              "mode": "Toggle",
+              "scale": 1
+            },
+            "group": "state.bindingGroups.defaultActionGroup",
+            "held": [
+              "look"
+            ]
+          },
+          {
+            "chord": [
+              "gamepad.rightStickPress"
+            ],
+            "command": {
+              "channel": "up",
+              "label": "Auto-jetpack",
+              "mode": "Toggle",
+              "scale": 1
+            },
+            "group": "state.bindingGroups.defaultActionGroup",
+            "held": [
+              "look"
+            ]
+          },
+          {
+            "chord": [
+              "look",
+              "gamepad.rightShoulder",
+              "actionWheel"
+            ],
+            "command": {
+              "command": "player.look.swap",
+              "label": "Look behind"
+            },
+            "group": "state.bindingGroups.defaultActionGroup"
+          },
+          {
+            "chord": [
+              "actionWheel"
+            ],
+            "group": "state.bindingGroups.defaultActionGroup",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.wheel.select",
+                  "sources": [
+                    "gamepad.rightStick",
+                    "mouse.motion"
+                  ]
+                },
+                {
+                  "activateOn": "Completed",
+                  "command": "player.wheel.commit",
+                  "sources": [
+                    "gamepad.leftShoulder",
+                    "keyboard.tab"
+                  ]
+                }
+              ],
+              "id": "actionWheel",
+              "inherits": "base"
+            }
+          },
+          {
+            "command": {
+              "channel": "forward",
+              "holdRelease": true,
+              "label": "Run"
+            },
+            "group": "state.bindingGroups.defaultActionGroup",
+            "held": [
+              "mouse.button1",
+              "mouse.button2"
+            ]
+          }
+        ],
+        "modifiers": [
+          {
+            "id": "actionWheel",
+            "label": "Wheel",
+            "sources": [
+              "gamepad.leftShoulder",
+              "keyboard.tab"
+            ]
+          },
+          {
+            "id": "look",
+            "label": "Look",
+            "sources": [
+              "gamepad.leftTrigger",
+              "keyboard.shiftLeft"
+            ]
+          }
+        ],
+        "version": "puck.bindings.v1",
+        "wheels": [
+          {
+            "group": "state.bindingGroups.defaultActionGroup",
+            "holdPages": [
+              "actionWheel"
+            ],
+            "id": "defaultActionWheel",
+            "rings": [
+              {
+                "entries": [
+                  {
+                    "command": "editor.enter",
+                    "icon": "edit.place",
+                    "label": "Editor",
+                    "sources": null
+                  },
+                  {
+                    "command": "editor.status",
+                    "icon": "action.target",
+                    "label": "Status",
+                    "sources": null
+                  },
+                  {
+                    "command": "console",
+                    "icon": "edit.op",
+                    "label": "Console",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.channels",
+                    "icon": "edit.link",
+                    "label": "Channels",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.where",
+                    "icon": "action.target",
+                    "label": "Where",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.disengage",
+                    "icon": "edit.exit",
+                    "label": "Disengage",
+                    "sources": null
+                  }
+                ],
+                "icon": null,
+                "id": "ring0",
+                "label": "Ring0"
+              }
+            ],
+            "style": {
+              "axisDeadZone": 0.08,
+              "placement": "ViewportCenter",
+              "selectionGraceSeconds": 0.13,
+              "switchFraction": 0.4
+            }
+          }
+        ]
+      },
+      "id": "null-play"
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "defaultMotionProgram",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapePlanarVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyVerticalGravity",
+        "ApplyVerticalDrive",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveForward",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "up",
+      "role": "MoveUp",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceX",
+      "role": "FaceX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceY",
+      "role": "FaceY",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceZ",
+      "role": "FaceZ",
+      "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "jump",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "run",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "dash",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "leap",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "airLeap",
+      "shape": "Binary"
+    }
+  ],
+  "kits": [
+    {
+      "actions": {
+        "airLeap": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "durationSeconds": 1.0,
+                "speed": 9
+              },
+              {
+                "$type": "startTimer",
+                "seconds": 1.0,
+                "state": "globalCooldown"
+              }
+            ],
+            "gate": {
+              "$type": "all",
+              "predicates": [
+                {
+                  "$type": "timerElapsed",
+                  "state": "globalCooldown"
+                },
+                {
+                  "$type": "now",
+                  "fact": "Airborne"
+                }
+              ]
+            }
+          }
+        },
+        "dash": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "durationSeconds": 0.25,
+                "speed": 14
+              },
+              {
+                "$type": "startTimer",
+                "seconds": 1.0,
+                "state": "globalCooldown"
+              }
+            ],
+            "gate": {
+              "$type": "timerElapsed",
+              "state": "globalCooldown"
+            },
+            "latchSeconds": 0.1
+          }
+        },
+        "jump": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "setVerticalVelocity",
+                "velocity": 11
+              },
+              {
+                "$type": "addState",
+                "state": "jumpCounter",
+                "value": 1
+              }
+            ],
+            "gate": {
+              "$type": "compareState",
+              "comparison": "Less",
+              "state": "jumpCounter",
+              "value": 2
+            },
+            "latchSeconds": 0.1
+          },
+          "onRelease": {
+            "effects": [
+              {
+                "$type": "scaleVerticalVelocity",
+                "factor": 0.45
+              }
+            ],
+            "gate": {
+              "$type": "now",
+              "fact": "Rising"
+            },
+            "latchSeconds": 0
+          }
+        },
+        "leap": {
+          "onPress": {
+            "effects": [
+              {
+                "$type": "setVerticalVelocity",
+                "velocity": 16
+              },
+              {
+                "$type": "planarImpulse",
+                "bodyDirection": [
+                  0,
+                  0,
+                  -1
+                ],
+                "durationSeconds": 1.0,
+                "speed": 9
+              },
+              {
+                "$type": "startTimer",
+                "seconds": 1.0,
+                "state": "globalCooldown"
+              }
+            ],
+            "gate": {
+              "$type": "all",
+              "predicates": [
+                {
+                  "$type": "timerElapsed",
+                  "state": "globalCooldown"
+                },
+                {
+                  "$type": "recently",
+                  "fact": "Grounded",
+                  "windowSeconds": 0.09
+                }
+              ]
+            },
+            "latchSeconds": 0.1
+          }
+        }
+      },
+      "bodyContact": "Solid",
+      "bodyMotionProgram": "defaultMotionProgram",
+      "collider": {
+        "$type": "capsule",
+        "endpoint": [
+          0,
+          1,
+          0
+        ],
+        "radius": 0.35
+      },
+      "motion": {
+        "$type": "grounded",
+        "facingSnap": false,
+        "fallGravity": 46,
+        "maxFallSpeed": 40,
+        "moveSpeed": 4,
+        "response": [],
+        "riseGravity": 28,
+        "sprintChannel": "run",
+        "sprintMultiplier": 1.6,
+        "turnSpeed": 2.5
+      },
+      "name": "defaultKit"
+    }
+  ],
+  "state": {
+    "body": [
+      {
+        "initial": 0,
+        "kind": "Timer",
+        "name": "globalCooldown"
+      },
+      {
+        "initial": 0,
+        "kind": "Counter",
+        "name": "jumpCounter",
+        "resetFact": "Grounded"
+      }
+    ],
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "defaultActionGroup",
+            "value": "defaultActionGroup"
+          }
+        ],
+        "kind": "text",
+        "name": "bindingGroups"
+      }
+    ]
+  }
+}

@@ -12,7 +12,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// round-trip is byte-identical) and <c>fork-determinism</c> (a forked sibling stays byte-identical) stages; this stage
 /// proves two independent RUNS agree, so a failure here plus green siblings localises to the run rather than the
 /// snapshot layer.</remarks>
-internal sealed class DeterminismStage : IPostStage {
+internal sealed class DeterminismStage : IPostStage<PostContext> {
     private const int Frames = 200;
 
     /// <inheritdoc/>

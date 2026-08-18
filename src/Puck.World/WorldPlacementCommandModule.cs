@@ -241,7 +241,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
             // Filtered by this row's own durability and resolved document too — the resolver's cache key carries
             // both, so a bare destinationName filter would echo generations belonging to a different row (a
             // different durability, or an unrelated document reached through a different spelling) sharing the same name.
-            var sourceInstance = (instance ?? instances.Boot);
+            var sourceInstance = (instance ?? instances.Boot)!;
             var active = DescribeActiveGenerations(
                 destinationName: destination.Name.Value,
                 durability: destination.Durability,
@@ -343,7 +343,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
 
         var seats = new List<string>();
 
-        for (var seat = 0; (seat < WorldPopulation.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
             if (instance.PortalOccupancy.IsInside(
                 faceName: faceName,
                 placementId: placementId,

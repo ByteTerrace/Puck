@@ -56,7 +56,7 @@ internal static class MarketFixtures {
             MaxDurationSeconds: MaxDurationSeconds
         );
 
-        return (Fixtures.BuildDocument() with { State = [gold, apple], Market = market });
+        return (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with { Market = market });
     }
     /// <summary>Reads a principal's cell value out of a keyed state row, defaulting to zero when the row declares no
     /// cell for that holder — the same convention the market compose arms themselves read through.</summary>
@@ -67,7 +67,7 @@ internal static class MarketFixtures {
             return 0L;
         }
 
-        var key = principal.Index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var key = principal.Index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
 
         foreach (var cell in (stateRow.Cells ?? [])) {
             if (string.Equals(a: cell.Key.Value, b: key, comparisonType: System.StringComparison.Ordinal)) {

@@ -18,7 +18,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// The gate math (order-independent convergence, subset-proof meta XOR) is proven separately by the engine battery's
 /// <c>victory-gate</c> stage; this is the hardware-mapping half.
 /// </summary>
-internal sealed class VictoryRegionStage : IPostStage {
+internal sealed class VictoryRegionStage : IPostStage<PostContext> {
     private const int Expected128KiB = 0x2_0000;
     private const int RegionByteCount = 16;
 

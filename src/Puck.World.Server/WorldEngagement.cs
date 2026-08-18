@@ -84,6 +84,19 @@ public sealed class WorldEngagement {
     // co-drive/StageContribution path; see the class remarks on replay visibility for why this is never taped here).
     private readonly List<BodyRouteContribution> m_bodyContributions = new();
 
+    /// <summary>Asserts this fold carries no state a checkpoint would need to capture — every route lives in the
+    /// grant table (<see cref="WorldGrants"/>'s own Control capability, already captured there), the per-screen
+    /// translation/channel-mask tables are boot-compiled (re-derived identically from the definition), and the pad
+    /// snapshot/body-contribution buffers are per-tick scratch fully overwritten by the next <see cref="FoldTick"/>
+    /// before anything reads them — so this asserts the one buffer (<see cref="m_bodyContributions"/>) that is
+    /// supposed to be empty at a master boundary rather than silently assuming it.</summary>
+    /// <exception cref="InvalidOperationException"><see cref="m_bodyContributions"/> is non-empty.</exception>
+    public void AssertCheckpointQuiescent() {
+        if (m_bodyContributions.Count != 0) {
+            throw new InvalidOperationException(message: "a checkpoint requires the engagement fold's body-contribution buffer to be empty — capture only between a completed Step and the next StepInstances.");
+        }
+    }
+
     /// <summary>Initializes the routing fold over the population (bodies 0..127) and the one grant table the routes
     /// live in.</summary>
     /// <param name="population">The entity table.</param>
@@ -456,7 +469,7 @@ public sealed class WorldEngagement {
                 continue;
             }
 
-            var principal = ((index < WorldPopulation.LocalSeatCount)
+            var principal = ((index < m_population.LocalSeatCount)
                 ? WorldPrincipal.Seat(slot: index)
                 : m_population.PeerPrincipal(index: index)
             );

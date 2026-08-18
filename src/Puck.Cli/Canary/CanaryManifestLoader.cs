@@ -4,10 +4,12 @@ namespace Puck.Cli.Canary;
 
 internal static class CanaryManifestLoader {
     private const int MaximumExitSeconds = 30;
+    private const int MaximumFederatedExitSeconds = 90;
+    private const int MaximumFederatedLegTimeoutSeconds = 240;
     private const int MaximumLegTimeoutSeconds = 60;
 
     public static bool TryLoadAll(string repositoryRoot, out IReadOnlyList<CanaryManifest> manifests, out string error) {
-        var canaryRoot = Path.Combine(path1: repositoryRoot, path2: "docs", path3: "verification", path4: "canaries");
+        var canaryRoot = Path.Combine(path1: repositoryRoot, path2: "tests", path3: "Puck.World.Canaries");
         var loaded = new List<CanaryManifest>();
 
         manifests = loaded;
@@ -105,14 +107,6 @@ internal static class CanaryManifestLoader {
             var seconds = ReadInteger(context: $"canary '{id}'", element: root, member: "seconds");
             var timeoutSeconds = ReadInteger(context: $"canary '{id}'", element: root, member: "timeoutSeconds");
 
-            if ((seconds <= 0) || (seconds > MaximumExitSeconds)) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' seconds must be in 1..{MaximumExitSeconds}; an automatic proof must end on its own and stay cheap.");
-            }
-
-            if ((timeoutSeconds <= seconds) || (timeoutSeconds > MaximumLegTimeoutSeconds)) {
-                throw new CanaryManifestRefusal(message: $"canary '{id}' timeoutSeconds must be greater than seconds and at most {MaximumLegTimeoutSeconds}; it must distinguish a hang without making the gate unbounded.");
-            }
-
             var positive = ReadLeg(
                 element: ReadRequiredObject(context: $"canary '{id}'", element: root, member: "positive"),
                 id: id,
@@ -127,6 +121,19 @@ internal static class CanaryManifestLoader {
                 repositoryRoot: repositoryRoot,
                 canaryDirectory: directory
             );
+            // A federated mesh leg spawns several concurrently-launched Puck.World processes on a shared machine
+            // rather than one — real spawn/handshake variance earns it a wider ceiling than the single-process budget.
+            var isFederated = ((positive.Authorities.Count != 0) || (discriminating.Authorities.Count != 0));
+            var maximumExitSeconds = (isFederated ? MaximumFederatedExitSeconds : MaximumExitSeconds);
+            var maximumLegTimeoutSeconds = (isFederated ? MaximumFederatedLegTimeoutSeconds : MaximumLegTimeoutSeconds);
+
+            if ((seconds <= 0) || (seconds > maximumExitSeconds)) {
+                throw new CanaryManifestRefusal(message: $"canary '{id}' seconds must be in 1..{maximumExitSeconds}; an automatic proof must end on its own and stay cheap.");
+            }
+
+            if ((timeoutSeconds <= seconds) || (timeoutSeconds > maximumLegTimeoutSeconds)) {
+                throw new CanaryManifestRefusal(message: $"canary '{id}' timeoutSeconds must be greater than seconds and at most {maximumLegTimeoutSeconds}; it must distinguish a hang without making the gate unbounded.");
+            }
 
             if (PathsEqual(left: positive.WorldPath, right: discriminating.WorldPath) && PathsEqual(left: positive.ScriptPath, right: discriminating.ScriptPath)) {
                 throw new CanaryManifestRefusal(message: $"canary '{id}' discriminating leg changes neither world nor script; prose alone cannot make the positive observation turn red.");
@@ -176,7 +183,7 @@ internal static class CanaryManifestLoader {
     private static CanaryLeg ReadLeg(JsonElement element, string id, string name, string repositoryRoot, string canaryDirectory) {
         var context = $"canary '{id}' {name} leg";
 
-        RequireOnlyMembers(element: element, context: context, "authorityWorld", "commands", "connect", "expect", "script", "world");
+        RequireOnlyMembers(element: element, context: context, "authorities", "authorityWorld", "commands", "connect", "expect", "script", "world");
 
         var worldText = ReadRequiredString(context: context, element: element, member: "world");
         var scriptText = ReadRequiredString(context: context, element: element, member: "script");
@@ -202,10 +209,66 @@ internal static class CanaryManifestLoader {
         if (connect && (authorityWorldPath is null)) {
             throw new CanaryManifestRefusal(message: $"{context} connect requires authorityWorld so the runner owns the endpoint it dials.");
         }
-        var commands = ReadCommands(context: context, element: element, scriptPath: scriptPath);
-        var assertions = ReadAssertions(context: context, element: element);
 
-        return new CanaryLeg(Assertions: assertions, AuthorityWorldPath: authorityWorldPath, Commands: commands, Connect: connect, Name: name, ScriptPath: scriptPath, WorldPath: worldPath);
+        var authorities = ReadAuthorities(canaryDirectory: canaryDirectory, context: context, element: element, legScriptPath: scriptPath, legWorldPath: worldPath, repositoryRoot: repositoryRoot);
+
+        if ((authorities.Count != 0) && (authorityWorldPath is not null)) {
+            throw new CanaryManifestRefusal(message: $"{context} authorities and authorityWorld are mutually exclusive transport shapes.");
+        }
+
+        var commands = ReadCommands(context: context, element: element, scriptPath: scriptPath);
+        var assertions = ReadAssertions(authorityIds: authorities.Select(selector: static role => role.Id).ToHashSet(comparer: StringComparer.Ordinal), context: context, element: element);
+
+        return new CanaryLeg(Assertions: assertions, Authorities: authorities, AuthorityWorldPath: authorityWorldPath, Commands: commands, Connect: connect, Name: name, ScriptPath: scriptPath, WorldPath: worldPath);
+    }
+    // authorities[] replaces the singular authorityWorld/connect pair with an N-ary listener mesh: every entry
+    // binds its own real endpoint, none dials out, and neighbours resolve each other symbolically (the quilt
+    // adjacency/references mechanism), never through a runner-owned --connect argument.
+    private static IReadOnlyList<CanaryAuthorityRole> ReadAuthorities(JsonElement element, string context, string repositoryRoot, string canaryDirectory, string legWorldPath, string legScriptPath) {
+        if (!element.TryGetProperty(propertyName: "authorities", value: out var authoritiesElement)) {
+            return [];
+        }
+        if (authoritiesElement.ValueKind != JsonValueKind.Array) {
+            throw new CanaryManifestRefusal(message: $"{context} authorities must be an array.");
+        }
+
+        var count = authoritiesElement.GetArrayLength();
+
+        if (count < 2) {
+            throw new CanaryManifestRefusal(message: $"{context} authorities must name at least two listeners; a single authority is the existing single-process shape.");
+        }
+
+        var roles = new List<CanaryAuthorityRole>(capacity: count);
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < count); index++) {
+            var rowContext = $"{context} authorities[{index}]";
+            var row = RequireObject(context: rowContext, element: authoritiesElement[index]);
+
+            RequireOnlyMembers(element: row, context: rowContext, "id", "script", "world");
+
+            var authorityId = ReadRequiredString(context: rowContext, element: row, member: "id");
+
+            if (!IsSafeToken(allowColon: false, allowDot: false, value: authorityId)) {
+                throw new CanaryManifestRefusal(message: $"{rowContext} id '{authorityId}' is not a safe lower-case token; use letters, digits, and single interior hyphens only.");
+            }
+            if (!ids.Add(item: authorityId)) {
+                throw new CanaryManifestRefusal(message: $"{rowContext} repeats authority id '{authorityId}'.");
+            }
+
+            var authorityWorldText = ReadRequiredString(context: rowContext, element: row, member: "world");
+            var authorityScriptText = ReadRequiredString(context: rowContext, element: row, member: "script");
+            var authorityWorldPath = ResolveFile(basePath: repositoryRoot, containmentRoot: repositoryRoot, context: $"{rowContext} world", rawPath: authorityWorldText);
+            var authorityScriptPath = ResolveFile(basePath: canaryDirectory, containmentRoot: repositoryRoot, context: $"{rowContext} script", rawPath: authorityScriptText);
+
+            roles.Add(item: new CanaryAuthorityRole(Id: authorityId, ScriptPath: authorityScriptPath, WorldPath: authorityWorldPath));
+        }
+
+        if (!roles.Any(predicate: role => (PathsEqual(left: role.WorldPath, right: legWorldPath) && PathsEqual(left: role.ScriptPath, right: legScriptPath)))) {
+            throw new CanaryManifestRefusal(message: $"{context} authorities must include an entry whose world and script equal this leg's own — the entry unscoped assertions read by default.");
+        }
+
+        return roles;
     }
     private static IReadOnlyList<CanaryCommandClaim> ReadCommands(JsonElement element, string context, string scriptPath) {
         var array = ReadRequiredArray(context: context, element: element, member: "commands");
@@ -220,7 +283,7 @@ internal static class CanaryManifestLoader {
 
             var row = RequireObject(context: $"{context} commands[{index}]", element: item);
 
-            RequireOnlyMembers(element: row, context: $"{context} commands[{index}]", "occurrence", "outcome", "verb");
+            RequireOnlyMembers(element: row, context: $"{context} commands[{index}]", "occurrence", "outcome", "stream", "verb");
 
             var verb = ReadRequiredString(context: $"{context} commands[{index}]", element: row, member: "verb");
 
@@ -240,8 +303,28 @@ internal static class CanaryManifestLoader {
                 "refused" => CanaryCommandOutcome.Refused,
                 _ => throw new CanaryManifestRefusal(message: $"{context} command '{verb}' outcome '{outcomeText}' is invalid; use exactly 'accepted' or 'refused' (casing is significant)."),
             };
+            CanaryStream? streamOverride = null;
 
-            claims.Add(item: new CanaryCommandClaim(Occurrence: occurrence, Outcome: outcome, Verb: verb));
+            // Server narration (a mutation's own echo — [world.grant: …], [world.revoke: …], …) always lands on
+            // stderr, accepted or not, unlike an ordinary accepted command's stdout read-back. stream lets a claim
+            // declare that exception explicitly instead of forcing the accepted-implies-stdout default.
+            if (row.TryGetProperty(propertyName: "stream", value: out var streamElement)) {
+                if (outcome != CanaryCommandOutcome.Accepted) {
+                    throw new CanaryManifestRefusal(message: $"{context} command '{verb}' stream override applies only to an accepted outcome; a refused command's response is always stderr by protocol.");
+                }
+
+                var streamContext = $"{context} commands[{index}]";
+                var streamText = (((streamElement.ValueKind == JsonValueKind.String) ? streamElement.GetString() : null)
+                    ?? throw new CanaryManifestRefusal(message: $"{streamContext} stream must be a non-blank string."));
+
+                streamOverride = ReadStream(context: streamContext, value: streamText);
+
+                if (streamOverride == CanaryStream.Stdout) {
+                    throw new CanaryManifestRefusal(message: $"{context} command '{verb}' stream override to stdout is redundant; an accepted outcome already expects stdout by default.");
+                }
+            }
+
+            claims.Add(item: new CanaryCommandClaim(Occurrence: occurrence, Outcome: outcome, StreamOverride: streamOverride, Verb: verb));
         }
 
         var submitted = ReadScriptCommands(context: context, scriptPath: scriptPath);
@@ -291,7 +374,7 @@ internal static class CanaryManifestLoader {
 
         return commands;
     }
-    private static IReadOnlyList<CanaryAssertion> ReadAssertions(JsonElement element, string context) {
+    private static IReadOnlyList<CanaryAssertion> ReadAssertions(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
         var array = ReadRequiredArray(context: context, element: element, member: "expect");
 
         if (array.GetArrayLength() == 0) {
@@ -313,9 +396,9 @@ internal static class CanaryManifestLoader {
             var row = RequireObject(context: $"{context} expect[{index}]", element: item);
             var type = ReadRequiredString(context: $"{context} expect[{index}]", element: row, member: "type");
             CanaryAssertion assertion = type switch {
-                "line" => ReadLineAssertion(context: $"{context} expect[{index}]", element: row),
-                "response" => ReadResponseAssertion(context: $"{context} expect[{index}]", element: row, values: values),
-                "sequence" => ReadSequenceAssertion(context: $"{context} expect[{index}]", element: row),
+                "line" => ReadLineAssertion(authorityIds: authorityIds, context: $"{context} expect[{index}]", element: row),
+                "response" => ReadResponseAssertion(authorityIds: authorityIds, context: $"{context} expect[{index}]", element: row, values: values),
+                "sequence" => ReadSequenceAssertion(authorityIds: authorityIds, context: $"{context} expect[{index}]", element: row),
                 "relation" => ReadRelationAssertion(context: $"{context} expect[{index}]", element: row, values: values),
                 "filesDiffer" => ReadFileDifferenceAssertion(context: $"{context} expect[{index}]", element: row),
                 _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'response', 'sequence', 'relation', or 'filesDiffer' (casing is significant)."),
@@ -373,10 +456,11 @@ internal static class CanaryManifestLoader {
 
         return value;
     }
-    private static CanaryLineAssertion ReadLineAssertion(JsonElement element, string context) {
-        RequireOnlyMembers(element: element, context: context, "match", "name", "present", "stream", "text", "type");
+    private static CanaryLineAssertion ReadLineAssertion(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
+        RequireOnlyMembers(element: element, context: context, "authority", "match", "name", "present", "stream", "text", "type");
 
         var name = ReadRequiredString(context: context, element: element, member: "name");
+        var authority = ReadAssertionAuthority(authorityIds: authorityIds, context: context, element: element);
         var stream = ReadStream(value: ReadRequiredString(context: context, element: element, member: "stream"), context: context);
         var matchText = ReadRequiredString(context: context, element: element, member: "match");
         var match = matchText switch {
@@ -395,12 +479,31 @@ internal static class CanaryManifestLoader {
             };
         }
 
-        return new CanaryLineAssertion(Match: match, Name: name, Present: present, Stream: stream, Text: text);
+        return new CanaryLineAssertion(Authority: authority, Match: match, Name: name, Present: present, Stream: stream, Text: text);
     }
-    private static CanaryResponseAssertion ReadResponseAssertion(JsonElement element, string context, HashSet<string> values) {
-        RequireOnlyMembers(element: element, context: context, "count", "extract", "name", "occurrence", "stream", "type", "verb");
+    // Absent (null) reads the leg's own default transcript — the entry whose world/script equal the leg's, or the
+    // sole transcript for a non-federated leg. A leg with no authorities[] cannot name one at all.
+    private static string? ReadAssertionAuthority(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
+        if (!element.TryGetProperty(propertyName: "authority", value: out var authorityElement)) {
+            return null;
+        }
+        if ((authorityElement.ValueKind != JsonValueKind.String) || string.IsNullOrWhiteSpace(value: authorityElement.GetString())) {
+            throw new CanaryManifestRefusal(message: $"{context} authority must be a non-blank authority id.");
+        }
+
+        var authorityId = authorityElement.GetString()!;
+
+        if (!authorityIds.Contains(item: authorityId)) {
+            throw new CanaryManifestRefusal(message: $"{context} names authority '{authorityId}', which this leg's authorities[] does not declare.");
+        }
+
+        return authorityId;
+    }
+    private static CanaryResponseAssertion ReadResponseAssertion(JsonElement element, string context, HashSet<string> values, IReadOnlySet<string> authorityIds) {
+        RequireOnlyMembers(element: element, context: context, "authority", "count", "extract", "name", "occurrence", "stream", "type", "verb");
 
         var name = ReadRequiredString(context: context, element: element, member: "name");
+        var authority = ReadAssertionAuthority(authorityIds: authorityIds, context: context, element: element);
         var stream = ReadStream(value: ReadRequiredString(context: context, element: element, member: "stream"), context: context);
         var selector = ReadSelector(context: context, element: element);
         var extractions = new List<CanaryValueExtraction>();
@@ -435,6 +538,7 @@ internal static class CanaryManifestLoader {
         }
 
         return new CanaryResponseAssertion(
+            Authority: authority,
             Count: selector.Count,
             Extractions: extractions,
             Name: name,
@@ -443,10 +547,11 @@ internal static class CanaryManifestLoader {
             Verb: selector.Verb
         );
     }
-    private static CanarySequenceAssertion ReadSequenceAssertion(JsonElement element, string context) {
-        RequireOnlyMembers(element: element, context: context, "name", "responses", "stream", "type");
+    private static CanarySequenceAssertion ReadSequenceAssertion(JsonElement element, string context, IReadOnlySet<string> authorityIds) {
+        RequireOnlyMembers(element: element, context: context, "authority", "name", "responses", "stream", "type");
 
         var name = ReadRequiredString(context: context, element: element, member: "name");
+        var authority = ReadAssertionAuthority(authorityIds: authorityIds, context: context, element: element);
         var stream = ReadStream(value: ReadRequiredString(context: context, element: element, member: "stream"), context: context);
         var rows = ReadRequiredArray(context: context, element: element, member: "responses");
 
@@ -463,7 +568,7 @@ internal static class CanaryManifestLoader {
             responses.Add(item: ReadSelector(context: $"{context} responses[{index}]", element: row));
         }
 
-        return new CanarySequenceAssertion(Name: name, Responses: responses, Stream: stream);
+        return new CanarySequenceAssertion(Authority: authority, Name: name, Responses: responses, Stream: stream);
     }
     private static CanaryRelationAssertion ReadRelationAssertion(JsonElement element, string context, HashSet<string> values) {
         RequireOnlyMembers(element: element, context: context, "left", "margin", "maximum", "minimum", "name", "operator", "right", "type");
@@ -650,6 +755,13 @@ internal static class CanaryManifestLoader {
         if (IsWithin(root: canaryDirectory, path: discriminating.WorldPath)) {
             expected.Add(item: discriminating.WorldPath);
         }
+        foreach (var role in positive.Authorities.Concat(second: discriminating.Authorities)) {
+            expected.Add(item: role.ScriptPath);
+
+            if (IsWithin(root: canaryDirectory, path: role.WorldPath)) {
+                expected.Add(item: role.WorldPath);
+            }
+        }
         foreach (var fixture in fixtures) {
             expected.Add(item: fixture);
         }
@@ -704,7 +816,8 @@ internal static class CanaryManifestLoader {
     private static CanaryBootShape ReadBootShape(string value, string id) => value switch {
         "headless" => CanaryBootShape.Headless,
         "windowed" => CanaryBootShape.Windowed,
-        _ => throw new CanaryManifestRefusal(message: $"canary '{id}' bootShape '{value}' is invalid; use exactly 'headless' or 'windowed' (casing is significant)."),
+        "stub" => CanaryBootShape.Stub,
+        _ => throw new CanaryManifestRefusal(message: $"canary '{id}' bootShape '{value}' is invalid; use exactly 'headless', 'windowed', or 'stub' (casing is significant)."),
     };
     private static CanaryStream ReadStream(string value, string context) => value switch {
         "stdout" => CanaryStream.Stdout,

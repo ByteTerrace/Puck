@@ -300,6 +300,10 @@ public sealed class CommandRegistry {
     internal bool IsFocusExemptCommand(ushort commandId) =>
         ((commandId < m_metadataById.Length) &&
         (m_metadataById[commandId].InputScope == CommandInputScope.FocusExempt));
+    /// <summary>Determines whether an interned command is a HELD verb (see <see cref="CommandMetadata.Held"/>).</summary>
+    internal bool IsHeldCommand(ushort commandId) =>
+        ((commandId < m_metadataById.Length) &&
+        m_metadataById[commandId].Held);
     internal bool IsMapActive(CommandModality modality, string map) {
         return (
             m_mapIndexByName.TryGetValue(

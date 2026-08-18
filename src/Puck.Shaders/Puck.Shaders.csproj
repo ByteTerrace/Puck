@@ -1,13 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>Backend-neutral compiled-shader loading: reads a vertex/fragment shader pair's bytecode from an IAssetSource, identifies and validates it as SPIR-V (Vulkan) or a DXBC/DXIL container (Direct3D 12) from its leading magic, and caches the validated bytes by content hash. It compiles nothing itself — the bytecode arrives already compiled, from whichever offline or backend-side compiler produced it.</Description>
+        <Description>Backend-neutral shader sets as data: a puck.shader.v1 manifest beside compiled HLSL declares a set's stages, bindings, config schema, and push-constant block; the loader validates the manifest and its SPIR-V/DXIL bytecode, binds a document's config against the schema, and FullscreenPassNode runs the set as one fullscreen pass over an inner render node with no per-effect code. Ships the shared HLSL-to-SPIR-V/DXIL build recipe for package consumers; compiles nothing at runtime.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Shaders</PackageId>
-        <PackageTags>bytecode;dxbc;dxil;shaders;spir-v;validation</PackageTags>
+        <PackageTags>bytecode;dxil;manifest;post-process;shaders;spir-v;validation</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)..\..\build\PuckShaderHashSidecars.cs" Pack="true" PackagePath="buildTransitive\PuckShaderHashSidecars.cs" Visible="false" />
+        <None Include="$(MSBuildThisFileDirectory)..\..\build\Shaders.targets" Pack="true" PackagePath="buildTransitive\ByteTerrace.Puck.Shaders.targets" Visible="false" />
     </ItemGroup>
 </Project>

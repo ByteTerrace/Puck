@@ -448,18 +448,7 @@ internal static class Diagnostics {
             : "normal speed throughout");
         var framebuffer = machine.GetRequiredService<IFramebuffer>();
         var pixels = framebuffer.Pixels;
-        var rgba = new byte[(pixels.Length * 4)];
-
-        // The framebuffer packs 0x00RRGGBB; the encoder wants R,G,B,A bytes, so repack with an opaque alpha.
-        for (var index = 0; (index < pixels.Length); ++index) {
-            var offset = (index * 4);
-            var pixel = pixels[index];
-
-            rgba[offset] = ((byte)(pixel >> 16));
-            rgba[(offset + 1)] = ((byte)(pixel >> 8));
-            rgba[(offset + 2)] = ((byte)pixel);
-            rgba[(offset + 3)] = 0xFF;
-        }
+        var rgba = FramebufferRgba.Pack(pixels: pixels);
 
         PngEncoder.Write(
             path: outputPath,

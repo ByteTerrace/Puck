@@ -25,8 +25,7 @@ public enum WorldRenderScaleTier {
     /// <summary>~half the native pixel work (q = 181, scale ~0.710 ≈ 1/√2): render extent ~909x568 at 1280x800.</summary>
     Half,
 
-    /// <summary>~quarter the native pixel work (q = 128, scale ~0.502): render extent ~643x402 at 1280x800 — exactly the
-    /// reduction a since-retired <c>world-render-scale</c> lever measured as within the resampling-blur envelope.</summary>
+    /// <summary>~quarter the native pixel work (q = 128, scale ~0.502): render extent ~643x402 at 1280x800.</summary>
     Quarter,
 
     /// <summary>~eighth the native pixel work (q = 90, scale ~0.353 ≈ 1/(2√2)): render extent ~452x282 at 1280x800 — the

@@ -17,23 +17,23 @@ internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, W
     /// <summary>The chain verb: <c>editor.sculpt.chain</c> with no argument defines a LIMB chain from the
     /// selection (South on the rig page — the rig page's own binding);
     /// with arguments it defines a NAMED chain from an explicit shape list.</summary>
-    public const string ChainCommand = "editor.sculpt.chain";
+    public const string ChainCommand = Puck.World.Client.EditorSculptRigCommandNames.ChainCommand;
     /// <summary>The chain-kind-toggle act (North on the rig page).</summary>
-    public const string ChainKindCommand = "editor.sculpt.chain.kind";
+    public const string ChainKindCommand = Puck.World.Client.EditorSculptRigCommandNames.ChainKindCommand;
     /// <summary>The chain-cursor-cycle act (West on the rig page).</summary>
-    public const string ChainNextCommand = "editor.sculpt.chain.next";
+    public const string ChainNextCommand = Puck.World.Client.EditorSculptRigCommandNames.ChainNextCommand;
     /// <summary>The chain-delete act (East on the rig page): the cursored (or named) chain.</summary>
-    public const string ChainRemoveCommand = "editor.sculpt.chain.remove";
+    public const string ChainRemoveCommand = Puck.World.Client.EditorSculptRigCommandNames.ChainRemoveCommand;
     /// <summary>The frame verb, widened to fold the step chord onto itself: <c>editor.sculpt.frame
     /// &lt;n|next|prev&gt;</c>. East/West on the frames page bind it with a constant Axis1D value (+1 next, -1 prev)
     /// in place of an argument.</summary>
-    public const string FrameCommand = "editor.sculpt.frame";
+    public const string FrameCommand = Puck.World.Client.EditorSculptRigCommandNames.FrameCommand;
     /// <summary>The frame-record act (South on the frames page).</summary>
-    public const string FrameRecordCommand = "editor.sculpt.frame.record";
+    public const string FrameRecordCommand = Puck.World.Client.EditorSculptRigCommandNames.FrameRecordCommand;
     /// <summary>The frame-delete act (D-pad Down on the frames page).</summary>
-    public const string FrameRemoveCommand = "editor.sculpt.frame.remove";
+    public const string FrameRemoveCommand = Puck.World.Client.EditorSculptRigCommandNames.FrameRemoveCommand;
     /// <summary>The playback-toggle act (North on the frames page).</summary>
-    public const string PlayCommand = "editor.sculpt.play";
+    public const string PlayCommand = Puck.World.Client.EditorSculptRigCommandNames.PlayCommand;
 
     private readonly WorldEditorSession m_session = session;
     private readonly WorldWorkbench m_workbench = workbench;
@@ -64,7 +64,7 @@ internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, W
             }
 
             return EditorSculptCommandModule.Echo(
-                detail: $"chain {fromSelection.Id} ({fromSelection.Kind}, {fromSelection.ShapeIds.Count} shapes)",
+                detail: $"chain {fromSelection.Id} ({fromSelection.Kind}, {fromSelection.Shapes.Count} shapes)",
                 slot: noArgSlot,
                 verb: ChainCommand
             );
@@ -130,7 +130,7 @@ internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, W
         }
 
         return EditorSculptCommandModule.Echo(
-            detail: $"chain {chain.Id} '{chain.Name}' ({chain.Kind}, {chain.ShapeIds.Count} shapes) — cycle the target onto its goal to pose it",
+            detail: $"chain {chain.Id} '{chain.Name}' ({chain.Kind}, {chain.Shapes.Count} shapes) — cycle the target onto its goal to pose it",
             slot: slot,
             verb: ChainCommand
         );
@@ -456,37 +456,6 @@ internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, W
             verb: FrameRemoveCommand
         );
     }
-    private CommandResult FrameTicksHandler(CommandContext context, WireArgs args) {
-        if (args.Count is (< 1 or > 2)) {
-            return CommandResult.Error(output: "[editor.sculpt.frame.ticks: expected <n 1..60> plus an optional seat 1..4]");
-        }
-
-        if (!args.TryInt(
-            index: 0,
-            value: out var ticks
-        )) {
-            return CommandResult.Error(output: "[editor.sculpt.frame.ticks: could not parse <n> as an integer]");
-        }
-
-        var (slot, model, error) = EditorSculptCommandModule.ResolveBench(
-            args: in args,
-            at: 1,
-            context: context,
-            session: m_session,
-            verb: "editor.sculpt.frame.ticks",
-            workbench: m_workbench
-        );
-
-        if (error is { } benchError) {
-            return benchError;
-        }
-
-        return EditorSculptCommandModule.Echo(
-            slot: slot,
-            verb: "editor.sculpt.frame.ticks",
-            detail: $"{model!.SetFrameTicks(ticks: ticks)} ticks/frame"
-        );
-    }
     private CommandResult GoalHandler(CommandContext context, WireArgs args) =>
         ChainPointHandler(
             args: in args,
@@ -553,12 +522,6 @@ internal sealed class EditorSculptRigCommandModule(WorldEditorSession session, W
             name: FrameRemoveCommand,
             description: "Deletes the CURRENT saved frame (rest is protected; later frames renumber): editor.sculpt.frame.remove [seat]. The chord twin is D-pad Down on the frames page.",
             handler: FrameRemoveHandler
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "editor.sculpt.frame.ticks",
-            description: "Sets the playback hold per frame in engine ticks at 60/s (clamped 1..60; the fixed 8-tick cadence is the default): editor.sculpt.frame.ticks <n> [seat].",
-            handler: FrameTicksHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,

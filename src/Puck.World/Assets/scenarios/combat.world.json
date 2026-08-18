@@ -334,14 +334,6 @@
       },
       "actions": {
         "jump": {
-          "state": [
-            {
-              "name": "jumpUses",
-              "kind": "Counter",
-              "initial": 0,
-              "resetFact": "Grounded"
-            }
-          ],
           "onPress": {
             "gate": {
               "$type": "all",
@@ -412,7 +404,7 @@
     {
       "bindingBar": {
         "enabled": true,
-        "hideAfterRestSeconds": 6,
+        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
         "layout": {
           "buttonSize": 0.075,
           "centerGap": 0.1,
@@ -428,76 +420,96 @@
         "modifiers": [],
         "chords": [
           {
-            "group": "play",
+            "group": "default",
             "chord": [],
             "page": {
               "id": "base",
               "entries": [
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "channel": "jump",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "keyboard.space",
+                  "sources": [
+                    "keyboard.space"
+                  ],
                   "channel": "jump",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "channel": "jump",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonSouth",
+                  "sources": [
+                    "gamepad.buttonSouth"
+                  ],
                   "channel": "jump",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": null,
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.buttonEast",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
                   "channel": "dash",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "run",
                   "activateOn": null,
                   "label": "Sprint",
                   "icon": null
                 },
                 {
-                  "source": "gamepad.leftShoulder",
+                  "sources": [
+                    "gamepad.leftShoulder"
+                  ],
                   "channel": "run",
                   "activateOn": "Completed",
                   "label": null,
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "run",
                   "activateOn": null,
                   "label": "Sprint",
                   "icon": null
                 },
                 {
-                  "source": "keyboard.shiftLeft",
+                  "sources": [
+                    "keyboard.shiftLeft"
+                  ],
                   "channel": "run",
                   "activateOn": "Completed",
                   "label": null,
@@ -524,15 +536,9 @@
       "document": {
         "schema": "puck.creation.v1",
         "name": "ground",
-        "intent": "Object",
-        "bakeStyle": "classic",
         "palette": [
           {
-            "albedo": {
-              "x": 0.33,
-              "y": 0.52,
-              "z": 0.24
-            },
+            "color": "#54853D",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
@@ -543,28 +549,13 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
-            "rotation": {
-              "isIdentity": true,
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "scale": {
-              "x": 1,
-              "y": 1,
-              "z": 1
-            },
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "group": 0,
-            "mirror": false,
             "twist": 0,
             "onion": 0,
             "bend": 0,
@@ -575,8 +566,7 @@
         "chains": null,
         "cameras": null,
         "behavior": null
-      },
-      "hash": "b795d9778c470fe40f2408d95d3bd8f347f9dc0436fb97666502be69b2c8e0cb"
+      }
     }
   ],
   "placements": [
@@ -692,7 +682,8 @@
     },
     "panels": []
   },
-  "state": [
+  "state": {
+    "world": [
     {
       "name": "hp",
       "kind": "int",
@@ -808,7 +799,16 @@
       "kind": "int",
       "value": -1
     }
-  ],
+    ],
+    "body": [
+      {
+        "name": "jumpUses",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded"
+      }
+    ]
+  },
   "rules": [
     {
       "name": "strike-cooldown-tick",
@@ -1220,7 +1220,6 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-      "arming": "RightButton",
       "stickLookRate": 2.6
     }
   }

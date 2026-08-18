@@ -15,6 +15,9 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <!-- Puck.Commands exposes DocumentIdentifier in its public binding model; consumers compiling against that
+             surface must reference the contract owner explicitly because repository builds disable transitive refs. -->
+        <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\..\src\Puck.Commands\Puck.Commands.csproj" />
     </ItemGroup>
 </Project>

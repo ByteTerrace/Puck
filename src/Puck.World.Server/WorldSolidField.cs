@@ -1043,15 +1043,28 @@ public sealed class WorldSolidField : IContactField {
                 angle: FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)))
             );
 
+            // A creation whose parts carve each other is one candidate against the solid field, never a carve of it.
+            // The field scope is one deep, and a nonzero contact margin already spends it per shape (dilation before
+            // the authored blend), so a margined solid emits unscoped.
+            var scoped = (
+                (solid.Margin == 0f) &&
+                (creation.Document.Shapes is { Count: > 0 }) &&
+                CreationStampEmitter.ComposesInternally(document: creation.EngineDocument)
+            );
+
             CreationStampLattice.ForEachFixedInstance(
                 origin: FixedVector3.FromVector3(value: placement.Position),
                 rotation: fixedRotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => {
+                    if (scoped) {
+                        _ = builder.PushField(compose: SdfBlendOp.Union);
+                    }
+
                     CreationStampEmitter.EmitFixed(
                         builder: builder,
-                        document: creation.Document,
+                        document: creation.EngineDocument,
                         transform: new FixedCreationStampTransform(
                             Origin: instance.Origin,
                             Rotation: fixedRotation,
@@ -1061,6 +1074,11 @@ public sealed class WorldSolidField : IContactField {
                         materialFor: _ => material,
                         contactMargin: solid.Margin
                     );
+
+                    if (scoped) {
+                        _ = builder.PopField();
+                    }
+
                     placementShapeCount += (creation.Document.Shapes?.Count ?? 0);
                 }
             );

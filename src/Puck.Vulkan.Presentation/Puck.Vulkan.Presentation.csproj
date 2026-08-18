@@ -5,6 +5,10 @@
     </PropertyGroup>
     <PropertyGroup>
         <DxcCommand>dxc</DxcCommand>
+        <!-- No DXIL: Puck.Vulkan.Presentation only ever ran the Vulkan half of the pair (matching the recipe
+             before it moved into the shared build\Shaders.targets) — it declares no compute items, so the compute
+             opt-out is moot for it. -->
+        <PuckShaderDxilEnabled>false</PuckShaderDxilEnabled>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
@@ -16,23 +20,17 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="[10.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <Content Include="Assets\Shaders\**\*.spv" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Evaluation-time glob for ValidateShaderBytecodeSources (build\Shaders.targets); the shipped Content
+             declaration is owned by the shared CollectShaderBytecode target, which re-globs after CompileShaders. -->
+        <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
     </ItemGroup>
     <ItemGroup>
         <VertexShaderSource Include="Assets\Shaders\**\*.vert.hlsl" />
         <FragmentShaderSource Include="Assets\Shaders\**\*.frag.hlsl" />
         <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
     </ItemGroup>
-    <!-- Compile each *.vert.hlsl / *.frag.hlsl to SPIR-V via DXC. The Vulkan pipeline binds the entry point by
-         the fixed name "main", so the SPIR-V entry is renamed regardless of the HLSL entry function. Every invocation
-         pins the shared capability floor: -fspv-target-env=vulkan1.3 (SPIR-V 1.6), -T *_6_6 (Shader Model 6.6), explicit
-         -O3, and -enable-16bit-types (inert until a shader adopts fp16). -->
-    <Target BeforeTargets="PrepareForBuild" Inputs="@(VertexShaderSource);@(FragmentShaderSource);@(ShaderInclude);$(MSBuildProjectFullPath)" Name="CompileShaders" Outputs="@(VertexShaderSource -> '%(RootDir)%(Directory)%(Filename).spv');@(FragmentShaderSource -> '%(RootDir)%(Directory)%(Filename).spv')">
-        <Exec Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
-            <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
-        </Exec>
-        <Error Condition="'$(DxcProbeExitCode)' != '0'" Text="Puck.Vulkan.Presentation shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T vs_6_6 -E VSMain -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
-        <Exec Condition="'$(DxcProbeExitCode)' == '0'" Command="&quot;$(DxcCommand)&quot; -spirv -fspv-target-env=vulkan1.3 -fspv-entrypoint-name=main -enable-16bit-types -O3 -T ps_6_6 -E PSMain -Fo &quot;%(FragmentShaderSource.RootDir)%(FragmentShaderSource.Directory)%(FragmentShaderSource.Filename).spv&quot; &quot;%(FragmentShaderSource.FullPath)&quot;" />
-    </Target>
+    <!-- CompileShaders / CollectShaderBytecode / ValidateShaderBytecodeSources / ValidateShaderBytecodeFresh all
+         live in the shared build\Shaders.targets now (imported by Directory.Build.targets), item-driven purely
+         over the ItemGroup globs above — Puck.Vulkan.Presentation declares no ComputeShaderSource/
+         RayQueryComputeShaderSource, so neither Exec ever fires for it. -->
 </Project>

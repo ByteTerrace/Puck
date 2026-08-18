@@ -1,5 +1,4 @@
 {
-  "description": "The water section (default null = a dry world) \u2014 the world\u0027s standing-water medium (see WorldWaterSection): one authored waterline, echoed by world.status and read by the swim motion model\u0027s stages. Optional, for the same reason Rules is.",
   "type": [
     "object",
     "null"

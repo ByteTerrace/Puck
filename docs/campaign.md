@@ -127,10 +127,10 @@ ghost records**.
    only a clean git component runs that automatic set, followed by one final component-naming
    verdict and no skip path.
 
-   This envelope is intentionally not universal. The richer PowerShell batteries
-   `undo-all-or-nothing`, `strict-definition-parse`, `sdf-decode-sign-refusal`, `doc-links`,
-   `addon-mutation-seam`, and `four-world-boot-smoke` remain named, on-demand, and UNGATED; the
-   canary runner neither wraps nor weakens them.
+   A command claim's `stream` override lets an accepted outcome expect its confirmation on stderr
+   instead of stdout — the shape server narration (`[world.grant: …]`, `[world.revoke: …]`) always
+   uses regardless of accept/refuse — so `tests/Puck.World.Canaries/addon-mutation-seam` now covers
+   the grant-door and guest-mutation claims a canary manifest could not represent before.
 3. **The neighbour tape, then ghosts** — the ghost read-side now rides the same delivered snapshot
    as adjacency contact and rendering, and snapshots carry `(authority, body index, body generation)`
    addresses. The remaining work is transport determinism: hoist neighbour-field derivation to
@@ -163,13 +163,12 @@ EVIDENCE, not landed primitives**, and track 4 owns the feel gate.
 
 The obsolete portal-border canary was deleted with that model. Its replacement,
 `puck canary seamless-adjacency`, executes both the crossing and stationary discriminating legs on
-the real headless composition path. The stronger `docs/verification/four-corners-sharded/run.ps1`
-starts five distinct authorities — four ground worlds plus the floating island — and requires
-simultaneous horizontal and vertical remote handoffs, cross-host body contact, autonomous travellers,
-one player's complete four-ground-world circuit plus vertical human probes, with held input and the
-camera/authority route still following, post-handoff queries, every ground host's direct peers plus
-its compiler-derived diagonal corner peer,
-generation-addressed entity namespaces, and zero wire errors.
+the real headless composition path. The stronger `puck canary four-corners-sharded` starts five
+distinct authorities — four ground worlds plus the floating island — and requires one player's
+complete four-ground-world circuit through the router that follows a body wherever it now lives,
+distinct binds, remote-authority naming, and zero wire errors on every authority. Vertical/island
+handoffs, cross-host body contact, autonomous travellers, retained dual-stick control, and derived
+diagonal peers are not yet exercised by it — widening its scripts is future work, not a runner gap.
 
 **Owner decision:** no sixth track. Track 5 is aimed at the charter from the start, so its rule
 primitives land with the content that proves them.
@@ -185,10 +184,11 @@ POST battery scaffold folded into `Puck.GamingBricks` / `Puck.GamingBricks.Post`
 defects closed; the two-body spike folded into `tests/Puck.Physics.Tests`; separable tests mirrored into
 `Puck.Networking.Tests`, `Puck.World.Protocol.Tests`, `Puck.World.Schema.Tests`, `Puck.GamingBricks.Tests`;
 `quilt-nw-gap` back as a three-field basis delta with the `quilt-nw-gap-corner-strip` canary; the
-four-corners-sharded canary shape designed in `docs/verification/four-corners-sharded/CANARY-SHAPE.md`.
+canary runner's `authorities` array (an N-ary federated listener mesh, generalizing the prior
+singular companion-authority shape) and the `four-corners-sharded` canary it carries.
 **Wave 3, still open:** the `Puck.World.Client` split (seam designed, sequenced after the dissolution it
-depends on: `PlayerRoster` reads through a link query, remote-default); building the sharded canary
-shape; `docs/verification/manual` stays as the human-at-a-window procedures it is; `experimental/scripts`
+depends on: `PlayerRoster` reads through a link query, remote-default); `docs/verification/manual` stays
+as the human-at-a-window procedures it is; `experimental/scripts`
 holds the only coverage of the audio mixer, the overlay frame builder, the mux determinism check and the
 audio-device failure paths — those become law tests or `puck` verbs in the arcs that own them, never
 deletions until then.
@@ -239,6 +239,29 @@ identically in-process and over the wire; no direct-object interface is minted f
 
 **Voice rendering.** One short pitched synth voice per estimated syllable, on the identity's timbre with
 cadence jitter — never one sustained tone per sentence.
+
+**Self-update.** Launcher-based programs — the desktop client and player-hosted headless authorities —
+update themselves from a signed `puck.release.v1` manifest served through the front door under the
+platform's public content: per-RID file lists by content hash (deltas for free), a signature chain under the
+platform root, deterministic staged rollout, revocation and a minimum-supported version, side-by-side staging,
+one health-gated boot before a version becomes current, rollback on failure. `Puck.Launcher.AddSelfUpdate` is
+optional and configured from the app's own document; `puck publish` builds, signs, and uploads. The silo does not
+self-update — it consumes the manifest to pick an image revision. Content keeps flowing through storage; only
+binaries ride releases. The document, verifier, stager, applier, stub, and `puck publish` dry-run are built and
+proven end to end by the `self-update` canary (`tests/Puck.World.Canaries/self-update`, non-automatic); the trust
+anchor stays the build-time refusing placeholder until a real release-signing chain is minted, and the live publish
+path (a CI signing custody decision, `puck publish --sign`, upload) is not started.
+
+**Shader pipeline.** Compilation is a shared build primitive (`build/Shaders.targets`: one target set, the
+pinned DXC flags, committed bytecode with a `.hash` sidecar staleness check, shipped for package consumers). A
+shader set is data: a `puck.shader.v1` manifest beside the HLSL declares stages, bindings, the config schema a
+document may author, and the push-constant block with each field's source (`config.<field>`, `tick` quantized to
+an authored rate, `resolution`, `frame`); `Puck.Shaders` loads and validates it against the bytecode, binds a
+document's config, and runs the set as one `FullscreenPassNode` over the world. A post pass ships as exactly its
+HLSL and its manifest — `render.extensions[].id` is the manifest's file stem, found under the deploy's
+`Assets/Shaders` tree; `puck schema` splices each shipped set's config schema into the world-document schema by id.
+Proven by `sdf-film-grain`, whose noise is a hash of pixel, grain frame, and seed, holding `puck parity` on both
+backends. Check: `dotnet test tests/Puck.Shaders.Tests`, `puck parity`, `puck schema --check`.
 
 **Namespace normalization** runs once, last, tree-wide, after the splits above settle rather than
 interleaved with them.

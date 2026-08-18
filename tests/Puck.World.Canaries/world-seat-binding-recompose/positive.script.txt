@@ -1,0 +1,3 @@
+replay.status
+player.bind 1 keyboard.p editor.status
+world.save {run}\saved.world.json

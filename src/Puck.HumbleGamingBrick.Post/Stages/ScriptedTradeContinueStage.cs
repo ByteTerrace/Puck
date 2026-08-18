@@ -27,7 +27,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// cart simply never arms it.
 /// </para>
 /// </summary>
-internal sealed class ScriptedTradeContinueStage : IPostStage {
+internal sealed class ScriptedTradeContinueStage : IPostStage<PostContext> {
     private const string RomEnvironmentVariable = "PUCK_GB_TRADEROM";
 
     // The known dev-box copies (laptop, desktop), tried in order when the env var is unset.
@@ -106,7 +106,7 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return PostStageOutcome.Pass(detail: $"{CartridgeTitle(rom: rom)} cgb↔cgb: both crafted saves CONTINUE-accepted onto the POKECENTER_2F Cable Club floor (leads 0x{reference.LeadA:X2}/0x{reference.LeadB:X2}, checksums valid), replay-identical and churn-identical over {ScriptedTradeHarness.ContinueSettledFrame} frames (severed transfer-idle at budget step {ChurnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes). The overworld is navigable + the receptionist interactable via the crafted object structs (see TradeSaveFactory.WriteObjects); the scripted link through TRADE_CENTER is gated by link-lock.");
+        return PostStageOutcome.Pass(detail: $"{CartridgeTitleReader.CartridgeTitle(rom: rom)} cgb↔cgb: both crafted saves CONTINUE-accepted onto the POKECENTER_2F Cable Club floor (leads 0x{reference.LeadA:X2}/0x{reference.LeadB:X2}, checksums valid), replay-identical and churn-identical over {ScriptedTradeHarness.ContinueSettledFrame} frames (severed transfer-idle at budget step {ChurnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes). The overworld is navigable + the receptionist interactable via the crafted object structs (see TradeSaveFactory.WriteObjects); the scripted link through TRADE_CENTER is gated by link-lock.");
     }
 
     // One complete scenario on the fixed per-frame budget schedule. With churnAtStep >= 0 the session is suspended at that
@@ -259,24 +259,6 @@ internal sealed class ScriptedTradeContinueStage : IPostStage {
             array: RomFallbackPaths,
             match: File.Exists
         );
-    }
-    private static string CartridgeTitle(byte[] rom) {
-        var builder = new System.Text.StringBuilder(capacity: 11);
-
-        for (var offset = 0x0134; (offset < 0x013F); ++offset) {
-            var character = rom[offset];
-
-            if (
-                (character == 0) ||
-                (character >= 0x80)
-            ) {
-                break;
-            }
-
-            _ = builder.Append(value: ((char)character));
-        }
-
-        return builder.ToString().Trim();
     }
 
     private readonly record struct ScenarioResult(

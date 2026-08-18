@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Assets.Documents;
 using Puck.SignedDistance;
 
 namespace Puck.Forge.Authoring;
@@ -18,7 +19,7 @@ public static class CreationCanonicalizer {
     private const float MinTextEmHeight = 0.01f;
 
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
-        "schema", "name", "intent", "bakeStyle", "palette", "shapes", "frames", "chains", "cameras", "behavior", "textRuns", "parts",
+        "schema", "name", "palette", "shapes", "frames", "chains", "cameras", "behavior", "textRuns", "parts",
     };
 
     private static bool IsFinite(Vector3 vector) =>
@@ -361,6 +362,109 @@ public static class CreationCanonicalizer {
             }
         }
     }
+    // A NaN/infinite param would reach SdfProgramBuilder's own throwing guards at emission time (e.g.
+    // RequireDirection/RequireFinite), well past the point a document author could see a reason why — refused here
+    // instead, alongside the position/rotation/scale finite checks every other shape field already gets. Range clamps
+    // (spacing floors, non-negative limits, the enum fallbacks) are Normalize's job, mirroring NormalizeWallpaper's
+    // old clamp-not-refuse posture; only what Normalize cannot safely repair is refused here.
+    private static void ValidateDomain(IReadOnlyList<ShapeDomainOp>? domain, List<DocumentValidationError> errors, string path) {
+        if (domain is not { Count: > 0 } ops) {
+            return;
+        }
+
+        if (ops.Count > ShapeDocument.MaxDomainOps) {
+            errors.Add(item: new(
+                Message: $"{ops.Count} entries exceeds the {ShapeDocument.MaxDomainOps}-op domain list.",
+                Path: path
+            ));
+        }
+
+        for (var i = 0; (i < ops.Count); i++) {
+            var opPath = $"{path}[{i}]";
+
+            switch (ops[i]) {
+                case ShapeDomainOp.Symmetry symmetry: {
+                        if (!IsFinite(vector: symmetry.Normal)) {
+                            errors.Add(item: new(
+                                Message: "normal is non-finite.",
+                                Path: $"{opPath}.normal"
+                            ));
+                        }
+                        if (
+                            (symmetry.Offset is { } offset) &&
+                            !float.IsFinite(f: offset)
+                        ) {
+                            errors.Add(item: new(
+                                Message: "offset is non-finite.",
+                                Path: $"{opPath}.offset"
+                            ));
+                        }
+
+                        break;
+                    }
+                case ShapeDomainOp.Repeat repeat: {
+                        if (!IsFinite(vector: repeat.Spacing)) {
+                            errors.Add(item: new(
+                                Message: "spacing is non-finite.",
+                                Path: $"{opPath}.spacing"
+                            ));
+                        }
+                        if (
+                            (repeat.Limit is { } limit) &&
+                            !IsFinite(vector: limit)
+                        ) {
+                            errors.Add(item: new(
+                                Message: "limit is non-finite.",
+                                Path: $"{opPath}.limit"
+                            ));
+                        }
+
+                        break;
+                    }
+                case ShapeDomainOp.Polar polar: {
+                        if (
+                            (polar.Axis is { } axis) &&
+                            !Enum.IsDefined(value: axis)
+                        ) {
+                            errors.Add(item: new(
+                                Message: $"axis '{axis}' is not recognized.",
+                                Path: $"{opPath}.axis"
+                            ));
+                        }
+
+                        break;
+                    }
+                case ShapeDomainOp.Wallpaper wallpaper: {
+                        if (!Enum.IsDefined(value: wallpaper.Group)) {
+                            errors.Add(item: new(
+                                Message: $"group '{wallpaper.Group}' is not recognized.",
+                                Path: $"{opPath}.group"
+                            ));
+                        }
+                        if (
+                            (wallpaper.Plane is { } plane) &&
+                            !Enum.IsDefined(value: plane)
+                        ) {
+                            errors.Add(item: new(
+                                Message: $"plane '{plane}' is not recognized.",
+                                Path: $"{opPath}.plane"
+                            ));
+                        }
+                        if (
+                            !float.IsFinite(f: wallpaper.Cell.X) ||
+                            !float.IsFinite(f: wallpaper.Cell.Y)
+                        ) {
+                            errors.Add(item: new(
+                                Message: "cell is non-finite.",
+                                Path: $"{opPath}.cell"
+                            ));
+                        }
+
+                        break;
+                    }
+            }
+        }
+    }
     private static void ValidateExtensions(CreationDocument document, List<DocumentValidationError> errors) =>
         DocumentCanonicalizer.ValidateExtensions(
             addError: (path, message) => errors.Add(item: new(
@@ -441,10 +545,16 @@ public static class CreationCanonicalizer {
         for (var i = 0; (i < palette.Count); i++) {
             var entry = palette[i];
 
-            if (!IsFinite(vector: entry.Albedo)) {
+            if (
+                !HexColor.TryParse(
+                    rgb: out _,
+                    value: entry.Color
+                ) &&
+                !HexColor.IsStateBinding(value: entry.Color)
+            ) {
                 errors.Add(item: new(
-                    Message: "albedo is non-finite.",
-                    Path: $"palette[{i}].albedo"
+                    Message: "color must be #RRGGBB or a state.<row>[.<key>] binding.",
+                    Path: $"palette[{i}].color"
                 ));
             }
             if (
@@ -575,6 +685,16 @@ public static class CreationCanonicalizer {
         for (var i = 0; (i < runs.Count); i++) {
             var run = runs[i];
 
+            if (
+                (run.ShapeId is { } shapeId) &&
+                ((document.Shapes ?? []).All(predicate: shape => shape.Id != shapeId))
+            ) {
+                errors.Add(item: new(
+                    Message: $"names no shape with id {shapeId}.",
+                    Path: $"textRuns[{i}].shapeId"
+                ));
+            }
+
             if (!IsFinite(vector: run.Position)) {
                 errors.Add(item: new(
                     Message: "position is non-finite.",
@@ -650,6 +770,87 @@ public static class CreationCanonicalizer {
 
         return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
     }
+    // A non-finite/zero-length direction has no fold plane to normalize to, so it floors to the retired Mirror:
+    // true flag's exact plane (UnitX) rather than reaching SdfProgramBuilder.SymmetryPlane's own throwing guard.
+    private static Vector3 NormalizeDirection(Vector3 value) {
+        if (
+            !IsFinite(vector: value) ||
+            (value == Vector3.Zero)
+        ) {
+            return Vector3.UnitX;
+        }
+
+        return Vector3.Normalize(value: value);
+    }
+    // Absent stays absent so a creation authored without domain ops keeps its canonical bytes and hash; a present
+    // list is clamped to what each op's own SdfProgramBuilder method accepts (mirroring NormalizeWallpaper's old
+    // clamp-in-full posture) and every optional member is written out in full.
+    private static List<ShapeDomainOp>? NormalizeDomain(IReadOnlyList<ShapeDomainOp>? domain) {
+        if (domain is not { Count: > 0 } source) {
+            return null;
+        }
+
+        var normalized = new List<ShapeDomainOp>(capacity: source.Count);
+
+        foreach (var op in source) {
+            normalized.Add(item: NormalizeDomainOp(op: op));
+        }
+
+        return normalized;
+    }
+    private static ShapeDomainOp NormalizeDomainOp(ShapeDomainOp op) {
+        return op switch {
+            ShapeDomainOp.Symmetry symmetry => new ShapeDomainOp.Symmetry(
+                Normal: NormalizeDirection(value: symmetry.Normal),
+                Offset: (float.IsFinite(f: (symmetry.Offset ?? 0f))
+                ? (symmetry.Offset ?? 0f)
+                : 0f)
+            ),
+            ShapeDomainOp.Repeat repeat => new ShapeDomainOp.Repeat(
+                Limit: NormalizeNonNegative(value: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))),
+                Spacing: NormalizeSpacing(value: repeat.Spacing)
+            ),
+            ShapeDomainOp.Polar polar => new ShapeDomainOp.Polar(
+                Axis: (Enum.IsDefined(value: (polar.Axis ?? SdfPolarAxis.Y))
+                ? (polar.Axis ?? SdfPolarAxis.Y)
+                : SdfPolarAxis.Y),
+                Count: Math.Max(val1: polar.Count, val2: 1),
+                MaterialStride: Math.Max(val1: (polar.MaterialStride ?? 0), val2: 0),
+                Mirror: (polar.Mirror ?? false)
+            ),
+            ShapeDomainOp.Wallpaper wallpaper => new ShapeDomainOp.Wallpaper(
+                Cell: new Vector2(
+                    x: Math.Max(val1: wallpaper.Cell.X, val2: 0.001f),
+                    y: Math.Max(val1: wallpaper.Cell.Y, val2: 0.001f)
+                ),
+                Group: (Enum.IsDefined(value: wallpaper.Group)
+                ? wallpaper.Group
+                : SdfWallpaperGroup.P1),
+                Limit: new Vector2(
+                    x: Math.Max(val1: (wallpaper.Limit?.X ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f),
+                    y: Math.Max(val1: (wallpaper.Limit?.Y ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f)
+                ),
+                LodDistance: Math.Max(val1: (wallpaper.LodDistance ?? 0f), val2: 0f),
+                MaterialStride: Math.Max(val1: (wallpaper.MaterialStride ?? 0), val2: 0),
+                Plane: (Enum.IsDefined(value: (wallpaper.Plane ?? SdfWallpaperPlane.XZ))
+                ? (wallpaper.Plane ?? SdfWallpaperPlane.XZ)
+                : SdfWallpaperPlane.XZ)
+            ),
+            _ => op,
+        };
+    }
+    private static Vector3 NormalizeNonNegative(Vector3 value) =>
+        new(
+            x: Math.Max(val1: (float.IsFinite(f: value.X) ? value.X : 0f), val2: 0f),
+            y: Math.Max(val1: (float.IsFinite(f: value.Y) ? value.Y : 0f), val2: 0f),
+            z: Math.Max(val1: (float.IsFinite(f: value.Z) ? value.Z : 0f), val2: 0f)
+        );
+    private static Vector3 NormalizeSpacing(Vector3 value) =>
+        new(
+            x: Math.Max(val1: (float.IsFinite(f: value.X) ? value.X : 0f), val2: 0.001f),
+            y: Math.Max(val1: (float.IsFinite(f: value.Y) ? value.Y : 0f), val2: 0.001f),
+            z: Math.Max(val1: (float.IsFinite(f: value.Z) ? value.Z : 0f), val2: 0.001f)
+        );
     /// <summary>Normalizes an already-schema-valid document: clamps/defaults every optional member so the in-memory
     /// model never sees a null or an out-of-range value it has to reason about (the load-time half of the document
     /// doctrine). Idempotent — <c>Normalize(Normalize(x))</c> equals <c>Normalize(x)</c> — which is what makes a
@@ -665,6 +866,7 @@ public static class CreationCanonicalizer {
 
         foreach (var shape in (document.Shapes ?? [])) {
             shapes.Add(item: shape with {
+                Domain = NormalizeDomain(domain: shape.Domain),
                 Bend = Math.Clamp(
                 value: (shape.Bend ?? 0f),
                 max: ShapeDocument.MaxBend,
@@ -685,7 +887,6 @@ public static class CreationCanonicalizer {
                 max: (CreationDocument.PaletteSize - 1),
                 min: 0
             ),
-                Mirror = (shape.Mirror ?? false),
                 Onion = Math.Clamp(
                 value: (shape.Onion ?? 0f),
                 max: ShapeDocument.MaxOnion,
@@ -748,13 +949,6 @@ public static class CreationCanonicalizer {
         }
 
         return (document with {
-            BakeStyle = (string.Equals(
-            a: document.BakeStyle,
-            b: "bold",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
-            ? "bold"
-            : "classic"),
             Behavior = NormalizeBehavior(
             behavior: document.Behavior,
             shapeIds: shapeIds
@@ -764,8 +958,11 @@ public static class CreationCanonicalizer {
             shapeIds: shapeIds
         ),
             Chains = chains,
-            Intent = (document.Intent ?? CreatorIntent.Object),
-            Name = SanitizeName(name: (document.Name ?? "creation")),
+            // A world-backed name has already resolved for validation, but its reference token remains the authored
+            // source of truth. Preserve that token just like the creation's spatial document values do.
+            Name = ((document.Name?.Reference is not null)
+                ? document.Name
+                : SanitizeName(name: (document.Name?.Value ?? "creation"))),
             Parts = ((document.Parts is { Count: > 0 } parts)
             ? parts.ToArray()
             : null),
@@ -841,6 +1038,12 @@ public static class CreationCanonicalizer {
                     Path: $"shapes[{i}].rotation"
                 ));
             }
+
+            ValidateDomain(
+                domain: shape.Domain,
+                errors: errors,
+                path: $"shapes[{i}].domain"
+            );
         }
 
         ValidatePalette(

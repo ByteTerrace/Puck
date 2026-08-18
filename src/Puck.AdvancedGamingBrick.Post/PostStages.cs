@@ -5,7 +5,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 internal static class PostStages {
     /// <summary>Creates the ordered stage list.</summary>
     /// <returns>The stages, in run order.</returns>
-    public static IPostStage[] Create() =>
+    public static IPostStage<PostContext>[] Create() =>
         [
             // Tier A — core and queued-host self-tests (hand-assembled vectors + a synthetic cartridge; run anywhere).
             new SmokeStage(),

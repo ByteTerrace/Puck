@@ -1,15 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Assets</AssemblyName>
-        <Description>Content-addressed asset primitives for .NET: path-based byte sources, compact SHA-256 identities, a bounded least-recently-used cache, a persistent full-digest object store with named refs, and a minimal PNG/APNG codec.</Description>
+        <Description>Content-addressed asset primitives for .NET: path-based byte sources, SHA-256 identities and storage, a bounded cache, PNG/APNG and QR codecs, and canonical binary codecs for automatic sequences and raw mathematical certificates.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Assets</PackageId>
-        <PackageTags>assets;caching;content-addressing;png</PackageTags>
+        <PackageTags>assets;caching;content-addressing;png;qr</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Leaf contracts and data</PuckLayer>
         <RootNamespace>Puck.Assets</RootNamespace>
     </PropertyGroup>
+    <PropertyGroup>
+        <!-- Documents/DocumentCanonicalizer + DocumentJsonOptions use reflection-based JsonSerializer metadata and a
+             runtime enum converter, same as Puck.World.Forge's Authoring/ before this project relocated them. -->
+        <IsAotCompatible>false</IsAotCompatible>
+    </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="System.IO.Hashing" Version="[10.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
+        <!-- Qr/QrReedSolomon builds its generator polynomials over Puck.Maths.ReedSolomon/BinaryField<T>. -->
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

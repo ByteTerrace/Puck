@@ -7,7 +7,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// located from the <c>PUCK_AGB_ACCURACY_SUITE</c> environment variable; the stage skips when it is unset or missing.
 /// The same runner backs the <c>--accuracy-suite</c> diagnostic (which prints the per-suite / per-subtest detail).
 /// </summary>
-internal sealed class AccuracySuiteStage : IPostStage {
+internal sealed class AccuracySuiteStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "accuracy-suite";

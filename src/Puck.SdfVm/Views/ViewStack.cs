@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using System.Text;
+using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm.Views;
@@ -36,8 +37,8 @@ public interface IViewContent {
     /// <summary>This content's room-light contribution — zero for content that only films an already-lit scene (a
     /// camera, a nested world), non-zero for content that is its own light source (a CPU-drawn face, a CRT terminal).</summary>
     Vector3 RoomGlow { get; }
-    /// <summary>Whether this content counts against <see cref="ViewStack.RefreshBudget"/>'s round-robin share.
-    /// <see langword="true"/> (the default) for anything that pays a real render pass to resolve (an offscreen world
+    /// <summary>Whether this content counts against <see cref="OffscreenRenderBudget.PerProducedFrame"/>'s round-robin
+    /// share. <see langword="true"/> (the default) for anything that pays a real render pass to resolve (an offscreen world
     /// engine submit) — <see cref="Views.SdfCameraView"/> and <see cref="Views.NestedWorldView"/> both do.
     /// <see langword="false"/> for content whose <see cref="Resolve"/> is a cheap read of state some other path
     /// already refreshed (<see cref="Views.GuestSurfaceView"/> — its producer delegate is already ticked/uploaded by
@@ -84,13 +85,14 @@ public readonly record struct ViewRenderContext(
 /// resolve through this one small vocabulary — no consumer-specific channel exists.
 /// <para>
 /// Registering a view is cheap: up to
-/// <see cref="MaxRegisteredViews"/> may be live at once — but only <see cref="RefreshBudget"/> of the budgeted ones
-/// (<see cref="IViewContent.IsBudgeted"/> true — an offscreen render pays a real GPU pass) actually re-render on any
-/// one produced frame; the rest keep their last resolved handle until the round-robin cursor reaches them again.
+/// <see cref="OffscreenRenderBudget.RegisteredViews"/> may be live at once — but only <see cref="OffscreenRenderBudget.PerProducedFrame"/>
+/// of the budgeted ones (<see cref="IViewContent.IsBudgeted"/> true — an offscreen render pays a real GPU pass)
+/// actually re-render on any one produced frame; the rest keep their last resolved handle until the round-robin
+/// cursor reaches them again.
 /// Unbudgeted content (a cheap producer some other path already refreshed) resolves every frame regardless — see
 /// <see cref="IViewContent.IsBudgeted"/>'s remarks. So a wall of monitors costs the same per-frame render as four:
 /// registration is cheap, only the refresh budget is spent each frame. Beyond the budget, views share it
-/// round-robin (narrated, never dropped); only past the <see cref="MaxRegisteredViews"/> ceiling is a new
+/// round-robin (narrated, never dropped); only past the <see cref="OffscreenRenderBudget.RegisteredViews"/> ceiling is a new
 /// registration truly refused (narrated).
 /// </para>
 /// <para>
@@ -118,25 +120,6 @@ public readonly record struct ViewRenderContext(
 /// </para>
 /// </summary>
 public sealed class ViewStack : IDisposable {
-    /// <summary>The most views the stack holds live at once.
-    /// registering/holding this many is cheap state, not this many render passes per frame (see <see cref="RefreshBudget"/>).
-    /// A registration past this ceiling is refused (narrated); the caller's fallback (its non-diegetic presentation)
-    /// is its own call.</summary>
-    public const int MaxRegisteredViews = 64;
-    /// <summary>The per-frame render budget shared by every budgeted live view: how many actually re-render
-    /// (one real offscreen pass each) on any
-    /// one produced frame. Beyond this, views refresh round-robin (each persists its last resolved handle on the
-    /// frames it is skipped — diegetically honest for a wall of security CRTs), advancing a deterministic cursor on
-    /// the produced frame (no wall clock).</summary>
-    /// <remarks><c>Puck.World.WorldSessionWindowCapacity.MaxSimultaneousWindows</c> hand-mirrors this constant's
-    /// value (it lives in <c>Puck.World.Schema</c>, below this project in the layering, and may not reference this
-    /// type — see that constant's own remarks for the full reasoning). A window session is unbudgeted — it never
-    /// enters this round-robin share, resolving every produced frame unconditionally instead — so the mirrored
-    /// ceiling bounds the opposite risk: the worst-case count of full extra unconditional engine submits one
-    /// produced frame can be asked to pay, kept no larger than the number of budgeted views a frame already accepts
-    /// paying for here. Changing this value obligates that constant to the same change, by hand, in the same
-    /// commit.</remarks>
-    public const int RefreshBudget = 4;
 
     private static readonly IReadOnlySet<int> EmptyScreenSet = new HashSet<int>();
 
@@ -154,7 +137,7 @@ public sealed class ViewStack : IDisposable {
         // True once this view's own Resolve has thrown — permanently skipped by RenderFrame thereafter, never
         // retried on a later produced frame, mirroring WorldOutputHub's own detach-on-fault contract for a typed
         // subscriber that throws mid-delivery. The REGISTRATION itself survives (ActiveViewCount, the
-        // MaxRegisteredViews ceiling, and Release/Resolve-by-name all still see it) — only the render pass stops
+        // OffscreenRenderBudget.RegisteredViews ceiling, and Release/Resolve-by-name all still see it) — only the render pass stops
         // calling into content proven unsafe to call. Resolve/ResolveGlow keep serving whatever LastHandle/LastGlow
         // this entry last resolved successfully (0/zero if it never resolved at all), which is what "holds the last
         // completed image" means at this layer.
@@ -186,7 +169,7 @@ public sealed class ViewStack : IDisposable {
     // Narrates refresh-rate SHARING (never a drop) the frame the live budgeted-view count first exceeds the per-frame
     // budget, or when that count changes — hoisted verbatim from CameraFeedPool.NarrateRefreshSharing.
     private void NarrateRefreshSharing(int liveCount) {
-        if (liveCount <= RefreshBudget) {
+        if (liveCount <= OffscreenRenderBudget.PerProducedFrame) {
             m_lastNarratedShareCount = -1;
 
             return;
@@ -196,9 +179,9 @@ public sealed class ViewStack : IDisposable {
             return;
         }
 
-        var everyFrames = ((liveCount + (RefreshBudget - 1)) / RefreshBudget);
+        var everyFrames = ((liveCount + (OffscreenRenderBudget.PerProducedFrame - 1)) / OffscreenRenderBudget.PerProducedFrame);
 
-        Console.Error.WriteLine(value: $"[view-stack] {liveCount} view(s) live but the per-frame refresh budget is {RefreshBudget} — sharing round-robin: each view refreshes every {everyFrames} frame(s), last image persists in between");
+        Console.Error.WriteLine(value: $"[view-stack] {liveCount} view(s) live but the per-frame refresh budget is {OffscreenRenderBudget.PerProducedFrame} — sharing round-robin: each view refreshes every {everyFrames} frame(s), last image persists in between");
         m_lastNarratedShareCount = liveCount;
     }
     // Resolves one entry, scoping its own wired screens to 0 (the self-reference rule) — a wrapped delegate only when
@@ -307,7 +290,7 @@ public sealed class ViewStack : IDisposable {
     /// held replaces its content/band in place and keeps its <see cref="ViewId"/> and any GPU resource that content
     /// instance itself owns — a caller that wants a persistent offscreen engine to survive across frames passes the
     /// same <see cref="IViewContent"/> instance back every frame (mutating its own pose/binding fields), rather than
-    /// constructing a fresh one each call. A first-time registration past <see cref="MaxRegisteredViews"/> is refused
+    /// constructing a fresh one each call. A first-time registration past <see cref="OffscreenRenderBudget.RegisteredViews"/> is refused
     /// (narrated to stderr, like <c>CameraFeedPool</c>'s own ceiling) and returns <see cref="ViewId.None"/>.</summary>
     /// <param name="name">The view's stable name — the handle every consumer resolves by (see <see cref="Resolve"/>).</param>
     /// <param name="content">The content this name shows.</param>
@@ -334,8 +317,8 @@ public sealed class ViewStack : IDisposable {
             return existing.Id;
         }
 
-        if (m_order.Count >= MaxRegisteredViews) {
-            Console.Error.WriteLine(value: $"[view-stack] view '{name}' not registered — the pool ceiling is {MaxRegisteredViews} and every slot is taken");
+        if (m_order.Count >= OffscreenRenderBudget.RegisteredViews) {
+            Console.Error.WriteLine(value: $"[view-stack] view '{name}' not registered — the pool ceiling is {OffscreenRenderBudget.RegisteredViews} and every slot is taken");
 
             return ViewId.None;
         }
@@ -384,8 +367,8 @@ public sealed class ViewStack : IDisposable {
         }
     }
     /// <summary>Renders this frame's views: every unbudgeted view resolves unconditionally, then up to
-    /// <see cref="RefreshBudget"/> budgeted views resolve round-robin (see the type remarks) — a budgeted view whose
-    /// <c>isLive</c> predicate (see <see cref="Register"/>) returns <see langword="false"/> is skipped for its turn
+    /// <see cref="OffscreenRenderBudget.PerProducedFrame"/> budgeted views resolve round-robin (see the type remarks)
+    /// — a budgeted view whose <c>isLive</c> predicate (see <see cref="Register"/>) returns <see langword="false"/> is skipped for its turn
     /// without spending budget, and the cursor moves on to the next candidate. Each view's own render sees every
     /// other screen surface normally and its own wired screens as unbound (the self-reference rule).</summary>
     /// <param name="context">This frame's shared render inputs (see <see cref="ViewRenderContext"/>).</param>
@@ -424,7 +407,7 @@ public sealed class ViewStack : IDisposable {
 
         var refreshTarget = Math.Min(
             val1: budgetedCount,
-            val2: RefreshBudget
+            val2: OffscreenRenderBudget.PerProducedFrame
         );
 
         NarrateRefreshSharing(liveCount: budgetedCount);

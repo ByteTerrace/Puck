@@ -8,6 +8,11 @@
         "resolved": "10.0.11",
         "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
       },
+      "System.CommandLine": {
+        "type": "Transitive",
+        "resolved": "2.0.11",
+        "contentHash": "Pmg3/T0M37ZS3ovwPHtfBNTCdqNpnxo+tnZMg8JDHVR0qD8KwcPUKlheEiZysb1En8IyH7yDoa9QDq97Ny/vhQ=="
+      },
       "System.IO.Hashing": {
         "type": "Transitive",
         "resolved": "10.0.11",
@@ -19,13 +24,35 @@
       "ByteTerrace.Puck.Assets": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.IO.Hashing": "[10.*, )"
         }
+      },
+      "ByteTerrace.Puck.Commands": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "System.CommandLine": "[2.*, )"
+        }
+      },
+      "ByteTerrace.Puck.Hosting": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
       },
       "ByteTerrace.Puck.Shaders": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )"
         }
       }
     }

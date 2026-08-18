@@ -1,3 +1,5 @@
+using Puck.Commands;
+
 namespace Puck.World.Protocol;
 
 /// <summary>A session/identity request a client submits to the authoritative server — the closed set the roster/population
@@ -38,6 +40,13 @@ public abstract record SessionRequest(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Source">The intent source to store and sweep.</param>
     public sealed record SetPeerSource(WorldPrincipal Principal, IntentSource Source) : SessionRequest(Principal);
+    /// <summary>Records a device's preferred profile against the owned-world identity catalog — a local-machine
+    /// remembered controller/profile association, not a slot state change (see <c>Server.WorldOwnedWorlds.
+    /// RememberPreferredController</c>).</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Device">The device the preference is recorded against.</param>
+    /// <param name="IdentityName">The identity to remember as the device's preference.</param>
+    public sealed record RememberPreferredController(WorldPrincipal Principal, InputDeviceId Device, string IdentityName) : SessionRequest(Principal);
 
 }
 /// <summary>The server's answer to a <see cref="SessionRequest"/>: whether it was accepted, the 1-based display index it
@@ -64,6 +73,9 @@ public abstract record WorldQuery {
         Contacts contacts => GrantSubject.Body(index: (contacts.Index - 1)),
         ScreenState screen => GrantSubject.Screen(index: screen.ScreenIndex),
         Properties { BodyIndex: int bodyIndex } => GrantSubject.Body(index: bodyIndex),
+        GrantAllows allows => allows.Subject,
+        MusicState state => GrantSubject.Body(index: (state.Index - 1)),
+        JudgeState state => GrantSubject.Body(index: (state.Index - 1)),
         _ => GrantSubject.All,
     };
 
@@ -105,6 +117,57 @@ public abstract record WorldQuery {
     /// = fired/holding at the last evaluation) — the SAME line shape <see cref="Rules"/> gives a compiled rule.
     /// </summary>
     public sealed record Interactions : WorldQuery;
+    /// <summary>Whether <paramref name="Principal"/> holds <paramref name="Capability"/> over <paramref name="Subject"/>
+    /// — the query form of <c>Server.WorldGrants.Allows</c>, for a caller (e.g. <c>Client.PlayerRoster</c>) that holds
+    /// no live server reference. The answer's <see cref="QueryAnswer.Payload"/> carries the <see cref="GrantVerdict"/>.
+    /// </summary>
+    /// <param name="Principal">The principal to check.</param>
+    /// <param name="Capability">The capability to check.</param>
+    /// <param name="Subject">The subject to check.</param>
+    public sealed record GrantAllows(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject) : WorldQuery;
+    /// <summary>Mints a <see cref="WorldHandle"/> for <paramref name="Index"/> against <paramref name="Principal"/>'s
+    /// <paramref name="Capability"/> handle table — the query form of <c>Server.WorldHandleTable.TryMint</c>. The
+    /// answer's <see cref="QueryAnswer.Payload"/> carries the minted <see cref="WorldHandle"/>, or <see langword="null"/>
+    /// when the index names no live slot.</summary>
+    /// <param name="Principal">The handle table's principal (must be outside the trust boundary).</param>
+    /// <param name="Capability">The handle table's capability.</param>
+    /// <param name="Index">The 0-based slot index to mint.</param>
+    public sealed record GrantHandleMint(WorldPrincipal Principal, WorldCapability Capability, int Index) : WorldQuery;
+    /// <summary>Resolves a previously minted <see cref="WorldHandle"/> against its own handle table — the query form of
+    /// <c>Server.WorldHandleTable.TryResolve</c>. The answer's <see cref="QueryAnswer.Payload"/> carries the resolved
+    /// <see cref="GrantSubject"/>, or <see langword="null"/> when the handle no longer resolves.</summary>
+    /// <param name="Handle">The handle to resolve.</param>
+    public sealed record GrantHandleResolve(WorldHandle Handle) : WorldQuery;
+    /// <summary>The world's compiled channel shape table (bipolar/unipolar/binary per declared channel), the same
+    /// table every entity's held channels are read against. The answer's <see cref="QueryAnswer.Payload"/> carries the
+    /// <see cref="WorldChannelTable"/>.</summary>
+    public sealed record PopulationChannels : WorldQuery;
+    /// <summary>The owned-world identity catalog, projected — name, appearance, and claimed motion rates, never the
+    /// owned document itself (the same projection a federation seam carries). The answer's
+    /// <see cref="QueryAnswer.Payload"/> carries an <see cref="IReadOnlyList{T}"/> of <see cref="WorldIdentityProjection"/>.
+    /// </summary>
+    public sealed record ProfileCatalog : WorldQuery;
+    /// <summary>Finds a catalog identity by name (case-insensitive). The answer's <see cref="QueryAnswer.Payload"/>
+    /// carries the matching <see cref="WorldIdentityProjection"/>, or <see langword="null"/> when none matches.
+    /// </summary>
+    /// <param name="Name">The identity name to look up.</param>
+    public sealed record FindProfile(string Name) : WorldQuery;
+    /// <summary>The device's remembered preferred identity on this machine, if any. The answer's
+    /// <see cref="QueryAnswer.Payload"/> carries the preferred <see cref="WorldIdentityProjection"/>, or
+    /// <see langword="null"/> when the device has no remembered preference.</summary>
+    /// <param name="Device">The device to look up.</param>
+    public sealed record PreferredControllerProfile(InputDeviceId Device) : WorldQuery;
+    /// <summary>The live music clock/director state (<c>music.state</c>) — the current segment, any pending
+    /// transition, and the tick/from/to of the most recent committed transition, if any. World-wide, not
+    /// per-entity; <see cref="Index"/> names only the observing seat, the same subject its own
+    /// <see cref="ObservationSubject"/> checks Observe against.</summary>
+    /// <param name="Index">The 1-based observing player display index.</param>
+    public sealed record MusicState(int Index) : WorldQuery;
+    /// <summary>The declared judge window sets (<c>judge.state</c>) — a structural echo of every
+    /// <c>puck.judge.v1</c> row's name and windows. World-wide, not per-entity; <see cref="Index"/> names only the
+    /// observing seat, the same subject its own <see cref="ObservationSubject"/> checks Observe against.</summary>
+    /// <param name="Index">The 1-based observing player display index.</param>
+    public sealed record JudgeState(int Index) : WorldQuery;
 }
 /// <summary>The server's composed answer to a <see cref="WorldQuery"/> — the read-back string the client prints verbatim
 /// (a byte-identical echo of the authoritative pose/roster state), plus the verdict that says whether the answer is a
@@ -114,4 +177,8 @@ public abstract record WorldQuery {
 /// state. A rendering module maps this onto <c>CommandResult.IsError</c>, which is what makes the miss reach
 /// <c>wire.errors</c> on every transport — not just the loopback, where the client-side liveness guard catches it
 /// first.</param>
-public readonly record struct QueryAnswer(string Text, bool Refused = false);
+/// <param name="Payload">A typed value a programmatic (non-console) caller reads instead of parsing
+/// <paramref name="Text"/> — the shape is named on each <see cref="WorldQuery"/> leaf that populates one.
+/// <see langword="null"/> for every console read-back query, which carries its whole answer in
+/// <paramref name="Text"/>.</param>
+public readonly record struct QueryAnswer(string Text, bool Refused = false, object? Payload = null);

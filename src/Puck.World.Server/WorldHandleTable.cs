@@ -2,24 +2,6 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>A guest-facing reference into one <see cref="WorldHandleTable"/> slot — an index plus the generation its
-/// slot carried when this value was minted (<see cref="WorldHandleTable.TryMint"/>), stamped with the identity of the
-/// table that minted it. Only the index (and, once channels carry one, the generation) is meant to ever cross to a
-/// guest; the generation is how <see cref="WorldHandleTable.TryResolve"/> tells a handle minted before a rebuild apart
-/// from a fresh one that happens to reuse the same index — see <see cref="WorldHandleTable"/>'s own remarks.
-/// <para><b>A handle is bound to the table that minted it.</b> <see cref="TablePrincipal"/> and
-/// <see cref="TableCapability"/> never cross to a guest and are never guest-supplied — the host alone stamps them at
-/// <see cref="WorldHandleTable.TryMint"/> and checks them at <see cref="WorldHandleTable.TryResolve"/>. Without them, a
-/// bare <c>(Index, Generation)</c> pair is, by construction, interchangeable across every principal's and every
-/// capability's table: every table's generation counter starts at 0 and climbs slowly, so two different tables'
-/// same-index slots collide on generation far more often than not, and <see cref="WorldHandleTable.TryResolve"/> would
-/// silently answer whatever the wrong table's matching slot holds. Stamping the table's own identity into the value
-/// turns a mismatched resolve into a verification failure instead of a silent hit.</para></summary>
-/// <param name="Index">The 0-based slot index.</param>
-/// <param name="Generation">The slot's generation at mint time.</param>
-/// <param name="TablePrincipal">The principal of the <see cref="WorldHandleTable"/> that minted this handle.</param>
-/// <param name="TableCapability">The capability of the <see cref="WorldHandleTable"/> that minted this handle.</param>
-public readonly record struct WorldHandle(int Index, int Generation, WorldPrincipal TablePrincipal, WorldCapability TableCapability);
 /// <summary>
 /// A per-(principal, capability) handle table — the host-side, pure projection of <see cref="WorldGrants"/> for one
 /// principal outside the trust boundary. A handle resolves a designation — the <see cref="GrantSubject"/> a slot

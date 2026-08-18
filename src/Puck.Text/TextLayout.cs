@@ -20,9 +20,11 @@ namespace Puck.Text;
 /// </para>
 /// </remarks>
 public sealed class TextLayout {
-    // Shifts each line so its visual span centers in (or right-aligns to) the block's widest visual span. Both edges
-    // matter: real fonts may carry negative left side bearings, and trailing pen advance past the last placed glyph
-    // does not count toward a line's visual width.
+    // Shifts each line so its visual span centers in (or right-aligns to) the block's widest visual span, then anchors
+    // the BLOCK on the origin the same way: Center puts the block's midpoint at x = 0, Right its right edge — so the
+    // origin is the point an author aligned about, not always the block's left edge. Both line edges matter: real
+    // fonts may carry negative left side bearings, and trailing pen advance past the last placed glyph does not count
+    // toward a line's visual width.
     private static float AlignLines(TextAlignment alignment, List<(int StartIndex, float VisualLeft, float VisualRight)> lineBreaks, List<TextGlyphPlacement> placements) {
         var blockWidth = 0.0f;
 
@@ -45,7 +47,7 @@ public sealed class TextLayout {
                 : placements.Count
             );
             var visualWidth = (visualRight - visualLeft);
-            var shift = (((blockWidth - visualWidth) * fraction) - visualLeft);
+            var shift = ((((blockWidth - visualWidth) * fraction) - visualLeft) - (blockWidth * fraction));
 
             if (shift == 0.0f) {
                 continue;

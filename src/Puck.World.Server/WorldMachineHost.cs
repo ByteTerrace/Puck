@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Machines;
+using Puck.Audio.Mixing;
 
 namespace Puck.World.Server;
 
@@ -118,7 +119,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
                 options: machine.Options,
                 contentBytes: content,
                 savePath: null,
-                audioSampleRate: WorldMachineAudioRate.SampleRate
+                audioSampleRate: MachineAudioRate.SampleRate
             );
             slot.MachineEngine = engine.Id;
             slot.MachineContentPath = machine.ContentPath;
@@ -323,7 +324,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         try {
             created = engine.Create(
-                audioSampleRate: WorldMachineAudioRate.SampleRate,
+                audioSampleRate: MachineAudioRate.SampleRate,
                 contentBytes: content,
                 options: options,
                 savePath: null

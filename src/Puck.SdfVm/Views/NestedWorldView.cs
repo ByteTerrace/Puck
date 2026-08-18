@@ -60,78 +60,23 @@ public sealed class NestedWorldView : IViewContent, IDisposable {
     /// beyond whatever the host's own screen-surface glow accounting already does for a bound image.</remarks>
     public Vector3 RoomGlow => Vector3.Zero;
 
-    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) {
-        if (m_engine is not null) {
-            return;
-        }
-
-        m_kernels ??= SdfWorldKernels.Load(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_hostsOnDirectX));
-
-        // A composed frame source (the common case) already knows its own worst-case envelope; a bare source falls
-        // back to measuring its FIRST frame — safe only because a nested world with no probe discipline of its own
-        // must therefore never grow past its first frame's shape (documented risk, same as any non-composed
-        // ISdfFrameSource used directly against SdfWorldEngine).
-        var wordCapacity = ((m_frameSource is SdfCompositionFrameSource composed)
-            ? composed.WorstCaseProgramWordCapacity
-            : frame.Program.Words.Length
-        );
-        var instanceCapacity = ((m_frameSource is SdfCompositionFrameSource composedInstances)
-            ? composedInstances.WorstCaseInstanceCapacity
-            : frame.Program.Instances.Count
-        );
-        var dynamicCapacity = ((m_frameSource is SdfCompositionFrameSource composedTransforms)
-            ? composedTransforms.WorstCaseDynamicTransformCapacity
-            : frame.DynamicTransforms.Count
-        );
-
-        // GPU performance counters: same live arming as SdfEngineNode.EnsureEngine / SdfCameraView.EnsureEngine —
-        // GpuTimingControl.Shared, gated on the backend having registered the timing seam.
-        // A known wart: the timing bundle is resolved eagerly at the composition root regardless of arming
-        // state, but this engine only picks it up when ViewTiming.Enabled is true at this EnsureEngine call
-        // (once per engine lifetime) — a view whose engine builds with timing off never gains it until a
-        // device-lost rebuild re-runs EnsureEngine.
-        var timingFactory = (ViewTiming.Enabled
-            ? m_services.TimingFactory
-            : null
-        );
-        var timingRecorder = (ViewTiming.Enabled
-            ? m_services.TimingRecorder
-            : null
-        );
-
-        m_engine = new SdfWorldEngine(
+    // A nested-world filming view has no probe discipline of its own beyond SdfFilmingViewEngine's composed-vs-bare
+    // capacity fallback — it must never grow past its first frame's shape when its frame source is not a composition
+    // (documented risk, same as any non-composed ISdfFrameSource used directly against SdfWorldEngine).
+    private void EnsureEngine(IGpuDeviceContext device, IGpuComputeServices gpu, SdfFrame frame) =>
+        SdfFilmingViewEngine.EnsureEngine(
             device: device,
+            engine: ref m_engine,
+            frame: frame,
+            frameSource: m_frameSource,
             gpu: gpu,
             height: m_height,
-            kernels: m_kernels.Value,
-            options: new SdfWorldEngineOptions(
-                // A nested-world filming view never bakes carves (RequestBrickBake is never called on it), so the default
-                // 64 MB brick pool would be dead allocation — ~4 GB at the 64-view cap. Capacity 0 gives a 1-float
-                // filler; a nested SampledRegion renders via the shader's conservative uncarved-hull fallback.
-                BrickPoolVoxelCapacity: 0,
-                DynamicTransformCapacity: dynamicCapacity,
-                InstanceCapacity: instanceCapacity,
-                Program: frame.Program,
-                ProgramWordCapacity: wordCapacity,
-                TimingFactory: timingFactory,
-                TimingRecorder: timingRecorder,
-                ViewportCapacity: ((uint)Math.Max(
-                    val1: 1,
-                    val2: frame.Views.Count
-                ))
-            ),
+            hostsOnDirectX: m_hostsOnDirectX,
+            kernels: ref m_kernels,
+            services: m_services,
+            viewLabel: "nested-world view",
             width: m_width
         );
-
-        if (
-            (timingFactory is not null) &&
-            (timingRecorder is not null)
-        ) {
-            Console.Error.WriteLine(value: (m_engine.TimingEnabled
-                ? $"[view-timing] nested-world view enabled | period {m_engine.TimingCapabilities.PeriodNanoseconds:0.###}ns"
-                : "[view-timing] nested-world view — the device reports no usable GPU timestamps; running untimed."));
-        }
-    }
 
     /// <inheritdoc/>
     public void Dispose() {

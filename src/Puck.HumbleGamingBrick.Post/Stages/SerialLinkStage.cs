@@ -16,7 +16,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// snapshots on both machines — the replay-identical proof that the link (and its pair-stepping interleave) adds no
 /// nondeterminism to this generation pairing.
 /// </summary>
-internal sealed class SerialLinkStage : IPostStage {
+internal sealed class SerialLinkStage : IPostStage<PostContext> {
     private const int Frames = 8;
     private const byte MasterSendBase = 0x10;
     private const ushort SerialControlAddress = 0xFF02;

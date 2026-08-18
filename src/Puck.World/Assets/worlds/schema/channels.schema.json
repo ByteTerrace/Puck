@@ -1,6 +1,8 @@
 {
-  "description": "The world\u0027s channel table (see WorldChannel) \u2014 the intent vector\u0027s declared vocabulary every binding destination, player.press, kit Actions entry, and the addon wire resolve channel names against.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One row of the world\u0027s channel table \u2014 the intent vector\u0027s declared vocabulary (see PlayerIntent). The consumer is exactly one of Role (an engine motion channel, claimable by at most one channel) or Composition (a kit composition trigger, bound \u2014 or left inert \u2014 per kit via Actions).",
     "type": [
@@ -29,6 +31,9 @@
           "MoveUp",
           "Pitch",
           "Roll",
+          "FaceX",
+          "FaceY",
+          "FaceZ",
           null
         ],
         "default": null
@@ -45,6 +50,15 @@
           "null"
         ],
         "default": null
+      },
+      "frame": {
+        "description": "What the MoveForward/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.",
+        "enum": [
+          "World",
+          "Camera",
+          "Heading"
+        ],
+        "default": "World"
       }
     },
     "required": [
@@ -52,5 +66,6 @@
       "shape"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

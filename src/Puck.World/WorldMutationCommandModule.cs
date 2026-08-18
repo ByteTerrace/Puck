@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Puck.Commands;
 using Puck.Launcher;
-using Puck.World.Audio;
+using Puck.Audio.Mixing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using static Puck.World.WorldCommandDefinition;
@@ -110,12 +110,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 if (
                     (local < 1) ||
-                    (local > WorldPopulation.LocalSeatCount)
+                    (local > WorldPopulationLimits.LocalSeatCount)
                 ) {
-                    return CommandResult.Error(output: $"[world.population.defaults: local must be 1..{WorldPopulation.LocalSeatCount}]");
+                    return CommandResult.Error(output: $"[world.population.defaults: local must be 1..{WorldPopulationLimits.LocalSeatCount}]");
                 }
 
-                var seatActivation = new SeatActivationPolicy[WorldPopulation.LocalSeatCount];
+                var seatActivation = new SeatActivationPolicy[WorldPopulationLimits.LocalSeatCount];
 
                 for (var slot = 0; (slot < seatActivation.Length); slot++) {
                     seatActivation[slot] = ((slot < local)
@@ -128,7 +128,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // spawn policy (world.population.spawn owns it) — this verb only sets the local/network census figures.
                 return Submit(mutation: new WorldMutation.SetPopulationDefaults(
                     Principal: context.ActingPrincipal(),
-                    Population: (server.Definition.Population with { SeatActivation = seatActivation, NetworkPlayers = network })
+                    Population: (server.Definition.Population with { SeatActivationRaw = seatActivation, NetworkPlayers = network })
                 ));
             }
         );
@@ -484,10 +484,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     b: WorldAudioDefaults.CurveLinear,
                     comparisonType: StringComparison.Ordinal
                 )
-                    ? WorldAudioAttenuationCurve.Linear
-                    : WorldAudioAttenuationCurve.Smoothstep
+                    ? AudioAttenuationCurve.Linear
+                    : AudioAttenuationCurve.Smoothstep
                 );
-                var halfRadiusGain = (((double)WorldAudioMixer.HalfRadiusAttenuationQ16(curve: audioCurve)) / 65536.0);
+                var halfRadiusGain = (((double)AudioMixer.HalfRadiusAttenuationQ16(curve: audioCurve)) / 65536.0);
 
                 var water = ((definition.Water is { } medium)
                     ? medium.Level.ToString(

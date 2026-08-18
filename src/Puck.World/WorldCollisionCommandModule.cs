@@ -188,7 +188,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 var submissions = link;
                 var authorityIndex = index;
 
-                if (index <= WorldPopulation.LocalSeatCount) {
+                if (index <= WorldPopulationLimits.LocalSeatCount) {
                     var route = seatRouter.Route(slot: (index - 1));
 
                     submissions = route.Endpoint.Submissions;

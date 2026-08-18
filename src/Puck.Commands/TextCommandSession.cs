@@ -24,17 +24,30 @@ public sealed class TextCommandSession : ITextCommandSink {
         CommandPrincipal principal,
         int slot,
         CommandInjectionSink? simulationSink,
-        Action<string, CommandResult>? onResult
+        Action<string, CommandResult>? onResult,
+        Func<bool>? hold = null,
+        Func<IDisposable>? scope = null
     ) {
         m_onResult = onResult;
         m_source = source;
+        Hold = hold;
         Principal = principal;
+        Scope = scope;
         SimulationSink = simulationSink;
         Slot = slot;
     }
 
     internal TextSubmissionBarrier Barrier => m_barrier;
     internal bool HasPendingSimulationSubmission => m_barrier.HasPending;
+    // This session's own hold predicate, or null for a session nothing suspends on its own (the ordinary case; the
+    // source-wide HoldGate governs the desktop instead). While it returns true, Collect rotates this session to the
+    // tail exactly like a read-after-write-blocked one, leaving every other session's drain unaffected.
+    internal Func<bool>? Hold { get; }
+    // Entered around this session's own dispatch of an Immediate line (Collect's synchronous call into the
+    // registry) and disposed once the result is computed — a provider-neutral seam a host uses to make an ambient
+    // label (which row a hosted session belongs to) available to whatever the handler calls synchronously, without
+    // this project knowing what the label is for. Null for a session nothing ambient-labels (the ordinary case).
+    internal Func<IDisposable>? Scope { get; }
     internal CommandInjectionSink? SimulationSink { get; }
 
     /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>

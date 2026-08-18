@@ -66,10 +66,10 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
 
             stepTick = WorldServerStepShell.Step(
                 context: in bootContext,
+                publishTick: m_waitGate.PublishTick,
                 server: m_server,
                 tape: m_replayTape,
-                tcpHost: m_tcpHost,
-                waitGate: m_waitGate
+                tcpHost: m_tcpHost
             );
             m_instances.ScanBootBoundaryTriggers();
             // Frozen — not merely unchanged — while boot did not step; see WorldSimulation.Step's identical remark.
@@ -90,7 +90,7 @@ internal sealed class HeadlessWorldSimulation(WorldServer server, WorldReplayTap
         // Every world instance running beside the boot one (world.instance.start) advances on its OWN authored
         // schedule — folded into the SAME fixed-step call rather than a second pump (see WorldInstanceHost's own
         // remarks). masterDeltaTicks is the host's own per-call engine-time advance, never a second clock.
-        m_instances.StepInstancesBesideBoot(masterDeltaTicks: context.StepTicks);
+        m_instances.StepInstances(masterDeltaTicks: context.StepTicks);
         m_instances.FinishSeatIntents();
     }
 }

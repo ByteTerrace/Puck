@@ -49,12 +49,12 @@ public sealed class EngageAuthorityLawTests {
 
         Laws.RefusalWithControl(
             lawId: "engagement.control-authority-required",
-            deniedOutcome: () => EngageAndObserve(fixture: fixture, actor: actor, target: target),
+            deniedOutcome: () => EngageAndObserve(actor: actor, fixture: fixture, target: target),
             controlOutcome: () => {
                 // The missing grant restored — narrowly, over the target screen only, never the wildcard.
                 fixture.Server.Grant(grant: controlOverTarget, actor: WorldPrincipal.Console);
 
-                return EngageAndObserve(fixture: fixture, actor: actor, target: target);
+                return EngageAndObserve(actor: actor, fixture: fixture, target: target);
             });
     }
 

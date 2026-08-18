@@ -13,7 +13,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// replay-identical proof that the link (and its furthest-behind interleave) adds no nondeterminism. Self-contained:
 /// the protocol polls IF rather than taking interrupts, so it runs on the zeroed stub BIOS, anywhere.
 /// </remarks>
-internal sealed class LinkReplayStage : IPostStage {
+internal sealed class LinkReplayStage : IPostStage<PostContext> {
     private const int Frames = 4;
     private const uint ExpectedParentControl = 0x6003u; // multiplayer | 115200 bps | IRQ-enable, start clear, id 0
     private const uint ExpectedChildControl = 0x6013u;  // as the parent, with daisy-chain id 1 in bits 4-5

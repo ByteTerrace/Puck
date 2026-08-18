@@ -84,7 +84,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             WriteMask: DocumentWriteMask.Empty.With(kind: WorldDocumentWriteKind.Set)
         );
         var candidate = (document with {
-            Grants = [.. WithoutGrantRow(
+            GrantsRaw = [.. WithoutGrantRow(
                 grants: document.Grants,
                 principal: principal,
                 subject: subject
@@ -139,7 +139,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             subject: subject
         );
         var removed = (without.Count != document.Grants.Count);
-        var candidate = (document with { Grants = without });
+        var candidate = (document with { GrantsRaw = without });
 
         // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
         if (!WorldDefinitionValidator.TryValidate(
@@ -224,7 +224,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             ));
         }
 
-        var candidate = (document with { State = state });
+        var candidate = document.WithWorldState(rows: state);
 
         // No neighbour resolver: an owned identity's own document edit (a state/grant row), not a document load.
         if (!WorldDefinitionValidator.TryValidate(

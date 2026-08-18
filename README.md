@@ -111,7 +111,7 @@ rules and generates the layering block from each project's own declaration.
 | Rendering | `Puck.SdfVm` · `Puck.Shaders` · `Puck.Vulkan(.Presentation)` · `Puck.DirectX(.Presentation)` · `Puck.Overlays` · `Puck.Text` | the SDF virtual machine and world renderer, shader loading, the two backends and their presentation wrappers, overlays, and the MSDF/OpenType text pipeline |
 | Substrate | `Puck.Abstractions` · `Puck.Hosting` · `Puck.Launcher` · `Puck.Commands` · `Puck.Input` · `Puck.Platform` · `Puck.Networking` · `Puck.Attestation` · `Puck.Storage` · `Puck.Assets` · `Puck.Recording` | contracts, hosting and clocks, the host loop, commands and input, the OS layer, the dialect-agnostic wire, signed attestations, cloud storage, asset bytes and codecs, capture and muxing |
 | Emulators | `Puck.HumbleGamingBrick` · `Puck.AdvancedGamingBrick` · `Puck.GamingBricks` · the two `.Post` batteries | the GB/GBC and GBA cores, their shared instance/fork/snapshot scaffold, and the conformance and determinism batteries that gate them |
-| Tooling | `Puck.Cli` · `Puck.Analyzers` · `Puck.SdfVm.Bench` | the `puck` verbs, the verified-code and architecture analyzers, the renderer's ceiling harness |
+| Tooling | `Puck.Cli` · `Puck.Analyzers` | the `puck` verbs, the verified-code and architecture analyzers |
 
 `experimental/` holds quarantined trees (`Puck.Demo`, `Puck.Post`, `Puck.BareMetal`,
 the old `tools/` and `scripts/`): read as prior art, never built, run, or revived
@@ -120,7 +120,7 @@ in place — see [experimental/README.md](experimental/README.md).
 ## 📦 Packages
 
 Blessed libraries pack as `ByteTerrace.Puck.*` and ship in lockstep at one shared
-prerelease version (`build/Packaging.targets`): `Abstractions`, `AdvancedGamingBrick`,
+prerelease version (`build/Packaging.targets`): `Abstractions`, `AdvancedGamingBrick`, `Audio`,
 `Assets`, `Attestation`, `Commands`, `DirectX`, `GamingBricks`, `Hosting`,
 `HumbleGamingBrick`, `Maths`, `Physics`, `Recording`, `Scripting`, `Shaders`,
 `SignedDistance`, `Text`, `Vulkan`. Assemblies and namespaces stay `Puck.*`; each

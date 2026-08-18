@@ -1,165 +1,99 @@
 {
   "schema": "puck.creation.v1",
   "name": "town-planter",
-  "intent": "Object",
-  "bakeStyle": "classic",
   "palette": [
     {
-      "albedo": {
-        "x": 0.38,
-        "y": 0.26,
-        "z": 0.17
-      },
+      "color": "#61422B",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.26,
-        "y": 0.44,
-        "z": 0.22
-      },
+      "color": "#427038",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.641796,
-        "y": 0.85,
-        "z": 0.35
-      },
+      "color": "#A4D959",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.85,
-        "y": 0.35,
-        "z": 0.7876941
-      },
+      "color": "#D959C9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.85,
-        "z": 0.7664081
-      },
+      "color": "#59D9C3",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.85,
-        "y": 0.62050974,
-        "z": 0.35
-      },
+      "color": "#D99E59",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.4746121,
-        "y": 0.35,
-        "z": 0.85
-      },
+      "color": "#7959D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.37128553,
-        "y": 0.85,
-        "z": 0.35
-      },
+      "color": "#5FD959",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.85,
-        "y": 0.35,
-        "z": 0.5171839
-      },
+      "color": "#D95984",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.66308224,
-        "z": 0.85
-      },
+      "color": "#59A9D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.8089806,
-        "y": 0.85,
-        "z": 0.35
-      },
+      "color": "#CED959",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.74512255,
-        "y": 0.35,
-        "z": 0.85
-      },
+      "color": "#BE59D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.85,
-        "z": 0.5992242
-      },
+      "color": "#59D999",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.85,
-        "y": 0.45332584,
-        "z": 0.35
-      },
+      "color": "#D97459",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.39257106,
-        "z": 0.85
-      },
+      "color": "#5964D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.53847086,
-        "y": 0.85,
-        "z": 0.35
-      },
+      "color": "#89D959",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
@@ -170,23 +104,9 @@
       "id": 0,
       "name": "box",
       "type": "Box",
-      "position": {
-        "x": 0,
-        "y": 0.6,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.5,
-        "y": 0.25,
-        "z": 0.5
-      },
+      "position": [0, 0.6, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.5, 0.25, 0.5],
       "material": 0,
       "blend": "Union",
       "smooth": 0,
@@ -201,23 +121,9 @@
       "id": 1,
       "name": "bush",
       "type": "Sphere",
-      "position": {
-        "x": 0,
-        "y": 1.02,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.46,
-        "y": 0.4,
-        "z": 0.46
-      },
+      "position": [0, 1.02, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.46, 0.4, 0.46],
       "material": 1,
       "blend": "Union",
       "smooth": 0,

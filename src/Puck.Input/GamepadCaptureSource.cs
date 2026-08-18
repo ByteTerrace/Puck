@@ -21,7 +21,7 @@ public sealed class GamepadCaptureSource {
     // rather than the bit silently never reaching GamepadState.
     private static readonly (GamepadButtons Flag, string Source)[] ButtonSources = BuildButtonSources();
 
-    // Which analog controls each device last reported active, so the first return-to-rest emits an explicit zero
+    // Which analog and motion controls each device last reported active, so the first return-to-rest emits an explicit zero
     // without streaming redundant zeroes forever. The edge clears InputRouter's carried sample while ensuring a newly
     // connected, untouched pad does not reserve/join a player lane merely because its sticks are centered.
     // HeldButtons mirrors the presses this source has emitted and not yet released, so a device that leaves the
@@ -150,14 +150,50 @@ public sealed class GamepadCaptureSource {
                 );
             }
 
+            if (latch.Gyro) {
+                _ = EmitGyro(
+                    deviceId: deviceId,
+                    gyro: Vector3.Zero,
+                    tick: frameTick,
+                    wasActive: true
+                );
+            }
+
+            if (latch.MotionPose) {
+                _ = EmitMotionPose(
+                    deviceId: deviceId,
+                    latest: default,
+                    tick: frameTick,
+                    wasActive: true
+                );
+            }
+
             _ = m_analogLatches.Remove(key: deviceId);
         }
     }
-    // The accelerometer reads gravity at rest, so a device that has one streams continuously and drives the
-    // fused orientation on the same gate; absent devices report zero and emit nothing.
-    private void EmitAccelerometer(InputDeviceId deviceId, in GamepadState latest, ulong tick) {
+    // The accelerometer reads gravity at rest, so a device that has one streams continuously and drives the fused
+    // orientation on the same gate. The first missing sample explicitly clears both carried values; this matters to
+    // future tilt controls just as the gyro clear matters to current motion look.
+    private bool EmitMotionPose(InputDeviceId deviceId, in GamepadState latest, ulong tick, bool wasActive) {
         if (Vector3.Zero == latest.Accelerometer) {
-            return;
+            if (wasActive) {
+                m_router.Capture(signal: new InputSignal(
+                    CaptureTick: tick,
+                    DeviceId: deviceId,
+                    Phase: CommandPhase.Active,
+                    Source: InputSources.Gamepad.Accelerometer,
+                    Value: CommandValue.Axis(value: Vector3.Zero)
+                ));
+                m_router.Capture(signal: new InputSignal(
+                    CaptureTick: tick,
+                    DeviceId: deviceId,
+                    Phase: CommandPhase.Active,
+                    Source: InputSources.Gamepad.Orientation,
+                    Value: CommandValue.Inactive(kind: CommandValueKind.Orientation)
+                ));
+            }
+
+            return false;
         }
 
         m_router.Capture(signal: new InputSignal(
@@ -174,15 +210,33 @@ public sealed class GamepadCaptureSource {
             Source: InputSources.Gamepad.Orientation,
             Value: CommandValue.Orientation(value: latest.Orientation)
         ));
+
+        return true;
     }
-    private void EmitGyro(InputDeviceId deviceId, Vector3 gyro, ulong tick) {
-        m_router.Capture(signal: new InputSignal(
-            CaptureTick: tick,
-            DeviceId: deviceId,
-            Phase: CommandPhase.Active,
-            Source: InputSources.Gamepad.Gyro,
-            Value: CommandValue.Axis(value: gyro)
-        ));
+    private bool EmitGyro(InputDeviceId deviceId, Vector3 gyro, ulong tick, bool wasActive) {
+        if (gyro != Vector3.Zero) {
+            m_router.Capture(signal: new InputSignal(
+                CaptureTick: tick,
+                DeviceId: deviceId,
+                Phase: CommandPhase.Active,
+                Source: InputSources.Gamepad.Gyro,
+                Value: CommandValue.Axis(value: gyro)
+            ));
+
+            return true;
+        }
+
+        if (wasActive) {
+            m_router.Capture(signal: new InputSignal(
+                CaptureTick: tick,
+                DeviceId: deviceId,
+                Phase: CommandPhase.Active,
+                Source: InputSources.Gamepad.Gyro,
+                Value: CommandValue.Axis(value: Vector3.Zero)
+            ));
+        }
+
+        return false;
     }
     private void EmitSignals(in GamepadDrain drain, ulong frameTick) {
         var deviceId = drain.DeviceId;
@@ -268,22 +322,20 @@ public sealed class GamepadCaptureSource {
             value: latest.RightTrigger,
             wasActive: analogLatch.RightTrigger
         );
-        analogLatch.HeldButtons = (analogLatch.HeldButtons | drain.Pressed) & ~drain.Released;
-        m_analogLatches[deviceId] = analogLatch;
-
-        if (Vector3.Zero != drain.Gyro) {
-            EmitGyro(
-                deviceId: deviceId,
-                gyro: drain.Gyro,
-                tick: latestTick
-            );
-        }
-
-        EmitAccelerometer(
+        analogLatch.Gyro = EmitGyro(
+            deviceId: deviceId,
+            gyro: drain.Gyro,
+            tick: latestTick,
+            wasActive: analogLatch.Gyro
+        );
+        analogLatch.MotionPose = EmitMotionPose(
             deviceId: deviceId,
             latest: in latest,
-            tick: latestTick
+            tick: latestTick,
+            wasActive: analogLatch.MotionPose
         );
+        analogLatch.HeldButtons = (analogLatch.HeldButtons | drain.Pressed) & ~drain.Released;
+        m_analogLatches[deviceId] = analogLatch;
     }
     private bool EmitStick(InputDeviceId deviceId, string source, ulong tick, Vector2 value, bool wasActive) {
         if (value != Vector2.Zero) {
@@ -396,6 +448,8 @@ public sealed class GamepadCaptureSource {
         public bool RightTrigger;
         public bool Touch0;
         public bool Touch1;
+        public bool Gyro;
+        public bool MotionPose;
         public GamepadButtons HeldButtons;
     }
 

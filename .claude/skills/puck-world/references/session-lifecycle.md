@@ -191,7 +191,7 @@ the grace window (not merely the leave itself) is what the rules above ride.
   byte-for-byte identically on `combat.world.json`'s own `player.join` under
   the same recipe — no scenario document has a lever over it).
   `WorldSeatBindings`'s recompose now SKIPS a page (or a mixed page's
-  offending entries only — the play group's base page keeps its movement
+  offending entries only — the default group's base page keeps its movement
   rows and loses just `editor.enter`) whose commands are not in the
   registered vocabulary, keyed on `WorldAffordances.IsCommandRegistered`
   (a registration FACT, never a headless boolean) and narrated ONCE per

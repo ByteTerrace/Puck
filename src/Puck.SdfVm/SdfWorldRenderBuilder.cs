@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -45,7 +46,7 @@ public static class SdfWorldRenderBuilder {
     /// <summary>The kernel bytecode extension for a resolved host backend — the counterpart of the per-child
     /// <c>directX</c> flag (the GamingBrick child node), kept beside it so the two can never drift.</summary>
     /// <param name="hostsOnDirectX">Whether the resolved host backend is Direct3D 12.</param>
-    public static string BytecodeExtension(bool hostsOnDirectX) => (hostsOnDirectX ? ".dxil" : ".spv");
+    public static string BytecodeExtension(bool hostsOnDirectX) => ShaderBytecode.FileExtension(hostsOnDirectX: hostsOnDirectX);
     /// <summary>Assembles the SDF world render host a spec describes.</summary>
     /// <param name="services">The concrete GPU-services closure (<see cref="SdfViewGpuServices"/>) forwarded
     /// unchanged into the built <see cref="SdfEngineNode"/> — resolved once at the composition root; this factory

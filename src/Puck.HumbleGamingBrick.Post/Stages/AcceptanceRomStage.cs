@@ -6,7 +6,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// serial, OAM-DMA), so this is where sub-instruction timing accuracy is held to an external oracle. The group skips
 /// when the corpus is absent; a failure lists exactly which ROMs failed or produced no signature.
 /// </summary>
-internal sealed class AcceptanceRomStage : IPostStage {
+internal sealed class AcceptanceRomStage : IPostStage<PostContext> {
     private readonly string m_group;
     private readonly string m_relativeDirectory;
     private readonly bool m_recurse;

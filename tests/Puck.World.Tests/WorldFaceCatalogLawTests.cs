@@ -45,16 +45,16 @@ public sealed class WorldFaceCatalogLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "door",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [shape],
             Frames: (animated ? [new FrameDocument(Name: "idle", Transforms: [new FrameTransformDocument(Id: 0, Position: ShapeOffset, Rotation: Quaternion.Identity, Scale: ShapeScale)])] : null),
             Behavior: new CreationBehaviorDocument(Locomotion: null, Faces: [new CreationFaceDocument(DefaultSource: null, Name: DoorFace, ShapeId: (faceNamesShape ? 0 : null))])
         );
-        var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "door");
+        // The literals above describe the geometry this suite wants in ENGINE terms; converting them to the author
+        // frame here (the inverse CreationFrame applies at the engine door) keeps every assertion below unchanged.
+        var canonical = CreationCanonicalizer.Canonicalize(document: CreationFrame.ToAuthor(document: document), source: "door");
 
-        return new WorldCreation(Id: "door", Document: canonical.Document, Hash: canonical.Hash);
+        return new WorldCreation(Id: "door", Document: canonical.Document, HashRaw: canonical.Hash);
     }
     private static WorldDefinition BuildDoorDocument(
         float yawDegrees = 0f,
@@ -80,8 +80,8 @@ public sealed class WorldFaceCatalogLawTests {
         );
 
         return Fixtures.BuildDocument() with {
-            Creations = [creation],
-            Placements = [placement],
+            CreationsRaw = [creation],
+            PlacementsRaw = [placement],
             References = [new WorldReference(Name: WorldSafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
             Destinations = [new WorldDestination(Name: WorldSafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
         };
@@ -211,7 +211,7 @@ public sealed class WorldFaceCatalogLawTests {
         var ceiling = WorldFacePortalPolicy.SpeedCeiling(definition: definition);
         // Clear of every other term the ceiling maximizes over (this fixture's terminal fall speed dominates its
         // walk speed), so the raise is what moves the answer rather than being masked by a larger sibling.
-        var faster = (definition with { Motion = (definition.Motion with { MoveSpeed = (((float)((double)ceiling)) * 4f) }) });
+        var faster = (definition with { MotionRaw = (definition.Motion with { MoveSpeed = (((float)((double)ceiling)) * 4f) }) });
 
         Assert.True(condition: (WorldFacePortalPolicy.SpeedCeiling(definition: faster) > ceiling));
         Assert.True(condition: (WorldFacePortalPolicy.CrossingFloor(definition: faster) > WorldFacePortalPolicy.CrossingFloor(definition: definition)));
@@ -317,9 +317,9 @@ public sealed class WorldFaceCatalogLawTests {
         }
 
         return Fixtures.BuildDocument() with {
-            Creations = [creation],
-            Placements = placements,
-            Authoring = (WorldAuthoringDefaults.Default with { DerivedFaceScreens = reservedSlots }),
+            CreationsRaw = [creation],
+            PlacementsRaw = placements,
+            AuthoringRaw = (WorldAuthoringDefaults.Default with { DerivedFaceScreens = reservedSlots }),
         };
     }
 
@@ -344,10 +344,10 @@ public sealed class WorldFaceCatalogLawTests {
 
         placements[0] = (placements[0] with { FaceSources = [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())] });
 
-        var catalog = WorldFaceCatalog.For(definition: (dark with { Placements = placements }));
+        var catalog = WorldFaceCatalog.For(definition: (dark with { PlacementsRaw = placements }));
 
         Assert.Equal(expected: 2, actual: catalog.ClaimingFaceCount);
-        Assert.True(condition: Validates(definition: (dark with { Placements = placements })));
+        Assert.True(condition: Validates(definition: (dark with { PlacementsRaw = placements })));
         Assert.Equal(expected: -1, actual: catalog.Rows[0].ScreenIndex);
         Assert.False(condition: catalog.Rows[0].SlotStarved);
     }

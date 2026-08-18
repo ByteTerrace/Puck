@@ -1,0 +1,139 @@
+[
+  {
+    "Id": "ntt.prime-and-primitive-root",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Modulus" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "PrimitiveRoot" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "MaximumLog2Length" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "NumberTheoreticTransform.Modulus and the declared odd factor 262111 of Modulus - 1, tested for primality",
+        "Against": "Oracles.ExactPrimality — trial division by the primes below 8192 then twenty independent strong-probable-prime rounds, sharing no code and no idea with PrimeField64.IsPrime's twelve-round witness set",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "PrimeField64.IsPrime agrees with the independent oracle on both Modulus and the declared factor 262111, and 262111 * 2^44 + 1 equals Modulus exactly (the claimed factorization is re-derived from the two numbers rather than merely asserted)",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "PrimitiveRoot's multiplicative order over Modulus, decided by BigInteger.ModPow at the group order and at the order divided by each of the two prime factors (2 and 262111) — the Pocklington-style certificate: a candidate generates the whole group of order c*2^k exactly when it is not one at either (c*2^k)/2 or (c*2^k)/262111",
+        "Against": "BigInteger.ModPow, the BCL's own modular exponentiation, sharing no code with PrimeField64.Pow's Montgomery-ring chain (ScaledResidueRing64)",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "ntt.round-trip-exact",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Inverse" },
+      { "Type": "Puck.Maths.NttPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.NttPlan", "Name": "Length" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Inverse(Forward(x)) == x EXACTLY, bit-for-bit, at lengths 1, 2, 4, 8, 16, 64, 256 and 1024 over Pcg32XshRr-seeded field elements. Every step is exact field arithmetic (no rounding, no saturation anywhere in PrimeField64), so agreement is a bit-exact identity rather than a measured bound — a fused-substrate leg does not apply because nothing here rounds.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a wrong NttPlan.Length getter breaks this case rather than passing it silently: NumberTheoreticTransform.Forward and Inverse both check the operand span's length against the plan's Length before running, so a Length that answered anything other than the length the plan was built for throws on every call this case makes, which Laws.Claim reports as a failure.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "ntt.linearity-exact",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Field" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Forward(a) + Forward(b) == Forward(a + b) pointwise EXACTLY, at lengths 1 through 1024, where the addition on both sides is PrimeField64's own field Add — the DFT over a field is linear by the definition of the sum, and nothing here rounds, so the identity holds bit-for-bit rather than within a bound (the fixed-point FFT's linearity sibling, fft.linearity-bound, is the one that needs a bound).",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "ntt.convolution-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "PointwiseMultiply" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "NumberTheoreticTransform.Convolve at lengths 1 through 1024 over Pcg32XshRr-seeded content, with the boundary values zero and Modulus - 1 forced onto the first one or two lanes",
+        "Against": "Oracles.CyclicConvolutionModulus — the O(N^2) definition-form sum in BigInteger, reduced once per output rather than diagonalized through a transform at all. The subject runs forward-forward-pointwise-inverse; the oracle never forwards, never inverts and never multiplies pointwise — the two share no algorithm, only the theorem that connects them.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the comparison is EXACT equality, not a bound: field arithmetic never rounds, so a correct convolution theorem implementation reproduces the O(N^2) sum bit-for-bit.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "ntt.length-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.NttPlan", "Name": "Create" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Forward" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Inverse" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "Convolve" },
+      { "Type": "Puck.Maths.NumberTheoreticTransform", "Name": "PointwiseMultiply" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "every documented refusal, asserted by exception TYPE and by the parameter name it reports: NttPlan.Create at zero, a negative length and a non-power-of-two length (3 and 6) — the largest power of two an int can name is 2^30, far below MaximumLog2Length, so no int length is ever refused for exceeding the prime's own two-adicity ceiling; Forward and Inverse given a span whose length does not equal the plan's; Convolve given a right or destination span of the wrong length; PointwiseMultiply given spans of unequal lengths.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

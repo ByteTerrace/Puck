@@ -20,7 +20,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// policy, and replaying each once for determinism.
 /// </para>
 /// </summary>
-internal sealed class PrinterStage : IPostStage {
+internal sealed class PrinterStage : IPostStage<PostContext> {
     private const ulong BudgetStep = 2_048;
     private const ulong OverflowBudgetStep = 2_048;
     private const int OverflowStepCount = 40_000;

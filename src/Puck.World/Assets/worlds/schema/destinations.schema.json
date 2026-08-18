@@ -1,5 +1,4 @@
 {
-  "description": "The destinations section (default null = names nothing) \u2014 scoped-selection rows layered over exactly one References row each (see WorldDestination), echoed by world.destinations. A WorldPlacementPortal facet\u0027s Destination resolves against this section, not References directly. No boot-time file-existence check; resolution is a consumer\u0027s job. Optional, for the same reason Rules is. boot-only like References/ Portals \u2014 no live mutation arm yet.",
   "type": [
     "array",
     "null"

@@ -1,5 +1,4 @@
 using Puck.GamingBricks;
-using Puck.Maths;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
@@ -160,26 +159,16 @@ internal static class HashDivergenceProbe {
     // Snapshot-hashes both machines and, on a mismatch, prints the full localization report. Returns false (and has
     // already printed the report) on divergence, so the caller can stop the lockstep immediately.
     private static bool TryCompare(AdvancedGamingBrickMachine machineA, AdvancedGamingBrickMachine machineB, int frame, int? scanline) {
-        var snapshotA = machineA.Snapshot();
-        var snapshotB = machineB.Snapshot();
-        var hashA = Fnv1aHash.Compute(values: snapshotA.Data);
-        var hashB = Fnv1aHash.Compute(values: snapshotB.Data);
-
-        if (hashA == hashB) {
-            return true;
-        }
-
         var where = ((scanline is not null)
             ? $"frame {frame} scanline {scanline}"
             : $"frame {frame}");
 
-        Console.WriteLine(value: $"== HASH DIVERGENCE at {where}: A=0x{hashA:X16}  B=0x{hashB:X16} ==");
-        PrintDivergenceReport(
-            a: snapshotA,
-            b: snapshotB
+        return HashDivergenceReport.TryCompare<AgbMachineSnapshot, AgbMachineIdentity, long>(
+            snapshotA: machineA.Snapshot(),
+            snapshotB: machineB.Snapshot(),
+            where: where,
+            describeDivergence: DescribeDivergence
         );
-
-        return false;
     }
 
     /// <summary>
@@ -189,35 +178,12 @@ internal static class HashDivergenceProbe {
     /// </summary>
     /// <param name="a">The first snapshot.</param>
     /// <param name="b">The second snapshot.</param>
-    public static void PrintDivergenceReport(AgbMachineSnapshot a, AgbMachineSnapshot b) {
-        Console.WriteLine(value: $"  {DescribeDivergence(
+    public static void PrintDivergenceReport(AgbMachineSnapshot a, AgbMachineSnapshot b) =>
+        HashDivergenceReport.PrintDivergenceReport<AgbMachineSnapshot, AgbMachineIdentity, long>(
             a: a,
-            b: b
-        )}");
-
-        var diff = SnapshotDivergence.FindFirstDifference(
-            a: a.Data,
-            b: b.Data,
-            sections: a.Sections
+            b: b,
+            describeDivergence: DescribeDivergence
         );
-
-        if (diff is null) {
-            return;
-        }
-
-        var (_, _, absoluteOffset) = diff.Value;
-
-        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(
-            label: "A",
-            data: a.Data,
-            offset: absoluteOffset
-        ));
-        Console.WriteLine(value: SnapshotDivergence.FormatHexWindow(
-            label: "B",
-            data: b.Data,
-            offset: absoluteOffset
-        ));
-    }
     /// <summary>
     /// Describes the first byte-level difference between two snapshots as a one-line, component-localized detail —
     /// "component 'bus' (EWRAM), byte offset 32768 within component (absolute 32768)" rather than a bare "mismatch".

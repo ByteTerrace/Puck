@@ -26,18 +26,18 @@ public sealed class MarketSelfRaiseBidLawTests {
         using var fixture = Fixtures.FreshServer(definition: document);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller, Seller: Seller, ItemRow: MarketFixtures.AppleRow, Quantity: 1, CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English, StartPrice: 50, BuyoutPrice: null, DurationSeconds: MarketFixtures.MaxDurationSeconds
+            BuyoutPrice: null, CurrencyRow: MarketFixtures.GoldRow, DurationSeconds: MarketFixtures.MaxDurationSeconds, Format: WorldMarketFormat.English, ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller, Quantity: 1, Seller: Seller, StartPrice: 50
         ));
         fixture.Step();
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Bidder, Bidder: Bidder, ListingId: 1, Amount: 100));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 100, Bidder: Bidder, ListingId: 1, Principal: Bidder));
         fixture.Step();
 
         Assert.Equal(expected: 15L, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: Bidder));
 
         // The self-raise: pre-fix, this required the bidder to hold the FULL 110 liquid and refused at 15.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Bidder, Bidder: Bidder, ListingId: 1, Amount: 110));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 110, Bidder: Bidder, ListingId: 1, Principal: Bidder));
         fixture.Step();
 
         var listing = MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1)!;
@@ -49,7 +49,7 @@ public sealed class MarketSelfRaiseBidLawTests {
         // Control: a genuine outbid from a DIFFERENT party still refunds the self-raised bidder in FULL (their
         // whole 110 escrow, not just the delta) — proving the netting is scoped to a true self-raise, never leaking
         // into the ordinary cross-bidder refund path.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: ThirdParty, Bidder: ThirdParty, ListingId: 1, Amount: 200));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 200, Bidder: ThirdParty, ListingId: 1, Principal: ThirdParty));
         fixture.Step();
 
         Assert.Equal(expected: 115L, actual: MarketFixtures.CellValueOf(definition: fixture.Server.Definition, row: MarketFixtures.GoldRow, principal: Bidder));
@@ -63,17 +63,17 @@ public sealed class MarketSelfRaiseBidLawTests {
         var baseDocument = MarketFixtures.BuildDocument();
         var goldRow = baseDocument.State.First(predicate: row => (row.Name == MarketFixtures.GoldRow));
         var advancingCells = goldRow.Cells!.Select(selector: cell => (string.Equals(a: cell.Key.Value, b: "1", comparisonType: StringComparison.Ordinal)
-            ? (cell with { Value = 1000, Advance = new WorldStateAdvance(RateNumerator: 1, RateDenominator: 1, EpochTick: 0) })
+            ? (cell with { Value = 1000, Advance = new WorldStateAdvance(EpochTick: 0, RateDenominator: 1, RateNumerator: 1) })
             : cell)).ToList();
         var advancingGoldRow = (goldRow with { Cells = advancingCells });
         var otherRows = baseDocument.State.Where(predicate: row => (row.Name != MarketFixtures.GoldRow)).ToList();
-        var document = (baseDocument with { State = [advancingGoldRow, .. otherRows] });
+        var document = baseDocument.WithWorldState(rows: [advancingGoldRow, .. otherRows]);
 
         using var fixture = Fixtures.FreshServer(definition: document);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            Principal: Seller, Seller: Seller, ItemRow: MarketFixtures.AppleRow, Quantity: 1, CurrencyRow: MarketFixtures.GoldRow,
-            Format: WorldMarketFormat.English, StartPrice: 100, BuyoutPrice: null, DurationSeconds: MarketFixtures.MaxDurationSeconds
+            BuyoutPrice: null, CurrencyRow: MarketFixtures.GoldRow, DurationSeconds: MarketFixtures.MaxDurationSeconds, Format: WorldMarketFormat.English, ItemRow: MarketFixtures.AppleRow,
+            Principal: Seller, Quantity: 1, Seller: Seller, StartPrice: 100
         ));
         fixture.Step(); // tick 0
 
@@ -84,7 +84,7 @@ public sealed class MarketSelfRaiseBidLawTests {
         }
 
         // Bid1 applies at tick 50: reads 1000 + 50 = 1050, escrows 300, installs base 750 (rebased to epoch 50).
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Bidder, Bidder: Bidder, ListingId: 1, Amount: 300));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 300, Bidder: Bidder, ListingId: 1, Principal: Bidder));
         fixture.Step(); // tick 50
 
         for (var index = 0; (index < 39); index++) {
@@ -95,16 +95,16 @@ public sealed class MarketSelfRaiseBidLawTests {
         // 150, installing base 640 (rebased to epoch 90). The bug instead re-reads the just-written cell through its
         // STALE epoch-50 advance, re-applying the same 40-tick span, landing at 680 — a free 40 gold conjured by a
         // bidder raising their own bid.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Principal: Bidder, Bidder: Bidder, ListingId: 1, Amount: 450));
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 450, Bidder: Bidder, ListingId: 1, Principal: Bidder));
         fixture.Step(); // tick 90
 
         Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, rowName: MarketFixtures.GoldRow.Value, key: "1", tick: 90UL, row: out _, rawValue: out var atTick90, text: out _));
-        Assert.Equal(expected: 640L, actual: atTick90);
+        Assert.Equal(actual: atTick90, expected: 640L);
 
         // One further tick's worth of accrual applies correctly on top of the rebased base — rules out "the fix
         // just clamped the value" rather than genuinely rebasing the epoch to 90.
         Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, rowName: MarketFixtures.GoldRow.Value, key: "1", tick: 91UL, row: out _, rawValue: out var oneTickLater, text: out _));
-        Assert.Equal(expected: 641L, actual: oneTickLater);
+        Assert.Equal(actual: oneTickLater, expected: 641L);
     }
     [Fact]
     public void AMaximumStandingBid_HasNoWrappedSuccessor() {
@@ -135,7 +135,7 @@ public sealed class MarketSelfRaiseBidLawTests {
         // Before the guard, CurrentBid + 1 wrapped to long.MinValue. This bid of one then replaced the standing
         // maximum and refunded its escrow, violating the English auction's monotonicity.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(
-            Principal: ThirdParty, Bidder: ThirdParty, ListingId: 1, Amount: 1
+            Amount: 1, Bidder: ThirdParty, ListingId: 1, Principal: ThirdParty
         ));
         fixture.Step();
 
@@ -163,6 +163,6 @@ public sealed class MarketSelfRaiseBidLawTests {
             MaxDurationSeconds: MarketFixtures.MaxDurationSeconds
         );
 
-        return (Fixtures.BuildDocument() with { State = [gold, apple], Market = market });
+        return (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with { Market = market });
     }
 }

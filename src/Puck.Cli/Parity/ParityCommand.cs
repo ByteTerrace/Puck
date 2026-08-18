@@ -6,7 +6,7 @@ using Puck.Assets;
 namespace Puck.Cli.Parity;
 
 /// <summary><c>puck parity</c> — the narrow cross-backend composed-frame check. For every corpus entry — the
-/// authored pattern worlds under <c>docs/verification/parity/</c> plus the shipped default world — it boots the
+/// authored pattern worlds under <c>tests/Puck.Parity/</c> plus the shipped default world — it boots the
 /// real <c>Puck.World</c> windowed once per graphics backend, arms <c>world.screenshot</c> at the same fenced
 /// simulation moment in each run, and compares the backend pair under <see cref="ParityEnvelope"/>. Two different
 /// patterns rendered by the same backend must FAIL the same envelope, so a comparator that cannot refuse cannot
@@ -19,10 +19,11 @@ internal static class ParityCommand {
     // slice that moved instead of "the game looked different". The shipped default world rides along as the one
     // integration entry (null path = no --world override).
     private static readonly (string Name, string? WorldPath)[] Corpus = [
-        ("gradient", "docs/verification/parity/parity-gradient.world.json"),
-        ("edges", "docs/verification/parity/parity-edges.world.json"),
-        ("modifiers", "docs/verification/parity/parity-modifiers.world.json"),
-        ("glyphs", "docs/verification/parity/parity-glyphs.world.json"),
+        ("gradient", "tests/Puck.Parity/parity-gradient.world.json"),
+        ("edges", "tests/Puck.Parity/parity-edges.world.json"),
+        ("modifiers", "tests/Puck.Parity/parity-modifiers.world.json"),
+        ("glyphs", "tests/Puck.Parity/parity-glyphs.world.json"),
+        ("film-grain", "tests/Puck.Parity/parity-film-grain.world.json"),
         ("shipped", null),
     ];
 
@@ -30,18 +31,21 @@ internal static class ParityCommand {
         if ((Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
             return Usage();
         }
+        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
+            return 2;
+        }
+        if ((args.Length != 0) && (args[0] == "--generate")) {
+            return RunGenerate(args: args[1..], repositoryRoot: repositoryRoot);
+        }
         if (!TryParse(args: args, error: out var parseError, extraWorldPath: out var extraWorldPath)) {
             Console.Error.WriteLine(value: $"ERROR: {parseError}");
 
             return 2;
         }
-        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
-            return 2;
-        }
 
         var suiteClock = Stopwatch.StartNew();
 
-        SweepScratch();
+        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
 
         var runDirectory = CreateRunDirectory();
 
@@ -125,6 +129,48 @@ internal static class ParityCommand {
         return 0;
     }
 
+    private static int RunGenerate(string[] args, string repositoryRoot) {
+        if (!TryParseHashes(args: args, error: out var parseError, hashes: out var hashes)) {
+            Console.Error.WriteLine(value: $"ERROR: {parseError}");
+
+            return 2;
+        }
+
+        foreach (var path in ParityCorpusGenerator.Generate(hashes: hashes, repositoryRoot: repositoryRoot)) {
+            Console.WriteLine(value: $"parity: wrote {path}");
+        }
+
+        return 0;
+    }
+    private static bool TryParseHashes(string[] args, out IReadOnlyDictionary<string, string> hashes, out string error) {
+        var parsed = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        hashes = parsed;
+        error = string.Empty;
+
+        if (args.Length == 0) {
+            return true;
+        }
+        if ((args.Length != 2) || (args[0] != "--hashes")) {
+            error = "the only accepted form is: parity --generate [--hashes id=hex64,...]";
+
+            return false;
+        }
+
+        foreach (var pair in args[1].Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ',')) {
+            var equals = pair.IndexOf(value: '=');
+
+            if (equals <= 0) {
+                error = $"--hashes entry '{pair}' is not of the form id=hex64.";
+
+                return false;
+            }
+
+            parsed[pair[..equals]] = pair[(equals + 1)..];
+        }
+
+        return true;
+    }
     private static string Describe(ParityVerdict verdict) =>
         $"mean {verdict.MeanDelta.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} LSB, diff {(verdict.DiffFraction * 100.0).ToString(format: "0.##", provider: CultureInfo.InvariantCulture)}%, max {verdict.MaxDelta}";
     private static string FrameName(string entry, string backend) => $"{entry}-{backend}.png";
@@ -301,23 +347,6 @@ internal static class ParityCommand {
 
         throw new IOException(message: "Could not create a fresh random parity run directory after 8 attempts.");
     }
-    private static void SweepScratch() {
-        var threshold = DateTime.UtcNow.AddHours(value: -6);
-
-        try {
-            foreach (var directory in Directory.EnumerateDirectories(path: Path.GetTempPath(), searchPattern: $"{ScratchPrefix}*", searchOption: SearchOption.TopDirectoryOnly)) {
-                try {
-                    if (Directory.GetCreationTimeUtc(path: directory) < threshold) {
-                        Directory.Delete(path: directory, recursive: true);
-                    }
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    // A best-effort age-bounded sweep never makes this run fail or touches a fresh sibling run.
-                }
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // Enumerating temp is best-effort for the same reason as deleting an old entry.
-        }
-    }
     private static TimeSpan RemainingBudget(Stopwatch clock) {
         var remaining = (SuiteBudget - clock.Elapsed);
 
@@ -328,11 +357,14 @@ internal static class ParityCommand {
             value:
                 """
                 parity [--world <path.world.json>]
+                parity --generate [--hashes id=hex64,...]
 
                   no arguments           run the authored pattern corpus plus the shipped default world
                   --world <path>         additionally run the named world document as a corpus entry
+                  --generate             regenerate tests/Puck.Parity/*.world.json from their pattern definitions
+                  --hashes id=hex64,...  pin a regenerated creation's canonical hash (see tests/Puck.Parity/README.md)
 
-                For every corpus entry — the targeted pattern worlds under docs/verification/parity/
+                For every corpus entry — the targeted pattern worlds under tests/Puck.Parity/
                 (gradient, edges, modifiers) and the shipped default world — this boots the real
                 Puck.World windowed twice, once per backend, screenshots the same fenced simulation
                 moment in each run, and compares the backend pair under the relaxed parity envelope

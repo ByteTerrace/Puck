@@ -29,7 +29,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// "ignore any excess bytes" clause requires.</item>
 /// </list>
 /// </summary>
-internal sealed class BessImportGuardStage : IPostStage {
+internal sealed class BessImportGuardStage : IPostStage<PostContext> {
     private const int ExportFrames = 8;
 
     /// <inheritdoc/>

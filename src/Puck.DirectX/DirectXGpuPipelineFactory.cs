@@ -29,9 +29,7 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         IGpuRenderTarget renderTarget,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuPushConstantBinding? pushConstantBinding,
-        uint textureSamplerCount,
-        bool enableStorageBuffer,
+        GpuGraphicsPipelineDescription description,
         uint width,
         uint height
     ) {
@@ -44,27 +42,36 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         var renderTargetView = ((DirectXImageView)GCHandle.FromIntPtr(value: renderTarget.ImageViewHandle).Target!);
         var layout = BuildLayout(
             device: device,
-            enableStorageBuffer: enableStorageBuffer,
-            pushConstantBinding: pushConstantBinding,
-            textureSamplerCount: textureSamplerCount
+            enableStorageBuffer: description.EnableStorageBuffer,
+            pushConstantBinding: description.PushConstantBinding,
+            textureSamplerCount: description.TextureSamplerCount
         );
+        var attributes = description.VertexInput.Attributes;
+        var inputElements = stackalloc D3D12_INPUT_ELEMENT_DESC[attributes.Count];
 
+        // Every attribute reads as the "POSITION" semantic at its own SemanticIndex: the only vertex data this
+        // renderer's callers ever declare is untextured 2D position, and Direct3D's HLSL-facing semantic-name
+        // concept has no Vulkan counterpart to generalize against — a second semantic earns its own field when a
+        // caller actually needs one.
         fixed (byte* positionSemantic = "POSITION\0"u8) {
-            var inputElement = new D3D12_INPUT_ELEMENT_DESC {
-                AlignedByteOffset = 0,
-                Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT,
-                InputSlot = 0,
-                InputSlotClass = D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-                InstanceDataStepRate = 0,
-                SemanticIndex = 0,
-                SemanticName = new PCSTR(value: positionSemantic),
-            };
+            for (var index = 0; (index < attributes.Count); index++) {
+                inputElements[index] = new D3D12_INPUT_ELEMENT_DESC {
+                    AlignedByteOffset = attributes[index].OffsetBytes,
+                    Format = ToDxgiFormat(format: attributes[index].Format),
+                    InputSlot = 0,
+                    InputSlotClass = D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+                    InstanceDataStepRate = 0,
+                    SemanticIndex = ((uint)index),
+                    SemanticName = new PCSTR(value: positionSemantic),
+                };
+            }
 
             layout.PsoHandle = BuildPso(
                 device: device,
                 rootSignature: layout.RootSignatureHandle,
                 renderTargetFormat: renderTargetView.Format,
-                inputElement: &inputElement,
+                inputElements: inputElements,
+                inputElementCount: ((uint)attributes.Count),
                 vsHandle: vs.Handle,
                 vsLength: vs.BytecodeLength,
                 psHandle: ps.Handle,
@@ -73,6 +80,13 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         }
 
         return new DirectXGpuPipeline(layout: layout);
+    }
+
+    private static DXGI_FORMAT ToDxgiFormat(GpuVertexFormat format) {
+        return format switch {
+            GpuVertexFormat.R32G32Float => DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT,
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The vertex attribute format is not defined."),
+        };
     }
 
     private static DirectXPipelineLayout BuildLayout(
@@ -209,7 +223,8 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
         ID3D12Device* device,
         nint rootSignature,
         DXGI_FORMAT renderTargetFormat,
-        D3D12_INPUT_ELEMENT_DESC* inputElement,
+        D3D12_INPUT_ELEMENT_DESC* inputElements,
+        uint inputElementCount,
         nint vsHandle,
         nuint vsLength,
         nint psHandle,
@@ -225,8 +240,8 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
                 StencilEnable = false,
             },
             InputLayout = new D3D12_INPUT_LAYOUT_DESC {
-                NumElements = 1,
-                pInputElementDescs = inputElement,
+                NumElements = inputElementCount,
+                pInputElementDescs = inputElements,
             },
             NumRenderTargets = 1,
             PS = new D3D12_SHADER_BYTECODE {

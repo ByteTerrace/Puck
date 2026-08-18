@@ -11,8 +11,10 @@ open on purpose.
 
 ## Enforcement
 
-The build, the architecture gate, determinism checks, and calibrated ceilings
-are enforced. **POST is quarantined as of 2026-08-02** — `Puck.Post` is in
+The build, the architecture gate, determinism checks, calibrated ceilings, and
+the file-length ledger (`FileLengths.json`, LEN001–LEN004: no source file over
+2500 lines unless already recorded, and a recorded file may only shrink —
+`puck lengths`) are enforced. **POST is quarantined as of 2026-08-02** — `Puck.Post` is in
 `experimental/` and out of the build, so nothing it used to gate is enforced
 today; do not cite it, run it, or write a stage for it. The engine-contract
 verification story it carried is a live gap, not a live gate — except the one

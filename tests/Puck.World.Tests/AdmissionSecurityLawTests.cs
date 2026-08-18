@@ -111,7 +111,7 @@ public sealed class AdmissionSecurityLawTests {
 
                 var stallingStream = stalling.GetStream();
 
-                await HandshakeWireFormat.WriteHelloAsync(stream: stallingStream, key: WorldProtocol.WireProtocolKey, ct: testCt);
+                await HandshakeWireFormat.WriteHelloAsync(ct: testCt, key: WorldProtocol.WireProtocolKey, stream: stallingStream);
 
                 var challenge = await WorldTcpWireFormat.TryReadDownstreamAsync(ct: testCt, stream: stallingStream);
 
@@ -313,22 +313,22 @@ public sealed class AdmissionSecurityLawTests {
                 var widenedHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: widened));
 
                 fixture.Server.EnqueueRebuild(
-                    request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: widened, PathHint: "successive-rebuild.world.json", Force: true, ContentHash: widenedHash),
+                    request: new WorldRebuildRequest(ContentHash: widenedHash, Definition: widened, Force: true, Kind: WorldRebuildKind.Load, PathHint: "successive-rebuild.world.json"),
                     principal: WorldPrincipal.Console
                 );
                 fixture.Step();
 
-                Assert.True(condition: fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Observe, subject: body).IsAllowed, userMessage: "the widened admission policy did not add Observe/body:4 on its first rebuild");
+                Assert.True(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Observe, principal: peer, subject: body).IsAllowed, userMessage: "the widened admission policy did not add Observe/body:4 on its first rebuild");
 
                 fixture.Server.Revoke(grant: new WorldGrant(Principal: peer, Capability: WorldCapability.Observe, Subject: body, Exclusive: false), actor: WorldPrincipal.Console);
                 fixture.Step();
 
-                Assert.False(condition: fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Observe, subject: body).IsAllowed, userMessage: "the live revoke did not remove the policy-added Observe grant");
+                Assert.False(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Observe, principal: peer, subject: body).IsAllowed, userMessage: "the live revoke did not remove the policy-added Observe grant");
 
                 fixture.Server.EnqueueRebuild(request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reset, Definition: null, PathHint: null, Force: false), principal: WorldPrincipal.Console);
                 fixture.Step();
 
-                Assert.False(condition: fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Observe, subject: body).IsAllowed, userMessage: "the second rebuild resurrected a policy-added grant that had been explicitly revoked live");
+                Assert.False(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Observe, principal: peer, subject: body).IsAllowed, userMessage: "the second rebuild resurrected a policy-added grant that had been explicitly revoked live");
             }
         } finally {
             identity.Key.Dispose();
@@ -369,13 +369,13 @@ public sealed class AdmissionSecurityLawTests {
             using (admitted.Client) {
                 var peer = WorldPrincipal.Peer(index: admitted.PeerIndex, generation: admitted.Generation);
 
-                Assert.False(condition: fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Observe, subject: body).IsAllowed, userMessage: "the conflicting exclusive hold was expected to reject the admission mint");
+                Assert.False(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Observe, principal: peer, subject: body).IsAllowed, userMessage: "the conflicting exclusive hold was expected to reject the admission mint");
 
                 fixture.Server.Revoke(grant: blocker, actor: WorldPrincipal.Console);
                 fixture.Server.EnqueueRebuild(request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reset, Definition: null, PathHint: null, Force: false), principal: WorldPrincipal.Console);
                 fixture.Step();
 
-                Assert.True(condition: fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Observe, subject: body).IsAllowed, userMessage: "a grant-door conflict refusal was remembered as though it were an explicit peer-grant revoke");
+                Assert.True(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Observe, principal: peer, subject: body).IsAllowed, userMessage: "a grant-door conflict refusal was remembered as though it were an explicit peer-grant revoke");
             }
         } finally {
             identity.Key.Dispose();
@@ -556,7 +556,7 @@ public sealed class AdmissionSecurityLawTests {
 
         var stream = client.GetStream();
 
-        await HandshakeWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+        await HandshakeWireFormat.WriteHelloAsync(ct: ct, key: WorldProtocol.WireProtocolKey, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
 
         var challenge = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
             ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived"));
@@ -602,9 +602,9 @@ public sealed class AdmissionSecurityLawTests {
     /// literal, untouched.</summary>
     private static WorldDefinition BuildAdmissionDocument(WorldAdmissionEntry entry) {
         var baseDocument = Fixtures.BuildDocument();
-        var population = (baseDocument.Population with { Capacity = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 });
+        var population = (baseDocument.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1), NetworkPlayers = 1 });
 
-        return (baseDocument with { Population = population, Admission = [entry] });
+        return (baseDocument with { PopulationRaw = population, Admission = [entry] });
     }
 
     /// <summary>The 0-based body index every law in this file admits its remote peer onto — the ONE peer slot
@@ -676,19 +676,19 @@ public sealed class AdmissionSecurityLawTests {
             using (admitted.Client) {
                 var peer = WorldPrincipal.Peer(index: admitted.PeerIndex, generation: admitted.Generation);
 
-                Assert.True(condition: fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Drive, subject: subject).IsAllowed, userMessage: "the admission mint was expected to hold Drive/body:4 immediately after connecting");
+                Assert.True(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Drive, principal: peer, subject: subject).IsAllowed, userMessage: "the admission mint was expected to hold Drive/body:4 immediately after connecting");
 
                 if (revoke) {
                     fixture.Server.Revoke(grant: new WorldGrant(Principal: peer, Capability: WorldCapability.Drive, Subject: subject, Exclusive: false), actor: WorldPrincipal.Console);
                     fixture.Step();
 
-                    Assert.False(condition: fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Drive, subject: subject).IsAllowed, userMessage: "the live revoke was expected to take effect immediately, before any rebuild");
+                    Assert.False(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Drive, principal: peer, subject: subject).IsAllowed, userMessage: "the live revoke was expected to take effect immediately, before any rebuild");
                 }
 
                 fixture.Server.EnqueueRebuild(request: new WorldRebuildRequest(Kind: WorldRebuildKind.Reset, Definition: null, PathHint: null, Force: false), principal: WorldPrincipal.Console);
                 fixture.Step();
 
-                return fixture.Server.Grants.Allows(principal: peer, capability: WorldCapability.Drive, subject: subject).IsAllowed;
+                return fixture.Server.Grants.Allows(capability: WorldCapability.Drive, principal: peer, subject: subject).IsAllowed;
             }
         } finally {
             identity.Key.Dispose();
@@ -729,7 +729,7 @@ public sealed class AdmissionSecurityLawTests {
 
             var stream = client.GetStream();
 
-            await HandshakeWireFormat.WriteHelloAsync(stream: stream, key: WorldProtocol.WireProtocolKey, ct: ct).ConfigureAwait(continueOnCapturedContext: false);
+            await HandshakeWireFormat.WriteHelloAsync(ct: ct, key: WorldProtocol.WireProtocolKey, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
 
             var challengeFrame = ((await WorldTcpWireFormat.TryReadDownstreamAsync(ct: ct, stream: stream).ConfigureAwait(continueOnCapturedContext: false))
                 ?? throw new InvalidOperationException(message: "connection closed before the Hello challenge arrived"));

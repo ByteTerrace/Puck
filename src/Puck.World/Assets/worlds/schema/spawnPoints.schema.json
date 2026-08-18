@@ -1,6 +1,8 @@
 {
-  "description": "The named spawn poses seats and population policies reference.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One named spawn pose available to seats and population policies.",
     "type": "object",
@@ -18,5 +20,6 @@
       }
     },
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

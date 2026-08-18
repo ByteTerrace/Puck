@@ -15,11 +15,15 @@ namespace Puck.Commands;
 /// <param name="Bindability">Whether a binding document may name this command as a destination.</param>
 /// <param name="InputScope">Whether source-driven activation requires ordinary terminal focus.</param>
 /// <param name="Map">The command map that classifies source-driven activation.</param>
+/// <param name="Held">Whether the command is a HELD verb — its handler reads the phase, active on Started/Active
+/// and released on Completed/Canceled — so a plain-bound entry (no <c>activateOn</c>) delivers both edges, exactly
+/// as a channel destination does; an author binds it once and never authors a release twin.</param>
 public readonly record struct CommandMetadata(
     string Name,
     CommandValueKind ValueKind,
     CommandRouting Routing,
     CommandBindability Bindability,
     CommandInputScope InputScope = CommandInputScope.Focused,
-    string Map = CommandMaps.Global
+    string Map = CommandMaps.Global,
+    bool Held = false
 );

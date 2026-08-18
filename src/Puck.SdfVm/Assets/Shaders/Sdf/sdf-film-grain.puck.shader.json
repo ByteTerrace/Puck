@@ -1,0 +1,25 @@
+{
+  "$schema": "puck.shader.v1",
+  "name": "sdf-film-grain",
+  "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output. The hash is a pure function of pixel cell, grain frame, and seed, so it renders identically on both backends.",
+  "stages": { "vertex": "fullscreen.vert", "fragment": "sdf-film-grain.frag" },
+  "bindings": [
+    { "kind": "sampledImage", "vulkanBinding": 0, "directXRegister": "t0" }
+  ],
+  "targetFloor": { "vulkan": "1.3", "shaderModel": "6.6" },
+  "config": {
+    "intensity": { "type": "float", "default": 0.05, "min": 0, "max": 1, "description": "The peak per-channel offset." },
+    "size": { "type": "float", "default": 1, "min": 1, "description": "The grain cell size, in pixels." },
+    "seed": { "type": "uint", "default": 0, "description": "Folded into the per-pixel hash; two worlds with different seeds grain differently." },
+    "flickerHz": { "type": "uint", "default": 24, "description": "How many times per second the grain pattern advances; the pattern is keyed on the simulation clock, so a frame carries the grain of the flicker period its tick falls in." }
+  },
+  "pushConstants": {
+    "stages": ["fragment"],
+    "fields": [
+      { "name": "intensity", "type": "float", "source": "config.intensity" },
+      { "name": "size", "type": "float", "source": "config.size" },
+      { "name": "grainFrame", "type": "uint", "source": "tick", "quantizeHz": "config.flickerHz" },
+      { "name": "seed", "type": "uint", "source": "config.seed" }
+    ]
+  }
+}

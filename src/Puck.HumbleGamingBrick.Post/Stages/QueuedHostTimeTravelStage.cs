@@ -12,7 +12,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <see cref="QueuedHostContractProbe"/>; the authority fingerprint folds the machine's I/O + high-RAM window (DIV/timer/
 /// PPU registers included) through the host's own debug peek, so a stale accumulator phase shows as a divergence.
 /// </summary>
-internal sealed class QueuedHostTimeTravelStage : IPostStage {
+internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
     private const int RequestedSampleRate = 32_000;
 
     /// <inheritdoc/>

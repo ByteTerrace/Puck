@@ -45,7 +45,10 @@ var context = new PostContext(
     sstRoot: sstRoot,
     testRomRoot: testRomRoot
 );
-var report = new PostBattery(stages: stages).Run(context: context);
+var report = new PostBattery<PostContext>(
+    banner: "Puck.HumbleGamingBrick.Post - HumbleGamingBrick machine power-on self-test",
+    stages: stages
+).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
 return report.ExitCode;
 // The reference-ROM corpus root: --roms wins, else PUCK_GB_TESTROMS, else null (Tier-B stages skip when it is absent).
@@ -103,13 +106,13 @@ static string? ResolveSstRoot(string[] args) {
         ? Fallback
         : null);
 }
-static bool TierMatches(IPostStage stage, string? tierFilter) =>
+static bool TierMatches(IPostStage<PostContext> stage, string? tierFilter) =>
     (string.IsNullOrEmpty(value: tierFilter) || string.Equals(
     a: stage.Tier.ToString(),
     b: tierFilter,
     comparisonType: StringComparison.OrdinalIgnoreCase
 ));
-static bool NameMatches(IPostStage stage, string? nameFilter) =>
+static bool NameMatches(IPostStage<PostContext> stage, string? nameFilter) =>
     (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
     comparisonType: StringComparison.OrdinalIgnoreCase,
     value: nameFilter

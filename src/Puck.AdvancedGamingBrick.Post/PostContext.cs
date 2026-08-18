@@ -1,6 +1,6 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-/// <summary>The shared per-run context handed to every <see cref="IPostStage"/>: the directory stages write their
+/// <summary>The shared per-run context handed to every <see cref="IPostStage{PostContext}"/>: the directory stages write their
 /// artifacts to, the resolved roots of the external reference-ROM corpus and the commercial-ROM directory (either may be
 /// <see langword="null"/> when absent, in which case the stages that need them skip rather than fail), and the machine
 /// BIOS image every built machine boots with. Tier-A stages need none of the ROM roots — they run on hand-assembled

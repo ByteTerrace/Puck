@@ -1,5 +1,4 @@
 {
-  "description": "The optional metadata section \u2014 free-form author-facing facts (title, description, authors, tags, a custom bag). Nothing here is read by the engine; see WorldMetadataSection.",
   "type": [
     "object",
     "null"

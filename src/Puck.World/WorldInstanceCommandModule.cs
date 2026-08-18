@@ -39,9 +39,9 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
     // world.instance.seats' per-instance row: one token per local seat, ordinal 1..LocalSeatCount.
     private static string DescribeSeats(WorldServer server) {
         var population = server.Population;
-        var parts = new string[WorldPopulation.LocalSeatCount];
+        var parts = new string[WorldPopulationLimits.LocalSeatCount];
 
-        for (var slot = 0; (slot < WorldPopulation.LocalSeatCount); slot++) {
+        for (var slot = 0; (slot < WorldPopulationLimits.LocalSeatCount); slot++) {
             parts[slot] = (population.IsActive(index: slot)
                 ? $"{(slot + 1)}={(population.EntryBody(index: slot)?.Profile?.Id ?? "pending")}"
                 : $"{(slot + 1)}=-"
@@ -112,7 +112,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             value: out slot
         ) ||
             (slot < 1) ||
-            (slot > WorldPopulation.LocalSeatCount)
+            (slot > WorldPopulationLimits.LocalSeatCount)
         ) {
             slot = 0;
 
@@ -324,7 +324,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     verb: "world.transfer"
                 )
                 ) {
-                    return CommandResult.Error(output: $"[world.transfer: slot must be an integer 1..{WorldPopulation.LocalSeatCount}, or 'party']");
+                    return CommandResult.Error(output: $"[world.transfer: slot must be an integer 1..{WorldPopulationLimits.LocalSeatCount}, or 'party']");
                 }
 
                 WorldInstanceHost.TransferDestination destination;

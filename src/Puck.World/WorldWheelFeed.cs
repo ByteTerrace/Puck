@@ -23,6 +23,9 @@ namespace Puck.World;
 /// <param name="PointerSelection">The authored spatial-selection policy in force.</param>
 /// <param name="Placement">The authored hub-placement policy in force.</param>
 /// <param name="RingSelection">The authored explicit/excursion ring-selection policy in force.</param>
+/// <param name="SelectorDeadZone">The effective normalized Axis2D neutral threshold.</param>
+/// <param name="SwitchFraction">The normalized magnitude required to replace a grace-held sector.</param>
+/// <param name="SelectionGraceSeconds">The authored neutral dwell, in seconds, before an empty commit cancels.</param>
 /// <param name="Center">The radial hub in frame pixels (meaningful while open).</param>
 /// <param name="CenterKnown">Whether the hub is anchored.</param>
 internal readonly record struct WorldWheelStatus(
@@ -40,6 +43,9 @@ internal readonly record struct WorldWheelStatus(
     BindingWheelSpatialSelectionMode PointerSelection,
     BindingWheelPlacement Placement,
     BindingWheelRingSelectionMode RingSelection,
+    float SelectorDeadZone,
+    float SwitchFraction,
+    float SelectionGraceSeconds,
     Vector2 Center,
     bool CenterKnown
 );
@@ -77,12 +83,22 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         public int CommitRing;
         public int CommitSector;
         public BindingWheelView? CommitWheel;
+        // A relative aim source's (mouse motion's) accumulated deflection since the radial opened, in window client
+        // pixels — the pointer's virtual position relative to the hub, read by the wheel's pointerSelection policy.
+        public Vector2 Deflection;
+        public bool DeflectionKnown;
+        // Input may logically open a gesture before the next presentation tick installs Wheel. Keeping the logical
+        // identity separate prevents a one-frame flick or relative delta from being cleared at presentation open.
+        public BindingWheelView? GestureWheel;
+        public long GraceSince;
         public long PointerSequence;
         public BindingWheelView? RingCacheSource;
         public float RingScroll;
         public WorldWheelStatus Status;
         public BindingWheelView? Wheel;
 
+        // The last sector a live selection highlighted, and when it dropped back to the dead zone (Stopwatch ticks).
+        public int GraceSector = -1;
         public int AxisExcursionRing = -1;
         public int SpatialExcursionRing = -1;
         public BindingWheelGestureState Gesture { get; } = new();
@@ -166,6 +182,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             : null
         );
 
+        if (state.CommitSector != hoverSector) {
+            Console.Error.WriteLine(value: $"[player.wheel] hover -> {hoverSector} ({hoverReason}) axisKnown={state.Gesture.AxisKnown} axisNeutral={state.Gesture.AxisNeutral} axis={state.Gesture.Axis} axisSeq={state.Gesture.AxisSequence} pointerSeq={state.PointerSequence}");
+        }
+
         state.CommitArmed = true;
         state.CommitWheel = wheel;
         state.CommitRing = state.ActiveRing;
@@ -174,6 +194,21 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.CommitLabel = (hovered?.Label ?? (hovered?.Command ?? string.Empty));
         state.CommitReason = hoverReason;
         state.ClosedFrames = 0;
+    }
+    private static void BeginGesture(SeatState state, BindingWheelView wheel) {
+        state.GestureWheel = wheel;
+        state.Gesture.Open();
+        state.Deflection = Vector2.Zero;
+        state.DeflectionKnown = false;
+        state.PointerSequence = 0L;
+        state.GraceSector = -1;
+        state.GraceSince = 0L;
+        state.ActiveRing = wheel.Style.InitialRing;
+        state.AxisExcursionRing = -1;
+        state.SpatialExcursionRing = -1;
+        state.RingScroll = 0f;
+        state.BankedNotches = 0f;
+        state.CenterKnown = false;
     }
     private static OverlayWheelSeat BuildSeat(SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
         if (!ReferenceEquals(
@@ -219,7 +254,12 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         );
     }
     private static void Close(int slot, SeatState state) {
+        if (state.Wheel is not null) {
+            Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} closed (armed={state.CommitArmed}, sector={state.CommitSector}, '{state.CommitLabel}')");
+        }
+
         state.Wheel = null;
+        state.GestureWheel = null;
         state.Gesture.Close();
         state.AxisExcursionRing = -1;
         state.SpatialExcursionRing = -1;
@@ -249,9 +289,30 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         PointerSelection: BindingWheelSpatialSelectionMode.Disabled,
         Placement: BindingWheelPlacement.ViewportCenter,
         RingSelection: BindingWheelRingSelectionMode.Explicit,
+        SelectorDeadZone: 0f,
+        SwitchFraction: 0f,
+        SelectionGraceSeconds: 0f,
         Center: Vector2.Zero,
         CenterKnown: false
     );
+    private BindingWheelView? CurrentGestureWheel(int slot, SeatState state) {
+        var wheel = m_bindings.WheelView(slot: slot);
+
+        if (
+            (wheel is not null) &&
+            !ReferenceEquals(
+            objA: state.GestureWheel,
+            objB: wheel
+        )
+        ) {
+            BeginGesture(
+                state: state,
+                wheel: wheel
+            );
+        }
+
+        return wheel;
+    }
     private static bool RequiresSpatialNeutral(BindingWheelView wheel) =>
         ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.Angle) ||
             ((wheel.Style.PointerSelection == BindingWheelSpatialSelectionMode.HitTarget) && (wheel.Excursion is not null)));
@@ -352,9 +413,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         );
     }
 
-    /// <summary>Commits the last presented sector — the <c>player.wheel.commit</c> handler's whole act. When another
-    /// authored opener still presents the same radial, the release is deferred: the remaining opener owns the
-    /// eventual commit.</summary>
+    /// <summary>Commits the last resolved sector — the <c>player.wheel.commit</c> handler's whole act. A directional
+    /// sample that completes before the first presentation frame resolves here from the gesture's retained peak.
+    /// When another authored opener still presents the same radial, the release is deferred: the remaining opener
+    /// owns the eventual commit.</summary>
     /// <param name="slot">The 0-based seat slot the commit targets.</param>
     /// <returns>The commit disposition, every failure distinguishable from the others.</returns>
     public BindingWheelCommitResult Commit(int slot) {
@@ -364,11 +426,42 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
         var state = m_state[slot];
 
+        Console.Error.WriteLine(value: $"[player.wheel] commit requested (armed={state.CommitArmed}, open={(m_bindings.WheelView(slot: slot) is not null)}, sector={state.CommitSector}, '{state.CommitLabel}')");
+
         if (state.Gesture.Cancelled) {
             return BindingWheelCommitResult.Cancelled(
                 reason: "cancelled",
                 ring: state.CommitRing,
                 sector: -1
+            );
+        }
+
+        if (
+            !state.CommitArmed &&
+            state.Gesture.CanArm &&
+            state.Gesture.AxisKnown &&
+            (state.GestureWheel is { } gestureWheel) &&
+            !ReferenceEquals(
+            objA: state.Wheel,
+            objB: gestureWheel
+        )
+        ) {
+            var selection = SelectAxis(
+                state: state,
+                wheel: gestureWheel
+            );
+            var cancelAtNeutral = (state.Gesture.AxisNeutral && (gestureWheel.Style.SelectionGraceSeconds <= 0f));
+
+            Arm(
+                state: state,
+                wheel: gestureWheel,
+                ring: gestureWheel.Rings[state.ActiveRing],
+                hoverSector: (cancelAtNeutral
+                ? -1
+                : selection.Sector),
+                hoverReason: (cancelAtNeutral
+                ? "dead-center"
+                : selection.Reason)
             );
         }
 
@@ -427,9 +520,14 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         }
 
         var state = m_state[slot];
+        var notches = m_pointer.TakeWheel(slot: slot);
 
-        state.BankedNotches += m_pointer.TakeWheel(slot: slot);
-        state.PointerSequence = ++m_selectionSequence;
+        if (CurrentGestureWheel(
+            slot: slot,
+            state: state
+        ) is not null) {
+            state.BankedNotches += notches;
+        }
     }
     /// <summary>Latches cancellation for the seat's current gesture — both the author-bound
     /// <c>player.wheel.cancel</c> act and the router's synthesized focus-loss cancellation (an alt-tab mid-hold must
@@ -440,21 +538,48 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         if (((uint)slot) < m_state.Length) {
             var state = m_state[slot];
 
+            _ = CurrentGestureWheel(
+                slot: slot,
+                state: state
+            );
             state.Gesture.Cancel();
             state.CommitArmed = false;
         }
     }
-    /// <summary>Accepts an authored Axis2D selection binding for a seat.</summary>
-    public void Select(int slot, Vector2 axis) {
+    /// <summary>Accepts an authored Axis2D selection binding for a seat. The open wheel's compiled dead zone admits
+    /// a deliberate neutral selection. The retained peak is scoped to one excursion, so repeated flicks remain
+    /// responsive while the authored switch threshold prevents an opposite return-spring rebound from beginning
+    /// another excursion.</summary>
+    public void Select(int slot, Vector2 axis, bool relative = false) {
         if (((uint)slot) >= m_state.Length) {
             return;
         }
 
         var state = m_state[slot];
+        var wheel = CurrentGestureWheel(
+            slot: slot,
+            state: state
+        );
 
-        state.Gesture.Select(
+        if (wheel is null) {
+            return;
+        }
+
+        if (relative) {
+            // A delta source accumulates from the open into a virtual pointer offset from the hub — mouse deflection
+            // read exactly like a stick's, later than any stick aim by sequence so whichever moved last selects.
+            state.Deflection += axis;
+            state.DeflectionKnown = true;
+            state.PointerSequence = ++m_selectionSequence;
+
+            return;
+        }
+
+        _ = state.Gesture.TrySelect(
             axis: axis,
-            sequence: ++m_selectionSequence
+            sequence: ++m_selectionSequence,
+            deadZoneSquared: wheel.SelectorDeadZoneSquared,
+            switchThresholdSquared: wheel.SelectorSwitchThresholdSquared
         );
     }
     /// <summary>One seat's last composed status.</summary>
@@ -503,13 +628,19 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             );
 
             if (opened) {
+                Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} opened '{wheel.Id}' (armed={state.CommitArmed}, carried='{state.CommitLabel}', grace={wheel.Style.SelectionGraceSeconds}s)");
+
+                if (!ReferenceEquals(
+                    objA: state.GestureWheel,
+                    objB: wheel
+                )) {
+                    BeginGesture(
+                        state: state,
+                        wheel: wheel
+                    );
+                }
+
                 state.Wheel = wheel;
-                state.Gesture.Open();
-                state.ActiveRing = wheel.Style.InitialRing;
-                state.AxisExcursionRing = -1;
-                state.SpatialExcursionRing = -1;
-                state.RingScroll = 0f;
-                state.BankedNotches = 0f;
                 state.Center = BindingWheelGeometry.ResolveOpeningCenter(
                     placement: wheel.Style.Placement,
                     pointerAvailable: pointerAvailable,
@@ -526,11 +657,28 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 state.BankedNotches = 0f;
             }
 
+            // The accumulated relative aim as a virtual pointer: hub + deflection, the deflection mapped from window
+            // client pixels into the frame the radial draws in (the per-axis frame/client scale the cursor feed
+            // applies). Its neutral is the hub itself, captured at the open.
+            var deflectionFrame = state.Deflection;
+
             if (
-                pointerAvailable &&
+                (m_viewports.ClientWidth > 0) &&
+                (m_viewports.ClientHeight > 0)
+            ) {
+                deflectionFrame = new Vector2(
+                    x: (state.Deflection.X * (viewport.Width / ((float)m_viewports.ClientWidth))),
+                    y: (state.Deflection.Y * (viewport.Height / ((float)m_viewports.ClientHeight)))
+                );
+            }
+
+            var virtualPointer = (state.Center + deflectionFrame);
+
+            if (
+                state.DeflectionKnown &&
                 RequiresSpatialNeutral(wheel: wheel)
             ) {
-                _ = state.Gesture.TryCaptureSpatialNeutral(position: pointerStatus.Frame);
+                _ = state.Gesture.TryCaptureSpatialNeutral(position: state.Center);
             }
 
             var hoverSector = -1;
@@ -549,23 +697,77 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                     wheel: wheel
                 );
 
-                hoverSector = selection.Sector;
-                hoverReason = selection.Reason;
+                if (state.Gesture.AxisNeutral) {
+                    if (
+                        (state.GraceSector < 0) &&
+                        (state.GraceSince == 0L) &&
+                        (wheel.Style.SelectionGraceSeconds > 0f) &&
+                        (selection.Sector >= 0)
+                    ) {
+                        state.GraceSector = selection.Sector;
+                    }
+
+                    hoverSector = -1;
+                    hoverReason = "dead-center";
+                } else {
+                    hoverSector = selection.Sector;
+                    hoverReason = selection.Reason;
+                }
             } else if (
-                pointerAvailable &&
+                state.DeflectionKnown &&
                 centerKnown &&
                 (!RequiresSpatialNeutral(wheel: wheel) || state.Gesture.SpatialNeutralKnown)
             ) {
                 var selection = SelectPointer(
-                    state: state,
-                    wheel: wheel,
-                    pointer: pointerStatus.Frame,
                     center: center,
-                    unit: unit
+                    pointer: virtualPointer,
+                    state: state,
+                    unit: unit,
+                    wheel: wheel
                 );
 
                 hoverSector = selection.Sector;
                 hoverReason = selection.Reason;
+            }
+
+            // Selection grace: a highlighted sector survives a dead-center reading for the authored window, and a
+            // different sector replaces it only past the switch threshold.
+            if (
+                (hoverSector >= 0) &&
+                (state.GraceSector >= 0) &&
+                (hoverSector != state.GraceSector) &&
+                state.Gesture.AxisKnown &&
+                (state.Gesture.Axis.LengthSquared() < (wheel.Style.SwitchFraction * wheel.Style.SwitchFraction))
+            ) {
+                hoverSector = state.GraceSector;
+                hoverReason = "sector";
+            }
+
+            if (hoverSector >= 0) {
+                state.GraceSector = hoverSector;
+                state.GraceSince = 0L;
+            } else if (
+                (state.GraceSector >= 0) &&
+                (hoverReason == "dead-center") &&
+                (wheel.Style.SelectionGraceSeconds > 0f)
+            ) {
+                var now = System.Diagnostics.Stopwatch.GetTimestamp();
+
+                if (state.GraceSince == 0L) {
+                    state.GraceSince = now;
+                }
+
+                if (System.Diagnostics.Stopwatch.GetElapsedTime(
+                    endingTimestamp: now,
+                    startingTimestamp: state.GraceSince
+                ).TotalSeconds <= wheel.Style.SelectionGraceSeconds) {
+                    hoverSector = state.GraceSector;
+                    hoverReason = "sector";
+                } else {
+                    state.GraceSector = -1;
+                }
+            } else {
+                state.GraceSector = -1;
             }
 
             var ring = wheel.Rings[state.ActiveRing];
@@ -601,6 +803,9 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 PointerSelection: wheel.Style.PointerSelection,
                 Placement: wheel.Style.Placement,
                 RingSelection: wheel.Style.RingSelection,
+                SelectorDeadZone: MathF.Sqrt(x: wheel.SelectorDeadZoneSquared),
+                SwitchFraction: wheel.Style.SwitchFraction,
+                SelectionGraceSeconds: wheel.Style.SelectionGraceSeconds,
                 Center: center,
                 CenterKnown: centerKnown
             );
@@ -626,14 +831,19 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         ringLabel = string.Empty;
         excursionControlled = false;
 
-        if (
-            (((uint)slot) >= m_state.Length) ||
-            (m_state[slot].Wheel is not { } wheel)
-        ) {
+        if (((uint)slot) >= m_state.Length) {
             return false;
         }
 
         var state = m_state[slot];
+        var wheel = CurrentGestureWheel(
+            slot: slot,
+            state: state
+        );
+
+        if (wheel is null) {
+            return false;
+        }
 
         if (wheel.Style.RingSelection == BindingWheelRingSelectionMode.Excursion) {
             excursionControlled = true;

@@ -1,0 +1,930 @@
+{
+  "basis": "standard.world.json",
+  "creations": [
+    {
+      "document": {
+        "name": "groundNorthEast",
+        "palette": [
+          {
+            "color": "state.colors.paper"
+          },
+          {
+            "color": "state.colors.ink"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  1,
+                  1
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0.001,
+              0
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "cut-x>0",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.quarterTurnZPositive",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 2,
+            "material": 0,
+            "name": "cut-z<0",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.quarterTurnXPositive",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundNorthEast"
+    },
+    {
+      "document": {
+        "name": "groundSouthEast",
+        "palette": [
+          {
+            "color": "state.colors.sage"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0.001,
+              0
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "cut-x>0",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.quarterTurnZPositive",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 2,
+            "material": 0,
+            "name": "cut-z>0",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.quarterTurnXNegative",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundSouthEast"
+    },
+    {
+      "document": {
+        "name": "groundSouthWest",
+        "palette": [
+          {
+            "color": "state.colors.blueDeep"
+          },
+          {
+            "color": "state.colors.bluePale"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "wallpaper",
+                "cell": [
+                  2,
+                  2
+                ],
+                "group": "P1",
+                "materialStride": 1
+              }
+            ],
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": [
+              0,
+              0.001,
+              0
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 1,
+            "material": 0,
+            "name": "cut-x<0",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.quarterTurnZNegative",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          },
+          {
+            "blend": "Subtraction",
+            "id": 2,
+            "material": 0,
+            "name": "cut-z>0",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.quarterTurnXNegative",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundSouthWest"
+    },
+    {
+      "document": {
+        "name": "groundNorthWest",
+        "palette": [
+          {
+            "color": "state.colors.stone"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "surface",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": "state.spatial.onesVector",
+            "smooth": 0,
+            "type": "Plane"
+          }
+        ]
+      },
+      "id": "groundNorthWest"
+    },
+    {
+      "document": {
+        "name": "state.identifiers.pip",
+        "palette": [
+          {
+            "color": "#FF73BF"
+          },
+          {
+            "color": "#1ABFB2"
+          },
+          {
+            "color": "#FFFFFF"
+          },
+          {
+            "color": "#0D0D0D"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "group": 0,
+            "id": 0,
+            "material": 0,
+            "name": "state.identifiers.pip",
+            "position": [
+              0,
+              0.5,
+              0
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.35,
+              1.75,
+              0.35
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 1,
+            "material": 2,
+            "name": "eye",
+            "position": [
+              0.2,
+              1.1,
+              0.42
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "group": 0,
+            "id": 2,
+            "material": 3,
+            "name": "pupil",
+            "position": [
+              0.2,
+              1.1,
+              0.54
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ],
+        "textRuns": [
+          {
+            "align": "center",
+            "depth": 0.05,
+            "emHeight": 0.35,
+            "material": 1,
+            "mode": "emboss",
+            "position": [
+              0,
+              0.25,
+              -1
+            ],
+            "rotation": "state.spatial.halfTurnY",
+            "shapeId": 0,
+            "text": "K"
+          }
+        ]
+      },
+      "id": "state.identifiers.pip"
+    }
+  ],
+  "documentId": "null",
+  "hud": {
+    "defaults": {
+      "cursor": {
+        "hoverRadius": 48,
+        "role": "TextPrimary",
+        "sizePx": 7
+      },
+      "enabled": true
+    },
+    "panels": []
+  },
+  "lookAssignment": {
+    "rows": [
+      "state.identifiers.pip"
+    ],
+    "sequence": {
+      "name": "r1",
+      "offset": 0,
+      "step": 0
+    }
+  },
+  "looks": [
+    {
+      "motion": {
+        "gaitAmplitude": 0,
+        "replayFrames": false,
+        "secondsPerFrame": 0
+      },
+      "name": "state.identifiers.pip",
+      "scale": 1,
+      "source": {
+        "$type": "creation",
+        "creationId": "state.identifiers.pip"
+      }
+    }
+  ],
+  "placements": [
+    {
+      "creationId": "groundNorthEast",
+      "id": "groundNorthEast",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "groundSouthEast",
+      "id": "groundSouthEast",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "groundSouthWest",
+      "id": "groundSouthWest",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "groundNorthWest",
+      "id": "groundNorthWest",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    }
+  ],
+  "playerDefaults": {
+    "seatLook": {
+      "gyro": {
+        "deadZone": [
+          0.02,
+          0.02,
+          0.02
+        ],
+        "invertX": false,
+        "invertY": false,
+        "invertZ": false,
+        "pitch": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "scale": 1.0,
+        "yaw": [
+          0.0,
+          -1.0,
+          -1.0
+        ]
+      },
+      "invertPitch": false,
+      "invertYaw": false,
+      "pitchSensitivity": 0.001,
+      "stickLookRate": 2.6,
+      "yawSensitivity": 0.001
+    }
+  },
+  "population": {
+    "localSeats": 1
+  },
+  "render": {
+    "cycle": {
+      "keys": [
+        {
+          "at": 0.0,
+          "lighting": {
+            "ambient": {
+              "base": 0.06,
+              "color": "state.colors.nightAmbient",
+              "hemisphere": 0.08
+            },
+            "sun": {
+              "color": "state.colors.nightSun",
+              "direction": [
+                0,
+                -1,
+                0
+              ],
+              "weight": 0.0
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.nightCloud",
+              "coverage": 0.3,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.nightGround",
+            "horizon": "state.colors.nightHorizon",
+            "stars": {
+              "brightness": 1.0,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.045,
+              "intensity": 0
+            },
+            "zenith": "state.colors.nightZenith"
+          }
+        },
+        {
+          "at": 0.25,
+          "lighting": {
+            "ambient": {
+              "base": 0.16,
+              "color": "state.colors.dawnAmbient",
+              "hemisphere": 0.2
+            },
+            "sun": {
+              "color": "state.colors.dawnSun",
+              "direction": [
+                1,
+                0.15,
+                -0.2
+              ],
+              "weight": 0.7
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.dawnCloud",
+              "coverage": 0.4,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.dawnGround",
+            "horizon": "state.colors.dawnHorizon",
+            "stars": {
+              "brightness": 0.15,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.045,
+              "intensity": 6
+            },
+            "zenith": "state.colors.dawnZenith"
+          }
+        },
+        {
+          "at": 0.5,
+          "lighting": {
+            "ambient": {
+              "base": 0.28,
+              "color": "state.colors.dayAmbient",
+              "hemisphere": 0.3
+            },
+            "sun": {
+              "color": "state.colors.daySun",
+              "direction": [
+                0.2,
+                1,
+                -0.3
+              ],
+              "weight": 1.0
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.paper",
+              "coverage": 0.45,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.dayGround",
+            "horizon": "state.colors.dayHorizon",
+            "stars": {
+              "brightness": 0.0,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.03,
+              "intensity": 8
+            },
+            "zenith": "state.colors.dayZenith"
+          }
+        },
+        {
+          "at": 0.75,
+          "lighting": {
+            "ambient": {
+              "base": 0.16,
+              "color": "state.colors.duskAmbient",
+              "hemisphere": 0.2
+            },
+            "sun": {
+              "color": "state.colors.duskSun",
+              "direction": [
+                -1,
+                0.15,
+                -0.2
+              ],
+              "weight": 0.7
+            }
+          },
+          "sky": {
+            "clouds": {
+              "color": "state.colors.duskCloud",
+              "coverage": 0.4,
+              "drift": [
+                -0.008,
+                0.03
+              ],
+              "scale": 2.5,
+              "seed": 4242,
+              "softness": 0.3
+            },
+            "ground": "state.colors.duskGround",
+            "horizon": "state.colors.duskHorizon",
+            "stars": {
+              "brightness": 0.25,
+              "density": 64,
+              "seed": 1337
+            },
+            "sun": {
+              "discRadians": 0.045,
+              "intensity": 6
+            },
+            "zenith": "state.colors.duskZenith"
+          }
+        }
+      ],
+      "state": "timeOfDay"
+    },
+    "lighting": {
+      "ambient": {
+        "base": 0.18,
+        "color": "state.colors.baseAmbient",
+        "hemisphere": 0.22
+      },
+      "sun": {
+        "color": "state.colors.baseSun",
+        "direction": [
+          0.6,
+          0.2,
+          -0.75
+        ],
+        "weight": 0.9
+      }
+    },
+    "sky": {
+      "clouds": {
+        "color": "state.colors.baseCloud",
+        "coverage": 0.4,
+        "curl": 0.8,
+        "drift": [
+          -0.008,
+          0.03
+        ],
+        "scale": 2.5,
+        "seed": 4242,
+        "shear": [
+          -0.02,
+          0.015
+        ],
+        "softness": 0.3,
+        "spin": 0.004
+      },
+      "fogDensity": 0.015,
+      "ground": "state.colors.duskGround",
+      "horizon": "state.colors.duskHorizon",
+      "stars": {
+        "brightness": 0.85,
+        "density": 64,
+        "seed": 1337,
+        "twinkle": {
+          "depth": 0.6,
+          "rate": 1.5,
+          "share": 0.3
+        }
+      },
+      "sun": {
+        "discRadians": 0.045,
+        "intensity": 6
+      },
+      "zenith": "state.colors.duskZenith"
+    }
+  },
+  "schema": "puck.world.def.v1",
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "pip",
+            "value": "pip"
+          }
+        ],
+        "kind": "text",
+        "name": "identifiers"
+      },
+      {
+        "cells": [
+          {
+            "key": "zerosVector",
+            "value": "[0, 0, 0]"
+          },
+          {
+            "key": "onesVector",
+            "value": "[1, 1, 1]"
+          },
+          {
+            "key": "identityQuaternion",
+            "value": "[0, 0, 0, 1]"
+          },
+          {
+            "key": "quarterTurnXPositive",
+            "value": "[0.70710678, 0, 0, 0.70710678]"
+          },
+          {
+            "key": "quarterTurnXNegative",
+            "value": "[-0.70710678, 0, 0, 0.70710678]"
+          },
+          {
+            "key": "quarterTurnZPositive",
+            "value": "[0, 0, 0.70710678, 0.70710678]"
+          },
+          {
+            "key": "quarterTurnZNegative",
+            "value": "[0, 0, -0.70710678, 0.70710678]"
+          },
+          {
+            "key": "halfTurnY",
+            "value": "[0, 1, 0, 0]"
+          }
+        ],
+        "kind": "text",
+        "name": "spatial"
+      },
+      {
+        "advance": {
+          "rateDenominator": 57600,
+          "rateNumerator": 1
+        },
+        "kind": "fixed",
+        "name": "timeOfDay",
+        "value": "0.3"
+      },
+      {
+        "cells": [
+          {
+            "key": "paper",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "ink",
+            "value": "#000000"
+          },
+          {
+            "key": "stone",
+            "value": "#C8C8C8"
+          },
+          {
+            "key": "sage",
+            "value": "#7A9E7E"
+          },
+          {
+            "key": "blueDeep",
+            "value": "#2E5C8A"
+          },
+          {
+            "key": "bluePale",
+            "value": "#9DBEDF"
+          },
+          {
+            "key": "baseAmbient",
+            "value": "#4C5C8C"
+          },
+          {
+            "key": "baseSun",
+            "value": "#FFD9A6"
+          },
+          {
+            "key": "baseCloud",
+            "value": "#C9BFC4"
+          },
+          {
+            "key": "nightAmbient",
+            "value": "#2A3560"
+          },
+          {
+            "key": "nightSun",
+            "value": "#8090C0"
+          },
+          {
+            "key": "nightCloud",
+            "value": "#1A1E33"
+          },
+          {
+            "key": "nightGround",
+            "value": "#020308"
+          },
+          {
+            "key": "nightHorizon",
+            "value": "#0E1430"
+          },
+          {
+            "key": "nightZenith",
+            "value": "#04050C"
+          },
+          {
+            "key": "dawnAmbient",
+            "value": "#6E5A80"
+          },
+          {
+            "key": "dawnSun",
+            "value": "#FFB07A"
+          },
+          {
+            "key": "dawnCloud",
+            "value": "#F0B9A0"
+          },
+          {
+            "key": "dawnGround",
+            "value": "#1A1418"
+          },
+          {
+            "key": "dawnHorizon",
+            "value": "#E89A6C"
+          },
+          {
+            "key": "dawnZenith",
+            "value": "#2E3F7A"
+          },
+          {
+            "key": "dayAmbient",
+            "value": "#9DB4E0"
+          },
+          {
+            "key": "daySun",
+            "value": "#FFF6E8"
+          },
+          {
+            "key": "dayGround",
+            "value": "#6E7A88"
+          },
+          {
+            "key": "dayHorizon",
+            "value": "#BFD8F5"
+          },
+          {
+            "key": "dayZenith",
+            "value": "#3F7FDF"
+          },
+          {
+            "key": "duskAmbient",
+            "value": "#7A4C5C"
+          },
+          {
+            "key": "duskSun",
+            "value": "#FF9A66"
+          },
+          {
+            "key": "duskCloud",
+            "value": "#E8A07A"
+          },
+          {
+            "key": "duskGround",
+            "value": "#0B0D14"
+          },
+          {
+            "key": "duskHorizon",
+            "value": "#E08F6B"
+          },
+          {
+            "key": "duskZenith",
+            "value": "#1B2350"
+          }
+        ],
+        "kind": "text",
+        "name": "colors"
+      }
+    ]
+  },
+  "text": {
+    "defaultFont": "inter",
+    "fonts": [
+      {
+        "codePointRanges": [
+          "U+0020-U+007E"
+        ],
+        "hash": "sha256-64/47e488e1fc92d640",
+        "name": "inter",
+        "source": "fonts/inter-regular.ttf"
+      }
+    ]
+  },
+  "views": {
+    "layouts": [],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "swapRate": 0,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "aim": {
+        "$type": "anchor",
+        "offset": [
+          0,
+          1,
+          0
+        ],
+        "worldAxes": false
+      },
+      "lens": {
+        "fieldOfViewRadians": 0.9599311
+      },
+      "motion": {
+        "$type": "orbit",
+        "distance": 5.4626001,
+        "pitch": 0.4145069,
+        "pivotOffset": [
+          0,
+          0,
+          0
+        ],
+        "yaw": 0
+      },
+      "smoothRate": 6
+    }
+  }
+}

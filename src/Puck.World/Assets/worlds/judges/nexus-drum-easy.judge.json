@@ -1,0 +1,14 @@
+{
+  "schema": "puck.judge.v1",
+  "name": "nexus-drum-easy",
+  "windows": [
+    {
+      "grade": "perfect",
+      "toleranceTicks": 105
+    },
+    {
+      "grade": "good",
+      "toleranceTicks": 315
+    }
+  ]
+}

@@ -11,18 +11,20 @@ namespace Puck.Overlays;
 /// clip-scope contract <see cref="EditorHudWriter"/> uses.
 /// </summary>
 public sealed class HudWriter {
-    // A gauge's fixed layout budget: a track rect + a fill rect + one label run — WorldHudCapacity.GaugeElementCost /
-    // GaugeWordCost's render-side twin (Puck.World.Schema cannot be referenced here; the two are kept in step by the
-    // combined reservation's static assertion in OverlayChannelLeases).
+    // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.
     private const int GaugeLabelChars = 16;
     private const float GaugeTrackAlpha = 0.35f;
 
-    /// <summary>The glyph-word ceiling one text element's run is clipped to — <c>WorldHudCapacity.TextWordCost</c>'s
-    /// render-side twin, and the per-element term <see cref="OverlayChannelLeases"/> multiplies into the Hud
-    /// reservation. Enforced at <see cref="OverlayFrameBuilder.WriteText"/>'s own <c>maxChars</c> clamp, so the
-    /// reservation arithmetic describes what the writer can actually emit: a template resolving many long
-    /// <c>state</c> cells (each up to <c>WorldStateCapacity.MaxTextValueLength</c>) clips as this writer's own
-    /// attributed refusal instead of eating the shared channel budget and dropping other elements' records.</summary>
+    /// <summary>The render elements one authored gauge expands into — a track rect, a fill rect, and one label run —
+    /// the per-element cost <see cref="OverlayChannelLeases"/> multiplies into the Hud element reservation (the
+    /// authored kind that expands widest; a rect or text element is one record).</summary>
+    public const int GaugeElementCost = 3;
+    /// <summary>The glyph-word ceiling one text element's run is clipped to — the per-element term
+    /// <see cref="OverlayChannelLeases"/> multiplies into the Hud text-word reservation. Enforced at
+    /// <see cref="OverlayFrameBuilder.WriteText"/>'s own <c>maxChars</c> clamp, so the reservation arithmetic
+    /// describes what the writer can actually emit: a template resolving many long host-supplied text cells clips as
+    /// this writer's own attributed refusal instead of eating the shared channel budget and dropping other elements'
+    /// records.</summary>
     public const int TextRunChars = 64;
 
     private readonly IHudBindingResolver m_bindings;
@@ -43,11 +45,10 @@ public sealed class HudWriter {
         m_bindings = bindings;
     }
 
-    // Substitution only — the brace/escape GRAMMAR is parsed once by Puck.World.Schema's HudTemplate and arrives here
-    // as runs, so this project restates none of it (a mirrored constant can be eyeballed for drift; a mirrored
-    // grammar cannot). A placeholder that fails to resolve appends nothing: the document validator already refused
-    // an unknown one before it could reach a live document, so an empty substitution keeps the frame drawing rather
-    // than standing in for a refusal that belongs upstream.
+    // Substitution only — the brace/escape grammar is parsed once by the host's document layer and arrives here as
+    // runs, so this project restates none of it. A placeholder that fails to resolve appends nothing: the host's
+    // validator already refused an unknown one before it could reach a live document, so an empty substitution keeps
+    // the frame drawing rather than standing in for a refusal that belongs upstream.
     private string ComposeTemplate(ReadOnlySpan<OverlayHudTemplateSegment> segments) {
         var builder = new System.Text.StringBuilder();
 
@@ -160,8 +161,8 @@ public sealed class HudWriter {
             label = text;
         }
 
-        // Track (always the full extent) + fill (scaled by the resolved fraction) + a short value label — the 3
-        // render elements WorldHudCapacity.GaugeElementCost reserves.
+        // Track (always the full extent) + fill (scaled by the resolved fraction) + a short value label — the
+        // GaugeElementCost records the reservation counts per gauge.
         builder.WriteRect(
             alpha: GaugeTrackAlpha,
             h: h,
@@ -367,7 +368,7 @@ public sealed class HudWriter {
 
         var seats = m_frame.SeatPanels.Span;
 
-        OverlayChannelLeases.EnsureSeatCapacity(
+        builder.Leases.EnsureSeatCapacity(
             seatCount: seats.Length,
             writerName: nameof(HudWriter)
         );

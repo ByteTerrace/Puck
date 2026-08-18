@@ -6,7 +6,7 @@ internal interface IOverlaySeatEmitter<TSeat> {
 internal static class OverlaySeatLoop {
     public static void Emit<TWriter, TSeat>(OverlayFrameBuilder builder, ReadOnlySpan<TSeat> seats, string writerName, TWriter writer)
         where TWriter : IOverlaySeatEmitter<TSeat> {
-        OverlayChannelLeases.EnsureSeatCapacity(
+        builder.Leases.EnsureSeatCapacity(
             seatCount: seats.Length,
             writerName: writerName
         );

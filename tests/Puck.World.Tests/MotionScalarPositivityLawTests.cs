@@ -19,12 +19,12 @@ public sealed class MotionScalarPositivityLawTests {
         var kit = document.Kits[0];
         var grounded = ((WorldMotionModel.Grounded)kit.Motion);
         var negative = document with {
-            Kits = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Min: -100f, Max: 10f) } }],
+            KitsRaw = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Max: 10f, Min: -100f) } }],
         };
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: negative, reason: out var reason, neighbours: null), userMessage: "a [-100, 10] envelope was expected to refuse");
-        Assert.Contains(expectedSubstring: "moveSpeedEnvelope.min", actualString: reason, comparisonType: StringComparison.Ordinal);
-        Assert.Contains(expectedSubstring: "-100", actualString: reason, comparisonType: StringComparison.Ordinal);
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: negative, neighbours: null, reason: out var reason), userMessage: "a [-100, 10] envelope was expected to refuse");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "moveSpeedEnvelope.min");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "-100");
     }
     [Fact]
     public void NonNegativeEnvelopeValidates() {
@@ -33,10 +33,10 @@ public sealed class MotionScalarPositivityLawTests {
         var grounded = ((WorldMotionModel.Grounded)kit.Motion);
         // Min 0 is the legitimate edge (full slowdown admitted); the kit's own moveSpeed must sit inside the bound.
         var control = document with {
-            Kits = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Min: 0f, Max: (grounded.MoveSpeed + 1f)) } }],
+            KitsRaw = [kit with { Motion = grounded with { MoveSpeedEnvelope = new MotionScalarEnvelope(Min: 0f, Max: (grounded.MoveSpeed + 1f)) } }],
         };
 
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, reason: out var reason, neighbours: null), userMessage: reason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: control, neighbours: null, reason: out var reason), userMessage: reason);
     }
     [Fact]
     public void IdentityMoveSpeedSetterThrowsOnNonPositive() {

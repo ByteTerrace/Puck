@@ -143,7 +143,7 @@ public sealed class WorldReplayTape {
     private List<WorldReplaySeat> CaptureActiveSeats() {
         var seats = new List<WorldReplaySeat>();
 
-        for (var slot = 0; (slot < WorldPopulation.LocalSeatCount); slot++) {
+        for (var slot = 0; (slot < m_liveServer.Population.LocalSeatCount); slot++) {
             if (m_liveServer.Population.IsActive(index: slot)) {
                 seats.Add(item: new WorldReplaySeat(
                     Slot: slot,

@@ -60,7 +60,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
                 // Read the traveler the instant the destination called it committed, exactly as a routed read-back
                 // does: through the same authority gate, asking the same grant table WorldServer.AnswerSubmittedQuery
                 // asks before it will answer at all.
-                resolvedPrincipal = fixture.Server.TryTransferredPrincipal(sourceAuthority: SourceAuthority, transferId: TransferId, ordinal: 0, principal: out principal);
+                resolvedPrincipal = fixture.Server.TryTransferredPrincipal(ordinal: 0, principal: out principal, sourceAuthority: SourceAuthority, transferId: TransferId);
                 (active, observeVerdict, driveVerdict) = fixture.Server.ExecuteAuthorityOperation(operation: () => (
                     fixture.Server.Population.IsActive(index: bodyIndex),
                     fixture.Server.Grants.Allows(principal: principal, capability: WorldCapability.Observe, subject: GrantSubject.Body(index: bodyIndex)),
@@ -158,18 +158,18 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
             PeerAdmission: true,
             Members: [new WorldTransferReservationMember(
                 Principal: WorldPrincipal.Console,
-                PreferredSlot: WorldPopulation.LocalSeatCount,
+                PreferredSlot: WorldPopulationLimits.LocalSeatCount,
                 Identity: null,
                 Source: IntentSource.Live,
                 BodyColor: default,
                 CatalogRig: 4,
-                Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Index: WorldPopulation.LocalSeatCount, Generation: 7), Epoch: 0))]);
+                Mobility: new WorldMobilityIdentity(Incarnation: new WorldEntityAddress(Authority: "origin/world", Generation: 7, Index: WorldPopulationLimits.LocalSeatCount), Epoch: 0))]);
     private static WorldDefinition TransferPopulationDocument() {
         var document = Fixtures.BuildDocument();
 
         return document with {
-            Population = document.Population with {
-                Capacity = (WorldPopulation.LocalSeatCount + 2),
+            PopulationRaw = document.Population with {
+                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],

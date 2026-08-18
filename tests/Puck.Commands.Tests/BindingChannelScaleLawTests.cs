@@ -51,14 +51,14 @@ public sealed class BindingChannelScaleLawTests {
 
     private static BindingProfileDocument Document(float? pageScale, float? chordScale) => new(
         Version: BindingProfileDocument.CurrentVersion,
-        Modifiers: [new BindingModifierDefinition(Id: "shift", Source: "key.shift")],
+        Modifiers: [new BindingModifierDefinition(Id: "shift", Sources: ["key.shift"])],
         Chords: [
             new BindingChordDefinition(
                 Group: "play",
                 Chord: [],
                 Page: new BindingPageDefinition(
                     Id: "base",
-                    Entries: [new BindingPageEntryDefinition(Source: "key.fire", Channel: new ChannelRef.Name(Value: "fire"), Scale: pageScale)]
+                    Entries: [new BindingPageEntryDefinition(Sources: ["key.fire"], Channel: new ChannelRef.Name(Value: "fire"), Scale: pageScale)]
                 )
             ),
             new BindingChordDefinition(

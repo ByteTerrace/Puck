@@ -1987,6 +1987,198 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// removing <see cref="Revoke"/>, and the engagement-route helpers below — never by a read.</remarks>
     public int Revision => m_revision;
 
+    /// <summary>One principal's checkpointed capability rows — the five subject sets plus the route policy payload.
+    /// Excludes <see cref="m_handleTables"/>: a per-(principal, capability) handle table is a pure projection of
+    /// this table, re-derived lazily from <see cref="ProjectSubjects"/> the moment its own revision cache goes
+    /// stale, and every live handle a guest could hold is meaningless the instant that guest's own connection drops
+    /// — which every checkpoint restart already forces (the arm gate refuses a checkpoint of a server any addon has
+    /// ever pumped, and a remote human is parked, not left connected, across a restore) — the same "subscribers
+    /// re-attach" exclusion <see cref="WorldOutputHub"/>/<see cref="WorldTcpHost"/> connections already carry.</summary>
+    public sealed record WorldGrantsPrincipalCheckpoint(
+        WorldPrincipal Principal,
+        IReadOnlyList<GrantSubject> Drive,
+        IReadOnlyList<GrantSubject> Observe,
+        IReadOnlyList<GrantSubject> Control,
+        IReadOnlyList<GrantSubject> Mutate,
+        IReadOnlyList<GrantSubject> Edit,
+        bool RouteCapture,
+        ulong RouteChannelMaskBits
+    );
+    /// <summary>The grant table's own checkpointed state — every table this class owns.</summary>
+    public sealed record WorldGrantsCheckpoint(
+        IReadOnlyList<WorldGrantsPrincipalCheckpoint> Principals,
+        IReadOnlyList<(WorldCapability Capability, GrantSubject Subject, WorldPrincipal Holder)> Exclusive,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ushort Budget)> Budgets,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ushort Budget)> EventBudgets,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, long Ceiling)> HoldCeilings,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ulong Bits)> ChannelReach,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, IReadOnlyList<(int Ordinal, long Ceiling)> Ceilings)> PoolCeilings,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, UInt128 Bits)> KindMasks,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject, ulong Bits)> WriteMasks,
+        IReadOnlyList<(WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject)> SeededSections,
+        IReadOnlyList<(WorldPrincipal Principal, IReadOnlyList<string> Groups)> GroupMembership,
+        IReadOnlyList<(string Group, IReadOnlyList<WorldCapability> Reach)> GroupReach,
+        IReadOnlyList<(WorldPrincipal Principal, IReadOnlyList<string> Groups)> OwnedGroups,
+        IReadOnlyList<(int BodyIndex, string Reason)> DriveGates,
+        int Revision
+    );
+
+    /// <summary>Captures every table this class owns.</summary>
+    public WorldGrantsCheckpoint Capture() {
+        var principals = new List<WorldGrantsPrincipalCheckpoint>(capacity: m_byPrincipal.Count);
+
+        foreach (var (principal, grants) in m_byPrincipal) {
+            principals.Add(item: new WorldGrantsPrincipalCheckpoint(
+                Principal: principal,
+                Drive: [.. (grants.For(capability: WorldCapability.Drive) ?? [])],
+                Observe: [.. (grants.For(capability: WorldCapability.Observe) ?? [])],
+                Control: [.. (grants.For(capability: WorldCapability.Control) ?? [])],
+                Mutate: [.. (grants.For(capability: WorldCapability.Mutate) ?? [])],
+                Edit: [.. (grants.For(capability: WorldCapability.Edit) ?? [])],
+                RouteCapture: grants.RouteCapture(),
+                RouteChannelMaskBits: grants.RouteChannelMask().Bits
+            ));
+        }
+
+        return new WorldGrantsCheckpoint(
+            Principals: principals,
+            Exclusive: [.. m_exclusive.Select(selector: static pair => (pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            Budgets: [.. m_budgets.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            EventBudgets: [.. m_eventBudgets.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            HoldCeilings: [.. m_holdCeilings.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value))],
+            ChannelReach: [.. m_channelReach.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            PoolCeilings: [.. m_poolCeilings.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, CaptureCeilings(ceilings: pair.Value)))],
+            KindMasks: [.. m_kindMasks.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            WriteMasks: [.. m_writeMasks.Select(selector: static pair => (pair.Key.Principal, pair.Key.Capability, pair.Key.Subject, pair.Value.Bits))],
+            SeededSections: [.. m_seededSections.Select(selector: static key => (key.Principal, key.Capability, key.Subject))],
+            GroupMembership: [.. m_groupMembership.Select(selector: static pair => (pair.Key, ((IReadOnlyList<string>)[.. pair.Value])))],
+            GroupReach: [.. m_groupReach.Select(selector: static pair => (pair.Key, ((IReadOnlyList<WorldCapability>)[.. pair.Value])))],
+            OwnedGroups: [.. m_ownedGroups.Select(selector: static pair => (pair.Key, ((IReadOnlyList<string>)[.. pair.Value])))],
+            DriveGates: [.. m_driveGates.Select(selector: static pair => (pair.Key, pair.Value))],
+            Revision: m_revision
+        );
+    }
+    /// <summary>Restores every table this class owns from a previously captured checkpoint — a wholesale replace,
+    /// never a merge onto whatever the boot-seed constructor already installed.</summary>
+    public void Restore(WorldGrantsCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+
+        m_byPrincipal.Clear();
+        m_exclusive.Clear();
+        m_budgets.Clear();
+        m_eventBudgets.Clear();
+        m_holdCeilings.Clear();
+        m_channelReach.Clear();
+        m_poolCeilings.Clear();
+        m_kindMasks.Clear();
+        m_writeMasks.Clear();
+        m_seededSections.Clear();
+        m_handleTables.Clear();
+        m_groupMembership.Clear();
+        m_groupReach.Clear();
+        m_ownedGroups.Clear();
+        m_driveGates.Clear();
+
+        foreach (var row in checkpoint.Principals) {
+            var grants = new PrincipalGrants();
+
+            foreach (var subject in row.Drive) {
+                grants.Add(capability: WorldCapability.Drive, subject: subject);
+            }
+            foreach (var subject in row.Observe) {
+                grants.Add(capability: WorldCapability.Observe, subject: subject);
+            }
+            foreach (var subject in row.Control) {
+                grants.Add(capability: WorldCapability.Control, subject: subject);
+            }
+            foreach (var subject in row.Mutate) {
+                grants.Add(capability: WorldCapability.Mutate, subject: subject);
+            }
+            foreach (var subject in row.Edit) {
+                grants.Add(capability: WorldCapability.Edit, subject: subject);
+            }
+            grants.SetRoutePolicy(
+                capture: row.RouteCapture,
+                channelMask: new ChannelReachMask(Bits: row.RouteChannelMaskBits)
+            );
+
+            m_byPrincipal[row.Principal] = grants;
+        }
+
+        foreach (var row in checkpoint.Exclusive) {
+            m_exclusive[new ExclusiveKey(
+                Capability: row.Capability,
+                Subject: row.Subject
+            )] = row.Holder;
+        }
+        foreach (var row in checkpoint.Budgets) {
+            m_budgets[(row.Principal, row.Capability, row.Subject)] = row.Budget;
+        }
+        foreach (var row in checkpoint.EventBudgets) {
+            m_eventBudgets[(row.Principal, row.Capability, row.Subject)] = row.Budget;
+        }
+        foreach (var row in checkpoint.HoldCeilings) {
+            m_holdCeilings[(row.Principal, row.Capability, row.Subject)] = row.Ceiling;
+        }
+        foreach (var row in checkpoint.ChannelReach) {
+            m_channelReach[(row.Principal, row.Capability, row.Subject)] = new ChannelReachMask(Bits: row.Bits);
+        }
+        foreach (var row in checkpoint.PoolCeilings) {
+            m_poolCeilings[(row.Principal, row.Capability, row.Subject)] = RestoreCeilings(rows: row.Ceilings);
+        }
+        foreach (var row in checkpoint.KindMasks) {
+            m_kindMasks[(row.Principal, row.Capability, row.Subject)] = new MutationKindMask(Bits: row.Bits);
+        }
+        foreach (var row in checkpoint.WriteMasks) {
+            m_writeMasks[(row.Principal, row.Capability, row.Subject)] = new DocumentWriteMask(Bits: row.Bits);
+        }
+        foreach (var row in checkpoint.SeededSections) {
+            _ = m_seededSections.Add(item: new SeededKey(
+                Capability: row.Capability,
+                Principal: row.Principal,
+                Subject: row.Subject
+            ));
+        }
+        foreach (var row in checkpoint.GroupMembership) {
+            m_groupMembership[row.Principal] = [.. row.Groups];
+        }
+        foreach (var row in checkpoint.GroupReach) {
+            m_groupReach[row.Group] = [.. row.Reach];
+        }
+        foreach (var row in checkpoint.OwnedGroups) {
+            m_ownedGroups[row.Principal] = [.. row.Groups];
+        }
+        foreach (var row in checkpoint.DriveGates) {
+            m_driveGates[row.BodyIndex] = row.Reason;
+        }
+
+        m_revision = checkpoint.Revision;
+    }
+
+    private static IReadOnlyList<(int Ordinal, long Ceiling)> CaptureCeilings(ChannelCeilings ceilings) {
+        var rows = new List<(int, long)>();
+
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+            if ((ceilings.Support.Bits & (1UL << ordinal)) != 0UL) {
+                rows.Add(item: (ordinal, ceilings[ordinal]));
+            }
+        }
+
+        return rows;
+    }
+    private static ChannelCeilings RestoreCeilings(IReadOnlyList<(int Ordinal, long Ceiling)> rows) {
+        var ceilings = default(ChannelCeilings);
+
+        foreach (var row in rows) {
+            ceilings = ceilings.WithCeiling(
+                ceiling: row.Ceiling,
+                channels: new ChannelConsentMask(Bits: (1UL << row.Ordinal))
+            );
+        }
+
+        return ceilings;
+    }
+
     // One principal's five per-capability subject sets, allocated lazily. A struct held by ref in the dictionary; the
     // sets are reference types so ref-mutation persists.
     private struct PrincipalGrants {

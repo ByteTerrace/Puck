@@ -1,0 +1,42 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "channel": {
+      "description": "The release channel this install tracks (e.g. stable, beta). Null = the app\u0027s own default channel.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "cacheRoot": {
+      "description": "The on-disk root staged versions and update state live under. Null = the app\u0027s own default.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "checkIntervalSeconds": {
+      "description": "Seconds between automatic update.check attempts. Null = the app\u0027s own default; 0 disables automatic checking (a manual update.check still works).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "keepVersions": {
+      "description": "The number of most-recent staged versions to retain beyond the current one. Null = the app\u0027s own default.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null
+}

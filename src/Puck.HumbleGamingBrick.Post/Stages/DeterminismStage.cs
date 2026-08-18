@@ -7,7 +7,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// divergence anywhere in the machine — the foundation every higher tier and the cross-generation link determinism rest
 /// on.
 /// </summary>
-internal sealed class DeterminismStage : IPostStage {
+internal sealed class DeterminismStage : IPostStage<PostContext> {
     private const int Frames = 300;
 
     /// <inheritdoc/>

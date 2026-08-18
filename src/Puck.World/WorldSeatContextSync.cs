@@ -5,7 +5,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// Publishes each seat's admitted context-family states (<see cref="WorldContextFamilies"/>) and its resolved
+/// Publishes each seat's roster/engagement context states and its resolved
 /// perception anchor (<see cref="WorldPerceptionAnchor"/>) — the one derivation feed, shared by the post-step sync
 /// (<see cref="WorldSimulation"/>, every tick, so a state change flips the derived group and swaps the anchor the
 /// same tick it applied) and the post-build wiring (once at boot, so a pre-first-tick read-back reports the boot
@@ -13,8 +13,8 @@ namespace Puck.World;
 /// made one value; engagement and the anchor are both reads over the server grant table's single-valued Control
 /// route for the seat's acting principal — the same in-process loopback discipline as <c>CheckEngage</c>, never a
 /// parallel latch, and the anchor rides this same read rather than opening a second one (one source of truth).
-/// <see cref="WorldSeatBindings.SetContextState"/> short-circuits on an unchanged state, so an ordinary tick costs
-/// two string compares, one route lookup, and one array write per seat.
+/// State-backed control contexts are published separately by <see cref="WorldSeatBindings.SyncSeat"/> from the
+/// seat's routed definition. <see cref="WorldSeatBindings.SetContextState"/> short-circuits on an unchanged value.
 /// </summary>
 internal static class WorldSeatContextSync {
     // The roster family's single value — the joined/claimed/pending booleans the roster already publishes, made one
@@ -34,7 +34,7 @@ internal static class WorldSeatContextSync {
         );
     }
 
-    /// <summary>Publishes both admitted families' current states, and the resolved perception anchor, for every
+    /// <summary>Publishes roster and engagement state, and the resolved perception anchor, for every
     /// local seat.</summary>
     /// <param name="seatBindings">The per-seat binding resolver the states publish into.</param>
     /// <param name="roster">The client roster (the roster family's machine, and the seat→acting-principal map).</param>

@@ -1,6 +1,8 @@
 {
-  "description": "The named per-body target registers and their designation envelopes.",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One authored per-body target register and the envelope a designation into it must satisfy.",
     "type": [
@@ -48,5 +50,6 @@
       "requiresLineOfSight"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

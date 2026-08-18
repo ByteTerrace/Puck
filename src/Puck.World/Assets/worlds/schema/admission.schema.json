@@ -1,5 +1,4 @@
 {
-  "description": "The admission section (default null = admits no remote peer) \u2014 the durable vocabulary of which identities/issuers this world\u0027s TCP socket admits (see WorldAdmissionEntry), and what each is minted once verified. WorldAdmissionDoor is the one consumer, at the Hello handshake, off the tick thread \u2014 this replaces the game socket\u0027s former blanket \u0022admit as Control/all\u0022 wire admission with a verified-identity-to-principal mapping. boot-only like References/Portals/Destinations \u2014 no live mutation arm. A trailing addition over the section set shipped before it, never reordered among it \u2014 the same trailing convention Market follows after it.",
   "type": [
     "array",
     "null"

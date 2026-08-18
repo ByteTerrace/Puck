@@ -3,3 +3,4 @@
 // spells (name resolution across a project reference does not see the brick project's own aliases).
 global using MachineFork = Puck.GamingBricks.MachineFork<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;
 global using MachineInstance = Puck.GamingBricks.MachineInstance<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;
+global using Puck.GamingBricks.Post;

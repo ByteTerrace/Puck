@@ -24,7 +24,8 @@ public enum WorldScreenProjection : byte {
     Window,
 }
 /// <summary>An offscreen session render's requested pixel resolution — <c>[width, height]</c> on the wire, the same
-/// two-element-array convention <see cref="Vector3JsonConverter"/> establishes for a coordinate triple. Null (the
+/// two-element-array convention <see cref="Puck.Assets.Documents.Vector3JsonConverter"/> establishes for a coordinate
+/// triple. Null (the
 /// default absent value on <see cref="WorldScreenSource.Session"/>) keeps <c>Puck.SdfVm.Views.WorldSessionView</c>'s
 /// existing fixed panel size, so a session facet authored before this member existed renders byte-identically.</summary>
 /// <param name="Width">The render width in pixels.</param>
@@ -32,7 +33,7 @@ public enum WorldScreenProjection : byte {
 [JsonConverter(typeof(WorldScreenResolutionJsonConverter))]
 public readonly record struct WorldScreenResolution(int Width, int Height);
 /// <summary>Reads and writes a <see cref="WorldScreenResolution"/> as a two-element JSON array <c>[width, height]</c>
-/// — the same array shape <see cref="Vector3JsonConverter"/> uses for a coordinate, applied here directly at the
+/// — the same array shape <see cref="Puck.Assets.Documents.Vector3JsonConverter"/> uses for a coordinate, applied here directly at the
 /// type's own declaration (a struct this project owns, unlike <see cref="System.Numerics.Vector3"/>) rather than a
 /// central source-gen registration.</summary>
 public sealed class WorldScreenResolutionJsonConverter : JsonConverter<WorldScreenResolution> {

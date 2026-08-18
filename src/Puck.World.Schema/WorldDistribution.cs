@@ -1,4 +1,4 @@
-using System.Numerics;
+using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 
@@ -25,13 +25,21 @@ public abstract record WorldDistributionRegion {
     /// <param name="CountA">The copy count along <paramref name="StepA"/>.</param>
     /// <param name="StepB">The second per-copy step.</param>
     /// <param name="CountB">The copy count along <paramref name="StepB"/>.</param>
-    public sealed record Lattice(Vector3 StepA, int CountA, Vector3 StepB, int CountB) : WorldDistributionRegion;
+    public sealed record Lattice(DocumentVector3 StepA, int CountA, DocumentVector3 StepB, int CountB) : WorldDistributionRegion;
 }
 /// <summary>A spatial region composed with the deterministic sequence that fills it.</summary>
 /// <param name="Region">The region to fill.</param>
 /// <param name="Fill">The per-index fill sequence.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldDistribution(WorldDistributionRegion Region, WorldSequence Fill);
+public sealed record WorldDistribution(WorldDistributionRegion Region, WorldSequence Fill) {
+    /// <summary>Gets the inert distribution every world declaring no <c>population.distribution</c> resolves to —
+    /// the smallest valid disc (the validator's positive-radius floor admits no zero disc here) with an inert fill
+    /// sequence. Never read unless the document also authors simulated peers past its local/network seat count.</summary>
+    public static WorldDistribution Default { get; } = new(
+        Region: new WorldDistributionRegion.Disc(Radius: 0.01f, SampleCount: 1),
+        Fill: WorldSequence.AdditiveDefault
+    );
+}
 /// <summary>The one-time fixed-point compilation of a population distribution.</summary>
 /// <param name="Radius">The disc radius or point-square half-extent.</param>
 /// <param name="SampleCount">The authored radial sample count, or zero to use the requested count.</param>

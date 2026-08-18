@@ -10,7 +10,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// the carry-forward rule in miniature. The comparison is framebuffer-only because the boot handoff legitimately
 /// differs (the AGB's extra <c>inc b</c>), which a ROM that ignores B never observes.
 /// </summary>
-internal sealed class AgbCostumeStage : IPostStage {
+internal sealed class AgbCostumeStage : IPostStage<PostContext> {
     private const int Frames = 300;
 
     /// <inheritdoc/>

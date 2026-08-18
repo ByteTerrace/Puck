@@ -15,10 +15,10 @@ public sealed class BindingProfileValidationTests {
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
             modifiers: [new BindingModifierDefinition(
                 Id: "shift",
-                Source: "key.shift",
+                Sources: ["key.shift"],
                 PressThreshold: float.NaN
             )],
-            entry: new BindingPageEntryDefinition(Source: "key.a", Command: "action")
+            entry: new BindingPageEntryDefinition(Sources: ["key.a"], Command: "action")
         )));
     }
     [Fact]
@@ -26,7 +26,7 @@ public sealed class BindingProfileValidationTests {
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
             modifiers: [],
             entry: new BindingPageEntryDefinition(
-                Source: "key.a",
+                Sources: ["key.a"],
                 Command: "action",
                 Mode: ((BindingEntryMode)42)
             )
@@ -34,7 +34,7 @@ public sealed class BindingProfileValidationTests {
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
             modifiers: [],
             entry: new BindingPageEntryDefinition(
-                Source: "key.a",
+                Sources: ["key.a"],
                 Command: "action",
                 ActivateOn: ((CommandPhase)42)
             )
@@ -42,7 +42,7 @@ public sealed class BindingProfileValidationTests {
         _ = Assert.Throws<ArgumentException>(testCode: static () => BindingProfile.Compile(document: Document(
             modifiers: [],
             entry: new BindingPageEntryDefinition(
-                Source: null,
+                Sources: null,
                 Command: "action",
                 Activator: new BindingActivatorDefinition(
                     Sequence: ["key.a"],

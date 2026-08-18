@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Audio</AssemblyName>
+        <Description>Deterministic sim-side music/rhythm state (tick-denominated musical clock, event-driven segment director, opt-in hit-window judge) plus the presentation-adjacent fixed-point mixer core (s16xQ16 gains, polynomial soft-clip, ramped coefficients) and voice synth every world's audio hosting shares. No document parsing here — compiled shapes only.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Audio</PackageId>
+        <PackageTags>audio;determinism;mixer;music;rhythm;simulation;synth</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.Audio</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+    </ItemGroup>
+</Project>

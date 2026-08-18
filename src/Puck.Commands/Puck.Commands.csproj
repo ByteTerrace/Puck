@@ -13,6 +13,7 @@
         <PackageReference Include="System.CommandLine" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
 </Project>

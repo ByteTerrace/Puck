@@ -290,7 +290,7 @@ internal sealed class WorldColliderSet : IContactField {
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
-                    document: creation.Document,
+                    document: creation.EngineDocument,
                     transform: new FixedCreationStampTransform(
                         Origin: instance.Origin,
                         Rotation: rotation,
@@ -393,7 +393,7 @@ internal sealed class WorldColliderSet : IContactField {
             );
 
             CreationStampEmitter.VisitFixedPrimitiveCopies(
-                document: creation.Document,
+                document: creation.EngineDocument,
                 transform: new FixedCreationStampTransform(
                     Origin: fixedPosition,
                     Rotation: stampRotation,

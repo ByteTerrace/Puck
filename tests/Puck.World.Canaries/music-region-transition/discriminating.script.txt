@@ -1,0 +1,8 @@
+console off 1
+world.wait 30
+music.state
+world.wait 90
+music.state
+world.wait 90
+music.state
+wire.errors

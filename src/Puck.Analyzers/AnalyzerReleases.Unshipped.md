@@ -17,3 +17,7 @@ VER009 | Puck.VerifiedCode | Error | VerifiedCodeAnalyzer, [Documentation not pr
 VER010 | Puck.VerifiedCode | Error | VerifiedCodeAnalyzer, [Documentation not provided]
 ENUM001 | Puck.StrictEnum | Error | StrictEnumAnalyzer, [Documentation not provided]
 ENUM002 | Puck.StrictEnum | Error | StrictEnumAnalyzer, [Documentation not provided]
+LEN001 | Puck.FileLength | Error | FileLengthAnalyzer, [Documentation not provided]
+LEN002 | Puck.FileLength | Error | FileLengthAnalyzer, [Documentation not provided]
+LEN003 | Puck.FileLength | Error | FileLengthAnalyzer, [Documentation not provided]
+LEN004 | Puck.FileLength | Error | FileLengthAnalyzer, [Documentation not provided]

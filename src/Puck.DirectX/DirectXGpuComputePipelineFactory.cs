@@ -25,9 +25,15 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuComputePipelineFactory : IGpuComputePipelineFactory {
     /// <inheritdoc/>
-    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, IReadOnlyList<GpuComputeBinding> bindings, GpuPushConstantBinding? pushConstantBinding, GpuSamplerFilter samplerFilter = GpuSamplerFilter.Linear) {
+    public IGpuComputePipeline Create(IGpuDeviceContext deviceContext, IGpuShaderModule computeShaderModule, GpuComputePipelineDescription description) {
         ArgumentNullException.ThrowIfNull(deviceContext);
         ArgumentNullException.ThrowIfNull(computeShaderModule);
+        ArgumentNullException.ThrowIfNull(description);
+
+        var bindings = description.Bindings;
+        var pushConstantBinding = description.PushConstantBinding;
+        var samplerFilter = description.SamplerFilter;
+
         ArgumentNullException.ThrowIfNull(bindings);
         GpuComputeBinding.ValidateSet(bindings: bindings);
 

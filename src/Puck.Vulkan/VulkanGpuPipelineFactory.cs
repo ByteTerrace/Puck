@@ -14,9 +14,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
         IGpuRenderTarget renderTarget,
         IGpuShaderModule vertexShaderModule,
         IGpuShaderModule fragmentShaderModule,
-        GpuPushConstantBinding? pushConstantBinding,
-        uint textureSamplerCount,
-        bool enableStorageBuffer,
+        GpuGraphicsPipelineDescription description,
         uint width,
         uint height
     ) {
@@ -24,6 +22,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
         var renderPass = ((IVulkanRenderTarget)renderTarget).RenderPass;
         var vertexShader = ((VulkanShaderModule)vertexShaderModule);
         var fragmentShader = ((VulkanShaderModule)fragmentShaderModule);
+        var pushConstantBinding = description.PushConstantBinding;
         var vkPushConstant = ((pushConstantBinding is null) ? null
             : new VulkanPushConstantBinding(
                 data: pushConstantBinding.Data,
@@ -31,14 +30,18 @@ public sealed class VulkanGpuPipelineFactory(IVulkanGraphicsPipelineFactory pipe
                 stageFlags: ((uint)pushConstantBinding.StageFlags)
             ));
 
+        // The vertex input layout is not forwarded: IVulkanGraphicsPipelineFactory hardcodes the same fixed
+        // POSITION-only shape one layer down (the counterpart to Direct3D's now-data-driven input layout), and
+        // every caller of this factory authors that exact shape today — describing it as data here does not open
+        // a door Vulkan silently ignores, since no caller varies it.
         return pipelineFactory.Create(
-            enableStorageBuffer: enableStorageBuffer,
+            enableStorageBuffer: description.EnableStorageBuffer,
             fragmentShaderModule: fragmentShader,
             height: height,
             logicalDevice: logicalDevice,
             pushConstantBinding: vkPushConstant,
             renderPass: renderPass,
-            textureSamplerCount: textureSamplerCount,
+            textureSamplerCount: description.TextureSamplerCount,
             vertexShaderModule: vertexShader,
             width: width
         );

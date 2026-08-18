@@ -148,10 +148,11 @@ Three shapes implement it today:
   itself wires a screen to yet another nested view, the chain composes.
 
 **Registration is cheap; refreshing is not — so they are budgeted
-separately.** Up to `MaxRegisteredViews` (64) views may be live at once;
+separately.** Up to `OffscreenRenderBudget.RegisteredViews` (64) views may be live at once;
 holding a registration costs only a small amount of state. But only
-`RefreshBudget` (4) of the *budgeted* views actually pay a real render pass
-on any one produced frame. Views beyond the budget share it round-robin: an
+`OffscreenRenderBudget.PerProducedFrame` (4, the presentation budget declared
+once in `Puck.Abstractions`) of the *budgeted* views actually pay a real render
+pass on any one produced frame. Views beyond the budget share it round-robin: an
 unrefreshed view keeps showing its last resolved image until the cursor
 reaches it again. This is why a wall of a hundred security monitors costs
 the same per-frame render budget as four — the wall is diegetically honest

@@ -648,7 +648,12 @@ public sealed class OstrowskiOutputAutomaton {
         var pending = new Queue<int>();
         var transitions = new Dictionary<(int State, BigInteger Digit), int>();
 
-        AddState(state: components.Select(selector: component => component.Automaton.StartState).ToArray());
+        AutomatonStateDedup.AddState(
+            indexes: indexes,
+            pending: pending,
+            state: components.Select(selector: component => component.Automaton.StartState).ToArray(),
+            states: states
+        );
 
         while (pending.Count > 0) {
             var stateIndex = pending.Dequeue();
@@ -663,7 +668,12 @@ public sealed class OstrowskiOutputAutomaton {
                         digit
                     );
                 }
-                transitions[(stateIndex, digit)] = AddState(state: target);
+                transitions[(stateIndex, digit)] = AutomatonStateDedup.AddState(
+                    indexes: indexes,
+                    pending: pending,
+                    state: target,
+                    states: states
+                );
             }
         }
 
@@ -693,24 +703,6 @@ public sealed class OstrowskiOutputAutomaton {
             system: system,
             transitions: transitions
         );
-
-        int AddState(int[] state) {
-            var key = string.Join(
-                separator: ',',
-                values: state
-            );
-
-            if (indexes.TryGetValue(
-                key: key,
-                value: out var existing
-            )) { return existing; }
-            var index = states.Count;
-
-            states.Add(item: state);
-            indexes[key] = index;
-            pending.Enqueue(item: index);
-            return index;
-        }
     }
     public BigInteger Output(BigInteger value) {
         var digits = System.Represent(value: value);

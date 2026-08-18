@@ -14,7 +14,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// silently dropped.
 /// </para>
 /// </summary>
-internal sealed class Sm83SstStage : IPostStage {
+internal sealed class Sm83SstStage : IPostStage<PostContext> {
     // Opcode families excluded from pass/fail as DOCUMENTED ORACLE CONFLICTS — never as a way to launder a genuine
     // correctness finding. A family is only listed here with evidence from a real run (not speculatively), and each
     // reason states the disagreement in evidence-class terms. External suites are evidence, never gates (repo doctrine):

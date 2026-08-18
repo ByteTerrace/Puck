@@ -158,6 +158,15 @@
     "metadata": {
       "$ref": "./schema/metadata.schema.json"
     },
+    "update": {
+      "$ref": "./schema/update.schema.json"
+    },
+    "music": {
+      "$ref": "./schema/music.schema.json"
+    },
+    "judges": {
+      "$ref": "./schema/judges.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },
@@ -168,41 +177,6 @@
       "$ref": "./schema/schema.schema.json"
     }
   },
-  "required": [
-    "motion",
-    "spawnPoints",
-    "render",
-    "screens",
-    "cameras",
-    "population",
-    "playerDefaults",
-    "channels",
-    "targetRegisters",
-    "bodyMotionPrograms",
-    "kits",
-    "defaultSeatKit",
-    "assignment",
-    "addons",
-    "bindingOverlays",
-    "storage",
-    "creations",
-    "placements",
-    "authoring",
-    "speakers",
-    "tunes",
-    "patches",
-    "audio",
-    "collision",
-    "host",
-    "views",
-    "looks",
-    "lookAssignment",
-    "links",
-    "grants",
-    "hud",
-    "state",
-    "inputHold"
-  ],
   "additionalProperties": false,
   "patternProperties": {
     "^[$_]": true

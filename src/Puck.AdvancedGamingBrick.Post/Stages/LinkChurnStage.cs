@@ -20,7 +20,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// instruction-overshoot credit, running extra cycles and diverging by construction.
 /// </para>
 /// </summary>
-internal sealed class LinkChurnStage : IPostStage {
+internal sealed class LinkChurnStage : IPostStage<PostContext> {
     private const long BudgetStep = 64L;
     private const uint ExpectedParentControl = 0x6003u; // multiplayer | 115200 bps | IRQ-enable, start clear, id 0
     private const uint ExpectedChildControl = 0x6013u;  // as the parent, with daisy-chain id 1 in bits 4-5

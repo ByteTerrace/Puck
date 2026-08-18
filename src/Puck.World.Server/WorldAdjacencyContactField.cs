@@ -183,7 +183,8 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
 
             if (
                 !resolution.Grounded &&
-                neighbour.TryGetSolidField(
+                (neighbour is IWorldAdjacencyNeighbourContact contactNeighbour) &&
+                contactNeighbour.TryGetSolidField(
                 field: out var neighbourField,
                 reason: out _
             ) &&

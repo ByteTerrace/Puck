@@ -16,7 +16,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
 
         source = source with {
-            Placements = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
+            PlacementsRaw = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
             References = [
                 new WorldReference(WorldSafeName.Parse(candidate: "unused-east-ref"), "unused-east.world.json"),
                 new WorldReference(WorldSafeName.Parse(candidate: "unused-south-ref"), "unused-south.world.json"),
@@ -130,7 +130,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
     }
 
-    private const float BoxLocalHalfExtent = 0.38f;
+    private const float BoxLocalHalfExtent = 1.04f;
     private const float FloorHalfExtent = 12f;
     private const float GroundTolerance = 0.01f;
 
@@ -167,20 +167,18 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "ground",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [shape],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "ground");
-        var creation = new WorldCreation(Id: "ground", Document: canonical.Document, Hash: canonical.Hash);
+        var creation = new WorldCreation(Id: "ground", Document: canonical.Document, HashRaw: canonical.Hash);
         var spawn = (floorCenterZ / 2f);
 
         return source with {
-            Collision = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
-            Creations = [creation],
-            Placements = [new WorldPlacement(Id: "ground", CreationId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
-            SpawnPoints = [
+            CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
+            CreationsRaw = [creation],
+            PlacementsRaw = [new WorldPlacement(Id: "ground", CreationId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            SpawnPointsRaw = [
                 new WorldSpawnPoint(Id: "seat-1", Position: new Vector3(x: 0f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-2", Position: new Vector3(x: 2f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-3", Position: new Vector3(x: 4f, y: 1f, z: spawn)),
@@ -262,7 +260,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
     }
-    private sealed class SeamNeighbour : IWorldAdjacencyNeighbour {
+    private sealed class SeamNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField? m_field;
 
         public SeamNeighbour(WorldDefinition definition, WorldFaceFrame counterpartFrame, bool hasField) {
@@ -329,7 +327,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         }
         public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
     }
-    private sealed class CornerNeighbour : IWorldAdjacencyNeighbour {
+    private sealed class CornerNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField m_field;
 
         public CornerNeighbour(WorldDefinition definition) {

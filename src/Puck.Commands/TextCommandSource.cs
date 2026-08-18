@@ -94,6 +94,15 @@ public sealed class TextCommandSource : ITextCommandSink {
                 continue;
             }
 
+            // A session's own hold — e.g. a per-row world.wait tick barrier — rotates it to the tail exactly like a
+            // read-after-write-blocked session below: nothing of THIS session's drains (comments included) while its
+            // own hold stands, but every other session keeps draining independently.
+            if (session.Hold?.Invoke() ?? false) {
+                (blockedSessions ??= []).Add(item: session);
+                m_pending.Enqueue(item: session);
+                continue;
+            }
+
             if (isComment) {
                 _ = session.TryDequeuePending(line: out _);
                 continue;
@@ -115,15 +124,17 @@ public sealed class TextCommandSource : ITextCommandSink {
                 continue;
             }
 
-            var result = m_registry.SubmitSession(
-                line: line,
-                session: session
-            );
+            using (session.Scope?.Invoke()) {
+                var result = m_registry.SubmitSession(
+                    line: line,
+                    session: session
+                );
 
-            session.PublishResult(
-                line: line,
-                result: result
-            );
+                session.PublishResult(
+                    line: line,
+                    result: result
+                );
+            }
         }
     }
     /// <summary>Creates a seat-authenticated text session over this source's shared queue and registry.</summary>
@@ -145,12 +156,37 @@ public sealed class TextCommandSource : ITextCommandSink {
             );
         }
 
-        return new TextCommandSession(
-            source: this,
+        return CreateSession(
             principal: CommandPrincipal.Seat(slot: slot),
+            onResult: onResult,
             slot: slot,
-            simulationSink: router.CreateSeatTextSink(slot: slot),
-            onResult: onResult
+            simulationSink: router.CreateSeatTextSink(slot: slot)
+        );
+    }
+    /// <summary>Creates a text session over this source's shared queue and registry — the general form: a plain
+    /// administrative ingress bound to a stamped identity, with no simulation lane and no fixed seat slot.
+    /// <see cref="CreateSeatSession"/> is a caller of this method for the seat-bound shape.</summary>
+    /// <param name="principal">The identity this session's lines are stamped with.</param>
+    /// <param name="hold">An optional per-session hold predicate — while it returns <see langword="true"/>, this
+    /// session rotates to the tail of the drain exactly like a read-after-write-blocked one, without affecting any
+    /// other session. <see langword="null"/> (the default) never holds on its own.</param>
+    /// <param name="onResult">An optional callback for synchronous results produced by this session.</param>
+    /// <param name="slot">The logical slot this session's lines carry — 0 for an administrative session.</param>
+    /// <param name="simulationSink">This session's fixed simulation ingress, or <see langword="null"/> for a session
+    /// with no simulation lane.</param>
+    /// <param name="scope">An optional ambient scope entered around this session's own dispatch of an
+    /// <c>Immediate</c> line and disposed once the result is computed — see <see cref="TextCommandSession.Scope"/>.
+    /// <see langword="null"/> (the default) enters nothing.</param>
+    /// <returns>A text sink permanently stamped with <paramref name="principal"/>.</returns>
+    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null) {
+        return new TextCommandSession(
+            hold: hold,
+            onResult: onResult,
+            principal: principal,
+            scope: scope,
+            simulationSink: simulationSink,
+            slot: slot,
+            source: this
         );
     }
     /// <summary>Queues a command line to be submitted on the next <see cref="Collect"/>.</summary>

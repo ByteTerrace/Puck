@@ -126,18 +126,13 @@
       "document": {
         "palette": [
           {
-            "albedo": {
-              "x": 0.64,
-              "y": 0.35,
-              "z": 0.84
-            },
+            "color": "#A359D6",
             "emissive": 0,
             "specular": 0,
             "shininess": 0
           }
         ]
       },
-      "hash": "c66c1994787d3c2e848360e8a769b5400fc1f7cd931aaad5d2ab2a745f2f5c76",
       "id": "ground"
     }
   ],

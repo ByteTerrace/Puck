@@ -4,7 +4,7 @@ namespace Puck.Commands;
 
 /// <summary>
 /// An ordered sequence of physical controls that gates or fires a <see cref="BindingPageEntryDefinition"/>, in
-/// place of a single <see cref="BindingPageEntryDefinition.Source"/> — the same held-order primitive
+/// place of <see cref="BindingPageEntryDefinition.Sources"/> — the same held-order primitive
 /// <see cref="BindingChordDefinition"/> uses for page/command chords, scoped to one binding row instead of a
 /// whole group, and widened with a tapped variant a simultaneous hold cannot express. Arbitrary length: a
 /// one-element sequence is a plain held (or tapped) control; a ten-element sequence is the same primitive at

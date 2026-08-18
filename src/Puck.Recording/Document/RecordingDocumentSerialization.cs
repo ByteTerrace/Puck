@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Abstractions.Documents;
 
 namespace Puck.Recording.Document;
 
@@ -9,11 +10,6 @@ namespace Puck.Recording.Document;
 /// stay diffable. Loading runs the one thick <see cref="RecordingDocumentValidator"/> and never half-accepts.
 /// </summary>
 public static class RecordingDocumentSerialization {
-    private static readonly JsonWriterOptions WriterOptions = new() {
-        Indented = true,
-        NewLine = "\n",
-    };
-
     /// <summary>Writes a document to <paramref name="path"/> in canonical form.</summary>
     /// <param name="document">The document to write.</param>
     /// <param name="path">The destination file path.</param>
@@ -40,22 +36,10 @@ public static class RecordingDocumentSerialization {
     public static byte[] Serialize(RecordingDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(
-            options: WriterOptions,
-            utf8Json: stream
-        )) {
-            JsonSerializer.Serialize(
-                writer: writer,
-                value: document,
-                jsonTypeInfo: RecordingJsonContext.Default.RecordingDocument
-            );
-        }
-
-        stream.WriteByte(value: ((byte)'\n'));
-
-        return stream.ToArray();
+        return CanonicalJsonDocument.Serialize(
+            jsonTypeInfo: RecordingJsonContext.Default.RecordingDocument,
+            value: document
+        );
     }
     /// <summary>Parses and validates a document from UTF-8 JSON.</summary>
     /// <param name="utf8Json">The document bytes.</param>

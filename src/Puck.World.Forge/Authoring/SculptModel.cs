@@ -1,73 +1,24 @@
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.Forge.Authoring;
 
-/// <summary>One authored shape in a sculpt model — the live, non-nullable twin of <see cref="ShapeDocument"/>.
-/// Every field is baked into whatever program a consumer emits, so any change is a preview-rebuild-scale event.
-/// One revision counter drives all consumers; there is no transform/program split.</summary>
-/// <param name="Id">The shape's stable id (unique within the model; survives deletes/reorders — names and
-/// selection key on it).</param>
-/// <param name="Name">An optional player-given name; null until named.</param>
-/// <param name="Type">The primitive this shape draws (the canonical dimensions live in <see cref="CreationGeometry"/>).</param>
-/// <param name="Position">The shape's position (workbench-local space).</param>
-/// <param name="Rotation">The shape's orientation.</param>
-/// <param name="Scale">The shape's per-axis scale.</param>
-/// <param name="MaterialIndex">The palette slot this shape colors from (0..<see cref="CreationDocument.PaletteSize"/>-1).</param>
-/// <param name="Blend">How this shape combines with the shapes before it; non-Union blends are honored only within
-/// a group (group id != 0) — the structural invariant that keeps blends inside instance bounds.</param>
-/// <param name="Smooth">The blend radius for the smooth blend variants (0 for the hard ops).</param>
-/// <param name="GroupId">The composition group this shape belongs to (0 = ungrouped).</param>
-/// <param name="Mirror">Whether the shape's local field mirrors across its local X=0 plane.</param>
-/// <param name="Twist">The shape's local twist rate about Y (clamped to ±<see cref="ShapeDocument.MaxTwist"/>).</param>
-/// <param name="Bend">The shape's local bend rate about Y (clamped to ±<see cref="ShapeDocument.MaxBend"/>).</param>
-/// <param name="Dilate">The shape's inflation radius (clamped to [0, <see cref="ShapeDocument.MaxDilate"/>]).</param>
-/// <param name="Onion">The shape's shell thickness (clamped to [0, <see cref="ShapeDocument.MaxOnion"/>]; 0 = solid).</param>
-public readonly record struct SculptShape(
-    int Id,
-    string? Name,
-    AvatarPrimitive Type,
-    Vector3 Position,
-    Quaternion Rotation,
-    Vector3 Scale,
-    int MaterialIndex,
-    SdfBlendOp Blend,
-    float Smooth,
-    int GroupId,
-    bool Mirror = false,
-    float Twist = 0f,
-    float Bend = 0f,
-    float Dilate = 0f,
-    float Onion = 0f
-);
-/// <summary>One shape's pose inside a timeline frame (matched back to the shape by id on apply — a pose whose shape
-/// was deleted is skipped harmlessly).</summary>
-/// <param name="Id">The shape id the pose belongs to.</param>
-/// <param name="Position">The pose position.</param>
-/// <param name="Rotation">The pose orientation.</param>
-/// <param name="Scale">The pose scale.</param>
-public readonly record struct SculptPose(int Id, Vector3 Position, Quaternion Rotation, Vector3 Scale);
-/// <summary>One timeline frame: a named full snapshot of every shape's transform. The deliberate minimal animation
-/// model: hold-style playback, no per-shape keys, no interpolation, by design.</summary>
-/// <param name="Name">The frame's name (auto-named <c>f1</c>, <c>f2</c>… on record).</param>
-/// <param name="Poses">Every shape's pose at record time.</param>
-public sealed record SculptFrame(string Name, IReadOnlyList<SculptPose> Poses);
 /// <summary>
-/// The sculpt model — a <c>puck.creation.v1</c> document being edited at frame rate: shapes, a 16-slot palette,
-/// hold-style timeline frames, and an IK chain rig, with a bounded local <see cref="EditHistory{T}"/> undo ring.
-/// Presentation-pure and renderer-blind: no GPU types, no program revisions — consumers watch <see cref="Revision"/>
-/// and re-emit through <see cref="CreationGeometry"/> (so what a preview draws is what a committed stamp draws,
-/// byte-for-byte). The behavioral contract (edit rates, clamps, blend-group coercion, timeline and IK semantics,
-/// the push-after undo/drag-coalescing protocol) is preserved deliberately: a persisted creation's pose must
-/// re-derive identically.
+/// The sculpt model — a <c>puck.creation.v1</c> document being edited at frame rate. The <see cref="Document"/> IS
+/// the model: every edit is <c>document with {...}</c> (records are immutable and value-equal), and
+/// <see cref="EditHistory{T}"/> undoes/redoes the document itself. Everything that is NOT document-representable —
+/// selection, the brush (the next add's style), drag state, the timeline cursor/clock, the chain-rig cursor, and the
+/// derived IK rest-geometry cache — lives beside it as ordinary session fields, never serialized, never a parallel
+/// copy of a document section.
 /// </summary>
-/// <remarks><b>The target model.</b> Every edit verb acts on the selected shape when one exists, else on the brush — the
-/// style/transform state the next added shape inherits. The ghost/brush mechanism drives placement previews; the
-/// brush itself never renders. When a chain goal is the target (<see cref="TargetIsGoal"/>), movement drives the goal and
-/// the chain re-solves live. Single-threaded like every input-fold type: mutators run in the command pump's apply
-/// window, <see cref="TickPlayback"/>/<see cref="EndInputFrame"/> on the produce path — one window-pump thread.</remarks>
+/// <remarks><b>The target model.</b> Every edit verb acts on the selected shape when one exists, else on the brush.
+/// When a chain goal is the target (<see cref="TargetIsGoal"/>), movement drives the goal and the chain re-solves
+/// live. Single-threaded like every input-fold type: mutators run in the command pump's apply window,
+/// <see cref="TickPlayback"/>/<see cref="EndInputFrame"/> on the produce path — one window-pump thread.</remarks>
 public sealed class SculptModel {
     /// <summary>The blend cycle in authoring order (hard/smooth pairs adjacent), not raw enum order.</summary>
     public static readonly SdfBlendOp[] BlendCycle = [
@@ -89,38 +40,11 @@ public sealed class SculptModel {
         y: 0.7f,
         z: 0f
     );
-    private readonly List<SculptShape> m_shapes = [];
-    private readonly Dictionary<int, int> m_shapeIndexById = [];
-    private readonly SdfMaterial[] m_palette = DefaultPalette();
-    private int m_nextShapeId = 1;
-    private int m_nextGroupId = 1;
-    private int m_selectionIndex = -1;
-    private int m_previousSelectionIndex = -1;
-    private string m_name = "creation";
-    private string m_bakeStyle = "classic";
-    private CreatorIntent m_intent = CreatorIntent.Object;
-    // THE TIMELINE: saved frames display as 1..Count; cursor 0 is the REST pose — the live authored model, captured
-    // implicitly the first time the timeline steps away from it and restored on return/stop. Playback holds each
-    // frame for m_secondsPerFrame (no interpolation, by design).
-    private readonly List<SculptFrame> m_frames = [];
-    private float m_secondsPerFrame = (8f / 60f);
-    private Quaternion m_brushRotation = Quaternion.Identity;
-    private Vector3 m_brushScale = Vector3.One;
-    private SdfBlendOp m_brushBlend = SdfBlendOp.Union;
-    // THE RIG (chains + IK): defined chains plus the two cursors — the goal-target index (movement drives that
-    // chain's goal) and the rig-page chain cursor (pole/kind/delete act on it) — deliberately separate: a chain
-    // tunes without its goal being the movement target.
-    private readonly List<SculptChain> m_chains = [];
-    private int m_nextChainId = 1;
-    private int m_goalChainIndex = -1;
-    private int m_chainCursor = -1;
-    // Per-solve pose scratch, grown to the longest chain and reused (a held goal drag re-solves every frame).
-    private (Vector3 Position, Quaternion Rotation)[] m_solveScratch = [];
 
-    // The workbench-local authoring bound every position clamps into. A CONTRACT of the preview/stamp path, not a
-    // preference: a shape flung far from the origin would blow the stamp's instance bound (reach is data-derived)
-    // into a screen-filling evaluation, and the orbit camera frames this envelope. Persisted creations were
-    // authored inside a bound of this scale, so the clamp never bites a legitimate load.
+    // The workbench-local authoring bound every position clamps into — the preview/stamp path's instance-bound
+    // contract (reach is data-derived; a shape flung far from the origin would blow the stamp evaluation up), and
+    // the orbit camera frames this envelope. Persisted creations were authored inside a bound of this scale, so the
+    // clamp never bites a legitimate load.
     private const float BoundHalfExtent = 6f;
     private const float BoundMaxY = 10f;
     private const float BoundMinY = -1f;
@@ -133,42 +57,61 @@ public sealed class SculptModel {
     public const float MaxScale = 3.0f;
     /// <summary>The smallest per-axis scale an authored shape clamps to.</summary>
     public const float MinScale = 0.2f;
+    // The hold-style playback cadence (engine ticks at 60/s) — a fixed session constant; the timeline authors NO
+    // per-creation playback-speed field (it is a local preview convenience, never part of the document).
+    private const float SecondsPerFrame = (8f / 60f);
 
-    // Undo/redo: a bounded ring of immutable whole-model snapshots. Continuous edits coalesce onto ONE snapshot per
-    // drag (pushed on the drag's START edge) via m_dragOpen/m_dragTouchedThisFrame; discrete edits each push.
-    private readonly EditHistory<SculptSnapshot> m_history;
+    // THE DOCUMENT — the whole model. Every mutator replaces this with `with {...}`; EditHistory<CreationDocument>
+    // undoes/redoes it directly. Shapes is ALWAYS a concrete (possibly empty) list during a live session (never
+    // null) so a bare generic-set path can always navigate/append into it; Palette/Chains/Frames stay exactly as
+    // loaded (including null/short) so a load with no edits round-trips byte-identically — a generic set touching
+    // palette[n] pads it to n+1 slots with the default sweep first (see AcceptCandidate/PadPaletteForWrite), never
+    // eagerly.
+    private CreationDocument m_document;
+    private readonly EditHistory<CreationDocument> m_history;
     private readonly int m_shapeCapacity;
 
-    private float m_brushBend;
-    private float m_brushDilate;
-    private int m_brushMaterial;
-    private bool m_brushMirror;
-    private float m_brushOnion;
-    private float m_brushSmooth;
-    private float m_brushTwist;
-    // THE BRUSH — the style/transform the next added shape inherits, and the target of style verbs while nothing is
-    // selected. The ghost mechanism drives placement previews; the brush itself never renders.
-    private AvatarPrimitive m_brushType;
-    private int m_currentFrame;
+    // THE RIG CACHE — rest geometry ChainDocument itself does not (and never will) carry, keyed by chain id. Ids are
+    // minted by m_nextChainId and NEVER reused within a session, so once a rig is captured for an id it is valid for
+    // that id's entire remaining lifetime: undo/redo change which ids are VISIBLE in Document.Chains, never what a
+    // visible id's rest geometry means. See ChainRig's remarks.
+    private readonly Dictionary<int, ChainRig> m_rig = [];
+    private (Vector3 Position, Quaternion Rotation)[] m_solveScratch = [];
+
+    // THE BRUSH — a ShapeDocument-shaped template: the style/transform the next AddShape inherits, and the generic
+    // set path's target when nothing is selected (`.<field>` against the brush, via TrySetBrushField). Being a real
+    // ShapeDocument means the brush never special-cases a field name — whatever the document record declares, the
+    // brush carries the same way.
+    private ShapeDocument m_brush;
+
+    // Session-only id counters — monotonic for the model's whole lifetime (NOT restored by undo; only Load rebases
+    // them), which is what makes the rig cache above valid forever once populated.
+    private int m_nextChainId = 1;
+    private int m_nextGroupId = 1;
+    private int m_nextShapeId = 1;
+
+    // Selection/target state, by id (never index — a removed/undone id just stops resolving, no stale-index cleanup
+    // needed anywhere).
+    private int? m_chainCursorId;
+    private int? m_goalChainId;
+    private int? m_previousSelectedShapeId;
+    private int? m_selectedShapeId;
+
+    // Drag coalescing (a held gesture pushes ONE undo step, on the drag's start edge).
     private bool m_dragOpen;
     private bool m_dragTouchedThisFrame;
-    private CreationBehaviorDocument? m_loadedBehavior;
-    // Carried, editor-opaque document members: the model authors none of these, so it stashes whatever the loaded
-    // document carried and hands it straight back on save, byte-for-byte. NEVER part of SculptSnapshot — undo must
-    // not touch what no verb here can edit.
-    private IReadOnlyList<CreationCameraDocument>? m_loadedCameras;
-    private IDictionary<string, JsonElement>? m_loadedExtensions;
-    private IReadOnlyList<CreationPartDocument>? m_loadedParts;
-    private IReadOnlyList<TextRunDocument>? m_loadedTextRuns;
+
+    // The timeline: cursor 0 is the rest pose (the live authored model), captured implicitly the first time the
+    // timeline steps away from it and restored on return/stop.
+    private int m_currentFrame;
     private float m_playClock;
     private int m_playCursor;
     private bool m_playing;
-    private SculptFrame? m_restPose;
+    private IReadOnlyList<FrameTransformDocument>? m_restPose;
 
     /// <summary>Initializes an empty model under a shape budget.</summary>
-    /// <param name="shapeCapacity">The consumer's per-creation shape budget — <see cref="StampShapeCount"/> (authored
-    /// shapes plus any carried text runs' glyphs) never exceeds it; <see cref="AddShape"/>/<see cref="DuplicateTarget"/>
-    /// refuse past it.</param>
+    /// <param name="shapeCapacity">The consumer's per-creation shape budget — <see cref="CreationDocument.StampShapeCount"/>
+    /// never exceeds it; <see cref="AddShape"/>/<see cref="DuplicateTarget"/> refuse past it.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="shapeCapacity"/> is not positive.</exception>
     public SculptModel(int shapeCapacity) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
@@ -177,172 +120,182 @@ public sealed class SculptModel {
         );
 
         m_shapeCapacity = shapeCapacity;
-        m_history = new EditHistory<SculptSnapshot>(
+        m_brush = DefaultBrush();
+        m_document = new CreationDocument(
+            Schema: CreationDocument.CurrentSchema,
+            Name: "creation",
+            Palette: null,
+            Shapes: [],
+            Frames: null
+        );
+        m_history = new EditHistory<CreationDocument>(
             capacity: HistoryCapacity,
-            initial: CaptureSnapshot()
+            initial: m_document
         );
     }
 
-    /// <summary>The carried bake-style knob (<c>classic</c>/<c>bold</c>).</summary>
-    public string BakeStyle => m_bakeStyle;
     /// <summary>Whether a redo step is available on the local ring.</summary>
     public bool CanRedo => m_history.CanRedo;
     /// <summary>Whether an undo step is available on the local ring.</summary>
     public bool CanUndo => m_history.CanUndo;
     /// <summary>The chains currently defined, in definition order.</summary>
-    public IReadOnlyList<SculptChain> Chains => m_chains;
+    public IReadOnlyList<ChainDocument> Chains => (m_document.Chains ?? []);
     /// <summary>The rig-page chain cursor's chain (see <see cref="CycleChainCursor"/>); null = none.</summary>
-    public SculptChain? CurrentChain => (((m_chainCursor >= 0) && (m_chainCursor < m_chains.Count))
-        ? m_chains[m_chainCursor]
-        : null
-    );
+    public ChainDocument? CurrentChain {
+        get {
+            if (m_chainCursorId is not { } id) {
+                return null;
+            }
+
+            foreach (var chain in Chains) {
+                if (chain.Id == id) {
+                    return chain;
+                }
+            }
+
+            return null;
+        }
+    }
     /// <summary>The timeline cursor: 0 = the rest pose (the live model), 1..<see cref="FrameCount"/> = saved frames.</summary>
     public int CurrentFrame => m_currentFrame;
+    /// <summary>The model's whole document — the source of truth. Every mutation replaces this wholesale.</summary>
+    public CreationDocument Document => m_document;
     /// <summary>How many frames are saved (past the always-present rest pose).</summary>
-    public int FrameCount => m_frames.Count;
-    /// <summary>The saved frames, in playback order.</summary>
-    public IReadOnlyList<SculptFrame> Frames => m_frames;
+    public int FrameCount => (m_document.Frames?.Count ?? 0);
     /// <summary>The local ring's retained snapshot count (the HUD's ring readout).</summary>
     public int HistoryCount => m_history.Count;
-    /// <summary>The authoring intent (carried; a world stamp ignores it, a bake consumes it).</summary>
-    public CreatorIntent Intent => m_intent;
     /// <summary>The creation's name (the document handle; the committed row id names the world asset).</summary>
-    public string Name => m_name;
-    /// <summary>The material palette (16 slots); shapes reference entries by index.</summary>
-    public IReadOnlyList<SdfMaterial> Palette => m_palette;
+    public string Name => (m_document.Name ?? "creation");
     /// <summary>Whether the frame loop is playing.</summary>
     public bool Playing => m_playing;
     /// <summary>Bumps on every visible mutation — a preview consumer re-emits when it moves.</summary>
     public int Revision { get; private set; }
-    /// <summary>The selected shape, when there is one.</summary>
-    public SculptShape? SelectedShape => (TargetIsBrush
-        ? null
-        : m_shapes[m_selectionIndex]
-    );
-    /// <summary>The selected shape's index (-1 = none; the brush is then the style target, unless a chain goal is
-    /// selected — see <see cref="TargetIsGoal"/>).</summary>
-    public int SelectionIndex => m_selectionIndex;
+    /// <summary>The selected shape, when there is one (null on the brush or a chain goal).</summary>
+    public ShapeDocument? SelectedShape => (TargetIsBrush ? null : ResolveSelectedShape()?.Shape);
     /// <summary>The shape budget passed at construction (the consumer's per-stamp cap).</summary>
     public int ShapeCapacity => m_shapeCapacity;
-    /// <summary>The authored shapes, in document order (the order group blends evaluate in).</summary>
-    public IReadOnlyList<SculptShape> Shapes => m_shapes;
-    /// <summary>The model's current stamp cost: authored shapes plus every carried text run's glyph count — the
-    /// number a placement of the committed creation emits (the HUD's budget readout).</summary>
-    public int StampShapeCount {
-        get {
-            var count = m_shapes.Count;
-
-            foreach (var run in (m_loadedTextRuns ?? [])) {
-                count += run.GlyphCount;
-            }
-
-            return count;
-        }
-    }
-    /// <summary>The target's blend op (the selected shape's, else the brush's).</summary>
-    public SdfBlendOp TargetBlend => (TargetIsBrush
-        ? m_brushBlend
-        : m_shapes[m_selectionIndex].Blend
-    );
-    /// <summary>The chain whose goal is the current target, when <see cref="TargetIsGoal"/>.</summary>
-    public SculptChain? TargetGoalChain => (TargetIsGoal
-        ? m_chains[m_goalChainIndex]
-        : null
-    );
-    /// <summary>Whether style/transform verbs currently target the brush (no shape and no chain goal selected).</summary>
-    public bool TargetIsBrush => (!TargetIsGoal && ((m_selectionIndex < 0) || (m_selectionIndex >= m_shapes.Count)));
+    /// <summary>The model's current stamp cost — see <see cref="CreationDocument.StampShapeCount"/>.</summary>
+    public int StampShapeCount => m_document.StampShapeCount();
+    /// <summary>Whether style/transform gestures currently target the brush (no shape and no chain goal selected).</summary>
+    public bool TargetIsBrush => (!TargetIsGoal && (ResolveSelectedShape() is null));
     /// <summary>Whether the selected target is a chain goal rather than a shape or the brush — movement then drives
     /// the goal and the chain re-solves live.</summary>
-    public bool TargetIsGoal => ((m_goalChainIndex >= 0) && (m_goalChainIndex < m_chains.Count));
-    /// <summary>The target's palette slot.</summary>
-    public int TargetMaterialIndex => (TargetIsBrush
-        ? m_brushMaterial
-        : m_shapes[m_selectionIndex].MaterialIndex
-    );
-    /// <summary>The target's mirror flag.</summary>
-    public bool TargetMirror => (TargetIsBrush
-        ? m_brushMirror
-        : m_shapes[m_selectionIndex].Mirror
-    );
-    /// <summary>The target's position: the selected shape's, the targeted chain goal's, or null on the brush (which
-    /// has no place until it becomes a shape).</summary>
-    public Vector3? TargetPosition => (TargetIsGoal
-        ? m_chains[m_goalChainIndex].Goal
-        : (TargetIsBrush
-            ? null
-            : m_shapes[m_selectionIndex].Position
-    ));
-    /// <summary>The target's per-axis scale (the selected shape's, else the brush's — what the next add inherits).</summary>
-    public Vector3 TargetScale => (TargetIsBrush
-        ? m_brushScale
-        : m_shapes[m_selectionIndex].Scale
-    );
-    /// <summary>The target's smooth-blend radius.</summary>
-    public float TargetSmooth => (TargetIsBrush
-        ? m_brushSmooth
-        : m_shapes[m_selectionIndex].Smooth
-    );
-    /// <summary>The target's primitive (the selected shape's, else the brush's — what the next Add draws).</summary>
-    public AvatarPrimitive TargetType => (TargetIsBrush
-        ? m_brushType
-        : m_shapes[m_selectionIndex].Type
-    );
+    public bool TargetIsGoal => (ResolveGoalChainIndex() is not null);
+    /// <summary>The chain whose goal is the current target, when <see cref="TargetIsGoal"/> — a resolved, non-null
+    /// view (a fresh chain's goal/pole default to its rest tip / above its root until moved).</summary>
+    public ChainTarget? TargetGoalChain {
+        get {
+            if (ResolveGoalChainIndex() is not { } index) {
+                return null;
+            }
 
-    // Applies a frame's poses by shape id (missing shapes skip harmlessly).
-    private void ApplyPoses(SculptFrame? frame) {
-        if (frame is null) {
+            var chain = Chains[index];
+            var rig = RigFor(chainId: chain.Id);
+
+            return new ChainTarget(
+                Goal: (chain.Goal ?? rig.RestGoal),
+                Id: chain.Id,
+                Kind: (chain.Kind ?? ChainDocument.KindSpine),
+                Name: chain.Name,
+                Pole: (chain.Pole ?? rig.RestPole)
+            );
+        }
+    }
+
+    /// <summary>A resolved chain-goal view (see <see cref="TargetGoalChain"/>) — Goal/Pole are always concrete,
+    /// falling back to the chain's rest geometry when unset.</summary>
+    public readonly record struct ChainTarget(int Id, string? Name, string Kind, Vector3 Goal, Vector3 Pole);
+    /// <summary>One generic-edit outcome: whether the patch (and its validation) succeeded, and a human-readable
+    /// detail — the applied field on success, the refusal reason on failure.</summary>
+    public readonly record struct EditOutcome(bool Success, string Message);
+
+    // Applies a recorded/rest frame's poses by shape id (a pose whose shape was deleted skips harmlessly).
+    private void ApplyPoses(IReadOnlyList<FrameTransformDocument>? poses) {
+        if (poses is null) {
             return;
         }
 
-        foreach (var pose in frame.Poses) {
-            if (!m_shapeIndexById.TryGetValue(
-                key: pose.Id,
-                value: out var index
-            )) {
+        var shapes = new List<ShapeDocument>(collection: (m_document.Shapes ?? []));
+
+        foreach (var pose in poses) {
+            var index = shapes.FindIndex(match: s => (s.Id == pose.Id));
+
+            if (index < 0) {
                 continue;
             }
 
-            m_shapes[index] = m_shapes[index] with {
+            shapes[index] = shapes[index] with {
                 Position = ClampLocal(position: pose.Position),
                 Rotation = pose.Rotation,
                 Scale = pose.Scale,
             };
         }
 
+        m_document = m_document with { Shapes = shapes };
         Revision++;
     }
-    // Lifts the WHOLE authored state (everything ToDocument would persist, plus the selection/cursor state and the
-    // brush so undo/redo feels like true time travel) into one immutable snapshot value. Carried opaque members are
-    // deliberately NOT captured — no verb edits them, so undo must not touch them.
-    private SculptSnapshot CaptureSnapshot() {
-        return new SculptSnapshot(
-            BakeStyle: m_bakeStyle,
-            BrushBend: m_brushBend,
-            BrushBlend: m_brushBlend,
-            BrushDilate: m_brushDilate,
-            BrushMaterial: m_brushMaterial,
-            BrushMirror: m_brushMirror,
-            BrushOnion: m_brushOnion,
-            BrushRotation: m_brushRotation,
-            BrushScale: m_brushScale,
-            BrushSmooth: m_brushSmooth,
-            BrushTwist: m_brushTwist,
-            BrushType: m_brushType,
-            Chains: [.. m_chains],
-            CurrentFrame: m_currentFrame,
-            Frames: [.. m_frames],
-            Intent: m_intent,
-            Name: m_name,
-            NextChainId: m_nextChainId,
-            NextGroupId: m_nextGroupId,
-            NextShapeId: m_nextShapeId,
-            Palette: [.. m_palette],
-            PreviousSelectionIndex: m_previousSelectionIndex,
-            RestPose: m_restPose,
-            SelectionIndex: m_selectionIndex,
-            Shapes: [.. m_shapes]
-        );
+    // The shared style-target mutator: brush edits apply in place; a selected shape's edit replaces its slot and
+    // (when discreet=true) pushes one undo step. A no-op on a chain goal (nothing shape-shaped to edit).
+    private void ApplyToTarget(Func<ShapeDocument, ShapeDocument> mutate, bool pushUndo) {
+        if (TargetIsGoal) {
+            return;
+        }
+
+        if (TargetIsBrush) {
+            m_brush = ClampBrush(shape: mutate(m_brush));
+            Revision++;
+
+            return;
+        }
+
+        var (index, shape) = ResolveSelectedShape()!.Value;
+        var shapes = new List<ShapeDocument>(collection: m_document.Shapes!) {
+            [index] = mutate(shape),
+        };
+
+        m_document = (m_document with { Shapes = shapes });
+        Revision++;
+
+        if (pushUndo) {
+            PushUndo();
+        }
     }
+    private static ShapeDocument ClampBrush(ShapeDocument shape) => (shape with {
+        Bend = Math.Clamp(
+            value: (shape.Bend ?? 0f),
+            max: ShapeDocument.MaxBend,
+            min: -ShapeDocument.MaxBend
+        ),
+        Blend = (shape.Blend ?? SdfBlendOp.Union),
+        Dilate = Math.Clamp(
+            value: (shape.Dilate ?? 0f),
+            max: ShapeDocument.MaxDilate,
+            min: 0f
+        ),
+        Group = 0,
+        Material = Math.Clamp(
+            value: (shape.Material ?? 0),
+            max: (CreationDocument.PaletteSize - 1),
+            min: 0
+        ),
+        Onion = Math.Clamp(
+            value: (shape.Onion ?? 0f),
+            max: ShapeDocument.MaxOnion,
+            min: 0f
+        ),
+        Rotation = ((shape.Rotation == default) ? Quaternion.Identity : Quaternion.Normalize(value: shape.Rotation)),
+        Scale = ClampScale(scale: ((shape.Scale == default) ? Vector3.One : shape.Scale)),
+        Smooth = Math.Clamp(
+            value: (shape.Smooth ?? 0f),
+            max: ShapeDocument.MaxSmooth,
+            min: 0f
+        ),
+        Twist = Math.Clamp(
+            value: (shape.Twist ?? 0f),
+            max: ShapeDocument.MaxTwist,
+            min: -ShapeDocument.MaxTwist
+        ),
+    });
     private static Vector3 ClampLocal(Vector3 position) =>
         new(
             x: Math.Clamp(
@@ -361,28 +314,58 @@ public sealed class SculptModel {
                 value: position.Z
             )
         );
-    // Resolves a chain by id (digits) or (case-insensitive) name to its index, or -1 when nothing matches.
-    private int FindChainIndex(string idOrName) {
-        for (var index = 0; (index < m_chains.Count); index++) {
-            var chain = m_chains[index];
-            var matches = (int.TryParse(
-                result: out var id,
-                s: idOrName
+    private static Vector3 ClampScale(Vector3 scale) =>
+        new(
+            x: Math.Clamp(
+                value: scale.X,
+                max: MaxScale,
+                min: MinScale
+            ),
+            y: Math.Clamp(
+                value: scale.Y,
+                max: MaxScale,
+                min: MinScale
+            ),
+            z: Math.Clamp(
+                value: scale.Z,
+                max: MaxScale,
+                min: MinScale
             )
-                ? (chain.Id == id)
-                : string.Equals(
-                    a: chain.Name,
-                    b: idOrName,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )
-            );
+        );
+    private static ShapeDocument DefaultBrush() =>
+        new(
+            Bend: 0f,
+            Blend: SdfBlendOp.Union,
+            Dilate: 0f,
+            Group: 0,
+            Id: 0,
+            Material: 0,
+            Name: null,
+            Onion: 0f,
+            Position: Vector3.Zero,
+            Rotation: Quaternion.Identity,
+            Scale: Vector3.One,
+            Smooth: 0f,
+            Twist: 0f,
+            Type: default
+        );
+    /// <summary>A fresh copy of the default 16-slot palette: a golden-ratio hue sweep — well-separated hues for
+    /// small index counts, deterministic, editable per slot. The schema's documented "null palette = the default
+    /// sweep" behavior, value-for-value.</summary>
+    /// <returns>The default palette (one list per call — callers may mutate their copy).</returns>
+    public static List<PaletteEntryDocument> DefaultPalette() {
+        var palette = new List<PaletteEntryDocument>(capacity: CreationDocument.PaletteSize);
 
-            if (matches) {
-                return index;
-            }
+        for (var index = 0; (index < CreationDocument.PaletteSize); index++) {
+            palette.Add(item: new PaletteEntryDocument(
+                Color: HexColor.Format(rgb: PaletteHue(index: index)),
+                Emissive: null,
+                Specular: null,
+                Shininess: null
+            ));
         }
 
-        return -1;
+        return palette;
     }
     private static Vector3 PaletteHue(int index) {
         var hue = ((index * 0.61803399f) % 1f);
@@ -404,54 +387,78 @@ public sealed class SculptModel {
             z: (0.35f + (0.5f * b))
         );
     }
-    // Completes a TouchDrag pair: call AFTER mutating, passing back what TouchDrag returned.
-    private void PushIfDragStarted(bool dragStarted) {
-        if (dragStarted) {
-            m_history.Push(snapshot: CaptureSnapshot());
-        }
-    }
     // Pushes a snapshot for a DISCRETE edit (one push per call, unconditionally) — call AFTER mutating. Also closes
     // any open drag first, so a discrete edit mid-drag does not merge into it.
     private void PushUndo() {
         m_dragOpen = false;
-        m_history.Push(snapshot: CaptureSnapshot());
+        m_history.Push(snapshot: m_document);
     }
-    // Resyncs the shape id -> index map with the current m_shapes contents — call after ANY add/remove/clear (an
-    // in-place `m_shapes[i] = shape with {...}` never needs this). Structural edits are act-scale, never per-frame.
-    private void RebuildShapeIndex() {
-        m_shapeIndexById.Clear();
-
-        for (var index = 0; (index < m_shapes.Count); index++) {
-            m_shapeIndexById[m_shapes[index].Id] = index;
+    // Completes a TouchDrag pair: call AFTER mutating, passing back what TouchDrag returned.
+    private void PushIfDragStarted(bool dragStarted) {
+        if (dragStarted) {
+            m_history.Push(snapshot: m_document);
         }
     }
-    private void RenumberFrames() {
-        for (var index = 0; (index < m_frames.Count); index++) {
-            var expected = $"f{(index + 1)}";
+    // Resolves a chain by id (digits) or (case-insensitive) name to its index in Chains, or -1 when nothing matches.
+    private int ResolveChainIndex(string idOrName) {
+        var chains = Chains;
 
-            if (
-                m_frames[index].Name.StartsWith(value: 'f') &&
-                (m_frames[index].Name != expected)
-            ) {
-                m_frames[index] = (m_frames[index] with { Name = expected });
+        for (var index = 0; (index < chains.Count); index++) {
+            var chain = chains[index];
+            var matches = (int.TryParse(
+                result: out var id,
+                s: idOrName
+            )
+                ? (chain.Id == id)
+                : string.Equals(
+                    a: chain.Name,
+                    b: idOrName,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )
+            );
+
+            if (matches) {
+                return index;
             }
         }
+
+        return -1;
+    }
+    private int? ResolveGoalChainIndex() {
+        if (m_goalChainId is not { } id) {
+            return null;
+        }
+
+        var chains = Chains;
+
+        for (var index = 0; (index < chains.Count); index++) {
+            if (chains[index].Id == id) {
+                return index;
+            }
+        }
+
+        return null;
     }
     // Resolves a shape by id (digits) or (case-insensitive) name to its id, or null when nothing matches.
     private int? ResolveShapeId(string idOrName) {
+        var shapes = (m_document.Shapes ?? []);
+
         if (int.TryParse(
             result: out var id,
             s: idOrName
         )) {
-            return (m_shapeIndexById.ContainsKey(key: id)
-                ? id
-                : null
-            );
+            foreach (var shape in shapes) {
+                if (shape.Id == id) {
+                    return id;
+                }
+            }
+
+            return null;
         }
 
-        foreach (var shape in m_shapes) {
+        foreach (var shape in shapes) {
             if (string.Equals(
-                a: shape.Name,
+                a: shape.Name?.Value,
                 b: idOrName,
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
@@ -461,96 +468,61 @@ public sealed class SculptModel {
 
         return null;
     }
-    // Restores a previously captured snapshot wholesale (undo/redo's shared apply path).
-    private void RestoreSnapshot(SculptSnapshot snapshot) {
-        m_shapes.Clear();
-        m_shapes.AddRange(collection: snapshot.Shapes);
-        RebuildShapeIndex();
-
-        for (var index = 0; ((index < snapshot.Palette.Count) && (index < CreationDocument.PaletteSize)); index++) {
-            m_palette[index] = snapshot.Palette[index];
+    private (int Index, ShapeDocument Shape)? ResolveSelectedShape() {
+        if (m_selectedShapeId is not { } id) {
+            return null;
         }
 
-        m_chains.Clear();
-        m_chains.AddRange(collection: snapshot.Chains);
-        m_frames.Clear();
-        m_frames.AddRange(collection: snapshot.Frames);
-        m_currentFrame = snapshot.CurrentFrame;
-        m_restPose = snapshot.RestPose;
-        m_selectionIndex = snapshot.SelectionIndex;
-        m_previousSelectionIndex = snapshot.PreviousSelectionIndex;
-        m_nextShapeId = snapshot.NextShapeId;
-        m_nextGroupId = snapshot.NextGroupId;
-        m_nextChainId = snapshot.NextChainId;
-        m_name = snapshot.Name;
-        m_bakeStyle = snapshot.BakeStyle;
-        m_intent = snapshot.Intent;
-        m_brushType = snapshot.BrushType;
-        m_brushRotation = snapshot.BrushRotation;
-        m_brushScale = snapshot.BrushScale;
-        m_brushMaterial = snapshot.BrushMaterial;
-        m_brushBlend = snapshot.BrushBlend;
-        m_brushSmooth = snapshot.BrushSmooth;
-        m_brushMirror = snapshot.BrushMirror;
-        m_brushTwist = snapshot.BrushTwist;
-        m_brushBend = snapshot.BrushBend;
-        m_brushDilate = snapshot.BrushDilate;
-        m_brushOnion = snapshot.BrushOnion;
-        m_goalChainIndex = -1;
-        m_chainCursor = -1;
-        m_playing = false;
+        var shapes = (m_document.Shapes ?? []);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            if (shapes[index].Id == id) {
+                return (index, shapes[index]);
+            }
+        }
+
+        return null;
+    }
+    // The rig cache lookup every solve/goal-target read uses — a chain visible in Document.Chains always has a
+    // cached rig (captured at definition/load, or resynced by AcceptCandidate for a chain a generic edit added
+    // directly); the fallback recapture is defensive only.
+    private ChainRig RigFor(int chainId) {
+        if (m_rig.TryGetValue(
+            key: chainId,
+            value: out var cached
+        )) {
+            return cached;
+        }
+
+        foreach (var chain in Chains) {
+            if ((chain.Id == chainId) && TryCaptureRig(
+                shapeIds: chain.Shapes,
+                shapes: (m_document.Shapes ?? []),
+                rig: out var recaptured
+            )) {
+                m_rig[chainId] = recaptured;
+
+                return recaptured;
+            }
+        }
+
+        return ChainRig.Capture(positions: [], rotations: []);
+    }
+    private void SelectShapeById(int? id) {
+        if (m_selectedShapeId is { } current) {
+            m_previousSelectedShapeId = current;
+        }
+
+        m_selectedShapeId = id;
+        m_goalChainId = null;
         Revision++;
     }
-    private void SelectIndex(int index) {
-        if (!TargetIsBrush) {
-            m_previousSelectionIndex = m_selectionIndex;
-        }
+    private IReadOnlyList<FrameTransformDocument> Snapshot() {
+        var shapes = (m_document.Shapes ?? []);
+        var poses = new List<FrameTransformDocument>(capacity: shapes.Count);
 
-        m_selectionIndex = index;
-        m_goalChainIndex = -1;
-        Revision++;
-    }
-    // The shared clamped-style setter (twist/bend/dilate/onion have identical target dispatch, differing only in
-    // clamp envelope and field).
-    private float SetStyleField(float value, float max, float min, StyleField field) {
-        if (TargetIsGoal) {
-            return 0f;
-        }
-
-        var clamped = Math.Clamp(
-            max: max,
-            min: min,
-            value: value
-        );
-
-        if (TargetIsBrush) {
-            _ = field switch {
-                StyleField.Twist => m_brushTwist = clamped,
-                StyleField.Bend => m_brushBend = clamped,
-                StyleField.Dilate => m_brushDilate = clamped,
-                _ => m_brushOnion = clamped,
-            };
-            Revision++;
-        } else {
-            var shape = m_shapes[m_selectionIndex];
-
-            m_shapes[m_selectionIndex] = field switch {
-                StyleField.Twist => shape with { Twist = clamped },
-                StyleField.Bend => shape with { Bend = clamped },
-                StyleField.Dilate => shape with { Dilate = clamped },
-                _ => shape with { Onion = clamped },
-            };
-            Revision++;
-            PushUndo();
-        }
-
-        return clamped;
-    }
-    private SculptFrame Snapshot(string name) {
-        var poses = new List<SculptPose>(capacity: m_shapes.Count);
-
-        foreach (var shape in m_shapes) {
-            poses.Add(item: new SculptPose(
+        foreach (var shape in shapes) {
+            poses.Add(item: new FrameTransformDocument(
                 Id: shape.Id,
                 Position: shape.Position,
                 Rotation: shape.Rotation,
@@ -558,21 +530,14 @@ public sealed class SculptModel {
             ));
         }
 
-        return new SculptFrame(
-            Name: name,
-            Poses: poses
-        );
+        return poses;
     }
-    // ---- undo internals (EditHistory<SculptSnapshot> over the whole authored state) ------------------------------
-    //
-    // EditHistory<T>.Push's contract is "the snapshot AFTER the completed edit" — the pushed value becomes the new
-    // undo-stack top, and a later TryUndo steps back to whatever was pushed BEFORE it. So every push here happens
-    // AFTER its mutation, never before (pushing before would duplicate the constructor's baseline into the first
-    // edit's "before" state and shift every subsequent undo off by one).
-
-    // Marks a continuous edit's (a drag's) touch for this frame: true only on the drag's START edge, so the caller
-    // pushes the post-mutation snapshot exactly once; the drag stays open across frames until EndInputFrame notices
-    // it went untouched, coalescing the whole drag onto ONE undo step. Call BEFORE mutating.
+    private void StopPlayback() {
+        m_playing = false;
+        m_currentFrame = 0;
+        ApplyPoses(poses: m_restPose);
+    }
+    // Completes a TouchDrag pair for a chain-goal/pole drive: call BEFORE mutating (see TouchDrag).
     private bool TouchDrag() {
         var isDragStart = !m_dragOpen;
 
@@ -581,86 +546,77 @@ public sealed class SculptModel {
 
         return isDragStart;
     }
-    // Captures a chain's rest geometry from the CURRENT positions of the named shapes (root→tip order); returns
-    // null when fewer than 2 shapes resolved (a chain needs at least one bone).
-    private SculptChain? TryCaptureChain(int id, string? name, IReadOnlyList<int> shapeIds, string? kind) {
+    // Captures a chain's rest geometry from the CURRENT positions of the named shapes (root→tip order); false when
+    // fewer than 2 resolved or any named shape is missing.
+    private static bool TryCaptureRig(IReadOnlyList<int> shapeIds, IReadOnlyList<ShapeDocument> shapes, out ChainRig rig) {
         if (shapeIds.Count < 2) {
-            return null;
+            rig = null!;
+
+            return false;
         }
 
         var positions = new List<Vector3>(capacity: shapeIds.Count);
         var rotations = new List<Quaternion>(capacity: shapeIds.Count);
 
         foreach (var shapeId in shapeIds) {
-            if (!m_shapeIndexById.TryGetValue(
-                key: shapeId,
-                value: out var index
-            )) {
-                return null;
+            var found = false;
+
+            foreach (var shape in shapes) {
+                if (shape.Id == shapeId) {
+                    positions.Add(item: shape.Position);
+                    rotations.Add(item: shape.Rotation);
+                    found = true;
+
+                    break;
+                }
             }
 
-            var shape = m_shapes[index];
+            if (!found) {
+                rig = null!;
 
-            positions.Add(item: shape.Position);
-            rotations.Add(item: shape.Rotation);
+                return false;
+            }
         }
 
-        return SculptChain.Capture(
-            id: id,
-            kind: kind,
-            name: name,
+        rig = ChainRig.Capture(
             positions: positions,
-            rotations: rotations,
-            shapeIds: shapeIds
+            rotations: rotations
         );
+
+        return true;
     }
+    private ShapeDocument TargetShape() => (TargetIsBrush ? m_brush : ResolveSelectedShape()!.Value.Shape);
 
     /// <summary>Adds a shape: the brush's primitive (or an explicit one) with the brush's style, at an explicit
     /// position or the spawn point, then selects it. The brush's palette slot advances so consecutive adds read as
-    /// distinct siblings; a non-Union brush blend coerces the new shape into its own group-of-one (the structural
-    /// invariant: blends only ever act within a group).</summary>
+    /// distinct siblings.</summary>
     /// <param name="type">The primitive, or null for the brush's.</param>
     /// <param name="position">The position (clamped into the workbench bound), or null for the spawn point.</param>
     /// <returns>The added shape, or null when the shape budget is spent.</returns>
-    public SculptShape? AddShape(AvatarPrimitive? type = null, Vector3? position = null) {
+    public ShapeDocument? AddShape(AvatarPrimitive? type = null, Vector3? position = null) {
         if (StampShapeCount >= m_shapeCapacity) {
             return null;
         }
 
-        var shape = new SculptShape(
-            Bend: m_brushBend,
-            Blend: m_brushBlend,
-            Dilate: m_brushDilate,
-            GroupId: ((m_brushBlend != SdfBlendOp.Union)
-            ? m_nextGroupId++
-            : 0),
-            Id: m_nextShapeId++,
-            MaterialIndex: m_brushMaterial,
-            Mirror: m_brushMirror,
-            Name: null,
-            Onion: m_brushOnion,
-            Position: ClampLocal(position: (position ?? SpawnPosition)),
-            Rotation: m_brushRotation,
-            Scale: m_brushScale,
-            Smooth: m_brushSmooth,
-            Twist: m_brushTwist,
-            Type: (type ?? m_brushType)
-        );
+        var shape = (m_brush with {
+            Group = (((m_brush.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) ? m_nextGroupId++ : 0),
+            Id = m_nextShapeId++,
+            Name = null,
+            Position = ClampLocal(position: (position ?? SpawnPosition)),
+            Type = (type ?? m_brush.Type),
+        });
+        var shapes = new List<ShapeDocument>(collection: (m_document.Shapes ?? [])) { shape };
 
-        m_shapes.Add(item: shape);
-        RebuildShapeIndex();
+        m_document = (m_document with { Shapes = shapes });
 
         if (type is { } explicitType) {
-            m_brushType = explicitType;
+            m_brush = (m_brush with { Type = explicitType });
         }
 
         // The next add reads as a sibling: advance the brush's palette slot so consecutive adds stay visually
         // distinct without any palette work by the player.
-        m_brushMaterial = ((m_brushMaterial + 1) % CreationDocument.PaletteSize);
-        m_previousSelectionIndex = m_selectionIndex;
-        m_selectionIndex = (m_shapes.Count - 1);
-        m_goalChainIndex = -1;
-        Revision++;
+        m_brush = (m_brush with { Material = (((m_brush.Material ?? 0) + 1) % CreationDocument.PaletteSize) });
+        SelectShapeById(id: shape.Id);
         PushUndo();
 
         return shape;
@@ -671,54 +627,75 @@ public sealed class SculptModel {
     /// <returns>The target's new blend op.</returns>
     public SdfBlendOp CycleBlend(int direction) {
         if (TargetIsGoal) {
-            return TargetBlend;
+            return SdfBlendOp.Union;
         }
 
         var current = Array.IndexOf(
             array: BlendCycle,
-            value: TargetBlend
+            value: (TargetShape().Blend ?? SdfBlendOp.Union)
         );
         var next = BlendCycle[(current + direction).FloorModulo(modulus: BlendCycle.Length)];
 
-        SetBlend(blend: next);
+        if (TargetIsBrush) {
+            m_brush = (m_brush with { Blend = next });
+            Revision++;
+        } else {
+            var (index, shape) = ResolveSelectedShape()!.Value;
+            var newGroup = (((next != SdfBlendOp.Union) && ((shape.Group ?? 0) == 0)) ? m_nextGroupId++ : (shape.Group ?? 0));
+            var shapes = new List<ShapeDocument>(collection: m_document.Shapes!) {
+                [index] = (shape with { Blend = next, Group = newGroup }),
+            };
+
+            m_document = (m_document with { Shapes = shapes });
+            Revision++;
+            PushUndo();
+        }
 
         return next;
     }
-    /// <summary>Cycles the rig-page current-chain cursor (which chain pole/kind/delete verbs act on) — separate from
-    /// the goal-target selection (a chain tunes without its goal being the movement target). Wraps through "none".</summary>
+    /// <summary>Cycles the rig-page current-chain cursor (which chain kind/delete verbs act on) — separate from the
+    /// goal-target selection. Wraps through "none".</summary>
     /// <param name="direction">+1 for the next chain, -1 for the previous.</param>
     /// <returns>The cursor's chain, or null (none).</returns>
-    public SculptChain? CycleChainCursor(int direction) {
-        if (m_chains.Count == 0) {
-            m_chainCursor = -1;
+    public ChainDocument? CycleChainCursor(int direction) {
+        var chains = Chains;
+
+        if (chains.Count == 0) {
+            m_chainCursorId = null;
 
             return null;
         }
 
-        var next = (m_chainCursor + direction);
+        var current = ((m_chainCursorId is { } id) ? chains.ToList().FindIndex(match: c => (c.Id == id)) : -1);
+        var next = (current + direction);
 
-        m_chainCursor = ((next >= m_chains.Count)
+        next = ((next >= chains.Count)
             ? -1
             : ((next < -1)
-                ? (m_chains.Count - 1)
+                ? (chains.Count - 1)
                 : next
         ));
+        m_chainCursorId = ((next >= 0) ? chains[next].Id : null);
         Revision++;
 
-        return ((m_chainCursor >= 0)
-            ? m_chains[m_chainCursor]
-            : null
-        );
+        return ((next >= 0) ? chains[next] : null);
     }
     /// <summary>Cycles the target's material through the palette (wraps).</summary>
     /// <param name="direction">+1 for the next palette slot, -1 for the previous.</param>
     /// <returns>The target's new palette slot.</returns>
     public int CycleMaterial(int direction) {
         if (TargetIsGoal) {
-            return TargetMaterialIndex;
+            return 0;
         }
 
-        return SetMaterialIndex(index: (TargetMaterialIndex + direction).FloorModulo(modulus: CreationDocument.PaletteSize));
+        var next = ((TargetShape().Material ?? 0) + direction).FloorModulo(modulus: CreationDocument.PaletteSize);
+
+        ApplyToTarget(
+            mutate: s => (s with { Material = next }),
+            pushUndo: true
+        );
+
+        return next;
     }
     /// <summary>Cycles the target's primitive (wraps both directions): the brush's when nothing is selected (the
     /// next add changes), the selected shape's otherwise (re-primitive in place).</summary>
@@ -726,22 +703,15 @@ public sealed class SculptModel {
     /// <returns>The target's new primitive.</returns>
     public AvatarPrimitive CyclePrimitive(int direction) {
         if (TargetIsGoal) {
-            return TargetType;
+            return m_brush.Type;
         }
 
-        if (TargetIsBrush) {
-            m_brushType = ((AvatarPrimitive)((((int)m_brushType) + direction).FloorModulo(modulus: PrimitiveCount)));
-            Revision++;
+        var next = ((AvatarPrimitive)((((int)TargetShape().Type) + direction).FloorModulo(modulus: PrimitiveCount)));
 
-            return m_brushType;
-        }
-
-        var shape = m_shapes[m_selectionIndex];
-        var next = ((AvatarPrimitive)((((int)shape.Type) + direction).FloorModulo(modulus: PrimitiveCount)));
-
-        m_shapes[m_selectionIndex] = shape with { Type = next };
-        Revision++;
-        PushUndo();
+        ApplyToTarget(
+            mutate: s => (s with { Type = next }),
+            pushUndo: true
+        );
 
         return next;
     }
@@ -749,23 +719,18 @@ public sealed class SculptModel {
     /// through "none" (where the target reverts to the brush) at either end.</summary>
     /// <param name="direction">+1 for the next shape/goal, -1 for the previous.</param>
     public void CycleSelection(int direction) {
-        if (
-            (m_shapes.Count == 0) &&
-            (m_chains.Count == 0)
-        ) {
+        var shapes = (m_document.Shapes ?? []);
+        var chains = Chains;
+
+        if ((shapes.Count == 0) && (chains.Count == 0)) {
             return;
         }
 
-        if (!TargetIsBrush) {
-            m_previousSelectionIndex = m_selectionIndex;
-        }
-
-        // The combined cursor space: -1 (brush), 0..shapes-1 (shapes), shapes..+chains-1 (goals).
         var combined = (TargetIsGoal
-            ? (m_shapes.Count + m_goalChainIndex)
-            : m_selectionIndex
+            ? (shapes.Count + ResolveGoalChainIndex()!.Value)
+            : (ResolveSelectedShape()?.Index ?? -1)
         );
-        var span = (m_shapes.Count + m_chains.Count);
+        var span = (shapes.Count + chains.Count);
         var next = (combined + direction);
 
         next = ((next >= span)
@@ -775,28 +740,22 @@ public sealed class SculptModel {
                 : next
         ));
 
-        if (next >= m_shapes.Count) {
-            m_selectionIndex = -1;
-            m_goalChainIndex = (next - m_shapes.Count);
+        if (m_selectedShapeId is { } current) {
+            m_previousSelectedShapeId = current;
+        }
+
+        if (next >= shapes.Count) {
+            m_selectedShapeId = null;
+            m_goalChainId = chains[(next - shapes.Count)].Id;
+        } else if (next >= 0) {
+            m_selectedShapeId = shapes[next].Id;
+            m_goalChainId = null;
         } else {
-            m_selectionIndex = next;
-            m_goalChainIndex = -1;
+            m_selectedShapeId = null;
+            m_goalChainId = null;
         }
 
         Revision++;
-    }
-    /// <summary>A fresh copy of the default 16-slot palette: a golden-ratio hue sweep — well-separated hues for
-    /// small index counts, deterministic, editable per slot. The schema's documented "null palette = the default
-    /// sweep" behavior, value-for-value.</summary>
-    /// <returns>The default palette (one array per call — callers may mutate their copy).</returns>
-    public static SdfMaterial[] DefaultPalette() {
-        var palette = new SdfMaterial[CreationDocument.PaletteSize];
-
-        for (var index = 0; (index < CreationDocument.PaletteSize); index++) {
-            palette[index] = new SdfMaterial(Albedo: PaletteHue(index: index));
-        }
-
-        return palette;
     }
     // ---- the rig (chains + IK) ----------------------------------------------------------------------------------
 
@@ -806,12 +765,8 @@ public sealed class SculptModel {
     /// <param name="shapeIdsOrNames">The member shape ids or names, root→tip order (at least 2).</param>
     /// <param name="kind"><c>limb</c> or <c>spine</c> (null infers limb for exactly 3 shapes, else spine).</param>
     /// <returns>The defined chain, or null when fewer than 2 shapes resolved or <see cref="MaxChains"/> is reached.</returns>
-    public SculptChain? DefineChain(string? name, IReadOnlyList<string> shapeIdsOrNames, string? kind = null) {
+    public ChainDocument? DefineChain(string? name, IReadOnlyList<string> shapeIdsOrNames, string? kind = null) {
         ArgumentNullException.ThrowIfNull(shapeIdsOrNames);
-
-        if (m_chains.Count >= MaxChains) {
-            return null;
-        }
 
         var ids = new List<int>(capacity: shapeIdsOrNames.Count);
 
@@ -821,74 +776,90 @@ public sealed class SculptModel {
             }
         }
 
-        if (TryCaptureChain(
-            id: m_nextChainId,
+        return DefineChainCore(
             kind: kind,
             name: name,
             shapeIds: ids
-        ) is not { } captured) {
-            return null;
-        }
-
-        m_nextChainId++;
-        m_chains.Add(item: captured);
-        Revision++;
-        PushUndo();
-
-        return captured;
+        );
     }
     /// <summary>Defines a limb chain seeded from the selection: the selected shape as root, walking forward through
     /// the next 2 shapes in document order (the pad-friendly stand-in for the console verb's arbitrary list).</summary>
     /// <returns>The defined chain, or null when there was no valid 3-shape run or <see cref="MaxChains"/> is reached.</returns>
-    public SculptChain? DefineChainFromSelection() {
+    public ChainDocument? DefineChainFromSelection() {
         if (
             TargetIsBrush ||
             TargetIsGoal ||
-            ((m_selectionIndex + 2) >= m_shapes.Count) ||
-            (m_chains.Count >= MaxChains)
+            (ResolveSelectedShape() is not { } selection) ||
+            ((selection.Index + 2) >= (m_document.Shapes?.Count ?? 0))
         ) {
             return null;
         }
 
-        var ids = new[] { m_shapes[m_selectionIndex].Id, m_shapes[(m_selectionIndex + 1)].Id, m_shapes[(m_selectionIndex + 2)].Id };
+        var shapes = m_document.Shapes!;
+        var ids = new[] { shapes[selection.Index].Id, shapes[(selection.Index + 1)].Id, shapes[(selection.Index + 2)].Id };
 
-        if (TryCaptureChain(
-            id: m_nextChainId,
+        return DefineChainCore(
             kind: ChainDocument.KindLimb,
             name: null,
             shapeIds: ids
-        ) is not { } captured) {
+        );
+    }
+    private ChainDocument? DefineChainCore(string? name, IReadOnlyList<int> shapeIds, string? kind) {
+        var chains = Chains;
+
+        if (
+            (chains.Count >= MaxChains) ||
+            !TryCaptureRig(
+                shapeIds: shapeIds,
+                shapes: (m_document.Shapes ?? []),
+                rig: out var rig
+            )
+        ) {
             return null;
         }
 
-        m_nextChainId++;
-        m_chains.Add(item: captured);
+        var resolvedKind = (kind ?? ((shapeIds.Count == 3) ? ChainDocument.KindLimb : ChainDocument.KindSpine));
+        var newId = m_nextChainId++;
+        var chain = new ChainDocument(
+            Goal: rig.RestGoal,
+            Id: newId,
+            Kind: resolvedKind,
+            Name: name,
+            Pole: rig.RestPole,
+            Shapes: shapeIds
+        );
+        var list = new List<ChainDocument>(collection: chains) { chain };
+
+        m_document = (m_document with { Chains = list });
+        m_rig[newId] = rig;
         Revision++;
         PushUndo();
 
-        return captured;
+        return chain;
     }
     /// <summary>Deletes a chain by id or name; a no-op when nothing matches.</summary>
     /// <param name="idOrName">The chain's id (digits) or player-given name.</param>
     /// <returns>Whether a chain was removed.</returns>
     public bool DeleteChain(string idOrName) {
-        var index = FindChainIndex(idOrName: idOrName);
+        var index = ResolveChainIndex(idOrName: idOrName);
 
         if (index < 0) {
             return false;
         }
 
-        m_chains.RemoveAt(index: index);
+        var list = new List<ChainDocument>(collection: Chains);
+        var removedId = list[index].Id;
 
-        if (m_goalChainIndex == index) {
-            m_selectionIndex = -1;
-            m_goalChainIndex = -1;
-        } else if (m_goalChainIndex > index) {
-            m_goalChainIndex--;
+        list.RemoveAt(index: index);
+        m_document = (m_document with { Chains = ((list.Count > 0) ? list : null) });
+
+        if (m_goalChainId == removedId) {
+            m_selectedShapeId = null;
+            m_goalChainId = null;
         }
 
-        if (m_chainCursor >= m_chains.Count) {
-            m_chainCursor = -1;
+        if (m_chainCursorId == removedId) {
+            m_chainCursorId = null;
         }
 
         Revision++;
@@ -903,16 +874,24 @@ public sealed class SculptModel {
             return false;
         }
 
-        m_frames.RemoveAt(index: (m_currentFrame - 1));
-        RenumberFrames();
+        var frames = new List<FrameDocument>(collection: m_document.Frames!);
+
+        frames.RemoveAt(index: (m_currentFrame - 1));
+
+        for (var index = 0; (index < frames.Count); index++) {
+            var expected = $"f{(index + 1)}";
+
+            if (frames[index].Name.StartsWith(value: 'f') && (frames[index].Name != expected)) {
+                frames[index] = (frames[index] with { Name = expected });
+            }
+        }
+
+        m_document = (m_document with { Frames = ((frames.Count > 0) ? frames : null) });
         m_currentFrame = Math.Min(
             val1: m_currentFrame,
-            val2: m_frames.Count
+            val2: frames.Count
         );
-        ApplyPoses(frame: ((m_currentFrame == 0)
-            ? m_restPose
-            : m_frames[(m_currentFrame - 1)]));
-        Revision++;
+        ApplyPoses(poses: ((m_currentFrame == 0) ? m_restPose : frames[(m_currentFrame - 1)].Transforms));
         PushUndo();
 
         return true;
@@ -920,17 +899,16 @@ public sealed class SculptModel {
     /// <summary>Deletes the selected shape (a no-op when nothing is selected). The selection clears.</summary>
     /// <returns>Whether a shape was removed.</returns>
     public bool DeleteSelected() {
-        if (
-            TargetIsBrush ||
-            TargetIsGoal
-        ) {
+        if (ResolveSelectedShape() is not { } selection) {
             return false;
         }
 
-        m_shapes.RemoveAt(index: m_selectionIndex);
-        RebuildShapeIndex();
-        m_selectionIndex = -1;
-        m_previousSelectionIndex = -1;
+        var shapes = new List<ShapeDocument>(collection: m_document.Shapes!);
+
+        shapes.RemoveAt(index: selection.Index);
+        m_document = (m_document with { Shapes = shapes });
+        m_selectedShapeId = null;
+        m_previousSelectedShapeId = null;
         Revision++;
         PushUndo();
 
@@ -942,38 +920,29 @@ public sealed class SculptModel {
             return;
         }
 
-        m_previousSelectionIndex = m_selectionIndex;
-        m_selectionIndex = -1;
-        m_goalChainIndex = -1;
-        Revision++;
+        SelectShapeById(id: null);
     }
     /// <summary>Duplicates the selected shape in place (nudged aside so the twin reads) and selects the twin. A
     /// duplicate of a grouped member joins the same group.</summary>
     /// <returns>Whether a shape was added (false with no selection or a spent budget).</returns>
     public bool DuplicateTarget() {
-        if (
-            TargetIsBrush ||
-            TargetIsGoal ||
-            (StampShapeCount >= m_shapeCapacity)
-        ) {
+        if ((ResolveSelectedShape() is not { } selection) || (StampShapeCount >= m_shapeCapacity)) {
             return false;
         }
 
-        var source = m_shapes[m_selectionIndex];
-
-        m_shapes.Add(item: source with {
+        var twin = (selection.Shape with {
             Id = m_nextShapeId++,
             Name = null,
-            Position = ClampLocal(position: (source.Position + new Vector3(
-            x: 0.35f,
-            y: 0f,
-            z: 0f
-        ))),
+            Position = ClampLocal(position: (selection.Shape.Position + new Vector3(
+                x: 0.35f,
+                y: 0f,
+                z: 0f
+            ))),
         });
-        RebuildShapeIndex();
-        m_previousSelectionIndex = m_selectionIndex;
-        m_selectionIndex = (m_shapes.Count - 1);
-        Revision++;
+        var shapes = new List<ShapeDocument>(collection: m_document.Shapes!) { twin };
+
+        m_document = (m_document with { Shapes = shapes });
+        SelectShapeById(id: twin.Id);
         PushUndo();
 
         return true;
@@ -981,10 +950,7 @@ public sealed class SculptModel {
     /// <summary>Closes a drag whose continuous verb did not fire this frame (the stick returned to center) — call
     /// once per produced frame after every input verb has run. A drag still being touched stays open.</summary>
     public void EndInputFrame() {
-        if (
-            m_dragOpen &&
-            !m_dragTouchedThisFrame
-        ) {
+        if (m_dragOpen && !m_dragTouchedThisFrame) {
             m_dragOpen = false;
         }
 
@@ -995,183 +961,121 @@ public sealed class SculptModel {
     /// <returns>The joined group id, or null when there was no valid pair to link.</returns>
     public int? LinkWithPrevious() {
         if (
-            TargetIsBrush ||
-            TargetIsGoal ||
-            (m_previousSelectionIndex < 0) ||
-            (m_previousSelectionIndex >= m_shapes.Count) ||
-            (m_previousSelectionIndex == m_selectionIndex)
+            (ResolveSelectedShape() is not { } current) ||
+            (m_previousSelectedShapeId is not { } previousId) ||
+            (previousId == current.Shape.Id)
         ) {
             return null;
         }
 
-        var current = m_shapes[m_selectionIndex];
-        var previous = m_shapes[m_previousSelectionIndex];
-        // Resolve the joined group: reuse either member's existing group, else mint a new one; when BOTH have
-        // (different) groups, the previous shape's whole group migrates into the current's.
-        var groupId = ((current.GroupId != 0)
-            ? current.GroupId
-            : ((previous.GroupId != 0)
-                ? previous.GroupId
+        var shapes = new List<ShapeDocument>(collection: m_document.Shapes!);
+        var previousIndex = shapes.FindIndex(match: s => (s.Id == previousId));
+
+        if (previousIndex < 0) {
+            return null;
+        }
+
+        var previous = shapes[previousIndex];
+        var groupId = (((current.Shape.Group ?? 0) != 0)
+            ? current.Shape.Group!.Value
+            : (((previous.Group ?? 0) != 0)
+                ? previous.Group!.Value
                 : m_nextGroupId++
         ));
-        var migrating = (((previous.GroupId != 0) && (previous.GroupId != groupId))
-            ? previous.GroupId
-            : 0
-        );
+        var migrating = ((((previous.Group ?? 0) != 0) && (previous.Group != groupId)) ? previous.Group!.Value : 0);
 
-        for (var index = 0; (index < m_shapes.Count); index++) {
+        for (var index = 0; (index < shapes.Count); index++) {
             if (
-                (index == m_selectionIndex) ||
-                (index == m_previousSelectionIndex) ||
-                ((migrating != 0) && (m_shapes[index].GroupId == migrating))
+                (index == current.Index) ||
+                (index == previousIndex) ||
+                ((migrating != 0) && ((shapes[index].Group ?? 0) == migrating))
             ) {
-                m_shapes[index] = m_shapes[index] with { GroupId = groupId };
+                shapes[index] = (shapes[index] with { Group = groupId });
             }
         }
 
+        m_document = (m_document with { Shapes = shapes });
         Revision++;
         PushUndo();
 
         return groupId;
     }
-    /// <summary>Replaces the model's content from a normalized document (cross <see cref="CreationCanonicalizer"/>
-    /// first): ids/groups resequence their counters, chains recapture rest geometry from the just-loaded shape
-    /// positions (never trusting persisted rest data), and the pose is deliberately not re-solved — the loaded
-    /// transforms already are the exact pose, and a two-bone solve is not perfectly idempotent at float precision
-    /// (re-solving could drift a byte-identical round-trip by ULPs). Editor-opaque members stash verbatim. The undo
-    /// ring re-baselines (a load is a boundary; a save is not).</summary>
-    /// <param name="document">The normalized document.</param>
+    /// <summary>Replaces the model's content from a document (crossed through <see cref="CreationCanonicalizer.Normalize"/>
+    /// first). Chains recapture rest geometry from the just-loaded shape positions — never trusting persisted rest
+    /// data. The undo ring re-baselines (a load is a boundary; a save is not).</summary>
+    /// <param name="document">The document to load.</param>
     /// <returns>How many shapes loaded (the shape budget truncates a larger document).</returns>
-    public int LoadDocument(CreationDocument document) {
+    public int Load(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
-        m_shapes.Clear();
-        m_selectionIndex = -1;
-        m_previousSelectionIndex = -1;
-        m_name = (document.Name ?? "creation");
-        m_bakeStyle = (document.BakeStyle ?? "classic");
-        m_intent = (document.Intent ?? CreatorIntent.Object);
-        m_loadedCameras = document.Cameras;
-        m_loadedBehavior = document.Behavior;
-        m_loadedParts = document.Parts;
-        m_loadedTextRuns = document.TextRuns;
-        m_loadedExtensions = document.Extensions;
-
-        if (document.Palette is { } palette) {
-            for (var index = 0; ((index < palette.Count) && (index < CreationDocument.PaletteSize)); index++) {
-                var entry = palette[index];
-                var defaults = new SdfMaterial(Albedo: entry.Albedo);
-
-                m_palette[index] = (defaults with {
-                    Emissive = (entry.Emissive ?? defaults.Emissive),
-                    Shininess = (entry.Shininess ?? defaults.Shininess),
-                    Specular = (entry.Specular ?? defaults.Specular),
-                });
-            }
-        }
-
+        var normalized = CreationCanonicalizer.Normalize(document: document);
         var carriedGlyphs = 0;
 
-        foreach (var run in (m_loadedTextRuns ?? [])) {
+        foreach (var run in (normalized.TextRuns ?? [])) {
             carriedGlyphs += run.GlyphCount;
         }
 
-        var maxId = -1;
+        var shapes = new List<ShapeDocument>();
+        var maxShapeId = -1;
         var maxGroup = 0;
 
-        foreach (var shape in (document.Shapes ?? [])) {
-            if ((m_shapes.Count + carriedGlyphs) >= m_shapeCapacity) {
+        foreach (var shape in (normalized.Shapes ?? [])) {
+            if ((shapes.Count + carriedGlyphs) >= m_shapeCapacity) {
                 break;
             }
 
-            m_shapes.Add(item: new SculptShape(
-                Bend: (shape.Bend ?? 0f),
-                Blend: (shape.Blend ?? SdfBlendOp.Union),
-                Dilate: (shape.Dilate ?? 0f),
-                GroupId: (shape.Group ?? 0),
-                Id: shape.Id,
-                MaterialIndex: (shape.Material ?? 0),
-                Mirror: (shape.Mirror ?? false),
-                Name: shape.Name,
-                Onion: (shape.Onion ?? 0f),
-                Position: ClampLocal(position: shape.Position),
-                Rotation: shape.Rotation,
-                Scale: shape.Scale,
-                Smooth: (shape.Smooth ?? 0f),
-                Twist: (shape.Twist ?? 0f),
-                Type: shape.Type
-            ));
-            maxId = Math.Max(
-                val1: maxId,
-                val2: shape.Id
-            );
-            maxGroup = Math.Max(
-                val1: maxGroup,
-                val2: (shape.Group ?? 0)
-            );
+            shapes.Add(item: shape);
+            maxShapeId = Math.Max(val1: maxShapeId, val2: shape.Id);
+            maxGroup = Math.Max(val1: maxGroup, val2: (shape.Group ?? 0));
         }
 
-        RebuildShapeIndex();
-        m_nextShapeId = (maxId + 1);
-        m_nextGroupId = (maxGroup + 1);
+        m_rig.Clear();
 
-        // The timeline reloads with the shapes (the cursor resets to rest; the rest pose is the loaded live model).
-        m_frames.Clear();
-        m_currentFrame = 0;
-        m_restPose = null;
-        m_playing = false;
-
-        foreach (var frame in (document.Frames ?? [])) {
-            var poses = new List<SculptPose>(capacity: frame.Transforms.Count);
-
-            foreach (var transform in frame.Transforms) {
-                poses.Add(item: new SculptPose(
-                    Id: transform.Id,
-                    Position: transform.Position,
-                    Rotation: transform.Rotation,
-                    Scale: transform.Scale
-                ));
-            }
-
-            m_frames.Add(item: new SculptFrame(
-                Name: frame.Name,
-                Poses: poses
-            ));
-        }
-
-        m_chains.Clear();
-        m_goalChainIndex = -1;
-        m_chainCursor = -1;
-
+        var chains = new List<ChainDocument>();
         var maxChainId = 0;
 
-        foreach (var chain in (document.Chains ?? [])) {
-            if (m_chains.Count >= MaxChains) {
-                break;
+        foreach (var chain in (normalized.Chains ?? [])) {
+            if (
+                (chains.Count >= MaxChains) ||
+                !TryCaptureRig(
+                    shapeIds: chain.Shapes,
+                    shapes: shapes,
+                    rig: out var rig
+                )
+            ) {
+                continue;
             }
 
-            if (TryCaptureChain(
-                id: chain.Id,
-                name: chain.Name,
-                shapeIds: chain.Shapes,
-                kind: chain.Kind
-            ) is { } captured) {
-                m_chains.Add(item: (captured with {
-                    Goal = (chain.Goal ?? captured.Goal),
-                    Pole = (chain.Pole ?? captured.Pole),
-                }));
-                maxChainId = Math.Max(
-                    val1: maxChainId,
-                    val2: chain.Id
-                );
-            }
+            var captured = (chain with {
+                Goal = (chain.Goal ?? rig.RestGoal),
+                Pole = (chain.Pole ?? rig.RestPole),
+            });
+
+            chains.Add(item: captured);
+            m_rig[chain.Id] = rig;
+            maxChainId = Math.Max(val1: maxChainId, val2: chain.Id);
         }
 
+        m_document = (normalized with {
+            Chains = ((chains.Count > 0) ? chains : null),
+            Name = (normalized.Name ?? "creation"),
+            Shapes = shapes,
+        });
         m_nextChainId = (maxChainId + 1);
+        m_nextGroupId = (maxGroup + 1);
+        m_nextShapeId = (maxShapeId + 1);
+        m_brush = DefaultBrush();
+        m_chainCursorId = null;
+        m_currentFrame = 0;
+        m_goalChainId = null;
+        m_playing = false;
+        m_previousSelectedShapeId = null;
+        m_restPose = null;
+        m_selectedShapeId = null;
         Revision++;
-        m_history.Reset(initial: CaptureSnapshot());
+        m_history.Reset(initial: m_document);
 
-        return m_shapes.Count;
+        return shapes.Count;
     }
     /// <summary>Moves the target this frame — planar on the floor plane plus a vertical nudge — clamped inside the
     /// workbench bound. A chain-goal target moves the goal and re-solves the chain live. A no-op on the brush (there
@@ -1194,9 +1098,13 @@ public sealed class SculptModel {
         var pushAfter = TouchDrag();
 
         if (TargetIsGoal) {
-            var chain = m_chains[m_goalChainIndex];
+            var index = ResolveGoalChainIndex()!.Value;
+            var chains = new List<ChainDocument>(collection: Chains);
+            var chain = chains[index];
+            var rig = RigFor(chainId: chain.Id);
 
-            m_chains[m_goalChainIndex] = (chain with { Goal = ClampLocal(position: (chain.Goal + step)) });
+            chains[index] = (chain with { Goal = ClampLocal(position: ((chain.Goal ?? rig.RestGoal) + step)) });
+            m_document = (m_document with { Chains = chains });
             SolveChains();
             PushIfDragStarted(dragStarted: pushAfter);
 
@@ -1207,9 +1115,12 @@ public sealed class SculptModel {
             return;
         }
 
-        var shape = m_shapes[m_selectionIndex];
+        var (shapeIndex, shape) = ResolveSelectedShape()!.Value;
+        var shapes = new List<ShapeDocument>(collection: m_document.Shapes!) {
+            [shapeIndex] = (shape with { Position = ClampLocal(position: (shape.Position + step)) }),
+        };
 
-        m_shapes[m_selectionIndex] = shape with { Position = ClampLocal(position: (shape.Position + step)) };
+        m_document = (m_document with { Shapes = shapes });
         Revision++;
         PushIfDragStarted(dragStarted: pushAfter);
     }
@@ -1217,39 +1128,72 @@ public sealed class SculptModel {
     /// <param name="planar">The X/Z nudge.</param>
     /// <param name="deltaSeconds">The frame delta.</param>
     public void NudgePole(Vector2 planar, float deltaSeconds) {
-        if (
-            (m_chainCursor < 0) ||
-            (m_chainCursor >= m_chains.Count) ||
-            (planar == Vector2.Zero)
-        ) {
+        if ((m_chainCursorId is not { } cursorId) || (planar == Vector2.Zero)) {
+            return;
+        }
+
+        var chains = Chains;
+        var index = chains.ToList().FindIndex(match: c => (c.Id == cursorId));
+
+        if (index < 0) {
             return;
         }
 
         const float PoleSpeed = 3.2f;
-        var chain = m_chains[m_chainCursor];
+        var list = new List<ChainDocument>(collection: chains);
+        var chain = list[index];
+        var rig = RigFor(chainId: chain.Id);
 
-        m_chains[m_chainCursor] = (chain with {
-            Pole = (chain.Pole + (new Vector3(
-            x: planar.X,
-            y: 0f,
-            z: planar.Y
-        ) * (PoleSpeed * deltaSeconds))),
+        list[index] = (chain with {
+            Pole = ((chain.Pole ?? rig.RestPole) + (new Vector3(
+                x: planar.X,
+                y: 0f,
+                z: planar.Y
+            ) * (PoleSpeed * deltaSeconds))),
         });
+        m_document = (m_document with { Chains = list });
         SolveChains();
+    }
+    // A path targeting palette[n] needs a real JSON array of at least n+1 entries to navigate into — pads with the
+    // default-sweep hue for any slot the document did not yet author, LAZILY (only when a write actually reaches
+    // that far), so a load with no edits never grows the palette and stays byte-round-trippable. Untouched entries
+    // pass through verbatim (no re-parse/re-format), so an already-valid but non-canonical color is never rewritten
+    // by a write to some OTHER slot.
+    private static List<PaletteEntryDocument> PadPaletteForWrite(IReadOnlyList<PaletteEntryDocument>? source, int minLength) {
+        var target = Math.Min(val1: Math.Max(val1: minLength, val2: (source?.Count ?? 0)), val2: CreationDocument.PaletteSize);
+        var padded = new List<PaletteEntryDocument>(capacity: target);
+
+        for (var index = 0; (index < target); index++) {
+            padded.Add(item: (((source is { } provided) && (index < provided.Count))
+                ? provided[index]
+                : new PaletteEntryDocument(
+                    Color: HexColor.Format(rgb: PaletteHue(index: index)),
+                    Emissive: null,
+                    Specular: null,
+                    Shininess: null
+            )));
+        }
+
+        return padded;
     }
     /// <summary>Records the current pose: at rest a new frame appends and becomes current; on a saved frame the
     /// snapshot overwrites it.</summary>
     /// <returns>The recorded frame's display index (1-based).</returns>
     public int RecordFrame() {
+        var frames = new List<FrameDocument>(collection: (m_document.Frames ?? []));
+
         if (m_currentFrame == 0) {
-            // Recording FROM rest: the rest pose is the frame — capture it as both.
-            m_restPose ??= Snapshot(name: "rest");
-            m_frames.Add(item: Snapshot(name: $"f{(m_frames.Count + 1)}"));
-            m_currentFrame = m_frames.Count;
+            m_restPose ??= Snapshot();
+            frames.Add(item: new FrameDocument(
+                Name: $"f{(frames.Count + 1)}",
+                Transforms: Snapshot()
+            ));
+            m_currentFrame = frames.Count;
         } else {
-            m_frames[(m_currentFrame - 1)] = (Snapshot(name: m_frames[(m_currentFrame - 1)].Name));
+            frames[(m_currentFrame - 1)] = (frames[(m_currentFrame - 1)] with { Transforms = Snapshot() });
         }
 
+        m_document = (m_document with { Frames = frames });
         Revision++;
         PushUndo();
 
@@ -1262,45 +1206,33 @@ public sealed class SculptModel {
             return false;
         }
 
-        RestoreSnapshot(snapshot: snapshot);
+        RestoreDocument(document: snapshot);
 
         return true;
     }
-    /// <summary>Renames the selected shape (a no-op without one).</summary>
-    /// <param name="name">The new name.</param>
-    /// <returns>Whether a shape was renamed.</returns>
-    public bool RenameSelected(string name) {
-        if (
-            TargetIsBrush ||
-            TargetIsGoal
-        ) {
-            return false;
-        }
-
-        m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Name = name };
+    private void RestoreDocument(CreationDocument document) {
+        m_document = document;
+        m_chainCursorId = null;
+        m_goalChainId = null;
+        m_playing = false;
+        m_currentFrame = Math.Min(
+            val1: m_currentFrame,
+            val2: (document.Frames?.Count ?? 0)
+        );
         Revision++;
-
-        return true;
     }
     /// <summary>Spins the target this frame — yaw about world up (stick X), pitch about world right (stick Y), roll
-    /// about world forward — composed onto its live orientation (world-space axis deltas premultiplied, so yaw reads
-    /// the same regardless of how far the shape has turned). Coalesces onto one undo step per drag.</summary>
+    /// about world forward — composed onto its live orientation. Coalesces onto one undo step per drag.</summary>
     /// <param name="stick">The stick vector: X yaws, Y pitches.</param>
     /// <param name="roll">The roll rate (−1 rolls left, +1 rolls right).</param>
     /// <param name="deltaSeconds">The frame delta.</param>
     public void Rotate(Vector2 stick, float roll, float deltaSeconds) {
-        if (
-            ((stick == Vector2.Zero) && (roll == 0f)) ||
-            TargetIsGoal ||
-            TargetIsBrush
-        ) {
+        if (((stick == Vector2.Zero) && (roll == 0f)) || TargetIsGoal || TargetIsBrush) {
             return;
         }
 
         var pushAfter = TouchDrag();
-
         const float RotateSpeed = 2.2f; // radians/second at full deflection
-
         var step = (RotateSpeed * deltaSeconds);
         var delta = ((Quaternion.CreateFromAxisAngle(
             axis: Vector3.UnitY,
@@ -1314,28 +1246,28 @@ public sealed class SculptModel {
             axis: Vector3.UnitZ,
             angle: (roll * step)
         ));
-        var shape = m_shapes[m_selectionIndex];
+        var (index, shape) = ResolveSelectedShape()!.Value;
+        var shapes = new List<ShapeDocument>(collection: m_document.Shapes!) {
+            [index] = (shape with { Rotation = Quaternion.Normalize(value: (delta * shape.Rotation)) }),
+        };
 
-        m_shapes[m_selectionIndex] = shape with { Rotation = Quaternion.Normalize(value: (delta * shape.Rotation)) };
+        m_document = (m_document with { Shapes = shapes });
         Revision++;
         PushIfDragStarted(dragStarted: pushAfter);
     }
-    /// <summary>Grows or shrinks the target this frame (uniform, multiplicative — a second of "up" always ~doubles),
-    /// clamped to the scale envelope. Coalesces onto one undo step per drag.</summary>
+    /// <summary>Grows or shrinks the target this frame (uniform, multiplicative), clamped to the scale envelope. The
+    /// continuous stick-driven scale gesture — <see cref="StepScale"/> is the discrete chord twin. Coalesces onto
+    /// one undo step per drag.</summary>
     /// <param name="delta">The scale rate (−1 shrinks, +1 grows).</param>
     /// <param name="deltaSeconds">The frame delta.</param>
     public void ScaleUniform(float delta, float deltaSeconds) {
-        if (
-            (delta == 0f) ||
-            TargetIsGoal ||
-            TargetIsBrush
-        ) {
+        if ((delta == 0f) || TargetIsGoal || TargetIsBrush) {
             return;
         }
 
         var pushAfter = TouchDrag();
         var factor = MathF.Exp(x: ((delta * 1.6f) * deltaSeconds));
-        var shape = m_shapes[m_selectionIndex];
+        var (index, shape) = ResolveSelectedShape()!.Value;
         var next = Math.Clamp(
             value: (shape.Scale.X * factor),
             max: MaxScale,
@@ -1343,7 +1275,11 @@ public sealed class SculptModel {
         );
 
         if (next != shape.Scale.X) {
-            m_shapes[m_selectionIndex] = shape with { Scale = new Vector3(value: next) };
+            var shapes = new List<ShapeDocument>(collection: m_document.Shapes!) {
+                [index] = (shape with { Scale = new Vector3(value: next) }),
+            };
+
+            m_document = (m_document with { Shapes = shapes });
             Revision++;
         }
 
@@ -1352,152 +1288,52 @@ public sealed class SculptModel {
     /// <summary>Selects a shape by id or (case-insensitive) name.</summary>
     /// <param name="idOrName">The shape's id (digits) or player-given name.</param>
     /// <returns>The selected shape, or null when nothing matched.</returns>
-    public SculptShape? Select(string idOrName) {
+    public ShapeDocument? Select(string idOrName) {
         ArgumentNullException.ThrowIfNull(idOrName);
 
-        if (int.TryParse(
-            result: out var id,
-            s: idOrName
-        )) {
-            if (!m_shapeIndexById.TryGetValue(
-                key: id,
-                value: out var mappedIndex
-            )) {
-                return null;
-            }
-
-            SelectIndex(index: mappedIndex);
-
-            return m_shapes[mappedIndex];
+        if (ResolveShapeId(idOrName: idOrName) is not { } id) {
+            return null;
         }
 
-        for (var index = 0; (index < m_shapes.Count); index++) {
-            if (string.Equals(
-                a: m_shapes[index].Name,
-                b: idOrName,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                SelectIndex(index: index);
+        SelectShapeById(id: id);
 
-                return m_shapes[index];
-            }
-        }
-
-        return null;
+        return ResolveSelectedShape()!.Value.Shape;
     }
     /// <summary>Targets a chain's goal for movement, by id or name (the verb twin of cycling into goals).</summary>
     /// <param name="idOrName">The chain's id or name.</param>
     /// <returns>The targeted chain, or null when nothing matched.</returns>
-    public SculptChain? SelectGoal(string idOrName) {
-        var index = FindChainIndex(idOrName: idOrName);
+    public ChainTarget? SelectGoal(string idOrName) {
+        var index = ResolveChainIndex(idOrName: idOrName);
 
         if (index < 0) {
             return null;
         }
 
-        if (!TargetIsBrush) {
-            m_previousSelectionIndex = m_selectionIndex;
+        if (m_selectedShapeId is { } current) {
+            m_previousSelectedShapeId = current;
         }
 
-        m_selectionIndex = -1;
-        m_goalChainIndex = index;
+        m_selectedShapeId = null;
+        m_goalChainId = Chains[index].Id;
         Revision++;
 
-        return m_chains[index];
-    }
-    /// <summary>Sets the target's bend rate (clamped to ±<see cref="ShapeDocument.MaxBend"/>).</summary>
-    /// <param name="value">The rate.</param>
-    /// <returns>The applied rate.</returns>
-    public float SetBend(float value) => SetStyleField(
-        field: StyleField.Bend,
-        max: ShapeDocument.MaxBend,
-        min: -ShapeDocument.MaxBend,
-        value: value
-    );
-    /// <summary>Sets the target's blend op directly (same group-of-one coercion as <see cref="CycleBlend"/>).</summary>
-    /// <param name="blend">The blend op.</param>
-    public void SetBlend(SdfBlendOp blend) {
-        if (TargetIsGoal) {
-            return;
-        }
-
-        if (TargetIsBrush) {
-            m_brushBlend = blend;
-            Revision++;
-        } else {
-            var shape = m_shapes[m_selectionIndex];
-
-            m_shapes[m_selectionIndex] = shape with {
-                Blend = blend,
-                GroupId = (((blend != SdfBlendOp.Union) && (shape.GroupId == 0))
-                ? m_nextGroupId++
-                : shape.GroupId),
-            };
-            Revision++;
-            PushUndo();
-        }
-    }
-    /// <summary>Sets the target's dilate (inflation) radius (clamped to [0, <see cref="ShapeDocument.MaxDilate"/>]).</summary>
-    /// <param name="value">The radius.</param>
-    /// <returns>The applied radius.</returns>
-    public float SetDilate(float value) => SetStyleField(
-        field: StyleField.Dilate,
-        max: ShapeDocument.MaxDilate,
-        min: 0f,
-        value: value
-    );
-    /// <summary>Moves the timeline cursor to an exact frame and applies it (see <see cref="StepFrame"/>).</summary>
-    /// <param name="index">The frame (clamped to [0, <see cref="FrameCount"/>]).</param>
-    public void SetFrame(int index) {
-        var target = Math.Clamp(
-            value: index,
-            max: m_frames.Count,
-            min: 0
-        );
-
-        if (target == m_currentFrame) {
-            return;
-        }
-
-        if (
-            (m_currentFrame == 0) &&
-            (m_restPose is null)
-        ) {
-            m_restPose = Snapshot(name: "rest");
-        }
-
-        m_currentFrame = target;
-        ApplyPoses(frame: ((target == 0)
-            ? m_restPose
-            : m_frames[(target - 1)]));
-    }
-    /// <summary>Sets the playback hold per frame, in engine ticks at 60/s.</summary>
-    /// <param name="ticks">The hold (clamped 1..60).</param>
-    /// <returns>The applied tick count.</returns>
-    public int SetFrameTicks(int ticks) {
-        var clamped = Math.Clamp(
-            max: 60,
-            min: 1,
-            value: ticks
-        );
-
-        m_secondsPerFrame = (clamped / 60f);
-        Revision++;
-
-        return clamped;
+        return TargetGoalChain;
     }
     /// <summary>Sets a chain's goal directly and re-solves (the numeric twin of a goal drag). One discrete undo step.</summary>
     /// <param name="idOrName">The chain's id or name.</param>
     /// <param name="goal">The new goal position (clamped into the workbench bound).</param>
     /// <returns>Whether a chain was found and re-solved.</returns>
     public bool SetGoal(string idOrName, Vector3 goal) {
-        var index = FindChainIndex(idOrName: idOrName);
+        var index = ResolveChainIndex(idOrName: idOrName);
 
         if (index < 0) {
             return false;
         }
 
-        m_chains[index] = (m_chains[index] with { Goal = ClampLocal(position: goal) });
+        var chains = new List<ChainDocument>(collection: Chains);
+
+        chains[index] = (chains[index] with { Goal = ClampLocal(position: goal) });
+        m_document = (m_document with { Chains = chains });
         SolveChains();
         PushUndo();
 
@@ -1508,12 +1344,13 @@ public sealed class SculptModel {
     /// <param name="kind"><c>limb</c> or <c>spine</c>.</param>
     /// <returns>The applied kind, or null when no chain matched.</returns>
     public string? SetKind(string idOrName, string kind) {
-        var index = FindChainIndex(idOrName: idOrName);
+        var index = ResolveChainIndex(idOrName: idOrName);
 
         if (index < 0) {
             return null;
         }
 
+        var chains = new List<ChainDocument>(collection: Chains);
         var resolved = (string.Equals(
             a: kind,
             b: ChainDocument.KindLimb,
@@ -1529,276 +1366,143 @@ public sealed class SculptModel {
             b: ChainDocument.KindLimb,
             comparisonType: StringComparison.OrdinalIgnoreCase
         ) &&
-            (m_chains[index].ShapeIds.Count != 3)
+            (chains[index].Shapes.Count != 3)
         ) {
             resolved = ChainDocument.KindSpine;
         }
 
-        m_chains[index] = (m_chains[index] with { Kind = resolved });
+        chains[index] = (chains[index] with { Kind = resolved });
+        m_document = (m_document with { Chains = chains });
         SolveChains();
         PushUndo();
 
         return resolved;
     }
-    /// <summary>Assigns the target's palette slot directly (clamped into range).</summary>
-    /// <param name="index">The palette slot.</param>
-    /// <returns>The applied slot.</returns>
-    public int SetMaterialIndex(int index) {
-        if (TargetIsGoal) {
-            return TargetMaterialIndex;
-        }
-
-        var clamped = Math.Clamp(
-            max: (CreationDocument.PaletteSize - 1),
-            min: 0,
-            value: index
-        );
-
-        if (TargetIsBrush) {
-            m_brushMaterial = clamped;
-            Revision++;
-        } else {
-            m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { MaterialIndex = clamped };
-            Revision++;
-            PushUndo();
-        }
-
-        return clamped;
-    }
     /// <summary>Renames the creation (the document handle).</summary>
     /// <param name="name">The new name.</param>
     public void SetName(string name) {
-        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentException.ThrowIfNullOrEmpty(argument: name);
 
-        m_name = name;
+        m_document = (m_document with { Name = name });
         Revision++;
-    }
-    /// <summary>Sets the target's onion shell thickness (clamped to [0, <see cref="ShapeDocument.MaxOnion"/>]).</summary>
-    /// <param name="value">The thickness.</param>
-    /// <returns>The applied thickness.</returns>
-    public float SetOnion(float value) => SetStyleField(
-        field: StyleField.Onion,
-        max: ShapeDocument.MaxOnion,
-        min: 0f,
-        value: value
-    );
-    /// <summary>Edits a palette entry (every shape referencing the slot re-colors).</summary>
-    /// <param name="index">The palette slot (clamped into range).</param>
-    /// <param name="material">The new material.</param>
-    public void SetPaletteEntry(int index, SdfMaterial material) {
-        m_palette[Math.Clamp(
-            max: (CreationDocument.PaletteSize - 1),
-            min: 0,
-            value: index
-        )] = material;
-        Revision++;
-        PushUndo();
     }
     /// <summary>Sets a chain's pole (bend-direction hint) by id or name and re-solves.</summary>
     /// <param name="idOrName">The chain's id or name.</param>
     /// <param name="pole">The new pole position.</param>
     /// <returns>Whether a chain was found and updated.</returns>
     public bool SetPole(string idOrName, Vector3 pole) {
-        var index = FindChainIndex(idOrName: idOrName);
+        var index = ResolveChainIndex(idOrName: idOrName);
 
         if (index < 0) {
             return false;
         }
 
-        m_chains[index] = (m_chains[index] with { Pole = pole });
+        var chains = new List<ChainDocument>(collection: Chains);
+
+        chains[index] = (chains[index] with { Pole = pole });
+        m_document = (m_document with { Chains = chains });
         SolveChains();
 
         return true;
     }
-    /// <summary>Sets the target's primitive directly (the named twin of <see cref="CyclePrimitive"/>).</summary>
-    /// <param name="type">The primitive.</param>
-    public void SetPrimitive(AvatarPrimitive type) {
-        if (TargetIsGoal) {
+    /// <summary>Moves the timeline cursor to an exact frame and applies it (see <see cref="StepFrame"/>).</summary>
+    /// <param name="index">The frame (clamped to [0, <see cref="FrameCount"/>]).</param>
+    public void SetFrame(int index) {
+        var target = Math.Clamp(
+            value: index,
+            max: FrameCount,
+            min: 0
+        );
+
+        if (target == m_currentFrame) {
             return;
         }
 
-        if (TargetIsBrush) {
-            m_brushType = type;
-            Revision++;
-        } else {
-            m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Type = type };
-            Revision++;
-            PushUndo();
+        if ((m_currentFrame == 0) && (m_restPose is null)) {
+            m_restPose = Snapshot();
         }
+
+        m_currentFrame = target;
+        ApplyPoses(poses: ((target == 0) ? m_restPose : m_document.Frames![(target - 1)].Transforms));
     }
-    /// <summary>Sets the target's smooth-blend radius directly (clamped to [0, <see cref="ShapeDocument.MaxSmooth"/>]).</summary>
-    /// <param name="value">The radius.</param>
-    /// <returns>The applied radius.</returns>
-    public float SetSmooth(float value) {
-        if (TargetIsGoal) {
-            return TargetSmooth;
-        }
-
-        var clamped = Math.Clamp(
-            max: ShapeDocument.MaxSmooth,
-            min: 0f,
-            value: value
-        );
-
-        if (TargetIsBrush) {
-            m_brushSmooth = clamped;
-            Revision++;
-        } else {
-            m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Smooth = clamped };
-            Revision++;
-            PushUndo();
-        }
-
-        return clamped;
-    }
-    /// <summary>Places the target at an exact position (clamped; a goal target moves the goal and re-solves) — the
-    /// console twin of stick movement. One discrete undo step.</summary>
-    /// <param name="position">The desired position.</param>
-    /// <returns>The clamped position actually applied, or null on the brush (nothing to place).</returns>
-    public Vector3? SetTargetPosition(Vector3 position) {
-        var clamped = ClampLocal(position: position);
-
-        if (TargetIsGoal) {
-            var chain = m_chains[m_goalChainIndex];
-
-            m_chains[m_goalChainIndex] = (chain with { Goal = clamped });
-            SolveChains();
-            PushUndo();
-
-            return clamped;
-        }
-
-        if (TargetIsBrush) {
-            return null;
-        }
-
-        m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Position = clamped };
-        Revision++;
-        PushUndo();
-
-        return clamped;
-    }
-    /// <summary>Sets the target's orientation from Tait-Bryan degrees (yaw about +Y, pitch about +X, roll about +Z).
-    /// A no-op on a chain goal or the brush.</summary>
-    /// <param name="yawDegrees">The yaw in degrees.</param>
-    /// <param name="pitchDegrees">The pitch in degrees.</param>
-    /// <param name="rollDegrees">The roll in degrees.</param>
-    /// <returns>Whether a shape's orientation was set.</returns>
-    public bool SetTargetRotation(float yawDegrees, float pitchDegrees, float rollDegrees) {
-        if (
-            TargetIsGoal ||
-            TargetIsBrush
-        ) {
-            return false;
-        }
-
-        const float ToRadians = (MathF.PI / 180f);
-        var rotation = Quaternion.Normalize(value: (
-            (Quaternion.CreateFromAxisAngle(
-            axis: Vector3.UnitY,
-            angle: (yawDegrees * ToRadians)
-        )
-            * Quaternion.CreateFromAxisAngle(
-            axis: Vector3.UnitX,
-            angle: (pitchDegrees * ToRadians)
-        ))
-            * Quaternion.CreateFromAxisAngle(
-            axis: Vector3.UnitZ,
-            angle: (rollDegrees * ToRadians)
-        )));
-
-        m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Rotation = rotation };
-        Revision++;
-        PushUndo();
-
-        return true;
-    }
-    /// <summary>Sets the target's per-axis scale directly, each axis clamped to the envelope; the brush takes it as
-    /// the next add's scale.</summary>
-    /// <param name="scale">The desired per-axis scale.</param>
-    /// <returns>The clamped scale actually applied.</returns>
-    public Vector3 SetTargetScale(Vector3 scale) {
-        var clamped = new Vector3(
-            x: Math.Clamp(
-                max: MaxScale,
-                min: MinScale,
-                value: scale.X
-            ),
-            y: Math.Clamp(
-                max: MaxScale,
-                min: MinScale,
-                value: scale.Y
-            ),
-            z: Math.Clamp(
-                max: MaxScale,
-                min: MinScale,
-                value: scale.Z
-            )
-        );
-
-        if (TargetIsGoal) {
-            return clamped;
-        }
-
-        if (TargetIsBrush) {
-            m_brushScale = clamped;
-            Revision++;
-        } else {
-            m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Scale = clamped };
-            Revision++;
-            PushUndo();
-        }
-
-        return clamped;
-    }
-    /// <summary>Sets the target's twist rate (clamped to ±<see cref="ShapeDocument.MaxTwist"/>).</summary>
-    /// <param name="value">The rate.</param>
-    /// <returns>The applied rate.</returns>
-    public float SetTwist(float value) => SetStyleField(
-        field: StyleField.Twist,
-        max: ShapeDocument.MaxTwist,
-        min: -ShapeDocument.MaxTwist,
-        value: value
-    );
     /// <summary>Re-solves every defined chain against its live goal/pole and writes the result into its member
     /// shapes' ordinary transforms — solver output lands in the same transforms <see cref="RecordFrame"/> snapshots,
     /// which is what lets a recorded pose inherit IK with zero consumer changes.</summary>
     public void SolveChains() {
-        foreach (var chain in m_chains) {
-            var count = chain.ShapeIds.Count;
+        var chains = Chains;
+
+        if (chains.Count == 0) {
+            Revision++;
+
+            return;
+        }
+
+        var shapes = new List<ShapeDocument>(collection: (m_document.Shapes ?? []));
+        var shapeIndexById = new Dictionary<int, int>(capacity: shapes.Count);
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            shapeIndexById[shapes[index].Id] = index;
+        }
+
+        foreach (var chain in chains) {
+            var rig = RigFor(chainId: chain.Id);
+            var count = chain.Shapes.Count;
 
             if (m_solveScratch.Length < count) {
                 m_solveScratch = new (Vector3, Quaternion)[count];
             }
 
-            chain.Solve(destination: m_solveScratch.AsSpan(
-                length: count,
-                start: 0
-            ));
+            rig.Solve(
+                kind: (chain.Kind ?? ChainDocument.KindSpine),
+                goal: (chain.Goal ?? rig.RestGoal),
+                pole: (chain.Pole ?? rig.RestPole),
+                destination: m_solveScratch.AsSpan(
+                    length: count,
+                    start: 0
+                )
+            );
 
             for (var member = 0; (member < count); member++) {
-                if (!m_shapeIndexById.TryGetValue(
-                    key: chain.ShapeIds[member],
-                    value: out var index
+                if (!shapeIndexById.TryGetValue(
+                    key: chain.Shapes[member],
+                    value: out var shapeIndex
                 )) {
                     continue;
                 }
 
                 var (position, rotation) = m_solveScratch[member];
 
-                m_shapes[index] = m_shapes[index] with {
+                shapes[shapeIndex] = (shapes[shapeIndex] with {
                     Position = ClampLocal(position: position),
                     Rotation = rotation,
-                };
+                });
             }
         }
 
+        m_document = (m_document with { Shapes = shapes });
         Revision++;
     }
-    // ---- the timeline (frame snapshots — the minimal hold-style animation model) --------------------------------
+    /// <summary>Grows or shrinks the target ~15% (a deliberate act-scale step; the continuous drag is
+    /// <see cref="ScaleUniform"/>'s job). One discrete undo step.</summary>
+    /// <param name="direction">+1 grows, -1 shrinks.</param>
+    /// <returns>The target's new per-axis scale.</returns>
+    public Vector3 StepScale(int direction) {
+        if (TargetIsGoal) {
+            return Vector3.One;
+        }
 
-    /// <summary>Steps the timeline cursor and applies the destination frame's poses (0 restores the rest pose).
-    /// Stepping away from rest captures it first, so the authored pose is never lost.</summary>
+        const float StepFactor = 1.15f;
+        var factor = ((direction > 0) ? StepFactor : (1f / StepFactor));
+        var next = ClampScale(scale: (TargetShape().Scale * factor));
+
+        ApplyToTarget(
+            mutate: s => (s with { Scale = next }),
+            pushUndo: true
+        );
+
+        return next;
+    }
+    /// <summary>Steps the timeline cursor and applies the destination frame's poses (0 restores the rest pose).</summary>
     /// <param name="direction">+1 forward, -1 back (clamped to [0, <see cref="FrameCount"/>]).</param>
     /// <returns>The new cursor.</returns>
     public int StepFrame(int direction) {
@@ -1806,143 +1510,32 @@ public sealed class SculptModel {
 
         return m_currentFrame;
     }
-    /// <summary>Stops playback and restores the rest pose.</summary>
-    public void StopPlayback() {
-        m_playing = false;
-        m_currentFrame = 0;
-        ApplyPoses(frame: m_restPose);
-    }
-    /// <summary>Advances playback (call once per frame with the frame delta): holds each saved frame for the
-    /// configured duration, looping 1..<see cref="FrameCount"/>.</summary>
+    /// <summary>Advances playback (call once per frame with the frame delta): holds each saved frame for the fixed
+    /// cadence, looping 1..<see cref="FrameCount"/>.</summary>
     /// <param name="deltaSeconds">The frame delta.</param>
     public void TickPlayback(float deltaSeconds) {
-        if (
-            !m_playing ||
-            (m_frames.Count == 0)
-        ) {
+        if (!m_playing || (FrameCount == 0)) {
             return;
         }
 
         m_playClock += deltaSeconds;
 
-        if (m_playClock < m_secondsPerFrame) {
+        if (m_playClock < SecondsPerFrame) {
             return;
         }
 
         m_playClock = 0f;
-        m_playCursor = ((m_playCursor + 1) % m_frames.Count);
+        m_playCursor = ((m_playCursor + 1) % FrameCount);
         m_currentFrame = (m_playCursor + 1);
-        ApplyPoses(frame: m_frames[m_playCursor]);
-    }
-    // ---- the document seam --------------------------------------------------------------------------------------
-
-    /// <summary>Lifts the model into its <c>puck.creation.v1</c> document — the payload
-    /// <see cref="CreationCanonicalizer.Canonicalize"/> pins for a commit. Carried members
-    /// (cameras/behavior/text-runs/extensions) hand back byte-for-byte.</summary>
-    /// <returns>The document.</returns>
-    public CreationDocument ToDocument() {
-        var palette = new List<PaletteEntryDocument>(capacity: CreationDocument.PaletteSize);
-
-        foreach (var entry in m_palette) {
-            palette.Add(item: new PaletteEntryDocument(
-                Albedo: entry.Albedo,
-                Emissive: entry.Emissive,
-                Shininess: entry.Shininess,
-                Specular: entry.Specular
-            ));
-        }
-
-        var shapes = new List<ShapeDocument>(capacity: m_shapes.Count);
-
-        foreach (var shape in m_shapes) {
-            shapes.Add(item: new ShapeDocument(
-                Bend: shape.Bend,
-                Blend: shape.Blend,
-                Dilate: shape.Dilate,
-                Group: shape.GroupId,
-                Id: shape.Id,
-                Material: shape.MaterialIndex,
-                Mirror: shape.Mirror,
-                Name: shape.Name,
-                Onion: shape.Onion,
-                Position: shape.Position,
-                Rotation: shape.Rotation,
-                Scale: shape.Scale,
-                Smooth: shape.Smooth,
-                Twist: shape.Twist,
-                Type: shape.Type
-            ));
-        }
-
-        List<FrameDocument>? frames = null;
-
-        if (m_frames.Count > 0) {
-            frames = new List<FrameDocument>(capacity: m_frames.Count);
-
-            foreach (var frame in m_frames) {
-                var transforms = new List<FrameTransformDocument>(capacity: frame.Poses.Count);
-
-                foreach (var pose in frame.Poses) {
-                    transforms.Add(item: new FrameTransformDocument(
-                        Id: pose.Id,
-                        Position: pose.Position,
-                        Rotation: pose.Rotation,
-                        Scale: pose.Scale
-                    ));
-                }
-
-                frames.Add(item: new FrameDocument(
-                    Name: frame.Name,
-                    Transforms: transforms
-                ));
-            }
-        }
-
-        List<ChainDocument>? chains = null;
-
-        if (m_chains.Count > 0) {
-            chains = new List<ChainDocument>(capacity: m_chains.Count);
-
-            foreach (var chain in m_chains) {
-                chains.Add(item: new ChainDocument(
-                    Goal: chain.Goal,
-                    Id: chain.Id,
-                    Kind: chain.Kind,
-                    Name: chain.Name,
-                    Pole: chain.Pole,
-                    Shapes: chain.ShapeIds
-                ));
-            }
-        }
-
-        return new CreationDocument(
-            BakeStyle: m_bakeStyle,
-            Behavior: m_loadedBehavior,
-            Cameras: m_loadedCameras,
-            Chains: chains,
-            Frames: frames,
-            Intent: m_intent,
-            Name: m_name,
-            Palette: palette,
-            Parts: m_loadedParts,
-            Schema: CreationDocument.CurrentSchema,
-            Shapes: shapes,
-            TextRuns: m_loadedTextRuns
-        ) {
-            Extensions = m_loadedExtensions,
-        };
+        ApplyPoses(poses: m_document.Frames![m_playCursor].Transforms);
     }
     /// <summary>Toggles the cursor chain's kind (the rig page's chord act).</summary>
     /// <returns>The applied kind, or null when no chain is cursored.</returns>
     public string? ToggleCurrentChainKind() {
-        if (
-            (m_chainCursor < 0) ||
-            (m_chainCursor >= m_chains.Count)
-        ) {
+        if (CurrentChain is not { } chain) {
             return null;
         }
 
-        var chain = m_chains[m_chainCursor];
         var next = (string.Equals(
             a: chain.Kind,
             b: ChainDocument.KindLimb,
@@ -1953,45 +1546,22 @@ public sealed class SculptModel {
         );
 
         return SetKind(
-            idOrName: chain.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+            idOrName: chain.Id.ToString(provider: CultureInfo.InvariantCulture),
             kind: next
         );
-    }
-    /// <summary>Toggles the target's mirror flag (the local X=0 symmetry fold).</summary>
-    /// <returns>The target's new mirror flag.</returns>
-    public bool ToggleMirror() {
-        if (TargetIsGoal) {
-            return TargetMirror;
-        }
-
-        var next = !TargetMirror;
-
-        if (TargetIsBrush) {
-            m_brushMirror = next;
-            Revision++;
-        } else {
-            m_shapes[m_selectionIndex] = m_shapes[m_selectionIndex] with { Mirror = next };
-            Revision++;
-            PushUndo();
-        }
-
-        return next;
     }
     /// <summary>Toggles the frame-loop playback (needs at least one saved frame). Stopping restores rest.</summary>
     /// <returns>Whether playback is now running.</returns>
     public bool TogglePlayback() {
-        if (m_frames.Count == 0) {
+        if (FrameCount == 0) {
             return false;
         }
 
         if (m_playing) {
             StopPlayback();
         } else {
-            if (
-                (m_currentFrame == 0) &&
-                (m_restPose is null)
-            ) {
-                m_restPose = Snapshot(name: "rest");
+            if ((m_currentFrame == 0) && (m_restPose is null)) {
+                m_restPose = Snapshot();
             }
 
             m_playing = true;
@@ -2001,16 +1571,243 @@ public sealed class SculptModel {
 
         return m_playing;
     }
-    // ---- undo/redo (the push-after / drag-coalescing protocol) --------------------------------------------------
+    // ---- the generic document-member-path door — TrySet/TryRemove ------------------------------------------------
 
-    /// <summary>Steps the local undo ring back one edit, restoring the whole model.</summary>
+    /// <summary>Sets a document member by path (the creation-scoped twin of <c>world.row.set</c>). A LEADING DOT
+    /// targets the current selection (<c>.scale</c> on the selected shape, <c>.goal</c> on a targeted chain, or a
+    /// flat brush field when nothing is selected — the brush is itself a <see cref="ShapeDocument"/>, so a brush
+    /// field is never special-cased). A leading <c>@</c> is deliberately NOT this sugar — a console line containing
+    /// one is rejected upstream as a System.CommandLine response-file token before this method ever sees it. Any
+    /// other path addresses the document directly (<c>shapes[3].scale</c>, <c>palette[0].color</c>, <c>name</c>).
+    /// Validated through <see cref="CreationCanonicalizer.Validate"/> before acceptance — a refused edit leaves the
+    /// document untouched.</summary>
+    /// <param name="path">The target path.</param>
+    /// <param name="json">The payload, in the document's own wire shape.</param>
+    /// <returns>The outcome.</returns>
+    public EditOutcome TrySet(string path, string json) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: path);
+
+        if (!path.StartsWith(value: '.')) {
+            return ApplyDocumentPatch(
+                json: json,
+                path: path
+            );
+        }
+
+        var field = path[1..];
+
+        if (field.Length == 0) {
+            return new EditOutcome(Success: false, Message: $"'{path}': a leading '.' needs a trailing field — e.g. .scale");
+        }
+
+        if (TargetIsGoal) {
+            return ApplyDocumentPatch(
+                json: json,
+                path: $"chains[{ResolveGoalChainIndex()!.Value}].{field}"
+            );
+        }
+
+        if (TargetIsBrush) {
+            return TrySetBrushField(
+                field: field,
+                json: json
+            );
+        }
+
+        return ApplyDocumentPatch(
+            json: json,
+            path: $"shapes[{ResolveSelectedShape()!.Value.Index}].{field}"
+        );
+    }
+    /// <summary>Removes one array row by path (<c>shapes[3]</c>) — always by index, never a bare list or scalar
+    /// field. The selection-scoped twin lives on the bare <c>editor.sculpt.remove</c> verb (no path — deletes the
+    /// selected shape).</summary>
+    /// <param name="path">The element's path — must end in <c>[n]</c>.</param>
+    /// <returns>The outcome.</returns>
+    public EditOutcome TryRemove(string path) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: path);
+
+        if (path.StartsWith(value: '.')) {
+            return new EditOutcome(Success: false, Message: "a leading '.' is not valid for remove — editor.sculpt.remove with no path deletes the selected shape");
+        }
+
+        var outcome = CreationDocumentPatcher.TryRemove(
+            document: m_document,
+            path: path
+        );
+
+        return (outcome.Ok
+            ? AcceptCandidate(candidate: outcome.Document!, path: path)
+            : new EditOutcome(Success: false, Message: outcome.Error!)
+        );
+    }
+    private EditOutcome AcceptCandidate(CreationDocument candidate, string path) {
+        var errors = CreationCanonicalizer.Validate(document: candidate);
+
+        if (errors.Count > 0) {
+            return new EditOutcome(Success: false, Message: DocumentCanonicalizer.FormatErrors(
+                errors: errors,
+                source: null
+            ));
+        }
+
+        var normalized = CreationCanonicalizer.Normalize(document: candidate);
+        var shapes = (normalized.Shapes ?? []);
+        var maxShapeId = -1;
+        var maxGroup = 0;
+
+        foreach (var shape in shapes) {
+            maxShapeId = Math.Max(val1: maxShapeId, val2: shape.Id);
+            maxGroup = Math.Max(val1: maxGroup, val2: (shape.Group ?? 0));
+        }
+
+        m_nextShapeId = Math.Max(val1: m_nextShapeId, val2: (maxShapeId + 1));
+        m_nextGroupId = Math.Max(val1: m_nextGroupId, val2: (maxGroup + 1));
+
+        var maxChainId = 0;
+
+        foreach (var chain in (normalized.Chains ?? [])) {
+            maxChainId = Math.Max(val1: maxChainId, val2: chain.Id);
+
+            // A chain a raw path edit introduced directly (never through DefineChain) has no cached rig yet —
+            // capture it now, from current positions, exactly like a fresh definition would.
+            if (
+                !m_rig.ContainsKey(key: chain.Id) &&
+                TryCaptureRig(
+                    shapeIds: chain.Shapes,
+                    shapes: shapes,
+                    rig: out var rig
+                )
+            ) {
+                m_rig[chain.Id] = rig;
+            }
+        }
+
+        m_nextChainId = Math.Max(val1: m_nextChainId, val2: (maxChainId + 1));
+        m_document = (normalized with { Shapes = shapes });
+        m_currentFrame = Math.Min(
+            val1: m_currentFrame,
+            val2: (m_document.Frames?.Count ?? 0)
+        );
+        Revision++;
+        PushUndo();
+
+        return new EditOutcome(Success: true, Message: $"'{path}' set");
+    }
+    private EditOutcome ApplyDocumentPatch(string path, string json) {
+        // A path reaching into palette[n] needs a real array of at least n+1 entries to navigate into — pad it
+        // (default-sweep hue for any slot not yet authored) on the CANDIDATE only, so a load with no edits round-
+        // trips byte-identically and only a write into the palette section ever grows it.
+        var basis = (TryPaletteWriteMinLength(
+            minLength: out var minLength,
+            path: path
+        )
+            ? (m_document with { Palette = PadPaletteForWrite(minLength: minLength, source: m_document.Palette) })
+            : m_document
+        );
+        var outcome = CreationDocumentPatcher.TrySet(
+            document: basis,
+            json: json,
+            path: path
+        );
+
+        return (outcome.Ok
+            ? AcceptCandidate(candidate: outcome.Document!, path: path)
+            : new EditOutcome(Success: false, Message: outcome.Error!)
+        );
+    }
+    // Recognizes a leading "palette" or "palette[n]" path segment and the array length a write there needs.
+    private static bool TryPaletteWriteMinLength(string path, out int minLength) {
+        var firstDot = path.IndexOf(value: '.');
+        var head = ((firstDot < 0) ? path : path[..firstDot]);
+
+        if (!head.StartsWith(
+            value: "palette",
+            comparisonType: StringComparison.Ordinal
+        )) {
+            minLength = 0;
+
+            return false;
+        }
+
+        if (head.Length == "palette".Length) {
+            minLength = 0;
+
+            return true;
+        }
+
+        var bracket = head.IndexOf(value: '[');
+
+        if (
+            (bracket != "palette".Length) ||
+            !head.EndsWith(value: ']') ||
+            !int.TryParse(
+                s: head[(bracket + 1)..^1],
+                result: out var index
+            ) ||
+            (index < 0)
+        ) {
+            minLength = 0;
+
+            return false;
+        }
+
+        minLength = (index + 1);
+
+        return true;
+    }
+    // The brush is a flat ShapeDocument — one property deep, never nested/indexed — so its own patch path is a
+    // direct property-node replace rather than the full CreationDocumentPatcher machinery.
+    private EditOutcome TrySetBrushField(string field, string json) {
+        if (field.Contains(value: '.') || field.Contains(value: '[')) {
+            return new EditOutcome(Success: false, Message: $"'.{field}': brush fields are flat — e.g. .scale, not a nested path");
+        }
+
+        if (!CreationDocumentPatcher.TryParseJsonLenient(
+            error: out var parseError,
+            json: json,
+            payload: out var payload
+        )) {
+            return new EditOutcome(Success: false, Message: $"'.{field}': {parseError}");
+        }
+
+        var node = (JsonSerializer.SerializeToNode(
+            value: m_brush,
+            options: DocumentJsonOptions.Shared
+        )?.AsObject() ?? throw new InvalidOperationException(message: "the brush serialized to a null node"));
+
+        if (!node.ContainsKey(propertyName: field)) {
+            return new EditOutcome(Success: false, Message: $"'.{field}': unknown brush field '{field}'");
+        }
+
+        node[field] = payload;
+
+        try {
+            var candidate = JsonSerializer.Deserialize<ShapeDocument>(
+                node: node,
+                options: DocumentJsonOptions.Shared
+            );
+
+            if (candidate is null) {
+                return new EditOutcome(Success: false, Message: $"'.{field}': patched brush parsed to null");
+            }
+
+            m_brush = ClampBrush(shape: candidate);
+            Revision++;
+
+            return new EditOutcome(Success: true, Message: $"brush '{field}' set");
+        } catch (JsonException exception) {
+            return new EditOutcome(Success: false, Message: $"'.{field}': {exception.Message.ReplaceLineEndings(replacementText: " ")}");
+        }
+    }
+    /// <summary>Steps the local undo ring back one edit, restoring the whole document.</summary>
     /// <returns>Whether an undo step was applied.</returns>
     public bool Undo() {
         if (!m_history.TryUndo(snapshot: out var snapshot)) {
             return false;
         }
 
-        RestoreSnapshot(snapshot: snapshot);
+        RestoreDocument(document: snapshot);
 
         return true;
     }
@@ -2018,63 +1815,25 @@ public sealed class SculptModel {
     /// every member's blend returns to plain Union (an ungrouped shape may not carry a blend).</summary>
     /// <returns>How many shapes left the group (0 when the target was ungrouped, the brush, or a chain goal).</returns>
     public int UngroupTarget() {
-        if (
-            TargetIsBrush ||
-            TargetIsGoal ||
-            (m_shapes[m_selectionIndex].GroupId == 0)
-        ) {
+        if ((ResolveSelectedShape() is not { } selection) || ((selection.Shape.Group ?? 0) == 0)) {
             return 0;
         }
 
-        var groupId = m_shapes[m_selectionIndex].GroupId;
+        var groupId = selection.Shape.Group!.Value;
+        var shapes = new List<ShapeDocument>(collection: m_document.Shapes!);
         var released = 0;
 
-        for (var index = 0; (index < m_shapes.Count); index++) {
-            if (m_shapes[index].GroupId == groupId) {
-                m_shapes[index] = m_shapes[index] with { Blend = SdfBlendOp.Union, GroupId = 0, Smooth = 0f };
+        for (var index = 0; (index < shapes.Count); index++) {
+            if ((shapes[index].Group ?? 0) == groupId) {
+                shapes[index] = (shapes[index] with { Blend = SdfBlendOp.Union, Group = 0, Smooth = 0f });
                 released++;
             }
         }
 
+        m_document = (m_document with { Shapes = shapes });
         Revision++;
         PushUndo();
 
         return released;
     }
-
-    private enum StyleField {
-        Twist,
-        Bend,
-        Dilate,
-        Onion,
-    }
-    // The complete authored-state snapshot the undo/redo ring stores. Immutable by construction (record +
-    // IReadOnlyList members populated from array/list COPIES at capture time).
-    private sealed record SculptSnapshot(
-        IReadOnlyList<SculptShape> Shapes,
-        IReadOnlyList<SdfMaterial> Palette,
-        IReadOnlyList<SculptFrame> Frames,
-        IReadOnlyList<SculptChain> Chains,
-        int CurrentFrame,
-        SculptFrame? RestPose,
-        int SelectionIndex,
-        int PreviousSelectionIndex,
-        int NextShapeId,
-        int NextGroupId,
-        int NextChainId,
-        string Name,
-        string BakeStyle,
-        CreatorIntent Intent,
-        AvatarPrimitive BrushType,
-        Quaternion BrushRotation,
-        Vector3 BrushScale,
-        int BrushMaterial,
-        SdfBlendOp BrushBlend,
-        float BrushSmooth,
-        bool BrushMirror,
-        float BrushTwist,
-        float BrushBend,
-        float BrushDilate,
-        float BrushOnion
-    );
 }

@@ -13,17 +13,19 @@ people and tools stable names for content that may change. `ContentPetname`
 turns a hash into a short label such as `Willow-Lantern-Nine` when raw hex would
 be awkward to read aloud.
 
-The one decoder the library does carry is PNG: `PngEncoder` and `PngDecoder`
-round-trip 8-bit RGBA stills and APNG animations for capture frames and baked
-font atlases. Beyond that, nothing here decodes a font, shader, or document,
-and Puck.Assets does not mount archives, layer sources, or normalize paths. It
-supplies the byte and identity layer; each other consumer owns the meaning of
-its own bytes.
+The library carries three codec families. `PngEncoder` and `PngDecoder` round-trip 8-bit
+RGBA stills and APNG animations for capture frames and baked font atlases.
+`QrEncoder` goes the other direction — a payload string in, a scannable module
+grid out; there is no QR decoder here. `AutomaticIntegerSequenceCodec` carries
+compiled numeration/DFAO programs as compact, deterministic, versioned binary,
+validating the byte structure under explicit allocation ceilings. Puck.Assets
+does not decode fonts, shaders, or documents, and it does not mount archives,
+layer sources, or normalize paths.
 
 `dotnet pack` produces `ByteTerrace.Puck.Assets`; the first NuGet.org release
-has not been published yet. The package targets .NET 10 and depends only on
-the `System.IO.Hashing` package (CRC-32 for the PNG codec); it has no project
-dependencies.
+has not been published yet. The package targets .NET 10, depends on the
+`System.IO.Hashing` package (CRC-32 for the PNG codec), and references
+`Puck.Maths` (the QR encoder's Reed–Solomon error correction).
 
 This README is the human entry point. The
 [generated API reference](../../docs/api) owns complete member signatures,
@@ -47,9 +49,16 @@ parameters, return values, and exceptions.
 - *A minimal PNG/APNG codec:* `PngEncoder` and `PngDecoder` write and read
   8-bit RGBA stills and full-frame APNG animations — just enough to round-trip
   the files Puck itself writes and bakes, not a general image library.
-- *A small dependency surface:* the package depends on nothing beyond the
-  .NET base class library and `System.IO.Hashing`, and does not perform
-  dependency-injection wiring.
+- *A spec-correct QR encoder:* `QrEncoder` builds ISO/IEC 18004 byte-mode
+  symbols — auto version selection, all four error-correction levels, and a
+  CPU-rasterizable module grid — from a payload string.
+- *Canonical automatic-sequence artifacts:* `AutomaticIntegerSequenceCodec`
+  preserves positional or quadratic-Ostrowski numeration, the reachable DFAO
+  graph, and its arbitrary-width output alphabet. Re-encoding decoded bytes is
+  byte-identical, so the full SHA-256 digest is a stable persistent identity.
+- *A small dependency surface:* the package depends on the .NET base class
+  library, `System.IO.Hashing`, and `Puck.Maths` (the QR encoder's field
+  arithmetic), and does not perform dependency-injection wiring.
 
 ## 📐 How bytes move through the library
 
@@ -249,6 +258,29 @@ round-trip the files Puck itself writes and bakes, including `Puck.Text`'s
 font atlas artifacts (`FontAtlasArtifactWriter` / `FontAtlasImageDataLoader`)
 and `Puck.Recording`'s capture stills (`CaptureSink`).
 
+## 🔲 QR encoding
+
+`Qr/` is a deterministic, spec-correct ISO/IEC 18004 byte-mode encoder:
+`QrEncoder.TryEncode` picks the smallest version (1..10) that holds a payload
+at the requested error-correction level (`QrErrorCorrectionLevel`), builds the
+interleaved data+EC codeword sequence (`QrReedSolomon`, generic Reed–Solomon
+over `Puck.Maths.ReedSolomon`/`BinaryField<T>`), and places it into a
+`QrMatrix` — all eight mask patterns scored by the spec's four penalty rules,
+correct format/version info bits, and a nearest-neighbor B8G8R8A8 raster
+(`QrMatrix.RenderPixels`) for CPU-side upload. Pure integer math throughout:
+the same payload and level always build the identical matrix, so a caller can
+also ask `QrEncoder.TryFindVersion` whether a payload FITS a level without
+building the matrix — the question a document validator asks before an
+authoring-time refusal, and the question `QrEncoder.TryEncode` asks itself
+before building.
+
+The field arithmetic is `Puck.Maths`'s: `QrReedSolomon` binds the standard's
+own choice of field (`GF(256)` under `t⁸+t⁴+t³+t²+1`, `0x11D` — a different
+modulus from the catalog's `BinaryFields.Degree8`, `0x11B`) and generator
+convention to the shared carrier. What stays here is what is genuinely the
+standard's: the block-count and capacity tables, the alignment-pattern
+coordinates, the format/version BCH codes, masking, and matrix placement.
+
 ## 📋 Core types
 
 This table is the conceptual map. The
@@ -265,6 +297,10 @@ surface.
 | `ContentPetname` | Produces a deterministic three-word label from a hexadecimal content hash. |
 | `PngEncoder` / `PngDecoder` | Write and read 8-bit RGBA PNG stills and full-frame APNG animations. |
 | `PngImage` / `PngAnimation` / `PngAnimationFrame` | The decoded still and animation shapes `PngDecoder` returns. |
+| `QrEncoder` | Builds an ISO/IEC 18004 byte-mode `QrMatrix` from a payload string and error-correction level. |
+| `QrMatrix` | The resolved module grid — placement, masking, and a B8G8R8A8 raster. |
+| `QrErrorCorrectionLevel` / `QrErrorCorrection` | The four EC levels and their one canonical letter spelling/parse. |
+| `QrCapacityTable` / `QrReedSolomon` | The version/level block-and-capacity tables and the standard's Reed–Solomon binding. |
 
 ## 📌 Design notes
 
@@ -291,7 +327,12 @@ dotnet test tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj
 
 `PngCodecLawTests` builds hand-crafted chunk streams to exercise the decoder's
 chunk and CRC handling directly, alongside encode/decode round-trips for both
-stills and animations.
+stills and animations. `QrCodecLawTests` pins a known payload's matrix
+fingerprint and proves the fingerprint is sensitive to the input by flipping
+one codeword byte. `AutomaticSequenceCodecTests` pins both binary artifact
+digests, checks byte-identical re-encoding for save and network crossings,
+exercises positional and Ostrowski programs, and proves that malformed or
+over-limit input is refused before mathematical verification.
 
 ## 🧪 Building the package
 

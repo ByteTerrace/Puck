@@ -49,6 +49,9 @@ public sealed class GamepadDeviceTests {
         using var hid = new TestHidDevice();
         var parser = new TestParser();
 
+        // Held timeouts keep the silence watchdog from firing until the test lets the stream go quiet, so the
+        // streaming state is observed on the test's schedule rather than the timer's.
+        hid.HoldReadTimeouts();
         hid.EnqueueReport(1);
         using var device = CreateDevice(
             activateOnStream: true,
@@ -59,6 +62,8 @@ public sealed class GamepadDeviceTests {
 
         device.Start();
         await TestWait.UntilAsync(condition: () => device.HasStream);
+
+        hid.ReleaseReadTimeouts();
         await TestWait.UntilAsync(condition: () => !device.HasStream);
 
         Assert.True(condition: (parser.ResetCount > 0));
@@ -71,6 +76,10 @@ public sealed class GamepadDeviceTests {
         using var hid = new TestHidDevice();
         var parser = new TestParser();
 
+        // Held timeouts make a park impossible until the test releases them: the loop only leaves its read when a
+        // report arrives, so the accepted rumble below cannot be discarded by a park that wins the race to the
+        // output queue.
+        hid.HoldReadTimeouts();
         hid.EnqueueReport(1);
         using var device = CreateDevice(
             activateOnStream: true,
@@ -88,17 +97,14 @@ public sealed class GamepadDeviceTests {
 
         Assert.True(condition: device.Output.Rumble(effect: in effect));
 
-        // Feed reports until the write lands so the silence park cannot race the enqueued command; then let
-        // the stream go silent.
-        await TestWait.UntilAsync(condition: () => {
-            if (parser.RumbleWrites.Count != 0) {
-                return true;
-            }
+        // The loop services its output queue at the top of each iteration, so one more report carries it past the
+        // pending read and onto the write.
+        hid.EnqueueReport(1);
+        await TestWait.UntilAsync(condition: () => (parser.RumbleWrites.Count != 0));
+        Assert.Equal(expected: (1f, 1f), actual: parser.RumbleWrites[0]);
 
-            hid.EnqueueReport(1);
-
-            return false;
-        });
+        // Now let the stream go silent: timed reads expire, and the watchdog parks the slot.
+        hid.ReleaseReadTimeouts();
         await TestWait.UntilAsync(condition: () => !device.HasStream);
 
         Assert.Equal(expected: (0f, 0f), actual: parser.RumbleWrites[^1]);

@@ -96,15 +96,18 @@
             "Low",
             "Medium",
             "High"
-          ]
+          ],
+          "default": "Off"
         },
         "shadowCrowdRadius": {
           "description": "The boot soft-shadow crowd radius (world units).",
-          "type": "number"
+          "type": "number",
+          "default": 15
         },
         "ambientOcclusion": {
           "description": "Whether ambient occlusion boots on.",
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "renderScale": {
           "description": "The boot render-scale tier.",
@@ -114,15 +117,20 @@
             "Half",
             "Quarter",
             "Eighth"
-          ]
+          ],
+          "default": "Half"
         },
         "upscaleSharpness": {
           "description": "The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).",
-          "type": "number"
+          "type": "number",
+          "default": 0
         },
         "low": {
           "description": "The world.quality low preset.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "shadows": {
               "description": "The soft-shadow tier the preset selects.",
@@ -148,11 +156,15 @@
               ]
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "default": null
         },
         "medium": {
           "description": "The world.quality medium preset.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "shadows": {
               "description": "The soft-shadow tier the preset selects.",
@@ -178,11 +190,15 @@
               ]
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "default": null
         },
         "high": {
           "description": "The world.quality high preset.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "shadows": {
               "description": "The soft-shadow tier the preset selects.",
@@ -208,19 +224,583 @@
               ]
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "default": null
+        },
+        "extensions": {
+          "description": "The post-render extension chain, composed over the world\u0027s rendered output in list order \u2014 e.g. [{ \u0022id\u0022: \u0022sdf-film-grain\u0022, \u0022config\u0022: { \u0022intensity\u0022: 0.08 } }]. Optional; an absent or empty list is the byte-identical default path (no extension composed). Every id must name a shipped shader set \u2014 a puck.shader.v1 manifest\u0027s file stem (checked at document load); each entry\u0027s own config is validated against that manifest\u0027s declared config schema at boot and by puck schema.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One entry in Extensions \u2014 a shipped shader set\u0027s id plus the values for its manifest-declared config fields.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "description": "The shader set id (its puck.shader.v1 manifest\u0027s file stem) \u2014 checked against the shipped vocabulary at document load (IsRegisteredPostRenderExtension), never interpreted here.",
+                "type": "string",
+                "enum": [
+                  "sdf-film-grain"
+                ]
+              },
+              "config": {
+                "description": "The set\u0027s config values, or null when the manifest declares none or every field has a default. Not validated at document load \u2014 the manifest\u0027s declared config schema validates it at boot (matching Machine\u0027s Options, the identical shallow-then-deep precedent), refusing boot with the set id and reason on a malformed value.",
+                "default": null
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "id": {
+                      "const": "sdf-film-grain"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "config": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "description": "Film grain: a per-pixel integer-hashed offset added over the rendered output. The hash is a pure function of pixel cell, grain frame, and seed, so it renders identically on both backends.",
+                      "properties": {
+                        "intensity": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1,
+                          "default": 0.05,
+                          "description": "The peak per-channel offset."
+                        },
+                        "size": {
+                          "type": "number",
+                          "minimum": 1,
+                          "default": 1,
+                          "description": "The grain cell size, in pixels."
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 4294967295,
+                          "default": 0,
+                          "description": "Folded into the per-pixel hash; two worlds with different seeds grain differently."
+                        },
+                        "flickerHz": {
+                          "type": "integer",
+                          "enum": [
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            12,
+                            14,
+                            15,
+                            16,
+                            18,
+                            20,
+                            21,
+                            24,
+                            25,
+                            28,
+                            30,
+                            32,
+                            35,
+                            36,
+                            40,
+                            42,
+                            45,
+                            48,
+                            50,
+                            56,
+                            60,
+                            63,
+                            70,
+                            72,
+                            75,
+                            80,
+                            84,
+                            90,
+                            96,
+                            100,
+                            105,
+                            112,
+                            120,
+                            126,
+                            140,
+                            144,
+                            150,
+                            160,
+                            168,
+                            175,
+                            180,
+                            200,
+                            210,
+                            224,
+                            225,
+                            240,
+                            252,
+                            280,
+                            288,
+                            300,
+                            315,
+                            336,
+                            350,
+                            360,
+                            400,
+                            420,
+                            450,
+                            480,
+                            504,
+                            525,
+                            560,
+                            600,
+                            630,
+                            672,
+                            700,
+                            720,
+                            800,
+                            840,
+                            900,
+                            1008,
+                            1050,
+                            1120,
+                            1200,
+                            1260,
+                            1400,
+                            1440,
+                            1575,
+                            1680,
+                            1800,
+                            2016,
+                            2100,
+                            2400,
+                            2520,
+                            2800,
+                            3150,
+                            3360,
+                            3600,
+                            4200,
+                            5040,
+                            5600,
+                            6300,
+                            7200,
+                            8400,
+                            10080,
+                            12600,
+                            16800,
+                            25200,
+                            50400
+                          ],
+                          "default": 24,
+                          "description": "How many times per second the grain pattern advances; the pattern is keyed on the simulation clock, so a frame carries the grain of the flicker period its tick falls in."
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "default": null
+        },
+        "lighting": {
+          "description": "The scene\u0027s directional sun and ambient term. Optional, and every field within it is optional individually \u2014 an absent section, or an absent field within it, resolves to SdfFrame\u0027s pinned default for that field, so a world renders unchanged until it authors one.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "sun": {
+              "description": "The directional sun.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "direction": {
+                  "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
+                  "default": null
+                },
+                "weight": {
+                  "description": "The sun\u0027s diffuse weight.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "color": {
+                  "description": "The sun\u0027s linear #RRGGBB color.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "additionalProperties": false,
+              "default": null
+            },
+            "ambient": {
+              "description": "The ambient (hemisphere) term.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "base": {
+                  "description": "The ambient floor.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "hemisphere": {
+                  "description": "The hemisphere gradient, scaling surface normal Y.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "color": {
+                  "description": "The ambient linear #RRGGBB color.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "additionalProperties": false,
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null
+        },
+        "sky": {
+          "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "zenith": {
+              "description": "The straight-up sky color, as #RRGGBB. Optional; absent takes the pinned zenith.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "horizon": {
+              "description": "The horizon-band color (the gradient\u0027s middle stop), as #RRGGBB. Optional; absent takes the midpoint between the pinned ground and zenith.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "ground": {
+              "description": "The straight-down (nadir) color, as #RRGGBB. Optional; absent takes the pinned ground.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "fogDensity": {
+              "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            },
+            "sun": {
+              "description": "The visible sun disc, drawn about the lighting sun\u0027s direction. Optional; absent draws no disc.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "discRadians": {
+                  "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Controls the falloff sharpness: a smaller disc reads sharper.",
+                  "type": "number"
+                },
+                "intensity": {
+                  "description": "The disc\u0027s peak additive brightness.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "discRadians",
+                "intensity"
+              ],
+              "additionalProperties": false,
+              "default": null
+            },
+            "stars": {
+              "description": "The procedural star field. Optional; absent draws no stars.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "density": {
+                  "description": "The star grid\u0027s cell count per octahedral axis. A higher value packs more, smaller stars.",
+                  "type": "number"
+                },
+                "brightness": {
+                  "description": "The peak per-star brightness.",
+                  "type": "number"
+                },
+                "seed": {
+                  "description": "The hash seed folded into every cell \u2014 a different seed reshuffles the field.",
+                  "type": "integer"
+                },
+                "twinkle": {
+                  "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "share": {
+                      "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
+                      "type": "number"
+                    },
+                    "depth": {
+                      "description": "How far a twinkling star dips below its steady brightness, in [0, 1]: 0 holds steady, 1 dips to black.",
+                      "type": "number"
+                    },
+                    "rate": {
+                      "description": "The fundamental scintillation rate in hertz; each star twinkles at a small harmonic of it.",
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "share",
+                    "depth",
+                    "rate"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                }
+              },
+              "required": [
+                "density",
+                "brightness",
+                "seed"
+              ],
+              "additionalProperties": false,
+              "default": null
+            },
+            "clouds": {
+              "description": "The procedural cloud layer. Optional; absent draws no clouds.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "coverage": {
+                  "description": "The fraction of the sky the layer covers, in [0, 1]. Zero draws none.",
+                  "type": "number"
+                },
+                "softness": {
+                  "description": "The width of a cloud\u0027s edge, in (0, 1]: small is hard-edged cumulus, large is a diffuse haze.",
+                  "type": "number"
+                },
+                "scale": {
+                  "description": "The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1 spans about 45\u00B0 overhead). Larger is broader clouds.",
+                  "type": "number"
+                },
+                "seed": {
+                  "description": "The hash seed folded into the lattice \u2014 a different seed reshapes the layer.",
+                  "type": "integer"
+                },
+                "color": {
+                  "description": "The cloud colour, as #RRGGBB or a state.\u003Crow\u003E.\u003Ckey\u003E binding. Optional; absent is white.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "drift": {
+                  "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
+                  "default": null
+                },
+                "spin": {
+                  "description": "The layer\u0027s rotation about the zenith in radians per second \u2014 the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "curl": {
+                  "description": "The Coriolis twist: how far, in radians, the layer is wound about the zenith at 45\u00B0 elevation, the winding falling off toward the horizon and the zenith so bands spiral in rather than shear apart. Positive winds counter-clockwise. Optional; absent is none.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "shear": {
+                  "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
+                  "default": null
+                }
+              },
+              "required": [
+                "coverage",
+                "softness",
+                "scale",
+                "seed"
+              ],
+              "additionalProperties": false,
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null
+        },
+        "cycle": {
+          "description": "Lighting and sky keyed over a state row\u0027s value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "state": {
+              "description": "The state row read (its slot cell; Fixed or Int).",
+              "type": "string"
+            },
+            "keys": {
+              "description": "At least two keys, strictly ascending At in [0, 1).",
+              "type": "array",
+              "items": {
+                "description": "One point on a WorldRenderCycle.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "at": {
+                    "description": "The row-value fraction this key sits at, in [0, 1).",
+                    "type": "number"
+                  },
+                  "lighting": {
+                    "description": "The lighting fields this key moves, or null.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "sun": {
+                        "$ref": "#/properties/render/properties/lighting/properties/sun",
+                        "default": null
+                      },
+                      "ambient": {
+                        "$ref": "#/properties/render/properties/lighting/properties/ambient",
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null
+                  },
+                  "sky": {
+                    "description": "The sky fields this key moves, or null.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "zenith": {
+                        "description": "The straight-up sky color, as #RRGGBB. Optional; absent takes the pinned zenith.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "horizon": {
+                        "description": "The horizon-band color (the gradient\u0027s middle stop), as #RRGGBB. Optional; absent takes the midpoint between the pinned ground and zenith.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "ground": {
+                        "description": "The straight-down (nadir) color, as #RRGGBB. Optional; absent takes the pinned ground.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "fogDensity": {
+                        "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "sun": {
+                        "$ref": "#/properties/render/properties/sky/properties/sun",
+                        "default": null
+                      },
+                      "stars": {
+                        "$ref": "#/properties/render/properties/sky/properties/stars",
+                        "default": null
+                      },
+                      "clouds": {
+                        "$ref": "#/properties/render/properties/sky/properties/clouds",
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null
+                  }
+                },
+                "required": [
+                  "at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "state",
+            "keys"
+          ],
+          "additionalProperties": false,
+          "default": null
         }
       },
-      "required": [
-        "shadows",
-        "shadowCrowdRadius",
-        "ambientOcclusion",
-        "renderScale",
-        "upscaleSharpness",
-        "low",
-        "medium",
-        "high"
-      ],
       "additionalProperties": false
     },
     "screens": {
@@ -279,7 +859,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "The deterministic animated test pattern (TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
+                "description": "The deterministic animated test pattern (Puck.SdfVm.Views.TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
                 "properties": {
                   "$type": {
                     "const": "testPattern"
@@ -530,7 +1110,7 @@
                     "default": null
                   },
                   "columns": {
-                    "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SdfVm.SdfWorldEngine.MaxScreenDecalCells).",
+                    "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).",
                     "type": [
                       "integer",
                       "null"
@@ -704,7 +1284,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "The deterministic animated test pattern (TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
+                      "description": "The deterministic animated test pattern (Puck.SdfVm.Views.TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
                       "properties": {
                         "$type": {
                           "const": "testPattern"
@@ -916,7 +1496,7 @@
                           "default": null
                         },
                         "columns": {
-                          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SdfVm.SdfWorldEngine.MaxScreenDecalCells).",
+                          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).",
                           "type": [
                             "integer",
                             "null"
@@ -1393,9 +1973,17 @@
       "description": "The population defaults \u2014 capacity, distribution, seat activation.",
       "type": "object",
       "properties": {
+        "localSeats": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "seatActivation": {
-          "description": "The per-seat boot-activation policy, exactly LocalSeatCount entries in seat order. Seat 0 (player 1) must be Eager (refused otherwise \u2014 the session always needs a first player); the remaining seats are ordinarily authored OnDemand so a friend\u0027s controller or an explicit player.join claims one only when someone actually shows up, rather than every local seat standing in the world unowned from tick 1.",
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "description": "Whether a local seat activates automatically at boot (Eager) or waits for a claim (OnDemand) \u2014 the per-seat authored policy SeatActivation declares. Both doors converge on the identical Server.WorldPopulation.ActivateSeat call through the same SessionRequest.Join/WorldServer.ApplySession session-join seam regardless of which policy admitted the seat \u2014 a seat activated on demand (player.join, or a controller\u0027s own hot-plug first touch via Client.PlayerRoster.ResolveDeviceSlot) is indistinguishable from one activated at boot the instant it is active.",
             "enum": [
@@ -1405,15 +1993,14 @@
           }
         },
         "networkPlayers": {
-          "description": "The number of active network-human stand-ins at boot.",
           "type": "integer"
         },
-        "defaultPeerSource": {
-          "description": "The boot intent-source template every network stand-in wakes on (Producer in the built-in world)."
-        },
+        "defaultPeerSource": {},
         "seatSpawns": {
-          "description": "The spawn-point name selected by each local seat ordinal.",
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": [
               "string",
@@ -1422,8 +2009,10 @@
           }
         },
         "distribution": {
-          "description": "How simulated peers are distributed at spawn. A third timing class within this row: it is live for future activations but inert for bodies already standing (a change re-clusters only peers spawned after it), narrated in the accept echo.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "region": {
               "description": "The region to fill.",
@@ -1546,8 +2135,10 @@
           "additionalProperties": false
         },
         "peerVariation": {
-          "description": "The independently authored producer-state sequences for peer bodies.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "phase": {
               "description": "The angular phase sequence.",
@@ -1630,8 +2221,10 @@
           "additionalProperties": false
         },
         "seatVariation": {
-          "description": "The independently authored producer-state sequences for local-seat bodies.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "phase": {
               "$ref": "#/properties/population/properties/peerVariation/properties/phase"
@@ -1651,8 +2244,10 @@
           "additionalProperties": false
         },
         "peerColors": {
-          "description": "The stand-in color sequence, independent of producer-state variation.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "name": {
               "description": "The sequence name: None, Index, Additive, R1, or R2.",
@@ -1675,15 +2270,15 @@
           "additionalProperties": false
         },
         "capacity": {
-          "description": "The total authoritative body capacity, including reserved local seats.",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "reconnectGraceSeconds": {
-          "description": "How long a disconnected body stays parked \u2014 retained in the sim/collider set at its last pose, still counted IsHumanOccupied \u2014 before the deferred teardown (body drop, and for a peer, its generation\u0027s grants) actually fires. 0 disables the grace window outright: a disconnect tears the body down immediately, the pre-park behavior. A positive value authored against a world whose SimulationRateHz is 0 parks the body forever \u2014 there is no tick mapping for a world that never advances, so the deferred teardown never fires (never, not immediately and not zero; see CompiledTickDuration). Authored in seconds \u2014 a physical unit, not a tick count, so a world\u0027s rate can change without silently retuning this window \u2014 and compiled once to PopulationReconnectGraceTicks via WorldSimulationTickConversion. Read once at construction/rebuild, like the rest of this section (SetPopulationDefaults\u0027s own timing class) \u2014 a live edit takes effect on the next disconnect, never retroactively on an already-parked body. See Server.WorldPopulation\u0027s park-with-grace remarks and the $parked:\u003CbodyRef\u003E reserved rule channel (ParkedPrefix) that reads a parked body\u0027s remaining count. Default 3 seconds \u2014 720 ticks at the fixed 240 Hz simulation rate.",
           "type": "number"
         },
         "capacityDraw": {
-          "description": "The census\u0027s authored-randomness facet, or null for an ordinary literal Capacity. A boot-only site (PopulationCapacity): settled into Capacity, cleared, and narrated exactly like BackendDraw. The census coherence rule. The site\u0027s admissible domain is not the capacity ceiling alone \u2014 NetworkPlayers is validated against capacity minus the local seats, so a drawn capacity below that sum is a document this same validator would refuse once resolved. The domain is narrowed statically at authoring instead, so the roll can never decide whether the world boots. Not an XOR. Unlike BackendDraw, this site cannot refuse both-declared: WorldPopulationDefaults is a struct, so an authored capacity: 128 and the C# default 128 are indistinguishable once parsed. When both are present the draw simply wins \u2014 a stated limitation, not a silent guess.",
           "type": [
             "object",
             "null"
@@ -1859,7 +2454,6 @@
           "additionalProperties": false
         },
         "disclosure": {
-          "description": "The per-observer snapshot disclosure policy (default null = Default, disclose-all) \u2014 read through ObserverDisclosure. Applied at the output hub\u0027s sink boundary, never inside the tick, so it changes what an observer is told and never what the simulation computes.",
           "type": [
             "object",
             "null"
@@ -1893,8 +2487,10 @@
       "type": "object",
       "properties": {
         "identities": {
-          "description": "The identities used to seed an absent owned-world directory.",
-          "type": "array",
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "description": "One authored identity used to seed an owned world.",
             "type": [
@@ -1921,15 +2517,21 @@
               "color"
             ],
             "additionalProperties": false
-          }
+          },
+          "default": null
         },
         "neutralColor": {
-          "description": "The placeholder color used when no profile identity is available.",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "colorSequence": {
-          "description": "The deterministic sequence used for generated profile colors.",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "name": {
               "description": "The sequence name: None, Index, Additive, R1, or R2.",
@@ -1949,42 +2551,48 @@
             "offset",
             "step"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "default": null
         },
         "saturation": {
-          "description": "The saturation used for generated colors.",
-          "type": "number"
+          "type": "number",
+          "default": 0
         },
         "value": {
-          "description": "The brightness used for generated colors.",
-          "type": "number"
+          "type": "number",
+          "default": 0
         },
         "colorSearchLimit": {
-          "description": "The number of generated colors checked before accepting the next sequence value.",
-          "type": "integer"
+          "type": "integer",
+          "default": 1
         },
         "noseFactor": {
-          "description": "The body-color multiplier used for avatar accents.",
-          "type": "number"
+          "type": "number",
+          "default": 0
         },
         "pickerThreshold": {
-          "description": "The stick magnitude that cycles a pending profile choice.",
-          "type": "number"
+          "type": "number",
+          "default": 0
         },
         "pickerNeutralColor": {
-          "description": "The pending-avatar desaturation target.",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "pickerNeutralBlend": {
-          "description": "The pending-avatar blend amount toward PickerNeutralColor.",
-          "type": "number"
+          "type": "number",
+          "default": 0
         },
         "seatLook": {
-          "description": "The control feel a seat of this document wakes with. required \u2014 there is no engine fallback, so a document either states what its seats should feel like or fails validation. Read per seat from whichever document owns it: the world\u0027s for an unclaimed seat, the joined identity\u0027s own for a claimed one, which is how a player\u0027s feel travels with their profile (see WorldSeatLook).",
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "yawSensitivity": {
-              "description": "The yaw response in radians per pixel of raw (un-accelerated) pointer motion along the X axis.",
+              "description": "The yaw response in radians per pixel of raw pointer motion along the X axis.",
               "type": "number"
             },
             "pitchSensitivity": {
@@ -1992,26 +2600,59 @@
               "type": "number"
             },
             "invertYaw": {
-              "description": "Whether the yaw response is inverted.",
+              "description": "Whether the final semantic yaw response (pointer, stick, and gyro) is inverted.",
               "type": "boolean"
             },
             "invertPitch": {
-              "description": "Whether the pitch response is inverted.",
+              "description": "Whether the final semantic pitch response (pointer, stick, and gyro) is inverted.",
               "type": "boolean"
-            },
-            "arming": {
-              "description": "What enables the orbit drag.",
-              "enum": [
-                "None",
-                "Always",
-                "LeftButton",
-                "RightButton",
-                "MiddleButton"
-              ]
             },
             "stickLookRate": {
               "description": "The look stick\u0027s yaw/pitch rate in radians per second at full deflection.",
               "type": "number"
+            },
+            "gyro": {
+              "description": "The optional full-axis gyro projection. Absent resolves to Default.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "scale": {
+                  "description": "The dimensionless multiplier applied after projection.",
+                  "type": "number",
+                  "default": 1
+                },
+                "deadZone": {
+                  "description": "Independent X/Y/Z dead zones in radians per second.",
+                  "default": null
+                },
+                "invertX": {
+                  "description": "Whether the physical X angular-velocity axis is inverted before projection.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "invertY": {
+                  "description": "Whether the physical Y angular-velocity axis is inverted before projection.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "invertZ": {
+                  "description": "Whether the physical Z angular-velocity axis is inverted before projection.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "yaw": {
+                  "description": "The X/Y/Z projection weights producing semantic look-right angular velocity.",
+                  "default": null
+                },
+                "pitch": {
+                  "description": "The X/Y/Z projection weights producing semantic look-up angular velocity.",
+                  "default": null
+                }
+              },
+              "additionalProperties": false,
+              "default": null
             }
           },
           "required": [
@@ -2019,25 +2660,12 @@
             "pitchSensitivity",
             "invertYaw",
             "invertPitch",
-            "arming",
             "stickLookRate"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "default": null
         }
       },
-      "required": [
-        "identities",
-        "neutralColor",
-        "colorSequence",
-        "saturation",
-        "value",
-        "colorSearchLimit",
-        "noseFactor",
-        "pickerThreshold",
-        "pickerNeutralColor",
-        "pickerNeutralBlend",
-        "seatLook"
-      ],
       "additionalProperties": false
     },
     "channels": {
@@ -2071,6 +2699,9 @@
               "MoveUp",
               "Pitch",
               "Roll",
+              "FaceX",
+              "FaceY",
+              "FaceZ",
               null
             ],
             "default": null
@@ -2087,6 +2718,15 @@
               "null"
             ],
             "default": null
+          },
+          "frame": {
+            "description": "What the MoveForward/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.",
+            "enum": [
+              "World",
+              "Camera",
+              "Heading"
+            ],
+            "default": "World"
           }
         },
         "required": [
@@ -2499,7 +3139,7 @@
                     "default": "World"
                   },
                   "facingSnap": {
-                    "description": "Under World only: whether the body\u0027s facing snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) rather than holding its heading. Ignored under Heading, where facing is the integrated heading by construction. true is the default.",
+                    "description": "Under World only: whether the body\u0027s drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) \u2014 the body angles toward its travel, a strafe included \u2014 while its HEADING (the Turn role\u0027s integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.",
                     "type": "boolean",
                     "default": true
                   },
@@ -2535,6 +3175,10 @@
                       "Heading",
                       "World"
                     ]
+                  },
+                  "declaredTurnSpeed": {
+                    "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -2669,6 +3313,10 @@
                       "Heading",
                       "World"
                     ]
+                  },
+                  "declaredTurnSpeed": {
+                    "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -2790,6 +3438,10 @@
                       "Heading",
                       "World"
                     ]
+                  },
+                  "declaredTurnSpeed": {
+                    "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -2864,14 +3516,7 @@
                     "description": "The positive half-extents."
                   },
                   "rotation": {
-                    "description": "The body-local orientation.",
-                    "type": "object",
-                    "properties": {
-                      "isIdentity": {
-                        "type": "boolean"
-                      }
-                    },
-                    "additionalProperties": false
+                    "description": "The body-local orientation."
                   }
                 },
                 "required": [
@@ -2950,13 +3595,7 @@
         },
         "rows": {
           "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
-          "type": "array",
-          "items": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
+          "type": "array"
         }
       },
       "required": [
@@ -2997,8 +3636,14 @@
                     "id": {
                       "type": "string"
                     },
-                    "source": {
-                      "type": "string"
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
                     },
                     "pressThreshold": {
                       "type": "number",
@@ -3025,7 +3670,7 @@
                   },
                   "required": [
                     "id",
-                    "source"
+                    "sources"
                   ],
                   "additionalProperties": false
                 }
@@ -3042,13 +3687,17 @@
                       "type": "string"
                     },
                     "chord": {
-                      "type": "array",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
                       "items": {
                         "type": [
                           "string",
                           "null"
                         ]
-                      }
+                      },
+                      "default": null
                     },
                     "page": {
                       "type": [
@@ -3067,11 +3716,17 @@
                               "null"
                             ],
                             "properties": {
-                              "source": {
+                              "sources": {
                                 "type": [
-                                  "string",
+                                  "array",
                                   "null"
-                                ]
+                                ],
+                                "items": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
                               },
                               "command": {
                                 "type": [
@@ -3162,7 +3817,7 @@
                               }
                             },
                             "required": [
-                              "source"
+                              "sources"
                             ],
                             "additionalProperties": false
                           }
@@ -3175,6 +3830,13 @@
                           "default": null
                         },
                         "icon": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "inherits": {
                           "type": [
                             "string",
                             "null"
@@ -3232,15 +3894,49 @@
                         },
                         "value": {
                           "default": null
+                        },
+                        "mode": {
+                          "enum": [
+                            "Hold",
+                            "Toggle"
+                          ],
+                          "default": "Hold"
                         }
                       },
                       "additionalProperties": false,
                       "default": null
+                    },
+                    "held": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "default": null
+                    },
+                    "isResting": {
+                      "type": "boolean"
+                    },
+                    "members": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
                     }
                   },
                   "required": [
-                    "group",
-                    "chord"
+                    "group"
                   ],
                   "additionalProperties": false
                 }
@@ -3323,6 +4019,13 @@
                             "default": null
                           },
                           "icon": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "inherits": {
                             "type": [
                               "string",
                               "null"
@@ -3419,6 +4122,18 @@
                           ],
                           "additionalProperties": false,
                           "default": null
+                        },
+                        "axisDeadZone": {
+                          "type": "number",
+                          "default": 0.08
+                        },
+                        "selectionGraceSeconds": {
+                          "type": "number",
+                          "default": 0.5
+                        },
+                        "switchFraction": {
+                          "type": "number",
+                          "default": 0.4
                         }
                       },
                       "additionalProperties": false,
@@ -3454,11 +4169,6 @@
                 "description": "Whether the bar is shown when no live override hides it.",
                 "type": "boolean",
                 "default": true
-              },
-              "hideAfterRestSeconds": {
-                "description": "The idle duration after which the bar hides; zero disables rest hiding.",
-                "type": "number",
-                "default": 0
               },
               "layout": {
                 "description": "The bar layout; null uses Default.",
@@ -3502,6 +4212,312 @@
                 ],
                 "additionalProperties": false,
                 "default": null
+              },
+              "visible": {
+                "description": "The bar\u0027s visibility condition over presentation facts, or null for always.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "$type"
+                ],
+                "anyOf": [
+                  {
+                    "description": "The fact holds this frame.",
+                    "properties": {
+                      "$type": {
+                        "const": "now"
+                      },
+                      "fact": {
+                        "enum": [
+                          "SeatInput",
+                          "PointerMotion",
+                          "WheelOpen",
+                          "ConsoleOpen",
+                          "EditorActive"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "fact"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The fact held within the last WindowSeconds.",
+                    "properties": {
+                      "$type": {
+                        "const": "recently"
+                      },
+                      "fact": {
+                        "enum": [
+                          "SeatInput",
+                          "PointerMotion",
+                          "WheelOpen",
+                          "ConsoleOpen",
+                          "EditorActive"
+                        ]
+                      },
+                      "windowSeconds": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "fact",
+                      "windowSeconds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "Every predicate holds.",
+                    "properties": {
+                      "$type": {
+                        "const": "all"
+                      },
+                      "predicates": {
+                        "type": "array",
+                        "items": {
+                          "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "required": [
+                            "$type"
+                          ],
+                          "anyOf": [
+                            {
+                              "description": "The fact holds this frame.",
+                              "properties": {
+                                "$type": {
+                                  "const": "now"
+                                },
+                                "fact": {
+                                  "enum": [
+                                    "SeatInput",
+                                    "PointerMotion",
+                                    "WheelOpen",
+                                    "ConsoleOpen",
+                                    "EditorActive"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "fact"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "The fact held within the last WindowSeconds.",
+                              "properties": {
+                                "$type": {
+                                  "const": "recently"
+                                },
+                                "fact": {
+                                  "enum": [
+                                    "SeatInput",
+                                    "PointerMotion",
+                                    "WheelOpen",
+                                    "ConsoleOpen",
+                                    "EditorActive"
+                                  ]
+                                },
+                                "windowSeconds": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "fact",
+                                "windowSeconds"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "Every predicate holds.",
+                              "properties": {
+                                "$type": {
+                                  "const": "all"
+                                },
+                                "predicates": {
+                                  "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                                }
+                              },
+                              "required": [
+                                "predicates"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "At least one predicate holds.",
+                              "properties": {
+                                "$type": {
+                                  "const": "any"
+                                },
+                                "predicates": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "predicates"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "description": "The predicate does not hold.",
+                              "properties": {
+                                "$type": {
+                                  "const": "not"
+                                },
+                                "predicate": {
+                                  "type": "object",
+                                  "required": [
+                                    "$type"
+                                  ],
+                                  "anyOf": [
+                                    {
+                                      "description": "The fact holds this frame.",
+                                      "properties": {
+                                        "$type": {
+                                          "const": "now"
+                                        },
+                                        "fact": {
+                                          "enum": [
+                                            "SeatInput",
+                                            "PointerMotion",
+                                            "WheelOpen",
+                                            "ConsoleOpen",
+                                            "EditorActive"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "fact"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "description": "The fact held within the last WindowSeconds.",
+                                      "properties": {
+                                        "$type": {
+                                          "const": "recently"
+                                        },
+                                        "fact": {
+                                          "enum": [
+                                            "SeatInput",
+                                            "PointerMotion",
+                                            "WheelOpen",
+                                            "ConsoleOpen",
+                                            "EditorActive"
+                                          ]
+                                        },
+                                        "windowSeconds": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "fact",
+                                        "windowSeconds"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "description": "Every predicate holds.",
+                                      "properties": {
+                                        "$type": {
+                                          "const": "all"
+                                        },
+                                        "predicates": {
+                                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                                        }
+                                      },
+                                      "required": [
+                                        "predicates"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "description": "At least one predicate holds.",
+                                      "properties": {
+                                        "$type": {
+                                          "const": "any"
+                                        },
+                                        "predicates": {
+                                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                                        }
+                                      },
+                                      "required": [
+                                        "predicates"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "description": "The predicate does not hold.",
+                                      "properties": {
+                                        "$type": {
+                                          "const": "not"
+                                        },
+                                        "predicate": {
+                                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                                        }
+                                      },
+                                      "required": [
+                                        "predicate"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "predicate"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "predicates"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "At least one predicate holds.",
+                    "properties": {
+                      "$type": {
+                        "const": "any"
+                      },
+                      "predicates": {
+                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                      }
+                    },
+                    "required": [
+                      "predicates"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The predicate does not hold.",
+                    "properties": {
+                      "$type": {
+                        "const": "not"
+                      },
+                      "predicate": {
+                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                      }
+                    },
+                    "required": [
+                      "predicate"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "default": null
               }
             },
             "additionalProperties": false,
@@ -3526,21 +4542,24 @@
         ],
         "properties": {
           "id": {
-            "description": "The row\u0027s stable string id \u2014 its mutation address and the handle placements reference.",
+            "description": "The row\u0027s stable string id \u2014 its mutation address and the handle placements reference \u2014 authored literally or through a Text state cell.",
             "type": "string"
           },
           "document": {
             "description": "The canonical (validated \u002B normalized) creation document."
           },
           "hash": {
-            "description": "The SHA-256 hex64 of the document\u0027s canonical bytes (Hash on the canonical result the compose boundary produces).",
-            "type": "string"
+            "description": "The SHA-256 hex64 of the document\u0027s canonical bytes (Hash on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from Document at load \u2014 an author never writes a content hash by hand; see Hash.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
           "id",
-          "document",
-          "hash"
+          "document"
         ],
         "additionalProperties": false
       }
@@ -3759,7 +4778,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "The deterministic animated test pattern (TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
+                      "description": "The deterministic animated test pattern (Puck.SdfVm.Views.TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
                       "properties": {
                         "$type": {
                           "const": "testPattern"
@@ -3971,7 +4990,7 @@
                           "default": null
                         },
                         "columns": {
-                          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SdfVm.SdfWorldEngine.MaxScreenDecalCells).",
+                          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).",
                           "type": [
                             "integer",
                             "null"
@@ -4751,6 +5770,37 @@
             "maxPitch": {
               "description": "The maximum live pitch offset in radians.",
               "type": "number"
+            },
+            "follow": {
+              "description": "The follow camera: with no look input the camera yaw eases in behind the body\u0027s heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World \u2014 a body-relative yaw already rides the body.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "rate": {
+                  "description": "The exponential rate (per second) the camera yaw closes on the heading \u2014 about 63% of the remaining angle per 1/rate seconds; larger is a stiffer follow.",
+                  "type": "number"
+                },
+                "whileIdle": {
+                  "description": "Whether the follow also runs while the body has no movement input. false (the default) is the classic feel: after a free-look the camera stays where you left it until you move.",
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "rate"
+              ],
+              "additionalProperties": false,
+              "default": null
+            },
+            "swapRate": {
+              "description": "The rate the camera boom closes over a player.look.swap, in the same unit as seatRig.smoothRate: 0 is instant (the boom re-seeds at the turned pose \u2014 a cut), a positive value eases the half-turn at that rate until it lands. Optional; absent leaves the swap to the rig\u0027s own smoothRate.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             }
           },
           "required": [
@@ -4850,7 +5900,7 @@
         ],
         "properties": {
           "name": {
-            "description": "The look\u0027s stable kebab-case name (unique within the definition), assignable by the look table.",
+            "description": "The look\u0027s stable kebab-case name, authored literally or through a Text state cell; it is unique within the definition and assignable by the look table.",
             "type": "string"
           },
           "source": {
@@ -4886,7 +5936,7 @@
                     "const": "creation"
                   },
                   "creationId": {
-                    "description": "The referenced Id (must resolve at validation).",
+                    "description": "The referenced Id, authored literally or through a Text state cell; it must resolve at validation.",
                     "type": "string"
                   }
                 },
@@ -5011,6 +6061,110 @@
                     "Accent",
                     "Phosphor"
                   ]
+                },
+                "visible": {
+                  "description": "The drawn cursor\u0027s visibility condition, or null for always.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "required": [
+                    "$type"
+                  ],
+                  "anyOf": [
+                    {
+                      "description": "The fact holds this frame.",
+                      "properties": {
+                        "$type": {
+                          "const": "now"
+                        },
+                        "fact": {
+                          "enum": [
+                            "SeatInput",
+                            "PointerMotion",
+                            "WheelOpen",
+                            "ConsoleOpen",
+                            "EditorActive"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "fact"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The fact held within the last WindowSeconds.",
+                      "properties": {
+                        "$type": {
+                          "const": "recently"
+                        },
+                        "fact": {
+                          "enum": [
+                            "SeatInput",
+                            "PointerMotion",
+                            "WheelOpen",
+                            "ConsoleOpen",
+                            "EditorActive"
+                          ]
+                        },
+                        "windowSeconds": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "fact",
+                        "windowSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Every predicate holds.",
+                      "properties": {
+                        "$type": {
+                          "const": "all"
+                        },
+                        "predicates": {
+                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                        }
+                      },
+                      "required": [
+                        "predicates"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "At least one predicate holds.",
+                      "properties": {
+                        "$type": {
+                          "const": "any"
+                        },
+                        "predicates": {
+                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                        }
+                      },
+                      "required": [
+                        "predicates"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "The predicate does not hold.",
+                      "properties": {
+                        "$type": {
+                          "const": "not"
+                        },
+                        "predicate": {
+                          "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                        }
+                      },
+                      "required": [
+                        "predicate"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -5019,6 +6173,110 @@
                 "role"
               ],
               "additionalProperties": false,
+              "default": null
+            },
+            "visible": {
+              "description": "The visibility condition every world-scope panel is gated by, beside its own, or null for always.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "$type"
+              ],
+              "anyOf": [
+                {
+                  "description": "The fact holds this frame.",
+                  "properties": {
+                    "$type": {
+                      "const": "now"
+                    },
+                    "fact": {
+                      "enum": [
+                        "SeatInput",
+                        "PointerMotion",
+                        "WheelOpen",
+                        "ConsoleOpen",
+                        "EditorActive"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "fact"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "The fact held within the last WindowSeconds.",
+                  "properties": {
+                    "$type": {
+                      "const": "recently"
+                    },
+                    "fact": {
+                      "enum": [
+                        "SeatInput",
+                        "PointerMotion",
+                        "WheelOpen",
+                        "ConsoleOpen",
+                        "EditorActive"
+                      ]
+                    },
+                    "windowSeconds": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "fact",
+                    "windowSeconds"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "Every predicate holds.",
+                  "properties": {
+                    "$type": {
+                      "const": "all"
+                    },
+                    "predicates": {
+                      "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                    }
+                  },
+                  "required": [
+                    "predicates"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "At least one predicate holds.",
+                  "properties": {
+                    "$type": {
+                      "const": "any"
+                    },
+                    "predicates": {
+                      "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                    }
+                  },
+                  "required": [
+                    "predicates"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "The predicate does not hold.",
+                  "properties": {
+                    "$type": {
+                      "const": "not"
+                    },
+                    "predicate": {
+                      "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                    }
+                  },
+                  "required": [
+                    "predicate"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
               "default": null
             }
           },
@@ -5079,6 +6337,110 @@
                   "Strip",
                   "Chip"
                 ]
+              },
+              "visible": {
+                "description": "The panel\u0027s visibility condition over presentation facts, or null for always.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "$type"
+                ],
+                "anyOf": [
+                  {
+                    "description": "The fact holds this frame.",
+                    "properties": {
+                      "$type": {
+                        "const": "now"
+                      },
+                      "fact": {
+                        "enum": [
+                          "SeatInput",
+                          "PointerMotion",
+                          "WheelOpen",
+                          "ConsoleOpen",
+                          "EditorActive"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "fact"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The fact held within the last WindowSeconds.",
+                    "properties": {
+                      "$type": {
+                        "const": "recently"
+                      },
+                      "fact": {
+                        "enum": [
+                          "SeatInput",
+                          "PointerMotion",
+                          "WheelOpen",
+                          "ConsoleOpen",
+                          "EditorActive"
+                        ]
+                      },
+                      "windowSeconds": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "fact",
+                      "windowSeconds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "Every predicate holds.",
+                    "properties": {
+                      "$type": {
+                        "const": "all"
+                      },
+                      "predicates": {
+                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates"
+                      }
+                    },
+                    "required": [
+                      "predicates"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "At least one predicate holds.",
+                    "properties": {
+                      "$type": {
+                        "const": "any"
+                      },
+                      "predicates": {
+                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/3/properties/predicates"
+                      }
+                    },
+                    "required": [
+                      "predicates"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "description": "The predicate does not hold.",
+                    "properties": {
+                      "$type": {
+                        "const": "not"
+                      },
+                      "predicate": {
+                        "$ref": "#/properties/bindingOverlays/items/properties/bindingBar/properties/visible/anyOf/2/properties/predicates/items/anyOf/4/properties/predicate"
+                      }
+                    },
+                    "required": [
+                      "predicate"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "default": null
               },
               "elements": {
                 "description": "Gets the panel\u0027s child elements. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
@@ -5573,6 +6935,22 @@
                       "additionalProperties": false
                     },
                     {
+                      "description": "Stages a rhythm-judge grading fact for the body whose trigger fired \u2014 the entity index, the judge window set, and the firing tick are collected during the body\u0027s advance (the same staged-output shape Generate uses) and drained by WorldServer.Step immediately after the body step, where they are graded against the world\u0027s musical clock. The grade is never computed here \u2014 this effect only names which judge row applies.",
+                      "properties": {
+                        "$type": {
+                          "const": "judge"
+                        },
+                        "judgeRef": {
+                          "description": "The declared judges row name (a puck.judge.v1 reference) whose hit windows grade the press.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "judgeRef"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
                       "description": "Upserts a whole HUD panel row \u2014 world scope only (refused at body scope: a per-body action has no HUD panel of its own to author). Admits WorldMutation.UpsertHudPanel into the world-rule effect set through the same seam Generate uses: the compiled effect submits the mutation stamped World, which WorldServer.TryAdmitMutation admits structurally, so the panel\u0027s own validation (capacity, unknown binding) is the ordinary whole-document revalidation every UpsertHudPanel submission \u2014 console, addon, or rule \u2014 already passes through.",
                       "properties": {
                         "$type": {
@@ -5604,6 +6982,10 @@
                                 "Strip",
                                 "Chip"
                               ]
+                            },
+                            "visible": {
+                              "$ref": "#/properties/hud/properties/panels/items/properties/visible",
+                              "default": null
                             },
                             "elements": {
                               "$ref": "#/properties/hud/properties/panels/items/properties/elements"

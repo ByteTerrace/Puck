@@ -9,11 +9,11 @@ than measurements, and they keep a bounded search that ran out of budget
 distinct from a search that found nothing: `SearchLimitReached` is never
 conflated with a proof or a counterexample.
 
-**Two namespaces, and the split is in flight.** Ten of the folder's twenty-six
-files declare `namespace Puck.Maths.Research`; the other sixteen still sit flat
+**Two namespaces, and the split is in flight.** Ten of the folder's thirty C#
+files declare `namespace Puck.Maths.Research`; the other twenty still sit flat
 in `namespace Puck.Maths` alongside the rest of the library. Check the declaring
 file before writing a `using` — the compiler is the only authority, and this
-line is a snapshot. As of 2026-07-27 the table below splits like this:
+line is a snapshot. As of 2026-08-16 the table below splits like this:
 
 - **`Puck.Maths.Research`** — `QuadraticIntegerArithmetic`;
   `OddCyclicIncidence` / `OddCyclicWordAnalysis`;
@@ -26,13 +26,16 @@ line is a snapshot. As of 2026-07-27 the table below splits like this:
 - **`Puck.Maths`** (flat) — `CertifiedLowDiscrepancy`;
   `PolynomialContinuedFractionTail` / `PolynomialContinuedFractionAnalysis`;
   `QuadraticInflation`; `QuadraticQuasicrystal` / `QuadraticQuasicrystalIndex`;
-  `MetallicQuasicrystal`; `MetallicPolynomialContinuedFraction`.
+  `MetallicQuasicrystal`; `MetallicPolynomialContinuedFraction`;
+  `IntegerNumerationSystem` / `DeterministicOutputAutomaton` /
+  `AutomaticIntegerSequence`; `RadicalShadowTowerAnalyzer` and its certificate,
+  verifier, compiler, and evaluator.
 
-**Not yet covered here.** Nine files carry public types the table below does not
+**Not yet covered here.** Eight files carry public types the table below does not
 name — `OstrowskiNumeration`, `PellEquation`, `PolynomialBeattyShadow`,
 `PolynomialExactBeattyTrap`, `PolynomialRationalTail`,
 `PolynomialTailEulerMoment`, `PolynomialTailMinimalityReduction`,
-`PolynomialTailPairedForcing`, `PositionalNumeration` (all flat `Puck.Maths`;
+`PolynomialTailPairedForcing` (all flat `Puck.Maths`;
 five of them also carry partials of the documented
 `PolynomialContinuedFractionAnalysis`). Their XML docs are the contract until
 someone who owns them writes the rows. `QuadraticNormEquation` and
@@ -63,6 +66,8 @@ this file is the contract for the folder.
 | `CertifiedLowDiscrepancy` | `readonly record struct` | A Kronecker sequence `{n·α}` for a quadratic irrational `α = (p + q·√d)/r`, carrying an EXACT equidistribution certificate: `Certificate` is the largest continued-fraction partial quotient `K` (read from `ContinuedFraction`, the integer part dropped) — the badly-approximable bound, `K = 1` for the golden ratio (Hurwitz-optimal), `K = n` for the `n`-th metallic mean, which `MetallicMean` builds by index. `DiscrepancyBound(N)` is the closed-form `O(K·log N / N)` star-discrepancy guarantee that follows from `K` alone; `Point` is the `[0, 1)` value (the one seam), one multiply in the stateless style of `LowDiscrepancy.R1`. Reframes "well-distributed" as a bounded-partial-quotient certificate instead of a measured statistic. |
 | `OddCyclicIncidence` / `OddCyclicWordAnalysis` | `sealed class` | Geometry-neutral exact analysis of any free odd-cyclic binary incidence system. A compact letter×ray-orbit polynomial table yields `t=1` syndromes, the syndrome-matroid circuit filter, ranks over every CRT field, exact expanded nullity, and parity-proof irreducibility. Optional direct expansion recomputes the large binary rank and fails if it disagrees with the CRT sum, making the theorem executable as a per-word certificate. |
 | `AutomaticSelectionAutomaton` / `AutomaticCyclicIncidence` | `sealed class` | Composes a finite-output positional or quadratic-Ostrowski sequence with `OddCyclicIncidence`. Prefix and range masks are accumulated exactly in `GF(2)` without scanning the range; positional prefix accumulation can itself be compiled to a DFAO. Reusable factories cover digit-sum residue selectors and the canonical binary Gray orbit through every selection mask—and hence every kernel relation—while safety-bounded compilation avoids materializing exponential output spaces. |
+| `IntegerNumerationSystem` / `DeterministicOutputAutomaton` / `AutomaticIntegerSequence` | `sealed class` | The engine-neutral random-access primitive beneath compiled sparse patterns. Non-negative integers are written either in a fixed radix or in the canonical Ostrowski system of a quadratic irrational; a dense deterministic finite automaton with output (DFAO) reads those digits; and a finite alphabet maps the resulting `int` symbol to an arbitrary-width integer. `BigInteger` is the contract, while `ulong` has a bounded-width traversal path. The automaton constructor discards unreachable states and renumbers the reachable graph deterministically. |
+| `RadicalShadowTowerAnalyzer` / `RadicalShadowTowerVerifier` / `RadicalShadowTowerCompiler` / `RadicalShadowTowerEvaluator` | `static` / `sealed class` | The first sound slice of the radical tower `t_n²=d n²+u n+v+w t_(n+1)`. Analysis derives `sqrt(d)`, the forced affine offset, the exact residual `kappa`, the norm congruence, and the strict first-order channel threshold. Version one certifies only the exact-affine case `kappa=0`. The analyzer emits the mathematical certificate, the compiler separately produces its zero-correction DFAO program, and the exact verifier checks the pair before returning an opaque verified value. Only that value can construct a total evaluator. Nonzero residuals return `Undecided`: the global trap seed and second-order channel-boundary argument are still research gaps, so the API does not turn the observed Pell patterns into a theorem. |
 | `PolynomialContinuedFractionTail` / `PolynomialContinuedFractionAnalysis` | `static` / `sealed class` | Exact analysis of every integer family `sₙ=p·n+q+(r·n²+u·n+v)/sₙ₊₁` with non-negative base and positive numerator on all positive indices. A successful `Analyze` certifies existence and uniqueness of the positive tail, returns its exact quadratic slope/offset/residual, constructs an integer-checkable interval `|sₙ−(λn+β)|≤H/n` beyond an explicit cutoff, and generates any requested finite number of exact asymptotic coefficients. `TryRationalTailCertificate` recognizes polynomial-denominator rational-function tails over the full characteristic field `Q(λ)` through the dense solver's explicit degree-128 resource ceiling, caches the result, and certifies positivity and absence of positive-integer poles; the former linear-fractional recognizer remains as a specialized compatibility API. `TryDegreeOneMinimalityReduction` recognizes the double-square subfamily covered directly by the 2026 minimality theorem. `TryOnePeriodEqualityReduction` additionally recognizes the aligned irrational-characteristic branch `p(u-r)=2rq`, where the transformed Gauss parameters remain rational and equality reduces to an effective 1-period relation. |
 | `QuadraticInflation` | `readonly record struct` | The inflation lens of a quadratic irrational: reads its `ContinuedFraction` period as the exact substitution matrix `∏[[aᵢ,1],[1,0]]`, exposing the conjugacy invariants (`Trace`, `Determinant = (−1)^period`, `Discriminant`), the closed-geodesic `Axis` (a hyperbolic `ModularTransform`), and the `InflationFactor` (the Perron eigenvalue). Golden recovers discriminant 5 and factor φ, silver discriminant 8 and factor 1 + √2 — read from the continued fraction, not fed in. |
 | `QuadraticQuasicrystal` / `QuadraticQuasicrystalIndex` | `static` / `sealed class` | The tiling word of the quasicrystal beneath **any** quadratic irrational, for an arbitrary CF period. `Word` streams its Sturmian fixed point, while `Compile` builds a straight-line substitution grammar supporting exact `TileAt`, prefix long-tile rank, and exact position at arbitrarily large `BigInteger` indices in period-times-logarithmic work without generating the preceding prefix. The nested **`Chain`** adds O(1) ring-coordinate random access into that same tiling — `Chain.FromQuadraticIrrational(…)` caches the period, then a vertex is the `(longCount, shortCount)` abelianization of a prefix and `Contains` tests whether its Galois-conjugate internal coordinate `C·a + (λ′−A)·b` lands in the window `[0, C + A − λ′)` in exact integer surd arithmetic, with `StartsLongTile`/`Next`/`Previous`/`Position` walking it. Single-term periods reproduce the metallic tiling language (in tile-count coordinates; `MetallicQuasicrystal` keeps the `a + b·δₙ` ring coordinate — general periods admit no such embedding). |
@@ -71,6 +76,42 @@ this file is the contract for the folder.
 | `SturmianReturnSpectrumResearch` | `static` | Exact Proposition-20 return-spectrum machinery for arbitrary periodic Sturmian directives and periodic left/right colorings. It evaluates a specified finite preperiod, enumerates every determinant-compatible congruence component representing all preperiods, reconstructs an explicit positive prefix for a component, and returns exact phase witnesses and minima; phase-invariant candidate tables make broad searches practical, while a separate optimized Fibonacci path supports cross-checking. |
 | `MetallicQuasicrystal` | `static` | The metallic-mean quasicrystals `δₙ = (n + √(n²+4))/2` for any index — golden is `n = 1` (the Fibonacci chain), silver is `n = 2` (the Pell chain). `Word` streams the tiling; `Contains`/`StartsLongTile`/`Next`/`Previous`/`Position` address points by ring coordinate `a + b·δₙ` in O(1), the membership-and-traversal surface generalized from the retired hand-coded golden and silver chains — `n = 1` reproduces the former golden chain coordinate for coordinate. Exact integer arithmetic above one fixed-point seam, so it never drifts. |
 | `MetallicPolynomialContinuedFraction` | `static` | Exact random access to the metallic polynomial continued fraction: `TailFloor(k, n)` evaluates `⌊sₙ⌋`, where `sₙ = k·n−1+n²/sₙ₊₁`, directly from its proved quadratic-irrational formula. It uses arbitrary-width integer arithmetic and an integer square root instead of a truncation depth or floating-point tolerance; differences of consecutive floors give its associated integer sequence. |
+
+---
+
+## Automatic integer sequences
+
+`IntegerNumerationSystem` gives every non-negative integer one digit word. A
+positional system uses the familiar powers of a radix; a quadratic Ostrowski
+system uses the denominators of continued-fraction convergents. A
+`DeterministicOutputAutomaton` reads that word from its most significant digit
+and emits an `int` symbol. `AutomaticIntegerSequence` then maps the symbol to a
+`BigInteger`, which keeps small corrections such as −1, 0, and 1 cheap without
+making them the framework's numeric ceiling.
+
+The generic sequence index starts at zero. It performs no hidden shift.
+Consumers with a different mathematical origin impose it themselves; the
+radical tower evaluator, for example, accepts only `n >= 1` and addresses its
+correction sequence with that same positive `n`.
+
+## Radical shadow towers
+
+For parameters `(d,u,v,w)`, the analyzer derives the affine center
+`sqrt(d)n+c`, where `c=u/(2sqrt(d))+w/2`, and the first residual coefficient
+`kappa`. It also exposes the generalized-Pell channel modulus and activation
+threshold so the later channel analyzer has one exact source for those values.
+Analysis has distinct `Invalid`, `ResourceLimit`, and `Undecided` outcomes;
+cooperative cancellation throws `OperationCanceledException` and is never
+reported as a mathematical result.
+
+The current total path is deliberately narrow. When `kappa=0` and the affine
+solution is positive from `n=1`, the recurrence identity is checked exactly,
+the analyzer emits a mathematical certificate, and `Compile` turns it into a
+zero-correction program. `CompileTotal` verifies that program before building
+an evaluator. For `kappa!=0`, the analyzer reports `Undecided`. The
+Pell-channel compiler and the proof objects for eventual or finite-domain
+results remain to be added after the trap-invariance and second-order boundary
+arguments are closed.
 
 ---
 

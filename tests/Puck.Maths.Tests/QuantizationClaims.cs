@@ -194,12 +194,12 @@ internal static class QuantizationClaims {
             var denominators = new BigInteger[count];
 
             ContinuedFraction.Convergents(
+                d: d,
+                denominators: denominators,
+                numerators: numerators,
                 p: a,
                 q: b,
-                d: d,
-                r: c,
-                numerators: numerators,
-                denominators: denominators
+                r: c
             );
 
             for (var k = 0; (k < count); ++k) {
@@ -303,12 +303,12 @@ internal static class QuantizationClaims {
 
         try {
             ContinuedFraction.Convergents(
+                d: 2L,
+                denominators: new BigInteger[2],
+                numerators: new BigInteger[3],
                 p: 0L,
                 q: 1L,
-                d: 2L,
-                r: 1L,
-                numerators: new BigInteger[3],
-                denominators: new BigInteger[2]
+                r: 1L
             );
 
             return "Convergents accepted mismatched span lengths";
@@ -549,8 +549,8 @@ internal static class QuantizationClaims {
                 return $"interval battery envelope broken: denominator {denominator} exceeds the scan cap";
             }
             if (!BigInteger.GreatestCommonDivisor(
-                numerator,
-                denominator
+                left: numerator,
+                right: denominator
             ).IsOne) {
                 return $"simplest fraction {numerator}/{denominator} is not in lowest terms";
             }

@@ -79,6 +79,52 @@ public sealed class WorldEventFeed {
     /// Valid only between one <see cref="Collect"/> call and the next.</summary>
     public IReadOnlyList<WorldEventEdge> Edges => m_edges;
 
+    /// <summary>One <see cref="WorldEventFeed"/>'s checkpointed state — the edge-detection tables
+    /// (<see cref="m_overlapping"/>/<see cref="m_regionOccupancy"/>/<see cref="m_seatOccupied"/>) a later tick's
+    /// enter/exit comparison reads, plus the two buffers that must reproduce exactly for a checkpoint taken
+    /// mid-episode to resume the same edges.</summary>
+    public sealed record WorldEventFeedCheckpoint(
+        IReadOnlyList<WorldEventEdge> Edges,
+        IReadOnlyList<WorldEventEdge> PendingRoutes,
+        bool[] SeatOccupied,
+        IReadOnlyList<(int A, int B)> Overlapping,
+        IReadOnlyList<(string Region, bool[] Occupancy)> RegionOccupancy
+    );
+
+    /// <summary>Captures this feed's live state.</summary>
+    public WorldEventFeedCheckpoint Capture() => new(
+        Edges: [.. m_edges],
+        PendingRoutes: [.. m_pendingRoutes],
+        SeatOccupied: [.. m_seatOccupied],
+        Overlapping: [.. m_overlapping],
+        RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Clone())))]
+    );
+    /// <summary>Restores this feed's live state from a previously captured checkpoint.</summary>
+    public void Restore(WorldEventFeedCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+
+        m_edges.Clear();
+        m_edges.AddRange(collection: checkpoint.Edges);
+        m_pendingRoutes.Clear();
+        m_pendingRoutes.AddRange(collection: checkpoint.PendingRoutes);
+        Array.Copy(
+            sourceArray: checkpoint.SeatOccupied,
+            destinationArray: m_seatOccupied,
+            length: Math.Min(
+                val1: checkpoint.SeatOccupied.Length,
+                val2: m_seatOccupied.Length
+            )
+        );
+        m_overlapping.Clear();
+        foreach (var pair in checkpoint.Overlapping) {
+            _ = m_overlapping.Add(item: pair);
+        }
+        m_regionOccupancy.Clear();
+        foreach (var row in checkpoint.RegionOccupancy) {
+            m_regionOccupancy[row.Region] = ((bool[])row.Occupancy.Clone());
+        }
+    }
+
     private static (FixedVector3 Center, FixedVector3 Extent) Bounds(FixedVector3 position, FixedQuaternion orientation,
         in FixedBodyColliderVolume volume) {
         if (volume.Kind == FixedBodyColliderKind.Sphere) {

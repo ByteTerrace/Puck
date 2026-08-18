@@ -11,6 +11,10 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <!-- Composes IObjectBlobStore through PuckStorageServiceRegistration.AddCore so the backend law suite
+             drives the real routed store (IObjectBlobStoreBackend is internal to Puck.Storage) rather than a second,
+             hand-rolled dispatch. -->
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
         <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
@@ -22,6 +26,11 @@
              (Fixtures.BuildDocument constructs a WorldDefinition directly in code) rather than read from any
              shipped world file — no src/Puck.World/Assets path is read here at all. -->
         <ProjectReference Include="..\..\src\Puck.Networking\Puck.Networking.csproj" />
+        <!-- The Schema-to-presentation capacity seam: Puck.World.Client's bridge derives Puck.Overlays' capacity from
+             Schema's ceilings, and the lease table it builds must fit the overlay's backstops — a property neither
+             assembly can state alone. -->
+        <ProjectReference Include="..\..\src\Puck.Overlays\Puck.Overlays.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Server\Puck.World.Server.csproj" />

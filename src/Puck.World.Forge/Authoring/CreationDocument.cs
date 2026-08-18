@@ -1,47 +1,53 @@
-using System.Numerics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Puck.Assets.Documents;
 using Puck.SignedDistance;
 
 namespace Puck.Forge.Authoring;
 
 /// <summary>One palette entry on the wire (mirrors <see cref="SdfMaterial"/> with document-doctrine nullability).</summary>
-/// <param name="Albedo">The base color.</param>
+/// <param name="Color">The base color as <c>#RRGGBB</c> (see <see cref="HexColor"/>).</param>
 /// <param name="Emissive">The emissive strength (null = 0 — optional members are nullable and normalized at load).</param>
 /// <param name="Specular">The specular strength (null = the material default).</param>
 /// <param name="Shininess">The specular exponent (null = the material default).</param>
-public sealed record PaletteEntryDocument(Vector3 Albedo, float? Emissive, float? Specular, float? Shininess);
-/// <summary>The persisted form of a placed shape (see <see cref="SculptShape"/>).</summary>
+public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Shininess);
+/// <summary>The persisted form of a placed shape. <see cref="Position"/> and
+/// <see cref="Rotation"/> are authored in the creation's author frame — see <see cref="CreationFrame"/> — and
+/// <see cref="Scale"/> is the primitive's size directly: see <see cref="CreationGeometry"/>'s unit table.</summary>
 /// <param name="Id">The shape's stable id.</param>
-/// <param name="Name">The optional player-given name.</param>
+/// <param name="Name">The optional player-given name, authored literally or through a containing world's Text state cell.</param>
 /// <param name="Type">The primitive.</param>
-/// <param name="Position">The shape's position (workbench space).</param>
+/// <param name="Position">The shape's position (the author frame's workbench space).</param>
 /// <param name="Rotation">The orientation.</param>
-/// <param name="Scale">The per-axis scale.</param>
+/// <param name="Scale">The per-axis scale — the primitive's size (see <see cref="CreationGeometry"/>).</param>
 /// <param name="Material">The palette slot (null = 0).</param>
 /// <param name="Blend">The blend op name (null = Union).</param>
 /// <param name="Smooth">The smooth-blend radius (null = 0).</param>
 /// <param name="Group">The composition group (null = ungrouped).</param>
-/// <param name="Mirror">Whether the shape mirrors across its local X=0 plane (null = false).</param>
 /// <param name="Twist">The shape's local twist rate (null = 0).</param>
 /// <param name="Bend">The shape's local bend rate about Y (null = 0).</param>
 /// <param name="Dilate">The shape's inflation radius (null = 0).</param>
 /// <param name="Onion">The shape's shell thickness (null = 0, solid).</param>
+/// <param name="Domain">The ordered SDF VM domain operators (<see cref="ShapeDomainOp"/>) applied to the shape's
+/// point in creation space, before its own translate/rotate/scale (null = none). <c>symmetry</c> and <c>repeat</c>
+/// apply on BOTH render and the fixed-point solid field; <c>polar</c> and <c>wallpaper</c> are render only (the
+/// fixed-point path collides against the unfolded shape).</param>
 public sealed record ShapeDocument(
     int Id,
-    string? Name,
+    DocumentIdentifier? Name,
     AvatarPrimitive Type,
-    Vector3 Position,
-    Quaternion Rotation,
-    Vector3 Scale,
+    DocumentVector3 Position,
+    DocumentQuaternion Rotation,
+    DocumentVector3 Scale,
     int? Material,
     SdfBlendOp? Blend,
     float? Smooth,
     int? Group,
-    bool? Mirror = null,
     float? Twist = null,
     float? Onion = null,
     float? Bend = null,
-    float? Dilate = null
+    float? Dilate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeDomainOp>? Domain = null
 ) {
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
@@ -49,6 +55,10 @@ public sealed record ShapeDocument(
     public const float MaxBend = 1.5f;
     /// <summary>The largest dilate (inflation) radius — mirrors <see cref="MaxOnion"/>'s clamp.</summary>
     public const float MaxDilate = 0.2f;
+    /// <summary>The most domain operators <see cref="Domain"/> carries — every kind costs exactly one
+    /// <c>SdfInstruction</c>, so this bounds a shape's domain-op instruction cost for capacity probes
+    /// (<c>Puck.World.Client.WorldStampPool</c>'s <c>probeWorstCase</c> sizing).</summary>
+    public const int MaxDomainOps = 4;
     /// <summary>The largest onion shell thickness a shape's clamp normalizes to.</summary>
     public const float MaxOnion = 0.2f;
     /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
@@ -69,6 +79,8 @@ public sealed record CreationPartDocument(string Id, int ShapeId);
 /// centre + <paramref name="Rotation"/>, in the creation's workbench space: local +X = advance, +Y = ascent, +Z = the
 /// relief normal). The glyph slab straddles the host surface, so the lettering is proud (emboss / Union) or recessed
 /// (engrave / Subtraction) but never coplanar — coincident zero-sets speckle (docs/sdf-wiki/text-and-glyphs.md).
+/// <paramref name="Position"/>/<paramref name="Rotation"/> are authored in the creation's author frame (see
+/// <see cref="CreationFrame"/>).
 /// </summary>
 /// <param name="Text">The run's text (whitespace / unmapped code points advance the pen without a glyph).</param>
 /// <param name="Position">The run's anchor centre on the host surface (workbench space).</param>
@@ -84,10 +96,13 @@ public sealed record CreationPartDocument(string Id, int ShapeId);
 /// line (null = left).</param>
 /// <param name="Tracking">Extra advance after every glyph, in em units (null = 0; negative tightens).</param>
 /// <param name="LineSpacing">A multiplier on the font's line height for the baseline step between lines (null = 1).</param>
+/// <param name="ShapeId">The shape the run rides, or null for a run placed in creation space. A riding run's
+/// <paramref name="Position"/>/<paramref name="Rotation"/> are in that shape's unit-local frame: scaled by the shape's
+/// scale, then rotated and translated with it, so the run stays on the surface as the shape resizes.</param>
 public sealed record TextRunDocument(
     string Text,
-    Vector3 Position,
-    Quaternion Rotation,
+    DocumentVector3 Position,
+    DocumentQuaternion Rotation,
     float EmHeight,
     float? Depth,
     string? Mode,
@@ -101,7 +116,9 @@ public sealed record TextRunDocument(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     float? Tracking = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    float? LineSpacing = null
+    float? LineSpacing = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    int? ShapeId = null
 ) {
     /// <summary>The center alignment name.</summary>
     public const string AlignCenter = "center";
@@ -144,7 +161,7 @@ public sealed record TextRunDocument(
         }
     }
 }
-/// <summary>One IK chain on the wire (see <see cref="SculptChain"/>'s live definition — rest geometry is
+/// <summary>One IK chain on the wire (see <see cref="ChainRig"/>'s rest-geometry capture — rest geometry is
 /// re-derived from the member shapes' current positions at load time, never persisted, so a loaded chain always
 /// captures fresh against whatever pose the shapes loaded at).</summary>
 /// <param name="Id">The chain's stable id.</param>
@@ -158,8 +175,8 @@ public sealed record ChainDocument(
     string? Name,
     IReadOnlyList<int> Shapes,
     string? Kind,
-    Vector3? Goal,
-    Vector3? Pole
+    DocumentVector3? Goal,
+    DocumentVector3? Pole
 ) {
     /// <summary>The "limb" kind name (exactly 3 shapes / 2 bones, two-bone IK).</summary>
     public const string KindLimb = "limb";
@@ -176,7 +193,7 @@ public sealed record FrameDocument(string Name, IReadOnlyList<FrameTransformDocu
 /// <param name="Position">The pose position.</param>
 /// <param name="Rotation">The pose orientation.</param>
 /// <param name="Scale">The pose scale.</param>
-public sealed record FrameTransformDocument(int Id, Vector3 Position, Quaternion Rotation, Vector3 Scale);
+public sealed record FrameTransformDocument(int Id, DocumentVector3 Position, DocumentQuaternion Rotation, DocumentVector3 Scale);
 /// <summary>
 /// One camera eye a creation carries — a posed viewpoint anchored to one of the creation's own shapes (a
 /// <see cref="ShapeDocument.Id"/>), so the eye rides that shape's live pose through IK/animation frames. This is the
@@ -188,7 +205,8 @@ public sealed record FrameTransformDocument(int Id, Vector3 Position, Quaternion
 /// <param name="Id">The eye's stable id within the creation.</param>
 /// <param name="ShapeId">The anchored shape id (a <see cref="ShapeDocument.Id"/>). A camera naming a missing shape is
 /// dropped at load (its offset frame has no anchor).</param>
-/// <param name="Position">The eye offset from the anchored shape's frame origin.</param>
+/// <param name="Position">The eye offset from the anchored shape's frame origin, in the creation's author frame (see
+/// <see cref="CreationFrame"/>).</param>
 /// <param name="Yaw">The eye heading offset, degrees (null = 0).</param>
 /// <param name="Pitch">The eye tilt offset, degrees (null = 0).</param>
 /// <param name="Fov">The vertical field of view, degrees (null = the engine default).</param>
@@ -198,7 +216,7 @@ public sealed record FrameTransformDocument(int Id, Vector3 Position, Quaternion
 public sealed record CreationCameraDocument(
     int Id,
     int ShapeId,
-    Vector3 Position,
+    DocumentVector3 Position,
     float? Yaw,
     float? Pitch,
     float? Fov,
@@ -276,12 +294,14 @@ public sealed record CreationBehaviorDocument(
 /// creation can be named, saved, reloaded, and handed to a bake/forge headlessly. Document doctrine applies
 /// throughout: every optional member is declared nullable (the polymorphic parse path skips property initializers —
 /// an omitted member arrives null regardless), validated only when present, and normalized at consumption (see
-/// <see cref="CreationCanonicalizer"/>).
+/// <see cref="CreationCanonicalizer"/>). Every <see cref="System.Numerics.Vector2"/>/<see cref="System.Numerics.Vector3"/>
+/// in this document graph is an <c>[x, y]</c>/<c>[x, y, z]</c> array on the wire, and every
+/// <see cref="System.Numerics.Quaternion"/> is <c>[x, y, z, w]</c> — the object form is refused (see
+/// <see cref="Puck.Assets.Documents.QuaternionJsonConverter"/>).
 /// </summary>
 /// <param name="Schema">The document version tag (<c>puck.creation.v1</c>).</param>
-/// <param name="Name">The creation's handle (normalization narrows it to letters, digits, dashes, and underscores).</param>
-/// <param name="Intent">The authoring intent name (null = Object).</param>
-/// <param name="BakeStyle">The per-cart bake style knob (null = classic).</param>
+/// <param name="Name">The creation's handle, authored literally or through a containing world's Text state cell;
+/// normalization narrows a literal value to letters, digits, dashes, and underscores.</param>
 /// <param name="Palette">The material palette (null = the default sweep).</param>
 /// <param name="Shapes">The authored shapes (null = empty).</param>
 /// <param name="Frames">The animation timeline frames (null = none).</param>
@@ -298,9 +318,7 @@ public sealed record CreationBehaviorDocument(
 /// Each maps a stable identifier to one shape's dynamic transform.</param>
 public sealed record CreationDocument(
     string? Schema,
-    string? Name,
-    CreatorIntent? Intent,
-    string? BakeStyle,
+    DocumentIdentifier? Name,
     IReadOnlyList<PaletteEntryDocument>? Palette,
     IReadOnlyList<ShapeDocument>? Shapes,
     IReadOnlyList<FrameDocument>? Frames,

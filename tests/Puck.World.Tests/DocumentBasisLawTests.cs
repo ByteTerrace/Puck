@@ -515,7 +515,7 @@ public sealed class DocumentBasisLawTests {
             userMessage: loadReason
         );
 
-        var retuned = (loaded! with { Motion = (loaded.Motion with { MoveSpeed = 7.25f }) });
+        var retuned = (loaded! with { MotionRaw = (loaded.Motion with { MoveSpeed = 7.25f }) });
 
         WorldDefinitionSerialization.SavePreservingBasis(
             basisPath: out var basisPath,

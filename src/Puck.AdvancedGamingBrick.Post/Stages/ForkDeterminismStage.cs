@@ -8,7 +8,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// it compares the entire snapshot image, and a mismatch is localized to the diverging component and byte offset
 /// via <see cref="HashDivergenceProbe.DescribeDivergence"/>.
 /// </summary>
-internal sealed class ForkDeterminismStage : IPostStage {
+internal sealed class ForkDeterminismStage : IPostStage<PostContext> {
     private const int TailFrames = 200;
     private const int WarmFrames = 200;
 

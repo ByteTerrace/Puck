@@ -25,7 +25,7 @@ public sealed record BindingPageView(
     IReadOnlyList<BindingChordCommandView> CommandChords
 );
 /// <summary>One bound source as the UI presents it.</summary>
-/// <param name="Source">The provider-neutral input source id.</param>
+/// <param name="Source">The row's trigger label — its source ids comma-joined, or an activator label.</param>
 /// <param name="Command">The name of the command the source activates on this page.</param>
 /// <param name="Label">The binding's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The binding's display icon id, if any; opaque to the engine.</param>
@@ -37,29 +37,31 @@ public sealed record BindingPageButtonView(
 );
 /// <summary>One declared modifier as the UI presents it.</summary>
 /// <param name="Id">The modifier's profile-unique identifier.</param>
-/// <param name="Source">The provider-neutral input source id that drives the modifier.</param>
+/// <param name="Sources">The provider-neutral input source ids that drive the modifier.</param>
 /// <param name="Label">The modifier's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The modifier's display icon id, if any; opaque to the engine.</param>
 /// <param name="Required">Whether the page's chord requires this modifier to be held.</param>
 public sealed record BindingModifierView(
     string Id,
-    string Source,
+    IReadOnlyList<string> Sources,
     string? Label,
     string? Icon,
     bool Required
 );
-/// <summary>One command-meaning chord row as the UI presents it — a binding bar's chord hint.</summary>
-/// <param name="Chord">The ordered modifier ids that fire the command, in press order.</param>
-/// <param name="Sources">The chord members' input source ids, parallel to <paramref name="Chord"/> (glyph resolution).</param>
+/// <summary>One command-meaning row as the UI presents it — a binding bar's chord hint.</summary>
+/// <param name="Chord">The modifier ids that must have been pressed in this order.</param>
+/// <param name="Sources">The members' input source ids — <paramref name="Held"/> then <paramref name="Chord"/> (glyph resolution).</param>
 /// <param name="Command">The name of the command the chord fires.</param>
 /// <param name="Label">The row's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The row's display icon id, if any; opaque to the engine.</param>
 /// <param name="HoldRelease">Whether the command dispatches on both edges (see <see cref="BindingCommandDefinition.HoldRelease"/>).</param>
+/// <param name="Held">The modifier ids that must be down, in any order.</param>
 public sealed record BindingChordCommandView(
     IReadOnlyList<string> Chord,
     IReadOnlyList<string> Sources,
     string Command,
     string? Label,
     string? Icon,
-    bool HoldRelease
+    bool HoldRelease,
+    IReadOnlyList<string>? Held = null
 );

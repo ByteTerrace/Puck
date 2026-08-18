@@ -13,7 +13,7 @@ namespace Puck.World;
 /// protocol traffic → every body, INCLUDING every booted screen machine (<c>Server.WorldMachineHost.Advance</c>)
 /// → the tick's snapshot, delivered to the client synchronously), then
 /// the client-side post-step (the per-tick analog clear).</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldEditorSession editor, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances) : IFixedStepSimulation {
+internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldEditorSession editor, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances) : IFixedStepSimulation, IWorldSimulationClock {
     private const ulong TimingReportInterval = 60UL;
 
     private ulong m_timingSamples;
@@ -22,6 +22,7 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldServer m_server = server;
     private readonly WorldClient m_client = client;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
+    private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
     private readonly WorldEditorSession m_editor = editor;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
@@ -150,10 +151,10 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
 
             stepTick = WorldServerStepShell.Step(
                 context: in bootContext,
+                publishTick: m_waitGate.PublishTick,
                 server: m_server,
                 tape: m_replayTape,
-                tcpHost: m_tcpHost,
-                waitGate: m_waitGate
+                tcpHost: m_tcpHost
             );
             m_instances.ScanBootBoundaryTriggers();
             // Frozen — not merely unchanged — while boot did not step: ElapsedTicks/Tick report the AUTHORITATIVE
@@ -181,22 +182,24 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
         // per-step inside this call — once per actual Server.Step, which can run several times here for a fast
         // instance, or zero times for a paused/rate-0 one — never once for the whole call regardless of how many
         // times an instance actually advanced.
-        m_instances.StepInstancesBesideBoot(masterDeltaTicks: context.StepTicks);
+        m_instances.StepInstances(masterDeltaTicks: context.StepTicks);
 
         // Reflect any applied world-binding-overlay mutation into the per-seat resolvers, then publish the seats'
         // context-family states and the perception anchor so a state change this tick applied (an engage, a
         // possession, a roster move) flips the context-derived binding group and swaps the seat's perceived body
-        // the same tick. SyncDefinition carries only the boot world's own control-feel floor (never routed); each
-        // seat's binding vocabulary resolves from its own routed instance (WorldInstanceHost.ResolveRoutedDefinition
-        // — boot for an un-crossed seat, the destination for a crossed one), never uniformly from boot. Cheap on an
-        // ordinary tick: a boot-routed seat's resolve returns the same reference SyncSeat already holds.
-        m_seatBindings.SyncDefinition(definition: m_client.Definition);
+        // the same tick. Each seat's binding vocabulary and state-backed control contexts resolve from its complete
+        // authority route, never uniformly from boot. Cheap on an ordinary tick: SyncSeat compares the delivered
+        // state, overlay, and channel-list references before doing any work.
 
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-            m_seatBindings.SyncSeat(
-                slot: slot,
-                definition: m_instances.ResolveRoutedDefinition(slot: slot)
-            );
+            if (m_seatRouter.TryRoute(slot: slot) is { } route) {
+                m_seatBindings.SyncSeat(
+                    slot: slot,
+                    definition: route.Endpoint.Definition,
+                    entityIndex: route.EntityIndex,
+                    nextInputTick: route.Endpoint.NextInputTick
+                );
+            }
         }
 
         WorldSeatContextSync.Publish(

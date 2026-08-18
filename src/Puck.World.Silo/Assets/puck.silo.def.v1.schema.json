@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "puck.silo.def.v1",
+  "title": "Puck world silo (puck.silo.def.v1)",
+  "description": "The silo document (puck.silo.def.v1) \u2014 durable configuration for one Puck.World.Silo process: which worlds it may activate, its declared door budget, where its checkpoints/journals/definitions live, its own state directory, and its clustering membership. Loaded once at silo start (--silo \u003Cpath\u003E); nothing in it is simulation state. See WorldSiloDefinitionValidator for the checks a document must pass before the silo composes against it.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "worlds": {
+      "description": "Every world this silo may activate, keyed by World.",
+      "type": "array",
+      "items": {
+        "description": "One world this silo activates. Its own host.authority (read from its definition after load) is the subject its federation key signs as \u2014 never this silo\u0027s own identity.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "owner": {
+            "description": "The owning identity\u0027s Entra oid.",
+            "type": "string",
+            "format": "uuid"
+          },
+          "world": {
+            "description": "The world id under that owner\u0027s container \u2014 the grain key\u0027s own extension.",
+            "type": "string"
+          },
+          "federation": {
+            "description": "This row\u0027s own signing key.",
+            "type": "object",
+            "properties": {
+              "keyFile": {
+                "description": "The path to the PKCS#8 private-key file this row signs its outbound federation claims and its own door\u0027s admission challenges with.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "keyFile"
+            ],
+            "additionalProperties": false
+          },
+          "pinned": {
+            "description": "Whether this row activates at silo start and never idle-deactivates.",
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "owner",
+          "world",
+          "federation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "doors": {
+      "description": "The declared door budget.",
+      "type": "object",
+      "properties": {
+        "budget": {
+          "description": "The maximum number of Pinned rows this silo may activate at start.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "budget"
+      ],
+      "additionalProperties": false
+    },
+    "store": {
+      "description": "The checkpoint/journal/definition backend.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Which backend.",
+          "enum": [
+            "Directory",
+            "Azure"
+          ]
+        },
+        "directoryPath": {
+          "description": "The root directory \u2014 required when Kind is Directory, otherwise absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "accountUrl": {
+          "description": "The Azure Blob account endpoint (e.g. https://bytrcstp001.blob.core.windows.net) \u2014 required when Kind is Azure, otherwise absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "stateDir": {
+      "description": "The root every activated row\u0027s container-ephemeral owned-world store resolves its own directory under \u2014 the --state-dir counterpart.",
+      "type": "string"
+    },
+    "clustering": {
+      "description": "Orleans cluster membership.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Which provider.",
+          "enum": [
+            "Localhost",
+            "Table"
+          ]
+        },
+        "tableName": {
+          "description": "The Storage Table name \u2014 required when Kind is Table, otherwise absent (a local run names no table).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "schema": {
+      "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worlds",
+    "doors",
+    "store",
+    "stateDir",
+    "clustering"
+  ],
+  "additionalProperties": false
+}

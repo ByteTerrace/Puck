@@ -1,6 +1,8 @@
 {
-  "description": "The creation asset rows (default empty) \u2014 whole puck.creation.v1 documents embedded inline-canonical with their identity hashes pinned (see WorldCreation).",
-  "type": "array",
+  "type": [
+    "array",
+    "null"
+  ],
   "items": {
     "description": "One creation asset row \u2014 a whole puck.creation.v1 document embedded inline, in canonical form, in the world file with its identity hash pinned beside it. The document and hash must come from the same CanonicalDocument\u00601: the compose boundary canonicalizes on upsert and rejects a hash the pipeline did not itself compute; the validator re-verifies the pin on every candidate, so a tampered world file rejects loudly. World files stay self-contained \u2014 the CAS is an authoring-time import/export cache, never a load-time dependency.",
     "type": [
@@ -9,22 +11,26 @@
     ],
     "properties": {
       "id": {
-        "description": "The row\u0027s stable string id \u2014 its mutation address and the handle placements reference.",
+        "description": "The row\u0027s stable string id \u2014 its mutation address and the handle placements reference \u2014 authored literally or through a Text state cell.",
         "type": "string"
       },
       "document": {
         "description": "The canonical (validated \u002B normalized) creation document."
       },
       "hash": {
-        "description": "The SHA-256 hex64 of the document\u0027s canonical bytes (Hash on the canonical result the compose boundary produces).",
-        "type": "string"
+        "description": "The SHA-256 hex64 of the document\u0027s canonical bytes (Hash on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from Document at load \u2014 an author never writes a content hash by hand; see Hash.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
       }
     },
     "required": [
       "id",
-      "document",
-      "hash"
+      "document"
     ],
     "additionalProperties": false
-  }
+  },
+  "default": null
 }

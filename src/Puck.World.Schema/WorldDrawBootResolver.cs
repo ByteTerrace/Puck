@@ -114,7 +114,7 @@ internal static class WorldDrawBootResolver {
                 settled: drawn.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
             );
 
-            population = (population with { Capacity = ((int)drawn), CapacityDraw = null });
+            population = (population with { CapacityRaw = ((int)drawn), CapacityDraw = null });
             changed = true;
         }
 
@@ -195,7 +195,7 @@ internal static class WorldDrawBootResolver {
         }
 
         if (changed) {
-            resolved = (definition with { Population = population, Host = host, State = state });
+            resolved = (definition.WithWorldState(rows: state) with { PopulationRaw = population, HostRaw = host });
         }
 
         return true;

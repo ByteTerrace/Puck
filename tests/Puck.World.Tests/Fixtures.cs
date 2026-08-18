@@ -142,10 +142,10 @@ internal static class Fixtures {
             // The full parameter set ValidateProducerParameters requires for a kit naming the "wander"
             // producer — see the bodyMotionPrograms remark above for why this exists at all. Values mirror the
             // shipped worlds' own "traveler"-style kit; none of them is exercised by this suite's laws.
-            Producers: new Dictionary<string, BodyProgramParameters> {
+            ProducersRaw: new Dictionary<string, BodyProgramParameters> {
                 ["wander"] = TravelerWanderParameters,
             },
-            Actions: new Dictionary<string, ActionSpec>(),
+            ActionsRaw: new Dictionary<string, ActionSpec>(),
             Collider: seatCollider
         ),
     ];
@@ -195,54 +195,52 @@ internal static class Fixtures {
         };
 
         var population = new WorldPopulationDefaults(
-            SeatActivation: [SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager],
+            SeatActivationRaw: [SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager, SeatActivationPolicy.Eager],
             NetworkPlayers: 0,
             // Idle, not Producer("wander") — this fixture declares no producer program at all; nothing simulated
             // ever needs to resolve a producer name.
-            DefaultPeerSource: IntentSource.Idle,
-            SeatSpawns: ["seat-1", "seat-2", "seat-3", "seat-4"],
-            Distribution: new WorldDistribution(
+            DefaultPeerSourceRaw: IntentSource.Idle,
+            SeatSpawnsRaw: ["seat-1", "seat-2", "seat-3", "seat-4"],
+            DistributionRaw: new WorldDistribution(
                 Region: new WorldDistributionRegion.Disc(Radius: 40f, SampleCount: 124),
                 Fill: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.38196602f)
             ),
-            PeerVariation: new WorldPopulationVariation(
+            PeerVariationRaw: new WorldPopulationVariation(
                 Phase: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.38196602f),
                 Weave: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.618034f),
                 Activity: new WorldSequence(Name: WorldSequence.R2, Offset: 1, Step: 0f)
             ),
-            SeatVariation: new WorldPopulationVariation(
+            SeatVariationRaw: new WorldPopulationVariation(
                 Phase: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.38196602f),
                 Weave: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f),
                 Activity: new WorldSequence(Name: WorldSequence.R2, Offset: 1, Step: 0f)
             ),
-            PeerColors: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.618034f),
+            PeerColorsRaw: new WorldSequence(Name: WorldSequence.Additive, Offset: -4, Step: 0.618034f),
             // Capacity == LocalSeatCount (the validator's own floor) deliberately: WorldPopulation seeds every
             // entry from LocalSeatCount..Capacity as a "simulated" crowd stand-in (WorldPopulation.SeedSimulated),
             // which unconditionally requires a "wander" producer program on the assigned kit REGARDLESS of
             // DefaultPeerSource — a requirement this minimal fixture has no reason to carry, since none of this
             // suite's laws exercise simulated/peer bodies. Pinning capacity to the seat count makes that loop empty
             // (LocalSeatCount..Capacity is 4..4) rather than declaring an unused producer just to satisfy it.
-            Capacity: WorldPopulationLimits.LocalSeatCount,
+            CapacityRaw: WorldPopulationLimits.LocalSeatCount,
             ReconnectGraceSeconds: 3.0f
         );
 
         var playerDefaults = new WorldPlayerDefaults(
-            Identities: [
+            IdentitiesRaw: [
                 new WorldIdentitySeed(Id: WorldSafeName.Parse(candidate: "amber"), Name: "amber", Color: "#ED8530"),
             ],
-            NeutralColor: "#8C8C8C",
-            ColorSequence: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f),
+            NeutralColorRaw: "#8C8C8C",
+            ColorSequenceRaw: new WorldSequence(Name: WorldSequence.Additive, Offset: 0, Step: 0.618034f),
             Saturation: 0.65f,
             Value: 0.85f,
             ColorSearchLimit: 64,
             NoseFactor: 0.35f,
             PickerThreshold: 0.6f,
-            PickerNeutralColor: "#8C8C8C",
+            PickerNeutralColorRaw: "#8C8C8C",
             PickerNeutralBlend: 0.5f,
-            // Control feel is REQUIRED — there is no engine default to fall back on, so even a compiler-maintained
-            // fixture must state what its seats feel like. These are the numbers the shipped worlds author.
-            SeatLook: new WorldSeatLook(
-                Arming: WorldSeatLookArming.RightButton,
+            // Explicit — this fixture states what its seats feel like, matching the shipped worlds' numbers.
+            SeatLookRaw: new WorldSeatLook(
                 InvertPitch: false,
                 InvertYaw: false,
                 PitchSensitivity: 0.001f,
@@ -276,41 +274,41 @@ internal static class Fixtures {
         );
 
         return new WorldDefinition(
-            Motion: new WorldMotionDefaults(MaxSmoothError: 3f, MoveSpeed: 4f, TurnSpeed: 2.5f),
-            SpawnPoints: spawnPoints,
-            Render: WorldRenderDefaults.Default,
-            Screens: [testPatternScreen],
-            Cameras: [],
-            Population: population,
-            PlayerDefaults: playerDefaults,
-            Channels: channels,
-            TargetRegisters: [],
-            BodyMotionPrograms: bodyMotionPrograms,
-            Kits: BuildKits(seatCollider: seatCollider),
-            DefaultSeatKit: "traveler",
-            Assignment: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 1, Step: 0f), Rows: []),
-            Addons: addons,
-            BindingOverlays: [],
-            Storage: WorldStorageDefaults.None,
-            Creations: creations,
-            Placements: placements,
-            Authoring: WorldAuthoringDefaults.Default,
-            Speakers: [],
-            Tunes: [],
-            Patches: [],
-            Audio: WorldAudioDefaults.Default,
-            Collision: collision,
-            Host: WorldHostDefaults.Default,
-            Views: WorldViewDefaults.Default,
-            Looks: [],
-            LookAssignment: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
-            Links: [],
-            Grants: [],
-            Hud: WorldHudSection.Default,
-            State: [],
+            MotionRaw: new WorldMotionDefaults(MaxSmoothError: 3f, MoveSpeed: 4f, TurnSpeed: 2.5f),
+            SpawnPointsRaw: spawnPoints,
+            RenderRaw: WorldRenderDefaults.Default,
+            ScreensRaw: [testPatternScreen],
+            CamerasRaw: [],
+            PopulationRaw: population,
+            PlayerDefaultsRaw: playerDefaults,
+            ChannelsRaw: channels,
+            TargetRegistersRaw: [],
+            BodyMotionProgramsRaw: bodyMotionPrograms,
+            KitsRaw: BuildKits(seatCollider: seatCollider),
+            DefaultSeatKitRaw: "traveler",
+            AssignmentRaw: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 1, Step: 0f), Rows: []),
+            AddonsRaw: addons,
+            BindingOverlaysRaw: [],
+            StorageRaw: WorldStorageDefaults.None,
+            CreationsRaw: creations,
+            PlacementsRaw: placements,
+            AuthoringRaw: WorldAuthoringDefaults.Default,
+            SpeakersRaw: [],
+            TunesRaw: [],
+            PatchesRaw: [],
+            AudioRaw: WorldAudioDefaults.Default,
+            CollisionRaw: collision,
+            HostRaw: WorldHostDefaults.Default,
+            ViewsRaw: WorldViewDefaults.Default,
+            LooksRaw: [],
+            LookAssignmentRaw: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
+            LinksRaw: [],
+            GrantsRaw: [],
+            HudRaw: WorldHudSection.Default,
+            StateRaw: new WorldStateSection(World: []),
             // Authored seconds now (WorldDefinition.InputHold is the AUTHORED shape) — 120/60/0 ticks at the
             // fixture's default 240 Hz (no Simulation section authored) is 0.5/0.25/0 seconds.
-            InputHold: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, DefaultSeconds: 0f, EqualizeByDefault: true, LowerAfterSeconds: 0.25f, Participants: [])
+            InputHoldRaw: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, DefaultSeconds: 0f, EqualizeByDefault: true, LowerAfterSeconds: 0.25f, Participants: [])
         );
     }
 
@@ -329,7 +327,7 @@ internal static class Fixtures {
     /// upstream table's value is exactly the kind of drift <see cref="BuildBallCreation"/>'s canonicalize-at-build
     /// hash pin cannot silently accept: only the RESULTING surface radius matters here, so a mismatch just resizes
     /// the ball, never breaks the fixture.</summary>
-    private const float SphereLocalRadius = 0.38f;
+    private const float SphereLocalRadius = 1f;
     /// <summary>How far off vertical (as a fraction of <see cref="BallSurfaceRadius"/>) the flank point
     /// <see cref="GradientUpContactLawTests"/> grounds on sits — 0.9 puts the surface normal at
     /// <c>acos(sqrt(1-0.9^2))</c> ~= 64 degrees off world +Y, comfortably past the fixture's 60-degree
@@ -371,15 +369,13 @@ internal static class Fixtures {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "ball",
-            Intent: CreatorIntent.Object,
-            BakeStyle: null,
             Palette: null,
             Shapes: [shape],
             Frames: null
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "ball");
 
-        return new WorldCreation(Id: "ball", Document: canonical.Document, Hash: canonical.Hash);
+        return new WorldCreation(Id: "ball", Document: canonical.Document, HashRaw: canonical.Hash);
     }
 
     /// <summary>Extends <see cref="BuildDocumentCore"/> with the ONE fixture <see cref="GradientUpContactLawTests"/>
@@ -434,10 +430,9 @@ internal static class Fixtures {
         return node.ToJsonBytes();
     }
     /// <summary>Serializes the code-built document and REMOVES <c>playerDefaults.seatLook</c>, returning the
-    /// re-serialized bytes. A seat's control feel is a required member with no engine fallback, and a non-nullable
-    /// record parameter does not by itself PROVE that: only a document actually missing the member, actually
-    /// refused, shows the requirement is enforced rather than merely declared. Starts from the canonical writer's own
-    /// output (<see cref="DefaultWorldBytes"/>), so the removal is the only thing that could make it refuse.</summary>
+    /// re-serialized bytes — proves the member parses absent and resolves through <see cref="WorldSeatLook.Default"/>.
+    /// Starts from the canonical writer's own output (<see cref="DefaultWorldBytes"/>), so the removal is the only
+    /// difference from a document known to parse clean.</summary>
     public static byte[] MissingSeatLookBytes() {
         var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: DefaultWorldBytes()))!.AsObject();
 

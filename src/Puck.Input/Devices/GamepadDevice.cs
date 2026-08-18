@@ -96,7 +96,9 @@ internal sealed class GamepadDevice : IGamepadConnection {
     /// <summary>
     /// Whether the device is currently streaming parsed state. Set on the I/O thread by the first parsed report;
     /// cleared when the receiver announces the controller left the slot. The manager reconciles deferred devices'
-    /// player slots against this.
+    /// player slots against this. Either transition publishes the flag after the output and stream state it
+    /// announces, so a reader that observes it finds output accepting (<see langword="true"/>) or suspended and
+    /// reset (<see langword="false"/>).
     /// </summary>
     internal bool HasStream => m_hasStream;
 
@@ -267,7 +269,6 @@ internal sealed class GamepadDevice : IGamepadConnection {
             );
         }
 
-        m_hasStream = false;
         m_sequence = 0UL;
         m_rumbleActive = false;
         m_rumbleExpiry = long.MaxValue;
@@ -278,6 +279,10 @@ internal sealed class GamepadDevice : IGamepadConnection {
         if (m_parser is IGamepadStreamReset resettable) {
             resettable.ResetStreamState();
         }
+
+        // Publish the flag last, mirroring the claim: an observer that sees the stream gone finds output already
+        // suspended and the coalescer and parser already reset.
+        m_hasStream = false;
     }
     private static int RemainingMilliseconds(long expiryTimestamp) {
         var remaining = (expiryTimestamp - Stopwatch.GetTimestamp());
@@ -381,8 +386,9 @@ internal sealed class GamepadDevice : IGamepadConnection {
                         m_coalescer.Update(state: in state);
 
                         if (!m_hasStream) {
-                            m_hasStream = true;
+                            // Publish the flag last: an observer that sees HasStream finds output accepting.
                             m_output.Resume();
+                            m_hasStream = true;
                         }
 
                         if (!firstParsed) {

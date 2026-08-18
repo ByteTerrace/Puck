@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// confirms the bytes survive — plus the dirty-flag transitions and the wrong-size rejection. Self-contained (no machine,
 /// no external ROM); proves the save layer a host relies on to persist progress across launches.
 /// </summary>
-internal sealed class SaveRoundTripStage : IPostStage {
+internal sealed class SaveRoundTripStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "save-round-trip";

@@ -106,10 +106,10 @@ Where things live, and nothing crosses:
 | File | Holds | Never holds |
 |---|---|---|
 | `laws/*.json` | ids, tiers, covered members, leg prose | anything executable |
-| `LawRegistry.cs` | domains and one `Case(id, run)` binding per law | legs, members, arithmetic, assertions |
+| `LawRegistry.cs` and its per-family partials | domains and one `Case(id, run)` binding per law | legs, members, arithmetic, assertions |
 | `LawDeclarations.cs` | the declaration records and their loader | law logic |
-| `Subjects.cs`, `*Claims.cs` | subject closures + claim bodies | oracle arithmetic |
-| `Oracles.cs` | shared-nothing reference arithmetic | a `Puck.Maths` call |
+| `Subjects.cs` and its per-family partials, `*Claims.cs` | subject closures + claim bodies | oracle arithmetic |
+| `Oracles.cs` and its per-area partials | shared-nothing reference arithmetic | a `Puck.Maths` call |
 | `Domains.cs`, `Frontier.cs` | operand sources | anything law-specific |
 | `Laws.cs` | generic combinators, written once | per-subject logic |
 | `Coverage.cs` | member surface, waivers, ratchet | law logic |
@@ -120,7 +120,7 @@ in use: `scalar`, `unsigned-scalar`, `closed-unit`, `unit-fraction16`,
 `unit-fraction32`, `integer`, `complex`, `split`, `dual`, `quaternion`,
 `vector`, `rigid`, `position`, `rate`, `algebra`, `mobius`, `presented`,
 `certified`, `quasicrystal`, `sampling`, `core`, `binary-field`, `polynomial`,
-`prime-field`, `reed-solomon`. Mirrors take the **tier** as their prefix instead:
+`prime-field`, `reed-solomon`, `ntt`, `fft`. Mirrors take the **tier** as their prefix instead:
 `smoke.*` and `deep.*`. Reuse a family; do not invent one for a type that has
 one.
 
@@ -269,7 +269,7 @@ required (an empty one throws at the factory). The register closes only by
 **correcting the code or the doc and re-spelling the leg**; editing
 `leg-ledger.md` closes nothing — it is regenerated on the next run. The
 tool-side label grammar has no token for this, so a doc gap can only be spelled
-in `LawRegistry.cs`.
+in `LawRegistry.cs` or one of its per-family partials.
 
 **What the leg gate checks.** Checks 1–2 run in
 `LegLedgerTests.LawLegsAreDeclared` at tier `Default`; check 3 runs inside

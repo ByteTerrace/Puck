@@ -45,7 +45,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// real-time rate.
 /// </para>
 /// </remarks>
-internal sealed class ScriptedTradeLinkLockStage : IPostStage {
+internal sealed class ScriptedTradeLinkLockStage : IPostStage<PostContext> {
     private const string RomEnvironmentVariable = "PUCK_GB_TRADEROM";
 
     // The known dev-box copies (laptop, desktop), tried in order when the env var is unset.
@@ -123,7 +123,7 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
             return PostStageOutcome.Fail(detail: churnFailure);
         }
 
-        return PostStageOutcome.Pass(detail: ((((string)$"{CartridgeTitle(rom: rom)} cgb↔cgb Cable Club trade COMPLETED: rendezvous roles $01/$02 resolved (A=0x{reference.RoleA:X2} B=0x{reference.RoleB:X2}), TRADE_CENTER warp + seat walk + console + mon-selection menu drive, leads swapped and auto-saved (A 0x{craftedLeadA:X2}→0x{reference.LeadA:X2}, B 0x{craftedLeadB:X2}→0x{reference.LeadB:X2}, checksums valid), CANCEL handshake back to the overworld, ")
+        return PostStageOutcome.Pass(detail: ((((string)$"{CartridgeTitleReader.CartridgeTitle(rom: rom)} cgb↔cgb Cable Club trade COMPLETED: rendezvous roles $01/$02 resolved (A=0x{reference.RoleA:X2} B=0x{reference.RoleB:X2}), TRADE_CENTER warp + seat walk + console + mon-selection menu drive, leads swapped and auto-saved (A 0x{craftedLeadA:X2}→0x{reference.LeadA:X2}, B 0x{craftedLeadB:X2}→0x{reference.LeadB:X2}, checksums valid), CANCEL handshake back to the overworld, ")
                 + $"A sent {reference.TrafficA.MasterSends}/completed {reference.TrafficA.Completions} B sent {reference.TrafficB.MasterSends}/completed {reference.TrafficB.Completions} transfers (traffic 0x{reference.TrafficA.TrafficHash:X16}/0x{reference.TrafficB.TrafficHash:X16}), ")
                 + $"replay- and churn-identical (severed transfer-idle at budget step {churnStep}, {reference.StateA.Size}+{reference.StateB.Size} state bytes)."));
     }
@@ -280,23 +280,5 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage {
             array: RomFallbackPaths,
             match: File.Exists
         );
-    }
-    private static string CartridgeTitle(byte[] rom) {
-        var builder = new System.Text.StringBuilder(capacity: 11);
-
-        for (var offset = 0x0134; (offset < 0x013F); ++offset) {
-            var character = rom[offset];
-
-            if (
-                (character == 0) ||
-                (character >= 0x80)
-            ) {
-                break;
-            }
-
-            _ = builder.Append(value: ((char)character));
-        }
-
-        return builder.ToString().Trim();
     }
 }

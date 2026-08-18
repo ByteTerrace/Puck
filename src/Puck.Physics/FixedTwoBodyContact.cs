@@ -30,27 +30,11 @@ public readonly record struct FixedTwoBodyContact(
     /// <remarks>An explicit insertion sort rather than a library sort, matching <see cref="FixedContactCandidate.Canonicalize"/>:
     /// the ordering is part of the contract a permutation law proves, so it is written where it can be read, and its
     /// cost is irrelevant at manifold sizes.</remarks>
-    public static void Canonicalize(List<FixedTwoBodyContact> candidates) {
-        ArgumentNullException.ThrowIfNull(argument: candidates);
-
-        for (var index = 1; (index < candidates.Count); ++index) {
-            var current = candidates[index];
-            var slot = (index - 1);
-
-            while (
-                (slot >= 0) &&
-                (Compare(
-                left: candidates[slot],
-                right: current
-            ) > 0)
-            ) {
-                candidates[(slot + 1)] = candidates[slot];
-                --slot;
-            }
-
-            candidates[(slot + 1)] = current;
-        }
-    }
+    public static void Canonicalize(List<FixedTwoBodyContact> candidates) =>
+        FixedContactCanonicalization.InsertionSort(
+            candidates: candidates,
+            compare: Compare
+        );
     /// <summary>Compares two candidates on a TOTAL key: the canonically-ordered body id pair first, then source,
     /// feature, normal, separation, and both anchors, each read as a raw carrier word.</summary>
     /// <param name="left">The first candidate.</param>

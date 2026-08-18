@@ -9,7 +9,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// actual RAM bank to bits 0-2 only, and a NON-rumble MBC5 (header <c>0x1B</c>) must show no motor regardless of the
 /// same bit pattern — the control the latch is real, not a false-positive on every MBC5.
 /// </summary>
-internal sealed class RumbleDeviceStage : IPostStage {
+internal sealed class RumbleDeviceStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public string Name =>
         "rumble-device";

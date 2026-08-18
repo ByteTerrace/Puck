@@ -142,7 +142,7 @@ public sealed class CommandModalityTests {
                     Group: "play",
                     Chord: [],
                     Page: new BindingPageDefinition(Id: "rest", Entries: [new BindingPageEntryDefinition(
-                        Source: "key.drive",
+                        Sources: ["key.drive"],
                         Channel: new ChannelRef.Name(Value: "movement")
                     )])
                 )]
@@ -315,8 +315,8 @@ public sealed class CommandModalityTests {
                 Group: "menu",
                 HoldPages: ["hold"],
                 Rings: [new BindingPageDefinition(Id: "actions", Entries: [
-                    new BindingPageEntryDefinition(Source: null, Command: "menu.accept"),
-                    new BindingPageEntryDefinition(Source: null, Command: "menu.accept"),
+                    new BindingPageEntryDefinition(Sources: null, Command: "menu.accept"),
+                    new BindingPageEntryDefinition(Sources: null, Command: "menu.accept"),
                 ])]
             )]
         ));
@@ -326,7 +326,7 @@ public sealed class CommandModalityTests {
     private static PagedInputBindings ChordBindings() {
         return new PagedInputBindings(profile: BindingProfile.Compile(document: new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
-            Modifiers: [new BindingModifierDefinition(Id: "modifier", Source: "button.modifier")],
+            Modifiers: [new BindingModifierDefinition(Id: "modifier", Sources: ["button.modifier"])],
             Chords: [
                 new BindingChordDefinition(
                     Group: "play",
@@ -350,7 +350,7 @@ public sealed class CommandModalityTests {
                     Group: "play",
                     Chord: [],
                     Page: new BindingPageDefinition(Id: "rest", Entries: [new BindingPageEntryDefinition(
-                        Source: null,
+                        Sources: null,
                         Channel: new ChannelRef.Name(Value: "movement"),
                         Activator: new BindingActivatorDefinition(
                             Sequence: ["button.tap"],

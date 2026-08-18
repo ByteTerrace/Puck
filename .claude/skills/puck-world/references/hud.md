@@ -13,7 +13,7 @@ side: `src/Puck.World/WorldHudFeed.cs`, `WorldHudBindingResolver.cs`,
 
 - Schema and caps
 - Templating (`WorldHudElement.Template`)
-- The overlay reservation — what breaks the build
+- The overlay reservation — what refuses at construction
 - Bands — what `replace` replaces
 - The reconcile split — structure vs values
 - Verbs
@@ -40,19 +40,15 @@ an unbound gauge draws empty).
 `Panel`/`Strip`/`Chip`; `WorldHudStyleToken`: `Primary`/`Dim`/`Accent`/
 `Positive`/`Warning`/`Danger`.
 
-`WorldHudCapacity`: `MaxWorldPanels = 4`, `MaxElementsPerPanel = 24`,
-`MaxElementsPerSeatPanel = 12`,
-`RectElementCost = 1`, `TextElementCost = 1`, `TextWordCost = 64`,
-`GaugeElementCost = 3`, `GaugeWordCost = 16`. A templated Text element costs
-exactly `TextElementCost`/`TextWordCost` like any other, so `Template` needed
-no new capacity constant — but only because `TextWordCost`'s render-side twin
-(`HudWriter.TextRunChars`, which `OverlayChannelLeases.HudTextWordCost` now
-READS rather than restates) is enforced as a `WriteText` `maxChars` clamp, the
-way `GaugeLabelChars` always was for a gauge label. Before that clamp the
-number was assumed, not applied: a resolved run is unbounded (each `state`
-text cell is up to `WorldStateCapacity.MaxTextValueLength = 256`, and a
-template may name many), and 13 elements × 1024 resolved chars was measured
-over-running the whole 9216-word Hud reservation and DROPPING element records.
+`WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 4`,
+`MaxElementsPerPanel = 24`, `MaxSeatPanels = 1`, `MaxElementsPerSeatPanel =
+12`. The render cost an authored element expands into is the WRITER's own
+constant in `Puck.Overlays` (`HudWriter.GaugeElementCost = 3` records,
+`HudWriter.TextRunChars = 64` glyph words — the latter enforced as a
+`WriteText` `maxChars` clamp, the way `GaugeLabelChars` always was for a gauge
+label, so a template resolving many long `state` cells clips as the writer's
+own attributed refusal rather than over-running the Hud reservation and
+DROPPING element records). Schema declares no render cost.
 Enforced by
 `WorldDefinitionValidator.ValidateHudCore` throwing `HudValidationException`
 with an enum `HudRefusal` (`TooManyPanels`, `DuplicatePanelId`,
@@ -61,7 +57,9 @@ with an enum `HudRefusal` (`TooManyPanels`, `DuplicatePanelId`,
 `TemplateBindingConflict`, under door `hud.validate` in `world.refusals`; a blank
 id folds into the duplicate reason). `ValidateHudCore` takes an `isIdentityScope`
 flag (`definition.Identity is not null` at its one call site) that swaps
-`MaxElementsPerPanel` for the tighter `MaxElementsPerSeatPanel` and refuses
+`MaxWorldPanels`/`MaxElementsPerPanel` for the tighter
+`MaxSeatPanels`/`MaxElementsPerSeatPanel` (a second seat panel refuses as
+`TooManyPanels`, naming `MaxSeatPanels`) and refuses
 `WorldHudLayer.Replace` with `SeatPanelReplaceRefused` — applied to EVERY document
 carrying an `Identity` section (an owned world's boot load, a sync pull, and
 `identity.hud`'s own candidate check below), never hand-rolled per door.
@@ -139,9 +137,9 @@ render path is not one of its callers.** `Puck.Overlays` cannot reference
 `Puck.World.Schema` (the architecture boundary), so `WorldHudFeed` parses on the
 structure rebuild and hands the overlay PRE-PARSED runs
 (`OverlayHudTemplateSegment`: literal-or-placeholder); `HudWriter` only
-substitutes, and carries no grammar at all. This is deliberately NOT the
-`OverlayChannelLeases` treatment — that precedent mirrors CONSTANTS, which can
-be eyeballed for drift, and a grammar cannot. Parsing on the structure rebuild
+substitutes, and carries no grammar at all — the same direction the HUD
+ceilings travel (as an `OverlayCapacity` the composition root builds from
+Schema; nothing in `Puck.Overlays` restates a World number). Parsing on the structure rebuild
 also moves the cost off the per-frame path: world scope parses per revision,
 seat scope per identity edit (each seat's built panel is memoized against the
 document row INSTANCE it came from, so the unconditional per-frame seat walk
@@ -167,7 +165,7 @@ Template (reusing `HudTemplate.TryParse`, no second parser needed inside
 `Puck.World`); `world.hud.template` covers the one case neither already did —
 a template with no document row behind it at all.
 
-## The overlay reservation — what breaks the build
+## The overlay reservation — what refuses at construction
 
 `OverlayChannel` has EIGHT members, value = draw priority for the first five:
 `Console = 0`, `BindingBar = 1`, `Gizmos = 2`, `EditorHud = 3`, `Toast = 4`,
@@ -178,28 +176,30 @@ is the sixth channel, banded, not one of the five; `WheelWriter` and
 `CursorWriter` are the frame's last two scopes (wheel drawn first, cursor on
 top), outside the replace-band suppression — see [views.md](views.md).
 
-`OverlayChannelLeases` (`src/Puck.Overlays/OverlayChannels.cs`) restates
-World's constants BY HAND (the assembly boundary forbids a reference) — four
-mirrors that must stay in sync with `WorldHudCapacity`
-(`HudMaxWorldPanels`↔`MaxWorldPanels`, `HudMaxElementsPerPanel`↔
-`MaxElementsPerPanel`, `HudGaugeElementCost`↔`GaugeElementCost`,
-`HudTextWordCost`↔`TextWordCost` — via `HudWriter.TextRunChars`, so the
-number in the reservation and the number a run is clipped to are ONE constant)
-plus `MaxSeats`↔
-`WorldPopulationLimits.LocalSeatCount` (the runtime guard is
-`EnsureSeatCapacity`, which throws loudly on a roster mismatch). The Hud
-reservation is LARGER than the 4×24 schema caps because a seat-scope panel
-budget (1 panel × 12 elements per seat, `WorldHudCapacity
-.MaxElementsPerSeatPanel`) is reserved for player-scope HUD:
-`HudPanels = 4 + 4 = 8`, `HudElements = 4·24·3 + 4·12·3 =
-432` (each resource takes its own worst case independently),
-`HudTextWords = 9216`, `HudClips = 8`.
+`OverlayChannelLeases` (`src/Puck.Overlays/OverlayChannels.cs`) is an
+INSTANCE built from an `OverlayCapacity` — the host's declared counts
+(`Seats`, `HudPanels`, `HudElementsPerPanel`, `HudSeatPanelsPerSeat`,
+`HudElementsPerSeatPanel`). `Puck.Overlays` restates no World number: the
+composition root (`WorldBootComposition`'s one `new UnifiedOverlayNode`)
+supplies `Puck.World.Client.WorldOverlayCapacity.FromSchema()` — `Seats =
+WorldPopulationLimits.LocalSeatCount`, the four HUD ceilings from
+`WorldHudCapacity` (`MaxSeatPanels` is the seat-panel count). Render costs stay
+the writers' own (`HudWriter.GaugeElementCost`, `HudWriter.TextRunChars`, the
+per-seat writers' caps — the `CursorWriter` discipline). The runtime guard is
+`builder.Leases.EnsureSeatCapacity`, which throws on a roster/capacity
+mismatch. The Hud reservation covers world scope (panels × elements) PLUS the
+seat scope (seats × seat panels × elements), each resource at its own worst
+case (`Elements` at the gauge cost, `TextWords` at the text-run clamp, one
+clip per panel).
 
-`OverlayFrameBuilder` declares each headroom as `const uint (Cap − Total)`
-— an over-subscription makes one negative, and a negative constant cannot
-convert to `uint`, so the BUILD fails at the exact resource that over-ran.
-Current headroom: elements 179, text words 1431, panels 2 (the tightest),
-clips 12. Runtime overflow is per-channel and attributed (a channel clips at
+The table REFUSES AT CONSTRUCTION: its summed totals are checked against
+`OverlayFrameBuilder`'s four backstops (`MaxPanels`, `MaxElements`,
+`MaxClips`, `TextWordCapacity` — the GPU region the shader addresses) and an
+over-subscription throws `ArgumentOutOfRangeException` naming the resource,
+the total, and the backstop, on every boot. The cross-assembly proof that the
+Schema-derived capacity fits is
+`tests/Puck.World.Tests/OverlayLeaseTableFitsBackstopsLawTests.cs`.
+Runtime overflow is per-channel and attributed (a channel clips at
 its own boundary, never costs another channel), with two separately-latched
 narrations: reservation overflow vs a writer's own declared cap refusal.
 Binding-bar visibility, layout, and scale do not change this arithmetic: the

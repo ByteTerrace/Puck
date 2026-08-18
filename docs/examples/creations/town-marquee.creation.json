@@ -1,165 +1,99 @@
 {
   "schema": "puck.creation.v1",
   "name": "town-marquee",
-  "intent": "Object",
-  "bakeStyle": "classic",
   "palette": [
     {
-      "albedo": {
-        "x": 0.62,
-        "y": 0.58,
-        "z": 0.5
-      },
+      "color": "#9E9480",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.46,
-        "y": 0.42,
-        "z": 0.36
-      },
+      "color": "#756B5C",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 1,
-        "y": 0.72,
-        "z": 0.3
-      },
+      "color": "#FFB84C",
       "emissive": 1.8,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.95,
-        "y": 0.78,
-        "z": 0.35
-      },
+      "color": "#F2C759",
       "emissive": 1.6,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.85,
-        "z": 0.7664081
-      },
+      "color": "#59D9C3",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.85,
-        "y": 0.62050974,
-        "z": 0.35
-      },
+      "color": "#D99E59",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.4746121,
-        "y": 0.35,
-        "z": 0.85
-      },
+      "color": "#7959D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.37128553,
-        "y": 0.85,
-        "z": 0.35
-      },
+      "color": "#5FD959",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.85,
-        "y": 0.35,
-        "z": 0.5171839
-      },
+      "color": "#D95984",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.66308224,
-        "z": 0.85
-      },
+      "color": "#59A9D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.8089806,
-        "y": 0.85,
-        "z": 0.35
-      },
+      "color": "#CED959",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.74512255,
-        "y": 0.35,
-        "z": 0.85
-      },
+      "color": "#BE59D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.85,
-        "z": 0.5992242
-      },
+      "color": "#59D999",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.85,
-        "y": 0.45332584,
-        "z": 0.35
-      },
+      "color": "#D97459",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.35,
-        "y": 0.39257106,
-        "z": 0.85
-      },
+      "color": "#5964D9",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
     },
     {
-      "albedo": {
-        "x": 0.53847086,
-        "y": 0.85,
-        "z": 0.35
-      },
+      "color": "#89D959",
       "emissive": 0,
       "specular": 0,
       "shininess": 32
@@ -170,23 +104,9 @@
       "id": 0,
       "name": "pillarL",
       "type": "Box",
-      "position": {
-        "x": -1.1,
-        "y": 1,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.4117647,
-        "y": 2.9411764,
-        "z": 0.4117647
-      },
+      "position": [-1.1, 1, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.4117647, 2.9411764, 0.4117647],
       "material": 0,
       "blend": "Union",
       "smooth": 0,
@@ -201,23 +121,9 @@
       "id": 1,
       "name": "pillarR",
       "type": "Box",
-      "position": {
-        "x": 1.1,
-        "y": 1,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.4117647,
-        "y": 2.9411764,
-        "z": 0.4117647
-      },
+      "position": [1.1, 1, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.4117647, 2.9411764, 0.4117647],
       "material": 0,
       "blend": "Union",
       "smooth": 0,
@@ -232,23 +138,9 @@
       "id": 2,
       "name": "capL",
       "type": "Box",
-      "position": {
-        "x": -1.1,
-        "y": 2.06,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.5882353,
-        "y": 0.2352941,
-        "z": 0.5882353
-      },
+      "position": [-1.1, 2.06, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.5882353, 0.2352941, 0.5882353],
       "material": 1,
       "blend": "Union",
       "smooth": 0,
@@ -263,23 +155,9 @@
       "id": 3,
       "name": "capR",
       "type": "Box",
-      "position": {
-        "x": 1.1,
-        "y": 2.06,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.5882353,
-        "y": 0.2352941,
-        "z": 0.5882353
-      },
+      "position": [1.1, 2.06, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.5882353, 0.2352941, 0.5882353],
       "material": 1,
       "blend": "Union",
       "smooth": 0,
@@ -294,23 +172,9 @@
       "id": 4,
       "name": "lintel",
       "type": "Box",
-      "position": {
-        "x": 0,
-        "y": 2.24,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 3,
-        "y": 0.4117647,
-        "z": 0.4705882
-      },
+      "position": [0, 2.24, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [3, 0.4117647, 0.4705882],
       "material": 0,
       "blend": "Union",
       "smooth": 0,
@@ -325,23 +189,9 @@
       "id": 5,
       "name": "lintelCap",
       "type": "Box",
-      "position": {
-        "x": 0,
-        "y": 2.42,
-        "z": 0
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 3,
-        "y": 0.2,
-        "z": 0.5882353
-      },
+      "position": [0, 2.42, 0],
+      "rotation": [0, 0, 0, 1],
+      "scale": [3, 0.2, 0.5882353],
       "material": 1,
       "blend": "Union",
       "smooth": 0,
@@ -356,23 +206,9 @@
       "id": 6,
       "name": "marqueeGlow",
       "type": "Box",
-      "position": {
-        "x": 0,
-        "y": 1.58,
-        "z": 0.16
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 2.9411764,
-        "y": 0.6470588,
-        "z": 0.2
-      },
+      "position": [0, 1.58, 0.16],
+      "rotation": [0, 0, 0, 1],
+      "scale": [2.9411764, 0.6470588, 0.2],
       "material": 2,
       "blend": "Union",
       "smooth": 0,
@@ -387,23 +223,9 @@
       "id": 7,
       "name": "marqueeSill",
       "type": "Box",
-      "position": {
-        "x": 0,
-        "y": 1.32,
-        "z": 0.16
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 3,
-        "y": 0.2,
-        "z": 0.2
-      },
+      "position": [0, 1.32, 0.16],
+      "rotation": [0, 0, 0, 1],
+      "scale": [3, 0.2, 0.2],
       "material": 1,
       "blend": "Union",
       "smooth": 0,
@@ -418,23 +240,9 @@
       "id": 8,
       "name": "accentTrim",
       "type": "Box",
-      "position": {
-        "x": 0,
-        "y": 1.9,
-        "z": 0.15
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 3,
-        "y": 0.2,
-        "z": 0.2
-      },
+      "position": [0, 1.9, 0.15],
+      "rotation": [0, 0, 0, 1],
+      "scale": [3, 0.2, 0.2],
       "material": 3,
       "blend": "Union",
       "smooth": 0,
@@ -449,23 +257,9 @@
       "id": 9,
       "name": "accentStudL",
       "type": "Box",
-      "position": {
-        "x": -1.1,
-        "y": 1.9,
-        "z": 0.13
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.2,
-        "y": 0.2,
-        "z": 0.2
-      },
+      "position": [-1.1, 1.9, 0.13],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.2, 0.2, 0.2],
       "material": 3,
       "blend": "Union",
       "smooth": 0,
@@ -480,23 +274,9 @@
       "id": 10,
       "name": "accentStudR",
       "type": "Box",
-      "position": {
-        "x": 1.1,
-        "y": 1.9,
-        "z": 0.13
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
-      "scale": {
-        "x": 0.2,
-        "y": 0.2,
-        "z": 0.2
-      },
+      "position": [1.1, 1.9, 0.13],
+      "rotation": [0, 0, 0, 1],
+      "scale": [0.2, 0.2, 0.2],
       "material": 3,
       "blend": "Union",
       "smooth": 0,
@@ -515,18 +295,8 @@
   "textRuns": [
     {
       "text": "PUCKTON",
-      "position": {
-        "x": 0,
-        "y": 1.58,
-        "z": 0.21
-      },
-      "rotation": {
-        "isIdentity": true,
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "w": 1
-      },
+      "position": [0, 1.58, 0.21],
+      "rotation": [0, 0, 0, 1],
       "emHeight": 0.26,
       "depth": 0.03,
       "mode": "emboss",

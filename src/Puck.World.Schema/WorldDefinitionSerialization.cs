@@ -32,9 +32,12 @@ namespace Puck.World;
 /// context below instead (a source-gen context may register a closed generic converter for a type it does not own,
 /// unlike the non-generic factory this replaced, which the generator refused unconditionally).
 /// <c>UseStringEnumConverter</c> writes by name too but has no <c>allowIntegerValues</c> knob, so it still accepts a
-/// numeric wire value on read. <see cref="Vector3"/> rides <see cref="Vector3JsonConverter"/> as a three-element array
-/// (never <c>IncludeFields</c> — STJ silently zeroes struct fields without it; a converter sidesteps the trap
-/// entirely), and <see cref="Puck.World.Protocol.GrantSubject"/>/<see cref="Puck.World.Protocol.WorldPrincipal"/>
+/// numeric wire value on read. <see cref="Vector2"/>, <see cref="Vector3"/> and <see cref="Quaternion"/> ride
+/// <see cref="Puck.Assets.Documents.Vector2JsonConverter"/>/<see cref="Puck.Assets.Documents.Vector3JsonConverter"/>/<see cref="Puck.Assets.Documents.QuaternionJsonConverter"/>
+/// as <c>[x, y]</c>/<c>[x, y, z]</c>/<c>[x, y, z, w]</c> arrays — the same converters and spelling
+/// <see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/> registers for every other document family, so a
+/// vector never carries two spellings depending which document it sits in — and
+/// <see cref="Puck.World.Protocol.GrantSubject"/>/<see cref="Puck.World.Protocol.WorldPrincipal"/>
 /// each ride a token converter (<see cref="GrantSubjectJsonConverter"/>/<see cref="WorldPrincipalJsonConverter"/>) so a
 /// document-authored grant reads the same compact <c>world.grant</c> tokens rather than a raw field object.
 /// </summary>
@@ -87,12 +90,20 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldSpeaker))]
 // The speaker union's nested kinds collide by simple name with the camera/screen-source unions' (Fixed/Anchored and
 // None/Machine); explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031).
+[JsonSerializable(typeof(OverlayPredicate.Now), TypeInfoPropertyName = "OverlayPredicateNow")]
+[JsonSerializable(typeof(OverlayPredicate.Recently), TypeInfoPropertyName = "OverlayPredicateRecently")]
+[JsonSerializable(typeof(OverlayPredicate.All), TypeInfoPropertyName = "OverlayPredicateAll")]
+[JsonSerializable(typeof(OverlayPredicate.Any), TypeInfoPropertyName = "OverlayPredicateAny")]
+[JsonSerializable(typeof(OverlayPredicate.Not), TypeInfoPropertyName = "OverlayPredicateNot")]
 [JsonSerializable(typeof(WorldSpeaker.Fixed), TypeInfoPropertyName = "WorldSpeakerFixed")]
 [JsonSerializable(typeof(WorldSpeaker.Anchored), TypeInfoPropertyName = "WorldSpeakerAnchored")]
 [JsonSerializable(typeof(WorldSpeakerSource.None), TypeInfoPropertyName = "WorldSpeakerSourceNone")]
 [JsonSerializable(typeof(WorldSpeakerSource.Machine), TypeInfoPropertyName = "WorldSpeakerSourceMachine")]
 [JsonSerializable(typeof(WorldTune))]
 [JsonSerializable(typeof(WorldPatch))]
+// puck.music.v1 / puck.judge.v1 are referenced, never embedded — plain Name/Source/Hash rows, no bridging converter.
+[JsonSerializable(typeof(WorldMusicRow))]
+[JsonSerializable(typeof(WorldJudgeRow))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSerializable(typeof(WorldAudioCue))]
 // The host-section defaults row (the world.row.set host payload shape + the document `host` section). WorldBackendPreference
@@ -120,6 +131,7 @@ namespace Puck.World;
 // in WorldStateRowJsonConverter so the `value`-vs-`cells` exclusivity and the decimal fixed-point spelling refuse by
 // name rather than defaulting.
 [JsonSerializable(typeof(WorldStateRow))]
+[JsonSerializable(typeof(WorldStateSection))]
 // The stochastic SOURCE family — reachable both as a document `generators` row and inline inside a site's draw
 // facet. Registered on its own so WorldStateRowJsonConverter can read/write the facet through a typed accessor (the
 // row converter is hand-written; its nested objects are ordinary strict-parsed STJ).
@@ -158,11 +170,15 @@ namespace Puck.World;
 // The signed border claim's payload shape — a separate document family, sharing this context's strictness and
 // Vector3/enum spellings so a boundary reads identically here and in the world document.
 [JsonSerializable(typeof(WorldCounterpartAttestation))]
+// The silo document (puck.silo.def.v1) — a separate document family (Puck.World.Silo's own composition input,
+// never embedded in or referenced from a world document), sharing this context's strictness and naming policy so
+// its own JSON Schema generation rides the same exporter machinery as every world-document family.
+[JsonSerializable(typeof(WorldSiloDefinition))]
 [JsonSourceGenerationOptions(
     // CommandPhase (Puck.Commands) cannot carry a [JsonConverter] attribute at its own declaration without a new
     // ProjectReference to Puck.Abstractions from that leaner project; registering its CLOSED StrictEnumConverter<T>
     // instance here instead keeps the strict posture without that edge.
-    Converters = new[] { typeof(Vector3JsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
+    Converters = new[] { typeof(Puck.Assets.Documents.Vector2JsonConverter), typeof(Puck.Assets.Documents.Vector3JsonConverter), typeof(Puck.Assets.Documents.QuaternionJsonConverter), typeof(CommandValueJsonConverter), typeof(CreationDocumentJsonConverter), typeof(AudioDocumentJsonConverter), typeof(SynthPatchDocumentJsonConverter), typeof(WorldBackendPreferenceJsonConverter), typeof(SurfaceFormatJsonConverter), typeof(GrantSubjectJsonConverter), typeof(WorldPrincipalJsonConverter), typeof(ChannelReachMaskJsonConverter), typeof(ChannelConsentMaskJsonConverter), typeof(MutationKindMaskJsonConverter), typeof(DocumentWriteMaskJsonConverter), typeof(WorldStateRowJsonConverter), typeof(WorldSafeNameJsonConverter), typeof(WorldCellNameJsonConverter), typeof(WorldDestinationDurabilityJsonConverter), typeof(WorldPortalTravelJsonConverter), typeof(WorldPortalArrivalJsonConverter), typeof(WorldDestinationScopeJsonConverter), typeof(StrictEnumConverter<CommandPhase>), typeof(StrictEnumConverter<ChannelRole>), typeof(StrictEnumConverter<BindingActivatorMode>), typeof(StrictEnumConverter<BindingEntryMode>), typeof(StrictEnumConverter<BindingWheelSpatialSelectionMode>), typeof(StrictEnumConverter<BindingWheelPlacement>), typeof(StrictEnumConverter<BindingWheelRingSelectionMode>) },
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     // The OTHER half of strict parse. UnmappedMemberHandling below refuses a member the model does not have; this
     // refuses a member the model REQUIRES and the document does not carry. Without it, a constructor parameter with
@@ -1033,6 +1049,16 @@ public sealed record WorldInputHoldAuthoring(
     bool EqualizeByDefault,
     IReadOnlyList<WorldInputHoldParticipantAuthoring> Participants
 ) {
+    /// <summary>Gets the inert input-hold policy — one simulation tick's worth of ceiling and lower-after (the
+    /// smallest positive duration <c>lowerAfterSeconds</c>' floor admits at the engine default rate), zero default
+    /// hold, no equalization, no participants.</summary>
+    public static WorldInputHoldAuthoring Default { get; } = new(
+        CeilingSeconds: (1f / WorldSimulationDefaults.DefaultRateHz),
+        LowerAfterSeconds: (1f / WorldSimulationDefaults.DefaultRateHz),
+        DefaultSeconds: 0f,
+        EqualizeByDefault: false,
+        Participants: []
+    );
     /// <summary>Compiles this authored (seconds) row to its compiled (ticks) shape at <paramref name="ratePerSecond"/>
     /// — the inverse of <see cref="WorldInputHoldSettings.ToAuthoring"/>. Every checked-in world authors durations
     /// that divide the rate they are authored against exactly, so this round-trips exactly for everything this
@@ -1075,55 +1101,6 @@ public sealed record WorldInputHoldAuthoring(
     }
 }
 
-/// <summary>
-/// Reads and writes a <see cref="Vector3"/> as a three-element JSON array <c>[x, y, z]</c>. Numbers ride STJ's default
-/// shortest-round-trip invariant formatting — the canonical number form. Registered on <see cref="WorldJsonContext"/> so
-/// every authored coordinate crosses this seam rather than exposing the struct's fields.
-/// </summary>
-internal sealed class Vector3JsonConverter : JsonConverter<Vector3> {
-    private static float ReadComponent(ref Utf8JsonReader reader) {
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.Number)
-        ) {
-            throw new JsonException(message: "a Vector3 element must be a finite number.");
-        }
-
-        return reader.GetSingle();
-    }
-
-    /// <inheritdoc/>
-    public override Vector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        if (reader.TokenType != JsonTokenType.StartArray) {
-            throw new JsonException(message: "a Vector3 must be a three-element [x, y, z] array.");
-        }
-
-        var x = ReadComponent(reader: ref reader);
-        var y = ReadComponent(reader: ref reader);
-        var z = ReadComponent(reader: ref reader);
-
-        if (
-            !reader.Read() ||
-            (reader.TokenType != JsonTokenType.EndArray)
-        ) {
-            throw new JsonException(message: "a Vector3 array must contain exactly three elements.");
-        }
-
-        return new Vector3(
-            x: x,
-            y: y,
-            z: z
-        );
-    }
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, Vector3 value, JsonSerializerOptions options) {
-        writer.WriteStartArray();
-        writer.WriteNumberValue(value: value.X);
-        writer.WriteNumberValue(value: value.Y);
-        writer.WriteNumberValue(value: value.Z);
-        writer.WriteEndArray();
-    }
-}
 /// <summary>
 /// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
 /// / <c>vulkan</c>) rather than the context's camelCase enum policy, which would emit <c>directX</c> — a spelling no one
@@ -1315,8 +1292,8 @@ internal sealed class WorldPrincipalJsonConverter : JsonConverter<WorldPrincipal
 }
 /// <summary>
 /// Bridges an embedded <see cref="Puck.Forge.Authoring.CreationDocument"/> (a <see cref="WorldCreation.Document"/>) through
-/// the creation contract's own serializer shape (<see cref="Puck.Forge.Authoring.DocumentJsonOptions.Shared"/> — member
-/// order, string enums, and the load-bearing <c>IncludeFields</c> for Vector3/Quaternion) instead of this context's
+/// the creation contract's own serializer shape (<see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/> — member
+/// order, string enums, and the Vector2/Vector3/Quaternion array converters) instead of this context's
 /// policies, so the inline-canonical embed carries exactly the member vocabulary
 /// <see cref="Puck.Forge.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
 /// writer, which is deterministic — the ouroboros round-trip covers the composition.
@@ -1326,19 +1303,19 @@ internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.Forge.A
     public override Puck.Forge.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         JsonSerializer.Deserialize<Puck.Forge.Authoring.CreationDocument>(
             reader: ref reader,
-            options: Puck.Forge.Authoring.DocumentJsonOptions.Shared
+            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.CreationDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,
-            options: Puck.Forge.Authoring.DocumentJsonOptions.Shared
+            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
 }
 /// <summary>
 /// Bridges an embedded <see cref="Puck.Forge.Authoring.AudioDocument"/> (a <see cref="WorldTune.Document"/>) through the
-/// audio contract's own serializer shape (<see cref="Puck.Forge.Authoring.DocumentJsonOptions.Shared"/>) instead of this
+/// audio contract's own serializer shape (<see cref="Puck.Assets.Documents.DocumentJsonOptions.Shared"/>) instead of this
 /// context's policies, so the inline-canonical embed carries exactly the member vocabulary
 /// <see cref="Puck.Forge.Authoring.AudioCanonicalizer"/> hashes, matching <see cref="CreationDocumentJsonConverter"/>'s approach.
 /// </summary>
@@ -1347,14 +1324,14 @@ internal sealed class AudioDocumentJsonConverter : JsonConverter<Puck.Forge.Auth
     public override Puck.Forge.Authoring.AudioDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         JsonSerializer.Deserialize<Puck.Forge.Authoring.AudioDocument>(
             reader: ref reader,
-            options: Puck.Forge.Authoring.DocumentJsonOptions.Shared
+            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.AudioDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,
-            options: Puck.Forge.Authoring.DocumentJsonOptions.Shared
+            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
 }
 /// <summary>
@@ -1366,14 +1343,14 @@ internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Forge
     public override Puck.Forge.Authoring.SynthPatchDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         JsonSerializer.Deserialize<Puck.Forge.Authoring.SynthPatchDocument>(
             reader: ref reader,
-            options: Puck.Forge.Authoring.DocumentJsonOptions.Shared
+            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, Puck.Forge.Authoring.SynthPatchDocument value, JsonSerializerOptions options) =>
         JsonSerializer.Serialize(
             writer: writer,
             value: value,
-            options: Puck.Forge.Authoring.DocumentJsonOptions.Shared
+            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
         );
 }
 
@@ -1386,12 +1363,6 @@ internal sealed class SynthPatchDocumentJsonConverter : JsonConverter<Puck.Forge
 /// the file byte-for-byte and world files stay diffable and git-friendly.
 /// </summary>
 public static class WorldDefinitionSerialization {
-    // LF newlines + indentation, independent of the platform default, so a save is byte-stable across machines.
-    private static readonly JsonWriterOptions WriterOptions = new() {
-        Indented = true,
-        NewLine = "\n",
-    };
-
     /// <summary>Deserializes, migrates, and validates a definition from its canonical UTF-8 JSON bytes — the inverse
     /// of <see cref="Serialize"/> for an in-memory round-trip (the replay recording's rehydration path). The bytes
     /// ride a file a user can hand-edit or truncate, so every malformed, incomplete, or invalid document arrives as
@@ -1414,6 +1385,13 @@ public static class WorldDefinitionSerialization {
                 ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null."));
 
             definition = WorldDefinitionMigrations.Apply(definition: definition);
+
+            if (!WorldStateDocumentValues.TryResolve(
+                definition: definition,
+                reason: out var spatialReason
+            )) {
+                throw new InvalidOperationException(message: spatialReason);
+            }
 
             // An embedded document already crossed a boundary that proved its cross-document claims (a boot load,
             // replay recording, identity issue, or authority projection). This storage-free rehydration cannot
@@ -1562,18 +1540,7 @@ public static class WorldDefinitionSerialization {
             output[propertyName: name] = value?.DeepClone();
         }
 
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(
-            options: WriterOptions,
-            utf8Json: stream
-        )) {
-            output.WriteTo(writer: writer);
-        }
-
-        stream.WriteByte(value: ((byte)'\n'));
-
-        var bytes = stream.ToArray();
+        var bytes = CanonicalJsonDocument.Serialize(node: output);
 
         File.WriteAllBytes(
             bytes: bytes,
@@ -1590,22 +1557,9 @@ public static class WorldDefinitionSerialization {
     public static byte[] Serialize(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(
-            options: WriterOptions,
-            utf8Json: stream
-        )) {
-            JsonSerializer.Serialize(
-                writer: writer,
-                value: definition,
-                jsonTypeInfo: WorldJsonContext.Default.WorldDefinition
-            );
-        }
-
-        // One trailing newline at EOF — the canonical, git-friendly terminator.
-        stream.WriteByte(value: ((byte)'\n'));
-
-        return stream.ToArray();
+        return CanonicalJsonDocument.Serialize(
+            jsonTypeInfo: WorldJsonContext.Default.WorldDefinition,
+            value: definition
+        );
     }
 }

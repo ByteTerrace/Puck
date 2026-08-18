@@ -589,7 +589,12 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         }
     }
     private nint HandleSetCursor(nint windowHandle, uint message, nint wParam, nint lParam) {
-        if (m_options.HideMouseCursor) {
+        var hitTest = (unchecked((ushort)lParam.ToInt64()));
+
+        if (
+            m_options.HideMouseCursor &&
+            (hitTest == HtClient)
+        ) {
             _ = User32.SetCursor(cursorHandle: 0);
             return 1;
         }
@@ -598,7 +603,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
         // DefWindowProc so Windows supplies its native edge/corner resize cursors. The explicit arrow assignment is
         // needed even though the class carries IDC_ARROW too — a class with no cursor leaves whatever process-global
         // cursor happened to be active (commonly the startup wait spinner) unchanged indefinitely.
-        if ((unchecked((ushort)lParam.ToInt64())) == HtClient) {
+        if (hitTest == HtClient) {
             _ = User32.SetCursor(cursorHandle: ArrowCursorHandle);
             return 1;
         }

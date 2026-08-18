@@ -174,17 +174,7 @@ internal static class LinkExplore {
     private static void Dump(MachineInstance machine, string outDir, string tag, int frame) {
         var framebuffer = machine.GetRequiredService<IFramebuffer>();
         var pixels = framebuffer.Pixels;
-        var rgba = new byte[(pixels.Length * 4)];
-
-        for (var pixel = 0; (pixel < pixels.Length); ++pixel) {
-            var offset = (pixel * 4);
-            var value = pixels[pixel];
-
-            rgba[offset] = ((byte)(value >> 16));
-            rgba[(offset + 1)] = ((byte)(value >> 8));
-            rgba[(offset + 2)] = ((byte)value);
-            rgba[(offset + 3)] = 0xFF;
-        }
+        var rgba = FramebufferRgba.Pack(pixels: pixels);
 
         var path = Path.Combine(
             path1: outDir,

@@ -1,0 +1,844 @@
+namespace Puck.World;
+
+public static partial class WorldDefinitionValidator {
+    private static void RequireNonNegativeScalar(BodyProgramParameters parameters, string name, string path, List<string> errors) {
+        if (TryScalar(
+            name: name,
+            parameters: parameters,
+            value: out var value
+        )) {
+            RequireNonNegative(
+                errors: errors,
+                name: $"{path}.scalars[{name}]",
+                value: value
+            );
+        }
+    }
+    private static void RequirePositiveScalar(BodyProgramParameters parameters, string name, string path, List<string> errors) {
+        if (TryScalar(
+            name: name,
+            parameters: parameters,
+            value: out var value
+        )) {
+            RequirePositive(
+                errors: errors,
+                name: $"{path}.scalars[{name}]",
+                value: value
+            );
+        }
+    }
+    // The op→facet mapping: walks a COMPILED program's selected operations (never the authored list — compilation
+    // already rejected an unknown/inadmissible opcode) and unions the facets each one reads. Speed is unconditional
+    // for every Motion-kind program (WorldBody resolves MoveSpeed/TurnSpeed before op dispatch, independent of which
+    // operations a program selects) — callers only reach here once the kit's program has already been confirmed
+    // Motion-kind (see ValidateKits).
+    private static MotionTuningFacet RequiredMotionTuningFacets(CompiledBodyMotionProgram program) {
+        var facets = MotionTuningFacet.Speed;
+
+        foreach (var op in Enum.GetValues<BodyMotionOp>()) {
+            if (!program.Contains(operation: op)) {
+                continue;
+            }
+
+            facets |= op switch {
+                BodyMotionOp.ApplyVerticalGravity => MotionTuningFacet.GravityArc,
+                BodyMotionOp.ApplyVerticalDecay => MotionTuningFacet.GravityBleed,
+                BodyMotionOp.ShapePlanarVelocity => MotionTuningFacet.PlanarResponse,
+                BodyMotionOp.ComputePlanarTargetVelocity => MotionTuningFacet.Sprint,
+                BodyMotionOp.ResolveYawAttitudeAndPlanarFrame or BodyMotionOp.SnapYawToPlanarIntent => MotionTuningFacet.WorldFrame,
+                BodyMotionOp.ResolveVehicleFrame or BodyMotionOp.ShapeVehicleVelocity => MotionTuningFacet.VehicleDrive,
+                // The swim program's planar half rides the SAME ShapePlanarVelocity op (and PlanarResponse facet)
+                // grounded uses; thrust additionally reads the sprint pair. The vertical channel has no op-specific
+                // facet of its own here — ApplyBuoyancyAndSurface below is the ONE vertical owner and already
+                // requires SwimBuoyancy, which subsumes it.
+                BodyMotionOp.ComputeSwimTargetVelocity => (MotionTuningFacet.Sprint | MotionTuningFacet.SwimThrust),
+                BodyMotionOp.ApplyBuoyancyAndSurface => MotionTuningFacet.SwimBuoyancy,
+                _ => MotionTuningFacet.None,
+            };
+        }
+
+        return facets;
+    }
+    // The model→facet mapping: what each WorldMotionModel arm supplies. A new arm (swim/vehicle) is a localized
+    // addition here, alongside its record arm (WorldDefinition.cs), its WorldBody integrator, and any new
+    // BodyMotionOp cases RequiredMotionTuningFacets needs — never a hunt. Grounded supplies every facet defined
+    // today because it is, today, also the only arm the world's "free" body motion program authors (see
+    // WorldMotionModel.Grounded's remarks) — a strict superset of what free's operations read.
+    private static MotionTuningFacet SuppliedMotionTuningFacets(WorldMotionModel model) => model switch {
+        WorldMotionModel.Grounded => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
+            | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint | MotionTuningFacet.WorldFrame),
+        // The vehicle arm carries its own gravity trio (contact-pinned variants run ApplyVerticalGravity; flying
+        // variants bleed impulses through ApplyVerticalDecay) but none of grounded's planar-shaping facets — pairing
+        // a vehicle model with ShapePlanarVelocity/ComputePlanarTargetVelocity/the yaw-frame ops refuses by name.
+        WorldMotionModel.Vehicle => (MotionTuningFacet.Speed | MotionTuningFacet.GravityArc | MotionTuningFacet.GravityBleed
+            | MotionTuningFacet.VehicleDrive),
+        // No gravity facets: a swim kit selecting ApplyVerticalGravity/ApplyVerticalDecay refuses here BY NAME —
+        // the medium owns the vertical channel, and the missing-facet line is the door that says so.
+        WorldMotionModel.Swim => (MotionTuningFacet.Speed | MotionTuningFacet.PlanarResponse | MotionTuningFacet.Sprint
+            | MotionTuningFacet.WorldFrame | MotionTuningFacet.SwimThrust | MotionTuningFacet.SwimBuoyancy),
+        _ => MotionTuningFacet.None,
+    };
+    private static bool TryScalar(BodyProgramParameters parameters, string name, out float value) => parameters.Scalars.TryGetValue(
+        key: name,
+        value: out value
+    );
+    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, List<string> errors) {
+        var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < programs.Count); index++) {
+            var program = programs[index];
+            var path = $"bodyMotionPrograms[{index}]";
+
+            if (program is null) {
+                errors.Add(item: $"{path} is required.");
+                continue;
+            }
+            if (compiled.ContainsKey(key: program.Name)) {
+                errors.Add(item: $"{path}.name '{program.Name}' is duplicated.");
+                continue;
+            }
+
+            try {
+                var compiledProgram = CompiledBodyMotionProgram.Compile(program: program);
+
+                compiled.Add(
+                    key: program.Name,
+                    value: compiledProgram
+                );
+
+                if (compiledProgram.Kind == BodyProgramKind.Producer) {
+                    var senses = compiledProgram.Contains(operation: BodyMotionOp.SenseNearestInCone);
+
+                    if (
+                        compiledProgram.Contains(operation: BodyMotionOp.ProduceAttendIntent) &&
+                        !senses
+                    ) {
+                        errors.Add(item: $"{path} producer opcode '{BodyMotionOp.ProduceAttendIntent}' requires '{BodyMotionOp.SenseNearestInCone}'.");
+                    }
+                    if (
+                        compiledProgram.Contains(operation: BodyMotionOp.FaceSensorTarget) &&
+                        !compiledProgram.Contains(operation: BodyMotionOp.ProduceAttendIntent)
+                    ) {
+                        errors.Add(item: $"{path} producer opcode '{BodyMotionOp.FaceSensorTarget}' requires '{BodyMotionOp.ProduceAttendIntent}'.");
+                    }
+                    if (
+                        senses &&
+                        (compiledProgram.Target is null)
+                    ) {
+                        errors.Add(item: $"{path}.target is required by '{BodyMotionOp.SenseNearestInCone}'.");
+                    } else if (
+                        !senses &&
+                        (compiledProgram.Target is not null)
+                    ) {
+                        errors.Add(item: $"{path}.target requires '{BodyMotionOp.SenseNearestInCone}'.");
+                    }
+                    switch (compiledProgram.Target) {
+                        case BodyTargetSource.Sensed sensed:
+                            if (!Enum.IsDefined(value: sensed.Scope)) {
+                                errors.Add(item: $"{path}.target.scope '{sensed.Scope}' is not a defined BodyTargetScope.");
+                            }
+                            RequirePositive(
+                                value: sensed.Range,
+                                name: $"{path}.target.range",
+                                errors: errors
+                            );
+                            ValidateHalfAngle(
+                                value: sensed.HalfAngleDegrees,
+                                name: $"{path}.target.halfAngleDegrees",
+                                errors: errors
+                            );
+                            break;
+                        case BodyTargetSource.Designated designated when (string.IsNullOrWhiteSpace(value: designated.Register) || !targetRegisterNames.Contains(item: designated.Register)):
+                            errors.Add(item: $"{path}.target.register '{designated.Register}' names no target register.");
+                            break;
+                    }
+                } else if (compiledProgram.Target is not null) {
+                    errors.Add(item: $"{path}.target is only admitted on a Producer program.");
+                }
+            } catch (BodyMotionProgramException exception) {
+                errors.Add(item: $"{path} {exception.Message}");
+            }
+        }
+
+        return compiled;
+    }
+    // The shape every authored envelope must have regardless of arm: min/max finite, min <= max (FixedQ4816.Clamp's
+    // own precondition, refused here so it never throws at seat-resolve time), min non-negative — every consumer
+    // bounds a speed magnitude, and reverse travel is its own positive scalar (reverseTopSpeed), so a negative
+    // endpoint would only widen the clamp past the bound's apparent intent. Returns whether the shape held, so a
+    // caller layering an additional check can skip it once the bound is already malformed.
+    private static bool ValidateEnvelopeShape(MotionScalarEnvelope envelope, string path, List<string> errors) {
+        if (
+            !float.IsFinite(f: envelope.Min) ||
+            !float.IsFinite(f: envelope.Max)
+        ) {
+            errors.Add(item: $"{path} must have a finite min and max.");
+
+            return false;
+        }
+
+        if (envelope.Min > envelope.Max) {
+            errors.Add(item: $"{path}.min ({envelope.Min}) is greater than {path}.max ({envelope.Max}).");
+
+            return false;
+        }
+
+        if (envelope.Min < 0f) {
+            errors.Add(item: $"{path}.min ({envelope.Min}) is negative — an envelope bounds a speed magnitude, so a negative endpoint admits magnitudes past the bound's own max; reverse travel is authored as its own positive scalar, never a negative speed.");
+
+            return false;
+        }
+
+        return true;
+    }
+    // A kit's full grounded locomotion tuning: speeds, gravity, and the velocity-response table every body
+    // integrates under.
+    private static void ValidateGroundedMotion(WorldMotionModel.Grounded tuning, string path, ISet<string> channelNames, List<string> errors) {
+        RequirePositive(
+            value: tuning.MoveSpeed,
+            name: $"{path}.moveSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.TurnSpeed,
+            name: $"{path}.turnSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.RiseGravity,
+            name: $"{path}.riseGravity",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.FallGravity,
+            name: $"{path}.fallGravity",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.MaxFallSpeed,
+            name: $"{path}.maxFallSpeed",
+            errors: errors
+        );
+        ValidateResponse(
+            response: tuning.Response,
+            path: $"{path}.response",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.SprintMultiplier,
+            name: $"{path}.sprintMultiplier",
+            errors: errors
+        );
+
+        // The sprint channel needs the same "must resolve" bar
+        // ValidateRoute holds engageChannel to, for the identical reason (a misspelled name would otherwise be a
+        // silent, permanent no-op — the button never sprints and nothing here would have said why).
+        if (
+            (tuning.SprintChannel is { Length: > 0 } sprintChannel) &&
+            !channelNames.Contains(item: sprintChannel)
+        ) {
+            errors.Add(item: $"{path}.sprintChannel '{sprintChannel}' names no declared composition channel.");
+        }
+
+        if (!Enum.IsDefined(value: tuning.MoveFrame)) {
+            errors.Add(item: $"{path}.moveFrame '{tuning.MoveFrame}' is not a defined MotionMoveFrame.");
+        }
+
+        // Absent, this envelope is wide-open (unclamped). Another arm's own overridable scalar walks the same gate.
+        if (tuning.MoveSpeedEnvelope is { } moveSpeedEnvelope) {
+            ValidateScalarEnvelope(
+                envelope: moveSpeedEnvelope,
+                ownValue: tuning.MoveSpeed,
+                ownValueName: "moveSpeed",
+                path: $"{path}.moveSpeedEnvelope",
+                errors: errors
+            );
+        }
+    }
+    private static void ValidateHalfAngle(float value, string name, List<string> errors) {
+        if (
+            !float.IsFinite(f: value) ||
+            (value <= 0f) ||
+            (value > 180f)
+        ) {
+            errors.Add(item: $"{name} {value} must be finite and within (0, 180].");
+        }
+    }
+    // The world motion defaults: positive speeds and correction smoothing distance.
+    private static void ValidateMotionDefaults(in WorldMotionDefaults motion, string path, List<string> errors) {
+        RequirePositive(
+            value: motion.MoveSpeed,
+            name: $"{path}.moveSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: motion.TurnSpeed,
+            name: $"{path}.turnSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: motion.MaxSmoothError,
+            name: $"{path}.maxSmoothError",
+            errors: errors
+        );
+    }
+    // The kit.motion gate: required (a kit with no declared model is a dead kit), coherent with its body motion
+    // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
+    // case coherence has nothing sound to check against), and per-arm valid. A new arm is a new case below.
+    private static void ValidateMotionModel(WorldMotionModel? model, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, bool hasWater, List<string> errors) {
+        if (model is null) {
+            errors.Add(item: $"{path} is required.");
+
+            return;
+        }
+
+        if (
+            (program is not null) &&
+            !TryValidateProgramCoherence(
+            model: model,
+            program: program,
+            reason: out var reason
+        )
+        ) {
+            errors.Add(item: $"{path} {reason}");
+        }
+
+        switch (model) {
+            case WorldMotionModel.Grounded grounded:
+                ValidateGroundedMotion(
+                    channelNames: channelNames,
+                    errors: errors,
+                    path: path,
+                    tuning: grounded
+                );
+
+                break;
+            case WorldMotionModel.Vehicle vehicle:
+                ValidateVehicleMotion(
+                    channelNames: channelNames,
+                    errors: errors,
+                    path: path,
+                    tuning: vehicle
+                );
+
+                break;
+            case WorldMotionModel.Swim swim:
+                ValidateSwimMotion(
+                    channelNames: channelNames,
+                    errors: errors,
+                    hasWater: hasWater,
+                    path: path,
+                    tuning: swim
+                );
+
+                break;
+            default:
+                errors.Add(item: $"{path} is an unknown motion model kind '{model.GetType().Name}'.");
+
+                break;
+        }
+    }
+    private static void ValidateProducerParameters(IReadOnlyDictionary<string, BodyProgramParameters> producers, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> channelNames, string path, List<string> errors) {
+        if (producers is null) {
+            errors.Add(item: $"{path} is required.");
+            return;
+        }
+
+        foreach (var (name, parameters) in producers) {
+            var itemPath = $"{path}[{name}]";
+
+            if (
+                string.IsNullOrWhiteSpace(value: name) ||
+                !programs.TryGetValue(
+                key: name,
+                value: out var program
+            )
+            ) {
+                errors.Add(item: $"{itemPath} names no program.");
+                continue;
+            }
+            if (program.Kind != BodyProgramKind.Producer) {
+                errors.Add(item: $"{itemPath} names a {program.Kind} program, not Producer.");
+                continue;
+            }
+            if (parameters is null) {
+                errors.Add(item: $"{itemPath} is required.");
+                continue;
+            }
+            if (
+                (parameters.Scalars is null) ||
+                (parameters.Channels is null)
+            ) {
+                errors.Add(item: $"{itemPath}.scalars and {itemPath}.channels are required.");
+                continue;
+            }
+
+            var required = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            if (program.Contains(operation: BodyMotionOp.ProduceWanderIntent)) {
+                required.UnionWith(other: WanderScalars);
+            }
+            if (program.Contains(operation: BodyMotionOp.ProduceAttendIntent)) {
+                required.UnionWith(other: AttendScalars);
+                if (program.Target is BodyTargetSource.Sensed) {
+                    required.Add(item: "releaseRadius");
+                }
+            }
+
+            foreach (var scalar in required) {
+                if (!parameters.Scalars.ContainsKey(key: scalar)) {
+                    errors.Add(item: $"{itemPath}.scalars is missing instruction parameter '{scalar}'.");
+                }
+            }
+            foreach (var (scalar, value) in parameters.Scalars) {
+                if (!required.Contains(item: scalar)) {
+                    errors.Add(item: $"{itemPath}.scalars contains unknown instruction parameter '{scalar}'.");
+                } else {
+                    RequireFinite(
+                        errors: errors,
+                        name: $"{itemPath}.scalars[{scalar}]",
+                        value: value
+                    );
+                }
+            }
+            foreach (var (argument, channel) in parameters.Channels) {
+                if (
+                    !string.Equals(
+                    a: argument,
+                    b: "press",
+                    comparisonType: StringComparison.Ordinal
+                ) ||
+                    !program.Contains(operation: BodyMotionOp.ProduceWanderIntent)
+                ) {
+                    errors.Add(item: $"{itemPath}.channels contains unknown instruction parameter '{argument}'.");
+                } else if (
+                    string.IsNullOrWhiteSpace(value: channel) ||
+                    !channelNames.Contains(item: channel)
+                ) {
+                    errors.Add(item: $"{itemPath}.channels[{argument}] '{channel}' names no channel.");
+                }
+            }
+
+            if (program.Contains(operation: BodyMotionOp.ProduceWanderIntent)) {
+                RequirePositiveScalar(
+                    errors: errors,
+                    name: "softRadius",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                RequirePositiveScalar(
+                    errors: errors,
+                    name: "turnScale",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                RequireNonNegativeScalar(
+                    errors: errors,
+                    name: "weaveFrequencyBase",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                RequireNonNegativeScalar(
+                    errors: errors,
+                    name: "weaveFrequencyRange",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                RequireNonNegativeScalar(
+                    errors: errors,
+                    name: "activityRateBase",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                RequireNonNegativeScalar(
+                    errors: errors,
+                    name: "activityRateRange",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                RequireNonNegativeScalar(
+                    errors: errors,
+                    name: "pressThreshold",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                RequireNonNegativeScalar(
+                    errors: errors,
+                    name: "altitudeRange",
+                    parameters: parameters,
+                    path: itemPath
+                );
+            }
+            if (
+                (program.Target is BodyTargetSource.Sensed sensed) &&
+                TryScalar(
+                name: "releaseRadius",
+                parameters: parameters,
+                value: out var release
+            ) &&
+                TryScalar(
+                name: "standoffRadius",
+                parameters: parameters,
+                value: out var standoff
+            )
+            ) {
+                RequirePositive(
+                    errors: errors,
+                    name: $"{itemPath}.scalars[releaseRadius]",
+                    value: release
+                );
+                RequirePositive(
+                    errors: errors,
+                    name: $"{itemPath}.scalars[standoffRadius]",
+                    value: standoff
+                );
+                if (!((release > sensed.Range) && (sensed.Range >= standoff))) {
+                    errors.Add(item: $"{itemPath} radii must satisfy releaseRadius > the target source range >= standoffRadius.");
+                }
+            }
+            if (program.Contains(operation: BodyMotionOp.ProduceAttendIntent)) {
+                RequirePositiveScalar(
+                    errors: errors,
+                    name: "standoffRadius",
+                    parameters: parameters,
+                    path: itemPath
+                );
+                if (TryScalar(
+                    name: "approach",
+                    parameters: parameters,
+                    value: out var approach
+                )) {
+                    RequireUnitInterval(
+                        errors: errors,
+                        name: $"{itemPath}.scalars[approach]",
+                        value: approach
+                    );
+                }
+                if (TryScalar(
+                    name: "orbit",
+                    parameters: parameters,
+                    value: out var orbit
+                )) {
+                    RequireUnitInterval(
+                        errors: errors,
+                        name: $"{itemPath}.scalars[orbit]",
+                        value: orbit
+                    );
+                }
+            }
+        }
+    }
+    // A kit/motion velocity-response table (SIM-AFFECTING): each row's engage/release rates must be positive (a zero
+    // rate never converges — a stuck body, not a feel), each gate is a body-fact-only predicate (the lane-scoped
+    // action-state predicates are rejected by name), and a null (always) gate before the final row makes every
+    // later row unreachable.
+    private static void ValidateResponse(IReadOnlyList<MotionResponse> response, string path, List<string> errors) {
+        // A required-with-no-default constructor parameter the JSON never supplied binds null, not an empty list.
+        // Name the absent section rather than faulting on it.
+        if (response is null) {
+            errors.Add(item: $"{path} is required.");
+
+            return;
+        }
+
+        for (var index = 0; (index < response.Count); index++) {
+            var row = response[index];
+            var rowPath = $"{path}[{index}]";
+
+            if (row is null) {
+                errors.Add(item: $"{rowPath} is required.");
+
+                continue;
+            }
+
+            RequirePositive(
+                value: row.EngageRate,
+                name: $"{rowPath}.engageRate",
+                errors: errors
+            );
+            RequirePositive(
+                value: row.ReleaseRate,
+                name: $"{rowPath}.releaseRate",
+                errors: errors
+            );
+            ValidateMotionGate(
+                predicate: row.Gate,
+                path: $"{rowPath}.gate",
+                errors: errors
+            );
+
+            if (
+                (row.Gate is null) &&
+                (index < (response.Count - 1))
+            ) {
+                errors.Add(item: $"{rowPath}.gate is the always-row (null) but is not last — every later row is unreachable.");
+            }
+        }
+    }
+    // Layered over ValidateEnvelopeShape: the kit's own authored value for the bounded scalar must also sit inside
+    // its own declared envelope — a world that pins a scalar narrower than the baseline it authors for profileless
+    // stand-ins is self-contradictory. Meaningful only where the bounded value is a fallback a separate, unvalidated
+    // live read (a seated profile) can diverge from — see ValidateVehicleMotion's remarks for the arm that
+    // deliberately skips this layer.
+    private static void ValidateScalarEnvelope(MotionScalarEnvelope envelope, float ownValue, string ownValueName, string path, List<string> errors) {
+        if (!ValidateEnvelopeShape(
+            envelope: envelope,
+            errors: errors,
+            path: path
+        )) {
+            return;
+        }
+
+        if (
+            (ownValue < envelope.Min) ||
+            (ownValue > envelope.Max)
+        ) {
+            errors.Add(item: $"{path} [{envelope.Min}, {envelope.Max}] does not contain the kit's own {ownValueName} ({ownValue}).");
+        }
+    }
+    // A kit's full swim locomotion tuning: thrust, medium dynamics, and the shared response/sprint/frame vocabulary.
+    // A swim kit in a world without a water section refuses HERE — the medium is the model's whole premise, and a
+    // silent dry-world swimmer would integrate against a waterline that does not exist.
+    private static void ValidateSwimMotion(WorldMotionModel.Swim tuning, string path, ISet<string> channelNames, bool hasWater, List<string> errors) {
+        if (!hasWater) {
+            errors.Add(item: $"{path} declares a swim model but the world authors no water section.");
+        }
+
+        RequirePositive(
+            value: tuning.ThrustSpeed,
+            name: $"{path}.thrustSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.TurnSpeed,
+            name: $"{path}.turnSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.VerticalThrustFraction,
+            name: $"{path}.verticalThrustFraction",
+            errors: errors
+        );
+        ValidateResponse(
+            response: tuning.Response,
+            path: $"{path}.response",
+            errors: errors
+        );
+
+        if (!float.IsFinite(f: tuning.Buoyancy)) {
+            errors.Add(item: $"{path}.buoyancy must be finite (was {tuning.Buoyancy}).");
+        }
+
+        RequirePositive(
+            value: tuning.MaxRiseSpeed,
+            name: $"{path}.maxRiseSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.MaxSinkSpeed,
+            name: $"{path}.maxSinkSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.SurfaceSettleRate,
+            name: $"{path}.surfaceSettleRate",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.FloatDepth,
+            name: $"{path}.floatDepth",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.SprintMultiplier,
+            name: $"{path}.sprintMultiplier",
+            errors: errors
+        );
+
+        if (
+            (tuning.SprintChannel is { Length: > 0 } sprintChannel) &&
+            !channelNames.Contains(item: sprintChannel)
+        ) {
+            errors.Add(item: $"{path}.sprintChannel '{sprintChannel}' names no declared composition channel.");
+        }
+
+        if (!Enum.IsDefined(value: tuning.MoveFrame)) {
+            errors.Add(item: $"{path}.moveFrame '{tuning.MoveFrame}' is not a defined MotionMoveFrame.");
+        }
+
+        // The seat-time speed clamp, this arm's own scalar — the SAME reusable gate Grounded.MoveSpeedEnvelope walks.
+        if (tuning.ThrustSpeedEnvelope is { } thrustSpeedEnvelope) {
+            ValidateScalarEnvelope(
+                envelope: thrustSpeedEnvelope,
+                ownValue: tuning.ThrustSpeed,
+                ownValueName: "thrustSpeed",
+                path: $"{path}.thrustSpeedEnvelope",
+                errors: errors
+            );
+        }
+    }
+    private static void ValidateVehicleMotion(WorldMotionModel.Vehicle tuning, string path, ISet<string> channelNames, List<string> errors) {
+        RequirePositive(
+            value: tuning.TopSpeed,
+            name: $"{path}.topSpeed",
+            errors: errors
+        );
+        RequireNonNegative(
+            value: tuning.ReverseTopSpeed,
+            name: $"{path}.reverseTopSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.Accel,
+            name: $"{path}.accel",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.Brake,
+            name: $"{path}.brake",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.CoastDrag,
+            name: $"{path}.coastDrag",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.Grip,
+            name: $"{path}.grip",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.SteerRate,
+            name: $"{path}.steerRate",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.SteerReferenceSpeed,
+            name: $"{path}.steerReferenceSpeed",
+            errors: errors
+        );
+        RequireNonNegative(
+            value: tuning.PitchRate,
+            name: $"{path}.pitchRate",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.RiseGravity,
+            name: $"{path}.riseGravity",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.FallGravity,
+            name: $"{path}.fallGravity",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.MaxFallSpeed,
+            name: $"{path}.maxFallSpeed",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.DriftSteerScale,
+            name: $"{path}.driftSteerScale",
+            errors: errors
+        );
+        RequirePositive(
+            value: tuning.BoostMultiplier,
+            name: $"{path}.boostMultiplier",
+            errors: errors
+        );
+
+        if (
+            !float.IsFinite(f: tuning.SteerFalloff) ||
+            (tuning.SteerFalloff < 0f) ||
+            (tuning.SteerFalloff > 1f)
+        ) {
+            errors.Add(item: $"{path}.steerFalloff {tuning.SteerFalloff} must be within [0, 1].");
+        }
+
+        if (tuning.DriftChannel is { Length: > 0 } driftChannel) {
+            if (!channelNames.Contains(item: driftChannel)) {
+                errors.Add(item: $"{path}.driftChannel '{driftChannel}' names no declared composition channel.");
+            }
+
+            if (
+                !float.IsFinite(f: tuning.DriftGrip) ||
+                (tuning.DriftGrip <= 0f)
+            ) {
+                errors.Add(item: $"{path}.driftGrip {tuning.DriftGrip} must be positive when a drift channel is declared.");
+            }
+        }
+
+        if (
+            (tuning.BoostChannel is { Length: > 0 } boostChannel) &&
+            !channelNames.Contains(item: boostChannel)
+        ) {
+            errors.Add(item: $"{path}.boostChannel '{boostChannel}' names no declared composition channel.");
+        }
+
+        // Well-formedness only (finite min/max, min <= max) — deliberately NOT the own-value-in-range check
+        // ValidateScalarEnvelope also applies to grounded's moveSpeed. Grounded's baseline is a profileless fallback
+        // the live-clamped read (Profile's own speed) can diverge from, so an own-value check keeps that fallback
+        // sane. The vehicle arm has no such second channel: topSpeed itself IS the live-clamped read (world.row.set
+        // retunes it in place), so requiring it inside its own envelope would refuse the exact retune-past-the-cap
+        // this envelope exists to catch. A malformed envelope (min > max, non-finite) still refuses.
+        if (tuning.TopSpeedEnvelope is { } topSpeedEnvelope) {
+            ValidateEnvelopeShape(
+                envelope: topSpeedEnvelope,
+                errors: errors,
+                path: $"{path}.topSpeedEnvelope"
+            );
+        }
+    }
+
+    private static readonly string[] WanderScalars = [
+        "forward", "softRadius", "weaveAmplitude", "inwardGain", "turnScale",
+        "weaveFrequencyBase", "weaveFrequencyRange", "altitudeGain", "activityRateBase", "activityRateRange",
+        "strafeWave", "turnWave", "upWave", "pitchWave", "rollTurn", "pressThreshold", "altitudeBase", "altitudeRange",
+    ];
+    private static readonly string[] AttendScalars = ["standoffRadius", "approach", "orbit"];
+
+    /// <summary>The tuning facets a body motion program's selected operations read from a kit's declared
+    /// <see cref="WorldMotionModel"/> — the validator's own mapping (never convention; see
+    /// <see cref="RequiredMotionTuningFacets"/>/<see cref="SuppliedMotionTuningFacets"/>) that a new operation or a new
+    /// model arm must extend. A declared model missing a facet an operation still reads refuses by name at
+    /// validation instead of the operation reading a silent zero at runtime.</summary>
+    [Flags]
+    private enum MotionTuningFacet : ushort {
+        None = 0,
+
+        /// <summary>MoveSpeed/TurnSpeed — read unconditionally by every Motion-kind body motion program.</summary>
+        Speed = 1,
+
+        /// <summary>RiseGravity/FallGravity/MaxFallSpeed, the full gravity arc (<see cref="BodyMotionOp.ApplyVerticalGravity"/>) —
+        /// the same op <see cref="CompiledBodyMotionProgram.OwnsVerticalContactState"/> keys off, at runtime, to decide
+        /// whether contact resolution may write back into a body's vertical channel.</summary>
+        GravityArc = 2,
+
+        /// <summary>RiseGravity alone, read as a symmetric bleed rate (<see cref="BodyMotionOp.ApplyVerticalDecay"/>).</summary>
+        GravityBleed = 4,
+
+        /// <summary>The velocity-response table (<see cref="BodyMotionOp.ShapePlanarVelocity"/>).</summary>
+        PlanarResponse = 8,
+
+        /// <summary>SprintMultiplier/SprintChannel (<see cref="BodyMotionOp.ComputePlanarTargetVelocity"/>).</summary>
+        Sprint = 16,
+
+        /// <summary>MoveFrame/FacingSnap (<see cref="BodyMotionOp.ResolveYawAttitudeAndPlanarFrame"/>/
+        /// <see cref="BodyMotionOp.SnapYawToPlanarIntent"/>).</summary>
+        WorldFrame = 32,
+
+        /// <summary>The anisotropic drive family — longitudinal accel/brake/coast, lateral grip/drift, and
+        /// speed-scaled steering (<see cref="BodyMotionOp.ResolveVehicleFrame"/>/
+        /// <see cref="BodyMotionOp.ShapeVehicleVelocity"/>).</summary>
+        VehicleDrive = 64,
+
+        /// <summary>VerticalThrustFraction (<see cref="BodyMotionOp.ComputeSwimTargetVelocity"/>).</summary>
+        SwimThrust = 128,
+
+        /// <summary>Buoyancy/MaxRiseSpeed/MaxSinkSpeed/SurfaceSettleRate/FloatDepth — the medium dynamics
+        /// (<see cref="BodyMotionOp.ApplyBuoyancyAndSurface"/>).</summary>
+        SwimBuoyancy = 256,
+    }
+}

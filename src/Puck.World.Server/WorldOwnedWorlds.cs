@@ -123,6 +123,35 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Gets the local owned-world mutation counter.</summary>
     public long Revision => m_revision;
 
+    /// <summary>The catalog's checkpointed state — the identities as document data plus the mutation counter.
+    /// Excludes <see cref="FilePath"/> (host state — the state directory a fresh instance's own construction
+    /// resolves) and <see cref="LastReceipt"/> (a read-back-only diagnostic of the most recent submission, the same
+    /// exclusion class as a body's <c>PressOutcome</c>/<c>StopOutcome</c> — nothing but a read-back verb consults
+    /// it, and the next real submission repopulates it).</summary>
+    public sealed record WorldOwnedWorldsCheckpoint(IReadOnlyList<byte[]> IdentityDocumentsJson, long Revision);
+
+    /// <summary>Captures every identity's owned document and the mutation counter.</summary>
+    public WorldOwnedWorldsCheckpoint Capture() => new(
+        IdentityDocumentsJson: [.. m_identities.Select(selector: identity => WorldDefinitionSerialization.Serialize(definition: identity.Document!))],
+        Revision: m_revision
+    );
+    /// <summary>Restores every identity from a previously captured checkpoint. The identity list is replaced
+    /// wholesale — this never merges onto whatever the directory load already seeded.</summary>
+    public void Restore(WorldOwnedWorldsCheckpoint checkpoint) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+
+        m_identities.Clear();
+
+        foreach (var json in checkpoint.IdentityDocumentsJson) {
+            m_identities.Add(item: new WorldIdentity(
+                defaults: Defaults,
+                document: WorldDefinitionSerialization.Deserialize(utf8Json: json)
+            ));
+        }
+
+        m_revision = checkpoint.Revision;
+    }
+
     // THE CONTRACT SPLIT this door's text extension reveals: the DOOR — a grant naming
     // Principal==Document(source) && Capability==Mutate && Subject==State(slot), plus a WriteMask admitting the
     // requested WorldDocumentWriteKind — is SUBMITTER-AGNOSTIC. It answers "may THIS document write THAT slot", never
@@ -353,7 +382,7 @@ public sealed class WorldOwnedWorlds {
     );
     private static WorldDefinition Seed(WorldDefinition template, WorldMotionDefaults motion, WorldIdentitySeed seed) => template with {
         DocumentId = seed.Id,
-        Motion = motion,
+        MotionRaw = motion,
         Identity = new WorldIdentityDefinition(
         Id: seed.Id,
         Name: seed.Name,
@@ -361,7 +390,7 @@ public sealed class WorldOwnedWorlds {
         MoveSpeedState: MoveSpeedState,
         TurnSpeedState: TurnSpeedState
     ),
-        State = [
+        StateRaw = ((template.StateRaw ?? new WorldStateSection()) with { World = [
             new WorldStateRow(
             Name: MoveSpeedState,
             Kind: CellKind.Fixed,
@@ -378,9 +407,9 @@ public sealed class WorldOwnedWorlds {
                     Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.TurnSpeed).Value
                 )]
         ),
-        ],
-        BindingOverlays = [],
-        Hud = WorldHudSection.Default,
+        ] }),
+        BindingOverlaysRaw = [],
+        HudRaw = WorldHudSection.Default,
         Adjacencies = null,
     };
 

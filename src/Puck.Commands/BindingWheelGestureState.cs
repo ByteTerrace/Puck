@@ -6,11 +6,16 @@ namespace Puck.Commands;
 /// so cancellation cannot be undone by a later presentation frame and a selector sample cannot leak into the next
 /// gesture.</summary>
 public sealed class BindingWheelGestureState {
-    /// <summary>The most recent authored Axis2D selector sample in this gesture.</summary>
+    /// <summary>The latest live directional Axis2D selector sample, or the retained commit-safe direction after
+    /// the selector returns to neutral.</summary>
     public Vector2 Axis { get; private set; }
-    /// <summary>Whether <see cref="Axis"/> was sampled during this gesture.</summary>
+    /// <summary>Whether an Axis2D selector has crossed the wheel's authored dead zone during this gesture.</summary>
     public bool AxisKnown { get; private set; }
-    /// <summary>The selector arbitration sequence carried by <see cref="Axis"/>.</summary>
+    /// <summary>Whether the latest accepted selector state is inside the authored dead zone. The directional
+    /// <see cref="Axis"/> remains available so a throw and return occurring between presentation frames can still
+    /// resolve its intended sector.</summary>
+    public bool AxisNeutral { get; private set; }
+    /// <summary>The selector arbitration sequence carried by the latest accepted directional or neutral state.</summary>
     public long AxisSequence { get; private set; }
     /// <summary>Whether the current presentation frame may arm a sector commit.</summary>
     public bool CanArm => (Opened && !Cancelled);
@@ -26,10 +31,20 @@ public sealed class BindingWheelGestureState {
     /// <summary>Whether <see cref="SpatialNeutral"/> has been captured during this gesture.</summary>
     public bool SpatialNeutralKnown { get; private set; }
 
+    private Vector2 m_peakAxis;
+    private float m_peakAxisMagnitudeSquared;
+    private Vector2 m_stableAxis;
+    private bool m_stableAxisKnown;
+
     private void ClearAxis() {
         Axis = Vector2.Zero;
         AxisKnown = false;
+        AxisNeutral = false;
         AxisSequence = 0L;
+        m_peakAxis = Vector2.Zero;
+        m_stableAxis = Vector2.Zero;
+        m_peakAxisMagnitudeSquared = 0f;
+        m_stableAxisKnown = false;
     }
     private void ClearSpatialNeutral() {
         SpatialNeutral = Vector2.Zero;
@@ -52,12 +67,6 @@ public sealed class BindingWheelGestureState {
         ClearAxis();
         ClearSpatialNeutral();
     }
-    /// <summary>Records one authored Axis2D selector sample.</summary>
-    public void Select(Vector2 axis, long sequence) {
-        Axis = axis;
-        AxisKnown = true;
-        AxisSequence = sequence;
-    }
     /// <summary>Captures the first available spatial position as this gesture's device-relative origin. A
     /// position arriving after the opening frame is valid; later positions cannot move the origin.</summary>
     /// <param name="position">The spatial input position in its presenter's coordinate space.</param>
@@ -72,6 +81,98 @@ public sealed class BindingWheelGestureState {
 
         SpatialNeutral = position;
         SpatialNeutralKnown = true;
+
+        return true;
+    }
+    /// <summary>Accepts a finite Axis2D selector sample and tracks every deliberate directional update during an
+    /// active excursion. The last sample above the switch threshold is retained when the selector returns to
+    /// neutral; an excursion that never reaches that threshold retains its peak instead. A weak opposite-side
+    /// sample is rejected both during an excursion and after neutral, so a missed center sample cannot let spring
+    /// rebound masquerade as rotation or another throw.</summary>
+    /// <param name="axis">The normalized selector sample.</param>
+    /// <param name="sequence">The monotonically increasing input-arbitration sequence.</param>
+    /// <param name="deadZoneSquared">The inclusive squared selector dead-zone magnitude.</param>
+    /// <param name="switchThresholdSquared">The squared magnitude an opposite-side sample must reach to begin a
+    /// new excursion after neutral.</param>
+    /// <returns><see langword="true"/> when the sample becomes the gesture's selected axis.</returns>
+    public bool TrySelect(Vector2 axis, long sequence, float deadZoneSquared, float switchThresholdSquared) {
+        var magnitudeSquared = axis.LengthSquared();
+
+        if (
+            !Opened ||
+            !float.IsFinite(f: magnitudeSquared) ||
+            !float.IsFinite(f: deadZoneSquared) ||
+            (deadZoneSquared < 0f) ||
+            !float.IsFinite(f: switchThresholdSquared) ||
+            (switchThresholdSquared < 0f)
+        ) {
+            return false;
+        }
+
+        if (magnitudeSquared <= deadZoneSquared) {
+            if (
+                !AxisKnown ||
+                AxisNeutral
+            ) {
+                return false;
+            }
+
+            Axis = (m_stableAxisKnown
+                ? m_stableAxis
+                : m_peakAxis
+            );
+            AxisNeutral = true;
+            AxisSequence = sequence;
+
+            return true;
+        }
+
+        if (AxisKnown) {
+            var retainedAxis = (m_stableAxisKnown
+                ? m_stableAxis
+                : m_peakAxis
+            );
+
+            if (AxisNeutral) {
+                if (
+                    (Vector2.Dot(
+                    value1: retainedAxis,
+                    value2: axis
+                ) <= 0f) &&
+                    (magnitudeSquared < switchThresholdSquared)
+                ) {
+                    return false;
+                }
+
+                m_peakAxis = Vector2.Zero;
+                m_stableAxis = Vector2.Zero;
+                m_peakAxisMagnitudeSquared = 0f;
+                m_stableAxisKnown = false;
+            } else if (
+                (Vector2.Dot(
+                value1: retainedAxis,
+                value2: axis
+            ) <= 0f) &&
+                (magnitudeSquared < switchThresholdSquared)
+            ) {
+                return false;
+            }
+        }
+
+        Axis = axis;
+        AxisKnown = true;
+        AxisNeutral = false;
+        AxisSequence = sequence;
+
+        if (magnitudeSquared >= m_peakAxisMagnitudeSquared) {
+            m_peakAxis = axis;
+            m_peakAxisMagnitudeSquared = magnitudeSquared;
+        }
+
+        if (magnitudeSquared >= switchThresholdSquared) {
+            m_stableAxis = axis;
+            m_stableAxisKnown = true;
+        }
 
         return true;
     }

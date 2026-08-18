@@ -1,0 +1,18 @@
+world.wait 90
+wire.errors reset
+world.adjacencies
+world.wait 30
+world.adjacencies
+replay.record fourcornersdisc
+player.pose -2 0 -12 0 0 0 1
+world.wait 120
+player.where 1
+world.adjacencies
+world.wait 180
+player.where 1
+world.wait 180
+player.where 1
+world.wait 210
+player.where 1
+world.adjacencies
+replay.stop
