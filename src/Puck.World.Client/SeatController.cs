@@ -35,7 +35,6 @@ public readonly record struct SeatLookSample(FixedVector2 Value, SeatLookBehavio
     /// <summary>Gets a value indicating whether horizontal look faces the body.</summary>
     public bool FacesBody => ((Behavior == SeatLookBehavior.FaceBody) && (Value.X != FixedQ4816.Zero));
 }
-
 /// <summary>
 /// One local seat's device-intent producer: held channel contributions, analog sticks, and toggled motion samples —
 /// everything a seat's physical devices stage between ticks.
@@ -80,6 +79,7 @@ public sealed class SeatController {
 
     /// <summary>The seat-lifetime logical view state shared by input, movement, every renderer, and read-back.</summary>
     public WorldSeatViewState View { get; } = new();
+
     /// <summary>Gets a value indicating whether <c>player.orbit</c> is held: pointer motion orbits the camera.</summary>
     public bool Orbiting { get; private set; }
     /// <summary>Whether any movement input is live this tick — a held row on a role ordinal or a deflected movement
@@ -307,9 +307,9 @@ public sealed class SeatController {
         }
 
         return roles.Intent(
-            moveForward: ClampedRaw(
+            moveAdvance: ClampedRaw(
                 raw: raw,
-                ordinal: roles.MoveForward
+                ordinal: roles.MoveAdvance
             ),
             moveStrafe: ClampedRaw(
                 raw: raw,
@@ -383,8 +383,8 @@ public sealed class SeatController {
     /// <param name="behavior">How horizontal look affects body facing.</param>
     public void SetAnalogLook(FixedVector2 look, SeatLookBehavior behavior) {
         m_look = new SeatLookSample(
-            Value: look,
-            Behavior: behavior
+            Behavior: behavior,
+            Value: look
         );
     }
     /// <summary>Feeds this frame's movement (left) stick sample, already quantized to fixed point at the router seam
@@ -397,8 +397,8 @@ public sealed class SeatController {
     /// <param name="behavior">How the sample affects body facing.</param>
     public void SetAnalogMove(FixedVector2 move, SeatMoveBehavior behavior) {
         m_move = new SeatMoveSample(
-            Value: move,
-            Behavior: behavior
+            Behavior: behavior,
+            Value: move
         );
     }
     /// <summary>Sets the client-side intent-source copy — <c>player.control</c>'s seat half (the server body's axis is

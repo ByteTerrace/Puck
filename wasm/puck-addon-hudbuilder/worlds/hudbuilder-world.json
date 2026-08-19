@@ -442,7 +442,7 @@
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveForward"
+      "role": "MoveAdvance"
     },
     {
       "name": "strafe",
@@ -896,7 +896,10 @@
           "scalars": {
             "standoffRadius": 2,
             "approach": 0.75,
-            "orbit": 0
+            "orbit": 0,
+            "altitudeGain": 0,
+            "inwardGain": 1.6,
+            "turnScale": 2.5
           },
           "channels": {
           }
@@ -1315,7 +1318,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "b795d9778c470fe40f2408d95d3bd8f347f9dc0436fb97666502be69b2c8e0cb"
+      "hash": "8fc62b00b6f29f725b83139affd724ff7656a5da7a8b690d2ac4d370adf5ae64"
     },
     {
       "id": "boulder-1",
@@ -1355,7 +1358,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "77fbd8b744daa35fd7f84eae197e5ee7d26096e1b813197e54770b47e62a69a2"
+      "hash": "bdff555f51a480dcebb8153d0e475c42ac60ddf8303bbc38b2b93b8b687776da"
     },
     {
       "id": "boulder-2",
@@ -1395,7 +1398,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "c4295e6e90708c67625c6abc91eba1ce873a45d14a63a1b302450c1e5dc64f4c"
+      "hash": "8fcace2f4f95b6a913f1f779dd010005c974463b626c9a1e3504772900fb49bc"
     },
     {
       "id": "boulder-3",
@@ -1435,7 +1438,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "38a1c5ab94e012d0c75cbe50a051b8dab5fa41040c9a271b55af2ad2b9369562"
+      "hash": "f2cb3176359084e34861b368ff4453492d475b3069c53bd05da882c8a97eb87a"
     },
     {
       "id": "boulder-4",
@@ -1475,7 +1478,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "e067725ece78e9c786198612ed28620746ad73a74a8e5d7b783fbdf0791715c0"
+      "hash": "3cae1b3a1d90fc5b144218384ed7512c8147b0e4a8bad0626c3e02cf29103743"
     },
     {
       "id": "boulder-5",
@@ -1515,7 +1518,7 @@
         "cameras": null,
         "behavior": null
       },
-      "hash": "ab933071511bde81b26bb3b3a292cb46056504d00fbee9ef905ab32dc9ff4210"
+      "hash": "a7c15ebde24f2942d5ff33f92c9347c3e62ddc7673c21e3ebd0adb645db5acfd"
     }
   ],
   "placements": [
@@ -1769,7 +1772,8 @@
       "yawSensitivity": 0.001,
       "pitchSensitivity": 0.001,
       "invertYaw": false,
-      "invertPitch": false,
+      "invertPitch": false,
+
       "stickLookRate": 2.6
     }
   }

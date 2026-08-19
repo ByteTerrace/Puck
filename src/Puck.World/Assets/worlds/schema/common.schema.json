@@ -759,6 +759,42 @@
       ],
       "additionalProperties": false
     },
+    "WorldCameraMotionFly": {
+      "description": "A free camera driven directly by a seat\u0027s channel-role input rather than a reference frame \u2014 the live eye/yaw/pitch are presentation-carried state (never authored per instance), advanced each frame from the SAME move/look samples a body seat\u0027s channels carry. Never resolved through Puck.World.WorldCameraRigCompiler (it has no reference frame to resolve against); the seat\u0027s own fly-rig integrator (Client.WorldSeatFlyRig) reads only these tunables.",
+      "properties": {
+        "$type": {
+          "const": "fly"
+        },
+        "minSpeed": {
+          "description": "The slowest operator-settable fly speed, world units per second.",
+          "type": "number"
+        },
+        "maxSpeed": {
+          "description": "The fastest operator-settable fly speed, world units per second.",
+          "type": "number"
+        },
+        "defaultSpeed": {
+          "description": "The fly speed a seat starts at on entry, clamped to [MinSpeed, MaxSpeed].",
+          "type": "number"
+        },
+        "lookRateRadiansPerSecond": {
+          "description": "The look input\u0027s angular rate at full deflection.",
+          "type": "number"
+        },
+        "maxPitchRadians": {
+          "description": "The pitch clamp, symmetric about level.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "minSpeed",
+        "maxSpeed",
+        "defaultSpeed",
+        "lookRateRadiansPerSecond",
+        "maxPitchRadians"
+      ],
+      "additionalProperties": false
+    },
     "WorldCameraMotionFollow": {
       "description": "Follows the reference frame at a fixed offset.",
       "properties": {
@@ -944,6 +980,9 @@
         "$type"
       ],
       "anyOf": [
+        {
+          "$ref": "#/$defs/WorldCameraMotionFly"
+        },
         {
           "$ref": "#/$defs/WorldCameraMotionFollow"
         },
@@ -2031,7 +2070,7 @@
         "PointerMotion",
         "WheelOpen",
         "ConsoleOpen",
-        "EditorActive"
+        "SeatFlying"
       ]
     },
     "OverlayPredicateNow": {

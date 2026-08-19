@@ -15,7 +15,9 @@ namespace Puck.World;
 /// <remarks><see cref="Collider"/> is the kit's body volume solved against the world contact field, or
 /// <see langword="null"/> for a kit with no volume (never solved against the field), omitted from the wire when
 /// null. <see cref="BodyContact"/> is whether bodies wearing this kit overlap one another or participate in
-/// physical depenetration — world geometry still uses <see cref="Collider"/> in either mode.</remarks>
+/// physical depenetration — world geometry still uses <see cref="Collider"/> in either mode. <see cref="Mass"/> is the
+/// body's gravitational mass in the same units a <c>gravity.attractors</c> row uses; zero (the default) makes a body a
+/// target that is pulled but pulls nothing.</remarks>
 public sealed record WorldKit(
     string Name,
     string BodyMotionProgram,
@@ -23,18 +25,19 @@ public sealed record WorldKit(
     [property: JsonPropertyName("producers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, BodyProgramParameters>? ProducersRaw = null,
     [property: JsonPropertyName("actions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, ActionSpec>? ActionsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
-    WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap
+    WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap,
+    float Mass = 0f
 ) {
-    /// <summary>Gets the producer parameter maps keyed by authored producer-program name — ABSENT resolves to
-    /// none.</summary>
-    [JsonIgnore]
-    public IReadOnlyDictionary<string, BodyProgramParameters> Producers => (ProducersRaw ?? EmptyProducers);
     /// <summary>Gets the kit's composition bindings, keyed by declared channel name (validated against the world's
     /// channel table — a kit naming an undeclared channel is a dead name; a declared composition channel with no
     /// entry here stays legal and inert per body). Compositions key off channel name, never a lane ordinal. ABSENT
     /// resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, ActionSpec> Actions => (ActionsRaw ?? EmptyActions);
+    /// <summary>Gets the producer parameter maps keyed by authored producer-program name — ABSENT resolves to
+    /// none.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, BodyProgramParameters> Producers => (ProducersRaw ?? EmptyProducers);
 
     private static readonly IReadOnlyDictionary<string, BodyProgramParameters> EmptyProducers = new Dictionary<string, BodyProgramParameters>(comparer: StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, ActionSpec> EmptyActions = new Dictionary<string, ActionSpec>(comparer: StringComparer.Ordinal);
@@ -62,6 +65,7 @@ public enum WorldBodyContactMode : byte {
 /// ordinal's shape whether or not this kit binds an action to it.</param>
 /// <param name="Collider">The kit's compiled body volumes, or <see langword="null"/> for a volumeless kit.</param>
 /// <param name="BodyContact">The authored dynamic-body contact mode.</param>
+/// <param name="Mass">The compiled gravitational mass.</param>
 /// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> (or the
 /// vehicle arm's <see cref="WorldMotionModel.Vehicle.BoostChannel"/> — the same held-multiplier seam) resolved to,
 /// or <c>-1</c> for a kit with no sprint capability (including a kit whose declared model carries none).</param>
@@ -78,6 +82,7 @@ public readonly record struct FixedWorldKit(
     ChannelShape[] ActionShapes,
     FixedWorldCollider? Collider,
     WorldBodyContactMode BodyContact,
+    FixedQ4816 Mass,
     int SprintChannelOrdinal,
     int DriftChannelOrdinal,
     RoleChannelOrdinals RoleOrdinals,
@@ -268,6 +273,7 @@ public readonly record struct FixedWorldKit(
                 creations: creations
             ),
             BodyContact: kit.BodyContact,
+            Mass: FixedQ4816.FromDouble(value: kit.Mass),
             SprintChannelOrdinal: sprintOrdinal,
             DriftChannelOrdinal: driftOrdinal,
             RoleOrdinals: roleOrdinals,

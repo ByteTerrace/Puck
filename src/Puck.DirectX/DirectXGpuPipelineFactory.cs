@@ -88,7 +88,6 @@ public sealed unsafe class DirectXGpuPipelineFactory : IGpuPipelineFactory {
             _ => throw new ArgumentOutOfRangeException(nameof(format), format, "The vertex attribute format is not defined."),
         };
     }
-
     private static DirectXPipelineLayout BuildLayout(
         ID3D12Device* device,
         uint textureSamplerCount,

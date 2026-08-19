@@ -5,7 +5,6 @@ using Puck.Networking.Peers;
 int? listenPort = null;
 string? keyPath = null;
 var dialTargets = new List<string>();
-
 for (var index = 0; (index < args.Length); index++) {
     switch (args[index]) {
         case "--listen":
@@ -26,28 +25,22 @@ for (var index = 0; (index < args.Length); index++) {
             return 1;
     }
 }
-
 if (!QuicPeerTransport.IsSupported) {
     Console.Error.WriteLine(value: "QUIC is not available on this host (msquic with TLS 1.3 support is required)");
 
     return 2;
 }
-
-var identity = ((keyPath is { } loadPath) && File.Exists(path: loadPath))
+var identity = (((keyPath is { } loadPath) && File.Exists(path: loadPath))
     ? PeerIdentity.Load(path: loadPath)
-    : PeerIdentity.Create();
-
+    : PeerIdentity.Create());
 if ((keyPath is { } savePath) && !File.Exists(path: savePath)) {
     identity.Save(path: savePath);
 }
-
 Console.WriteLine(value: $"peer.id {identity.Id.Domain}");
-
 await using var peer = new Peer(
     identity: identity,
     transport: new QuicPeerTransport(certificate: identity.CreateTransportCertificate())
 );
-
 if (listenPort is { } port) {
     var bound = await peer.ListenAsync(endpoint: new IPEndPoint(
         address: IPAddress.Any,
@@ -56,7 +49,6 @@ if (listenPort is { } port) {
 
     Console.WriteLine(value: $"listening {bound}");
 }
-
 _ = Task.Run(function: async () => {
     await foreach (var link in peer.IncomingLinks.ReadAllAsync().ConfigureAwait(continueOnCapturedContext: false)) {
         Console.WriteLine(value: $"link.up {link.RemoteId.Domain} {link.RemoteEndpoint}");
@@ -68,13 +60,10 @@ _ = Task.Run(function: async () => {
         Console.WriteLine(value: $"handshake.refused {refused.RemoteEndpoint} {refused.Failure}");
     }
 });
-
 foreach (var target in dialTargets) {
     await DialAsync(target: target).ConfigureAwait(continueOnCapturedContext: false);
 }
-
 string? line;
-
 while ((line = await Console.In.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false)) is not null) {
     var parts = line.Split(
         count: 3,
@@ -128,11 +117,9 @@ while ((line = await Console.In.ReadLineAsync().ConfigureAwait(continueOnCapture
             break;
     }
 }
-
 done:
 
 return 0;
-
 async Task DialAsync(string target) {
     if (!IPEndPoint.TryParse(
         result: out var endpoint,

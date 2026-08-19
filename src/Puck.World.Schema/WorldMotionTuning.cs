@@ -47,7 +47,7 @@ public abstract record WorldMotionModel {
     /// or <see langword="null"/> (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside
     /// every other kit-channel name, by <see cref="FixedWorldKit.Compile"/> — an unresolvable name (validator-refused
     /// already) reads as "no sprint" rather than throwing.</param>
-    /// <param name="MoveFrame">Which frame <c>MoveForward</c>/<c>MoveStrafe</c> resolve in.
+    /// <param name="MoveFrame">Which frame <c>MoveAdvance</c>/<c>MoveStrafe</c> resolve in.
     /// <see cref="MotionMoveFrame.Heading"/> explicitly rotates the commanded planar target by the body's own
     /// integrated heading. <see cref="MotionMoveFrame.World"/> (the default) takes the two channels as
     /// axes already in world frame — the seat's client composes the camera yaw into the submitted intent before it ever
@@ -197,7 +197,7 @@ public abstract record WorldMotionModel {
     /// <param name="SprintChannel">The declared channel name read while held for the burst, or <see langword="null"/>
     /// (the default) for a kit with no burst — the same resolution path <see cref="Grounded.SprintChannel"/>
     /// documents.</param>
-    /// <param name="MoveFrame">Which frame <c>MoveForward</c>/<c>MoveStrafe</c> resolve in — the same two-frame
+    /// <param name="MoveFrame">Which frame <c>MoveAdvance</c>/<c>MoveStrafe</c> resolve in — the same two-frame
     /// choice, and the same client-side camera composition seam, as <see cref="Grounded.MoveFrame"/>.</param>
     /// <param name="FacingSnap">Under <see cref="MotionMoveFrame.World"/> only: snap facing to the commanded planar
     /// direction each tick carrying input, as <see cref="Grounded.FacingSnap"/> documents.</param>
@@ -250,7 +250,7 @@ public abstract record WorldMotionModel {
         _ => 0f,
     };
 }
-/// <summary>Which frame a grounded body's <c>MoveForward</c>/<c>MoveStrafe</c> channels resolve in — a per-kit choice
+/// <summary>Which frame a grounded body's <c>MoveAdvance</c>/<c>MoveStrafe</c> channels resolve in — a per-kit choice
 /// (<see cref="WorldMotionModel.Grounded.MoveFrame"/>), never a global switch.</summary>
 [JsonConverter(typeof(StrictEnumConverter<MotionMoveFrame>))]
 public enum MotionMoveFrame : byte {
@@ -285,9 +285,9 @@ public readonly record struct WorldMotionDefaults(
     /// positive floor admits, so an unseated stand-in with no profile advances negligibly rather than not at
     /// all.</summary>
     public static WorldMotionDefaults Default { get; } = new(
+        MaxSmoothError: 0.01f,
         MoveSpeed: 0.01f,
-        TurnSpeed: 0.01f,
-        MaxSmoothError: 0.01f
+        TurnSpeed: 0.01f
     );
 }
 /// <summary>The one-time fixed-point compilation of the world's motion defaults. Runtime simulation reads only this

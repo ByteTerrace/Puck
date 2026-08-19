@@ -128,15 +128,21 @@ public sealed class OverlayGlyphAtlasSet {
 
     /// <summary>
     /// Loads the overlay glyph pack from the prepacked artifact beside the atlas (<c>overlay-glyphs.pack</c>) when
-    /// possible: a warm start reads the ~1.4 MiB finished pack instead of decoding the ~79 MiB combined PNG, whose
-    /// full MTSDF decode holds upward of 150 MiB transient to produce that 1.4 MiB pack. A cold or rebaked start
-    /// builds the pack from <see cref="MonoFont"/> once, persists it, and keys it by the SHA-256 of the source PNG
-    /// and mono layout JSON bytes. Returns <see langword="null"/> exactly when
+    /// possible: a warm start with the SAME <paramref name="extraCodePoints"/> reads the ~1.4-MiB-and-up finished
+    /// pack instead of decoding the ~79 MiB combined PNG, whose full MTSDF decode holds upward of 150 MiB transient
+    /// to produce it. A cold start, a rebaked atlas, or a DIFFERENT appended codepoint list (a world with a
+    /// different icon repertoire) builds the pack from <see cref="MonoFont"/> once, persists it (overwriting a
+    /// cached pack keyed to a different repertoire), and keys it by the SHA-256 of the source PNG bytes, the mono
+    /// layout JSON bytes, AND the codepoint list. Returns <see langword="null"/> exactly when
     /// <see cref="OverlayGlyphSdfPack.TryCreate"/> would (no usable atlas).
     /// </summary>
-    /// <remarks>A cold SDF bake is dramatically slower and far heavier than loading the prepacked artifact; warm
-    /// startup uses the committed pack, and the loaded pack is bit-identical to the built one.</remarks>
-    public OverlayGlyphSdfPack? LoadOverlayPack() {
+    /// <param name="extraCodePoints">Additional codepoints appended after the ASCII block, in caller order — an
+    /// authored world's icon repertoire (see <c>Puck.World.WorldIconTable</c>); <see langword="null"/> or empty
+    /// bakes the ASCII-only pack.</param>
+    /// <remarks>A cold SDF bake is dramatically slower and far heavier than loading the prepacked artifact; a warm
+    /// start against the same repertoire uses the committed pack, and the loaded pack is bit-identical to the built
+    /// one.</remarks>
+    public OverlayGlyphSdfPack? LoadOverlayPack(IReadOnlyList<int>? extraCodePoints = null) {
         var imagePath = Path.Combine(
             path1: m_fontsDirectory,
             path2: CombinedImageName
@@ -151,11 +157,15 @@ public sealed class OverlayGlyphAtlasSet {
             !File.Exists(path: jsonPath)
         ) {
             // No committed atlas: the ordinary path (which may resolve a caller-supplied fallback) decides loudly.
-            return OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
+            return OverlayGlyphSdfPack.TryCreate(
+                extraCodePoints: extraCodePoints,
+                monoFont: MonoFont
+            );
         }
 
         Span<byte> pngHash = stackalloc byte[SHA256.HashSizeInBytes];
         Span<byte> jsonHash = stackalloc byte[SHA256.HashSizeInBytes];
+        Span<byte> extraHash = stackalloc byte[SHA256.HashSizeInBytes];
 
         try {
             using (var image = File.OpenRead(path: imagePath)) {
@@ -169,10 +179,17 @@ public sealed class OverlayGlyphAtlasSet {
                 source: File.ReadAllBytes(path: jsonPath),
                 destination: jsonHash
             );
+            HashExtraCodePoints(
+                codePoints: extraCodePoints,
+                destination: extraHash
+            );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             Console.Error.WriteLine(value: $"[Puck.Overlays] could not key the overlay glyph pack ({exception.Message}); building it from the atlas.");
 
-            return OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
+            return OverlayGlyphSdfPack.TryCreate(
+                extraCodePoints: extraCodePoints,
+                monoFont: MonoFont
+            );
         }
 
         var packPath = Path.Combine(
@@ -181,6 +198,7 @@ public sealed class OverlayGlyphAtlasSet {
         );
 
         if (OverlayGlyphSdfPack.TryReadPack(
+            extraHash: extraHash,
             jsonHash: jsonHash,
             path: packPath,
             pngHash: pngHash
@@ -188,14 +206,41 @@ public sealed class OverlayGlyphAtlasSet {
             return cached;
         }
 
-        var built = OverlayGlyphSdfPack.TryCreate(monoFont: MonoFont);
+        var built = OverlayGlyphSdfPack.TryCreate(
+            extraCodePoints: extraCodePoints,
+            monoFont: MonoFont
+        );
 
         built?.WritePack(
+            extraHash: extraHash,
             jsonHash: jsonHash,
             path: packPath,
             pngHash: pngHash
         );
 
         return built;
+    }
+    // The appended codepoint list's key contribution — plain int32 little-endian, in caller order, so two callers
+    // requesting the same repertoire in the same order (the ordinary case: one WorldIconTable per boot) hash equal.
+    private static void HashExtraCodePoints(IReadOnlyList<int>? codePoints, Span<byte> destination) {
+        if ((codePoints is not { Count: > 0 })) {
+            destination.Clear();
+
+            return;
+        }
+
+        Span<byte> bytes = stackalloc byte[(codePoints.Count * sizeof(int))];
+
+        for (var index = 0; (index < codePoints.Count); index++) {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
+                destination: bytes[(index * sizeof(int))..],
+                value: codePoints[index]
+            );
+        }
+
+        _ = SHA256.HashData(
+            destination: destination,
+            source: bytes
+        );
     }
 }

@@ -263,7 +263,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             description: "Cycles an Explicit open radial menu's ACTIVE ring (wrapping): player.wheel.ring [next|prev] [player] (player 1..4, default 1). Authors may bind any digital source with a constant Axis1D direction; mouse-wheel motion cycles the pointer seat too. REFUSES when no radial is open or its ring selection is neutral-relative Excursion.",
             handler: RingHandler,
             // Every binding row targeting this verb carries a constant Axis1D value — declared so
-            // BindingVocabularyCheck admits the rows (the editor.cam.speed precedent).
+            // BindingVocabularyCheck admits the rows (the world.row.step delta-fold precedent).
             valueKind: CommandValueKind.Axis1D
         );
         yield return CommandDefinition.WithWireArgs(

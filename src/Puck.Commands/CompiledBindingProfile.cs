@@ -22,6 +22,7 @@ public sealed class CompiledBindingProfile {
     private readonly Dictionary<string, int> m_modifierIndexBySource;
     private readonly ImmutableArray<BindingModifierDefinition> m_modifiers;
     private readonly int[][] m_pageRowsByGroup;
+    private readonly Dictionary<string, int> m_pageRowByPageId;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
     private readonly Dictionary<int, BindingWheelView> m_wheelViewByRow;
@@ -225,6 +226,26 @@ public sealed class CompiledBindingProfile {
             value: out groupIndex
         );
     }
+    /// <summary>Attempts to resolve a page's precomputed view by its profile-unique id, across every group — the
+    /// lookup a consumer that names a page directly (rather than resolving the active page from a held chord) uses,
+    /// e.g. a binding-bar bank rendering a page other than the seat's currently active one.</summary>
+    /// <param name="pageId">The page id (ordinal comparison).</param>
+    /// <param name="view">The page's view, when found.</param>
+    /// <returns><see langword="true"/> when the profile declares a page with this id.</returns>
+    public bool TryGetPageView(string pageId, out BindingPageView view) {
+        if (m_pageRowByPageId.TryGetValue(
+            key: pageId,
+            value: out var rowIndex
+        )) {
+            view = m_rows[rowIndex].View!;
+
+            return true;
+        }
+
+        view = null!;
+
+        return false;
+    }
 
     internal CompiledBindingProfile(
         IReadOnlyList<BindingModifierDefinition> modifiers,
@@ -248,6 +269,18 @@ public sealed class CompiledBindingProfile {
         m_rows = rows;
         m_wheelViewByRow = wheelViewByRow;
         ActivatorCount = activatorCount;
+
+        // A page id is profile-unique by authoring contract (BindingPageDefinition.Id), so one flat table covers
+        // every group; a row with no page meaning (a bare command/channel row) contributes nothing.
+        m_pageRowByPageId = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        for (var rowIndex = 0; (rowIndex < rows.Length); rowIndex++) {
+            if (rows[rowIndex].View is { PageId: { Length: > 0 } pageId }) {
+                m_pageRowByPageId[pageId] = rowIndex;
+            }
+        }
+
+        PageIds = [.. m_pageRowByPageId.Keys];
     }
 
     /// <summary>Gets the total number of row activators declared across every page in this profile — the size a
@@ -257,6 +290,9 @@ public sealed class CompiledBindingProfile {
     public int DefaultGroupIndex => 0;
     /// <summary>Gets the group names, in first-declared order (index 0 is the default group).</summary>
     public IReadOnlyList<string> Groups => m_groups;
+    /// <summary>Gets every declared page's profile-unique id, across every group — the identity vocabulary a
+    /// consumer validates a page reference against (see <see cref="TryGetPageView"/>).</summary>
+    public IReadOnlyCollection<string> PageIds { get; }
     /// <summary>Gets the modifier declarations, in document order (a chord references them by index).</summary>
     public IReadOnlyList<BindingModifierDefinition> Modifiers => m_modifiers;
     /// <summary>Gets the number of compiled chord rows.</summary>

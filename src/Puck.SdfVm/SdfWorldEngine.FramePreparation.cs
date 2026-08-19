@@ -433,10 +433,12 @@ public sealed partial class SdfWorldEngine {
         floats[(skyBase + 28)] = ((float)cloudOffsetX); floats[(skyBase + 29)] = ((float)cloudOffsetY); floats[(skyBase + 30)] = ((float)shearOffsetX); floats[(skyBase + 31)] = ((float)shearOffsetY);
         floats[(skyBase + 32)] = ((float)spinAngle); floats[(skyBase + 33)] = frame.SkyCloudCurl; floats[(skyBase + 34)] = 0f; floats[(skyBase + 35)] = 0f;
     }
+
     // The cloud offset's wrap period in layer units. The lattice is hashed on integer cell coordinates, so any
     // integer period is seamless; this one keeps a full period inside float's exact-integer range with room for
     // the sub-cell fraction.
     private const double CloudLatticePeriod = 4096d;
+
     // Pack each frame's views (camera snapshot + region + render scale) into the 96-byte ViewportData rows the kernels
     // read — member-for-member from SdfFrame, no camera math (the snapshot already holds the basis + tan(fov/2) +
     // aspect). The render scale packs as its QUANTIZED numerator q (RenderScaleQ) so Stage 1, the tile passes, and

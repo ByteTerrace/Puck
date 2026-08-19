@@ -24,15 +24,31 @@ namespace Puck.Commands;
 /// share a group and each may name several hold pages); <see langword="null"/> declares none. Omitted from
 /// a saved document when <see langword="null"/>, so a document authored before this member existed round-trips
 /// byte-identical.</param>
+/// <param name="BindingBar">The player's on-screen binding-bar LOOK overrides (never bindings); <see langword="null"/>
+/// carries none, so the world-authored policy applies unmodified. Omitted from a saved document when
+/// <see langword="null"/>, so a document authored before this member existed round-trips byte-identical.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingProfileDocument(
     string Version,
     IReadOnlyList<BindingModifierDefinition> Modifiers,
     IReadOnlyList<BindingChordDefinition> Chords,
     IReadOnlyList<BindingContextDefinition>? Contexts = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindingWheelDefinition>? Wheels = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindingWheelDefinition>? Wheels = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindingBarPreferences? BindingBar = null
 ) {
     /// <summary>The schema version this engine build authors and accepts. A stored profile whose version differs is
     /// rejected by <see cref="BindingProfile.Compile"/> and reseeded from defaults.</summary>
     public const string CurrentVersion = "puck.bindings.v1";
 }
+/// <summary>A player's on-screen binding-bar LOOK preferences — presentation only, never a binding. Each field
+/// overrides the world-authored policy when set; <see langword="null"/> defers to it.</summary>
+/// <param name="HideUnbound">Overrides whether a slot with no bound act on its page renders at all.</param>
+/// <param name="Stacked">Overrides whether every authored bank renders (<see langword="true"/>) or only the active
+/// bank (<see langword="false"/>).</param>
+/// <param name="Scale">Overrides the authored layout's uniform cluster scale.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record BindingBarPreferences(
+    bool? HideUnbound = null,
+    bool? Stacked = null,
+    float? Scale = null
+);

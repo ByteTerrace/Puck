@@ -24,7 +24,7 @@ public sealed partial class WorldPopulation {
     private static void ClearDesignations(Entry entry) {
         Array.Fill(
             array: entry.Designations,
-            value: -1
+            value: WorldTargetDesignation.None
         );
         entry.DesignationRefusal = string.Empty;
     }
@@ -105,12 +105,12 @@ public sealed partial class WorldPopulation {
 
         return -1;
     }
-    private int[] NewDesignations() {
-        var values = new int[m_targets.Count];
+    private WorldTargetDesignation[] NewDesignations() {
+        var values = new WorldTargetDesignation[m_targets.Count];
 
         Array.Fill(
             array: values,
-            value: -1
+            value: WorldTargetDesignation.None
         );
         return values;
     }
@@ -177,7 +177,7 @@ public sealed partial class WorldPopulation {
     /// <param name="slot">The seat index (0-based).</param>
     /// <returns>A defensive copy of the slot's current designation register, or an empty array for an out-of-range
     /// slot.</returns>
-    public int[] CaptureDesignations(int slot) => ((((uint)slot) < m_entries.Length)
+    public WorldTargetDesignation[] CaptureDesignations(int slot) => ((((uint)slot) < m_entries.Length)
         ? [.. m_entries[slot].Designations]
         : []
     );
@@ -216,12 +216,17 @@ public sealed partial class WorldPopulation {
 
         for (var index = 0; (index < rows.Length); index++) {
             var register = m_targetRows[index];
-            var subject = entry.Designations[index];
-            var status = ((subject >= 0)
-                ? $"body:{subject}{(IsActive(index: subject)
+            var target = entry.Designations[index];
+            var status = (target.HasBody
+                ? $"body:{target.Index}{(IsActive(index: target.Index)
                     ? string.Empty
                     : "(inactive)")}"
-                : "none"
+                : (target.IsPoint
+                    ? string.Create(
+                        provider: System.Globalization.CultureInfo.InvariantCulture,
+                        handler: $"at:{((double)target.Point.X):0.###},{((double)target.Point.Y):0.###},{((double)target.Point.Z):0.###}"
+                    )
+                    : "none")
             );
             var effectiveRange = EffectiveTargetValue(
                 body: entry.Body,
@@ -254,10 +259,37 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Re-resolves a proposed body subject against one designation envelope.</summary>
     public bool DesignationWithinEnvelope(int sourceIndex, int targetIndex, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) {
-        var source = m_entries[sourceIndex].Body!;
         var target = m_entries[targetIndex].Body!;
+
+        return DesignationWithinEnvelope(
+            candidate: target.FixedPosition,
+            candidateLabel: $"body:{targetIndex}",
+            candidateOrientation: target.FixedOrientation,
+            halfAngleDegrees: halfAngleDegrees,
+            rangeValue: rangeValue,
+            reason: out reason,
+            register: register,
+            sourceIndex: sourceIndex
+        );
+    }
+    /// <summary>Re-resolves a proposed world-space point against one designation envelope.</summary>
+    public bool DesignationWithinEnvelope(int sourceIndex, in FixedVector3 point, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) =>
+        DesignationWithinEnvelope(
+            candidate: point,
+            candidateLabel: string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"at:{((double)point.X):0.###},{((double)point.Y):0.###},{((double)point.Z):0.###}"
+            ),
+            candidateOrientation: FixedQuaternion.Identity,
+            halfAngleDegrees: halfAngleDegrees,
+            rangeValue: rangeValue,
+            reason: out reason,
+            register: register,
+            sourceIndex: sourceIndex
+        );
+    private bool DesignationWithinEnvelope(int sourceIndex, in FixedVector3 candidate, string candidateLabel, in FixedQuaternion candidateOrientation, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) {
+        var source = m_entries[sourceIndex].Body!;
         var origin = source.FixedPosition;
-        var candidate = target.FixedPosition;
         var forward = source.FixedOrientation.Rotate(vector: LocalForward);
         var range = FixedQ4816.FromDouble(value: rangeValue);
         var minimumDot = FixedQ4816.FromDouble(value: Math.Cos(d: (halfAngleDegrees * (Math.PI / 180.0))));
@@ -270,11 +302,13 @@ public sealed partial class WorldPopulation {
             origin: in origin,
             range: range
         )) {
-            var distance = FixedQ4816.Sqrt(value: distanceSquared);
+            // The distance formats through double: FixedQ4816's own TryFormat admits only exact-expansion formats
+            // and refuses '0.###'.
+            var distance = ((double)FixedQ4816.Sqrt(value: distanceSquared));
 
             reason = string.Create(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"body:{targetIndex} is outside range/cone (distance={distance:0.###}, range={rangeValue:0.###}, halfAngle={halfAngleDegrees:0.###})"
+                handler: $"{candidateLabel} is outside range/cone (distance={distance:0.###}, range={rangeValue:0.###}, halfAngle={halfAngleDegrees:0.###})"
             );
             return false;
         }
@@ -284,10 +318,10 @@ public sealed partial class WorldPopulation {
             from: origin,
             fromOrientation: source.FixedOrientation,
             to: candidate,
-            toOrientation: target.FixedOrientation
+            toOrientation: candidateOrientation
         )
         ) {
-            reason = $"solid geometry blocks line of sight to body:{targetIndex}";
+            reason = $"solid geometry blocks line of sight to {candidateLabel}";
             return false;
         }
 
@@ -538,9 +572,9 @@ public sealed partial class WorldPopulation {
             m_entries[slot].CatalogRig = catalogRig;
         }
     }
-    /// <summary>Writes one already-validated body subject into a body's named register.</summary>
-    public void SetDesignation(int bodyIndex, int registerIndex, int subjectIndex) {
-        m_entries[bodyIndex].Designations[registerIndex] = subjectIndex;
+    /// <summary>Writes one already-validated target into a body's named register.</summary>
+    public void SetDesignation(int bodyIndex, int registerIndex, WorldTargetDesignation target) {
+        m_entries[bodyIndex].Designations[registerIndex] = target;
         m_entries[bodyIndex].DesignationRefusal = string.Empty;
     }
     /// <summary>Installs the committed mobility epoch on an already-admitted destination occupant.</summary>

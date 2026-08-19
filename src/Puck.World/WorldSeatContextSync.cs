@@ -34,13 +34,15 @@ internal static class WorldSeatContextSync {
         );
     }
 
-    /// <summary>Publishes roster and engagement state, and the resolved perception anchor, for every
+    /// <summary>Publishes roster, engagement, and layout state, and the resolved perception anchor, for every
     /// local seat.</summary>
     /// <param name="seatBindings">The per-seat binding resolver the states publish into.</param>
     /// <param name="roster">The client roster (the roster family's machine, and the seat→acting-principal map).</param>
     /// <param name="grants">The server grant table the engagement family and the anchor read the Control route from.</param>
     /// <param name="anchor">The per-seat perception anchor the resolved possession target publishes into.</param>
-    public static void Publish(WorldSeatBindings seatBindings, PlayerRoster roster, IWorldGrantsView grants, WorldPerceptionAnchor anchor) {
+    /// <param name="activeLayout">The window composer's active layout selection (window-wide, so every seat
+    /// publishes the same value) — an authored layout name, or <see cref="WorldViewComposer"/>'s <c>builtin</c>.</param>
+    public static void Publish(WorldSeatBindings seatBindings, PlayerRoster roster, IWorldGrantsView grants, WorldPerceptionAnchor anchor, string activeLayout) {
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
             var principal = roster.PrincipalOf(slot: slot);
             var route = grants.ControlRoute(principal: principal);
@@ -59,6 +61,11 @@ internal static class WorldSeatContextSync {
                 state: ((route is not null)
                 ? WorldContextFamilies.EngagementEngaged
                 : WorldContextFamilies.EngagementNone)
+            );
+            seatBindings.SetContextState(
+                family: WorldContextFamilies.Layout,
+                slot: slot,
+                state: activeLayout
             );
 
             // Possession means possession: a route targeting a BODY with capture ON swaps the seat's entire

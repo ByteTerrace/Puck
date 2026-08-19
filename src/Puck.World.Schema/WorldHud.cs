@@ -161,29 +161,18 @@ public enum WorldHudCursorRole : byte {
 /// <param name="SizePx">The drawn cursor's ring radius, pixels.</param>
 /// <param name="Role">The bare cursor's palette role; hover lights the accent tier regardless.</param>
 /// <param name="Visible">The drawn cursor's visibility condition, or <see langword="null"/> for always.</param>
-public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCursorRole Role, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
-    /// <summary>Gets the built-in default an unauthored row falls back to: a plaza-scale hover reach, a small ring,
-    /// the primary text hue.</summary>
-    public static WorldHudCursor Default { get; } = new(
-        HoverRadius: 64f,
-        Role: WorldHudCursorRole.TextPrimary,
-        SizePx: 7f
-    );
-}
+public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCursorRole Role, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null);
 /// <summary>The <c>hud</c> document section's defaults row (the <c>WorldMutation.SetHudDefaults</c> mutation
 /// target).</summary>
 /// <param name="Enabled">Whether the world-scope HUD panels render at all — a world-level kill switch independent of
 /// any individual panel's row (a diegetic reveal gate can flip this without editing every panel).</param>
-/// <param name="Cursor">The drawn pointer cursor's presentation policy, or <see langword="null"/> to fall back to
-/// <see cref="WorldHudCursor.Default"/> (the optional-section null-coalesce convention). Whole-row replace
-/// semantics apply: a <c>SetHudDefaults</c> authored without it clears any earlier authored policy back to the
-/// default.</param>
+/// <param name="Cursor">The drawn pointer cursor's presentation policy, or <see langword="null"/> for no drawn
+/// cursor at all — the engine draws no cursor of its own; the standard policy is AUTHORED, in
+/// <c>Assets/worlds/standard.world.json</c>. Whole-row replace semantics apply: a <c>SetHudDefaults</c> authored
+/// without it clears any earlier authored policy back to hidden.</param>
 /// <param name="Visible">The visibility condition every world-scope panel is gated by, beside its own, or
 /// <see langword="null"/> for always.</param>
-public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
-    /// <summary>Gets the built-in default: enabled, no authored panels (see <see cref="WorldHudSection.Default"/>).</summary>
-    public static WorldHudDefaults Default { get; } = new(Enabled: true);
-}
+public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null);
 /// <summary>The <c>hud</c> document section: the world-scope defaults plus the authored panel rows. A required section
 /// every document carries; an empty panel list draws nothing (the built-in default).</summary>
 /// <param name="Defaults">The section defaults.</param>
@@ -193,9 +182,11 @@ public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = nul
 public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<WorldHudPanel> Panels) {
     private readonly IReadOnlyList<WorldHudPanel> m_panels = (Panels ?? []);
 
-    /// <summary>Gets the built-in default: HUD enabled, no authored panels.</summary>
-    public static WorldHudSection Default { get; } = new(
-        Defaults: WorldHudDefaults.Default,
+    /// <summary>Gets the inert absence: HUD disabled, no cursor, no panels. The engine holds no HUD policy of its
+    /// own — the standard enabled-with-cursor row is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a
+    /// world inherits it by naming that document as its basis.</summary>
+    public static WorldHudSection Absent { get; } = new(
+        Defaults: new WorldHudDefaults(Enabled: false),
         Panels: []
     );
     /// <summary>Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason

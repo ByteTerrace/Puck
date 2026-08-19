@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Forge.Authoring;
 using Puck.Maths;
+using Puck.SignedDistance;
 
 namespace Puck.World.Server;
 
@@ -14,7 +15,7 @@ public static class WorldAdjacencyGeometry {
 
     private static bool IsWithinReach(WorldPlacement placement, WorldCreation creation, WorldFaceFrame frame, float overlapDepth) {
         foreach (var shape in (creation.Document.Shapes ?? [])) {
-            if (CreationGeometry.GetLocalBounds(type: shape.Type).IsUnbounded) {
+            if (SdfSolidGeometry.GetLocalBounds(type: shape.Type).IsUnbounded) {
                 return true;
             }
         }

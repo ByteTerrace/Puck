@@ -13,7 +13,7 @@
           "type": "boolean"
         },
         "cursor": {
-          "description": "The drawn pointer cursor\u0027s presentation policy, or null to fall back to Default (the optional-section null-coalesce convention). Whole-row replace semantics apply: a SetHudDefaults authored without it clears any earlier authored policy back to the default.",
+          "description": "The drawn pointer cursor\u0027s presentation policy, or null for no drawn cursor at all \u2014 the engine draws no cursor of its own; the standard policy is AUTHORED, in Assets/worlds/standard.world.json. Whole-row replace semantics apply: a SetHudDefaults authored without it clears any earlier authored policy back to hidden.",
           "type": [
             "object",
             "null"

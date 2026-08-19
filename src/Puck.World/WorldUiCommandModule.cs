@@ -107,9 +107,11 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
 
         return new CommandResult(Output: FormattableString.Invariant(formattable: $"[world.binding-bar p{player}: source {status.Source} authored {(authoring.Enabled
             ? "on"
+            : "off")} text {(authoring.Text
+            ? "on"
             : "off")} visible {((authoring.Visible is null)
             ? "always"
-            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} layout buttonSize {layout.ButtonSize:0.###} centerGap {layout.CenterGap:0.###} anchorOffsetY {layout.AnchorOffsetY:0.###} glyphOffsetRatio {layout.GlyphOffsetRatio:0.###} glyphSizeRatio {layout.GlyphSizeRatio:0.###} scale {layout.Scale:0.###}]"));
+            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layout buttonSize {layout.ButtonSize:0.###} centerGap {layout.CenterGap:0.###} anchorOffsetY {layout.AnchorOffsetY:0.###} glyphOffsetRatio {layout.GlyphOffsetRatio:0.###} glyphSizeRatio {layout.GlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
     }
 
     /// <inheritdoc/>
@@ -158,7 +160,7 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: BindingBarCommand,
-            description: "Reads or overrides one local seat's resolved on-screen binding bar: world.binding-bar [on|off|auto] [player], or world.binding-bar [player]. on/off force visibility; auto returns to authored enabled/rest behavior. The read-back reports the resolved world-or-identity policy, compiled rest ticks, current hidden state and reason, and every layout value. Player defaults to 1 (1..4).",
+            description: "Reads or overrides one local seat's resolved on-screen binding bar: world.binding-bar [on|off|auto] [player], or world.binding-bar [player]. on/off force visibility; auto returns to authored enabled/rest behavior. The read-back reports the resolved world-or-identity policy, its text policy (off = a purely pictographic bar: no letter badges, no page name, no chord hints), its authored slot/bank counts, the resolved (world-or-player) hideUnbound and stacked preferences, current hidden state and reason, and every layout value (scale reflects a player's own override when set). Player defaults to 1 (1..4).",
             handler: (_, args) => BindingBarHandler(
                 args: in args,
                 bindingBarControl: bindingBarControl

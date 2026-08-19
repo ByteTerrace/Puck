@@ -19,10 +19,21 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLink link, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     // The live analytic-vocabulary census, compiled by the same server path that materializes placement colliders.
+    //
+    // Names whether the world actually SOLVES against this vocabulary. A world that authors a field-selecting contact
+    // requirement stands on the SDF field instead, blend and all, and the analytic figures below then describe a
+    // vocabulary nothing is resolved against — a reading taken to answer "what am I standing on" that quietly
+    // describes the wrong surface. The census is still worth printing there (it is what the analytic path WOULD see,
+    // and the gap between the two is exactly what a blend contributes), but it is labelled for what it is.
     private CommandResult Census() {
         var census = server.Population.ContactCensus;
+        var field = WorldContactSelection.RequiresField(collision: server.Definition.Collision);
+        var provider = (field
+            ? $"field contact (requirements: {string.Join(separator: ", ", values: server.Definition.Collision.Requirements)}); analytic census NOT SOLVED AGAINST"
+            : "analytic contact; census"
+        );
 
-        return new CommandResult(Output: $"[world.contacts: analytic census {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
+        return new CommandResult(Output: $"[world.contacts: {provider} {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
     }
     private static string DescribeCollider(WorldCollider collider) {
         return collider switch {

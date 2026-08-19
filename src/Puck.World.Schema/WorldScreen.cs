@@ -246,7 +246,7 @@ public readonly record struct WorldScreenTranslationRow(string Channel, WorldPad
 /// through, which channel ordinals the route reaches, and how those channels translate to the target's pad image. The
 /// optional members each default to the inert/baked choice: no auto-boot, no gesture channel, every channel reached,
 /// and the engine's default translation (the two movement roles to the left stick — <c>MoveStrafe</c>/
-/// <c>MoveForward</c>, structural ordinals, never a channel name). The default names no gameplay channel: a
+/// <c>MoveAdvance</c>, structural ordinals, never a channel name). The default names no gameplay channel: a
 /// route whose machine needs a face button (or any other element) must author that row explicitly — see
 /// <c>Server.WorldEngagement.CompileTranslation</c>.</summary>
 /// <param name="Engageable">Whether a player may engage this screen.</param>

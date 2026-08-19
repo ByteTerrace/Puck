@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -8,29 +9,43 @@ namespace Puck.World;
 /// <param name="Override">The live visibility override, or <see langword="null"/> for authored behavior.</param>
 /// <param name="Hidden">Whether the bar is currently hidden.</param>
 /// <param name="Reason">Why the current visibility resolved.</param>
+/// <param name="EffectiveHideUnbound"><see cref="Authoring"/>'s <c>HideUnbound</c>, overridden by the seat's own
+/// stored <see cref="BindingBarPreferences.HideUnbound"/> when set.</param>
+/// <param name="Stacked">Whether every authored bank renders (<see langword="true"/>) or only the seat's active
+/// bank (<see langword="false"/>) — the seat's stored <see cref="BindingBarPreferences.Stacked"/>, defaulting to
+/// <see langword="true"/> (stacked, the authored look) when unset.</param>
+/// <param name="EffectiveScale"><see cref="Authoring"/>'s resolved layout scale, overridden by the seat's own
+/// stored <see cref="BindingBarPreferences.Scale"/> when set to a finite positive value.</param>
 internal readonly record struct WorldBindingBarStatus(
     WorldBindingBarAuthoring Authoring,
     string Source,
     bool? Override,
     bool Hidden,
-    string Reason
+    string Reason,
+    bool EffectiveHideUnbound,
+    bool Stacked,
+    float EffectiveScale
 );
 /// <summary>Resolves the world binding-bar floor with each seat identity's preference, its authored
-/// <see cref="WorldBindingBarAuthoring.Visible"/> condition, and the live override.</summary>
+/// <see cref="WorldBindingBarAuthoring.Visible"/> condition, the seat's own stored LOOK preferences
+/// (<see cref="BindingProfileDocument.BindingBar"/>), and the live override.</summary>
 internal sealed class WorldBindingBarControl {
+    private readonly WorldSeatBindings m_bindings;
     private readonly WorldClient m_client;
     private readonly WorldOverlayFacts m_facts;
     private readonly PlayerRoster m_roster;
     private readonly bool?[] m_visibilityOverrides = new bool?[PlayerRoster.MaxSlots];
 
     /// <summary>Initializes a binding-bar policy resolver.</summary>
-    public WorldBindingBarControl(WorldClient client, PlayerRoster roster, WorldOverlayFacts facts) {
+    public WorldBindingBarControl(WorldClient client, PlayerRoster roster, WorldOverlayFacts facts, WorldSeatBindings bindings) {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(bindings);
         m_client = client;
         m_roster = roster;
         m_facts = facts;
+        m_bindings = bindings;
     }
 
     private (WorldBindingBarAuthoring Authoring, string Source) ResolveAuthoring(int slot) {
@@ -42,7 +57,7 @@ internal sealed class WorldBindingBarControl {
             return (world, "world");
         }
 
-        return (WorldBindingBarAuthoring.Default, "default");
+        return (WorldBindingBarAuthoring.Absent, "default");
     }
 
     /// <summary>Sets or clears one seat's live visibility override.</summary>
@@ -90,12 +105,26 @@ internal sealed class WorldBindingBarControl {
             reason = "visible-false";
         }
 
+        var preferences = m_bindings.ProfileBindings(slot: slot)?.BindingBar;
+        var effectiveScale = authoring.ResolvedLayout.Scale;
+
+        if (
+            (preferences?.Scale is { } scale) &&
+            float.IsFinite(f: scale) &&
+            (scale > 0f)
+        ) {
+            effectiveScale = scale;
+        }
+
         return new WorldBindingBarStatus(
             Authoring: authoring,
+            EffectiveHideUnbound: (preferences?.HideUnbound ?? authoring.HideUnbound),
+            EffectiveScale: effectiveScale,
             Hidden: hidden,
             Override: liveOverride,
             Reason: reason,
-            Source: source
+            Source: source,
+            Stacked: (preferences?.Stacked ?? true)
         );
     }
 }

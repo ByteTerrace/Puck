@@ -120,7 +120,6 @@ public readonly record struct ViewRenderContext(
 /// </para>
 /// </summary>
 public sealed class ViewStack : IDisposable {
-
     private static readonly IReadOnlySet<int> EmptyScreenSet = new HashSet<int>();
 
     private bool m_disposed;

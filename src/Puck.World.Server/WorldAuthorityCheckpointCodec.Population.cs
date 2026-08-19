@@ -4,6 +4,19 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    private static void WriteTargetDesignation(WireWriter writer, WorldTargetDesignation target) {
+        writer.WriteInt32(value: target.Index);
+        writer.WriteFixedVector(value: target.Point);
+    }
+    private static WorldTargetDesignation ReadTargetDesignation(ref WireReader reader) {
+        var index = reader.ReadInt32();
+        var point = reader.ReadFixedVector();
+
+        return new WorldTargetDesignation(
+            Index: index,
+            Point: point
+        );
+    }
     private static void WritePopulationEntry(WireWriter writer, WorldPopulation.WorldPopulationEntryCheckpoint entry) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);
@@ -12,7 +25,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteArray(
             writer: writer,
             items: entry.Designations,
-            writeItem: static (w, v) => w.WriteInt32(value: v)
+            writeItem: WriteTargetDesignation
         );
         writer.WriteInt32(value: entry.Generation);
         writer.WriteBoolean(value: entry.IsAuthorityTransferred);
@@ -80,7 +93,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var designations = ReadArray(
             reader: ref reader,
             field: "population entry designations",
-            readItem: static (ref WireReader r) => r.ReadInt32()
+            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r)
         );
         var generation = reader.ReadInt32();
         var isAuthorityTransferred = reader.ReadBoolean();

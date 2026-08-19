@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Assets.Documents;
 using Puck.Commands;
@@ -9,12 +11,13 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The GENERAL document-row verb pair — <c>world.row.set</c>/<c>world.row.remove</c> — the ONE door every
-/// document section is authored through: a dotted DOCUMENT MEMBER PATH (the document's own
+/// The GENERAL document-row verb TRIO — <c>world.row.set</c>/<c>world.row.remove</c>/<c>world.row.step</c> — the ONE
+/// door every document section is authored through: a dotted DOCUMENT MEMBER PATH (the document's own
 /// camelCase JSON names, e.g. <c>kits</c>, <c>hud.panels</c>, <c>views.seatRig</c>) selects which
 /// <see cref="WorldMutation"/> a row's inline JSON composes into, closing over the same section table
-/// <c>puck schema</c> documents for payload shapes. An unknown path is refused BY NAME, enumerating every admissible
-/// sibling — never a silent no-op.
+/// <c>puck schema</c> documents for payload shapes; <c>world.row.step</c> addresses one FIELD a level deeper (see
+/// <see cref="WorldRowFieldStepper"/>) and applies a delta rather than a literal. An unknown path is refused BY NAME,
+/// enumerating every admissible sibling — never a silent no-op.
 /// </summary>
 /// <remarks>
 /// <para>ONE grammar exception: <c>properties.names</c> carries a BARE-NAME token, never JSON — the registry section
@@ -94,8 +97,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         return CommandResult.Error(output: $"[{verb}: unknown sequence '{args[1].ToString()}' — r1 | cycle]");
     }
     private static IReadOnlyDictionary<string, RowSection> BuildSections() => new Dictionary<string, RowSection>(comparer: StringComparer.Ordinal) {
-        // Keyed sections: set + remove.
+        // Keyed sections: set + remove + read (world.row.step's row lookup).
         ["kits"] = new RowSection(
+        RowType: typeof(WorldKit),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldKit,
             toMutation: static (principal, kit) => new WorldMutation.UpsertKit(
@@ -106,9 +110,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveKit(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldKit,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Kits
+        )
     ),
         ["cameras"] = new RowSection(
+        RowType: typeof(WorldCamera),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldCamera,
             toMutation: static (principal, camera) => new WorldMutation.UpsertCamera(
@@ -119,9 +129,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveCamera(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldCamera,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Cameras
+        )
     ),
         ["screens"] = new RowSection(
+        RowType: typeof(WorldScreen),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldScreen,
             toMutation: static (principal, screen) => new WorldMutation.UpsertScreen(
@@ -132,9 +148,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByIndex(remove: static (principal, index) => new WorldMutation.RemoveScreen(
             Index: index,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByIndex(
+            info: WorldJsonContext.Default.WorldScreen,
+            select: static server => server.Definition.Screens
+        )
     ),
         ["speakers"] = new RowSection(
+        RowType: typeof(WorldSpeaker),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSpeaker,
             toMutation: static (principal, speaker) => new WorldMutation.UpsertSpeaker(
@@ -145,9 +166,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveSpeaker(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldSpeaker,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Speakers
+        )
     ),
         ["placements"] = new RowSection(
+        RowType: typeof(WorldPlacement),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldPlacement,
             toMutation: static (principal, placement) => new WorldMutation.UpsertPlacement(
@@ -158,9 +185,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemovePlacement(
             Id: id,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldPlacement,
+            keyOf: static row => row.Id,
+            select: static server => server.Definition.Placements
+        )
     ),
         ["creations"] = new RowSection(
+        RowType: typeof(WorldCreation),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldCreation,
             toMutation: static (principal, creation) => new WorldMutation.UpsertCreation(
@@ -171,9 +204,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemoveCreation(
             Id: id,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldCreation,
+            keyOf: static row => row.Id,
+            select: static server => server.Definition.Creations
+        )
     ),
         ["tunes"] = new RowSection(
+        RowType: typeof(WorldTune),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldTune,
             toMutation: static (principal, tune) => new WorldMutation.UpsertTune(
@@ -184,9 +223,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemoveTune(
             Id: id,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldTune,
+            keyOf: static row => row.Id,
+            select: static server => server.Definition.Tunes
+        )
     ),
         ["patches"] = new RowSection(
+        RowType: typeof(WorldPatch),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldPatch,
             toMutation: static (principal, patch) => new WorldMutation.UpsertPatch(
@@ -197,9 +242,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemovePatch(
             Id: id,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldPatch,
+            keyOf: static row => row.Id,
+            select: static server => server.Definition.Patches
+        )
     ),
         ["links"] = new RowSection(
+        RowType: typeof(WorldScreenLink),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldScreenLink,
             toMutation: static (principal, screenLink) => new WorldMutation.UpsertScreenLink(
@@ -210,9 +261,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveScreenLink(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldScreenLink,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Links
+        )
     ),
         ["looks"] = new RowSection(
+        RowType: typeof(WorldLook),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldLook,
             toMutation: static (principal, look) => new WorldMutation.UpsertLook(
@@ -223,9 +280,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveLook(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldLook,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Looks
+        )
     ),
         ["addons"] = new RowSection(
+        RowType: typeof(WorldAddonRow),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldAddonRow,
             toMutation: static (principal, addon) => new WorldMutation.UpsertAddon(
@@ -236,9 +299,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveAddon(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldAddonRow,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Addons
+        )
     ),
         ["bindingOverlays"] = new RowSection(
+        RowType: typeof(WorldBindingOverlay),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldBindingOverlay,
             toMutation: static (principal, overlay) => new WorldMutation.UpsertBindingOverlay(
@@ -249,9 +318,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemoveBindingOverlay(
             Id: id,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldBindingOverlay,
+            keyOf: static row => row.Id,
+            select: static server => server.Definition.BindingOverlays
+        )
     ),
         ["state"] = new RowSection(
+        RowType: typeof(WorldStateRow),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldStateRow,
             toMutation: static (principal, row) => new WorldMutation.UpsertStateRow(
@@ -262,9 +337,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveStateRow(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldStateRow,
+            keyOf: static row => row.Name.ToString(),
+            select: static server => server.Definition.State
+        )
     ),
         ["rules"] = new RowSection(
+        RowType: typeof(WorldRule),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldRule,
             toMutation: static (principal, rule) => new WorldMutation.UpsertWorldRule(
@@ -275,9 +356,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByCellName(remove: static (principal, name) => new WorldMutation.RemoveWorldRule(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldRule,
+            keyOf: static row => row.Name.ToString(),
+            select: static server => (server.Definition.Rules ?? [])
+        )
     ),
         ["hud.panels"] = new RowSection(
+        RowType: typeof(WorldHudPanel),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldHudPanel,
             toMutation: static (principal, panel) => new WorldMutation.UpsertHudPanel(
@@ -288,9 +375,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, id) => new WorldMutation.RemoveHudPanel(
             Id: id,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldHudPanel,
+            keyOf: static row => row.Id,
+            select: static server => server.Definition.Hud.Panels
+        )
     ),
         ["views.layouts"] = new RowSection(
+        RowType: typeof(WorldViewLayout),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldViewLayout,
             toMutation: static (principal, layout) => new WorldMutation.UpsertViewLayout(
@@ -301,9 +394,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveViewLayout(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldViewLayout,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Views.Layouts
+        )
     ),
         ["groups.kinds"] = new RowSection(
+        RowType: typeof(WorldGroupKind),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldGroupKind,
             toMutation: static (principal, kind) => new WorldMutation.UpsertGroupKind(
@@ -314,9 +413,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveGroupKind(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldGroupKind,
+            keyOf: static row => row.Name,
+            select: static server => (server.Definition.Groups?.Kinds ?? [])
+        )
     ),
         ["interactions.interactions"] = new RowSection(
+        RowType: typeof(WorldInteraction),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldInteraction,
             toMutation: static (principal, interaction) => new WorldMutation.UpsertInteraction(
@@ -327,11 +432,17 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         Remove: RemoveByCellName(remove: static (principal, name) => new WorldMutation.RemoveInteraction(
             Name: name,
             Principal: principal
-        ))
+        )),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldInteraction,
+            keyOf: static row => row.Name.ToString(),
+            select: static server => (server.Definition.Interactions?.Interactions ?? [])
+        )
     ),
 
-        // Keyless sections: set only.
+        // Keyless sections: set only, plus read (world.row.step's row lookup — the whole section IS the row).
         ["motion"] = new RowSection(
+        RowType: typeof(WorldMotionDefaults),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldMotionDefaults,
             toMutation: static (principal, motion) => new WorldMutation.SetMotion(
@@ -339,9 +450,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Principal: principal
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldMotionDefaults,
+            select: static server => server.Definition.Motion
+        )
     ),
         ["render"] = new RowSection(
+        RowType: typeof(WorldRenderDefaults),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldRenderDefaults,
             toMutation: static (principal, render) => new WorldMutation.SetRenderDefaults(
@@ -349,9 +465,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Render: render
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldRenderDefaults,
+            select: static server => server.Definition.Render
+        )
     ),
         ["audio"] = new RowSection(
+        RowType: typeof(WorldAudioDefaults),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldAudioDefaults,
             toMutation: static (principal, audio) => new WorldMutation.SetAudioDefaults(
@@ -359,9 +480,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Principal: principal
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldAudioDefaults,
+            select: static server => server.Definition.Audio
+        )
     ),
         ["authoring"] = new RowSection(
+        RowType: typeof(WorldAuthoringDefaults),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldAuthoringDefaults,
             toMutation: static (principal, authoring) => new WorldMutation.SetAuthoringDefaults(
@@ -369,9 +495,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Principal: principal
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldAuthoringDefaults,
+            select: static server => server.Definition.Authoring
+        )
     ),
         ["collision"] = new RowSection(
+        RowType: typeof(WorldCollision),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldCollision,
             toMutation: static (principal, collision) => new WorldMutation.SetCollision(
@@ -379,9 +510,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Principal: principal
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldCollision,
+            select: static server => server.Definition.Collision
+        )
     ),
         ["host"] = new RowSection(
+        RowType: typeof(WorldHostDefaults),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldHostDefaults,
             toMutation: static (principal, host) => new WorldMutation.SetHostDefaults(
@@ -389,11 +525,16 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Principal: principal
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldHostDefaults,
+            select: static server => server.Definition.Host
+        )
     ),
         // Authored payload is SECONDS (WorldInputHoldAuthoring), matching the document field itself; compiled to the
         // mutation's ticks wire shape against the ADDRESSED row's own current rate.
         ["inputHold"] = new RowSection(
+        RowType: typeof(WorldInputHoldAuthoring),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldInputHoldAuthoring,
             toMutation: static (server, principal, authoring) => new WorldMutation.SetInputHold(
@@ -401,9 +542,16 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Settings: authoring.Compile(ratePerSecond: ((uint)server.Definition.SimulationRateHz))
             )
         ),
-        Remove: null
+        Remove: null,
+        // Reads the AUTHORED-seconds shape back — the same type Upsert parses, matching the section's own set/read
+        // symmetry (the compiled ticks form is a write-side-only derivation).
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldInputHoldAuthoring,
+            select: static server => server.Definition.InputHold
+        )
     ),
         ["hud.defaults"] = new RowSection(
+        RowType: typeof(WorldHudDefaults),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldHudDefaults,
             toMutation: static (principal, defaults) => new WorldMutation.SetHudDefaults(
@@ -411,9 +559,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Principal: principal
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldHudDefaults,
+            select: static server => server.Definition.Hud.Defaults
+        )
     ),
         ["spawnPoints"] = new RowSection(
+        RowType: typeof(WorldSpawnPoint[]),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSpawnPointArray,
             toMutation: static (principal, spawns) => new WorldMutation.SetSpawns(
@@ -421,11 +574,16 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Spawns: spawns
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldSpawnPointArray,
+            select: static server => [.. server.Definition.SpawnPoints]
+        )
     ),
         // The two views sub-rows RMW the CURRENT Views row (SetViewDefaults carries the whole section) — the same
         // read-modify-write world.row.set views.seatRig/world.view.look performed before folding into this table.
         ["views.seatRig"] = new RowSection(
+        RowType: typeof(WorldCameraRig),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldCameraRig,
             toMutation: static (server, principal, rig) => new WorldMutation.SetViewDefaults(
@@ -433,9 +591,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Views: (server.Definition.Views with { SeatRig = rig })
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldCameraRig,
+            select: static server => server.Definition.Views.SeatRig
+        )
     ),
         ["views.seatControl"] = new RowSection(
+        RowType: typeof(WorldSeatViewControl),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSeatViewControl,
             toMutation: static (server, principal, control) => new WorldMutation.SetViewDefaults(
@@ -443,9 +606,14 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Views: (server.Definition.Views with { SeatControl = control })
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldSeatViewControl,
+            select: static server => server.Definition.Views.SeatControl
+        )
     ),
         ["playerDefaults.seatLook"] = new RowSection(
+        RowType: typeof(WorldSeatLook),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSeatLook,
             toMutation: static (server, principal, look) => new WorldMutation.SetPlayerDefaults(
@@ -453,7 +621,11 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 Defaults: (server.Definition.PlayerDefaults with { SeatLookRaw = look })
             )
         ),
-        Remove: null
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldSeatLook,
+            select: static server => server.Definition.PlayerDefaults.SeatLook
+        )
     ),
     };
     // world.kits: name, program, arm, and the arm's key scalars — the census this section never had.
@@ -839,11 +1011,261 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             ),
             routing: CommandRouting.Simulation
         );
-    }
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "world.row.step",
+            description: "Steps ONE FIELD inside a document row or section by a delta — world.row.step <path> <delta>, one level deeper than world.row.set's own whole-row/whole-section path. <path> is <section>.<field> for a keyless section (render.sharpness) or <section>.<key>.<field> for a keyed one (creations.myrow.document.shapes[3].material) — the same section table world.row.set resolves against. Field-type semantics: a JSON number adds delta; a JSON boolean toggles on any nonzero delta; a named enum (the row's own C# member spelling) cycles forward/backward by delta's sign, wrapping. A vector, a nested object, or a plain (non-enum) string refuses by name. Bindable: a chord row carries the delta as a constant Axis1D value in place of the argument; the typed form takes an explicit numeric token. Buffers and applies through the SAME section Upsert world.row.set uses, at the tick boundary; a full-document revalidation still gates the result. Echoes [world.row.step: <path> <old> -> <new>].",
+            handler: (context, args) => {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.row.step"
+                )) {
+                    return error;
+                }
 
-    // One entry of the section table: a path's upsert (always present) and remove (null for a keyless section) —
-    // both given the addressed row's own WorldServer as their leading parameter.
-    private sealed record RowSection(Func<WorldServer, WorldPrincipal, string, RowOutcome> Upsert, Func<WorldServer, WorldPrincipal, string, RowOutcome>? Remove);
+                return HandleStep(
+                    args: args,
+                    context: context,
+                    server: server
+                );
+            },
+            routing: CommandRouting.Simulation,
+            valueKind: CommandValueKind.Axis1D
+        );
+    }
+    private CommandResult HandleStep(WorldServer server, CommandContext context, WireArgs args) {
+        if (args.Count is (< 1 or > 2)) {
+            return Usage(
+                form: "<path> <delta>",
+                verb: "world.row.step"
+            );
+        }
+
+        var path = args[0].ToString();
+        float delta;
+
+        if (args.Count == 2) {
+            if (!args.TryFloat(
+                index: 1,
+                value: out delta
+            )) {
+                return CommandResult.Error(output: $"[world.row.step: could not parse delta '{args[1].ToString()}' as a finite number]");
+            }
+        } else if (context.Origin == CommandOrigin.Binding) {
+            delta = context.Value.AsAxis1D;
+        } else {
+            return Usage(
+                form: "<path> <delta>",
+                verb: "world.row.step"
+            );
+        }
+
+        if (!TryResolveStepTarget(
+            error: out var resolveError,
+            fieldPath: out var fieldPath,
+            key: out var key,
+            path: path,
+            section: out var section
+        )) {
+            return CommandResult.Error(output: $"[world.row.step: {resolveError}]");
+        }
+
+        var read = section.Read(
+            server,
+            key
+        );
+
+        if (read.Error is { } readError) {
+            return CommandResult.Error(output: $"[world.row.step: {path}: {readError}]");
+        }
+
+        if (!WorldRowFieldStepper.TryStep(
+            delta: delta,
+            error: out var stepError,
+            fieldPath: fieldPath,
+            newText: out var newText,
+            oldText: out var oldText,
+            root: read.Row!,
+            rowType: section.RowType
+        )) {
+            return CommandResult.Error(output: $"[world.row.step: {path}: {stepError}]");
+        }
+
+        var principal = context.ActingPrincipal();
+        var outcome = section.Upsert(
+            server,
+            principal,
+            read.Row!.ToJsonString()
+        );
+
+        if (outcome.Error is { } upsertError) {
+            return CommandResult.Error(output: $"[world.row.step: {path}: {upsertError}]");
+        }
+
+        link.SubmitWorldMutation(mutation: outcome.Mutation!);
+
+        return new CommandResult(Output: $"[world.row.step: {path} {oldText} -> {newText}]");
+    }
+    // Resolves a step path against the SAME section table world.row.set uses, one level deeper: the longest
+    // section-key prefix (dot-boundary match) wins, so a dotted section name (hud.panels, views.seatRig) is never
+    // shadowed by a shorter one. A keyed section's remainder splits at its first dot into (rowKey, fieldPath); a
+    // keyless section's whole remainder IS the field path. An exact section-key match (no remainder) has no field to
+    // step — the whole row, not a field — and is refused the same as an unknown path.
+    private static bool TryResolveStepTarget(string path, out RowSection section, out string key, out string fieldPath, out string? error) {
+        section = null!;
+        key = string.Empty;
+        fieldPath = string.Empty;
+
+        string? bestKey = null;
+        RowSection? best = null;
+
+        foreach (var (candidateKey, candidateSection) in s_sections) {
+            if (string.Equals(
+                a: path,
+                b: candidateKey,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                continue;
+            }
+
+            var prefix = (candidateKey + ".");
+
+            if (
+                !path.StartsWith(
+                value: prefix,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+                ((bestKey is not null) && (candidateKey.Length <= bestKey.Length))
+            ) {
+                continue;
+            }
+
+            bestKey = candidateKey;
+            best = candidateSection;
+        }
+
+        if (
+            (bestKey is null) ||
+            (best is null)
+        ) {
+            error = UnknownStepPath(path: path);
+
+            return false;
+        }
+
+        var remainder = path[(bestKey.Length + 1)..];
+
+        if (best.Remove is null) {
+            if (remainder.Length == 0) {
+                error = $"'{path}': no field to step — a bare section path steps nothing";
+
+                return false;
+            }
+
+            section = best;
+            fieldPath = remainder;
+            error = null;
+
+            return true;
+        }
+
+        var dot = remainder.IndexOf(value: '.');
+
+        if (
+            (dot < 0) ||
+            (dot == 0) ||
+            (dot == (remainder.Length - 1))
+        ) {
+            error = $"'{path}': a keyed section needs a row key and a field — {bestKey}.<key>.<field>";
+
+            return false;
+        }
+
+        section = best;
+        key = remainder[..dot];
+        fieldPath = remainder[(dot + 1)..];
+        error = null;
+
+        return true;
+    }
+    // Every admissible step section, sorted for a stable, greppable refusal — properties.names is NOT included
+    // (it is a bare-name registry toggle, not a document row a field lives inside).
+    private static string UnknownStepPath(string path) {
+        var admissible = string.Join(
+            separator: ", ",
+            values: s_sections.Keys.OrderBy(
+                keySelector: static name => name,
+                comparer: StringComparer.Ordinal
+            )
+        );
+
+        return $"unknown path '{path}' — {admissible}";
+    }
+    // The keyless-section reader: the whole row IS the section, read fresh off the live definition.
+    private static Func<WorldServer, string, RowReadOutcome> ReadRow<T>(JsonTypeInfo<T> info, Func<WorldServer, T> select) {
+        return (server, _) => ToReadOutcome(node: JsonSerializer.SerializeToNode(
+            value: select(server),
+            jsonTypeInfo: info
+        ));
+    }
+    // The keyed-section reader: a linear scan by the row's own stable key text (every keyed section's key type —
+    // string, DocumentIdentifier, WorldCellName — round-trips through ToString() the same way its Remove delegate's
+    // plain-string key already does).
+    private static Func<WorldServer, string, RowReadOutcome> ReadRowByKey<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select, Func<T, string> keyOf) {
+        return (server, key) => {
+            foreach (var row in select(server)) {
+                if (string.Equals(
+                    a: keyOf(row),
+                    b: key,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return ToReadOutcome(node: JsonSerializer.SerializeToNode(
+                        value: row,
+                        jsonTypeInfo: info
+                    ));
+                }
+            }
+
+            return RowReadOutcome.Fail(error: $"no row '{key}'");
+        };
+    }
+    // The one section (screens) keyed by its own array POSITION rather than a stable name.
+    private static Func<WorldServer, string, RowReadOutcome> ReadRowByIndex<T>(JsonTypeInfo<T> info, Func<WorldServer, IReadOnlyList<T>> select) {
+        return (server, key) => {
+            if (!int.TryParse(
+                s: key,
+                style: NumberStyles.Integer,
+                provider: CultureInfo.InvariantCulture,
+                result: out var index
+            )) {
+                return RowReadOutcome.Fail(error: $"bad index '{key}' — an integer");
+            }
+
+            var rows = select(server);
+
+            if (((uint)index) >= ((uint)rows.Count)) {
+                return RowReadOutcome.Fail(error: $"index {index} out of range (0..{(rows.Count - 1)})");
+            }
+
+            return ToReadOutcome(node: JsonSerializer.SerializeToNode(
+                value: rows[index],
+                jsonTypeInfo: info
+            ));
+        };
+    }
+    private static RowReadOutcome ToReadOutcome(JsonNode? node) => ((node is null)
+        ? RowReadOutcome.Fail(error: "serialized to null")
+        : RowReadOutcome.Ok(row: node)
+    );
+
+    // One entry of the section table: a path's upsert (always present), remove (null for a keyless section), and
+    // read (world.row.step's row lookup — the whole row for a keyed section, the whole section for a keyless one) —
+    // each given the addressed row's own WorldServer as their leading parameter. RowType is the row's own CLR type
+    // (typeof(T), the SAME T every other member closes over) — the reflection root WorldRowFieldStepper walks an
+    // enum leaf's vocabulary through, since a JsonNode carries no type of its own.
+    private sealed record RowSection(Func<WorldServer, WorldPrincipal, string, RowOutcome> Upsert, Func<WorldServer, WorldPrincipal, string, RowOutcome>? Remove, Func<WorldServer, string, RowReadOutcome> Read, Type RowType);
     // A parsed-and-built mutation, or the reason building one failed — the ONE outcome shape every section entry
     // returns, so the two verb handlers stay generic over which section answered.
     private readonly record struct RowOutcome(WorldMutation? Mutation, string? Error) {
@@ -854,6 +1276,18 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         public static RowOutcome Ok(WorldMutation mutation) => new(
             Error: null,
             Mutation: mutation
+        );
+    }
+    // The row-read outcome world.row.step's lookup answers with — the row's live JSON node, or the reason none
+    // resolved (no such key, a malformed index).
+    private readonly record struct RowReadOutcome(JsonNode? Row, string? Error) {
+        public static RowReadOutcome Fail(string error) => new(
+            Error: error,
+            Row: null
+        );
+        public static RowReadOutcome Ok(JsonNode row) => new(
+            Error: null,
+            Row: row
         );
     }
 }

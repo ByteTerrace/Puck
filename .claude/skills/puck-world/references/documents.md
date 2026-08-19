@@ -120,11 +120,13 @@ mutates them in session and no grant subject names them:
   a placement face's own `WorldPlacementPortal` facet falls back to when it
   authors no `Travel`; a null section resolves every facet to `Body`.
 - **`Simulation`** (`WorldSimulationDefaults`, `WorldDefinition.cs`) — one
-  field, `RateHz`, the authoritative server's fixed step rate in Hz. Read
-  through `WorldDefinition.SimulationRateHz` (`Simulation?.RateHz ??
-  WorldSimulationDefaults.DefaultRateHz`, 240) — never `Simulation` directly,
-  since every consumer wants the resolved value, not the presence/absence of
-  the section. MUST be a positive divisor of
+  field, `RateHz` (required in an authored section), the authoritative
+  server's fixed step rate in Hz. Read through
+  `WorldDefinition.SimulationRateHz` (`Simulation?.RateHz ?? 0` — absence is
+  a rate-0 resident world; the standard 240 Hz is authored in
+  `standard.world.json`) — never `Simulation` directly, since every consumer
+  wants the resolved value, not the presence/absence of
+  the section. MUST be 0 or a positive divisor of
   `Puck.Maths.FixedTickConversion.TicksPerSecond` (50400) exactly, refused
   by `WorldDefinitionValidator.ValidateSimulation` otherwise (naming the
   nearest valid rates). Boot-time only, deliberately: nothing in this codebase
@@ -551,6 +553,22 @@ and `Puck.World.Server`'s `WorldStorageDocumentSource` resolves basis members ag
 owned worlds share a basis. Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
+**`standard.world.json` — the standard library, not a world.** The engine ships
+no content default: `WorldDefaultBindings` went first
+(its content is `default.world.json`), and `WorldChannelDefaults.Standard` and
+`WorldViewDefaults.Default` followed — the standard movement channels and the
+standard chase rig are AUTHORED, in `standard.world.json`, beside the bindings,
+kits, body-motion programs and state rows it already carried. Absent now means
+absent: `channels` resolves to NONE (a kit whose motion program claims
+`MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
+and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
+property non-null between parse and validation which the validator refuses for
+any document whose `population.capacity` is nonzero — the same derived refusal
+`kits` carries, so a seatless document may still author neither. A world takes
+the standard set by naming `standard.world.json` as its `basis`;
+`null.world.json` does, authoring only its own `layouts` and
+`seatControl.swapRate` delta over it.
+
 **Kit motion model (`WorldKit.Motion`, a `WorldMotionModel` row).** A kit
 declares WHICH motion model it advances on, alongside `BodyMotionProgram`
 (which operations run each tick) — a `$type`-discriminated union
@@ -591,7 +609,7 @@ its own row (Vehicle contributes `BoostChannel` to `DeclaredSprintChannel`
 but has no `MoveFrame` of its own, so `DeclaredMoveFrame` defaults to
 `Heading` for it). `MoveFrame` (`MotionMoveFrame.Heading` default / `.World`) and
 `FacingSnap` — `Heading` is tank controls (the historical default, every
-kit that never sets this field); `World` treats `MoveForward`/`MoveStrafe`
+kit that never sets this field); `World` treats `MoveAdvance`/`MoveStrafe`
 as ALREADY-WORLD-FRAME axes (the seat's client resolves its camera yaw into
 the submitted intent BEFORE the wire — determinism: the sim never reads a
 camera pose) and, with `FacingSnap` on, snaps the body's facing to
@@ -933,12 +951,71 @@ search/replace. The standard profile demonstrates this with
 `state.bindingGroups.defaultActionGroup`.
 
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
-for the on-screen mapping bar. Null resolves to `WorldBindingBarAuthoring.Default`
-(enabled, always visible, reference layout). The first world row supplies the
-world floor; the selected identity's own first row may replace it for that seat,
+for the on-screen mapping bar. Absence anywhere in the resolved chain (no
+identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
+bar draws; there is no baked-in C# look any more (the defaults-to-document
+conversion: `standard.world.json` now AUTHORS the values that used to be the
+`WorldBindingBarLayout.Default` static). The first world row supplies the world
+floor; the selected identity's own first row may replace it for that seat,
 matching the existing first-row binding-layer consumer in `WorldIdentity`.
 `world.binding-bar [on|off|auto] [player]` reads the resolved policy and controls
 its live visibility override.
+
+`bindingBar.slotSet` (required, non-empty) names the physical buttons the bar
+shows, in authored order — every name validated by exact (case-sensitive) match
+against the full `Puck.Input.Devices.GamepadButtons` catalog
+(`GamepadButtonVocabularyHook`, the `Puck.Input`-vocabulary seam Schema reaches
+the same way it reaches command/channel vocabulary), refusing an unknown name by
+it, a duplicate by index, and the whole list past
+`WorldBindingBarCapacity.MaxSlots` (23, the catalog's own declared-flag count —
+duplicates make the ceiling practically unreachable via valid authoring, which
+is the honest state, not a bug). The classic twelve (`BindingBarLayout.SlotButtons`)
+render in their fixed compass-diamond positions regardless of authored order;
+`Back`/`Guide`/`Start` render as a fixed three-slot row above the anchor, left to
+right in that real-controller order regardless of authored order; every other
+name (Touchpad, Mute, the grips, …) renders in a row further above, left to
+right in AUTHORED order — `BindingBarLayout.Categorize`/`Place`'s documented
+placement rule.
+
+`bindingBar.banks` (required, 1..`WorldBindingBarCapacity.MaxBanks` = 5 — the
+WoW-addon original's five chord states: resting/LT/RT/LT>RT/RT>LT) is a keyed
+list of `(id, pageId, offsetX, offsetY, alpha, activeAlpha?)` rows: each bank
+renders the WHOLE authored `slotSet` against its OWN named page (a
+`BindingPageDefinition.Id` — validated to exist somewhere in the COMPOSED
+binding profile, checked after `BindingProfile.Compile` succeeds, since only the
+whole overlay stack's result can answer that), displaced by its own 2D offset
+(region-height units, y-down, the same unit `WorldBindingBarLayout`'s lengths
+use) from the bar's shared anchor, at its authored `alpha` — or `activeAlpha`
+(default 1.0) when that bank's page is the seat's CURRENTLY active one. A
+player's own `identity.bindings`-stored `BindingProfileDocument.BindingBar`
+(`Puck.Commands.BindingBarPreferences`: `hideUnbound`/`stacked`/`scale`, all
+nullable, LOOK only — never a binding) overrides the world's `hideUnbound` and
+adds a `stacked` toggle (render every bank vs. only the seat's active one — falling
+back to every bank when none of them actually names the active page, rather than
+drawing nothing) and a `scale` override, resolved in `WorldBindingBarControl.Status`.
+
+`bindingBar.text` (default `true`) is the bar's ATLAS-TEXT switch: `false` drops
+every text run the bar writes — the letter badges (`LB`/`RB`, `LT`/`RT`,
+`LS`/`RS`, the menu trio, the exotics — the glyphs `OverlayGamepadGlyphs.BadgeLabel`
+routes to the shared atlas), the active page's name under the modifier pips, and
+the chord-hint lines above them — leaving a purely pictographic bar: the plates,
+the PROCEDURAL badge glyphs (the d-pad arrows and the face-position diamonds),
+the bound actions' icons, and the pips all still draw. The policy resolves ONCE
+per seat in `WorldOverlayFeed.Tick` and shapes what it publishes (a suppressed
+badge is `OverlayGlyphId.None`, a suppressed label the empty string, suppressed
+hints an empty span — each already a case `BindingBarWriter` draws nothing for),
+so the writer carries no text policy of its own. `standard.world.json` authors
+`"text": false`; `null.world.json` keeps the text (its showcase banks name their
+page).
+
+Every rendered slot's `Pressed` state reflects the PHYSICAL button's live carry
+(`BindingBarSeatComposer.IsPhysicallyPressed`, resolved once from the seat's
+ACTIVE page view and reused across every bank showing that button — a button's
+momentary press state does not depend on which bank/page is drawing it). Glyph
+resolution stays family-agnostic by design (`OverlayGamepadGlyphs.Resolve`
+ignores its `family` parameter): no per-family (Switch/Xbox/DualSense) glyph
+art exists today, so the `family` seam is threaded through end to end and
+falls back to the neutral procedural/lettered glyphs everywhere.
 
 **Overlay visibility (`visible`).** Every overlay element — a `hud.panels` row, a
 seat's player-scope panel, `hud.defaults` (the gate over every world panel),
@@ -947,7 +1024,8 @@ over per-seat presentation facts (`OverlayPredicate` / `OverlayFact`,
 `WorldOverlayVisibility.cs`; evaluated by `WorldOverlayFacts`): `now {fact}`,
 `recently {fact, windowSeconds}`, `all`, `any`, `not`. Facts: `SeatInput` (a
 routed signal this tick), `PointerMotion`, `WheelOpen`, `ConsoleOpen`,
-`EditorActive`. Absent = always visible. `{ "$type": "recently", "fact":
+`SeatFlying` (the seat's fly camera application is active — `WorldSeatFlyRig.IsFlying`).
+Absent = always visible. `{ "$type": "recently", "fact":
 "SeatInput", "windowSeconds": 3 }` hides an element three seconds after the
 seat's last input and shows it on the next; a world-scope panel reads a fact as
 true when it holds for any joined local seat. Windows compile through the world's
@@ -960,21 +1038,33 @@ PLACE, new keys append, so precedence order is authored primarily by the
 layer that ships the vocabulary. The seat's ACTIVE group derives as: first
 matching context row's group (document order) → the seat's requested group
 (`WorldSeatBindings.SetActiveGroup`, the mode pointer) → the profile default.
-Families are a closed engine registry (`WorldContextFamilies` — a family is
-admitted only as the output of one per-seat single-valued state machine):
-`roster` publishes `unjoined|claimed|pending|active`, `engagement` publishes
-`engaged|none` (a loopback read over the grant table's Control route, synced
-once at post-build wiring and every tick post-step via
-`WorldSeatContextSync.Publish`). Compile refuses a malformed/duplicate row or
+A family is one of three kinds: a BUILT-IN engine family
+(`WorldContextFamilies` — the output of one per-seat single-valued state
+machine): `roster` publishes `unjoined|claimed|pending|active`, `engagement`
+publishes `engaged|none` (a loopback read over the grant table's Control
+route, synced once at post-build wiring and every tick post-step via
+`WorldSeatContextSync.Publish`), and `layout` publishes the window composer's
+active layout selection (an authored `views.layouts` name, or `builtin`) — an
+OPEN-states family (`WorldContextFamilies.IsOpenStates`): any state token is
+admitted, and a token matching no authored layout simply never matches; a
+`state:<row>` family (`WorldStateBindingContext`) reading the routed world's
+scalar/keyed state; or an AUTHORED `seatModes` family (`WorldSeatModeFamily`,
+document top-level `seatModes`) — a world-declared name plus its admitted
+states, flipped by `player.mode <family> <state> [seat]` and validated
+strictly (unknown states refused, the name may not collide with a built-in
+family or the `state:` prefix). A state whose `target` is `"camera"` diverts
+the seat's own body intent to `player.control`'s idle contract and drives the
+world-authored `views.flyRig` from the seat's channels instead
+(`WorldSeatFlyRig`). Compile refuses a malformed/duplicate row or
 an undeclared group; the vocabulary gate refuses an unadmitted family/state —
 all by row. `player.bindings` leads with the derivation echo:
 `group=<active> (<step>)`, per-family `<family>=<state>→<group>
 (wins)|(shadowed)|(no row)`, and `requested=<group>` marked `(shadowed)` when
 a row overrides it — a matching row that lost to an earlier row is reported,
-never silent. No shipped world authors a `contexts` row today (the demo row
-that once lived in the retired `kart-remap` scaffold has no surviving
-successor); the shape is `{family, state, group}`, e.g.
-`{engagement, engaged, engaged}` onto an `engaged` group.
+never silent. `null.world.json` authors the shipped example: a
+`{layout, rts, rts}` row flips the seat onto a wheel-only `rts` group while
+its RTS layout override is active. Every group needs a resting (empty-chord)
+page — a blank-slate group authors one with an empty `entries` list.
 
 **Wheel rows.** `puck.bindings.v1` also carries an optional `wheels` section
 (`BindingWheelDefinition`: `{id, group, holdPages, rings, style}`). `id` is

@@ -156,7 +156,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: "ground",
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: new Vector3(x: scale, y: 0.1f, z: scale),

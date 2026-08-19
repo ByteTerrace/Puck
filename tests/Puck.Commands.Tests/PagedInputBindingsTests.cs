@@ -94,13 +94,18 @@ public sealed class PagedInputBindingsTests {
 
         Assert.Equal(expected: CommandPhase.Started, actual: pulse.Phase);
         Assert.Equal(expected: CommandOrigin.Binding, actual: pulse.Origin);
-        Assert.Null(@object: pulse.Source);
+        // A sequence activator has no ONE physical source to name — it is two presses — so the edge carries the
+        // synthesized per-destination identity every binding-origin edge carries (BindingSourceIdentity). What the
+        // tap actually depends on is that its release addresses the SAME identity: a different one on the release
+        // edge would leave the destination's held contribution latched with nothing left to clear it.
+        Assert.NotNull(@object: pulse.Source);
         Assert.True(condition: pulse.Dispatch);
         Assert.False(condition: router.IsCommandHeld(command: ActionCommand, slot: 0));
 
         var release = Assert.Single(collection: Assert.Single(collection: router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
 
         Assert.Equal(expected: CommandPhase.Completed, actual: release.Phase);
+        Assert.Equal(expected: pulse.Source, actual: release.Source);
         Assert.False(condition: release.Dispatch);
         Assert.Empty(collection: router.SnapshotForTick(tick: 4UL, windowEndTick: ulong.MaxValue).Lanes);
     }

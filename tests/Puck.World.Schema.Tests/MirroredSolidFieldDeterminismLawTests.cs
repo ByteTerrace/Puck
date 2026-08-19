@@ -16,7 +16,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: "floor",
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: new Vector3(x: 24f, y: 0.1f, z: 24f),
@@ -76,9 +76,9 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
     public void AxiallyScaledCylinderBakesIntoMetricShapeDimensions() {
         var builder = NewMaterialBuilder(material: out var material);
 
-        _ = CreationGeometry.AppendScaledPrimitive(
+        _ = SdfSolidGeometry.AppendScaledPrimitive(
             chain: builder,
-            type: AvatarPrimitive.Cylinder,
+            type: SdfSolidPrimitive.Cylinder,
             scale: new Vector3(x: 0.4f, y: 1.6f, z: 0.4f),
             material: material
         );
@@ -120,7 +120,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: new Vector3(x: 1f, y: 2f, z: 3f),
             Rotation: Quaternion.Identity,
             Scale: Vector3.One,
@@ -166,7 +166,7 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: new Vector3(x: 1.25f, y: -0.75f, z: 2.5f),
             Rotation: Quaternion.Normalize(value: new Quaternion(w: 0.8f, x: 0.2f, y: -0.3f, z: 0.4f)),
             Scale: Vector3.One,

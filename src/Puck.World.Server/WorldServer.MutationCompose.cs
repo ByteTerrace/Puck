@@ -460,13 +460,13 @@ public sealed partial class WorldServer {
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
     private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey) {
         if (!TryComposeCore(
-            current: current,
-            mutation: mutation,
-            tick: tick,
-            instanceIdentity: instanceIdentity,
             candidate: out candidate,
+            current: current,
+            evictedKey: out evictedKey,
+            instanceIdentity: instanceIdentity,
+            mutation: mutation,
             reason: out reason,
-            evictedKey: out evictedKey
+            tick: tick
         )) {
             return false;
         }
@@ -489,7 +489,6 @@ public sealed partial class WorldServer {
             )
         );
     }
-
     private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey) {
         reason = string.Empty;
         evictedKey = null;

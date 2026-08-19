@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.SignedDistance.Queries;
 
 /// <summary>

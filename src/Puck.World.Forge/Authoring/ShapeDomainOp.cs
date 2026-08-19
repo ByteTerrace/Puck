@@ -6,14 +6,15 @@ using Puck.SignedDistance;
 namespace Puck.Forge.Authoring;
 
 /// <summary>
-/// One SDF VM domain operator authored on a <see cref="ShapeDocument"/>, applied in CREATION space — after the
-/// creation/placement frame chain (origin/rotation/scale) and BEFORE the shape's own translate/rotate/scale, so every
-/// entry in <see cref="ShapeDocument.Domain"/> shares one space regardless of kind. This is the SDF VM's own domain
-/// operator family (<see cref="SdfProgramBuilder"/>'s <c>SymmetryPlane</c>/<c>RepeatLimited</c>/<c>RepeatPolar</c>/
-/// <c>WallpaperFold</c>) exposed as document data — a `$type`-discriminated ordered list — rather than one-off
-/// boolean/record flags per capability (the retired <c>ShapeDocument.Mirror</c> and the standalone
-/// <c>ShapeDocument.Wallpaper</c> member it replaces).
+/// One domain operator authored on a <see cref="ShapeDocument"/>, applied in creation space — after the
+/// creation/placement frame chain (origin/rotation/scale) and before the shape's own translate/rotate/scale, so every
+/// entry in <see cref="ShapeDocument.Domain"/> shares one space regardless of kind. The wire form of
+/// <see cref="SdfDomainOp"/>: a <c>$type</c>-discriminated ordered list whose optional members
+/// <see cref="ShapeDomainOps.ToDomainOps"/> resolves.
 /// </summary>
+/// <remarks>The render path takes these as point folds; the contact paths take them as the rigid copies
+/// <see cref="SdfDomainExpansion"/> derives, so collision matches render for every op that expands. An op that does
+/// not expand is refused on a solid placement by the world validator, naming it.</remarks>
 [JsonDerivedType(typeof(Symmetry), typeDiscriminator: "symmetry")]
 [JsonDerivedType(typeof(Repeat), typeDiscriminator: "repeat")]
 [JsonDerivedType(typeof(Polar), typeDiscriminator: "polar")]
@@ -23,17 +24,17 @@ public abstract record ShapeDomainOp {
     private ShapeDomainOp() {
     }
 
-    /// <summary>Reflection fold across a plane — mirrors <see cref="SdfProgramBuilder.SymmetryPlane"/>. One authored
-    /// half repeats mirror-imaged across the plane; an isometry, so BOTH render and the fixed-point solid field apply
-    /// it (collision matches render).</summary>
+    /// <summary>Reflection fold across a plane — <see cref="SdfDomainOp.Symmetry"/>. One authored half repeats
+    /// mirror-imaged across the plane.</summary>
     /// <param name="Normal">The plane normal, in the shape's creation-space frame (normalized at canonicalization;
     /// a zero/non-finite normal falls back to <see cref="Vector3.UnitX"/> — the retired <c>Mirror: true</c>
     /// flag's exact fold).</param>
     /// <param name="Offset">The plane's signed offset along <paramref name="Normal"/> (null = 0, through the
     /// creation origin).</param>
     public sealed record Symmetry(DocumentVector3 Normal, float? Offset = null) : ShapeDomainOp;
-    /// <summary>Bounded linear domain repeat — mirrors <see cref="SdfProgramBuilder.RepeatLimited"/>. An isometry, so
-    /// BOTH render and the fixed-point solid field apply it.</summary>
+    /// <summary>Bounded linear domain repeat — <see cref="SdfDomainOp.Repeat"/>. Expands for contact only when the
+    /// limit is a whole number within the copy budget; an absent limit is <see cref="Repeat.UnboundedLimit"/> and does
+    /// not expand.</summary>
     /// <param name="Spacing">The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the
     /// builder's own floor).</param>
     /// <param name="Limit">The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null =
@@ -42,17 +43,15 @@ public abstract record ShapeDomainOp {
         /// <summary>The per-axis repeat-cell limit an absent <see cref="Limit"/> means.</summary>
         public const float UnboundedLimit = 1000000f;
     }
-    /// <summary>Angular domain repeat — mirrors <see cref="SdfProgramBuilder.RepeatPolar"/>. RENDER ONLY: the
-    /// fixed-point solid field skips it — a solid placement authoring one gets its UNFOLDED (single-sector) geometry
-    /// for contact, since the field evaluator's warp-free excluded-op rule has no fixed-point spelling for it.</summary>
+    /// <summary>Angular domain repeat — <see cref="SdfDomainOp.Polar"/>. Its sectors expand to one rigid copy each,
+    /// so contact carries the full ring.</summary>
     /// <param name="Count">The sector count around the axis (clamped >= 1).</param>
     /// <param name="Axis">The rotation axis (null = Y, the XZ ground plane).</param>
     /// <param name="Mirror">Whether adjacent sectors mirror across their shared bisector (null = false).</param>
     /// <param name="MaterialStride">The per-sector palette stride (null = 0, geometric only).</param>
     public sealed record Polar(int Count, SdfPolarAxis? Axis = null, bool? Mirror = null, int? MaterialStride = null) : ShapeDomainOp;
-    /// <summary>Wallpaper-group lattice fold — mirrors <see cref="SdfProgramBuilder.WallpaperFold"/>. RENDER ONLY:
-    /// the fixed-point solid field skips it — a solid placement authoring one gets its UNFOLDED geometry for contact,
-    /// the same render-only posture the retired standalone <c>ShapeDocument.Wallpaper</c> member always carried.</summary>
+    /// <summary>Wallpaper-group lattice fold — <see cref="SdfDomainOp.Wallpaper"/>. Render only: it has no rigid-copy
+    /// expansion, so a solid placement carrying one is refused by name at validation.</summary>
     /// <param name="Group">The wallpaper group.</param>
     /// <param name="Cell">The lattice cell extents in the fold plane, creation units.</param>
     /// <param name="Limit">The repeat-cell limit per plane axis (null = <see cref="UnboundedLimit"/> per axis).</param>
@@ -72,10 +71,12 @@ public abstract record ShapeDomainOp {
     }
 }
 /// <summary>
-/// Applies a shape's ordered <see cref="ShapeDomainOp"/> list to an <see cref="SdfProgramBuilder"/> chain — the ONE
-/// place every emission path (the static placement stamper, the animated stamp pool, the fixed-point solid field)
-/// reaches the SDF VM's domain-operator family from document data, so the four ops' argument mapping is written once.
+/// Maps a shape's authored <see cref="ShapeDomainOp"/> list onto the SDF VM's own <see cref="SdfDomainOp"/> vocabulary
+/// — the one place the document family's optional-member defaults are resolved, so no emission path decides them
+/// twice.
 /// </summary>
+/// <remarks>Every meaning past this boundary belongs to <see cref="SdfDomainOps"/> (the fold) and
+/// <see cref="SdfDomainExpansion"/> (the copies); this type only reads the document.</remarks>
 public static class ShapeDomainOps {
     /// <summary>A worst-case domain list — <see cref="ShapeDocument.MaxDomainOps"/> symmetry entries — for capacity
     /// probes: every domain op costs exactly one <c>SdfInstruction</c> regardless of kind, so probing with any single
@@ -91,72 +92,29 @@ public static class ShapeDomainOps {
 
         return probe;
     }
-
-    /// <summary>Applies every op in <paramref name="domain"/>, in authored order — the full family (render path).</summary>
-    /// <param name="chain">The builder chain, already advanced past the creation/placement frame prefix.</param>
-    /// <param name="domain">The shape's domain ops, or null/empty for no-op.</param>
-    /// <returns><paramref name="chain"/>, for further chaining.</returns>
-    public static SdfProgramBuilder Apply(SdfProgramBuilder chain, IReadOnlyList<ShapeDomainOp>? domain) {
-        ArgumentNullException.ThrowIfNull(chain);
-
-        if (domain is not { Count: > 0 } ops) {
-            return chain;
-        }
-
-        foreach (var op in ops) {
-            chain = ApplyOne(chain: chain, op: op);
-        }
-
-        return chain;
-    }
-    /// <summary>Applies only the ops the fixed-point solid field can interpret — <see cref="ShapeDomainOp.Symmetry"/>
-    /// and <see cref="ShapeDomainOp.Repeat"/> — in authored order, silently skipping <see cref="ShapeDomainOp.Polar"/>
-    /// and <see cref="ShapeDomainOp.Wallpaper"/> (render-only ops <see cref="Puck.SignedDistance.Queries.SdfFieldEvaluator"/>
-    /// structurally cannot carry; a solid placement authoring one collides against its unfolded geometry).</summary>
-    /// <param name="chain">The builder chain, already advanced past the creation/placement frame prefix.</param>
-    /// <param name="domain">The shape's domain ops, or null/empty for no-op.</param>
-    /// <returns><paramref name="chain"/>, for further chaining.</returns>
-    public static SdfProgramBuilder ApplyFixedSupported(SdfProgramBuilder chain, IReadOnlyList<ShapeDomainOp>? domain) {
-        ArgumentNullException.ThrowIfNull(chain);
-
-        if (domain is not { Count: > 0 } ops) {
-            return chain;
-        }
-
-        foreach (var op in ops) {
-            if (
-                (op is ShapeDomainOp.Symmetry) ||
-                (op is ShapeDomainOp.Repeat)
-            ) {
-                chain = ApplyOne(chain: chain, op: op);
-            }
-        }
-
-        return chain;
-    }
-    private static SdfProgramBuilder ApplyOne(SdfProgramBuilder chain, ShapeDomainOp op) {
+    private static SdfDomainOp Map(ShapeDomainOp op) {
         return op switch {
-            ShapeDomainOp.Symmetry symmetry => chain.SymmetryPlane(
-                normal: symmetry.Normal,
-                offset: (symmetry.Offset ?? 0f)
+            ShapeDomainOp.Symmetry symmetry => new SdfDomainOp.Symmetry(
+                Normal: symmetry.Normal,
+                Offset: (symmetry.Offset ?? 0f)
             ),
-            ShapeDomainOp.Repeat repeat => chain.RepeatLimited(
-                spacing: repeat.Spacing,
-                limit: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))
+            ShapeDomainOp.Repeat repeat => new SdfDomainOp.Repeat(
+                Limit: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit)),
+                Spacing: repeat.Spacing
             ),
-            ShapeDomainOp.Polar polar => chain.RepeatPolar(
-                count: polar.Count,
-                axis: (polar.Axis ?? SdfPolarAxis.Y),
-                mirror: (polar.Mirror ?? false),
-                materialStride: (polar.MaterialStride ?? 0)
+            ShapeDomainOp.Polar polar => new SdfDomainOp.Polar(
+                Axis: (polar.Axis ?? SdfPolarAxis.Y),
+                Count: polar.Count,
+                MaterialStride: (polar.MaterialStride ?? 0),
+                Mirror: (polar.Mirror ?? false)
             ),
-            ShapeDomainOp.Wallpaper wallpaper => chain.WallpaperFold(
-                group: wallpaper.Group,
-                cell: wallpaper.Cell,
-                limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
-                plane: (wallpaper.Plane ?? SdfWallpaperPlane.XZ),
-                materialStride: (wallpaper.MaterialStride ?? 0),
-                lodDistance: (wallpaper.LodDistance ?? 0f)
+            ShapeDomainOp.Wallpaper wallpaper => new SdfDomainOp.Wallpaper(
+                Cell: wallpaper.Cell,
+                Group: wallpaper.Group,
+                Limit: (wallpaper.Limit ?? new Vector2(value: ShapeDomainOp.Wallpaper.UnboundedLimit)),
+                LodDistance: (wallpaper.LodDistance ?? 0f),
+                MaterialStride: (wallpaper.MaterialStride ?? 0),
+                Plane: (wallpaper.Plane ?? SdfWallpaperPlane.XZ)
             ),
             _ => throw new ArgumentOutOfRangeException(
                 paramName: nameof(op),
@@ -165,4 +123,50 @@ public static class ShapeDomainOps {
             ),
         };
     }
+
+    /// <summary>Applies every op in <paramref name="domain"/>, in authored order, as point folds.</summary>
+    /// <param name="chain">The builder chain, already advanced past the creation/placement frame prefix.</param>
+    /// <param name="domain">The shape's domain ops, or null/empty for no-op.</param>
+    /// <returns><paramref name="chain"/>, for further chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="chain"/> is <see langword="null"/>.</exception>
+    public static SdfProgramBuilder Apply(SdfProgramBuilder chain, IReadOnlyList<ShapeDomainOp>? domain) {
+        ArgumentNullException.ThrowIfNull(chain);
+
+        if (domain is not { Count: > 0 }) {
+            return chain;
+        }
+
+        return SdfDomainOps.Apply(
+            chain: chain,
+            domain: ToDomainOps(domain: domain)
+        );
+    }
+    /// <summary>Converts a shape's authored ops into the SDF VM vocabulary, resolving every absent optional to its
+    /// documented default.</summary>
+    /// <param name="domain">The shape's domain ops, or null/empty.</param>
+    /// <returns>The converted ops, in authored order; empty when there are none.</returns>
+    public static IReadOnlyList<SdfDomainOp> ToDomainOps(IReadOnlyList<ShapeDomainOp>? domain) {
+        if (domain is not { Count: > 0 } ops) {
+            return [];
+        }
+
+        var mapped = new SdfDomainOp[ops.Count];
+
+        for (var index = 0; (index < ops.Count); index++) {
+            mapped[index] = Map(op: ops[index]);
+        }
+
+        return mapped;
+    }
+    /// <summary>Returns whether a shape's authored ops expand to a finite copy set, and that set.</summary>
+    /// <param name="domain">The shape's domain ops, or null/empty for the identity copy.</param>
+    /// <param name="frames">The copies; a single identity frame when there are no ops, and empty on refusal.</param>
+    /// <param name="refusal">Empty on success; otherwise a noun phrase naming what could not expand.</param>
+    /// <returns><see langword="true"/> when the chain expanded.</returns>
+    public static bool TryExpand(IReadOnlyList<ShapeDomainOp>? domain, out SdfRigidFrame[] frames, out string refusal) =>
+        SdfDomainExpansion.TryExpand(
+            domain: ToDomainOps(domain: domain),
+            frames: out frames,
+            refusal: out refusal
+        );
 }

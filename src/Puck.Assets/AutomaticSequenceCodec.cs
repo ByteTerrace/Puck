@@ -14,8 +14,8 @@ public sealed class AutomaticSequenceDecodeLimits {
     /// <param name="maximumOutputCount">The maximum output-alphabet value count.</param>
     /// <exception cref="ArgumentOutOfRangeException">Any ceiling is not positive.</exception>
     public AutomaticSequenceDecodeLimits(
-        int maximumArtifactBytes = 64 * 1024 * 1024,
-        int maximumBigIntegerBytes = 1024 * 1024,
+        int maximumArtifactBytes = ((64 * 1024) * 1024),
+        int maximumBigIntegerBytes = (1024 * 1024),
         int maximumAlphabetSize = 65_536,
         int maximumStateCount = 1_000_000,
         int maximumOutputCount = 65_536
@@ -35,26 +35,21 @@ public sealed class AutomaticSequenceDecodeLimits {
 
     /// <summary>Gets the default decoding ceilings.</summary>
     public static AutomaticSequenceDecodeLimits Default { get; } = new();
-
     /// <summary>Gets the maximum digit alphabet size.</summary>
     public int MaximumAlphabetSize { get; }
-
     /// <summary>Gets the maximum complete artifact size, in bytes.</summary>
     public int MaximumArtifactBytes { get; }
-
     /// <summary>Gets the maximum magnitude size of one integer, in bytes.</summary>
     public int MaximumBigIntegerBytes { get; }
-
     /// <summary>Gets the maximum output-alphabet value count.</summary>
     public int MaximumOutputCount { get; }
-
     /// <summary>Gets the maximum DFAO state count.</summary>
     public int MaximumStateCount { get; }
 }
-
 /// <summary>Encodes and decodes the canonical versioned binary form of an <see cref="AutomaticIntegerSequence"/>.</summary>
 public static class AutomaticIntegerSequenceCodec {
     private static ReadOnlySpan<byte> Magic => "PAIS"u8;
+
     private const byte Version = 1;
 
     /// <summary>Decodes an untrusted canonical binary artifact under explicit allocation ceilings.</summary>
@@ -72,13 +67,14 @@ public static class AutomaticIntegerSequenceCodec {
         }
 
         var reader = new CanonicalBinaryReader(content: content);
+
         reader.Expect(value: Magic);
         if (reader.ReadByte() != Version) {
             throw new InvalidDataException(message: "the automatic-sequence artifact version is unsupported");
         }
 
         try {
-            var kind = (IntegerNumerationKind)reader.ReadByte();
+            var kind = ((IntegerNumerationKind)reader.ReadByte());
             IntegerNumerationSystem numeration;
 
             switch (kind) {
@@ -100,6 +96,7 @@ public static class AutomaticIntegerSequenceCodec {
             }
 
             var stateCount = reader.ReadBoundedInt(maximum: limits.MaximumStateCount);
+
             if (stateCount == 0) {
                 throw new InvalidDataException(message: "an automatic sequence must contain at least one state");
             }
@@ -117,6 +114,7 @@ public static class AutomaticIntegerSequenceCodec {
             }
 
             var outputCount = reader.ReadBoundedInt(maximum: limits.MaximumOutputCount);
+
             if (outputCount == 0) {
                 throw new InvalidDataException(message: "the output alphabet cannot be empty");
             }
@@ -144,14 +142,13 @@ public static class AutomaticIntegerSequenceCodec {
             );
         } catch (InvalidDataException) {
             throw;
-        } catch (Exception exception) when (exception is ArgumentException or ArithmeticException or OverflowException) {
+        } catch (Exception exception) when ((exception is ArgumentException or ArithmeticException or OverflowException)) {
             throw new InvalidDataException(
-                message: "the automatic-sequence artifact violates its structural contract",
-                innerException: exception
+                innerException: exception,
+                message: "the automatic-sequence artifact violates its structural contract"
             );
         }
     }
-
     /// <summary>Encodes an automatic integer sequence into its canonical version-one binary form.</summary>
     /// <param name="sequence">The sequence to encode.</param>
     /// <returns>The canonical bytes.</returns>
@@ -160,7 +157,7 @@ public static class AutomaticIntegerSequenceCodec {
         ArgumentNullException.ThrowIfNull(sequence);
         var writer = new ArrayBufferWriter<byte>();
 
-        writer.Write(Magic);
+        writer.Write(value: Magic);
         writer.WriteByte(value: Version);
         writer.WriteByte(value: ((byte)sequence.Numeration.Kind));
 
@@ -203,7 +200,6 @@ public static class AutomaticIntegerSequenceCodec {
             rationalNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes),
             surdNumerator: reader.ReadBigInteger(maximumByteCount: maximumBigIntegerBytes)
         );
-
     private static void WriteSurd(ArrayBufferWriter<byte> writer, QuadraticSurd value) {
         writer.WriteBigInteger(value: value.Denominator);
         writer.WriteBigInteger(value: value.Radicand);
@@ -223,6 +219,7 @@ internal static class CanonicalBinaryWriterExtensions {
         writer.WriteByte(value: ((value.Sign > 0) ? ((byte)1) : ((byte)2)));
         var magnitude = BigInteger.Abs(value: value);
         var byteCount = magnitude.GetByteCount(isUnsigned: true);
+
         writer.WriteVarUInt(value: checked((uint)byteCount));
         var destination = writer.GetSpan(sizeHint: byteCount)[..byteCount];
 
@@ -237,25 +234,25 @@ internal static class CanonicalBinaryWriterExtensions {
 
         writer.Advance(count: byteCount);
     }
-
     public static void WriteByte(this ArrayBufferWriter<byte> writer, byte value) {
         var destination = writer.GetSpan(sizeHint: 1);
+
         destination[0] = value;
         writer.Advance(count: 1);
     }
-
     public static void WriteVarUInt(this ArrayBufferWriter<byte> writer, uint value) {
         do {
             var current = ((byte)(value & 0x7f));
+
             value >>= 7;
             if (value != 0) { current |= 0x80; }
             writer.WriteByte(value: current);
         } while (value != 0);
     }
 }
-
 internal ref struct CanonicalBinaryReader {
     private readonly ReadOnlySpan<byte> m_content;
+
     private int m_offset;
 
     public CanonicalBinaryReader(ReadOnlySpan<byte> content) {
@@ -275,13 +272,11 @@ internal ref struct CanonicalBinaryReader {
 
         m_offset += value.Length;
     }
-
     public void ExpectEnd() {
         if (m_offset != m_content.Length) {
             throw new InvalidDataException(message: "the artifact contains trailing bytes");
         }
     }
-
     public BigInteger ReadBigInteger(int maximumByteCount) {
         var sign = ReadByte();
         var byteCount = ReadBoundedInt(maximum: maximumByteCount);
@@ -300,30 +295,31 @@ internal ref struct CanonicalBinaryReader {
         }
 
         var bytes = m_content.Slice(
-            start: m_offset,
-            length: byteCount
+            length: byteCount,
+            start: m_offset
         );
+
         if (bytes[0] == 0) {
             throw new InvalidDataException(message: "an integer magnitude contains a leading zero byte");
         }
 
         m_offset += byteCount;
         var magnitude = new BigInteger(
-            value: bytes,
             isBigEndian: true,
-            isUnsigned: true
+            isUnsigned: true,
+            value: bytes
         );
+
         return ((sign == 1) ? magnitude : -magnitude);
     }
-
     public int ReadBoundedInt(int maximum) {
         var value = ReadVarUInt();
+
         if (value > ((uint)maximum)) {
             throw new InvalidDataException(message: "an artifact count exceeds its configured ceiling");
         }
         return checked((int)value);
     }
-
     public byte ReadByte() {
         if (m_offset >= m_content.Length) {
             throw new InvalidDataException(message: "the artifact is truncated");
@@ -332,10 +328,11 @@ internal ref struct CanonicalBinaryReader {
     }
 
     private uint ReadVarUInt() {
-        uint value = 0;
+        var value = 0U;
 
         for (var index = 0; (index < 5); ++index) {
             var current = ReadByte();
+
             if ((index == 4) && ((current & 0xf0) != 0)) {
                 throw new InvalidDataException(message: "a variable-width integer overflows UInt32");
             }

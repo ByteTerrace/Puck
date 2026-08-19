@@ -1,6 +1,7 @@
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -49,9 +50,41 @@ public sealed partial class WorldBody {
     // clear, and never read by simulation — diagnostic only, with no allocation and no feedback into either fold.
     private PlayerIntent m_channelReadHeld;
     private FixedWorldCollider? m_collider;
+
     // The world contact field this body solves its swept grounded position against (null before a population assigns
     // the document-derived field) and the body's own capsule volume (null = a volumeless kit, never solved).
+    // The inward speed a grounded body keeps against the surface it stands on, in world units per second. Sized to
+    // cover the drop a walker's own speed opens over a tick on the tightest surface worth standing on; depenetration
+    // removes whatever the surface does not curve away.
+    private static readonly FixedQ4816 StickSpeed = FixedQ4816.FromDouble(value: 2d);
+    // How fast a solved field may turn the body's up axis, as the HALF angle a rotor is built from — so this is
+    // pi/2 per second of half angle, a half turn per second of actual turn. That crosses the shell where an
+    // attractor's pull cancels the world's as one continuous roll rather than a single-tick inversion, and leaves
+    // every ordinary reorientation untouched: a field turns far slower than this everywhere else. The half angle is
+    // what SteerUp's rotor and its within-budget test both want, so accumulating it directly spares a per-tick
+    // halving. See WorldBody.Step's SteerUp.
+    private static readonly FixedQ4816 FieldUpTurnHalfRate = FixedQ4816.FromDouble(value: 1.5707963267949d);
+    private static readonly FixedQ4816 MinFieldUpMagnitude = FixedQ4816.One;
+    // The ceiling on how fast a measured CONTACT normal may turn the up axis, again as a half-angle rate: 2*pi per
+    // second of half angle, two full turns per second of actual turn. This is a discontinuity filter, not a
+    // smoothing rate — it sits an order of magnitude above the fastest real curvature a body can walk (full sprint
+    // on the tightest planetoid), so ordinary running adopts the surface exactly and only a collider crease, which
+    // has no finite rate at all, is spread across a few ticks. See WorldBody.Step's contact adoption.
+    private static readonly FixedQ4816 ContactUpTurnHalfRate = FixedQ4816.FromDouble(value: 6.28318530717959d);
+
     private IContactField? m_contactField;
+
+    // The population's live gravity field and this body's index into it, refreshed per Advance.
+    private int m_entityIndex = -1;
+
+    private WorldGravityField? m_gravityField;
+
+    // The rotation carrying world +Y to the body's up, CARRIED rather than rebuilt. Reconstructing it from world +Y
+    // each tick is unstable where up approaches world -Y — the underside of a planetoid — because the shortest arc's
+    // axis is undefined there and flips with rounding, spinning the body on the spot. Transporting it by the tick's
+    // own (tiny) change has no such point.
+    private FixedQuaternion m_frame = FixedQuaternion.Identity;
+
     private ulong? m_continuumConsumedThroughEngineTick;
     private ulong m_durableInputTick;
     // The screen-engagement route latch (disengaged by default). Set by player.engage/disengage. While engaged the
@@ -222,8 +255,13 @@ public sealed partial class WorldBody {
     // each grounded step (arbitrary-up /
     // planetoid walking as a data choice), HELD from the previous step when a query is degenerate.
     private FixedVector3 m_up = UnitY;
+
+    // Set by a teleport: the next up resolve SNAPS to the field instead of steering toward it, because the body did
+    // not turn — it was relocated. See WorldBody.Lifecycle's Pose and WorldBody.Step's ResolveUp.
+    private bool m_upNeedsReseat;
+
     private static readonly FixedQ4816 ObstructionLatchDisplacementSquared = FixedQ4816.FromDouble(value: 4.0); // (2 units)^2 — a single noisy depenetration correction at a blended corner can be large; only a body that has genuinely moved on should cross this
-    // A raw MoveForward/MoveStrafe role channel reads in [-1, 1] — well clear of ordinary analog noise at this
+    // A raw MoveAdvance/MoveStrafe role channel reads in [-1, 1] — well clear of ordinary analog noise at this
     // threshold, so a genuinely-released stick/button (exactly 0) and a barely-held one are both "idle" alike.
     private static readonly FixedQ4816 ObstructionLatchIdleThreshold = FixedQ4816.FromDouble(value: 0.05);
     private static readonly ulong ObstructionLatchGraceTicks = FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: 0.5)); // 0.5s of real time
@@ -269,6 +307,8 @@ public sealed partial class WorldBody {
     // once here — a remainder is a numerator over that denominator, so the denominator is accumulator identity.
     private FixedVector3RateAccumulator m_positionAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedVector3RateAccumulator m_rotationAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    private FixedRateAccumulator m_contactUpTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    private FixedRateAccumulator m_upTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedRateAccumulator m_verticalVelocityAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     // The canonical orientation — the full 6DOF attitude the renderer, the camera rigs, and player.where all read. Under
     // grounded it mirrors m_yaw (pitch = roll = 0); under free it is the integrated body-frame attitude and m_yaw is

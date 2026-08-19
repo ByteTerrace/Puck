@@ -182,7 +182,7 @@ fields are plumbed for the wire, not consumed locally.
 `PlayerIntent` (`Protocol/PlayerIntent.cs`) is a fixed 16-slot vector of
 `FixedQ4816` channel values (`ChannelLimits.MaxChannels = 16`,
 `RoleCount = 6`, so 10 composition channels). `ChannelRole` occupies fixed
-ordinals 0–5: `MoveForward, MoveStrafe, Turn, MoveUp, Pitch, Roll`; ordinals
+ordinals 0–5: `MoveAdvance, MoveStrafe, Turn, MoveUp, Pitch, Roll`; ordinals
 6+ are the document's declared composition channels in declaration order.
 There is no button bitmask — a button is a `Binary`-shaped channel
 (`ChannelShape`: `Bipolar`/`Unipolar`/`Binary`); edges derive from threshold

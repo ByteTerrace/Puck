@@ -64,6 +64,18 @@ the deepest pair correction without knowing body identity or mutating state.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,
 axis-aligned boxes, and half-spaces, returning only a `FixedContactPush`.
 
+`IContactField` is the seam a grounded body resolves its swept position
+against, and `FixedStaticContactSolver` is the analytic provider's half of it:
+the relaxation over a static collider set, written once. It takes two collider
+spans and walks both inside each iteration, so a caller may hold a set it
+compiled once beside one it rebuilds per tick without changing how the two
+interleave. `FixedFieldContactSolver` is the other provider behind that seam: it measures
+contact from a scalar field instead of a collider list, taking its push
+direction from the field's own gradient at a confirmed penetration, and reads
+that field through `Puck.Maths`'s `IFieldEvaluator` and `IWorldQuery`. That is
+why neither this library nor a distance-field library needs to reference the
+other.
+
 `FixedRigidSolver` owns canonical contact ordering, persistent manifold slots,
 warm starting, speculative activation, bounded deep-overlap recovery, soft
 constraints formed at the substep width, and a fixed iteration budget. Geometry
@@ -209,6 +221,8 @@ thread-safe**.
   `GravitySolveStatistics`, `FastMonopoleOptions`, `AdaptiveFmmOptions`.
 - **Contact geometry** — `FixedBodyColliderVolume`, `FixedDynamicBodyContacts`,
   `FixedStaticCollider`, `FixedContactPush`.
+- **The contact seam** — `IContactField`, `ContactResolution`,
+  `FixedStaticContactSolver`, `FixedFieldContactSolver`.
 - **Rigid solver** — `FixedRigidSolver`, `FixedContactCandidate`.
 - **Multi-body coupling** — `FixedTwoBodyKernel`, `FixedTwoBodyContact`,
   `FixedPairManifoldSlotTable`, `FixedRigidWorld` (shape only, not wired into

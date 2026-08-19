@@ -164,6 +164,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     /// <param name="fragmentBytecode">The unified overlay fragment shader, in the host backend's bytecode format.</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
+    /// <param name="editorGizmoSpeakerIcon">The resolved plate icon the editor-gizmo writer draws for a point
+    /// speaker (<c>edit.speaker</c> in the caller's icon table); <see cref="OverlayResolvedGlyph.None"/> when
+    /// unresolved.</param>
+    /// <param name="editorGizmoBedIcon">The resolved plate icon the editor-gizmo writer draws for an ambient bed
+    /// (<c>edit.bed</c>).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> derives a lease table that
     /// over-subscribes an <see cref="OverlayFrameBuilder"/> backstop (see <see cref="OverlayChannelLeases"/>).</exception>
@@ -176,7 +181,9 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         ReadOnlyMemory<byte> vertexBytecode,
         ReadOnlyMemory<byte> fragmentBytecode,
         uint width,
-        uint height
+        uint height,
+        OverlayResolvedGlyph editorGizmoSpeakerIcon = default,
+        OverlayResolvedGlyph editorGizmoBedIcon = default
     ) {
         ArgumentNullException.ThrowIfNull(argument: glyphs);
         ArgumentNullException.ThrowIfNull(argument: inner);
@@ -218,7 +225,11 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             : null
         );
         m_gizmoWriter = ((sources.Gizmos is { } gizmos)
-            ? new EditorGizmoWriter(source: gizmos)
+            ? new EditorGizmoWriter(
+                bedIcon: editorGizmoBedIcon,
+                source: gizmos,
+                speakerIcon: editorGizmoSpeakerIcon
+            )
             : null
         );
         m_hudWriter = (((sources.Hud is { } hudSource) && (sources.HudBindings is { } hudBindings))
@@ -387,7 +398,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
                 Name: "overlay-unified",
                 VertexInput: new GpuVertexInputLayout(
                     StrideBytes: VertexStrideBytes,
-                    Attributes: [new GpuVertexAttribute(Location: 0, Format: GpuVertexFormat.R32G32Float, OffsetBytes: 0)]
+                    Attributes: [new GpuVertexAttribute(Format: GpuVertexFormat.R32G32Float, Location: 0, OffsetBytes: 0)]
                 ),
                 TextureSamplerCount: 1,
                 EnableStorageBuffer: true,
@@ -483,7 +494,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         floats[8] = m_builder.TextBaseWords;
         floats[9] = OverlayTokenBlock.WordCount;   // the glyph pack's base word (the atlas sits after the token slab)
         floats[10] = m_builder.ClipBaseWords;
-        floats[11] = 0f;
+        floats[11] = m_builder.Glyphs.GlyphCount;  // the pack's total glyph count (ASCII + this boot's appended icons)
     }
     // Not drawing this frame: hand a pending capture down the chain (the shared decorator forwarding contract) so
     // the readback lands on whatever actually produced the shown frame.

@@ -2,7 +2,7 @@ root = true
 
 [*]
 charset = utf-8
-end_of_line = crlf
+end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
@@ -186,3 +186,9 @@ indent_size = 4
 [*.{yml,yaml,md}]
 indent_style = space
 indent_size = 2
+
+# The only files that keep CRLF: batch scripts (cmd.exe mis-parses LF-terminated labels and
+# multi-line blocks) and the solution file (Visual Studio rewrites it with CRLF on save).
+# Everything else is LF end to end — see .gitattributes.
+[*.{bat,cmd,slnx}]
+end_of_line = crlf

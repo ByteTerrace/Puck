@@ -15,7 +15,7 @@ namespace Puck.SdfVm.Views;
 /// No construction sites exist in the buildable tree; the type is currently unconsumed. Its destination is a world
 /// document field or console verb that lets a screen show another live, simulated world, tracked as an open item in
 /// <c>docs/vision.md</c>'s recursion note; no phase currently owns building that seam. See
-/// <see cref="Puck.SignedDistance.Queries.IWorldQuery"/> for the same posture applied to its own destination.
+/// <see cref="Puck.Maths.IWorldQuery"/> for the same posture applied to its own destination.
 /// </remarks>
 public sealed class NestedWorldView : IViewContent, IDisposable {
     /// <summary>The view's fixed render height.</summary>

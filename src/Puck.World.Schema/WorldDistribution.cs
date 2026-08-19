@@ -36,7 +36,10 @@ public sealed record WorldDistribution(WorldDistributionRegion Region, WorldSequ
     /// the smallest valid disc (the validator's positive-radius floor admits no zero disc here) with an inert fill
     /// sequence. Never read unless the document also authors simulated peers past its local/network seat count.</summary>
     public static WorldDistribution Default { get; } = new(
-        Region: new WorldDistributionRegion.Disc(Radius: 0.01f, SampleCount: 1),
+        Region: new WorldDistributionRegion.Disc(
+            Radius: 0.01f,
+            SampleCount: 1
+        ),
         Fill: WorldSequence.AdditiveDefault
     );
 }

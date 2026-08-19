@@ -142,10 +142,10 @@ public sealed class QuaternionJsonConverter : JsonConverter<Quaternion> {
         }
 
         return new Quaternion(
+            w: w,
             x: x,
             y: y,
-            z: z,
-            w: w
+            z: z
         );
     }
     /// <inheritdoc/>

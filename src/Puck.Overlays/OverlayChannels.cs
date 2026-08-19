@@ -76,12 +76,16 @@ public readonly record struct OverlayChannelUsage(
 /// <param name="HudElementsPerPanel">The most elements one world-scope HUD panel carries.</param>
 /// <param name="HudSeatPanelsPerSeat">The most seat-scope authored HUD panels one seat carries.</param>
 /// <param name="HudElementsPerSeatPanel">The most elements one seat-scope HUD panel carries.</param>
+/// <param name="BindingBarMaxBanks">The most stacked banks one seat's binding bar authors.</param>
+/// <param name="BindingBarMaxSlotsPerBank">The most physical-button slots one bank's authored slot set carries.</param>
 public readonly record struct OverlayCapacity(
     int Seats,
     int HudPanels,
     int HudElementsPerPanel,
     int HudSeatPanelsPerSeat,
-    int HudElementsPerSeatPanel
+    int HudElementsPerSeatPanel,
+    int BindingBarMaxBanks,
+    int BindingBarMaxSlotsPerBank
 );
 /// <summary>
 /// The lease table: every channel's reservation, each sized at the writer's measured maximum — the largest record
@@ -99,9 +103,12 @@ public readonly record struct OverlayCapacity(
 /// authored-HUD one, means growing it here, in the open, against the sum — never drawing silently from the unclaimed
 /// remainder.</remarks>
 public sealed class OverlayChannelLeases {
-    // Binding bar, per JOINED seat — the twelve slot chips, the page label, the modifier pips, and the hint lines.
-    // Every one of its text runs (label and hints alike) rides the same character clamp.
-    private const int BindingBarElementsPerSeat = (((BindingBarLayout.SlotCount + 1) + BindingBarWriter.MaxModifierPips) + BindingBarWriter.MaxHintLines);
+    // Binding bar, per JOINED seat — every stacked bank's own slot cluster (BindingBarMaxBanks x
+    // BindingBarMaxSlotsPerBank, computed in the constructor from the host's capacity), plus the ONE page label, the
+    // modifier pips, and the hint lines the bar draws once regardless of bank count. Every one of its text runs
+    // (label and hints alike) rides the same character clamp; a slot's letter badge (LB/RB, the menu trio, the
+    // exotics) packs into the icon record itself (OverlayFrameBuilder.PackBadgeLabel), never this text-word budget.
+    private const int BindingBarFixedElementsPerSeat = ((1 + BindingBarWriter.MaxModifierPips) + BindingBarWriter.MaxHintLines);
     private const int BindingBarTextWordsPerSeat = ((BindingBarWriter.MaxHintLines + 1) * BindingBarWriter.MaxLineChars);
     private const int ConsoleElements = (ConsolePanelWriter.MaxRows + 3);
     private const int ConsoleTextWords = ((ConsoleTitleChars + ((ConsolePanelWriter.MaxRows - 1) * ConsolePanelWriter.MaxColumns)) + ConsolePanelWriter.MaxColumns);
@@ -168,11 +175,14 @@ public sealed class OverlayChannelLeases {
         RequireNonNegative(count: capacity.HudElementsPerPanel, name: nameof(OverlayCapacity.HudElementsPerPanel));
         RequireNonNegative(count: capacity.HudSeatPanelsPerSeat, name: nameof(OverlayCapacity.HudSeatPanelsPerSeat));
         RequireNonNegative(count: capacity.HudElementsPerSeatPanel, name: nameof(OverlayCapacity.HudElementsPerSeatPanel));
+        RequireNonNegative(count: capacity.BindingBarMaxBanks, name: nameof(OverlayCapacity.BindingBarMaxBanks));
+        RequireNonNegative(count: capacity.BindingBarMaxSlotsPerBank, name: nameof(OverlayCapacity.BindingBarMaxSlotsPerBank));
 
         var seats = capacity.Seats;
         var hudWorldElements = (capacity.HudPanels * capacity.HudElementsPerPanel);
         var hudSeatElements = ((seats * capacity.HudSeatPanelsPerSeat) * capacity.HudElementsPerSeatPanel);
         var hudPanels = (capacity.HudPanels + (capacity.HudSeatPanelsPerSeat * seats));
+        var bindingBarElementsPerSeat = (BindingBarFixedElementsPerSeat + (capacity.BindingBarMaxBanks * capacity.BindingBarMaxSlotsPerBank));
 
         Capacity = capacity;
         m_reservations = [
@@ -184,7 +194,7 @@ public sealed class OverlayChannelLeases {
             ),
             new OverlayChannelReservation(
                 Clips: 0,
-                Elements: (BindingBarElementsPerSeat * seats),
+                Elements: (bindingBarElementsPerSeat * seats),
                 Panels: 0,
                 TextWords: (BindingBarTextWordsPerSeat * seats)
             ),

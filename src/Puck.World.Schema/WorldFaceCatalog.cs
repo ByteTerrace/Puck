@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.Forge.Authoring;
 using Puck.Maths;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -35,7 +36,7 @@ public readonly record struct WorldFaceRow(
     string PlacementId,
     string FaceName,
     int? ShapeId,
-    AvatarPrimitive? ShapeType,
+    SdfSolidPrimitive? ShapeType,
     WorldFaceFrame Frame,
     WorldFaceApertureKind Aperture,
     WorldScreenSource Source,
@@ -75,10 +76,10 @@ public sealed class WorldFaceCatalog {
     // swap/negate, never Quaternion.CreateFromAxisAngle) — the value every author-frame shape's own rotation carries
     // when the author declared none.
     private static readonly Quaternion EngineFrameHalfTurn = new(
+        w: 0f,
         x: 0f,
         y: 1f,
-        z: 0f,
-        w: 0f
+        z: 0f
     );
     private static readonly FixedQ4816 FallbackHalfDepthFixed = FixedQ4816.FromDouble(value: FallbackHalfDepth);
     private static readonly FixedQ4816 FallbackHalfHeightFixed = FixedQ4816.FromDouble(value: FallbackHalfHeight);
@@ -133,7 +134,7 @@ public sealed class WorldFaceCatalog {
     // method assigns to build each arm's region, so a new WorldFaceApertureKind arm owes both switches an entry, or
     // TryAperture's default will silently answer "no aperture" for a shape the validator already approved.
     private static WorldFaceApertureKind ApertureFor(ShapeDocument? shape) =>
-        ((shape is { Type: AvatarPrimitive.Box })
+        ((shape is { Type: SdfSolidPrimitive.Box })
             ? WorldFaceApertureKind.Box
             : WorldFaceApertureKind.None
         );

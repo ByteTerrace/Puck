@@ -31,6 +31,9 @@
              assembly can state alone. -->
         <ProjectReference Include="..\..\src\Puck.Overlays\Puck.Overlays.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Client\Puck.World.Client.csproj" />
+        <!-- The generic world.row.step field walker (public, no InternalsVisibleTo needed) — see
+             WorldRowFieldStepperLawTests. -->
+        <ProjectReference Include="..\..\src\Puck.World.Console\Puck.World.Console.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Server\Puck.World.Server.csproj" />

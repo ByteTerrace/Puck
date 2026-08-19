@@ -29,7 +29,7 @@ public sealed class WorldFaceCatalogLawTests {
     // A rotation about the face's own RIGHT axis — pitch, the axis a world-up-pinned frame cannot represent.
     private static Quaternion Pitched { get; } = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 6f));
 
-    private static WorldCreation BuildDoorCreation(AvatarPrimitive faceShape = AvatarPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false) {
+    private static WorldCreation BuildDoorCreation(SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false) {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
@@ -59,7 +59,7 @@ public sealed class WorldFaceCatalogLawTests {
     private static WorldDefinition BuildDoorDocument(
         float yawDegrees = 0f,
         float scale = 1f,
-        AvatarPrimitive faceShape = AvatarPrimitive.Box,
+        SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box,
         bool faceNamesShape = true,
         bool animated = false,
         bool carriesPortal = true,
@@ -273,11 +273,11 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceNamesShape: false)),
             controlOutcome: static () => Validates(definition: BuildDoorDocument()));
     }
-    [InlineData(AvatarPrimitive.Sphere)]
-    [InlineData(AvatarPrimitive.Cylinder)]
-    [InlineData(AvatarPrimitive.Plane)]
+    [InlineData(SdfSolidPrimitive.Sphere)]
+    [InlineData(SdfSolidPrimitive.Cylinder)]
+    [InlineData(SdfSolidPrimitive.Plane)]
     [Theory]
-    public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName(AvatarPrimitive faceShape) {
+    public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName(SdfSolidPrimitive faceShape) {
         var unmapped = BuildDoorDocument(faceShape: faceShape);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: unmapped, neighbours: null, reason: out var reason));
@@ -288,15 +288,15 @@ public sealed class WorldFaceCatalogLawTests {
     public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName_ControlValidates() {
         Laws.RefusalWithControl(
             lawId: "face-frame.portal-on-unmapped-shape",
-            deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Sphere)),
-            controlOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Box)));
+            deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere)),
+            controlOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Box)));
     }
     [Fact]
     public void AFaceWithNoApertureStillDrawsWithoutAPortal() {
         // Geometry is never taken away by a refusal: the shape kinds that cannot be walked through still derive a
         // frame and still show a feed.
-        Assert.True(condition: Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Sphere, carriesPortal: false)));
-        Assert.Equal(expected: WorldFaceApertureKind.None, actual: DoorRow(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Sphere, carriesPortal: false)).Aperture);
+        Assert.True(condition: Validates(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere, carriesPortal: false)));
+        Assert.Equal(expected: WorldFaceApertureKind.None, actual: DoorRow(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere, carriesPortal: false)).Aperture);
     }
 
     // ---- The slot budget ----
@@ -319,7 +319,7 @@ public sealed class WorldFaceCatalogLawTests {
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
             PlacementsRaw = placements,
-            AuthoringRaw = (WorldAuthoringDefaults.Default with { DerivedFaceScreens = reservedSlots }),
+            AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = reservedSlots }),
         };
     }
 

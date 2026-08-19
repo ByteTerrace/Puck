@@ -35,6 +35,7 @@ public sealed class WorldViewComposer {
     private readonly List<ViewBinding> m_toScratch = new();
     private readonly Dictionary<string, int> m_cameraIds = new(comparer: StringComparer.Ordinal);
     private readonly List<string> m_cameraNames = new();
+    private readonly List<string> m_authoredLayoutNames = new();
     private string m_activeName = "";
 
     /// <summary>The selected layout's name — an authored layout name, or <c>builtin</c>.</summary>
@@ -49,6 +50,15 @@ public sealed class WorldViewComposer {
 
     /// <summary>This frame's resolved slots (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
     public IReadOnlyList<WorldComposedSlot> Slots => m_slots;
+
+    /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or
+    /// <see langword="null"/> when no authored layout sits there — the <c>view.override</c> bound dispatch's
+    /// ordinal-to-name resolution.</summary>
+    /// <param name="ordinal">The 1-based <c>views.layouts</c> row ordinal.</param>
+    public string? AuthoredLayoutName(int ordinal) => (((ordinal >= 1) && (ordinal <= m_authoredLayoutNames.Count))
+        ? m_authoredLayoutNames[(ordinal - 1)]
+        : null
+    );
 
     // Every camera-bearing slot resolves to the live camera override (SelectCamera) when one is set.
     private void ApplyCameraOverride(string? cameraOverride) {
@@ -139,15 +149,13 @@ public sealed class WorldViewComposer {
 
         return null;
     }
-    private void ResolveBuiltin(int joinedCount, int soleEditorIndex, float workbenchFraction) {
+    private void ResolveBuiltin(int joinedCount) {
         m_targetSlots.Clear();
 
         for (var index = 0; (index < joinedCount); index++) {
             var region = WorldFrameSource.LayoutRegion(
                 count: joinedCount,
-                index: index,
-                soleEditorIndex: soleEditorIndex,
-                workbenchFraction: workbenchFraction
+                index: index
             );
 
             m_targetSlots.Add(item: new WorldComposedSlot(
@@ -186,8 +194,13 @@ public sealed class WorldViewComposer {
         }
     }
     // Selects the target layout, filling m_targetSlots with its resolved (rect, occupant) slots.
-    private (string Name, string Reason, float Seconds, float RenderScale) Select(int joinedCount, int soleEditorIndex, float workbenchFraction, WorldViewDefaults views, string? layoutOverride) {
+    private (string Name, string Reason, float Seconds, float RenderScale) Select(int joinedCount, WorldViewDefaults views, string? layoutOverride) {
         var layouts = views.Layouts;
+
+        m_authoredLayoutNames.Clear();
+        foreach (var layout in layouts) {
+            m_authoredLayoutNames.Add(item: layout.Name);
+        }
 
         if (
             (layoutOverride is { } wanted) &&
@@ -219,31 +232,23 @@ public sealed class WorldViewComposer {
             return (catchall.Name, "authored", catchall.TransitionSeconds, catchall.TransitionRenderScale);
         }
 
-        ResolveBuiltin(
-            joinedCount: joinedCount,
-            soleEditorIndex: soleEditorIndex,
-            workbenchFraction: workbenchFraction
-        );
+        ResolveBuiltin(joinedCount: joinedCount);
 
         return (BuiltinName, BuiltinName, BuiltinTransitionSeconds, BuiltinTransitionRenderScale);
     }
 
     /// <summary>Composes the window for this frame.</summary>
     /// <param name="joinedCount">The joined local-seat count.</param>
-    /// <param name="soleEditorIndex">The sole editing seat's view index (>= 0 when exactly one of 2+ seats edits), else -1.</param>
-    /// <param name="workbenchFraction">The sole-editor workbench width fraction.</param>
     /// <param name="views">The resolved view defaults (authored or built-in).</param>
     /// <param name="layoutOverride">The live active-layout override, or <see langword="null"/> for auto selection.</param>
     /// <param name="cameraOverride">The live camera override for every camera-bearing slot, or <see langword="null"/>.</param>
     /// <param name="elapsedSeconds">The presentation clock (drives the ease).</param>
-    public void Compose(int joinedCount, int soleEditorIndex, float workbenchFraction, WorldViewDefaults views,
+    public void Compose(int joinedCount, WorldViewDefaults views,
         string? layoutOverride, string? cameraOverride, float elapsedSeconds) {
         var (name, reason, seconds, renderScale) = Select(
             joinedCount: joinedCount,
             layoutOverride: layoutOverride,
-            soleEditorIndex: soleEditorIndex,
-            views: views,
-            workbenchFraction: workbenchFraction
+            views: views
         );
 
         ApplyCameraOverride(cameraOverride: cameraOverride);

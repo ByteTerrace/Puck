@@ -33,54 +33,6 @@ namespace Puck.Maths;
 /// </para>
 /// </remarks>
 public static class FixedFourierTransform {
-    /// <summary>Computes the forward transform in place.</summary>
-    /// <param name="plan">The plan for <paramref name="values"/>' length.</param>
-    /// <param name="values">The sequence, transformed in place.</param>
-    /// <exception cref="ArgumentException"><paramref name="values"/>'s length does not equal <paramref name="plan"/>'s length.</exception>
-    public static void Forward(FixedFourierPlan plan, Span<FixedComplex> values) {
-        RequireLength(plan: plan, values: values, parameterName: nameof(values));
-        Butterfly(halveEachStage: false, twiddles: plan.ForwardTwiddles, values: values);
-    }
-    /// <summary>Embeds a real sequence (zero imaginary parts) and computes its forward transform.</summary>
-    /// <param name="plan">The plan for <paramref name="real"/>'s length.</param>
-    /// <param name="real">The real-valued input sequence.</param>
-    /// <param name="destination">Receives the transform; the same length as <paramref name="real"/>.</param>
-    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length.</exception>
-    public static void ForwardReal(FixedFourierPlan plan, ReadOnlySpan<FixedQ4816> real, Span<FixedComplex> destination) {
-        RequireLength(plan: plan, values: real, parameterName: nameof(real));
-        RequireLength(plan: plan, values: destination, parameterName: nameof(destination));
-
-        for (var i = 0; (i < real.Length); ++i) {
-            destination[i] = new(Real: real[i], Imaginary: FixedQ4816.Zero);
-        }
-
-        Forward(plan: plan, values: destination);
-    }
-    /// <summary>Computes the inverse transform in place.</summary>
-    /// <param name="plan">The plan for <paramref name="values"/>' length.</param>
-    /// <param name="values">The transformed sequence, restored in place.</param>
-    /// <exception cref="ArgumentException"><paramref name="values"/>'s length does not equal <paramref name="plan"/>'s length.</exception>
-    public static void Inverse(FixedFourierPlan plan, Span<FixedComplex> values) {
-        RequireLength(plan: plan, values: values, parameterName: nameof(values));
-        Butterfly(halveEachStage: true, twiddles: plan.InverseTwiddles, values: values);
-    }
-    /// <summary>Computes the inverse transform and discards the imaginary part, for a spectrum known to represent a
-    /// real sequence (Hermitian-symmetric).</summary>
-    /// <param name="plan">The plan for <paramref name="spectrum"/>'s length.</param>
-    /// <param name="spectrum">The spectrum; OVERWRITTEN with its inverse transform.</param>
-    /// <param name="destination">Receives the real part of each restored sample; the same length as <paramref name="spectrum"/>.</param>
-    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length.</exception>
-    public static void InverseReal(FixedFourierPlan plan, Span<FixedComplex> spectrum, Span<FixedQ4816> destination) {
-        RequireLength(plan: plan, values: spectrum, parameterName: nameof(spectrum));
-        RequireLength(plan: plan, values: destination, parameterName: nameof(destination));
-
-        Inverse(plan: plan, values: spectrum);
-
-        for (var i = 0; (i < spectrum.Length); ++i) {
-            destination[i] = spectrum[i].Real;
-        }
-    }
-
     // In-place radix-2 decimation-in-time, the same bit-reversal-then-stages shape as NumberTheoreticTransform.Butterfly.
     // halveEachStage carries the inverse's per-stage 1/N normalization: applied to every stage rather than once at the
     // end, so it never asks FixedQ4816 to represent 1/N directly.
@@ -113,17 +65,118 @@ public static class FixedFourierTransform {
                     var sum = (u + t);
                     var difference = (u - t);
 
-                    values[(i + j)] = (halveEachStage ? Half(value: sum) : sum);
-                    values[((i + j) + half)] = (halveEachStage ? Half(value: difference) : difference);
+                    values[(i + j)] = (halveEachStage
+                        ? Half(value: sum)
+                        : sum
+                    );
+                    values[((i + j) + half)] = (halveEachStage
+                        ? Half(value: difference)
+                        : difference
+                    );
                 }
             }
         }
     }
     private static FixedComplex Half(FixedComplex value) =>
-        new(Real: (value.Real / TwoRaw), Imaginary: (value.Imaginary / TwoRaw));
+        new(
+            Real: (value.Real / TwoRaw),
+            Imaginary: (value.Imaginary / TwoRaw)
+        );
     private static void RequireLength<T>(FixedFourierPlan plan, ReadOnlySpan<T> values, string parameterName) {
         if (values.Length != plan.Length) {
-            throw new ArgumentException(message: $"expected length {plan.Length} (the plan's length); got {values.Length}.", paramName: parameterName);
+            throw new ArgumentException(
+                message: $"expected length {plan.Length} (the plan's length); got {values.Length}.",
+                paramName: parameterName
+            );
+        }
+    }
+
+    /// <summary>Computes the forward transform in place.</summary>
+    /// <param name="plan">The plan for <paramref name="values"/>' length.</param>
+    /// <param name="values">The sequence, transformed in place.</param>
+    /// <exception cref="ArgumentException"><paramref name="values"/>'s length does not equal <paramref name="plan"/>'s length.</exception>
+    public static void Forward(FixedFourierPlan plan, Span<FixedComplex> values) {
+        RequireLength(
+            plan: plan,
+            values: values,
+            parameterName: nameof(values)
+        );
+        Butterfly(
+            halveEachStage: false,
+            twiddles: plan.ForwardTwiddles,
+            values: values
+        );
+    }
+    /// <summary>Embeds a real sequence (zero imaginary parts) and computes its forward transform.</summary>
+    /// <param name="plan">The plan for <paramref name="real"/>'s length.</param>
+    /// <param name="real">The real-valued input sequence.</param>
+    /// <param name="destination">Receives the transform; the same length as <paramref name="real"/>.</param>
+    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length.</exception>
+    public static void ForwardReal(FixedFourierPlan plan, ReadOnlySpan<FixedQ4816> real, Span<FixedComplex> destination) {
+        RequireLength(
+            plan: plan,
+            values: real,
+            parameterName: nameof(real)
+        );
+        RequireLength(
+            plan: plan,
+            values: destination,
+            parameterName: nameof(destination)
+        );
+
+        for (var i = 0; (i < real.Length); ++i) {
+            destination[i] = new(
+                Real: real[i],
+                Imaginary: FixedQ4816.Zero
+            );
+        }
+
+        Forward(
+            plan: plan,
+            values: destination
+        );
+    }
+    /// <summary>Computes the inverse transform in place.</summary>
+    /// <param name="plan">The plan for <paramref name="values"/>' length.</param>
+    /// <param name="values">The transformed sequence, restored in place.</param>
+    /// <exception cref="ArgumentException"><paramref name="values"/>'s length does not equal <paramref name="plan"/>'s length.</exception>
+    public static void Inverse(FixedFourierPlan plan, Span<FixedComplex> values) {
+        RequireLength(
+            plan: plan,
+            values: values,
+            parameterName: nameof(values)
+        );
+        Butterfly(
+            halveEachStage: true,
+            twiddles: plan.InverseTwiddles,
+            values: values
+        );
+    }
+    /// <summary>Computes the inverse transform and discards the imaginary part, for a spectrum known to represent a
+    /// real sequence (Hermitian-symmetric).</summary>
+    /// <param name="plan">The plan for <paramref name="spectrum"/>'s length.</param>
+    /// <param name="spectrum">The spectrum; OVERWRITTEN with its inverse transform.</param>
+    /// <param name="destination">Receives the real part of each restored sample; the same length as <paramref name="spectrum"/>.</param>
+    /// <exception cref="ArgumentException">A span's length does not equal <paramref name="plan"/>'s length.</exception>
+    public static void InverseReal(FixedFourierPlan plan, Span<FixedComplex> spectrum, Span<FixedQ4816> destination) {
+        RequireLength(
+            plan: plan,
+            values: spectrum,
+            parameterName: nameof(spectrum)
+        );
+        RequireLength(
+            plan: plan,
+            values: destination,
+            parameterName: nameof(destination)
+        );
+
+        Inverse(
+            plan: plan,
+            values: spectrum
+        );
+
+        for (var i = 0; (i < spectrum.Length); ++i) {
+            destination[i] = spectrum[i].Real;
         }
     }
 
@@ -159,7 +212,10 @@ public sealed class FixedFourierPlan {
             (length <= 0) ||
             !BitOperations.IsPow2(value: ((uint)length))
         ) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(length), message: "length must be a positive power of two.");
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(length),
+                message: "length must be a positive power of two."
+            );
         }
 
         var half = (length >> 1);
@@ -181,9 +237,9 @@ public sealed class FixedFourierPlan {
         );
     }
 
-    /// <summary>Gets the transform length this plan was built for.</summary>
-    public int Length { get; }
-
     internal ReadOnlySpan<FixedComplex> ForwardTwiddles => m_forwardTwiddles;
     internal ReadOnlySpan<FixedComplex> InverseTwiddles => m_inverseTwiddles;
+
+    /// <summary>Gets the transform length this plan was built for.</summary>
+    public int Length { get; }
 }

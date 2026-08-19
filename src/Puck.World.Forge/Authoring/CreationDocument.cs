@@ -29,13 +29,13 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// <param name="Dilate">The shape's inflation radius (null = 0).</param>
 /// <param name="Onion">The shape's shell thickness (null = 0, solid).</param>
 /// <param name="Domain">The ordered SDF VM domain operators (<see cref="ShapeDomainOp"/>) applied to the shape's
-/// point in creation space, before its own translate/rotate/scale (null = none). <c>symmetry</c> and <c>repeat</c>
-/// apply on BOTH render and the fixed-point solid field; <c>polar</c> and <c>wallpaper</c> are render only (the
-/// fixed-point path collides against the unfolded shape).</param>
+/// point in creation space, before its own translate/rotate/scale (null = none). Every op the copy expansion covers
+/// reaches contact as well as render; <c>wallpaper</c> does not expand, and a solid placement carrying one is refused
+/// at validation.</param>
 public sealed record ShapeDocument(
     int Id,
     DocumentIdentifier? Name,
-    AvatarPrimitive Type,
+    SdfSolidPrimitive Type,
     DocumentVector3 Position,
     DocumentQuaternion Rotation,
     DocumentVector3 Scale,
@@ -161,9 +161,9 @@ public sealed record TextRunDocument(
         }
     }
 }
-/// <summary>One IK chain on the wire (see <see cref="ChainRig"/>'s rest-geometry capture — rest geometry is
-/// re-derived from the member shapes' current positions at load time, never persisted, so a loaded chain always
-/// captures fresh against whatever pose the shapes loaded at).</summary>
+/// <summary>One IK chain on the wire. Carries no rest geometry (joint pivots, bone lengths) of its own — a chain
+/// consumer derives that from the member shapes' current positions; only the goal/pole live pose and the member list
+/// persist here.</summary>
 /// <param name="Id">The chain's stable id.</param>
 /// <param name="Name">The player-given name (null = unnamed).</param>
 /// <param name="Shapes">The member shape ids, root→tip order.</param>

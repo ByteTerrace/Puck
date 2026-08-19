@@ -18,19 +18,19 @@ public static class HexColor {
     /// <summary>Returns whether a value has the state-binding shape: the prefix followed by at least one character.</summary>
     /// <param name="value">The candidate string.</param>
     public static bool IsStateBinding(string? value) =>
-        (value is not null) &&
+        ((value is not null) &&
         (value.Length > StateBindingPrefix.Length) &&
         value.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: StateBindingPrefix
-        );
+        ));
     /// <summary>Formats an RGB triple (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> string.</summary>
     /// <param name="rgb">The RGB color.</param>
     /// <returns>The <c>#RRGGBB</c> string.</returns>
     public static string Format(Vector3 rgb) =>
         string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"#{((int)MathF.Round(x: (Math.Clamp(value: rgb.X, min: 0f, max: 1f) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(value: rgb.Y, min: 0f, max: 1f) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(value: rgb.Z, min: 0f, max: 1f) * 255f))):X2}"
+            handler: $"#{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.X) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.Y) * 255f))):X2}{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgb.Z) * 255f))):X2}"
         );
     /// <summary>Parses a <c>#RRGGBB</c> string, falling back when it does not parse.</summary>
     /// <param name="value">The <c>#RRGGBB</c> string.</param>

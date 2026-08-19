@@ -3,9 +3,10 @@
         <AssemblyName>Puck.SignedDistance</AssemblyName>
         <Description>The signed-distance-function field as data: the instruction ISA, the packed-word program
         representation, the fluent authoring builder (including laying out Puck.Text-authored strings into marchable
-        glyph geometry), and a warp-free deterministic fixed-point CPU interpreter (Puck.SignedDistance.Queries) for
-        authoritative simulation to query the same field a GPU renders. No GPU or shader-compiler dependency of any
-        kind.</Description>
+        glyph geometry), the solid primitive vocabulary and its unit-size table, the isometric domain-operator family
+        read both as a point fold and as the rigid copies it generates, and a warp-free deterministic fixed-point CPU
+        interpreter (Puck.SignedDistance.Queries) for authoritative simulation to query the same field a GPU renders.
+        No GPU or shader-compiler dependency of any kind.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.SignedDistance</PackageId>
         <PackageTags>determinism;distance-field;fixed-point;sdf;simulation</PackageTags>

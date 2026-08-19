@@ -1625,7 +1625,14 @@ public static class WorldSubmissionCodec {
             reader => new WorldDesignation(
                 EntityIndex: reader.ReadInt32(),
                 Register: reader.ReadString(),
-                Subject: ReadSubject(reader: reader)
+                Subject: ReadSubject(reader: reader),
+                Point: (reader.ReadBoolean()
+                    ? new FixedVector3(
+                        X: FixedQ4816.FromRawBits(value: reader.ReadInt64()),
+                        Y: FixedQ4816.FromRawBits(value: reader.ReadInt64()),
+                        Z: FixedQ4816.FromRawBits(value: reader.ReadInt64())
+                    )
+                    : null)
             ),
             out designation,
             out failure
@@ -1897,6 +1904,12 @@ public static class WorldSubmissionCodec {
                     writer: writer,
                     subject: designation.Subject
                 );
+                writer.Write(value: designation.Point.HasValue);
+                if (designation.Point is { } point) {
+                    writer.Write(value: point.X.Value);
+                    writer.Write(value: point.Y.Value);
+                    writer.Write(value: point.Z.Value);
+                }
             },
             out bytes,
             out failure

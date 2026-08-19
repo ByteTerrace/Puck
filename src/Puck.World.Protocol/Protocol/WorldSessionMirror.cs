@@ -493,8 +493,8 @@ public sealed class WorldSessionMirror : IClientSink {
             );
 
             m_heading[index] = MathF.Atan2(
-                y: -facing.X,
-                x: -facing.Z
+                x: -facing.Z,
+                y: -facing.X
             );
             m_bodyColor[index] = route.BodyColor;
             m_kit[index] = route.Kit;

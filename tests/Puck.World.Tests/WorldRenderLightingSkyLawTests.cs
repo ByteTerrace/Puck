@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// absence, at any level, must resolve to <see cref="SdfFrame"/>'s own pinned defaults bit-exactly, every authored
 /// field must thread through untouched, and a state-bound color reads its cell live.</summary>
 public sealed class WorldRenderLightingSkyLawTests {
-    private static WorldRenderDefaults BaseDefaults() => WorldRenderDefaults.Default;
+    private static WorldRenderDefaults BaseDefaults() => WorldRenderDefaults.Absent;
     private static WorldRenderLightingState Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldRenderCycleTrack? track = null) => (track ?? new WorldRenderCycleTrack()).Resolve(
         definition: (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults }),
         revision: revision,

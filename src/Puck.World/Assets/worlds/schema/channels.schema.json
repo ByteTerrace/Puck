@@ -25,7 +25,7 @@
       "role": {
         "description": "The engine motion role this channel claims, or null for a composition channel.",
         "enum": [
-          "MoveForward",
+          "MoveAdvance",
           "MoveStrafe",
           "Turn",
           "MoveUp",
@@ -34,6 +34,9 @@
           "FaceX",
           "FaceY",
           "FaceZ",
+          "MoveX",
+          "MoveY",
+          "MoveZ",
           null
         ],
         "default": null
@@ -52,7 +55,7 @@
         "default": null
       },
       "frame": {
-        "description": "What the MoveForward/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.",
+        "description": "What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.",
         "enum": [
           "World",
           "Camera",

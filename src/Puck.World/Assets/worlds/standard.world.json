@@ -1,7 +1,59 @@
 {
+  "audio": {
+    "cues": [],
+    "defaultBedFadeSeconds": 0.5,
+    "defaultCurve": "smoothstep",
+    "defaultSpeakerRadius": 8,
+    "listener": "focus",
+    "masterGain": 1
+  },
+  "authoring": {
+    "authoringHeadroomPlacements": 8,
+    "authoringHeadroomScreens": 4,
+    "candidateCap": 16,
+    "candidateRadius": 32,
+    "derivedFaceScreens": 4,
+    "maxPlacementScale": 5.0,
+    "minPlacementScale": 0.2,
+    "previewDeadlineFrames": 12
+  },
   "bindingOverlays": [
     {
       "bindingBar": {
+        "banks": [
+          {
+            "alpha": 1,
+            "id": "resting",
+            "offsetX": 0,
+            "offsetY": 0,
+            "pageId": "base"
+          }
+        ],
+        "hideUnbound": false,
+        "multiSeatAlpha": 0.5,
+        "layout": {
+          "anchorOffsetY": 0.36666667,
+          "buttonSize": 0.075,
+          "centerGap": 0.1,
+          "glyphOffsetRatio": 0.4375,
+          "glyphSizeRatio": 0.53333336,
+          "scale": 1
+        },
+        "slotSet": [
+          "DpadUp",
+          "DpadRight",
+          "DpadDown",
+          "DpadLeft",
+          "LeftShoulder",
+          "LeftStickPress",
+          "ButtonNorth",
+          "ButtonWest",
+          "ButtonSouth",
+          "ButtonEast",
+          "RightShoulder",
+          "RightStickPress"
+        ],
+        "text": false,
         "visible": {
           "$type": "recently",
           "fact": "SeatInput",
@@ -278,6 +330,52 @@
               "mouse.button1",
               "mouse.button2"
             ]
+          },
+          {
+            "chord": [],
+            "group": "flying",
+            "page": {
+              "entries": [
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "channel": "up",
+                  "label": "Ascend",
+                  "scale": 1,
+                  "sources": [
+                    "gamepad.rightStickPress",
+                    "keyboard.space"
+                  ]
+                },
+                {
+                  "channel": "up",
+                  "label": "Descend",
+                  "scale": -1,
+                  "sources": [
+                    "gamepad.leftStickPress",
+                    "keyboard.controlLeft"
+                  ]
+                }
+              ],
+              "id": "flying-base"
+            }
+          }
+        ],
+        "contexts": [
+          {
+            "family": "editing",
+            "group": "flying",
+            "state": "on"
           }
         ],
         "modifiers": [
@@ -309,18 +407,6 @@
             "rings": [
               {
                 "entries": [
-                  {
-                    "command": "editor.enter",
-                    "icon": "edit.place",
-                    "label": "Editor",
-                    "sources": null
-                  },
-                  {
-                    "command": "editor.status",
-                    "icon": "action.target",
-                    "label": "Status",
-                    "sources": null
-                  },
                   {
                     "command": "console",
                     "icon": "edit.op",
@@ -385,7 +471,7 @@
     {
       "frame": "Heading",
       "name": "forward",
-      "role": "MoveForward",
+      "role": "MoveAdvance",
       "shape": "Bipolar"
     },
     {
@@ -420,6 +506,21 @@
       "shape": "Bipolar"
     },
     {
+      "name": "moveX",
+      "role": "MoveX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "moveY",
+      "role": "MoveY",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "moveZ",
+      "role": "MoveZ",
+      "shape": "Bipolar"
+    },
+    {
       "composition": true,
       "name": "jump",
       "shape": "Binary"
@@ -445,6 +546,127 @@
       "shape": "Binary"
     }
   ],
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": []
+  },
+  "host": {
+    "presentation": "Windowed",
+    "backend": "auto",
+    "width": 1280,
+    "height": 800,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null
+  },
+  "hud": {
+    "defaults": {
+      "cursor": {
+        "hoverRadius": 64,
+        "role": "TextPrimary",
+        "sizePx": 7
+      },
+      "enabled": true
+    },
+    "panels": []
+  },
+  "icons": {
+    "icons": [
+      { "name": "dpad.up", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2191" } },
+      { "name": "dpad.right", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2192" } },
+      { "name": "dpad.down", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2193" } },
+      { "name": "dpad.left", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2190" } },
+      { "name": "face.north", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25B2" } },
+      { "name": "face.east", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25B6" } },
+      { "name": "face.south", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25BC" } },
+      { "name": "face.west", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25C0" } },
+      { "name": "bumper.left", "label": "LB" },
+      { "name": "bumper.right", "label": "RB" },
+      { "name": "trigger.left", "label": "LT" },
+      { "name": "trigger.right", "label": "RT" },
+      { "name": "stick.left", "label": "LS" },
+      { "name": "stick.right", "label": "RS" },
+      { "name": "menu.back", "label": "BK" },
+      { "name": "menu.start", "label": "ST" },
+      { "name": "menu.guide", "label": "GD" },
+      { "name": "menu.touchpad", "label": "TP" },
+      { "name": "menu.mute", "label": "MU" },
+      { "name": "grip.left", "label": "LG" },
+      { "name": "grip.right", "label": "RG" },
+      { "name": "grip.leftUpper", "label": "L5" },
+      { "name": "grip.rightUpper", "label": "R5" },
+      { "name": "menu.quickAccess", "label": "QA" },
+      { "name": "touchpad.left", "label": "TL" },
+      { "name": "action.jump", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2191" } },
+      { "name": "action.interact", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25C7" } },
+      { "name": "action.target", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25CE" } },
+      { "name": "action.1", "label": "1" },
+      { "name": "action.2", "label": "2" },
+      { "name": "action.3", "label": "3" },
+      { "name": "action.4", "label": "4" },
+      { "name": "action.5", "label": "5" },
+      { "name": "action.6", "label": "6" },
+      { "name": "action.7", "label": "7" },
+      { "name": "action.8", "label": "8" },
+      { "name": "action.9", "label": "9" },
+      { "name": "action.10", "label": "10" },
+      { "name": "action.11", "label": "11" },
+      { "name": "action.12", "label": "12" },
+      { "name": "edit.prev", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2039" } },
+      { "name": "edit.next", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+203A" } },
+      { "name": "edit.place", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2193" } },
+      { "name": "edit.delete", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+00D7" } },
+      { "name": "edit.exit", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2190" } },
+      { "name": "edit.duplicate", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25AA" } },
+      { "name": "edit.link", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2295" } },
+      { "name": "edit.material", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25C9" } },
+      { "name": "edit.op", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2229" } },
+      { "name": "edit.style", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25CB" } },
+      { "name": "edit.deselect", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+2298" } },
+      { "name": "edit.record", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25CF" } },
+      { "name": "edit.play", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25B6" } },
+      { "name": "edit.undo", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+21A9" } },
+      { "name": "edit.redo", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+21AA" } },
+      { "name": "edit.speaker", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25A0" } },
+      { "name": "edit.bed", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25EF" } }
+    ],
+    "badges": [
+      { "button": "DpadUp", "icon": "dpad.up" },
+      { "button": "DpadRight", "icon": "dpad.right" },
+      { "button": "DpadDown", "icon": "dpad.down" },
+      { "button": "DpadLeft", "icon": "dpad.left" },
+      { "button": "ButtonNorth", "icon": "face.north" },
+      { "button": "ButtonEast", "icon": "face.east" },
+      { "button": "ButtonSouth", "icon": "face.south" },
+      { "button": "ButtonWest", "icon": "face.west" },
+      { "button": "LeftShoulder", "icon": "bumper.left" },
+      { "button": "RightShoulder", "icon": "bumper.right" },
+      { "button": "LeftTrigger", "icon": "trigger.left" },
+      { "button": "RightTrigger", "icon": "trigger.right" },
+      { "button": "LeftStickPress", "icon": "stick.left" },
+      { "button": "RightStickPress", "icon": "stick.right" },
+      { "button": "Back", "icon": "menu.back" },
+      { "button": "Start", "icon": "menu.start" },
+      { "button": "Guide", "icon": "menu.guide" },
+      { "button": "Touchpad", "icon": "menu.touchpad" },
+      { "button": "Mute", "icon": "menu.mute" },
+      { "button": "LeftGrip", "icon": "grip.left" },
+      { "button": "RightGrip", "icon": "grip.right" },
+      { "button": "LeftUpperGrip", "icon": "grip.leftUpper" },
+      { "button": "RightUpperGrip", "icon": "grip.rightUpper" },
+      { "button": "QuickAccess", "icon": "menu.quickAccess" },
+      { "button": "TouchpadLeft", "icon": "touchpad.left" }
+    ]
+  },
   "kits": [
     {
       "actions": {
@@ -610,6 +832,31 @@
       "name": "defaultKit"
     }
   ],
+  "render": {
+    "shadows": "Off",
+    "shadowCrowdRadius": 15,
+    "ambientOcclusion": false,
+    "renderScale": "Half",
+    "upscaleSharpness": 0,
+    "low": {
+      "shadows": "Off",
+      "ambientOcclusion": false,
+      "renderScale": "Half"
+    },
+    "medium": {
+      "shadows": "Medium",
+      "ambientOcclusion": true,
+      "renderScale": "ThreeQuarter"
+    },
+    "high": {
+      "shadows": "High",
+      "ambientOcclusion": true,
+      "renderScale": "Native"
+    }
+  },
+  "simulation": {
+    "rateHz": 240
+  },
   "state": {
     "body": [
       {
@@ -636,5 +883,67 @@
         "name": "bindingGroups"
       }
     ]
-  }
+  },
+  "views": {
+    "flyRig": {
+      "aim": {
+        "$type": "forward",
+        "focusDistance": 6
+      },
+      "lens": {
+        "fieldOfViewRadians": 0.9599311
+      },
+      "motion": {
+        "$type": "fly",
+        "defaultSpeed": 8,
+        "lookRateRadiansPerSecond": 2.6,
+        "maxPitchRadians": 1.45,
+        "maxSpeed": 64,
+        "minSpeed": 0.5
+      },
+      "smoothRate": 0
+    },
+    "layouts": [],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "aim": {
+        "$type": "anchor",
+        "offset": [
+          0,
+          1,
+          0
+        ],
+        "worldAxes": false
+      },
+      "lens": {
+        "fieldOfViewRadians": 0.9599311
+      },
+      "motion": {
+        "$type": "orbit",
+        "distance": 5.4626001,
+        "pitch": 0.4145069,
+        "pivotOffset": [
+          0,
+          0,
+          0
+        ],
+        "yaw": 0
+      },
+      "smoothRate": 6
+    }
+  },
+  "seatModes": [
+    {
+      "defaultState": "off",
+      "name": "editing",
+      "states": [
+        { "name": "off" },
+        { "name": "on", "target": "camera" }
+      ]
+    }
+  ]
 }

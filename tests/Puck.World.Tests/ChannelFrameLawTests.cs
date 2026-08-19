@@ -5,13 +5,13 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>The MoveForward/MoveStrafe pair's authored frame (<see cref="ChannelFrame"/>): meaningful only on those
+/// <summary>The MoveAdvance/MoveStrafe pair's authored frame (<see cref="ChannelFrame"/>): meaningful only on those
 /// two roles, declared identically by both (the pair rotates together), and refused beside a kit on the sim's own
 /// Heading arm (which would rotate an already-composed pair a second time); the table exposes it as one value.</summary>
 public sealed class ChannelFrameLawTests {
     private static readonly WorldChannel Turn = new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn);
 
-    private static WorldChannel Forward(ChannelFrame frame) => new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveForward, Frame: frame);
+    private static WorldChannel Forward(ChannelFrame frame) => new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance, Frame: frame);
     private static WorldChannel Strafe(ChannelFrame frame) => new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe, Frame: frame);
     // The sim's yaw convention: facing (-sin yaw, -cos yaw), read back from the attitude the body is drawn in.
     private static float AttitudeYaw(Quaternion orientation) {

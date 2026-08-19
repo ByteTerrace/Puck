@@ -1049,16 +1049,17 @@ public sealed record WorldInputHoldAuthoring(
     bool EqualizeByDefault,
     IReadOnlyList<WorldInputHoldParticipantAuthoring> Participants
 ) {
-    /// <summary>Gets the inert input-hold policy — one simulation tick's worth of ceiling and lower-after (the
-    /// smallest positive duration <c>lowerAfterSeconds</c>' floor admits at the engine default rate), zero default
-    /// hold, no equalization, no participants.</summary>
-    public static WorldInputHoldAuthoring Default { get; } = new(
-        CeilingSeconds: (1f / WorldSimulationDefaults.DefaultRateHz),
-        LowerAfterSeconds: (1f / WorldSimulationDefaults.DefaultRateHz),
+    /// <summary>Gets the inert input-hold policy — a minimal positive ceiling and lower-after (1/240 s, a plain
+    /// duration constant small enough to read as "no hold" yet positive at every legal rate — the engine holds no
+    /// default rate to derive it from), zero default hold, no equalization, no participants.</summary>
+    public static WorldInputHoldAuthoring Absent { get; } = new(
+        CeilingSeconds: (1f / 240f),
         DefaultSeconds: 0f,
         EqualizeByDefault: false,
+        LowerAfterSeconds: (1f / 240f),
         Participants: []
     );
+
     /// <summary>Compiles this authored (seconds) row to its compiled (ticks) shape at <paramref name="ratePerSecond"/>
     /// — the inverse of <see cref="WorldInputHoldSettings.ToAuthoring"/>. Every checked-in world authors durations
     /// that divide the rate they are authored against exactly, so this round-trips exactly for everything this

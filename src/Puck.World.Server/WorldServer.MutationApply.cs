@@ -54,6 +54,52 @@ public sealed partial class WorldServer {
                 );
             }
         }
+        if (designation.Point is { } point) {
+            if (!knownSubject) {
+                var pointRegister = m_definition.TargetRegisters[registerIndex];
+                var pointRange = WorldPopulation.EffectiveTargetValue(
+                    body: source,
+                    stateName: pointRegister.RangeState,
+                    authoredMaximum: pointRegister.MaximumRange
+                );
+                var pointHalfAngle = WorldPopulation.EffectiveTargetValue(
+                    body: source,
+                    stateName: pointRegister.HalfAngleState,
+                    authoredMaximum: pointRegister.MaximumHalfAngleDegrees
+                );
+
+                if (!m_population.DesignationWithinEnvelope(
+                    halfAngleDegrees: pointHalfAngle,
+                    point: in point,
+                    rangeValue: pointRange,
+                    reason: out var pointReason,
+                    register: pointRegister,
+                    sourceIndex: sourceIndex
+                )) {
+                    return Refuse(pointReason);
+                }
+            }
+
+            m_population.SetDesignation(
+                bodyIndex: sourceIndex,
+                registerIndex: registerIndex,
+                target: WorldTargetDesignation.AtPoint(point: point)
+            );
+            var pointMessage = string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"body:{sourceIndex} {designation.Register}=at:{((double)point.X):0.###},{((double)point.Y):0.###},{((double)point.Z):0.###}"
+            );
+
+            Console.Error.WriteLine(value: $"[world.designation: {pointMessage}]");
+            EchoTap?.Invoke(obj: new WorldEditEcho(
+                Message: pointMessage,
+                Rejected: false,
+                Kind: WorldEditEchoKind.Designation,
+                ConnectionId: connectionId,
+                CorrelationId: correlationId
+            ));
+            return true;
+        }
         if (designation.Subject.Kind != GrantSubjectKind.Body) {
             return Refuse($"subject '{designation.Subject.Describe()}' is not a body");
         }
@@ -115,7 +161,7 @@ public sealed partial class WorldServer {
         m_population.SetDesignation(
             bodyIndex: sourceIndex,
             registerIndex: registerIndex,
-            subjectIndex: targetIndex
+            target: WorldTargetDesignation.Body(index: targetIndex)
         );
         var message = $"body:{sourceIndex} {designation.Register}={targetSubject.Describe()}";
 

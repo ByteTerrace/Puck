@@ -41,9 +41,6 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         m_source = source;
     }
 
-    /// <inheritdoc/>
-    public WorldContactCensus Census => m_inner.Census;
-
     private static FixedVector3 MapIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
         for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
             var stage = path[stageIndex];
@@ -99,9 +96,10 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         }
         return value;
     }
-    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         var resolution = m_inner.ResolveSweep(
             orientation: in orientation,
+                    up: in up,
             position: ref position,
             previousPosition: previousPosition,
             velocity: ref velocity,
@@ -190,10 +188,19 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             ) &&
                 (neighbourField is not null)
             ) {
+                // The up axis is a DIRECTION in the local frame, so it crosses the seam through the same isometry the
+                // orientation does. Handing the neighbour an unmapped axis makes its walkable test measure against the
+                // wrong vertical and the body loses ground exactly where the seam hands over.
+                var neighbourUp = MapVectorIntoNeighbour(
+                    path: projection.Path,
+                    value: up
+                );
+
                 neighbourResolution = neighbourField.ResolveSweep(
                     orientation: in neighbourOrientation,
                     position: ref neighbourPosition,
                     previousPosition: neighbourPreviousPosition,
+                    up: in neighbourUp,
                     velocity: ref neighbourVelocity,
                     volumes: volumes
                 );
@@ -272,45 +279,49 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     }
 
     /// <inheritdoc/>
-    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         return ResolveCore(
             entityIndex: -1,
             orientation: in orientation,
             position: ref position,
             previousPosition: position,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
     }
     /// <inheritdoc/>
-    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         return ResolveCore(
             entityIndex: entityIndex,
             orientation: in orientation,
             position: ref position,
             previousPosition: position,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
     }
     /// <inheritdoc/>
     public ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
-        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
             entityIndex: entityIndex,
             orientation: in orientation,
             position: ref position,
             previousPosition: previousPosition,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
     /// <inheritdoc/>
-    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
             entityIndex: -1,
             orientation: in orientation,
             position: ref position,
             previousPosition: previousPosition,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );

@@ -154,7 +154,8 @@ internal static class WorldPostBuildWiring {
             seatBindings: services.GetRequiredService<WorldSeatBindings>(),
             roster: services.GetRequiredService<PlayerRoster>(),
             grants: services.GetRequiredService<WorldServer>().Grants,
-            anchor: services.GetRequiredService<WorldPerceptionAnchor>()
+            anchor: services.GetRequiredService<WorldPerceptionAnchor>(),
+            activeLayout: services.GetRequiredService<Puck.World.Client.WorldViewComposer>().ActiveLayoutName
         );
 
         // Close the lever path here, where both halves are resolvable in EVERY shape: an accepted lever reaches the
@@ -164,16 +165,9 @@ internal static class WorldPostBuildWiring {
 
 
         // The echo fan-out's halves — resolved ONCE so the tap closure below never queries the container per-echo.
-        // toasts/overlayFeed are presentation-only (AddWorldPresentation registers both or neither); the stable
+        // toasts are presentation-only (AddWorldPresentation registers it); the stable
         // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
-        // editorDrag/editorWorkbench are CORE (command-vocabulary parity moved
-        // the whole editor/sculpt surface into AddWorldAuthoritativeCore — see WorldBootComposition's remarks), so
-        // they are ALWAYS present now — a headless script can grab/drag or open a sculpt bench purely over the
-        // console, same as windowed.
         var toasts = services.GetService<OverlayToastStore>();
-        var overlayFeed = services.GetService<WorldOverlayFeed>();
-        var editorDrag = services.GetRequiredService<WorldEditorDrag>();
-        var editorWorkbench = services.GetRequiredService<WorldWorkbench>();
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
@@ -213,30 +207,7 @@ internal static class WorldPostBuildWiring {
                 consoleRegistry.NoteDeferredRejection();
             }
 
-            // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
-            // Presentation-only: nothing else reads the HUD act-class tag headless.
-            if (
-                !echo.Rejected &&
-                (echo.Kind != WorldEditEchoKind.GrantTable)
-            ) {
-                overlayFeed?.NoteMutationApplied(documentOnly: (echo.Kind == WorldEditEchoKind.DocumentDefaults));
-            }
-
-            // A rejected mutation correlates back to the frozen released drag preview that submitted it: the
-            // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the
-            // deadline. CORE in every boot shape now (see the resolution above) — a headless drag preview is client-
-            // local state with nothing to render, but the correlation still keeps it honest.
-            if (
-                echo.Rejected &&
-                (echo.Mutation is { } rejectedMutation)
-            ) {
-                editorDrag.NoteRejected(mutation: rejectedMutation);
-                // A rejected sculpt commit clears its bench's pending flag WITHOUT flipping clean — the work stays
-                // counted as uncommitted (the accept, in WorldWorkbench.Tick, is the only clean edge).
-                editorWorkbench.NoteCommitRejected(mutation: rejectedMutation);
-            }
-
-            // THE EDIT-ECHO CUE LANE (the shimmer's audio twin): the same outcome fires its cue token — capability
+            // THE EDIT-ECHO CUE LANE: the same outcome fires its cue token — capability
             // denials as grant.denied, other rejections as mutation.rejected, applied edits as mutation.applied AT
             // the changed row's authored position where the mutation payload carries one. The audio director is
             // CORE, so this runs unconditionally; a headless boot's cues simply accumulate in a queue no device pump

@@ -77,7 +77,7 @@ Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and
 "Document composition" below). The movement platform
 every grounded kit rides is documented on its kit's `WorldMotionModel.Grounded`
 row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
-frame its MoveForward/MoveStrafe channel rows are authored in
+frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 `player.move` is camera-framed by its own definition, so keyboard-in-heading

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Physics</AssemblyName>
-        <Description>Deterministic fixed-point simulation kernels: exact and hierarchical gravitational fields (pairwise, Barnes–Hut monopole, and a low-order adaptive FMM), compound dynamic-body overlap, analytic static contact geometry, a substepping rigid-contact solver, and a two-body/multi-body coupling kernel with a shape-only multi-body world orchestrator. Identical results bit-for-bit for identical ordered inputs.</Description>
+        <Description>Deterministic fixed-point simulation kernels: exact and hierarchical gravitational fields (pairwise, Barnes–Hut monopole, and a low-order adaptive FMM), compound dynamic-body overlap, analytic static contact geometry and the relaxation solver over it, the contact seam a grounded body resolves against and both providers behind it (collider relaxation and scalar-field measurement), a substepping rigid-contact solver, and a two-body/multi-body coupling kernel with a shape-only multi-body world orchestrator. Identical results bit-for-bit for identical ordered inputs.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.Physics</PackageId>
         <PackageTags>collision;determinism;gravity;physics;rigid-body;simulation</PackageTags>

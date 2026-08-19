@@ -390,7 +390,8 @@ public sealed class WorldOwnedWorlds {
         MoveSpeedState: MoveSpeedState,
         TurnSpeedState: TurnSpeedState
     ),
-        StateRaw = ((template.StateRaw ?? new WorldStateSection()) with { World = [
+        StateRaw = ((template.StateRaw ?? new WorldStateSection()) with {
+            World = [
             new WorldStateRow(
             Name: MoveSpeedState,
             Kind: CellKind.Fixed,
@@ -407,9 +408,15 @@ public sealed class WorldOwnedWorlds {
                     Value: Puck.Maths.FixedQ4816.FromDouble(value: motion.TurnSpeed).Value
                 )]
         ),
-        ] }),
+        ],
+        }),
         BindingOverlaysRaw = [],
-        HudRaw = WorldHudSection.Default,
+        // The template's own hud policy (enabled/cursor) survives; only its authored panels are stripped — an owned
+        // world starts panel-clean but keeps the document-authored cursor, never an engine value.
+        HudRaw = new WorldHudSection(
+            Defaults: template.Hud.Defaults,
+            Panels: []
+        ),
         Adjacencies = null,
     };
 

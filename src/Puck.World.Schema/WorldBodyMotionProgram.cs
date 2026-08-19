@@ -405,11 +405,11 @@ public sealed class CompiledBodyMotionProgram {
     public bool Contains(BodyMotionOp operation) => m_operations.Contains(item: operation);
     /// <summary>Reports whether the selected instructions read <paramref name="role"/>.</summary>
     public bool RequiresRole(ChannelRole role) => role switch {
-        ChannelRole.MoveForward or ChannelRole.MoveStrafe => (Contains(operation: BodyMotionOp.ComputePlanarTargetVelocity)
+        ChannelRole.MoveAdvance or ChannelRole.MoveStrafe => (Contains(operation: BodyMotionOp.ComputePlanarTargetVelocity)
             || Contains(operation: BodyMotionOp.SnapYawToPlanarIntent)
             || Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
             || Contains(operation: BodyMotionOp.ComputeSwimTargetVelocity)
-            || (Contains(operation: BodyMotionOp.ShapeVehicleVelocity) && (role == ChannelRole.MoveForward))),
+            || (Contains(operation: BodyMotionOp.ShapeVehicleVelocity) && (role == ChannelRole.MoveAdvance))),
         ChannelRole.Turn => (Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
             || Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             || Contains(operation: BodyMotionOp.ResolveVehicleFrame)),

@@ -19,11 +19,13 @@ namespace Puck.Networking.Peers;
 public sealed class QuicPeerTransport : IPeerTransport {
     /// <summary>The ALPN token every peer connection negotiates.</summary>
     public static readonly SslApplicationProtocol ApplicationProtocol = new(protocol: "puck-peer");
+
     /// <summary>The TLS server name a dialer offers. Peers are addressed by identity, never by DNS name, so it is a
     /// fixed label the acceptor's certificate is not expected to match.</summary>
     public const string ServerName = "puck-peer";
 
     private static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(value: 10);
+
     private const int MaxInboundStreams = 16;
 
     private readonly X509Certificate2 m_certificate;
@@ -126,7 +128,7 @@ public sealed class QuicPeerTransport : IPeerTransport {
                     var connection = await m_listener.AcceptConnectionAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
 
                     return new Connection(connection: connection);
-                } catch (QuicException exception) when ((exception.QuicError != QuicError.OperationAborted) && !ct.IsCancellationRequested) {
+                } catch (QuicException exception) when (((exception.QuicError != QuicError.OperationAborted) && !ct.IsCancellationRequested)) {
                     // One remote side failed the transport handshake; the listener stays open for the next.
                 } catch (AuthenticationException) when (!ct.IsCancellationRequested) {
                     // Same: the remote side's certificate did not satisfy the TLS handshake.

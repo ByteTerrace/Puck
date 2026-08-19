@@ -203,6 +203,18 @@ correct them where they live.
    here is a defect, not a feature; a skill that proves wrong about its own
    area is stale, and gets corrected in the same change (rule 2).
 
+9. **Line endings are LF, everywhere, and are never a topic.** `.gitattributes`
+   pins `* text=auto eol=lf`, so the object store and the working tree hold the
+   same bytes on every OS and no checkout, formatter, or editor has a
+   conversion left to make; `.editorconfig` states the same contract so
+   `dotnet format whitespace` (phase 0 of `puck format`) agrees rather than
+   fights. The only exceptions are `*.bat`/`*.cmd` (cmd.exe mis-parses
+   LF-terminated labels) and `*.slnx` (Visual Studio rewrites it), pinned CRLF
+   in both files together. Never investigate, report, "fix", or work around an
+   end-of-line difference, and never spend a reviewer's attention on one — if
+   a diff or a formatter run appears to be about newlines, the setting is
+   wrong and gets corrected here, not accommodated at the call site.
+
 ## The game — where intent lives
 
 The four-world charter (Play plus the Dive/Kart/Jump dungeons, `studio` as a

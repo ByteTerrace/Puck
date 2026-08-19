@@ -78,16 +78,21 @@ public sealed partial class WorldPopulation {
         if (targetSource?.Source is BodyTargetSource.Designated) {
             var designated = entry.Designations[targetSource.Value.RegisterIndex];
 
-            if (
-                (designated >= 0) &&
-                (designated < Capacity) &&
-                m_entries[designated].Active &&
-                (m_entries[designated].Body is { } designatedBody)
+            if (designated.IsPoint) {
+                candidate = BodySensorTarget.Point(
+                    position: designated.Point,
+                    distanceSquared: (designated.Point - self).LengthSquared
+                );
+            } else if (
+                designated.HasBody &&
+                (designated.Index < Capacity) &&
+                m_entries[designated.Index].Active &&
+                (m_entries[designated.Index].Body is { } designatedBody)
             ) {
                 var position = designatedBody.FixedPosition;
 
                 candidate = new BodySensorTarget(
-                    Index: designated,
+                    Index: designated.Index,
                     Position: position,
                     DistanceSquared: (position - self).LengthSquared
                 );
@@ -198,6 +203,7 @@ public sealed partial class WorldPopulation {
     // phase/activity so the retune does not jerk the crowd.
     private void SeedSimulated(int index, bool resetPhase = true) {
         var offset = (index - LocalSeatCount);
+
         if (SeedProducer(kit: m_kits[m_entries[index].KitIndex]) is not { } producer) {
             return;
         }
@@ -377,6 +383,39 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+
+    // The tick's one gravity solve. Gathered in ENTITY ORDER so the solver's input order is the population's own
+    // stable order: an approximate solver's answer depends on the order its tree is built in, so activation history
+    // must not reach it.
+    private void SolveGravity() {
+        if (m_gravityField is not { IsActive: true } gravity) {
+            return;
+        }
+
+        m_gravityTargets.Clear();
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (
+                !entry.Active ||
+                (entry.Body is not { } body)
+            ) {
+                continue;
+            }
+
+            m_gravityTargets.Add(item: new WorldGravityTarget(
+                EntityIndex: index,
+                Mass: ((((uint)entry.KitIndex) < ((uint)m_kits.Length))
+                ? m_kits[entry.KitIndex].Mass
+                : FixedQ4816.Zero),
+                Position: body.FixedPosition
+            ));
+        }
+
+        gravity.Solve(targets: m_gravityTargets);
+    }
+
     /// <summary>Advances every active simulated stand-in by one sub-step: a named producer runs before motion, then
     /// every peer body integrates. A live <c>player.fly</c> tape or
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
@@ -392,6 +431,7 @@ public sealed partial class WorldPopulation {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         (m_contactField as WorldColliderSet)?.RefreshAttached(population: this);
+        SolveGravity();
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             var entry = m_entries[index];

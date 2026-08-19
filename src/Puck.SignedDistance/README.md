@@ -25,10 +25,18 @@ shade it; this library never names a device, a window, or a shader.
   bounds for `SdfProgram`'s packing pass. Shapes for which no finite sound bound
   exists, including planes and the approximate ellipsoid path, deliberately stay
   always-tested instead of claiming a false finite envelope.
+- *One fold, two readings:* an isometric domain operator is a point transform
+  to a marcher and a set of rigid copies to anything that places geometry
+  instead. `SdfDomainExpansion` derives the copies in fixed point, so an
+  analytic collider compiler sees every copy the fold draws.
 - *No GPU dependency:* authoring a program and querying it both work headless
   — no window, no device, no shader compiler.
 
 ## 🧮 The program model
+
+`SdfSolidPrimitive` is the closed vocabulary of solids that carry a unit-size
+law and a finite local bound; `SdfSolidGeometry` is the one place that decides
+what each one measures, so an authored scale of `(1,1,1)` is its unit size.
 
 `SdfProgramBuilder` builds an `SdfProgram` as an ordered stream of point
 transforms, field operations, shapes, and materials — reset/translate/rotate,
@@ -46,10 +54,11 @@ warp.
 `SdfFieldEvaluator` wraps a live `SdfProgram` and interprets its rigid,
 warp-free subset directly in `FixedQ4816`/`FixedVector3` — a SECOND,
 independent interpreter of the same instruction stream a GPU kernel walks,
-never generated shader code. It implements `IWorldQuery`
+never generated shader code. It implements `Puck.Maths`'s `IWorldQuery`
 (`Raycast`/`SphereCast`/`Overlap`/`TryGroundHeight`/`LineOfSight`) and the
-narrower `IFieldEvaluator` (`TryDistance`/`TryFieldGradient`) a gravity or
-wind consumer binds instead of the five-verb query surface. `BakedWorldQuery`
+narrower `IFieldEvaluator` (`TryDistance`/`TryFieldGradient`, declared in
+Puck.Maths) a gravity, contact, or wind consumer binds instead of the
+five-verb query surface. `BakedWorldQuery`
 is the sibling `Bounded`-confidence provider over a pre-baked, quantized
 artifact (`WorldQueryArtifact`/`WorldQueryBaker`) for callers that do not need
 per-tick exactness.
@@ -115,11 +124,15 @@ still has no live automated gate.
   `SdfMaterial`, `SdfMaterialScope`, `SdfInstanceRange`, `SdfScreenSurface`.
 - **The ISA vocabulary** — `SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfLift`,
   `SdfPolarAxis`, `SdfNoiseFlavor`, `SdfWallpaperGroup`, `SdfIsa`.
+- **Solid primitives** — `SdfSolidPrimitive`, `SdfSolidGeometry`,
+  `SdfSolidBounds`.
+- **Domain operators** — `SdfDomainOp`, `SdfDomainOps`, `SdfDomainExpansion`,
+  `SdfRigidFrame`.
 - **Per-frame data** — `DynamicTransform`.
 - **The instance cull grid** — `SdfInstanceGrid`, `SdfInstanceGridInput`.
 - **Bricks** — `SdfBrickBake`, `SdfBrickPoolLayout`.
 - **Screens** — `SdfScreenDecalLayout`.
-- **Queries** — `IWorldQuery`, `IFieldEvaluator`, `SdfFieldEvaluator`,
+- **Query providers** (the seams themselves are `Puck.Maths`) — `SdfFieldEvaluator`,
   `BakedWorldQuery`, `WorldQueryArtifact`, `WorldQueryBaker`,
   `WorldQueryProviders`, `WorldQueryConfidence`, `RayHit`.
 

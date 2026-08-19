@@ -42,7 +42,7 @@ public sealed class OverlayFrameBuilder {
     public const int MaxClips = 32;
     /// <summary>The element-record ceiling (rects + rings + text runs + icon chips together) — a cannot-overflow
     /// backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
-    public const int MaxElements = 1024;
+    public const int MaxElements = 2048;
     /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
     /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the four
     /// backstops size the GPU region the shader addresses. The budget is <see cref="OverlayChannelLeases"/>'
@@ -197,31 +197,6 @@ public sealed class OverlayFrameBuilder {
         return ((int)channel);
     }
     private static uint Pack(float value) => BitConverter.SingleToUInt32Bits(value: value);
-    // A badge label's two 7-bit lanes at bits 9-15 (char0) and 16-22 (char1), each an (atlas glyph index + 1), or 0
-    // for the iconographic glyphs that stay procedural. The shader uses a present char0 as the atlas-text flag.
-    private static uint PackBadgeLabel(OverlayGlyphId glyph) {
-        if (OverlayGamepadGlyphs.BadgeLabel(glyph: glyph) is not { Length: > 0 } label) {
-            return 0u;
-        }
-
-        var first = OverlayGlyphSdfPack.GlyphIndex(codePoint: label[0]);
-
-        if (first < 0) {
-            return 0u;
-        }
-
-        var bits = (((uint)(first + 1)) << 9);
-
-        if (label.Length > 1) {
-            var second = OverlayGlyphSdfPack.GlyphIndex(codePoint: label[1]);
-
-            if (second >= 0) {
-                bits |= (((uint)(second + 1)) << 16);
-            }
-        }
-
-        return bits;
-    }
     // The one place both NoteRefused and WriteText's own maxChars truncation land: content the WRITER declared it
     // would never offer, kept in its own bucket (m_refused) so it can never be reported as a reservation overflow.
     private void RefuseOwnCap(int index, int elements, int textWords) {
@@ -478,25 +453,33 @@ public sealed class OverlayFrameBuilder {
     /// <returns>The run width, px.</returns>
     public float TextWidth(int chars, int cellHeight) => (chars * CellWidth(cellHeight: cellHeight));
     /// <summary>Packs one icon chip (the binding-bar repertoire folded in as an element kind: rounded plate with the
-    /// four chip-state tiers, a procedural action icon, and a gamepad badge — atlas letters or procedural symbols).
-    /// Word layout (12): 0..1 plate center (normalized) · 2 plate half-size (px) · 3 badge half-size (px) ·
-    /// 4 = 2 | (role &lt;&lt; 4, unused) · 5 glyph &lt;&lt; 16 | icon · 6 state (alpha byte | pressed&lt;&lt;8 |
-    /// (char0+1)&lt;&lt;9 | (char1+1)&lt;&lt;16 | accent&lt;&lt;23 | bound&lt;&lt;24) · 7..8 badge center offset from
-    /// the plate center (px floats) · 9 clip index · 10..11 reserved.</summary>
+    /// four chip-state tiers, a bound action's plate icon, and a physical-button badge — every glyph an ALREADY
+    /// RESOLVED atlas index, 1-based, 0 = none; the caller (never this builder, never the shader) turns an icon
+    /// name or a physical button into that index — see <c>Puck.World.WorldIconTable</c>). Word layout (12):
+    /// 0..1 plate center (normalized) · 2 plate half-size (px) · 3 badge half-size (px) ·
+    /// 4 = 2 | (role &lt;&lt; 4, unused) · 5 iconGlyph0 (low 16 bits; high 16 reserved) ·
+    /// 6 state (alpha byte | pressed&lt;&lt;8 | badgeGlyph0&lt;&lt;9 (7 bits) | badgeGlyph1&lt;&lt;16 (7 bits) |
+    /// accent&lt;&lt;23 | bound&lt;&lt;24) · 7..8 badge center offset from the plate center (px floats) ·
+    /// 9 clip index · 10 iconGlyph1 · 11 reserved.</summary>
     /// <param name="centerX">The plate center x, px.</param>
     /// <param name="centerY">The plate center y, px.</param>
     /// <param name="plateHalf">The plate half-extent, px.</param>
     /// <param name="glyphHalf">The badge half-extent, px (0 = no badge).</param>
     /// <param name="glyphOffsetX">The badge center's x offset from the plate center, px.</param>
     /// <param name="glyphOffsetY">The badge center's y offset from the plate center, px.</param>
-    /// <param name="glyph">The physical-button badge glyph.</param>
-    /// <param name="icon">The bound action's icon.</param>
+    /// <param name="badgeGlyph0">The physical-button badge's first (or only) atlas glyph index, 1-based, 0 = no
+    /// badge. Capped at 7 bits (0..127) by the state word's packing.</param>
+    /// <param name="badgeGlyph1">The badge's second atlas glyph index (a 2-character label's second cell), 1-based,
+    /// 0 = a single-glyph badge. Capped at 7 bits (0..127).</param>
+    /// <param name="iconGlyph0">The bound action's first (or only) atlas glyph index, 1-based, 0 = no icon.</param>
+    /// <param name="iconGlyph1">The bound action's second atlas glyph index (a 2-character icon's second cell),
+    /// 1-based, 0 = a single-glyph icon.</param>
     /// <param name="alpha">The chip opacity.</param>
     /// <param name="pressed">The held tier-1 state.</param>
     /// <param name="accent">The accent tier-1 state (the context-primary action).</param>
     /// <param name="bound">Whether an action is bound (<see langword="false"/> = the disabled tier-0 look).</param>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, OverlayGlyphId glyph, OverlayIconId icon, float alpha, bool pressed, bool accent, bool bound) {
+    public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, ushort badgeGlyph0, ushort badgeGlyph1, ushort iconGlyph0, ushort iconGlyph1, float alpha, bool pressed, bool accent, bool bound) {
         if (!TryTakeElement()) {
             return;
         }
@@ -508,7 +491,7 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 2)] = Pack(value: plateHalf);
         m_scratch[(offset + 3)] = Pack(value: glyphHalf);
         m_scratch[(offset + 4)] = 2u;
-        m_scratch[(offset + 5)] = (((uint)glyph) << 16) | ((uint)icon);
+        m_scratch[(offset + 5)] = iconGlyph0;
         m_scratch[(offset + 6)] = ((uint)(Math.Clamp(
             max: 1f,
             min: 0f,
@@ -517,7 +500,8 @@ public sealed class OverlayFrameBuilder {
             | (pressed
             ? (1u << 8)
             : 0u)
-            | PackBadgeLabel(glyph: glyph)
+            | ((badgeGlyph0 & 0x7Fu) << 9)
+            | ((badgeGlyph1 & 0x7Fu) << 16)
             | (accent
             ? (1u << 23)
             : 0u)
@@ -528,6 +512,7 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 7)] = Pack(value: glyphOffsetX);
         m_scratch[(offset + 8)] = Pack(value: glyphOffsetY);
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_scratch[(offset + 10)] = iconGlyph1;
         m_elementCount++;
     }
     /// <summary>Packs one panel-chrome record (scrim fill + hairline + optional title band + optional Tier-1

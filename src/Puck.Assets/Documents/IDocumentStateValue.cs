@@ -9,7 +9,6 @@ namespace Puck.Assets.Documents;
 public interface IDocumentStateValue {
     /// <summary>The authored symbolic reference, or <see langword="null"/> for a literal.</summary>
     string? Reference { get; }
-
     /// <summary>A short description of the value shape required from the referenced Text state cell.</summary>
     string ExpectedValue { get; }
 

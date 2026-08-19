@@ -13,7 +13,7 @@ namespace Puck.World;
 /// protocol traffic → every body, INCLUDING every booted screen machine (<c>Server.WorldMachineHost.Advance</c>)
 /// → the tick's snapshot, delivered to the client synchronously), then
 /// the client-side post-step (the per-tick analog clear).</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldEditorSession editor, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances) : IFixedStepSimulation, IWorldSimulationClock {
+internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldTcpHost tcpHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances, WorldViewComposer composer) : IFixedStepSimulation, IWorldSimulationClock {
     private const ulong TimingReportInterval = 60UL;
 
     private ulong m_timingSamples;
@@ -23,12 +23,12 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
     private readonly WorldClient m_client = client;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
-    private readonly WorldEditorSession m_editor = editor;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
     private readonly WorldTcpHost m_tcpHost = tcpHost;
     private readonly WorldPerceptionAnchor m_anchor = anchor;
     private readonly WorldInstanceHost m_instances = instances;
+    private readonly WorldViewComposer m_composer = composer;
 
     /// <summary>The mounted addon runtime this shell holds — never called from here: the addon principals tick INSIDE
     /// <see cref="WorldServer.Step"/>, at its own three pinned points. It is a CONSTRUCTOR DEPENDENCY so that DI
@@ -206,7 +206,8 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
             seatBindings: m_seatBindings,
             roster: m_client.Roster,
             grants: m_server.Grants,
-            anchor: m_anchor
+            anchor: m_anchor,
+            activeLayout: m_composer.ActiveLayoutName
         );
 
         // Machine stepping runs INSIDE WorldServerStepShell.Step (Server.WorldMachineHost.Advance, called from
@@ -222,9 +223,6 @@ internal sealed class WorldSimulation(WorldServer server, WorldClient client, Wo
             : 0L
         );
         m_instances.FinishSeatIntents();
-        // Promote this tick's staged editor-stick samples to the frame-visible latch (the editor camera's per-frame
-        // integration cadence), beside the seats' own analog clear.
-        m_editor.LatchTick();
 
         var finishTicks = (timingEnabled
             ? (Stopwatch.GetTimestamp() - phaseStart)

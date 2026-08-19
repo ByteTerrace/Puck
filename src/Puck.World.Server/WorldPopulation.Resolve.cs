@@ -50,6 +50,15 @@ public sealed partial class WorldPopulation {
         // Derive the contact field the definition selects — the ONE derivation both a fresh activation and a live body
         // read. The field provider's program is handed in pre-built at runtime; at boot it is compiled here.
         m_contactCensus = WorldColliderSet.Measure(definition: definition);
+        // The gravitational field the definition authors. Compiled here beside the contact field so one derivation
+        // serves a fresh activation and a live body alike.
+        m_gravityField = new WorldGravityField(
+            capacity: Capacity,
+            compiled: FixedWorldGravity.Compile(
+                gravity: definition.Gravity,
+                placements: definition.Placements
+            )
+        );
         var derivedSolids = solids;
 
         if (
@@ -354,6 +363,7 @@ public sealed partial class WorldPopulation {
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index] is { Active: true, Body: { } body }) {
                 body.SetContactField(field: m_contactField);
+                body.SetGravityField(field: m_gravityField);
             }
         }
     }
@@ -462,6 +472,7 @@ public sealed partial class WorldPopulation {
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.
             body.SetContactField(field: m_contactField);
+            body.SetGravityField(field: m_gravityField);
             body.SetWaterline(level: m_waterline);
         }
 

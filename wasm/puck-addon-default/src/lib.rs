@@ -302,11 +302,11 @@ fn on_tick(inputs: &Inputs, outputs: &mut Outputs) {
         //
         // STRAFE and FORWARD are NOT symmetric here, and that is deliberate, not an oversight:
         // strafe drives MoveStrafe, which the host applies along the body's +X right vector
-        // directly, so the raw error dx is already the right sign. Forward drives MoveForward,
+        // directly, so the raw error dx is already the right sign. Forward drives MoveAdvance,
         // which the host applies along the body's FACING vector — and facing is -Z at this addon's
         // fixed yaw (0), per PlayerCommandModule's `player.face` doc ("0 = facing -Z") and
         // WorldBody's grounded integration (`facing = orientation.Rotate(-UnitZ)`,
-        // `planarTarget = facing * MoveForward`). So a POSITIVE forward value moves the body toward
+        // `planarTarget = facing * MoveAdvance`). So a POSITIVE forward value moves the body toward
         // -Z, and closing a NEGATIVE dz (the target sits further toward -Z than the body does)
         // needs a POSITIVE forward value: it is the sign-flipped error, `-dz`, not `dz` itself.
         let strafe = fixed::clamp(dx, fixed::NEGATIVE_ONE, fixed::ONE);

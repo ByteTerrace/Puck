@@ -24,9 +24,9 @@ internal static class PeerHandshake {
     private static async Task<PeerFailure> RefuseAsync(Stream stream, PeerFailure failure, CancellationToken ct) {
         try {
             await WireFrame.WriteAsync(
-                body: new[] { (byte)failure.Refusal },
+                body: new[] { ((byte)failure.Refusal) },
                 ct: ct,
-                kind: (byte)PeerFrameKind.HelloRefused,
+                kind: ((byte)PeerFrameKind.HelloRefused),
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
             await DrainUntilPeerClosesAsync(
@@ -43,7 +43,7 @@ internal static class PeerHandshake {
         var refusal = reader.ReadByte();
 
         if (
-            !reader.TryFinish(out var wireFailure) ||
+            !reader.TryFinish(failure: out var wireFailure) ||
             !Enum.IsDefined(value: ((PeerRefusal)refusal))
         ) {
             return new PeerFailure(
@@ -56,7 +56,7 @@ internal static class PeerHandshake {
         }
 
         return new PeerFailure(
-            Detail: $"the peer refused this side's handshake as {(PeerRefusal)refusal}",
+            Detail: $"the peer refused this side's handshake as {((PeerRefusal)refusal)}",
             Refusal: PeerRefusal.RefusedByPeer
         );
     }
@@ -81,7 +81,7 @@ internal static class PeerHandshake {
         await WireFrame.WriteAsync(
             body: offer.ToArray(),
             ct: ct,
-            kind: (byte)PeerFrameKind.HelloOffer,
+            kind: ((byte)PeerFrameKind.HelloOffer),
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -120,7 +120,7 @@ internal static class PeerHandshake {
             maxBytes: PeerWireProtocol.ChallengeBytes
         );
 
-        if (!offerReader.TryFinish(out var offerFailure)) {
+        if (!offerReader.TryFinish(failure: out var offerFailure)) {
             return (null, new PeerFailure(
                 Detail: offerFailure.ToString(),
                 Refusal: PeerRefusal.HandshakeMalformed
@@ -169,7 +169,7 @@ internal static class PeerHandshake {
         await WireFrame.WriteAsync(
             body: proofWriter.ToArray(),
             ct: ct,
-            kind: (byte)PeerFrameKind.HelloProof,
+            kind: ((byte)PeerFrameKind.HelloProof),
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -203,7 +203,7 @@ internal static class PeerHandshake {
             maxBytes: AttestationResourceLimits.AttestationBytes
         );
 
-        if (!proofReader.TryFinish(out var proofFailure)) {
+        if (!proofReader.TryFinish(failure: out var proofFailure)) {
             return (null, new PeerFailure(
                 Detail: proofFailure.ToString(),
                 Refusal: PeerRefusal.HandshakeMalformed

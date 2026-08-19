@@ -68,7 +68,7 @@
                 "default": null
               },
               "moveFrame": {
-                "description": "Which frame MoveForward/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body\u0027s own integrated heading. World (the default) takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
+                "description": "Which frame MoveAdvance/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body\u0027s own integrated heading. World (the default) takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
                 "enum": [
                   "Heading",
                   "World"
@@ -303,7 +303,7 @@
                 "default": null
               },
               "moveFrame": {
-                "description": "Which frame MoveForward/MoveStrafe resolve in \u2014 the same two-frame choice, and the same client-side camera composition seam, as MoveFrame.",
+                "description": "Which frame MoveAdvance/MoveStrafe resolve in \u2014 the same two-frame choice, and the same client-side camera composition seam, as MoveFrame.",
                 "enum": [
                   "Heading",
                   "World"
@@ -555,6 +555,10 @@
           "Solid"
         ],
         "default": "Overlap"
+      },
+      "mass": {
+        "type": "number",
+        "default": 0
       }
     },
     "required": [

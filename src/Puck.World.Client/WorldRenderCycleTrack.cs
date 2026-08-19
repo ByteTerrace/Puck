@@ -308,9 +308,9 @@ public sealed class WorldRenderCycleTrack {
             : ((1f - fromAt) + fraction));
         var t = ((span > 0f)
             ? Math.Clamp(
-                value: (offset / span),
+                max: 1f,
                 min: 0f,
-                max: 1f
+                value: (offset / span)
             )
             : 0f);
 

@@ -1,0 +1,126 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "icons": {
+      "description": "The icon rows.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One authored icon: a stable name (the string binding entries and badge rows reference, e.g. action.jump, edit.next) plus its content \u2014 exactly one of Glyph (a baked atlas glyph) or Label (a short text badge, at most MaxLabelChars characters \u2014 the LB/RB path made authorable).",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The stable icon name.",
+            "type": "string"
+          },
+          "glyph": {
+            "description": "The glyph content, or null when this row carries Label instead.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "font": {
+                "description": "The font id (WorldIconFontCatalog).",
+                "type": "string"
+              },
+              "glyph": {
+                "description": "The glyph spelling: one literal character, or U\u002BXXXX.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "font",
+              "glyph"
+            ],
+            "additionalProperties": false,
+            "default": null
+          },
+          "label": {
+            "description": "The short text content, or null when this row carries Glyph instead.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    },
+    "badges": {
+      "description": "The badge-mapping rows.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One physical-button badge mapping: which authored icon a GamepadButtons flag (by declared member name) shows on the binding bar, with optional per-family overrides \u2014 this replaces the engine\u0027s baked button\u2192glyph switch and makes the dormant controller-family seam real as data.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "button": {
+            "description": "The physical button (a declared, non-NoneGamepadButtons member name).",
+            "type": "string"
+          },
+          "icon": {
+            "description": "The default icon name.",
+            "type": "string"
+          },
+          "overrides": {
+            "description": "Family-specific overrides \u2014 ABSENT resolves to none.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One family-specific badge override: the same physical button renders a different icon on the named controller family (Puck.Input.Devices.GamepadType member name).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "family": {
+                  "description": "The controller family name.",
+                  "type": "string"
+                },
+                "icon": {
+                  "description": "The icon name this family shows instead of the row\u0027s default.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "icon"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "button",
+          "icon"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null
+}

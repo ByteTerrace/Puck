@@ -12,7 +12,7 @@ split, and this README is the entry point — each sibling owns its own depth:
 | [`Puck.World.Protocol`](../Puck.World.Protocol/README.md) | What a world SAYS — the wire/tape protocol |
 | [`Puck.Networking`](../Puck.Networking/README.md) | The world-agnostic wire substrate — the frame grammar and reader/writer pair |
 | [`Puck.World.Server`](../Puck.World.Server/README.md) | The authoritative runtime: the tick, entity table, grants, addons, owned worlds, storage, replay |
-| [`Puck.World.Client`](../Puck.World.Client/README.md) | The per-machine client half: seats, the entity view, the editor, and the binding-authoring layer |
+| [`Puck.World.Client`](../Puck.World.Client/README.md) | The per-machine client half: seats, the entity view, the fly camera application, and the binding-authoring layer |
 | `Puck.World` (this project) | The audio director, the frame source, presentation, console command modules, assets, and `Program.cs` |
 
 The product intent (the overworld, the reveal ladder) lives in
@@ -82,11 +82,12 @@ separate product (the unification contract): the SAME console verb surface
 drives both shapes, minus whatever presentation composed. The command
 VOCABULARY itself must be identical in every shape — the document validators
 check a world's `bindingOverlays` (the shipped `default.world.json` template's
-editor/sculpt pages included, for every world naming it as a basis)
+editor pages included, for every world naming it as a basis)
 against whatever this composition registers, so a genuinely presentation-only
 verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
-UNKNOWN over headless stdin, while `editor.*`/`sculpt.*` are CORE-registered
-(nothing in their dependency chain is GPU-typed), terminal-owned `console` is
+UNKNOWN over headless stdin, while `player.mode` (and the fly camera
+application it can activate) is CORE-registered (nothing in its dependency
+chain is GPU-typed), terminal-owned `console` is
 registered beside `quit`, and `world.screenshot`/`player.wheel.*` are
 CORE-registered too but resolve their presentation dependency as OPTIONAL and
 refuse BY NAME at use instead of going unregistered — a headless boot that
@@ -191,9 +192,8 @@ Facts a script needs:
   machine host is core state that boots and steps in every shape, and the
   binder is CORE too, since `world.faces`/`player.engage` read its bound/
   no-signal state even headless — every server-safe command module including
-  `ScreenCommandModule`, and the WHOLE editor/sculpt verb surface — session,
-  drag, workbench, picker, targeting, and every `editor.*`/`sculpt.*` command
-  module — for command-vocabulary parity: a world's binding document commits
+  `ScreenCommandModule`, and the fly camera application (`WorldSeatFlyRig`,
+  the `player.mode` verb) — for command-vocabulary parity: a world's binding document commits
   that vocabulary in every boot shape, and the validator checks it against what
   the shape registers) vs. everything genuinely presentation-only (the GPU host,
   render root, overlays, the audio device, gamepads). `WorldUiCommandModule`
@@ -212,8 +212,8 @@ Facts a script needs:
 - `WorldSimulation.cs` / `HeadlessWorldSimulation.cs` — the two boot shapes'
   `IFixedStepSimulation`s. Windowed: per exact tick, the client submits seat
   intents, the shared server-step shell runs, then the client post-step
-  (screens, the editor's per-tick latch). Headless: the shared server-step
-  shell alone — no `WorldClient`, no screens, no editor.
+  (screens). Headless: the shared server-step
+  shell alone — no `WorldClient`, no screens.
   `Puck.World.Server.WorldServerStepShell.Step` (not in this project) is the
   shared step both wrap: `WorldServer.Step`, then the replay tape's `NoteTick`
   and a caller-supplied `Action<ulong>` — here, the console wait gate's
@@ -248,7 +248,7 @@ Facts a script needs:
   real flattening needs.
 - `*CommandModule.cs` — the console verb modules, one per family (player,
   world, population, mutation, grants, bindings, profile, screens, collision,
-  looks, placements, network, refusals, editor, sculpt, audio, HUD, state,
+  looks, placements, network, refusals, audio, HUD, state,
   storage, recording, replay, views, waits, sdf, ui, instances, chat). Modules compose against
   the protocol link, so a scripted line drives the same wire a UI would.
   `WorldPopulationCommandModule.cs` (world.players/.devices/.population),
@@ -260,7 +260,7 @@ Facts a script needs:
   device open (or, for `qr`, a real encode) and reports the honest failure
   rather than refusing as unknown), and
   most others are server-safe (registered in `AddWorldAuthoritativeCore`,
-  the editor/sculpt modules included — see above); `WorldCommandModule.cs`
+  the fly camera application included — see above); `WorldCommandModule.cs`
   (the graphics/GPU levers), `WorldHostCommandModule.cs`,
   `WorldViewCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
@@ -274,7 +274,7 @@ Facts a script needs:
   `puck.recording.v1`.
 - [`Puck.World.Client`](../Puck.World.Client/README.md) — the per-machine
   client half: seats and device intents, the snapshot-fed entity view and
-  render interpolation, the in-session editor and sculpt workbench, the
+  render interpolation, the fly camera application, the
   binding-authoring layer, frame composition (`WorldFrameSource.cs`), scene
   emission (`WorldSceneEmitter.cs`), and offscreen view composition
   (`WorldViewComposer.cs`) — the three read the root's `WorldAudioDirector`
@@ -297,7 +297,7 @@ Facts a script needs:
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/` — the checked-in worlds (`worlds/*.world.json`, count them there
   rather than here: `default` — a partial `basis` template carrying the one
-  shipped binding document (movement, roster, editor and sculpt groups, and
+  shipped binding document (movement, roster, editor groups, and
   the `contexts` rows that map roster and editor states to them); the engine
   itself ships no bindings, so a world names this basis, authors its own, or
   has none — `play` — the hub and boot default — `dive`, `kart`, `jump`

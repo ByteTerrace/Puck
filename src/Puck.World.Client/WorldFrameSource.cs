@@ -2,14 +2,12 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.Text;
 using Puck.World.Client.Sdf;
-using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World.Client;
@@ -37,15 +35,6 @@ namespace Puck.World.Client;
 /// </para>
 /// </remarks>
 public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
-    // The per-editing-seat gizmo budget: the projected speaker chips one seat contributes to the
-    // gizmo channel's own reservation are capped here, nearest-to-camera first, so an author who declares a large
-    // speaker field admits its nearest rows rather than clipping arbitrary ones at the channel boundary. A dropped
-    // chip is off-screen priority (the farthest speakers), never a nearer one. Starving another surface is no longer
-    // possible in either direction: every channel writes against its own reservation
-    // (Puck.Overlays.OverlayChannelLeases), and the gizmo reservation is exactly PlayerRoster.MaxSlots seats × this
-    // budget × 2 records (ring + icon). THE cap is the writer's — this admission mirrors it, never widens it.
-    private const int MaxGizmoChipsPerSeat = EditorGizmoWriter.MaxChipsPerSeat;
-
     // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
     // and handoff use, with remote avatar transforms in its own frozen slot range.
     private readonly WorldAdjacencySceneEmitter m_adjacencies;
@@ -84,23 +73,20 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // BOOT-CONSUMED: the reserved derived-face screen count (WorldAuthoringDefaults.DerivedFaceScreens) — the binder's
     // frozen derived-face slot range, re-pointed live at each delivery.
     private readonly int m_derivedFaceScreens;
-    private readonly WorldEditorDrag m_drag;
-    // The per-seat editor mode: camera rig swap + the sole-editor layout policy, both read during dress.
-    private readonly WorldEditorSession m_editor;
+    // The seat's fly control application: camera rig swap, read during dress.
+    private readonly WorldSeatFlyRig m_flyRig;
     // The room's content sources, and the host that composes them. The host owns the capacity probe, the
     // dynamic-transform buffer and its slot assignment, and the rebuild-on-revision-change predicate.
     private readonly WorldSceneEmitter m_emitter;
     private readonly FrameRateMonitor m_frameRate;
-    // The editor-gizmo feed: geometry-less rows (speakers) projected into each EDITING seat's viewport as
-    // overlay chips — published every produced frame (leaving editor mode clears the chips), consumed by the
-    // unified overlay's gizmo writer the same frame (CaptureFrame runs before the overlay's FeedTick/writers).
-    private readonly EditorGizmoStore m_gizmos;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
     private readonly WorldSdfDocumentEmitter m_sdfDocuments;
     private readonly WorldRenderSettings m_settings;
+
     private readonly WorldRenderCycleTrack m_cycle = new();
+
     // The routed-definition registry supplies the structure half of each seat's live look policy while the
     // presentation clock integrates its latched stick Y. A traveling seat therefore uses the destination's clamp,
     // exactly like pointer drag and world.view.camera, rather than silently retaining the boot world's structure.
@@ -117,15 +103,10 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // WorldSeatCameraResolver.ResolveChase, the single shared path every traveling seat uses.
     // Slot-indexed, PlayerRoster.MaxSlots entries — one live rig per seat, never shared.
     private readonly IWorldSimulationClock m_simulation;
-    // The editor's client-side seams this half still reads: the targeting selection (the gizmo highlight tier), the
-    // drag channel (its per-frame retirement pass and the composed speaker rows), and the sculpt workbench and
-    // animated-placement pool (their presentation clocks). Their PROGRAM-side effects belong to the emitter.
-    private readonly WorldEditorTargeting m_targeting;
     private readonly WorldTextCatalog m_text;
     // The per-seat viewport + camera publication (the cursor feed's unproject seam): republished every dressed
     // frame from the SAME resolved region/camera each seat view renders with.
     private readonly WorldSeatViewports m_viewports;
-    private readonly WorldWorkbench m_workbench;
 
     private int m_builtDefinitionRevision;
     private SdfFieldEvaluator? m_cameraClearanceField;
@@ -144,8 +125,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // Advances exactly when the composed program is a NEW instance — the jumbotron engines' re-upload trigger.
     private int m_programRevision;
 
-    private readonly OverlayGizmoSeat[] m_gizmoSeats = new OverlayGizmoSeat[PlayerRoster.MaxSlots];
-    private readonly OverlayGizmoChip[][] m_gizmoChips = new OverlayGizmoChip[PlayerRoster.MaxSlots][];
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
     private readonly Vector3[] m_lastSeatAnchorPosition = new Vector3[PlayerRoster.MaxSlots];
@@ -175,14 +154,10 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
     /// <param name="envelope">The render-capacity oracle configured here with the probed floors and the emitter's
     /// candidate measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
-    /// <param name="editor">The per-seat editor mode (camera rig swap + the sole-editor layout policy).</param>
-    /// <param name="targeting">The editor selection state (the render highlight + rebuild watch).</param>
-    /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
+    /// <param name="flyRig">The seat fly control application (camera rig swap).</param>
     /// <param name="animator">The animated-placement replay pool.</param>
-    /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch).</param>
     /// <param name="audio">The narrow audio-director seam — the emitter derivation reconciled at the delivery
     /// boundary and the per-frame snapshot publisher.</param>
-    /// <param name="gizmos">The editor-gizmo store the per-frame speaker-chip projections publish into.</param>
     /// <param name="anchor">The per-seat perception anchor — the one body index every seat-relative derivation here
     /// (camera anchor pose, seat-join cue site, crowd soft-shadow centers) resolves through.</param>
     /// <param name="composition">The shared live composition-override store (view.override layout/view.override camera) the composer reads.</param>
@@ -196,7 +171,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="text">The world-relative font catalog and packed GPU atlas.</param>
     /// <param name="adjacencies">The injected adjacency resolver shared by rendering and collision.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldStampPool animator, WorldWorkbench workbench, IWorldAudioFrameFeed audio, EditorGizmoStore gizmos, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatFlyRig flyRig, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -206,13 +181,9 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: envelope);
-        ArgumentNullException.ThrowIfNull(argument: editor);
-        ArgumentNullException.ThrowIfNull(argument: targeting);
-        ArgumentNullException.ThrowIfNull(argument: drag);
+        ArgumentNullException.ThrowIfNull(argument: flyRig);
         ArgumentNullException.ThrowIfNull(argument: animator);
-        ArgumentNullException.ThrowIfNull(argument: workbench);
         ArgumentNullException.ThrowIfNull(argument: audio);
-        ArgumentNullException.ThrowIfNull(argument: gizmos);
         ArgumentNullException.ThrowIfNull(argument: composition);
         ArgumentNullException.ThrowIfNull(argument: composer);
         ArgumentNullException.ThrowIfNull(argument: sdfDocuments);
@@ -222,13 +193,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_viewports = viewports;
         m_composition = composition;
         m_composer = composer;
-        m_gizmos = gizmos;
         m_continuum = continuum;
         m_text = text;
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            m_gizmoChips[slot] = [];
-        }
 
         m_audio = audio;
         // The machine-source resolver: the director diffs the binder's LIVE machines by
@@ -243,11 +209,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_simulation = simulation;
         m_settings = settings;
         m_binder = binder;
-        m_editor = editor;
-        m_targeting = targeting;
-        m_drag = drag;
+        m_flyRig = flyRig;
         m_animator = animator;
-        m_workbench = workbench;
         m_sdfDocuments = sdfDocuments;
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
@@ -267,11 +230,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             audio: audio,
             client: client,
             continuum: continuum,
-            drag: drag,
             settings: settings,
-            targeting: targeting,
-            text: text,
-            workbench: workbench
+            text: text
         );
         m_adjacencies = new WorldAdjacencySceneEmitter(
             client: client,
@@ -338,46 +298,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_builtDefinitionRevision = int.MinValue;
     }
 
-    // The editor-aware viewport resolver: when EXACTLY one seat edits while others play (soleEditorIndex >= 0, 2+
-    // joined), the editing view takes the full-height left `workbenchFraction` (LIVE-CONSUMED —
-    // WorldAuthoringDefaults.WorkbenchFraction, read fresh by the one caller each captured frame; the workbench wants
-    // width and an honest aspect) and the playing seats stack in a live right rail spanning the remaining width (each
-    // keeps a visible, playable view). All-playing, single-seat, and multi-editor sessions fall through to the
-    // standard ladder.
-    public static NormalizedRect LayoutRegion(int count, int index, int soleEditorIndex, float workbenchFraction) {
-        if (
-            (soleEditorIndex >= 0) &&
-            (count >= 2)
-        ) {
-            if (index == soleEditorIndex) {
-                return new NormalizedRect(
-                    Height: 1f,
-                    Width: workbenchFraction,
-                    X: 0f,
-                    Y: 0f
-                );
-            }
-
-            var railCount = (count - 1);
-            var railIndex = ((index < soleEditorIndex)
-                ? index
-                : (index - 1)
-            );
-            var railWidth = (1f - workbenchFraction);
-
-            return new NormalizedRect(
-                Height: (1f / railCount),
-                Width: railWidth,
-                X: workbenchFraction,
-                Y: (((float)railIndex) / railCount)
-            );
-        }
-
-        return LayoutRegion(
-            count: count,
-            index: index
-        );
-    }
     // The viewport region for the player at slot-order position `index` of `count`. NormalizedRect convention: origin
     // top-left, Y increasing down. 1 = fullscreen; 2 = side-by-side halves; 3 = big-top (full-width, top half) over two
     // bottom quarters; 4 = the 2×2 quad (index 0=TL, 1=TR, 2=BL, 3=BR). Internal: the overlay feed scopes each seat's
@@ -425,100 +345,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         };
     }
 
-    // One editing seat's gizmo set: every composed speaker row resolved to a world pose (the director's own anchor
-    // resolution — leaf/placement anchors track exactly what the audio hears), projected into the seat's viewport, then
-    // culled to MaxGizmoChipsPerSeat nearest the camera (bounded admission into the shared overlay
-    // table). Selection lights the ACCENT tier; a live change-shimmer pulse the HELD tier; beds carry their projected
-    // support-radius ring. Reuses the per-slot chip array (grown only when the budget-bounded count does).
-    private OverlayGizmoSeat ComposeGizmoSeat(int slot, NormalizedRect region, in CameraSnapshot camera, uint width, uint height, IReadOnlyList<WorldSpeaker> speakers) {
-        var budget = Math.Min(
-            val1: speakers.Count,
-            val2: MaxGizmoChipsPerSeat
-        );
-
-        if (m_gizmoChips[slot].Length < budget) {
-            m_gizmoChips[slot] = new OverlayGizmoChip[budget];
-        }
-
-        var chips = m_gizmoChips[slot];
-        var count = 0;
-        var selection = m_targeting.Selected(slot: slot);
-        // The nearest-kept cull: the resolved camera-space depth of the FARTHEST kept chip and its slot, so once the
-        // budget fills a nearer speaker evicts the farthest instead of dropping. depths[i] tracks chips[i]'s depth.
-        Span<float> depths = stackalloc float[MaxGizmoChipsPerSeat];
-
-        foreach (var speaker in speakers) {
-            if (
-                !m_audio.TryResolveSpeakerPose(
-                position: out var world,
-                speaker: speaker,
-                transforms: m_transforms
-            ) ||
-                !TryProjectGizmo(
-                camera: in camera,
-                height: height,
-                pixelsPerUnit: out var pixelsPerUnit,
-                px: out var px,
-                py: out var py,
-                region: in region,
-                width: width,
-                world: world
-            )
-            ) {
-                continue;
-            }
-
-            var depth = Vector3.Dot(
-                vector1: (world - camera.Position),
-                vector2: camera.Forward
-            );
-            int writeSlot;
-
-            if (count < budget) {
-                writeSlot = count++;
-            } else {
-                // Budget full: evict the farthest kept chip only when this one is nearer; otherwise drop this speaker.
-                // count stays at budget — we overwrite one slot in place.
-                var farthest = 0;
-
-                for (var i = 1; (i < budget); i++) {
-                    if (depths[i] > depths[farthest]) {
-                        farthest = i;
-                    }
-                }
-
-                if (depth >= depths[farthest]) {
-                    continue;
-                }
-
-                writeSlot = farthest;
-            }
-
-            depths[writeSlot] = depth;
-            chips[writeSlot] = new OverlayGizmoChip(
-                CenterX: px,
-                CenterY: py,
-                RingRadiusPx: ((speaker is WorldSpeaker.Bed bed)
-                ? (bed.Radius * pixelsPerUnit)
-                : 0f),
-                Bed: (speaker is WorldSpeaker.Bed),
-                Selected: ((selection is { Section: WorldSection.Speakers } selected) && string.Equals(
-                    a: selected.Id,
-                    b: speaker.Name,
-                    comparisonType: StringComparison.Ordinal
-                )),
-                Pulse: (m_emitter.SpeakerPulse(name: speaker.Name) > 0f)
-            );
-        }
-
-        return new OverlayGizmoSeat(
-            Viewport: region,
-            Chips: chips.AsMemory(
-                length: count,
-                start: 0
-            )
-        );
-    }
     // Concatenate two row lists into one (document rows + derived rows) for the binder reconcile — a small allocation at
     // the delivery boundary only, never per-frame.
     private static IReadOnlyList<T> Concat<T>(IReadOnlyList<T> first, IReadOnlyList<T> second) {
@@ -681,8 +507,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_builtDefinitionRevision = definitionRevision;
     }
     // Frames the slot's view at the region's pixel size (region × window dims), so each split keeps its own aspect.
-    // The rig is the seat's chase rig by default; while the seat edits, the editor session's rig (advanced by this
-    // frame's presentation delta) frames it instead. The anchor is the render pose (interpolated and error-eased,
+    // The rig is the seat's chase rig by default; while the seat's fly application is active, the fly rig (advanced
+    // by this frame's presentation delta) frames it instead. The anchor is the render pose (interpolated and error-eased,
     // resolved by the client view this frame) of the seat's PERCEIVED body — the perception anchor's resolution,
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
@@ -736,10 +562,11 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             Orientation: bodyOrientation,
             Position: bodyPosition
         );
-        var rig = m_editor.ResolveRig(
+        var rig = m_flyRig.ResolveRig(
             anchor: in anchor,
             chase: chase,
             deltaSeconds: deltaSeconds,
+            flyRig: views.FlyRig,
             slot: slot,
             time: m_elapsedSeconds
         );
@@ -755,9 +582,41 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             clock: in clock
         );
 
+        // The boom rides the SEAT's up, not the world's. Authored orbit yaw/pitch place the camera about world +Y,
+        // which is behind and above a body standing on world up and somewhere arbitrary for one standing anywhere
+        // else — on the side of a planetoid it can sit directly over the seat's head, looking straight down the axis
+        // the seat stands on. That is not only wrong to look at: it is the one configuration in which a camera-framed
+        // movement direction cannot be resolved at all, because the camera's forward and the seat's up are parallel
+        // and the projection onto the ground plane vanishes.
+        //
+        // Rotating the boom by the same alignment the movement composition uses keeps the camera behind and above in
+        // the seat's OWN frame, so its forward stays square to that up and the frame the player pushes against is the
+        // frame the player is looking through. A seat standing on world up aligns by identity, so every flat world's
+        // camera is untouched to the bit.
+        if (ReferenceEquals(
+            objA: rig,
+            objB: chase
+        )) {
+            var seatUp = Vector3.Transform(
+                rotation: bodyOrientation,
+                value: Vector3.UnitY
+            );
+
+            if (seatUp.LengthSquared() > 0f) {
+                var alignment = view.CarriedUpAlignment(up: seatUp);
+
+                if (alignment != Quaternion.Identity) {
+                    eye = (target + Vector3.Transform(
+                        rotation: alignment,
+                        value: (eye - target)
+                    ));
+                }
+            }
+        }
+
         // The seat-chase smoothing gap: applied only to the plain (non-editing) chase rig — ReferenceEquals catches
         // exactly that, since ResolveRig above returns the same chase instance unchanged while the seat is not
-        // editing (see its own remarks) and a different rig (drag/orbit/workbench) otherwise. See
+        // editing (see its own remarks) and a different rig (drag/orbit) otherwise. See
         // WorldSeatCameraResolver.Smooth: a zero rate (the default, and every world/camera authored before this
         // field existed) skips the ease entirely — eye/target pass through raw, byte-for-byte.
         view.Smooth(
@@ -987,50 +846,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             )
         );
     }
-    // Perspective-projects a world point into a seat viewport's pixel space through the seat's own CameraSnapshot
-    // frame (the render camera's exact basis + FOV). False behind the near plane or generously outside the view
-    // (the clip rect would discard the pixels anyway — this just skips the record). pixelsPerUnit is the on-screen
-    // scale at the point's DEPTH (the bed ring's world-radius → px conversion; an approximation that reads as a
-    // radius indicator, not a perspective-correct 3D circle — deliberate, documented).
-    private static bool TryProjectGizmo(in CameraSnapshot camera, in NormalizedRect region, uint width, uint height, Vector3 world, out float px, out float py, out float pixelsPerUnit) {
-        px = 0f;
-        py = 0f;
-        pixelsPerUnit = 0f;
-
-        var delta = (world - camera.Position);
-        var depth = Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Forward
-        );
-
-        if (depth < 0.05f) {
-            return false;
-        }
-
-        var ndcX = (Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Right
-        ) / ((depth * camera.TanHalfFieldOfView) * camera.AspectRatio));
-        var ndcY = (Vector3.Dot(
-            vector1: delta,
-            vector2: camera.Up
-        ) / (depth * camera.TanHalfFieldOfView));
-
-        if (
-            (MathF.Abs(x: ndcX) > 1.5f) ||
-            (MathF.Abs(x: ndcY) > 1.5f)
-        ) {
-            return false;
-        }
-
-        var regionHeight = (region.Height * height);
-
-        px = ((region.X * width) + ((0.5f + (0.5f * ndcX)) * (region.Width * width)));
-        py = ((region.Y * height) + ((0.5f - (0.5f * ndcY)) * regionHeight));
-        pixelsPerUnit = ((regionHeight * 0.5f) / (depth * camera.TanHalfFieldOfView));
-
-        return true;
-    }
 
     /// <inheritdoc/>
     public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
@@ -1046,23 +861,10 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // still reads the authoritative sim pose server-side.
         m_client.UpdateRenderPoses(alpha: interpolationAlpha);
 
-        // Retire released drag overlays first (they freeze until their OWN act's apply/rejection resolves, or the
-        // missing-response deadline — see WorldEditorDrag), so the revision the host reads below already reflects any
-        // retirement.
-        m_drag.Reconcile();
-
         // Advance the animated-placement replay cursors on the render clock (hold-style — transforms move; the
         // program itself never rebuilds for a timeline step).
         m_animator.Tick(deltaSeconds: deltaSeconds);
 
-        // Advance the sculpt workbench: playback ticks, drag-coalescer frame boundary, and its model revisions fold
-        // into the emitter's monotonic rebuild watch.
-        m_workbench.Tick(deltaSeconds: deltaSeconds);
-
-        // Hand the emitter this frame's CONTENT clock: while a change-shimmer pulse is live it bumps its own revision
-        // from that number, so the pulse's decay animates through the host's ordinary revision predicate instead of
-        // through a clock the host would have to query.
-        m_emitter.AdvanceContentClock(seconds: m_elapsedSeconds);
         ReconcileDelivery();
         return m_composed.CaptureFrame(
             deltaSeconds: deltaSeconds,
@@ -1099,19 +901,12 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // supplied in full; the active-only program addresses only its avatars' stable leaf ranges.
         var joinedCount = m_roster.Count;
 
-        // Self-heal a seat that left the roster while editing (its mode layer and camera drop), then resolve this
-        // frame's layout policy: a SOLE editing seat among 2+ players takes the dominant workbench region.
-        m_editor.PruneDeparted();
-
-        var soleEditorViewIndex = m_editor.SoleEditorViewIndex();
+        // Self-heal a seat that left the roster while flying (its camera drops).
+        m_flyRig.PruneDeparted();
 
         m_views.Clear();
         Array.Clear(array: m_seatCameraPoses);
         m_viewports.BeginFrame();
-
-        // The gizmo feed's per-frame accumulators (the composed speaker list resolves lazily on the first editing seat).
-        IReadOnlyList<WorldSpeaker>? gizmoSpeakers = null;
-        var gizmoSeatCount = 0;
 
         // The roster bookkeeping pass: the seat.join cue (a roster arrival edge, layout-independent) and the ordered
         // list of joined seat slots a composed seat slot binds against by position.
@@ -1143,8 +938,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // the built-in seat ladder.
         m_composer.Compose(
             joinedCount: joinedCount,
-            soleEditorIndex: soleEditorViewIndex,
-            workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction,
             views: m_client.Definition.Views,
             layoutOverride: m_composition.ActiveLayout,
             cameraOverride: m_composition.SelectedCamera,
@@ -1152,6 +945,14 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         );
 
         var transitionScale = m_composer.CurrentRenderScale;
+        // The seat-UI fallback for a camera-only layout: the first camera-bearing slot's resolved (region, camera),
+        // published below for every joined seat the layout binds no seat slot to, so the cursor, the radial wheel,
+        // and pointer unprojection ride the view the player is actually looking at instead of vanishing with the
+        // seat slot.
+        var seatViewFallbackRegion = default(NormalizedRect);
+        var seatViewFallbackCamera = default(CameraSnapshot);
+        var hasSeatViewFallback = false;
+        Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
 
         foreach (var composed in m_composer.Slots) {
             var region = composed.Region;
@@ -1173,6 +974,11 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
                         RenderScale = transitionScale,
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
+                    if (!hasSeatViewFallback) {
+                        hasSeatViewFallback = true;
+                        seatViewFallbackCamera = namedCamera;
+                        seatViewFallbackRegion = region;
+                    }
                 }
 
                 continue;
@@ -1220,20 +1026,22 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
                 slot: slot,
                 width: width
             );
+            seatSlotBound[slot] = true;
+        }
 
-            // The speaker gizmos: EDITOR-MODE-ONLY chips at each speaker's resolved pose, projected through
-            // the SAME camera this seat renders with. Pending drag rows compose over the delivered truth, so a
-            // dragged chip tracks its snapped position live.
-            if (m_editor.IsEditing(slot: slot)) {
-                gizmoSpeakers ??= m_drag.ComposeSpeakers(live: m_client.Definition.Speakers);
-                m_gizmoSeats[gizmoSeatCount++] = ComposeGizmoSeat(
-                    camera: in camera,
-                    height: height,
-                    region: region,
-                    slot: slot,
-                    speakers: gizmoSpeakers,
-                    width: width
-                );
+        if (hasSeatViewFallback) {
+            for (var order = 0; (order < joinedRosterCount); order++) {
+                var slot = joinedRosterSlots[order];
+
+                if (!seatSlotBound[slot]) {
+                    m_viewports.Publish(
+                        camera: in seatViewFallbackCamera,
+                        height: height,
+                        region: seatViewFallbackRegion,
+                        slot: slot,
+                        width: width
+                    );
+                }
             }
         }
 
@@ -1271,12 +1079,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         } else {
             m_noLocalSeatsNarrated = false;
         }
-
-        // Published EVERY frame: an empty frame clears the chips the moment no seat edits.
-        m_gizmos.Publish(frame: new OverlayGizmoFrame(Seats: m_gizmoSeats.AsMemory(
-            length: gizmoSeatCount,
-            start: 0
-        )));
 
         // Publish this frame's audio snapshot AFTER the transforms are packed and the view rigs resolved: emitter
         // poses read the packed leaf transforms; the listener reads the seat cameras once per produced

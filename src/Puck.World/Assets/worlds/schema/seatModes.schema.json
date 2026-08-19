@@ -1,0 +1,59 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "An AUTHORED per-seat mode family \u2014 a document-declared name plus its admitted states, the generic replacement for the engine\u0027s former hard-coded editor context family. player.mode \u003Cfamily\u003E \u003Cstate\u003E [seat] flips a seat\u0027s published state within the family; Puck.World.Client.WorldContextFamilies context rows may then map a (family, state) pair to a binding group exactly as a built-in family does.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The family\u0027s stable name. Must not collide with a built-in family name (roster, engagement, layout) or the reserved state: prefix.",
+        "type": "string"
+      },
+      "defaultState": {
+        "description": "The state a seat publishes before any player.mode flip \u2014 one of States.",
+        "type": "string"
+      },
+      "states": {
+        "description": "Gets the family\u0027s admitted states. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+        "type": "array",
+        "items": {
+          "description": "One state of a WorldSeatModeFamily.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "description": "The state\u0027s stable name \u2014 the token player.mode \u003Cfamily\u003E \u003Cstate\u003E takes and the value Client.WorldContextFamilies context rows key on.",
+              "type": "string"
+            },
+            "target": {
+              "description": "The control application this state drives, or null for an ordinary state (the seat drives its own body normally). \u0022camera\u0022 is the only admitted value: entering the state diverts the seat\u0027s own body intent to Idle (the existing player.control idle contract) and drives the world-authored views.flyRig from the seat\u0027s channels instead.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "name",
+      "defaultState",
+      "states"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

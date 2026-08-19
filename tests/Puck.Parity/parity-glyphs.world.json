@@ -196,7 +196,7 @@
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveForward",
+      "role": "MoveAdvance",
       "composition": false
     },
     {
@@ -814,7 +814,6 @@
     "maxPlacementScale": 5,
     "candidateRadius": 32,
     "candidateCap": 16,
-    "workbenchFraction": 0.7,
     "previewDeadlineFrames": 12,
     "derivedFaceScreens": 4
   },

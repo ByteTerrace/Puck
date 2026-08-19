@@ -65,7 +65,7 @@ internal static class Fixtures {
     /// Every other section is the smallest legal value <c>WorldDefinitionValidator</c> accepts: one locomotion kit
     /// ("traveler", a bare-bones grounded model with an empty response table — "the empty table snaps planar
     /// velocity instantly"), the three channels its body motion program's selected operations require
-    /// (<c>MoveForward</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
+    /// (<c>MoveAdvance</c>/<c>MoveStrafe</c>/<c>Turn</c>), and <see cref="IntentSource.Idle"/> as the population's
     /// default peer source so no producer program (wander/attend/designated) is needed at all. This kit carries NO
     /// collider — no law here needs one — so <see cref="BuildDocumentCore"/> is the shared shape
     /// <see cref="BuildGradientUpDocument"/> extends with the ONE collider-bearing arm
@@ -159,7 +159,7 @@ internal static class Fixtures {
     /// <param name="placements">The document's placement rows.</param>
     private static WorldDefinition BuildDocumentCore(WorldSpawnPoint[] spawnPoints, WorldCollision collision, WorldCollider? seatCollider, WorldCreation[] creations, WorldPlacement[] placements) {
         var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveForward),
+            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
             new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
         };
@@ -276,7 +276,7 @@ internal static class Fixtures {
         return new WorldDefinition(
             MotionRaw: new WorldMotionDefaults(MaxSmoothError: 3f, MoveSpeed: 4f, TurnSpeed: 2.5f),
             SpawnPointsRaw: spawnPoints,
-            RenderRaw: WorldRenderDefaults.Default,
+            RenderRaw: null,
             ScreensRaw: [testPatternScreen],
             CamerasRaw: [],
             PopulationRaw: population,
@@ -292,36 +292,107 @@ internal static class Fixtures {
             StorageRaw: WorldStorageDefaults.None,
             CreationsRaw: creations,
             PlacementsRaw: placements,
-            AuthoringRaw: WorldAuthoringDefaults.Default,
+            AuthoringRaw: StandardAuthoring,
             SpeakersRaw: [],
             TunesRaw: [],
             PatchesRaw: [],
-            AudioRaw: WorldAudioDefaults.Default,
+            AudioRaw: null,
             CollisionRaw: collision,
-            HostRaw: WorldHostDefaults.Default,
-            ViewsRaw: WorldViewDefaults.Default,
+            HostRaw: StandardHost,
+            // The engine ships no rig (Assets/worlds/standard.world.json authors the standard one), and a nonzero
+            // census must author a views section, so the fixture carries the standard chase framing itself.
+            ViewsRaw: StandardViews,
             LooksRaw: [],
             LookAssignmentRaw: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
             LinksRaw: [],
             GrantsRaw: [],
-            HudRaw: WorldHudSection.Default,
+            HudRaw: new WorldHudSection(
+                Defaults: new WorldHudDefaults(Enabled: true),
+                Panels: []
+            ),
             StateRaw: new WorldStateSection(World: []),
             // Authored seconds now (WorldDefinition.InputHold is the AUTHORED shape) — 120/60/0 ticks at the
-            // fixture's default 240 Hz (no Simulation section authored) is 0.5/0.25/0 seconds.
-            InputHoldRaw: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, DefaultSeconds: 0f, EqualizeByDefault: true, LowerAfterSeconds: 0.25f, Participants: [])
+            // fixture's authored 240 Hz is 0.5/0.25/0 seconds.
+            InputHoldRaw: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, DefaultSeconds: 0f, EqualizeByDefault: true, LowerAfterSeconds: 0.25f, Participants: []),
+            // The engine holds no rate of its own (absence is a rate-0 resident world), so the stepping fixture
+            // authors the standard 240 Hz itself, like its views section.
+            Simulation: new WorldSimulationDefaults(RateHz: 240)
         );
     }
+
+    /// <summary>The standard host row (the values <c>standard.world.json</c> authors), for fixtures whose documents
+    /// must carry an authored host (serialization round-trips, the host-member strict-parse laws) — the engine no
+    /// longer carries one.</summary>
+    public static WorldHostDefaults StandardHost { get; } = new(
+        Presentation: WorldHostPresentation.Windowed,
+        Backend: WorldBackendPreference.Auto,
+        Width: 1280,
+        Height: 800,
+        SurfaceFormat: Puck.Abstractions.Presentation.SurfaceFormat.R8G8B8A8Unorm,
+        Fullscreen: false,
+        PresentMode: Puck.Abstractions.Presentation.PresentMode.Immediate,
+        TargetHertz: 0.0,
+        ExitAfterSeconds: 0,
+        RayQuery: true,
+        Timing: false,
+        Genlock: null,
+        Listen: null,
+        Authority: null
+    );
+
+    /// <summary>The standard authoring policy row (the values <c>standard.world.json</c> authors), for fixtures
+    /// that exercise editor/placement behavior — the engine no longer carries one.</summary>
+    public static WorldAuthoringDefaults StandardAuthoring { get; } = new(
+        AuthoringHeadroomPlacements: 8,
+        AuthoringHeadroomScreens: 4,
+        CandidateCap: 16,
+        CandidateRadius: 32f,
+        DerivedFaceScreens: 4,
+        MaxPlacementScale: 5.0f,
+        MinPlacementScale: 0.2f,
+        PreviewDeadlineFrames: 12
+    );
 
     /// <summary>The placed ball's actual surface radius, in world units — sized to "a few" per
     /// <see cref="GradientUpContactLawTests"/>'s brief, never a raw magic number at the call site.</summary>
     public const float BallSurfaceRadius = 3f;
+    /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.world.json</c>
+    /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
+    /// authoring no <c>views</c>, so a C#-built fixture states the numbers the way a document would.</summary>
+    private static WorldViewDefaults StandardViews { get; } = new(
+        SeatRig: new WorldCameraRig(
+            Motion: new WorldCameraMotion.Orbit(
+                Distance: 5.4626001f,
+                Yaw: 0f,
+                Pitch: 0.4145069f,
+                PivotOffset: Vector3.Zero
+            ),
+            Aim: new WorldCameraAim.Anchor(
+                Offset: new(
+                    x: 0f,
+                    y: 1f,
+                    z: 0f
+                ),
+                WorldAxes: false
+            ),
+            Lens: new WorldCameraLens(FieldOfViewRadians: 0.9599311f),
+            SmoothRate: 6f
+        ),
+        SeatControl: new WorldSeatViewControl(
+            MaxPitch: 1.2f,
+            MinPitch: -0.35f,
+            YawReference: WorldSeatYawReference.World
+        ),
+        Layouts: []
+    );
+
     /// <summary>The seat slot <see cref="GradientUpContactLawTests"/> joins and repositions onto the ball's flank —
     /// slot 0 maps directly to body index 0 (the 0-based seat/body correspondence
     /// <see cref="EngageAuthorityLawTests"/> also relies on), and is the ONE spawn point
     /// <see cref="BuildGradientUpDocument"/> relocates.</summary>
     public const int GradientUpSeatSlot = 0;
 
-    /// <summary><c>Puck.Forge.Authoring.CreationGeometry</c>'s own canonical <c>AvatarPrimitive.Sphere</c> local
+    /// <summary><c>Puck.Forge.Authoring.CreationGeometry</c>'s own canonical <c>SdfSolidPrimitive.Sphere</c> local
     /// radius — that table's constant is private, so this mirrors its grepped value rather than referencing it, to
     /// size <see cref="BuildBallCreation"/>'s shape <c>Scale</c> against a known local unit. A change to the
     /// upstream table's value is exactly the kind of drift <see cref="BuildBallCreation"/>'s canonicalize-at-build
@@ -357,7 +428,7 @@ internal static class Fixtures {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
-            Type: AvatarPrimitive.Sphere,
+            Type: SdfSolidPrimitive.Sphere,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: new Vector3(value: (BallSurfaceRadius / SphereLocalRadius)),

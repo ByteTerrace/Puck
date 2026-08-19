@@ -13,8 +13,8 @@ public enum IntegerNumerationKind : byte {
 /// Describes a canonical, most-significant-digit-first representation of every non-negative integer.
 /// </summary>
 public sealed class IntegerNumerationSystem {
-    private readonly PositionalNumerationSystem? m_positional;
     private readonly QuadraticOstrowskiSystem? m_ostrowski;
+    private readonly PositionalNumerationSystem? m_positional;
 
     private IntegerNumerationSystem(PositionalNumerationSystem positional) {
         m_positional = positional;
@@ -35,91 +35,6 @@ public sealed class IntegerNumerationSystem {
     public IntegerNumerationKind Kind { get; }
     /// <summary>Gets the positional radix, or zero for an Ostrowski system.</summary>
     public int Radix => (m_positional?.Radix ?? 0);
-
-    /// <summary>Creates a fixed-radix positional numeration system.</summary>
-    /// <param name="radix">The radix; it must be at least two.</param>
-    /// <returns>The canonical positional system.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radix"/> is below two.</exception>
-    public static IntegerNumerationSystem Positional(int radix = 2) =>
-        new(positional: new PositionalNumerationSystem(radix: radix));
-    /// <summary>Creates the Ostrowski system of a positive quadratic irrational.</summary>
-    /// <param name="basis">The positive quadratic irrational defining the convergent-denominator basis.</param>
-    /// <returns>The canonical quadratic Ostrowski system.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="basis"/> is not a positive quadratic irrational, or one of its periodic digit bounds exceeds
-    /// the signed 32-bit digit alphabet supported by deterministic output automata.
-    /// </exception>
-    public static IntegerNumerationSystem QuadraticOstrowski(QuadraticSurd basis) {
-        var system = QuadraticOstrowskiSystem.Create(basis: basis);
-        var maximumDigit = system.ContinuedFractionPrefix
-            .Skip(count: 1)
-            .Concat(second: system.ContinuedFractionPeriod)
-            .DefaultIfEmpty(defaultValue: BigInteger.One)
-            .Max();
-
-        if (maximumDigit >= int.MaxValue) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(basis),
-                message: "the Ostrowski digit alphabet exceeds the signed 32-bit automaton alphabet"
-            );
-        }
-
-        return new IntegerNumerationSystem(
-            alphabetSize: checked((((int)maximumDigit) + 1)),
-            ostrowski: system
-        );
-    }
-    /// <summary>Evaluates one canonical-or-caller-supplied digit word exactly.</summary>
-    /// <param name="digits">The nonempty most-significant-digit-first digit word.</param>
-    /// <returns>The represented non-negative integer.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="digits"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="digits"/> is empty.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A digit is outside this system's alphabet.</exception>
-    public BigInteger Evaluate(IReadOnlyList<int> digits) {
-        ArgumentNullException.ThrowIfNull(digits);
-        if (digits.Count == 0) {
-            throw new ArgumentException(
-                message: "a representation cannot be empty",
-                paramName: nameof(digits)
-            );
-        }
-
-        if (m_positional is not null) {
-            return m_positional.Evaluate(digits: digits);
-        }
-
-        var widened = new BigInteger[digits.Count];
-
-        for (var index = 0; (index < digits.Count); ++index) {
-            var digit = digits[index];
-
-            if (((uint)digit) >= ((uint)AlphabetSize)) {
-                throw new ArgumentOutOfRangeException(
-                    paramName: nameof(digits),
-                    message: "a digit lies outside the numeration alphabet"
-                );
-            }
-
-            widened[index] = digit;
-        }
-
-        return m_ostrowski!.Evaluate(digits: widened);
-    }
-    /// <summary>Returns the canonical representation of a non-negative integer.</summary>
-    /// <param name="value">The non-negative integer to represent.</param>
-    /// <returns>The most-significant-digit-first digit word.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
-    public IReadOnlyList<int> Represent(BigInteger value) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value);
-
-        if (m_positional is not null) {
-            return m_positional.Represent(value: value);
-        }
-
-        return m_ostrowski!.Represent(value: value)
-            .Select(selector: digit => checked((int)digit))
-            .ToArray();
-    }
 
     internal int Run(DeterministicOutputAutomaton automaton, BigInteger value) {
         ArgumentOutOfRangeException.ThrowIfNegative(value);
@@ -193,6 +108,91 @@ public sealed class IntegerNumerationSystem {
 
         return automaton.OutputSymbolUnchecked(state: state);
     }
+
+    /// <summary>Evaluates one canonical-or-caller-supplied digit word exactly.</summary>
+    /// <param name="digits">The nonempty most-significant-digit-first digit word.</param>
+    /// <returns>The represented non-negative integer.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="digits"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="digits"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A digit is outside this system's alphabet.</exception>
+    public BigInteger Evaluate(IReadOnlyList<int> digits) {
+        ArgumentNullException.ThrowIfNull(digits);
+        if (digits.Count == 0) {
+            throw new ArgumentException(
+                message: "a representation cannot be empty",
+                paramName: nameof(digits)
+            );
+        }
+
+        if (m_positional is not null) {
+            return m_positional.Evaluate(digits: digits);
+        }
+
+        var widened = new BigInteger[digits.Count];
+
+        for (var index = 0; (index < digits.Count); ++index) {
+            var digit = digits[index];
+
+            if (((uint)digit) >= ((uint)AlphabetSize)) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(digits),
+                    message: "a digit lies outside the numeration alphabet"
+                );
+            }
+
+            widened[index] = digit;
+        }
+
+        return m_ostrowski!.Evaluate(digits: widened);
+    }
+    /// <summary>Creates a fixed-radix positional numeration system.</summary>
+    /// <param name="radix">The radix; it must be at least two.</param>
+    /// <returns>The canonical positional system.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radix"/> is below two.</exception>
+    public static IntegerNumerationSystem Positional(int radix = 2) =>
+        new(positional: new PositionalNumerationSystem(radix: radix));
+    /// <summary>Creates the Ostrowski system of a positive quadratic irrational.</summary>
+    /// <param name="basis">The positive quadratic irrational defining the convergent-denominator basis.</param>
+    /// <returns>The canonical quadratic Ostrowski system.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="basis"/> is not a positive quadratic irrational, or one of its periodic digit bounds exceeds
+    /// the signed 32-bit digit alphabet supported by deterministic output automata.
+    /// </exception>
+    public static IntegerNumerationSystem QuadraticOstrowski(QuadraticSurd basis) {
+        var system = QuadraticOstrowskiSystem.Create(basis: basis);
+        var maximumDigit = system.ContinuedFractionPrefix
+            .Skip(count: 1)
+            .Concat(second: system.ContinuedFractionPeriod)
+            .DefaultIfEmpty(defaultValue: BigInteger.One)
+            .Max();
+
+        if (maximumDigit >= int.MaxValue) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(basis),
+                message: "the Ostrowski digit alphabet exceeds the signed 32-bit automaton alphabet"
+            );
+        }
+
+        return new IntegerNumerationSystem(
+            alphabetSize: checked((((int)maximumDigit) + 1)),
+            ostrowski: system
+        );
+    }
+    /// <summary>Returns the canonical representation of a non-negative integer.</summary>
+    /// <param name="value">The non-negative integer to represent.</param>
+    /// <returns>The most-significant-digit-first digit word.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
+    public IReadOnlyList<int> Represent(BigInteger value) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value);
+
+        if (m_positional is not null) {
+            return m_positional.Represent(value: value);
+        }
+
+        return m_ostrowski!.Represent(value: value)
+            .Select(selector: digit => checked((int)digit))
+            .ToArray();
+    }
 }
 /// <summary>An immutable dense deterministic finite automaton with an integer output symbol on every state.</summary>
 public sealed class DeterministicOutputAutomaton {
@@ -263,6 +263,9 @@ public sealed class DeterministicOutputAutomaton {
     /// <summary>Gets the number of reachable states.</summary>
     public int StateCount => m_outputSymbols.Length;
 
+    internal int OutputSymbolUnchecked(int state) => m_outputSymbols[state];
+    internal int TransitionUnchecked(int state, int digit) => m_transitions[checked(((state * AlphabetSize) + digit))];
+
     private static (int[] Transitions, int[] Outputs) NormalizeReachable(
         int alphabetSize,
         ReadOnlySpan<int> transitions,
@@ -307,6 +310,11 @@ public sealed class DeterministicOutputAutomaton {
         }
 
         return (normalizedTransitions, normalizedOutputs);
+    }
+    private void ValidateState(int state) {
+        if (((uint)state) >= ((uint)StateCount)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(state));
+        }
     }
 
     /// <summary>Returns the output symbol emitted by one state.</summary>
@@ -356,15 +364,6 @@ public sealed class DeterministicOutputAutomaton {
             digit: digit,
             state: state
         );
-    }
-
-    internal int OutputSymbolUnchecked(int state) => m_outputSymbols[state];
-    internal int TransitionUnchecked(int state, int digit) => m_transitions[checked(((state * AlphabetSize) + digit))];
-
-    private void ValidateState(int state) {
-        if (((uint)state) >= ((uint)StateCount)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(state));
-        }
     }
 }
 /// <summary>
@@ -422,17 +421,6 @@ public sealed class AutomaticIntegerSequence {
     /// <summary>Gets the number of values in the finite output alphabet.</summary>
     public int OutputAlphabetSize => m_outputAlphabet.Length;
 
-    /// <summary>Returns one value from the finite output alphabet.</summary>
-    /// <param name="symbol">The output symbol.</param>
-    /// <returns>The arbitrary-width integer assigned to the symbol.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="symbol"/> is outside the output alphabet.</exception>
-    public BigInteger OutputValue(int symbol) {
-        if (((uint)symbol) >= ((uint)m_outputAlphabet.Length)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(symbol));
-        }
-
-        return m_outputAlphabet[symbol];
-    }
     /// <summary>Returns the output symbol at a non-negative arbitrary-width index.</summary>
     /// <param name="index">The non-negative sequence index.</param>
     /// <returns>The finite output symbol.</returns>
@@ -448,6 +436,17 @@ public sealed class AutomaticIntegerSequence {
         automaton: Automaton,
         value: index
     );
+    /// <summary>Returns one value from the finite output alphabet.</summary>
+    /// <param name="symbol">The output symbol.</param>
+    /// <returns>The arbitrary-width integer assigned to the symbol.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="symbol"/> is outside the output alphabet.</exception>
+    public BigInteger OutputValue(int symbol) {
+        if (((uint)symbol) >= ((uint)m_outputAlphabet.Length)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(symbol));
+        }
+
+        return m_outputAlphabet[symbol];
+    }
     /// <summary>Returns the arbitrary-width value at a non-negative arbitrary-width index.</summary>
     /// <param name="index">The non-negative sequence index.</param>
     /// <returns>The sequence value.</returns>

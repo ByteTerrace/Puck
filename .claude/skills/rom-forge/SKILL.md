@@ -95,9 +95,10 @@ an absent capability.
   (`ThrowIfInvalid`), and the single shared `DocumentJsonOptions.Shared`
   (`IncludeFields = true` is LOAD-BEARING — `Vector3`/`Quaternion` expose
   fields, and omitting it silently zeroes every transform). Alongside them:
-  `CreationGeometry` (the canonical primitive dimension table every stamp,
-  workbench and bake emits through — changing a value changes the meaning of
-  every persisted creation), `SculptModel` (the frame-rate editor model — a
+  `SdfSolidGeometry` (in `Puck.SignedDistance`: the canonical primitive
+  dimension table every stamp, workbench and bake emits through — changing a
+  value changes the meaning of every persisted creation; `CreationGeometry`
+  keeps only the whole-document reach), `SculptModel` (the frame-rate editor model — a
   held `CreationDocument` IS the model, edited generically through
   `CreationDocumentPatcher`'s dotted/indexed path walker) + `ChainRig`/
   `ChainSolver` (its analytic two-bone/spine IK rest-geometry cache and

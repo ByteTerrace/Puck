@@ -1,11 +1,11 @@
 namespace Puck.Overlays;
 
 /// <summary>
-/// The binding-bar writer: renders each seat's active-page slot cluster from an <see cref="IBindingBarSource"/>
-/// snapshot as icon elements — the twelve slot chips (the mirrored-diamond layout), the modifier pips, and the
-/// active page's name —
-/// CONFINED to that seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars
-/// with the render node staying dumb. Pure record emission; no GPU types.
+/// The binding-bar writer: renders each seat's authored banks from an <see cref="IBindingBarSource"/> snapshot as
+/// icon elements — every bank's slot cluster (the mirrored-diamond layout plus the menu-trio and exotics rows, each
+/// bank displaced by its own authored offset), the modifier pips, and the active page's name — CONFINED to that
+/// seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars with the render
+/// node staying dumb. Pure record emission; no GPU types.
 /// </summary>
 public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     // A viewport eased/shrunk to nothing has nowhere to draw a bar.
@@ -59,7 +59,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         var regionAspect = (regionWidthPx / regionHeightPx);
         var slots = seat.Slots.Span;
 
-        for (var index = 0; ((index < slots.Length) && (index < BindingBarLayout.SlotButtons.Length)); index++) {
+        for (var index = 0; (index < slots.Length); index++) {
             var slot = slots[index];
 
             if (!slot.Visible) {
@@ -68,21 +68,27 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
 
             var placement = BindingBarLayout.Place(
                 aspect: regionAspect,
-                index: index,
+                category: slot.Category,
+                categoryCount: slot.CategoryCount,
+                categoryIndex: slot.CategoryIndex,
                 options: in layout
             );
+            var centerX = ((regionOriginX + (placement.Center.X * regionHeightPx)) + (slot.BankOffset.X * regionHeightPx));
+            var centerY = ((regionOriginY + (placement.Center.Y * regionHeightPx)) + (slot.BankOffset.Y * regionHeightPx));
 
             builder.WriteIcon(
                 accent: slot.Accent,
                 alpha: slot.Alpha,
+                badgeGlyph0: slot.BadgeGlyph0,
+                badgeGlyph1: slot.BadgeGlyph1,
                 bound: slot.Bound,
-                centerX: (regionOriginX + (placement.Center.X * regionHeightPx)),
-                centerY: (regionOriginY + (placement.Center.Y * regionHeightPx)),
-                glyph: slot.Glyph,
+                centerX: centerX,
+                centerY: centerY,
                 glyphHalf: (placement.GlyphHalfSize * regionHeightPx),
                 glyphOffsetX: ((placement.GlyphCenter.X - placement.Center.X) * regionHeightPx),
                 glyphOffsetY: ((placement.GlyphCenter.Y - placement.Center.Y) * regionHeightPx),
-                icon: slot.Icon,
+                iconGlyph0: slot.IconGlyph0,
+                iconGlyph1: slot.IconGlyph1,
                 plateHalf: (placement.HalfSize * regionHeightPx),
                 pressed: slot.Pressed
             );
@@ -152,14 +158,16 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 alpha: (modifier.Held
                 ? 1f
                 : 0.35f),
+                badgeGlyph0: modifier.BadgeGlyph0,
+                badgeGlyph1: modifier.BadgeGlyph1,
                 bound: true,
                 centerX: (anchorX + ((index - ((pipCount - 1) * 0.5f)) * pipSpacing)),
                 centerY: anchorY,
-                glyph: modifier.Glyph,
                 glyphHalf: (pipHalf * 0.8f),
                 glyphOffsetX: 0f,
                 glyphOffsetY: 0f,
-                icon: OverlayIconId.None,
+                iconGlyph0: 0,
+                iconGlyph1: 0,
                 plateHalf: pipHalf,
                 pressed: modifier.Held
             );

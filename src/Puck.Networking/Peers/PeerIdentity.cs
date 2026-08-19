@@ -55,7 +55,6 @@ public sealed class PeerIdentity : IDisposable {
     /// <param name="path">The key file's path.</param>
     /// <returns>The identity.</returns>
     public static PeerIdentity Load(string path) => FromPkcs8PrivateKey(pkcs8PrivateKey: File.ReadAllBytes(path: path));
-
     /// <summary>Mints a self-signed X.509 certificate over this identity's own key — the credential a TLS-bearing
     /// transport presents, whose public key a remote peer's handshake compares against the identity this side
     /// offers. Server- and client-authentication usages are both asserted because a peer plays either TLS role.
@@ -117,7 +116,7 @@ public sealed class PeerIdentity : IDisposable {
             claimBytes: payload,
             codec: PeerWireProtocol.Codec,
             domain: Id.Domain,
-            notAfter: at.Add(window).ToUnixTimeSeconds(),
+            notAfter: at.Add(timeSpan: window).ToUnixTimeSeconds(),
             notBefore: at.AddSeconds(seconds: -5).ToUnixTimeSeconds(),
             purpose: purpose,
             sequence: null,
@@ -126,7 +125,6 @@ public sealed class PeerIdentity : IDisposable {
             subject: Id.Subject!
         );
     }
-
     /// <inheritdoc/>
     public void Dispose() => m_key.Dispose();
 }

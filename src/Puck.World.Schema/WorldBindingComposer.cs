@@ -109,21 +109,6 @@ public static class WorldBindingComposer {
             into.Add(item: modifier);
         }
     }
-    private static bool SharesSource(BindingModifierDefinition a, BindingModifierDefinition b) {
-        foreach (var source in (a.Sources ?? [])) {
-            foreach (var candidate in (b.Sources ?? [])) {
-                if (string.Equals(
-                    a: source,
-                    b: candidate,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
     private static void MergeRows(List<MutableRow> into, Dictionary<string, int> index, BindingProfileDocument layer) {
         foreach (var row in (layer.Chords ?? [])) {
             var key = RowKey(row: row);
@@ -174,6 +159,21 @@ public static class WorldBindingComposer {
             separator: ',',
             values: (chord ?? [])
         )}";
+    }
+    private static bool SharesSource(BindingModifierDefinition a, BindingModifierDefinition b) {
+        foreach (var source in (a.Sources ?? [])) {
+            foreach (var candidate in (b.Sources ?? [])) {
+                if (string.Equals(
+                    a: source,
+                    b: candidate,
+                    comparisonType: StringComparison.OrdinalIgnoreCase
+                )) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Merges the given layers in order (null layers skipped). No non-null layer composes to the empty
@@ -261,11 +261,11 @@ public static class WorldBindingComposer {
     // reference at each key — so ToDefinition can recover, per entry, exactly which of its authored sources still
     // point back to it.
     private sealed class MutableRow {
-        private IReadOnlyList<string>? m_chord;
-        private IReadOnlyList<string>? m_held;
         private readonly string m_group;
 
+        private IReadOnlyList<string>? m_chord;
         private BindingCommandDefinition? m_command;
+        private IReadOnlyList<string>? m_held;
         private string? m_pageIcon;
         private string? m_pageId;
         private string? m_pageInherits;
@@ -373,13 +373,6 @@ public static class WorldBindingComposer {
                 );
             }
         }
-
-        public string Key => RowKey(
-            chord: m_chord,
-            group: m_group,
-            held: m_held
-        );
-
         private static IReadOnlyList<string>? Rename(IReadOnlyList<string>? ids, string from, string to) {
             if (ids is null) {
                 return null;
@@ -410,19 +403,7 @@ public static class WorldBindingComposer {
 
             return renamed;
         }
-        // Rewrites this row's chord/held references from an absorbed modifier id to the absorbing one.
-        public void RenameModifier(string from, string to) {
-            m_chord = Rename(
-                from: from,
-                ids: m_chord,
-                to: to
-            );
-            m_held = Rename(
-                from: from,
-                ids: m_held,
-                to: to
-            );
-        }
+
         public static MutableRow From(BindingChordDefinition row) {
             var mutable = new MutableRow(
                 group: row.Group,
@@ -464,6 +445,19 @@ public static class WorldBindingComposer {
             m_byActivatorKey.Clear();
             m_activatorOrder.Clear();
             Adopt(row: row);
+        }
+        // Rewrites this row's chord/held references from an absorbed modifier id to the absorbing one.
+        public void RenameModifier(string from, string to) {
+            m_chord = Rename(
+                from: from,
+                ids: m_chord,
+                to: to
+            );
+            m_held = Rename(
+                from: from,
+                ids: m_held,
+                to: to
+            );
         }
         public BindingChordDefinition ToDefinition() {
             if (m_command is { } command) {
@@ -520,5 +514,11 @@ public static class WorldBindingComposer {
                 )
             );
         }
+
+        public string Key => RowKey(
+            chord: m_chord,
+            group: m_group,
+            held: m_held
+        );
     }
 }

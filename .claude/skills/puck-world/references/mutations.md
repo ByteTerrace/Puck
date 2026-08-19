@@ -55,9 +55,9 @@ TCP work → `WorldServer.Step` → `WorldConsoleWaitGate.PublishTick` (the
 `world.wait` clock counts completed simulation ticks) → replay `NoteTick`
 when armed. `WorldSimulation` wraps it with seat-intent submission before the
 shell and seat-context sync plus analog/editor latching after it. The launcher
-owns time, pacing off `IFixedStepSimulation.RatePerSecond` (240 Hz by
-default — `WorldSimulationDefaults.DefaultRateHz` — but authored per world via
-the document's `simulation.rateHz` field; see
+owns time, pacing off `IFixedStepSimulation.RatePerSecond` (authored per world
+via the document's `simulation.rateHz` field — the standard 240 Hz lives in
+`standard.world.json`, and a world authoring no section is rate-0 resident; see
 [documents.md](documents.md)). A `.puckreplay` tape carries its OWN
 `SimulationRate`, stamped at record time from the live world's own rate, and
 `Drive` refuses a disagreement with the embedded definition's own

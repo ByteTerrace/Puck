@@ -179,25 +179,12 @@ the grace window (not merely the leave itself) is what the rules above ride.
   after a leave reliably crosses the deadline in a scripted verification run;
   `world.wait <2` plus `world.parked` reads the remaining-ticks countdown
   mid-window.
-- **Fixed 2026-08-06 (was: a `player.join` under `--headless` flooded stderr
-  with ~106 `[player.bindings] seat N recompose rejected: page "…" binds …
-  to "editor.*", which names no registered command` lines).**
-  `WorldDefaultBindings`'s editor/sculpt page groups are compiled into every
-  seat's composed document unconditionally ("always compiled in"), but
-  `AddWorldPresentation` — which registers `EditorCommandModule` and its
-  siblings — is skipped entirely on the headless boot shape
-  (`WorldBootComposition.cs`/`Program.cs`), so those pages always name
-  unregistered commands headless, on every world (this reproduced
-  byte-for-byte identically on `combat.world.json`'s own `player.join` under
-  the same recipe — no scenario document has a lever over it).
-  `WorldSeatBindings`'s recompose now SKIPS a page (or a mixed page's
-  offending entries only — the default group's base page keeps its movement
-  rows and loses just `editor.enter`) whose commands are not in the
-  registered vocabulary, keyed on `WorldAffordances.IsCommandRegistered`
-  (a registration FACT, never a headless boolean) and narrated ONCE per
-  skipped page (`[player.bindings] seat N: page "editor" (group "editor")
-  skipped 13 unregistered commands — …`) instead of once per entry. A
-  genuine vocabulary mistake surviving the skip (bindability, value kind)
-  still rejects the whole recompose exactly as before. Windowed boot
-  registers every command, so the skip predicate is always false there and
-  behavior is byte-identical to before the fix.
+- A composed document may name a command a leaner boot shape (e.g. headless)
+  never registers. `WorldSeatBindings`'s recompose SKIPS a page (or a mixed
+  page's offending entries only, keeping its registered/resolvable rows)
+  whose commands are not in the registered vocabulary, keyed on
+  `WorldAffordances.IsCommandRegistered` (a registration FACT, never a
+  headless boolean) and narrated ONCE per skipped page instead of once per
+  entry. A genuine vocabulary mistake surviving the skip (bindability, value
+  kind) still rejects the whole recompose. Windowed boot registers every
+  command, so the skip predicate is always false there.

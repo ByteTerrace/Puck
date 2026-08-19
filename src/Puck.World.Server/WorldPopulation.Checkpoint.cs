@@ -13,7 +13,7 @@ public sealed partial class WorldPopulation {
         byte KitIndex,
         Vector3 BodyColor,
         byte CatalogRig,
-        int[] Designations,
+        WorldTargetDesignation[] Designations,
         int Generation,
         bool IsAuthorityTransferred,
         bool IsRemoteHuman,
@@ -167,6 +167,7 @@ public sealed partial class WorldPopulation {
             );
 
             body.SetContactField(field: m_contactField);
+            body.SetGravityField(field: m_gravityField);
             body.SetWaterline(level: m_waterline);
             body.Pose(
                 position: captured.Position,

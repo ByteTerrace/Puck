@@ -26,8 +26,7 @@ A module implements `Puck.Commands.ICommandModule` — one
 `GetCommands() → IEnumerable<CommandDefinition>`. Convention: state as
 constructor parameters (never `IServiceProvider`), verb logic inline; when a
 module hits the analyzer complexity ceiling, carve by SUBJECT into more
-modules (the six `EditorSculpt*CommandModule`s), never into
-shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
+modules, never into shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
 X>()` in `Program.cs`; `CommandRegistry` aggregates all modules and
 observers at construction and throws on any duplicate name/alias (including
 its built-ins `help`, `wire.ack`, `wire.errors`).
@@ -144,8 +143,12 @@ operator panel.
 
 `world.binding-bar [on|off|auto] [player]` is the binding bar's parallel live
 control and read-back. `on`/`off` force a side, `auto` returns to the authored
-enabled/rest policy, and every form reports the resolved per-seat policy,
-current hidden state and reason, and layout values.
+enabled/rest policy, and every form reports the resolved per-seat policy — its
+`text on|off` switch, authored `slots`/`banks` counts, the resolved (world-or-
+player) `hideUnbound`/`stacked` preferences, current hidden state and reason,
+and layout values (`scale` reflects a player's own override when set) —
+included. Visibility is the only side the verb overrides; every other field is
+authored only (`bindingBar.*`, see [documents.md](documents.md)).
 
 ## Screenshots
 
@@ -204,7 +207,7 @@ composing writes. That is a defect class, not a shortcut.
 ## Grammar conventions for new verbs
 
 - `family.verb` dotted names (`world.*`, `player.*`, `screen.*`,
-  `editor.*`, `profile.*`, `storage.*`, `capture.*`, `replay.*`,
+  `profile.*`, `storage.*`, `capture.*`, `replay.*`,
   `audio.*`, `market.*`); names case-insensitive on the full parse, ordinal
   on the fast path.
 - Row-valued mutation verbs take ONE inline-JSON argument in the exact wire
@@ -223,7 +226,7 @@ composing writes. That is a defect class, not a shortcut.
   `WorldSeatBindings.RecomposeSeat` REJECTS the whole seat document and keeps the
   prior mapping — so every later `player.bind`, profile load or context regroup is
   silently discarded. Boot narration is NOT proof a binding change is safe: force a
-  recompose (`player.bind 1 keyboard.p editor.status`) and assert stderr carries no
+  recompose (`player.bind 1 keyboard.p player.wheel.ring value:1`) and assert stderr carries no
   `recompose rejected` line.
 - `player.bind` can carry a constant for a command destination with `value:<v>`
   (validated against the destination's declared kind; mutually exclusive with

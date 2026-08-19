@@ -296,6 +296,7 @@ internal static class ParityCorpusGenerator {
         ["specular"] = specular.ToJson(),
         ["shininess"] = shininess.ToJson(),
     };
+
     // The shape's ordered ShapeDomainOp list — "mirror: true"'s exact fold is one symmetry op across the
     // Vector3.UnitX plane (see CreationDocument.cs's ShapeDocument.Domain remarks).
     private static readonly JsonArray s_mirrorDomain = [new JsonObject { ["$type"] = "symmetry", ["normal"] = new JsonArray(((JsonNode)1), ((JsonNode)0), ((JsonNode)0)) }];

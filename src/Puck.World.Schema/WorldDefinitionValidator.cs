@@ -153,9 +153,9 @@ public static partial class WorldDefinitionValidator {
         return new AssetCheck(
             CanonicalHash: ((violations.Count == 0)
             ? MusicCanonicalizer.Canonicalize(
-                document: document,
-                source: row.Name
-            ).Hash
+                    document: document,
+                    source: row.Name
+                ).Hash
             : null),
             Violations: [.. violations]
         );
@@ -206,7 +206,10 @@ public static partial class WorldDefinitionValidator {
             definition: definition
         );
 
-        if (!bindsPointerSteer && !bindsLookSteer) {
+        if (
+            !bindsPointerSteer &&
+            !bindsLookSteer
+        ) {
             return;
         }
 
@@ -220,18 +223,26 @@ public static partial class WorldDefinitionValidator {
             hasFaceZ |= (channel.Role == ChannelRole.FaceZ);
         }
 
-        if (bindsPointerSteer && (!hasFaceX || !hasFaceY || !hasFaceZ)) {
+        if (
+            bindsPointerSteer &&
+            (!hasFaceX || !hasFaceY || !hasFaceZ)
+        ) {
             errors.Add(item: "bindingOverlays bind player.steer, which needs channels claiming FaceX, FaceY, and FaceZ.");
         }
-        if (bindsLookSteer && (!hasFaceX || !hasFaceZ)) {
+        if (
+            bindsLookSteer &&
+            (!hasFaceX || !hasFaceZ)
+        ) {
             errors.Add(item: "bindingOverlays bind player.look.steer, which needs channels claiming FaceX and FaceZ.");
         }
 
         if (definition.Views.SeatControl.YawReference != WorldSeatYawReference.World) {
-            var bindingNames = (bindsPointerSteer && bindsLookSteer
+            var bindingNames = ((bindsPointerSteer && bindsLookSteer)
                 ? "player.steer and player.look.steer"
-                : (bindsPointerSteer ? "player.steer" : "player.look.steer")
-            );
+                : (bindsPointerSteer
+                    ? "player.steer"
+                    : "player.look.steer"
+            ));
 
             errors.Add(item: $"bindingOverlays bind {bindingNames}, which needs views.seatControl.yawReference 'World'.");
         }
@@ -834,10 +845,18 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        var (iconNames, iconsAuthored) = ValidateIconography(
+            definition: definition,
+            errors: errors
+        );
+
         ValidateBindingOverlays(
             overlays: definition.BindingOverlays,
             channels: CompilableChannelTable(channels: definition.Channels),
             stateRows: stateRows,
+            seatModes: definition.SeatModes,
+            iconNames: iconNames,
+            iconsAuthored: iconsAuthored,
             errors: errors
         );
         ValidateStorage(
@@ -891,12 +910,16 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // Called early — the host section references no other section.
-        ValidateHost(
-            host: definition.Host,
-            generators: definition.Generators,
-            errors: errors
-        );
+        // Called early — the host section references no other section. Only an AUTHORED section validates: absence
+        // reads the inert WorldHostDefaults.Absent (no presentation), whose zero extent is the meaning of "no
+        // window", not an authored value to range-check.
+        if (definition.HostRaw is { } authoredHost) {
+            ValidateHost(
+                host: authoredHost,
+                generators: definition.Generators,
+                errors: errors
+            );
+        }
 
         ValidateWater(
             water: definition.Water,
@@ -957,16 +980,32 @@ public static partial class WorldDefinitionValidator {
 
         var authoring = definition.Authoring;
 
-        ValidateAuthoring(
-            authoring: authoring,
-            errors: errors
-        );
+        // Only an AUTHORED section validates — absence reads the inert WorldAuthoringDefaults.Absent (zero headroom,
+        // zero-width scale envelope), whose zeros are "no authoring capacity", not authored values to range-check.
+        if (definition.AuthoringRaw is { } authoredAuthoring) {
+            ValidateAuthoring(
+                authoring: authoredAuthoring,
+                errors: errors
+            );
+        }
 
-        var collision = definition.Collision;
-
-        ValidateCollision(
-            collision: collision,
-            errors: errors
+        // The contact solver. The engine holds no tuning of its own, so collision is REQUIRED exactly when the
+        // census implies a body to resolve contacts for (the kits/views derived refusal, not a flat floor): a
+        // bodyless document may author none and reads the inert WorldCollision.Absent.
+        if (definition.CollisionRaw is null) {
+            if (definition.Population.Capacity > 0) {
+                errors.Add(item: "collision is required when the census implies a body (population.capacity > 0) — author it, or inherit a basis (e.g. standard.world.json) that does.");
+            }
+        } else {
+            ValidateCollision(
+                collision: definition.CollisionRaw,
+                errors: errors
+            );
+        }
+        ValidateGravity(
+            errors: errors,
+            gravity: definition.Gravity,
+            placements: definition.Placements
         );
 
         var fontNames = ValidateTextCatalog(
@@ -1004,7 +1043,7 @@ public static partial class WorldDefinitionValidator {
             kitNames: kitNames,
             authoring: authoring,
             patchIds: patchIds,
-            requiresField: WorldContactSelection.RequiresField(collision: collision),
+            requiresField: WorldContactSelection.RequiresField(collision: definition.Collision),
             destinationNames: destinationNames,
             fontNames: fontNames,
             hasTextCatalog: (definition.Text is not null),
@@ -1071,12 +1110,19 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        // The window-composition defaults: absent-in-JSON coalesces to the built-in default (empty layouts -> the
-        // built-in seat ladder), so every downstream read sees a concrete row. Named cameras a layout slot references
-        // must resolve against the camera set just built.
+        // The window composition. The engine holds no rig of its own, so views is REQUIRED exactly when the census
+        // implies a body to look at (a derived refusal, not a flat floor, mirroring kits): a seatless document
+        // composes no seat view and may author none. Named cameras a layout slot references must resolve against the
+        // camera set just built.
         ValidateViews(
-            views: definition.Views,
+            views: definition.ViewsRaw,
+            capacity: definition.Population.Capacity,
             cameras: cameras,
+            errors: errors
+        );
+
+        ValidateSeatModes(
+            definition: definition,
             errors: errors
         );
 
@@ -1238,14 +1284,18 @@ public static partial class WorldDefinitionValidator {
             tuneIds: tuneIds
         );
 
-        ValidateAudioDefaults(
-            audio: definition.Audio,
-            cameras: cameras,
-            patchIds: patchIds,
-            speakerNames: speakerNames,
-            localSeats: definition.Population.LocalSeats,
-            errors: errors
-        );
+        // Only an AUTHORED audio section validates: absence reads the inert WorldAudioDefaults.Absent (silent),
+        // whose zeros are the meaning of "no audio", not authored values to range-check.
+        if (definition.AudioRaw is { } authoredAudio) {
+            ValidateAudioDefaults(
+                audio: authoredAudio,
+                cameras: cameras,
+                patchIds: patchIds,
+                speakerNames: speakerNames,
+                localSeats: definition.Population.LocalSeats,
+                errors: errors
+            );
+        }
 
         // Groups validates before Grants: a grant row may target a group principal, so Grants needs the declared
         // group-id set already resolved.

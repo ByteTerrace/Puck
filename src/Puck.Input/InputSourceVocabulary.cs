@@ -45,7 +45,6 @@ public static class InputSourceVocabulary {
     public static bool IsRelative(string sourceId) {
         return RelativeSourceIds.Contains(item: sourceId);
     }
-
     /// <summary>Attempts to resolve <paramref name="sourceId"/> against the engine's canonical source-id surface
     /// and report the full <see cref="CommandValueKind"/> it declares.</summary>
     /// <param name="sourceId">The provider-neutral source id text (e.g. <c>"gamepad.buttonSouth"</c>).</param>

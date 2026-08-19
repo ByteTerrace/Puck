@@ -217,6 +217,40 @@ public static partial class WorldDefinitionValidator {
         }
 
         switch (rig.Motion) {
+            case WorldCameraMotion.Fly fly:
+                if (
+                    !float.IsFinite(f: fly.MinSpeed) ||
+                    !float.IsFinite(f: fly.MaxSpeed) ||
+                    (fly.MinSpeed <= 0f) ||
+                    (fly.MaxSpeed < fly.MinSpeed)
+                ) {
+                    errors.Add(item: $"{path}.motion needs a positive, finite minSpeed and a maxSpeed no smaller than it.");
+                }
+
+                if (
+                    !float.IsFinite(f: fly.DefaultSpeed) ||
+                    (fly.DefaultSpeed < fly.MinSpeed) ||
+                    (fly.DefaultSpeed > fly.MaxSpeed)
+                ) {
+                    errors.Add(item: $"{path}.motion.defaultSpeed must be finite and within [minSpeed, maxSpeed].");
+                }
+
+                if (
+                    !float.IsFinite(f: fly.LookRateRadiansPerSecond) ||
+                    (fly.LookRateRadiansPerSecond <= 0f)
+                ) {
+                    errors.Add(item: $"{path}.motion.lookRateRadiansPerSecond must be positive and finite.");
+                }
+
+                if (
+                    !float.IsFinite(f: fly.MaxPitchRadians) ||
+                    (fly.MaxPitchRadians <= 0f) ||
+                    (fly.MaxPitchRadians >= (MathF.PI / 2f))
+                ) {
+                    errors.Add(item: $"{path}.motion.maxPitchRadians must be finite and within (0, pi/2).");
+                }
+
+                break;
             case WorldCameraMotion.Follow follow:
                 if (!IsFinite(value: follow.Offset)) {
                     errors.Add(item: $"{path}.motion.offset must contain finite coordinates.");
@@ -491,11 +525,17 @@ public static partial class WorldDefinitionValidator {
         } else if (control.MinPitch >= control.MaxPitch) {
             errors.Add(item: $"{path}.minPitch must be less than {path}.maxPitch.");
         }
-        if ((control.SwapRate is { } swapRate) && (!float.IsFinite(f: swapRate) || (swapRate < 0f))) {
+        if (
+            (control.SwapRate is { } swapRate) &&
+            (!float.IsFinite(f: swapRate) || (swapRate < 0f))
+        ) {
             errors.Add(item: $"{path}.swapRate must be finite and non-negative — 0 is an instant swap.");
         }
         if (control.Follow is { } follow) {
-            if (!float.IsFinite(f: follow.Rate) || (follow.Rate <= 0f)) {
+            if (
+                !float.IsFinite(f: follow.Rate) ||
+                (follow.Rate <= 0f)
+            ) {
                 errors.Add(item: $"{path}.follow.rate must be finite and positive.");
             }
             if (control.YawReference != WorldSeatYawReference.World) {
@@ -530,7 +570,10 @@ public static partial class WorldDefinitionValidator {
 
         var gyro = seatLook.Gyro;
 
-        if (!float.IsFinite(f: gyro.Scale) || (gyro.Scale < 0f)) {
+        if (
+            !float.IsFinite(f: gyro.Scale) ||
+            (gyro.Scale < 0f)
+        ) {
             errors.Add(item: $"{path}.gyro.scale must be finite and non-negative.");
         }
         if (
@@ -669,14 +712,20 @@ public static partial class WorldDefinitionValidator {
 
         if (
             (text.Foreground is { } foreground) &&
-            !IsColor(definition: definition, value: foreground)
+            !IsColor(
+            definition: definition,
+            value: foreground
+        )
         ) {
             errors.Add(item: $"{path}.text.foreground {WorldColor.Grammar}.");
         }
 
         if (
             (text.Background is { } background) &&
-            !IsColor(definition: definition, value: background)
+            !IsColor(
+            definition: definition,
+            value: background
+        )
         ) {
             errors.Add(item: $"{path}.text.background {WorldColor.Grammar}.");
         }
@@ -727,11 +776,14 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    // The window-composition defaults (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
-    // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set.
-    private static void ValidateViews(WorldViewDefaults views, HashSet<string> cameras, List<string> errors) {
+    // The window composition (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
+    // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set. ABSENT is a
+    // seatless document's right — the engine ships no rig, so a census implying a body must author one.
+    private static void ValidateViews(WorldViewDefaults? views, int capacity, HashSet<string> cameras, List<string> errors) {
         if (views is null) {
-            errors.Add(item: "views is required.");
+            if (capacity > 0) {
+                errors.Add(item: $"views is required when population.capacity ({capacity}) is nonzero; the engine declares no seat rig (author one, or name a basis document that does).");
+            }
 
             return;
         }
@@ -748,6 +800,18 @@ public static partial class WorldDefinitionValidator {
         );
         if (views.SeatRig?.Motion is not WorldCameraMotion.Orbit) {
             errors.Add(item: "views.seatRig.motion must be orbit because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+        }
+
+        if (views.FlyRig is { } flyRig) {
+            ValidateRig(
+                rig: flyRig,
+                path: "views.flyRig",
+                errors: errors
+            );
+
+            if (flyRig.Motion is not WorldCameraMotion.Fly) {
+                errors.Add(item: "views.flyRig.motion must be fly — it is the rig a camera-targeting mode state swaps to.");
+            }
         }
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);

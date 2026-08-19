@@ -854,8 +854,8 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         // observe the new pad exactly when it is still choosing a profile. Submission is gated on Active, so a pending
         // player never MOVES from this sample; its move stick doubles as the profile picker below.
         participant.Seat.SetAnalogMove(
-            move: value,
-            behavior: behavior
+            behavior: behavior,
+            move: value
         );
 
         if (participant.State == ParticipantState.Pending) {
@@ -1876,8 +1876,8 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         }
 
         participant.Seat.SetAnalogLook(
-            look: value,
-            behavior: behavior
+            behavior: behavior,
+            look: value
         );
     }
     /// <summary>Routes a movement-stick sample from a deterministic command lane to its logical player slot. The
@@ -1915,10 +1915,10 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
         var participant = m_slots[slot]!;
 
         RouteMove(
+            behavior: behavior,
             participant: participant,
             slot: slot,
-            value: value,
-            behavior: behavior
+            value: value
         );
     }
     /// <summary>The seat controller in the slot (0-based), or <see langword="null"/> if the slot is empty or out of
@@ -2320,7 +2320,7 @@ public sealed class PlayerRoster : IInputSlotResolver, ICommandPrincipalResolver
 
         if (
             (m_catalog.Length > 0) &&
-            (seatActivation is { Count: > 0 } && (seatActivation[0] == SeatActivationPolicy.Eager))
+            ((seatActivation is { Count: > 0 }) && (seatActivation[0] == SeatActivationPolicy.Eager))
         ) {
             Fill(
                 slot: 0,

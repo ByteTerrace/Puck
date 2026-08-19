@@ -6,7 +6,7 @@
   "properties": {
     "seatRig": {
       "$ref": "./common.schema.json#/$defs/WorldCameraRig",
-      "description": "The chase framing every seat\u0027s view resolves through (the non-editing default)."
+      "description": "The chase framing every seat\u0027s view resolves through by default."
     },
     "seatControl": {
       "description": "The structural constraints/reference for live seat camera input.",
@@ -65,6 +65,39 @@
         "maxPitch"
       ],
       "additionalProperties": false
+    },
+    "flyRig": {
+      "description": "The free-camera rig a seat\u0027s control application swaps to while flying (see Target) \u2014 null for a world that authors no camera-targeting mode state. Its motion must be Fly when present.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "motion": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraMotion",
+          "description": "The camera-local eye motion evaluated after its reference frame resolves."
+        },
+        "aim": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraAim",
+          "description": "The framing policy that selects a target from the resolved eye and reference frame."
+        },
+        "lens": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraLens",
+          "description": "The optical state applied to the rendered camera."
+        },
+        "smoothRate": {
+          "description": "The presentation-only exponential response rate (per second) the resolved eye eases at; zero disables smoothing. Applies to whichever motion the rig carries.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "motion",
+        "aim",
+        "lens"
+      ],
+      "additionalProperties": false,
+      "default": null
     },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",

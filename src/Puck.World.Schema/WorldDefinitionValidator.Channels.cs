@@ -19,6 +19,9 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
     }
+    // Slot-set/bank structure: names, uniqueness, and ceilings — everything checkable WITHOUT the composed binding
+    // profile. The bank PageId existence check runs separately, after ValidateBindingOverlays compiles the
+    // composed profile (a bank's page reference is checkable only against the whole overlay stack's result).
     private static void ValidateBindingBar(WorldBindingBarAuthoring? authoring, string path, List<string> errors) {
         if (authoring is null) {
             return;
@@ -29,6 +32,92 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.visible",
             predicate: authoring.Visible
         );
+
+        if (
+            !float.IsFinite(f: authoring.MultiSeatAlpha) ||
+            (authoring.MultiSeatAlpha < 0f) ||
+            (authoring.MultiSeatAlpha > 1f)
+        ) {
+            errors.Add(item: $"{path}.multiSeatAlpha {authoring.MultiSeatAlpha} is outside 0..1.");
+        }
+
+        if (authoring.SlotSet is null) {
+            errors.Add(item: $"{path}.slotSet is required.");
+        } else {
+            // No explicit count ceiling: known-name + uniqueness below already bound the slot set by the button
+            // catalog itself, which is what the overlay reservation sizes from.
+            var seenButtons = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < authoring.SlotSet.Count); index++) {
+                var name = authoring.SlotSet[index];
+                var slotPath = $"{path}.slotSet[{index}]";
+
+                if (string.IsNullOrWhiteSpace(value: name)) {
+                    errors.Add(item: $"{slotPath} is required.");
+                } else if (!seenButtons.Add(item: name)) {
+                    errors.Add(item: $"{slotPath} '{name}' is duplicated.");
+                } else if (
+                    (GamepadButtonVocabularyHook.IsKnownButtonName is { } isKnown) &&
+                    !isKnown(name)
+                ) {
+                    errors.Add(item: $"{slotPath} '{name}' is not a declared GamepadButtons name.");
+                }
+            }
+        }
+
+        if (authoring.Banks is null) {
+            errors.Add(item: $"{path}.banks is required.");
+        } else if (authoring.Banks.Count == 0) {
+            errors.Add(item: $"{path}.banks must declare at least one bank.");
+        } else if (authoring.Banks.Count > WorldBindingBarCapacity.MaxBanks) {
+            errors.Add(item: $"{path}.banks declares {authoring.Banks.Count} entries, exceeding the {WorldBindingBarCapacity.MaxBanks}-bank ceiling.");
+        } else {
+            var seenBanks = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < authoring.Banks.Count); index++) {
+                var bank = authoring.Banks[index];
+                var bankPath = $"{path}.banks[{index}]";
+
+                if (bank is null) {
+                    errors.Add(item: $"{bankPath} is required.");
+
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(value: bank.Id)) {
+                    errors.Add(item: $"{bankPath}.id is required.");
+                } else if (!seenBanks.Add(item: bank.Id)) {
+                    errors.Add(item: $"{bankPath}.id '{bank.Id}' is duplicated.");
+                }
+
+                if (string.IsNullOrWhiteSpace(value: bank.PageId)) {
+                    errors.Add(item: $"{bankPath}.pageId is required.");
+                }
+
+                if (!float.IsFinite(f: bank.OffsetX)) {
+                    errors.Add(item: $"{bankPath}.offsetX {bank.OffsetX} must be a finite number.");
+                }
+
+                if (!float.IsFinite(f: bank.OffsetY)) {
+                    errors.Add(item: $"{bankPath}.offsetY {bank.OffsetY} must be a finite number.");
+                }
+
+                if (
+                    !float.IsFinite(f: bank.Alpha) ||
+                    (bank.Alpha < 0f) ||
+                    (bank.Alpha > 1f)
+                ) {
+                    errors.Add(item: $"{bankPath}.alpha {bank.Alpha} is outside 0..1.");
+                }
+
+                if (
+                    (bank.ActiveAlpha is { } activeAlpha) &&
+                    (!float.IsFinite(f: activeAlpha) || (activeAlpha < 0f) || (activeAlpha > 1f))
+                ) {
+                    errors.Add(item: $"{bankPath}.activeAlpha {activeAlpha} is outside 0..1.");
+                }
+            }
+        }
 
         if (authoring.Layout is not { } layout) {
             return;
@@ -69,12 +158,37 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
+    // The bank PageId existence check — run AFTER the composed profile compiles successfully (a bank's page
+    // reference is only checkable against the WHOLE overlay stack's result, never one overlay's own document).
+    private static void ValidateBindingBarPageReferences(IReadOnlyList<WorldBindingOverlay> overlays, CompiledBindingProfile profile, List<string> errors) {
+        for (var index = 0; (index < overlays.Count); index++) {
+            var banks = overlays[index]?.BindingBar?.Banks;
+
+            if (banks is null) {
+                continue;
+            }
+
+            for (var bankIndex = 0; (bankIndex < banks.Count); bankIndex++) {
+                var pageId = banks[bankIndex]?.PageId;
+
+                if (
+                    !string.IsNullOrWhiteSpace(value: pageId) &&
+                    !profile.TryGetPageView(
+                    pageId: pageId,
+                    view: out _
+                )
+                ) {
+                    errors.Add(item: $"bindingOverlays[{index}].bindingBar.banks[{bankIndex}].pageId '{pageId}' names no page in the composed binding profile.");
+                }
+            }
+        }
+    }
     // The per-world binding overlays: non-empty unique ids, and the COMPOSED result (every overlay, in order) passes
     // the existing binding compiler — a partial overlay page that only makes sense post-merge still gates against the
     // real runtime artifact, and the binding validator is never reimplemented. No overlays compose to the empty
     // document: a world with no bindings is valid. The vocabulary half resolves channel names against THIS document's
     // own table (the `channels` parameter), never a process-global.
-    private static void ValidateBindingOverlays(IReadOnlyList<WorldBindingOverlay> overlays, WorldChannelTable? channels, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+    private static void ValidateBindingOverlays(IReadOnlyList<WorldBindingOverlay> overlays, WorldChannelTable? channels, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyList<WorldSeatModeFamily> seatModes, IReadOnlySet<string> iconNames, bool iconsAuthored, List<string> errors) {
         if (overlays is null) {
             errors.Add(item: "bindingOverlays is required.");
 
@@ -125,6 +239,7 @@ public static partial class WorldDefinitionValidator {
                     BindingVocabularyHook.VocabularyCheck?.Invoke(
                         overlay.Document,
                         table,
+                        seatModes,
                         vocabularyErrors
                     );
 
@@ -142,7 +257,40 @@ public static partial class WorldDefinitionValidator {
         }
 
         try {
-            _ = BindingProfile.Compile(document: WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers)));
+            var compiled = BindingProfile.Compile(document: WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers)));
+
+            if (compiled.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
+                errors.Add(item: $"bindingOverlays compose {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier pip ceiling.");
+            }
+
+            ValidateBindingBarPageReferences(
+                errors: errors,
+                overlays: overlays,
+                profile: compiled
+            );
+
+            // A bound action's icon string, checked against the icon table ONLY when some document in the basis
+            // chain authored one (see ValidateIconography's Absent gate) — no authored icons.icons means every
+            // icon string draws a blank plate, never a refusal.
+            if (iconsAuthored) {
+                foreach (var pageId in compiled.PageIds) {
+                    if (!compiled.TryGetPageView(
+                        pageId: pageId,
+                        view: out var view
+                    )) {
+                        continue;
+                    }
+
+                    foreach (var button in view.Buttons) {
+                        if (
+                            !string.IsNullOrEmpty(value: button.Icon) &&
+                            !iconNames.Contains(item: button.Icon)
+                        ) {
+                            errors.Add(item: $"bindingOverlays page '{pageId}' button '{button.Command}' icon '{button.Icon}' names no row in icons.icons.");
+                        }
+                    }
+                }
+            }
         } catch (ArgumentException exception) {
             errors.Add(item: $"bindingOverlays do not compose into a valid mapping: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
@@ -219,9 +367,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.frame '{channel.Frame}' is not a defined ChannelFrame.");
             } else if (
                 (channel.Frame != ChannelFrame.World) &&
-                (channel.Role is not (ChannelRole.MoveForward or ChannelRole.MoveStrafe))
+                (channel.Role is not (ChannelRole.MoveAdvance or ChannelRole.MoveStrafe))
             ) {
-                errors.Add(item: $"{path}.frame '{channel.Frame}' is only meaningful on the MoveForward/MoveStrafe roles.");
+                errors.Add(item: $"{path}.frame '{channel.Frame}' is only meaningful on the MoveAdvance/MoveStrafe roles.");
             }
 
             if (channel.Threshold is { } threshold) {
@@ -250,7 +398,7 @@ public static partial class WorldDefinitionValidator {
         var moveFramed = false;
 
         foreach (var channel in channels) {
-            if (channel?.Role is not (ChannelRole.MoveForward or ChannelRole.MoveStrafe)) {
+            if (channel?.Role is not (ChannelRole.MoveAdvance or ChannelRole.MoveStrafe)) {
                 continue;
             }
 
@@ -258,7 +406,7 @@ public static partial class WorldDefinitionValidator {
                 moveFrame = channel.Frame;
                 moveFramed = true;
             } else if (channel.Frame != moveFrame) {
-                errors.Add(item: $"channels claiming MoveForward and MoveStrafe must declare the same frame ('{moveFrame}' and '{channel.Frame}' differ) — the pair rotates together.");
+                errors.Add(item: $"channels claiming MoveAdvance and MoveStrafe must declare the same frame ('{moveFrame}' and '{channel.Frame}' differ) — the pair rotates together.");
 
                 break;
             }
@@ -275,7 +423,7 @@ public static partial class WorldDefinitionValidator {
                 (moveFrame != ChannelFrame.World) &&
                 (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)
             ) {
-                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.DeclaredMoveFrame}' cannot carry a '{moveFrame}'-framed MoveForward/MoveStrafe pair — a framed pair needs the kit's World frame.");
+                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.DeclaredMoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs the kit's World frame.");
             }
 
             if (!programs.TryGetValue(

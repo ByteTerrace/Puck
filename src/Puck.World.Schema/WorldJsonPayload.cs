@@ -86,9 +86,9 @@ public static class WorldJsonPayload {
             if (
                 (parsed is WorldDefinition definition) &&
                 !WorldStateDocumentValues.TryResolve(
-                    definition: definition,
-                    reason: out var spatialReason
-                )
+                definition: definition,
+                reason: out var spatialReason
+            )
             ) {
                 throw new InvalidOperationException(message: spatialReason);
             }

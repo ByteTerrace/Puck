@@ -98,6 +98,59 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} row '{name}' carries {((double)FixedQ4816.FromRawBits(value: row.Cells[0].Value)):0.####} — a locomotion rate must be positive.");
         }
     }
+    // The gravitational field (SIM-AFFECTING). The constant is non-negative and the softening length positive (a
+    // zero softening lets a coincident pair diverge); every attractor names a live placement, exactly once, with a
+    // non-negative mass. An inactive section still validates: authoring the constants before the sources is legal.
+    private static void ValidateGravity(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements, List<string> errors) {
+        if (!Enum.IsDefined(value: gravity.Solver)) {
+            errors.Add(item: $"gravity.solver '{gravity.Solver}' is not defined.");
+        }
+
+        RequireNonNegative(
+            value: gravity.GravitationalConstant,
+            name: "gravity.gravitationalConstant",
+            errors: errors
+        );
+        RequirePositive(
+            value: gravity.SofteningLength,
+            name: "gravity.softeningLength",
+            errors: errors
+        );
+
+        if (gravity.Attractors is null) {
+            errors.Add(item: "gravity.attractors is required.");
+
+            return;
+        }
+
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < gravity.Attractors.Count); index++) {
+            var attractor = gravity.Attractors[index];
+            var path = $"gravity.attractors[{index}]";
+
+            if (string.IsNullOrWhiteSpace(value: attractor.PlacementId)) {
+                errors.Add(item: $"{path}.placementId is required.");
+            } else {
+                if (!seen.Add(item: attractor.PlacementId)) {
+                    errors.Add(item: $"{path}.placementId duplicates '{attractor.PlacementId}'.");
+                }
+
+                if (WorldDefinitionRows.FindPlacement(
+                    id: attractor.PlacementId,
+                    placements: placements
+                ) is null) {
+                    errors.Add(item: $"{path}.placementId '{attractor.PlacementId}' resolves to no placement.");
+                }
+            }
+
+            RequireNonNegative(
+                value: attractor.Mass,
+                name: $"{path}.mass",
+                errors: errors
+            );
+        }
+    }
     // The contact-solver tuning (SIM-AFFECTING). ContactSkin positive; MaxIterations 1..8 (above 8 is a solver
     // pathology, not a choice); requirements are unique; MaxSlopeDegrees in (0, 90) — 0 grounds nothing, 90 grounds a
     // wall; GradientProbe non-negative, and > 0 requires a field-selecting requirement.
@@ -321,7 +374,9 @@ public static partial class WorldDefinitionValidator {
         if (panels.Count > maxPanels) {
             throw new HudValidationException(
                 reason: HudRefusal.TooManyPanels,
-                message: $"hud.panels count {panels.Count} exceeds the maximum of {maxPanels} ({(isIdentityScope ? "WorldHudCapacity.MaxSeatPanels — an identity-owned world authors one seat panel" : "WorldHudCapacity.MaxWorldPanels")})."
+                message: $"hud.panels count {panels.Count} exceeds the maximum of {maxPanels} ({(isIdentityScope
+                ? "WorldHudCapacity.MaxSeatPanels — an identity-owned world authors one seat panel"
+                : "WorldHudCapacity.MaxWorldPanels")})."
             );
         }
 
@@ -479,25 +534,46 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            if ((sun.Weight is { } weight) && (!float.IsFinite(f: weight) || (weight < 0f))) {
+            if (
+                (sun.Weight is { } weight) &&
+                (!float.IsFinite(f: weight) || (weight < 0f))
+            ) {
                 errors.Add(item: $"{path}.sun.weight must be finite and non-negative.");
             }
 
-            if ((sun.Color is { } color) && !IsColor(definition: definition, value: color)) {
+            if (
+                (sun.Color is { } color) &&
+                !IsColor(
+                definition: definition,
+                value: color
+            )
+            ) {
                 errors.Add(item: $"{path}.sun.color '{color}' {WorldColor.Grammar}.");
             }
         }
 
         if (lighting.Ambient is { } ambient) {
-            if ((ambient.Base is { } ambientBase) && (!float.IsFinite(f: ambientBase) || (ambientBase < 0f))) {
+            if (
+                (ambient.Base is { } ambientBase) &&
+                (!float.IsFinite(f: ambientBase) || (ambientBase < 0f))
+            ) {
                 errors.Add(item: $"{path}.ambient.base must be finite and non-negative.");
             }
 
-            if ((ambient.Hemisphere is { } hemisphere) && !float.IsFinite(f: hemisphere)) {
+            if (
+                (ambient.Hemisphere is { } hemisphere) &&
+                !float.IsFinite(f: hemisphere)
+            ) {
                 errors.Add(item: $"{path}.ambient.hemisphere must be finite.");
             }
 
-            if ((ambient.Color is { } color) && !IsColor(definition: definition, value: color)) {
+            if (
+                (ambient.Color is { } color) &&
+                !IsColor(
+                definition: definition,
+                value: color
+            )
+            ) {
                 errors.Add(item: $"{path}.ambient.color '{color}' {WorldColor.Grammar}.");
             }
         }
@@ -507,19 +583,40 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if ((sky.Zenith is { } zenith) && !IsColor(definition: definition, value: zenith)) {
+        if (
+            (sky.Zenith is { } zenith) &&
+            !IsColor(
+            definition: definition,
+            value: zenith
+        )
+        ) {
             errors.Add(item: $"{path}.zenith '{zenith}' {WorldColor.Grammar}.");
         }
 
-        if ((sky.Horizon is { } horizon) && !IsColor(definition: definition, value: horizon)) {
+        if (
+            (sky.Horizon is { } horizon) &&
+            !IsColor(
+            definition: definition,
+            value: horizon
+        )
+        ) {
             errors.Add(item: $"{path}.horizon '{horizon}' {WorldColor.Grammar}.");
         }
 
-        if ((sky.Ground is { } ground) && !IsColor(definition: definition, value: ground)) {
+        if (
+            (sky.Ground is { } ground) &&
+            !IsColor(
+            definition: definition,
+            value: ground
+        )
+        ) {
             errors.Add(item: $"{path}.ground '{ground}' {WorldColor.Grammar}.");
         }
 
-        if ((sky.FogDensity is { } fogDensity) && (!float.IsFinite(f: fogDensity) || (fogDensity < 0f))) {
+        if (
+            (sky.FogDensity is { } fogDensity) &&
+            (!float.IsFinite(f: fogDensity) || (fogDensity < 0f))
+        ) {
             errors.Add(item: $"{path}.fogDensity must be finite and non-negative.");
         }
 
@@ -532,65 +629,114 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.sun.discRadians must be finite and in (0, pi/2].");
             }
 
-            if (!float.IsFinite(f: sun.Intensity) || (sun.Intensity < 0f)) {
+            if (
+                !float.IsFinite(f: sun.Intensity) ||
+                (sun.Intensity < 0f)
+            ) {
                 errors.Add(item: $"{path}.sun.intensity must be finite and non-negative.");
             }
         }
 
         if (sky.Stars is { } stars) {
-            if (!float.IsFinite(f: stars.Density) || (stars.Density <= 0f)) {
+            if (
+                !float.IsFinite(f: stars.Density) ||
+                (stars.Density <= 0f)
+            ) {
                 errors.Add(item: $"{path}.stars.density must be finite and positive.");
             }
 
-            if (!float.IsFinite(f: stars.Brightness) || (stars.Brightness < 0f)) {
+            if (
+                !float.IsFinite(f: stars.Brightness) ||
+                (stars.Brightness < 0f)
+            ) {
                 errors.Add(item: $"{path}.stars.brightness must be finite and non-negative.");
             }
 
             if (stars.Twinkle is { } twinkle) {
-                if (!float.IsFinite(f: twinkle.Share) || (twinkle.Share < 0f) || (twinkle.Share > 1f)) {
+                if (
+                    !float.IsFinite(f: twinkle.Share) ||
+                    (twinkle.Share < 0f) ||
+                    (twinkle.Share > 1f)
+                ) {
                     errors.Add(item: $"{path}.stars.twinkle.share must be finite and in [0, 1].");
                 }
 
-                if (!float.IsFinite(f: twinkle.Depth) || (twinkle.Depth < 0f) || (twinkle.Depth > 1f)) {
+                if (
+                    !float.IsFinite(f: twinkle.Depth) ||
+                    (twinkle.Depth < 0f) ||
+                    (twinkle.Depth > 1f)
+                ) {
                     errors.Add(item: $"{path}.stars.twinkle.depth must be finite and in [0, 1].");
                 }
 
-                if (!float.IsFinite(f: twinkle.Rate) || (twinkle.Rate <= 0f)) {
+                if (
+                    !float.IsFinite(f: twinkle.Rate) ||
+                    (twinkle.Rate <= 0f)
+                ) {
                     errors.Add(item: $"{path}.stars.twinkle.rate must be finite and positive.");
                 }
             }
         }
 
         if (sky.Clouds is { } clouds) {
-            if (!float.IsFinite(f: clouds.Coverage) || (clouds.Coverage < 0f) || (clouds.Coverage > 1f)) {
+            if (
+                !float.IsFinite(f: clouds.Coverage) ||
+                (clouds.Coverage < 0f) ||
+                (clouds.Coverage > 1f)
+            ) {
                 errors.Add(item: $"{path}.clouds.coverage must be finite and in [0, 1].");
             }
 
-            if (!float.IsFinite(f: clouds.Softness) || (clouds.Softness <= 0f) || (clouds.Softness > 1f)) {
+            if (
+                !float.IsFinite(f: clouds.Softness) ||
+                (clouds.Softness <= 0f) ||
+                (clouds.Softness > 1f)
+            ) {
                 errors.Add(item: $"{path}.clouds.softness must be finite and in (0, 1].");
             }
 
-            if (!float.IsFinite(f: clouds.Scale) || (clouds.Scale <= 0f)) {
+            if (
+                !float.IsFinite(f: clouds.Scale) ||
+                (clouds.Scale <= 0f)
+            ) {
                 errors.Add(item: $"{path}.clouds.scale must be finite and positive.");
             }
 
-            if ((clouds.Color is { } cloudColor) && !IsColor(definition: definition, value: cloudColor)) {
+            if (
+                (clouds.Color is { } cloudColor) &&
+                !IsColor(
+                definition: definition,
+                value: cloudColor
+            )
+            ) {
                 errors.Add(item: $"{path}.clouds.color '{cloudColor}' {WorldColor.Grammar}.");
             }
 
-            if ((clouds.Drift is { } drift) && (!float.IsFinite(f: drift.X) || !float.IsFinite(f: drift.Y))) {
+            if (
+                (clouds.Drift is { } drift) &&
+                (!float.IsFinite(f: drift.X) || !float.IsFinite(f: drift.Y))
+            ) {
                 errors.Add(item: $"{path}.clouds.drift must contain finite coordinates.");
             }
 
-            if ((clouds.Spin is { } spin) && !float.IsFinite(f: spin)) {
+            if (
+                (clouds.Spin is { } spin) &&
+                !float.IsFinite(f: spin)
+            ) {
                 errors.Add(item: $"{path}.clouds.spin must be finite.");
             }
 
-            if ((clouds.Curl is { } curl) && !float.IsFinite(f: curl)) {
+            if (
+                (clouds.Curl is { } curl) &&
+                !float.IsFinite(f: curl)
+            ) {
                 errors.Add(item: $"{path}.clouds.curl must be finite.");
             }
 
-            if ((clouds.Shear is { } shear) && (!float.IsFinite(f: shear.X) || !float.IsFinite(f: shear.Y))) {
+            if (
+                (clouds.Shear is { } shear) &&
+                (!float.IsFinite(f: shear.X) || !float.IsFinite(f: shear.Y))
+            ) {
                 errors.Add(item: $"{path}.clouds.shear must contain finite coordinates.");
             }
         }
@@ -715,19 +861,31 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if ((update.Channel is not null) && string.IsNullOrWhiteSpace(value: update.Channel)) {
+        if (
+            (update.Channel is not null) &&
+            string.IsNullOrWhiteSpace(value: update.Channel)
+        ) {
             errors.Add(item: "update.channel must be non-whitespace when authored.");
         }
 
-        if ((update.CacheRoot is not null) && string.IsNullOrWhiteSpace(value: update.CacheRoot)) {
+        if (
+            (update.CacheRoot is not null) &&
+            string.IsNullOrWhiteSpace(value: update.CacheRoot)
+        ) {
             errors.Add(item: "update.cacheRoot must be non-whitespace when authored.");
         }
 
-        if ((update.CheckIntervalSeconds is { } checkIntervalSeconds) && (checkIntervalSeconds < 0)) {
+        if (
+            (update.CheckIntervalSeconds is { } checkIntervalSeconds) &&
+            (checkIntervalSeconds < 0)
+        ) {
             errors.Add(item: $"update.checkIntervalSeconds must not be negative, was {checkIntervalSeconds}.");
         }
 
-        if ((update.KeepVersions is { } keepVersions) && (keepVersions < 0)) {
+        if (
+            (update.KeepVersions is { } keepVersions) &&
+            (keepVersions < 0)
+        ) {
             errors.Add(item: $"update.keepVersions must not be negative, was {keepVersions}.");
         }
     }
@@ -875,7 +1033,10 @@ public static partial class WorldDefinitionValidator {
     // population.localSeats entries, the same shape ValidateSeatSpawns enforces for the sibling per-seat row. A
     // zero-seat world has no seat 0, so the eager-first-seat rule is vacuous rather than refusing an empty table.
     private static void ValidateSeatActivation(IReadOnlyList<SeatActivationPolicy> seatActivation, int localSeats, List<string> errors) {
-        if (seatActivation is not { Count: var count } || (count != localSeats)) {
+        if (
+            (seatActivation is not { Count: var count }) ||
+            (count != localSeats)
+        ) {
             errors.Add(item: $"population.seatActivation must contain exactly {localSeats} entries.");
 
             return;
@@ -889,7 +1050,10 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static void ValidateSeatSpawns(IReadOnlyList<string> seatSpawns, HashSet<string> spawnPointIds, int localSeats, List<string> errors) {
-        if (seatSpawns is not { Count: var count } || (count != localSeats)) {
+        if (
+            (seatSpawns is not { Count: var count }) ||
+            (count != localSeats)
+        ) {
             errors.Add(item: $"population.seatSpawns must contain exactly {localSeats} spawn-point names.");
 
             return;
@@ -911,8 +1075,8 @@ public static partial class WorldDefinitionValidator {
     // a positive rate (0 divides nothing).
     private static void ValidateSimulation(WorldSimulationDefaults? simulation, List<string> errors) {
         if (simulation is null) {
-            // Unauthored — WorldDefinition.SimulationRateHz falls back to WorldSimulationDefaults.DefaultRateHz
-            // (240), a divisor of 50400 by construction. Nothing to check.
+            // Unauthored — WorldDefinition.SimulationRateHz reads 0 (a resident, non-stepping world; the standard
+            // 240 Hz is authored in standard.world.json). Nothing to check.
             return;
         }
 

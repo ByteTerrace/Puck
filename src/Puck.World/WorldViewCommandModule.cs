@@ -3,7 +3,6 @@ using System.Text;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
-using static Puck.World.WorldCommandDefinition;
 
 namespace Puck.World;
 
@@ -110,10 +109,34 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return Simulation(
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
             name: "view.override",
-            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection. Gated Control over composition; a denial prints loudly and changes nothing.",
+            description: "LIVE composition override, keyed by which slot kind it forces: view.override camera|layout <name|auto>. 'layout' forces the active window layout for every seat; 'camera' resolves every camera-bearing slot to one camera for every seat (the twin of a layout slot's own camera). 'auto' (or '-') clears the override back to the composer's own selection. A BOUND dispatch (a wheel sector or chord row, which carries no tokens) selects the LAYOUT override by its constant Axis1D value: 0 or less clears to auto, n selects the nth authored views.layouts row (document order, 1-based). Gated Control over composition; a denial prints loudly and changes nothing.",
+            routing: CommandRouting.Simulation,
+            valueKind: CommandValueKind.Axis1D,
             handler: (context, args) => {
+                if (
+                    (context.Origin == CommandOrigin.Binding) &&
+                    (args.Count == 0)
+                ) {
+                    var ordinal = ((int)MathF.Round(x: context.Value.AsAxis1D));
+                    string? layoutName = null;
+
+                    if (ordinal >= 1) {
+                        layoutName = composer.AuthoredLayoutName(ordinal: ordinal);
+                        if (layoutName is null) {
+                            return CommandResult.Error(output: $"[view.override: no authored layout at ordinal {ordinal}]");
+                        }
+                    }
+
+                    link.SubmitComposition(
+                        composition: new WorldComposition.SetActiveLayout(Name: layoutName),
+                        principal: context.ActingPrincipal()
+                    );
+
+                    return CommandResult.None;
+                }
                 if (args.Count != 2) {
                     return Usage(
                         form: "camera|layout <name|auto>",

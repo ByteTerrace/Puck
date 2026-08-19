@@ -188,7 +188,7 @@
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveForward"
+      "role": "MoveAdvance"
     },
     {
       "name": "strafe",

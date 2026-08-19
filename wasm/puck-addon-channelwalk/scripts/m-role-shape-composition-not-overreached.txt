@@ -23,6 +23,6 @@ world.affordances
 #
 # NOT exercised by this battery (the rule itself is present, only this negative case is unbuilt): a second
 # world document declaring a Role-bound channel with Unipolar or Binary shape (e.g. a 'forward' row carrying
-# "role": "MoveForward", "shape": "Unipolar") must refuse to boot at all, naming channel, shape and role.
+# "role": "MoveAdvance", "shape": "Unipolar") must refuse to boot at all, naming channel, shape and role.
 # Author such a document, re-point --world at it, and confirm the refusal names all three. Verified separately
 # by hand at 216fe466 (both Unipolar and Binary role rows refuse, exit 1); it simply has no script here.

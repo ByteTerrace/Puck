@@ -65,7 +65,7 @@ internal sealed record WorldHostSettings(
     /// defaults (an absent flag keeps the authored default). Stays PURE: it returns the degraded backend plus the
     /// <see cref="BackendUnsatisfiable"/> / <see cref="BackendDowngraded"/> flags, and the caller decides whether to
     /// exit (a CLI assertion) or continue (a document preference).</summary>
-    /// <param name="defaults">The world-doc host defaults (absence already coalesced to <see cref="WorldHostDefaults.Default"/>).</param>
+    /// <param name="defaults">The world-doc host defaults (absence already coalesced to <see cref="WorldHostDefaults.Absent"/> — no presentation).</param>
     /// <param name="directXAvailable">Whether the Direct3D 12 backend is available on this OS.</param>
     /// <param name="backendOverride">The parsed <c>--backend</c> value, or <see langword="null"/> to let the document decide.</param>
     /// <param name="widthOverride">The <c>--width</c> value, or <see langword="null"/>.</param>

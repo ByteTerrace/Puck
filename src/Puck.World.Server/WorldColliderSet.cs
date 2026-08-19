@@ -1,6 +1,7 @@
 using Puck.Forge.Authoring;
 using Puck.Maths;
 using Puck.Physics;
+using Puck.SignedDistance;
 
 namespace Puck.World.Server;
 
@@ -40,33 +41,20 @@ internal sealed class WorldColliderSet : IContactField {
     // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick.
     private readonly IReadOnlyList<(WorldPlacement Placement, WorldCreation Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
-    private readonly FixedQ4816 m_groundedThreshold;
-    private readonly int m_iterations;
-    private readonly FixedQ4816 m_skin;
+    private readonly FixedStaticContactSolver m_solver;
 
     private WorldColliderSet(FixedStaticCollider[] colliders, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldCreation Creation)> attachedRows) {
         m_colliders = colliders;
         m_attachedRows = attachedRows;
-        m_skin = tuning.ContactSkin;
-        m_groundedThreshold = tuning.GroundedThreshold;
-        m_iterations = Math.Max(
-            val1: 1,
-            val2: tuning.MaxIterations
+        m_solver = new FixedStaticContactSolver(
+            ContactSkin: tuning.ContactSkin,
+            GroundedThreshold: tuning.GroundedThreshold,
+            MaxIterations: tuning.MaxIterations
         );
     }
 
     /// <summary>Gets the number of solid boxes in the set.</summary>
     public int BoxCount { get; private init; }
-    /// <inheritdoc/>
-    public WorldContactCensus Census => new(
-        SphereCount: SphereCount,
-        BoxCount: BoxCount,
-        PlaneCount: PlaneCount,
-        PlacementSphereCount: PlacementSphereCount,
-        PlacementBoxCount: PlacementBoxCount,
-        PlacementPlaneCount: PlacementPlaneCount,
-        UnsupportedPlacementCount: 0L
-    );
     /// <summary>Gets the number of placement-derived boxes in the set.</summary>
     public int PlacementBoxCount { get; private init; }
     /// <summary>Gets the number of placement-derived half-spaces in the set.</summary>
@@ -115,23 +103,38 @@ internal sealed class WorldColliderSet : IContactField {
             );
 
             foreach (var shape in (creation.Document.Shapes ?? [])) {
-                if (shape.Type == AvatarPrimitive.Plane) {
+                // A shape carrying domain ops compiles one collider PER EXPANDED COPY, exactly as Build emits them —
+                // counting the authored shape once would under-report the census the placement budget is read against.
+                var shapeCopies = (ShapeDomainOps.TryExpand(
+                    domain: shape.Domain,
+                    frames: out var frames,
+                    refusal: out _
+                )
+                    ? CreationStampLattice.MultiplySaturated(
+                        ceiling: long.MaxValue,
+                        left: copies,
+                        right: frames.Length
+                    )
+                    : copies
+                );
+
+                if (shape.Type == SdfSolidPrimitive.Plane) {
                     placementPlanes = AddSaturated(
                         left: placementPlanes,
-                        right: copies
+                        right: shapeCopies
                     );
                 } else if (
-                    (shape.Type == AvatarPrimitive.Sphere) &&
+                    (shape.Type == SdfSolidPrimitive.Sphere) &&
                     CreationStampEmitter.IsIsotropicallyScaled(shape: shape)
                 ) {
                     placementSpheres = AddSaturated(
                         left: placementSpheres,
-                        right: copies
+                        right: shapeCopies
                     );
                 } else {
                     placementBoxes = AddSaturated(
                         left: placementBoxes,
-                        right: copies
+                        right: shapeCopies
                     );
                 }
             }
@@ -165,34 +168,6 @@ internal sealed class WorldColliderSet : IContactField {
         ? long.MaxValue
         : (left + right)
     );
-    private void ApplyPush(
-        ref FixedVector3 position,
-        ref FixedVector3 velocity,
-        in FixedContactPush push,
-        ref bool grounded,
-        ref FixedVector3 lastNormal
-    ) {
-        position += (push.Normal * push.Penetration);
-        var walkable = (push.Normal.Y >= m_groundedThreshold);
-
-        grounded |= walkable;
-
-        // world.contacts' obstruction witness tracks only a NON-walkable push (a wall, not the ground/a ramp) —
-        // a standing body re-resolves its ground contact every solver iteration, so an unconditional "last push"
-        // would have the ground overwrite a genuine wall push from an earlier iteration in the SAME tick.
-        if (!walkable) {
-            lastNormal = push.Normal;
-        }
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: push.Normal
-        );
-
-        if (into < FixedQ4816.Zero) {
-            velocity -= (push.Normal * into);
-        }
-    }
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
     // axes. Exact for the axis-aligned screens the built-in world ships; conservative (bounding) for a rotated slab.
@@ -298,7 +273,7 @@ internal sealed class WorldColliderSet : IContactField {
                         ReflectionNormal: instance.ReflectionNormal
                     ),
                     visitor: copy => {
-                        if (copy.Shape.Type == AvatarPrimitive.Plane) {
+                        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                             var normal = copy.PlaneNormal;
 
                             colliders.Add(item: FixedStaticCollider.HalfSpace(
@@ -308,10 +283,10 @@ internal sealed class WorldColliderSet : IContactField {
                             planes++;
                             placementPlanes++;
                         } else if (
-                            (copy.Shape.Type == AvatarPrimitive.Sphere) &&
+                            (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
                             (copy.UniformScale > FixedQ4816.Zero)
                         ) {
-                            var sphereBounds = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
+                            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
                             colliders.Add(item: FixedStaticCollider.Sphere(
                                 center: copy.Center,
@@ -401,7 +376,7 @@ internal sealed class WorldColliderSet : IContactField {
                     ReflectionNormal: null
                 ),
                 visitor: copy => {
-                    if (copy.Shape.Type == AvatarPrimitive.Plane) {
+                    if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                         var normal = copy.PlaneNormal;
 
                         m_attachedColliders.Add(item: FixedStaticCollider.HalfSpace(
@@ -409,10 +384,10 @@ internal sealed class WorldColliderSet : IContactField {
                             normal: normal
                         ));
                     } else if (
-                        (copy.Shape.Type == AvatarPrimitive.Sphere) &&
+                        (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
                         (copy.UniformScale > FixedQ4816.Zero)
                     ) {
-                        var sphereBounds = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
+                        var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
                         m_attachedColliders.Add(item: FixedStaticCollider.Sphere(
                             center: copy.Center,
@@ -433,65 +408,18 @@ internal sealed class WorldColliderSet : IContactField {
         }
     }
     /// <inheritdoc/>
-    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var grounded = false;
-        var lastNormal = FixedVector3.Zero;
-
-        for (var iteration = 0; (iteration < m_iterations); iteration++) {
-            var pushed = false;
-
-            foreach (var volume in volumes) {
-                foreach (var collider in m_colliders) {
-                    if (collider.TryGetPush(
-                        orientation: in orientation,
-                        position: position,
-                        push: out var push,
-                        skin: m_skin,
-                        volume: in volume
-                    )) {
-                        ApplyPush(
-                            grounded: ref grounded,
-                            lastNormal: ref lastNormal,
-                            position: ref position,
-                            push: in push,
-                            velocity: ref velocity
-                        );
-                        pushed = true;
-                    }
-                }
-
-                // ATTACHED solid rows — recomputed once per tick by RefreshAttached, never here (Resolve runs once
-                // PER BODY; refreshing per body would repeat the same recompute for every other body in the world).
-                foreach (var collider in m_attachedColliders) {
-                    if (collider.TryGetPush(
-                        orientation: in orientation,
-                        position: position,
-                        push: out var push,
-                        skin: m_skin,
-                        volume: in volume
-                    )) {
-                        ApplyPush(
-                            grounded: ref grounded,
-                            lastNormal: ref lastNormal,
-                            position: ref position,
-                            push: in push,
-                            velocity: ref velocity
-                        );
-                        pushed = true;
-                    }
-                }
-            }
-
-            if (!pushed) {
-                break;
-            }
-        }
-
-        return new ContactResolution(
-            Grounded: grounded,
-            ObstructionNormal: lastNormal
+    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+        // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
+        // runs once PER BODY, so refreshing here would repeat that recompute for every other body in the world).
+        m_solver.Resolve(
+            colliders: m_colliders,
+            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+            orientation: in orientation,
+            position: ref position,
+            up: in up,
+            velocity: ref velocity,
+            volumes: volumes
         );
-    }
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         _ = position;

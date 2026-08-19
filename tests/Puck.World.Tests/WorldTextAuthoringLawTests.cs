@@ -150,7 +150,7 @@ public sealed class WorldTextAuthoringLawTests {
             Shapes = [new ShapeDocument(
                 Id: 1,
                 Name: null,
-                Type: AvatarPrimitive.Box,
+                Type: SdfSolidPrimitive.Box,
                 Position: Vector3.Zero,
                 Rotation: Quaternion.Identity,
                 Scale: Vector3.One,
@@ -235,7 +235,7 @@ public sealed class WorldTextAuthoringLawTests {
             Shapes: [new ShapeDocument(
                 Id: 1,
                 Name: null,
-                Type: AvatarPrimitive.Box,
+                Type: SdfSolidPrimitive.Box,
                 Position: Vector3.Zero,
                 Rotation: Quaternion.Identity,
                 Scale: Vector3.One,

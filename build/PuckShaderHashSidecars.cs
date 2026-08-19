@@ -38,7 +38,7 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 
             File.WriteAllText(
                 path: bytecodePath + ".hash",
-                contents: $"source:{sourceHash}{Environment.NewLine}bytecode:{bytecodeHash}{Environment.NewLine}");
+                contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n");
         }
 
         return !Log.HasLoggedErrors;

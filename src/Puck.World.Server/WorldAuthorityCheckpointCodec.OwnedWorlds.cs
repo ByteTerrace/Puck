@@ -57,7 +57,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteArray(
             writer: writer,
             items: member.Designations,
-            writeItem: static (w, v) => w.WriteInt32(value: v)
+            writeItem: WriteTargetDesignation
         );
         WriteOptional(
             writer: writer,
@@ -89,7 +89,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var designations = ReadArray(
             reader: ref reader,
             field: "landed member designations",
-            readItem: static (ref WireReader r) => r.ReadInt32()
+            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r)
         );
         var peer = ReadOptional(
             reader: ref reader,

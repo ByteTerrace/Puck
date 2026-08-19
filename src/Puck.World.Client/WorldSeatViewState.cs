@@ -16,6 +16,17 @@ public sealed class WorldSeatViewState {
     private readonly WorldSeatCameraResolver.LiveOrbitCache m_orbit = new();
     private readonly WorldSeatCameraResolver.SmoothingState m_smoothing = new();
 
+    // How much of the world-derived alignment is taken back per update once it is trustworthy again. Small enough
+    // that the carried frame is what the seat feels moment to moment, large enough that a lap's accumulated drift is
+    // gone within a second of leaving the pole.
+    private const float ReanchorFraction = 0.08f;
+    // Within this much of the antipode the world-derived alignment carries no usable twist and is not taken at all:
+    // cos(10 degrees) from straight down.
+    private const float AntipodeGuard = -0.985f;
+
+    private Quaternion m_upAlignment = Quaternion.Identity;
+    private Vector3 m_alignedUp = Vector3.UnitY;
+
     private WorldCameraRig? m_authoredRig;
     private ISdfCameraRig? m_compiledRig;
     private float m_pitch;
@@ -37,6 +48,63 @@ public sealed class WorldSeatViewState {
     private static float AuthoredPitch(WorldViewDefaults views) => ((views.SeatRig.Motion as WorldCameraMotion.Orbit)?.Pitch ?? 0f);
     private static float Wrap(float radians) => (radians - (MathF.Tau * MathF.Round(x: (radians / MathF.Tau))));
 
+    /// <summary>The rotation carrying world up to the seat's own up, CARRIED across updates rather than rebuilt.
+    /// Both the seat camera's boom and the movement composition ride this, so what the seat pushes and what it looks
+    /// through are laid onto the surface by the same rotation.</summary>
+    /// <remarks>
+    /// <para>Rebuilding it from world up each update is what pins a seat at the bottom of a planetoid. The shortest
+    /// arc from world up to a seat's up has no defined twist when the two are opposite, so approaching that point
+    /// the twist swings further and further on smaller and smaller changes in up — the control frame spins, and the
+    /// seat cannot hold a heading long enough to walk out. Transporting the held rotation by the tick's own (tiny)
+    /// change in up has no such point anywhere: it is the same reason WorldBody carries its frame instead of
+    /// rebuilding it.</para>
+    /// <para>Transport alone would drift, because parallel transport around a closed loop on a curved surface comes
+    /// back rotated. So the carried rotation is eased back toward the world-derived one wherever THAT is trustworthy,
+    /// and left alone where it is not. The seat gets a frame with no singular point and no accumulating drift, and
+    /// the easing is visible as the camera settling rather than as control changing under it.</para>
+    /// <para>Idempotent within an update: the camera and the movement composition both ask, and the second ask sees
+    /// an unchanged up and returns the same rotation rather than easing twice.</para>
+    /// </remarks>
+    /// <param name="up">The seat body's current unit up axis.</param>
+    /// <returns>The carried alignment.</returns>
+    public Quaternion CarriedUpAlignment(Vector3 up) {
+        if (up.LengthSquared() <= 0f) {
+            lock (m_gate) {
+                return m_upAlignment;
+            }
+        }
+
+        up = Vector3.Normalize(value: up);
+
+        lock (m_gate) {
+            // TRANSPORT only when the axis actually moved. An unchanged up carries the held rotation nowhere.
+            if (up != m_alignedUp) {
+                m_upAlignment = Quaternion.Normalize(value: (WorldSeatCameraResolver.ShortestArc(
+                    from: m_alignedUp,
+                    to: up
+                ) * m_upAlignment));
+                m_alignedUp = up;
+            }
+
+            // RE-ANCHOR every time, even when the axis did not move — especially then.
+            //
+            // Transport accumulates: a lap of a planetoid comes back rotated by the surface's holonomy, and that
+            // twist is a real rotation of the frame the seat pushes against. It is meant to be eased out against the
+            // world-derived alignment. Skipping the ease whenever up is unchanged skips it exactly where it matters
+            // most, because up stops changing the moment the seat is back on level ground: the twist earned out
+            // exploring would freeze there permanently, silently turning "forward" for the rest of the session, and
+            // the next thing to disturb up — a jump — would jerk it.
+            if (up.Y > AntipodeGuard) {
+                m_upAlignment = Quaternion.Normalize(value: Quaternion.Slerp(
+                    amount: ReanchorFraction,
+                    quaternion1: m_upAlignment,
+                    quaternion2: WorldSeatCameraResolver.AlignUp(up: up)
+                ));
+            }
+
+            return m_upAlignment;
+        }
+    }
     /// <summary>The total orbit pitch — the authored rig pitch plus the live delta — in radians.</summary>
     public float LogicalPitch(WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
@@ -124,6 +192,7 @@ public sealed class WorldSeatViewState {
             ApplyTurnRate(rate: rate);
         }
     }
+
     // Held under m_gate: a zero rate lands the turn instantly (the boom re-seeds at the turned pose), a positive one
     // eases it at that rate until it lands, and null leaves the turn to the rig's own smoothing.
     private void ApplyTurnRate(float? rate) {
@@ -138,6 +207,7 @@ public sealed class WorldSeatViewState {
 
         m_swapRate = turnRate;
     }
+
     public void Recenter() {
         lock (m_gate) {
             m_yaw = 0f;
@@ -150,6 +220,7 @@ public sealed class WorldSeatViewState {
 
         var control = views.SeatControl;
         var authoredPitch = AuthoredPitch(views: views);
+
         lock (m_gate) {
             m_pitch = ClampLivePitch(
                 authoredPitch: authoredPitch,

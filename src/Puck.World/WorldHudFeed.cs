@@ -18,11 +18,10 @@ namespace Puck.World;
 /// rects, their style, which binding token or parsed template runs each names, and which seat's viewport a
 /// player-scope panel is confined to).
 /// </summary>
-internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, WorldEditorSession editor, HudStore store, WorldOverlayFacts facts) {
+internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudStore store, WorldOverlayFacts facts) {
     private readonly WorldClient m_client = client;
     private readonly WorldOverlayFacts m_facts = facts;
     private readonly PlayerRoster m_roster = roster;
-    private readonly WorldEditorSession m_editor = editor;
     private readonly HudStore m_store = store;
     private readonly OverlayHudSeatPanel[] m_seatPanels = new OverlayHudSeatPanel[PlayerRoster.MaxSlots];
     // Per-seat structure memo: the document row a seat's panel was last built FROM, and the build. An identity
@@ -78,8 +77,6 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, Worl
     // seat's panel only when its document row is a different instance — zero steady-state allocation.
     private int BuildSeatPanels() {
         var joined = m_roster.Count;
-        var soleEditorViewIndex = m_editor.SoleEditorViewIndex();
-        var workbenchFraction = m_client.Definition.Authoring.WorkbenchFraction;
         var viewIndex = 0;
         var count = 0;
 
@@ -102,9 +99,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, Worl
 
             var viewport = WorldFrameSource.LayoutRegion(
                 count: joined,
-                index: localViewIndex,
-                soleEditorIndex: soleEditorViewIndex,
-                workbenchFraction: workbenchFraction
+                index: localViewIndex
             );
 
             if (!ReferenceEquals(

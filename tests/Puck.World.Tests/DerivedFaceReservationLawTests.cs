@@ -23,7 +23,7 @@ public sealed class DerivedFaceReservationLawTests {
 
     private static WorldFixture FreshServer() =>
         Fixtures.FreshServer(definition: (Fixtures.BuildDocument() with {
-            AuthoringRaw = (WorldAuthoringDefaults.Default with { DerivedFaceScreens = BootReservation }),
+            AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = BootReservation }),
         }));
 
     [Fact]
@@ -35,7 +35,7 @@ public sealed class DerivedFaceReservationLawTests {
         Assert.Equal(expected: BootReservation, actual: fixture.Server.BootDerivedFaceScreens);
         Assert.True(condition: ((BootReservation + 1) <= WorldPlacementPolicy.MaxDerivedFaceScreens), userMessage: "the raise under test must sit inside the static derivedFaceScreens range");
         Assert.True(condition: WorldDefinitionValidator.TryValidate(
-            definition: (Fixtures.BuildDocument() with { AuthoringRaw = (WorldAuthoringDefaults.Default with { DerivedFaceScreens = (BootReservation + 1) }) }),
+            definition: (Fixtures.BuildDocument() with { AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = (BootReservation + 1) }) }),
             reason: out var reason,
             neighbours: null), userMessage: reason);
     }

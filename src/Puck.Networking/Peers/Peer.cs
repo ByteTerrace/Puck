@@ -19,6 +19,7 @@ public sealed class Peer : IAsyncDisposable {
     private readonly Channel<PeerLink> m_incoming = Channel.CreateUnbounded<PeerLink>(options: new UnboundedChannelOptions { SingleReader = true });
     private readonly Lock m_linksLock = new();
     private readonly List<PeerLink> m_links = [];
+
     private readonly PeerIdentity m_local;
     private readonly Func<DateTimeOffset>? m_now;
     private readonly IPeerTransport m_transport;
@@ -66,7 +67,6 @@ public sealed class Peer : IAsyncDisposable {
 
         return deadline;
     }
-
     private void Register(PeerLink link) {
         lock (m_linksLock) {
             m_links.Add(item: link);
@@ -177,7 +177,7 @@ public sealed class Peer : IAsyncDisposable {
                 onClosed: Unregister,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (Exception exception) when ((exception is IOException or ObjectDisposedException) || ((exception is OperationCanceledException) && !ct.IsCancellationRequested)) {
+        } catch (Exception exception) when (((exception is IOException or ObjectDisposedException) || ((exception is OperationCanceledException) && !ct.IsCancellationRequested))) {
             link = null;
             failure = new PeerFailure(
                 Detail: $"{exception.GetType().Name}: {exception.Message}",
@@ -209,7 +209,6 @@ public sealed class Peer : IAsyncDisposable {
 
         return m_listener.LocalEndpoint;
     }
-
     /// <inheritdoc/>
     public async ValueTask DisposeAsync() {
         m_acceptLifetime?.Cancel();

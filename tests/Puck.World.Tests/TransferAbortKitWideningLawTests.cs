@@ -30,7 +30,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
     private static WorldDefinition BuildVehicleKitDocument() {
         var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveForward),
+            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
             new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
             new(Name: "surge", Shape: ChannelShape.Binary, Composition: true),
@@ -105,7 +105,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // "surge" stays at SurgeOrdinal (index 3), matching the vehicle kit's own layout above — "up" trails it so
         // the shared ordinal constants below address the same channel regardless of which fixture built the body.
         var channels = new WorldChannel[] {
-            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveForward),
+            new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
             new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
             new(Name: "surge", Shape: ChannelShape.Binary, Composition: true),

@@ -222,7 +222,7 @@ second write path for possession.
 - `Translation` (`IReadOnlyList<WorldScreenTranslationRow>`, channel name →
   `WorldPadElement`) — when a screen authors none, the compiled table covers
   the two movement ROLES only: `MoveStrafe`→`LeftStickX`,
-  `MoveForward`→`LeftStickY`. The engine default names no gameplay channel, so
+  `MoveAdvance`→`LeftStickY`. The engine default names no gameplay channel, so
   a screen whose machine needs a face button must author the row itself (e.g.
   a `jump`→`South` row; none of the four shipped worlds author a screen today,
   so there is no worked example to cite — Play's three portal placements are

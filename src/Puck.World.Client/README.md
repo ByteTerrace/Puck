@@ -81,7 +81,6 @@ root-crossing dependency was the audio director, narrowed to
   `SdfDocumentModel.cs`) and its declared refusals (`SdfRefusal.cs`).
 - `WorldCompositionState.cs` — the delivered composition state
   `WorldViewComposer` writes and readers consume.
-- `WorldChangeShimmer.cs` — the delivery-time highlight on changed rows.
 - `WorldSessionLeverSink.cs` — writes an accepted session lever onto the live
   presentation service it names (render settings, present pacing, audio mix
   gain via `IWorldAudioLever`) — the only write path for those knobs, reached
@@ -102,46 +101,25 @@ root-crossing dependency was the audio director, narrowed to
 - `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs`, `WorldAvatarCatalog.cs`,
   `WorldScreenTextDecal.cs` — compiled camera rigs, static placement/shape
   anchor geometry, the avatar instance layout, and screen decal text.
-- `FiniteGuard.cs` — the editor state-setters' finite guard (rejects NaN and
-  infinite values before they enter client state).
+## The fly camera application
 
-## The editor
-
-The in-session editor is client state end to end; its committed acts are
-ordinary protocol mutations submitted with the acting seat's principal.
-
-- `WorldEditorSession.cs` — editor-mode tenancy per seat: binding-group flip,
-  camera-rig swap, and the layout seam.
-- `WorldEditorTargeting.cs` — the selection (`section`, id-or-index), pure
-  client state that self-heals against every delivered definition.
-- `WorldEditorPicker.cs` — the look-ray pick: a fixed-point picking program
-  built from the document, rebuilt only on a definition delivery.
-- `WorldEditorDrag.cs` — the pending-row preview channel: a drag composes its
-  preview over the delivered definition and commits exactly one whole-row
-  mutation on release (one journal entry, one undo step).
-- `WorldWorkbench.cs` — the sculpt sub-editor: a client-local
-  `Puck.Forge.Authoring.SculptModel` bench whose live preview renders through
-  the same stamping path a committed creation uses.
-
-**Known limitations worth knowing before debugging them.** Authoring gestures
-sit outside the simulation-replay contract by design: a stick drag integrates
-presentation `deltaSeconds` and persists the resulting float row, so replaying
-identical command snapshots need not reproduce authored coordinates (the
-committed mutation and the journal are deterministic once the row exists). A
-new controller's first South press can both seat the player and fire its bound
-action, because seating and command dispatch consume the same snapshot. Losing
-window focus can strand a held edge (a release that never reaches the input
-router) until another edge clears it, and a signal from an unbound control can
-reserve an input slot that dispatches nothing until the mapping is replaced.
+- `WorldSeatFlyRig.cs` — the per-seat fly control application `player.mode`
+  activates when a mode state's `target` is `"camera"`: a free camera driven
+  by the seat's own move/look samples and its `MoveUp`-role held channel,
+  seeded from the seat's current chase framing (no pose pop) and resolved
+  against the world-authored `views.flyRig`. Presentation-only client state,
+  like everything else in this section.
 
 ## The binding-authoring layer
 
 - `WorldSeatBindings.cs` — the per-seat compiled `IInputBindings`: engine
   default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds, and the
   context-derivation state machine that picks a seat's active group. Besides
-  roster, engagement, and editor state, a `state:<row>` family reads the
-  routed world's scalar value or the controlled body's keyed value, allowing
-  gameplay-rule state writes to swap whole control groups.
+  the built-in roster/engagement/layout families and a world's own AUTHORED
+  `seatModes` families (`WorldSeatModeFamily`, flipped by `player.mode`), a
+  `state:<row>` family reads the routed world's scalar value or the
+  controlled body's keyed value, allowing gameplay-rule state writes to swap
+  whole control groups.
 - `WorldAffordances.cs` — the process command vocabulary check every binding
   document validates against.
 - `CommandVocabulary.cs` — the command-name string constants (and the two
@@ -170,6 +148,6 @@ reserve an input slot that dispatches nothing until the mapping is replaced.
 
 Client behavior is verified by running the game and looking, plus the console
 read-backs that echo client state (`world.players`, `player.bindings`,
-`screen.state`, `editor.status`). See
+`screen.state`, `player.mode`). See
 [`../Puck.World/README.md`](../Puck.World/README.md) for the run recipe and
 console contract.

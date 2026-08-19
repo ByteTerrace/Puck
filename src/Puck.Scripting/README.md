@@ -442,7 +442,7 @@ declares:
 
 | Channel | Shape | Intent effect, host-side (play world) |
 |---|---|---|
-| `forward` | `Bipolar` | `PlayerIntent.MoveForward = A` (role `MoveForward`) |
+| `forward` | `Bipolar` | `PlayerIntent.MoveAdvance = A` (role `MoveAdvance`) |
 | `strafe` | `Bipolar` | `PlayerIntent.MoveStrafe = A` (role `MoveStrafe`) |
 | `turn` | `Bipolar` | `PlayerIntent.Turn = A` (role `Turn`) — no host-side sign flip; the channel's documented convention IS the wire convention |
 | `up` | `Bipolar` | `PlayerIntent.MoveUp = A` (role `MoveUp`, free model only) |

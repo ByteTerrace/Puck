@@ -1,0 +1,66 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "solver": {
+      "description": "The evaluation strategy.",
+      "enum": [
+        "Pairwise",
+        "FastMonopole",
+        "AdaptiveFmm"
+      ]
+    },
+    "gravitationalConstant": {
+      "description": "The non-negative proportionality constant applied to every source mass.",
+      "type": "number"
+    },
+    "softeningLength": {
+      "description": "The positive Plummer softening length that bounds the force at short range.",
+      "type": "number"
+    },
+    "attractors": {
+      "description": "The static sources, or empty for a field summed from bodies alone.",
+      "type": "array",
+      "items": {
+        "description": "One gravitational source the world declares, riding a placement\u0027s authored transform.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "placementId": {
+            "description": "The placements row whose position the source sits at. The row need not be solid or visible; only its transform is read.",
+            "type": "string"
+          },
+          "mass": {
+            "description": "The source\u0027s non-negative gravitational mass.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "placementId",
+          "mass"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "uniform": {
+      "description": "A constant acceleration added to every solved answer, in world units per second squared. Point masses cannot express a uniform field, so this is how a world keeps a flat floor underfoot while its attractors own the space around them: authored as an acceleration, it is already what a body integrates.",
+      "default": null
+    },
+    "isActive": {
+      "description": "Gets a value indicating whether this field can produce a nonzero acceleration.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "solver",
+    "gravitationalConstant",
+    "softeningLength",
+    "attractors"
+  ],
+  "additionalProperties": false,
+  "default": null
+}

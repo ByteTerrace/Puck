@@ -34,6 +34,7 @@ public sealed record WorldSeatGyro(
             )
         );
     }
+
     /// <summary>The default full-axis mapping: device pitch drives look pitch, while device yaw and roll both drive
     /// look yaw. Authors and player profiles may freely remap, combine, or invert all three axes.</summary>
     public static WorldSeatGyro Default { get; } = new();
@@ -50,6 +51,7 @@ public sealed record WorldSeatGyro(
         y: -1f,
         z: -1f
     ));
+
     /// <summary>Projects provider-neutral angular velocity into semantic look-right/look-up radians per second,
     /// applying physical-axis dead zones and inversion before the authored full-axis projection.</summary>
     /// <param name="angularVelocity">The provider-neutral angular velocity in radians per second.</param>
@@ -71,9 +73,15 @@ public sealed record WorldSeatGyro(
         );
 
         filtered = new Vector3(
-            x: (InvertX ? -filtered.X : filtered.X),
-            y: (InvertY ? -filtered.Y : filtered.Y),
-            z: (InvertZ ? -filtered.Z : filtered.Z)
+            x: (InvertX
+            ? -filtered.X
+            : filtered.X),
+            y: (InvertY
+            ? -filtered.Y
+            : filtered.Y),
+            z: (InvertZ
+            ? -filtered.Z
+            : filtered.Z)
         );
 
         return (new Vector2(
@@ -88,7 +96,6 @@ public sealed record WorldSeatGyro(
         ) * Scale);
     }
 }
-
 /// <summary>
 /// One seat's input feel — pointer/right-stick/gyro sensitivity and inversion. Camera structure does not
 /// travel with a profile: the framing world's <see cref="WorldSeatViewControl"/> owns pitch limits and yaw reference.

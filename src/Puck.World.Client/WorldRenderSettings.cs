@@ -62,7 +62,6 @@ public sealed class WorldRenderSettings {
 
     }
 
-
     /// <summary>Whether ambient occlusion is on. Boots at the definition's default (<see langword="false"/> in the built-in
     /// world); the <c>world.ao</c> verb toggles it live (it rides the per-frame
     /// <see cref="Puck.SdfVm.SdfFrame.DisableAmbientOcclusion"/> lane, so no rebuild).</summary>

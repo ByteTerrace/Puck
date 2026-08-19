@@ -187,14 +187,14 @@ public sealed record WorldAudioCue(
 ) {
     /// <summary>A capability denial — a mutate attempt without its grant, or a refused grant acquisition.</summary>
     public const string GrantDenied = "grant.denied";
-    /// <summary>A world mutation applied (the edit-echo lane — fired beside the loud accept line).</summary>
-    public const string MutationApplied = "mutation.applied";
-    /// <summary>A world mutation rejected (validator/guard/capacity — never a grant denial).</summary>
-    public const string MutationRejected = "mutation.rejected";
     /// <summary>A music segment transition committed. Reserved: no cue row consumes it yet (the same posture as
     /// <see cref="PlayerJump"/>), but a <c>puck.music.v1</c> transition's own <c>when</c> field never uses this
     /// token — it names the transition FIRING, not a condition a transition arms on.</summary>
     public const string MusicTransition = "music.transition";
+    /// <summary>A world mutation applied (the edit-echo lane — fired beside the loud accept line).</summary>
+    public const string MutationApplied = "mutation.applied";
+    /// <summary>A world mutation rejected (validator/guard/capacity — never a grant denial).</summary>
+    public const string MutationRejected = "mutation.rejected";
     /// <summary>The spatial placement token — the cue sounds at the event's world position.</summary>
     public const string PlacementAtSite = "at-site";
     /// <summary>The named-speaker placement prefix (<c>emitter:&lt;speaker-name&gt;</c>).</summary>
@@ -209,16 +209,16 @@ public sealed record WorldAudioCue(
     public const string PlayerJump = "player.jump";
     /// <summary>A local seat avatar's landing. Reserved (see <see cref="PlayerJump"/>).</summary>
     public const string PlayerLand = "player.land";
-    /// <summary>A machine booted onto a screen slot (the binder lifecycle — <c>screen.insert</c> and the
-    /// reconcile-driven declared-source boot).</summary>
-    public const string ScreenBoot = "screen.boot";
-    /// <summary>A machine boot/lifecycle fault on a screen slot (missing content, unresolved engine).</summary>
-    public const string ScreenFault = "screen.fault";
     /// <summary>A body entered a named region — a <c>puck.music.v1</c> transition's <c>when</c> field names this to
     /// arm on the region-events feed's <c>RegionEnter</c> family.</summary>
     public const string RegionEnter = "region.enter";
     /// <summary>A body left a named region. See <see cref="RegionEnter"/>.</summary>
     public const string RegionExit = "region.exit";
+    /// <summary>A machine booted onto a screen slot (the binder lifecycle — <c>screen.insert</c> and the
+    /// reconcile-driven declared-source boot).</summary>
+    public const string ScreenBoot = "screen.boot";
+    /// <summary>A machine boot/lifecycle fault on a screen slot (missing content, unresolved engine).</summary>
+    public const string ScreenFault = "screen.fault";
     /// <summary>A local seat joined the roster.</summary>
     public const string SeatJoin = "seat.join";
 
@@ -258,7 +258,8 @@ public sealed record WorldAudioCue(
 }
 /// <summary>
 /// The world's audio host-section defaults — document defaults with the same absence-coalesce convention every
-/// defaults section uses (see <see cref="WorldStorageDefaults"/>): absent-in-JSON coalesces to <see cref="Default"/>.
+/// defaults section uses (see <see cref="WorldStorageDefaults"/>): absent-in-JSON coalesces to <see cref="Absent"/>
+/// (silent); the standard values are authored in <c>Assets/worlds/standard.world.json</c>.
 /// These are document data, not editor policy; live master volume is the <c>world.volume</c> session lever: the lever
 /// owns "now" once touched, <see cref="MasterGain"/> owns boot, and <c>world.save</c> folds the lever back into
 /// <see cref="MasterGain"/> (the render-levers asymmetry).
@@ -300,14 +301,16 @@ public sealed record WorldAudioDefaults(
         get => m_cues;
         init => m_cues = (value ?? []);
     }
-    /// <summary>Gets the built-in audio defaults: unity master, an 8-unit speaker radius, the smoothstep curve, a
-    /// half-second bed fade, the focus listener.</summary>
-    public static WorldAudioDefaults Default { get; } = new WorldAudioDefaults(
+    /// <summary>Gets the inert absence — zero master gain (silent), zero speaker radius, no fade, no cues. The
+    /// engine holds no audio posture of its own: the standard values are AUTHORED, in
+    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits them by naming that document as its
+    /// basis.</summary>
+    public static WorldAudioDefaults Absent { get; } = new WorldAudioDefaults(
         Cues: [],
-        DefaultBedFadeSeconds: 0.5f,
-        DefaultCurve: CurveSmoothstep,
-        DefaultSpeakerRadius: 8f,
+        DefaultBedFadeSeconds: 0f,
+        DefaultCurve: CurveLinear,
+        DefaultSpeakerRadius: 0f,
         Listener: ListenerFocus,
-        MasterGain: 1f
+        MasterGain: 0f
     );
 }

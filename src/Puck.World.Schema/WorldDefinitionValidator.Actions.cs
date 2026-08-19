@@ -177,13 +177,16 @@ public static partial class WorldDefinitionValidator {
                 var path = $"state.{lane}[{index}]";
 
                 ValidateActionStateSlot(
-                    state: state,
+                    errors: errors,
                     lifetime: lifetime,
                     path: path,
-                    errors: errors
+                    state: state
                 );
 
-                if (state is null || string.IsNullOrWhiteSpace(value: state.Name)) {
+                if (
+                    (state is null) ||
+                    string.IsNullOrWhiteSpace(value: state.Name)
+                ) {
                     continue;
                 }
                 if (!stateSlots.TryAdd(

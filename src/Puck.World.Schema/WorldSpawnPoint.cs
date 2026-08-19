@@ -31,19 +31,18 @@ public static class WorldSpawnPointDefaults {
 public sealed record WorldRowAssignment(WorldSequence Sequence, IReadOnlyList<DocumentIdentifier> Rows) {
     private readonly IReadOnlyList<DocumentIdentifier> m_rows = (Rows ?? []);
 
-    /// <summary>Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
-    public IReadOnlyList<DocumentIdentifier> Rows {
-        get => m_rows;
-        init => m_rows = (value ?? []);
-    }
-
     /// <summary>Gets the inert assignment policy — the index sequence (row 0 of whatever it selects) over every
     /// declared row in declaration order.</summary>
     public static WorldRowAssignment Default { get; } = new(
         Sequence: WorldSequence.IndexDefault,
         Rows: []
     );
+    /// <summary>Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason
+    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    public IReadOnlyList<DocumentIdentifier> Rows {
+        get => m_rows;
+        init => m_rows = (value ?? []);
+    }
 }
 /// <summary>The deterministic pose compiled from one authored spawn point.</summary>
 /// <param name="Position">The fixed-point world position.</param>

@@ -11,9 +11,9 @@ namespace Puck.Commands;
 /// Do not reach for <see cref="IServiceProvider"/>: a module that would need one is a module whose
 /// dependencies have not been named, and no module in the tree does it.</para>
 /// <para>When a module's own member count or coupling would cross the analyzer ceiling (CA1502/CA1506),
-/// carve it by SUBJECT into more modules rather than splitting one module into a thin registration shell
-/// plus a static <c>*Commands</c> logic class — the editor's six <c>EditorSculpt*CommandModule</c>s are that
-/// carve. The shell/logic split was the older escape and no module uses it today.</para>
+/// carve it by SUBJECT into more modules (or, for a partial class like <c>PlayerCommandModule</c>, more files)
+/// rather than splitting one module into a thin registration shell plus a static <c>*Commands</c> logic class.
+/// The shell/logic split was the older escape and no module uses it today.</para>
 /// </remarks>
 public interface ICommandModule {
     /// <summary>Returns the command definitions provided by this module.</summary>

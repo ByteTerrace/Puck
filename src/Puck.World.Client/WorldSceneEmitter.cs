@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Overlays;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -32,10 +31,8 @@ namespace Puck.World.Client;
 /// </para>
 /// <para>
 /// The rebuild cadence is a set of numbers, never a time the host queries: <see cref="WriteRevision"/> reports the
-/// client/selection/drag/workbench watches and a shimmer counter this type bumps itself from the content clock
-/// (<see cref="AdvanceContentClock"/>), so the composition host's existing "rebuild when a revision component moved"
-/// predicate carries the shimmer pulse's per-frame cadence without knowing what a shimmer is. They are reported side by
-/// side rather than combined — see <see cref="WriteRevision"/> for why any sum on this path could silently cancel.
+/// client watch and the continuum watch side by side rather than combined — see <see cref="WriteRevision"/> for why
+/// any sum on this path could silently cancel.
 /// </para>
 /// <para>
 /// Slot layout: this emitter's declared range (<see cref="DynamicSlotCount"/>) is the frozen avatar catalog followed by
@@ -47,9 +44,6 @@ namespace Puck.World.Client;
 /// </para>
 /// </remarks>
 internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
-    private const float SelectionTintBlend = DesignTokens.Feedback.SelectionTintBlend;
-    private const float ShimmerBlendMax = DesignTokens.Feedback.ChangeShimmerBlendMax;
-
     // The per-seat perception anchor: the crowd soft-shadow centers resolve each seat's body index through it, so a
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates
     // below stay keyed on the raw body index band instead — see their own comments for why.
@@ -67,19 +61,13 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The binder's boot-reserved derived-face slot count — the band the headroom screen scan must leave alone (the
     // binder registers it at boot from the same field, WorldFrameSource.m_derivedFaceScreens).
     private readonly int m_derivedFaceScreens;
-    private readonly WorldEditorDrag m_drag;
     private readonly float m_noseFactor;
     // The placement capacity reservation, in worst-case stamp instances: boot static instances + the authoring
     // headroom. Frozen at construction; the apply-time measure charges max(candidate instances, this).
     private readonly int m_placementReservation;
     private readonly WorldRenderSettings m_settings;
-    private readonly WorldEditorTargeting m_targeting;
     private readonly WorldTextCatalog m_text;
-    private readonly WorldWorkbench m_workbench;
 
-    // The content clock the shimmer's pulse table is keyed by — the SAME number the tint reads and the revision is
-    // derived from, so a rebuild's cadence and its content can never disagree.
-    private double m_contentSeconds;
     // The CURRENT derived-face screen ROWS (creation faces derived from placements x creations) — threaded in from
     // WorldFrameSource.ReconcileDelivery's ONE WorldCreationFacets.Derive call each delivery via ObserveDelivery,
     // NEVER re-derived here: the geometry this emitter composes and the binder's bound sources must read the SAME
@@ -91,15 +79,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // Always exactly m_derivedFaceScreens entries (Derive pads the reserved range with placeholders), so the word
     // cost this band contributes is IDENTICAL between the probe and every live build.
     private IReadOnlyList<WorldScreen> m_derivedFaceRows;
-    private int m_shimmerRevision;
     // Latched from the ONE construction-time probe: the host assigns SlotBase once and it is stable for this emitter's
     // lifetime, so the candidate measure composes against the same base a live program does.
     private int m_slotBase;
-
-    // The editor's presentation feedback tints/blends — DesignTokens.Feedback (the one C# token source; these are
-    // palette values fed to the SDF program CPU-side, the sibling of the overlay's GPU token slab).
-    private static readonly Vector3 ShimmerTint = DesignTokens.Feedback.ChangeShimmerTint.Rgb;
-    private static readonly Vector3 SelectionTint = DesignTokens.Feedback.SelectionTint.Rgb;
 
     // Where a creation-stamp body's catalog avatar parks (below the floor, culled) — the body renders its creation.
     // The same point the composition host parks every unused slot at (WorldFrameSource sets it as ParkPosition).
@@ -109,7 +91,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         z: 0f
     );
 
-    private readonly WorldChangeShimmer m_shimmer = new();
     // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
     private readonly float[] m_avatarGaitPhases = new float[WorldAvatarCatalog.Capacity];
     private readonly Vector3[] m_avatarPreviousPositions = new Vector3[WorldAvatarCatalog.Capacity];
@@ -129,9 +110,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// freezing the authoring-headroom policy and the placement reservation the probe branch reserves against.</summary>
     /// <param name="client">The snapshot-fed entity view every pose, color, look, and active flag is read from.</param>
     /// <param name="settings">The live render settings (the crowd soft-shadow radius is read while packing).</param>
-    /// <param name="targeting">The editor selection state (the render highlight + rebuild watch).</param>
-    /// <param name="drag">The editor drag channel (the pending-row overlay + rebuild watch).</param>
-    /// <param name="workbench">The sculpt workbench (the preview creation/placement overlay + rebuild watch).</param>
     /// <param name="animator">The creation-stamp pool (animated placements, attached placements, body-rooted stamps).</param>
     /// <param name="audio">The narrow cue-submission seam the distance-driven footstep cue fires into while packing.</param>
     /// <param name="anchor">The per-seat perception anchor the crowd soft-shadow centers resolve their body indices
@@ -140,12 +118,9 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// their original catalog slot across authority handoffs.</param>
     /// <param name="text">The world-relative font catalog used by creation text runs.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldEditorTargeting targeting, WorldEditorDrag drag, WorldWorkbench workbench, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text) {
+    public WorldSceneEmitter(WorldClient client, WorldRenderSettings settings, WorldStampPool animator, IWorldAudioCueSink audio, WorldPerceptionAnchor anchor, WorldContinuum continuum, WorldTextCatalog text) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: settings);
-        ArgumentNullException.ThrowIfNull(argument: targeting);
-        ArgumentNullException.ThrowIfNull(argument: drag);
-        ArgumentNullException.ThrowIfNull(argument: workbench);
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -156,9 +131,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_continuum = continuum;
         m_anchor = anchor;
         m_settings = settings;
-        m_targeting = targeting;
-        m_drag = drag;
-        m_workbench = workbench;
         m_animator = animator;
         m_text = text;
         m_audio = audio;
@@ -192,12 +164,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             creations: definition.Creations,
             placements: definition.Placements
         ) + m_authoringHeadroomPlacements);
-        // The boot placements + speakers are the shimmer baseline — the first delivery pulses only what it changed.
-        m_shimmer.Observe(
-            placements: definition.Placements,
-            speakers: definition.Speakers,
-            now: 0d
-        );
     }
 
     /// <summary>The frozen transform-slot count this emitter declares: every leaf in the all-128 avatar catalog plus
@@ -210,7 +176,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 5);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 1);
 
     // The screens, static placement stamps + the creation-stamp pool, then the view's active avatars as leaf-level dynamic
     // instances riding frozen catalog slots. Active-only, never declared-but-parked: the per-tile instance mask width
@@ -220,7 +186,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // own body + accent material (cheap constant words), so a recolor is data, not a resize. `placementProbe` replaces
     // the static stamps with the reserved worst case (the construction probe only); the animated pool and the avatars
     // follow `probeWorstCase` (worst case for both the construction probe AND the apply-time measure).
-    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, WorldEditorTargeting? highlight, float maxPlacementScale, double shimmerNow, int slotBase) {
+    private void Compose(SdfProgramBuilder builder, IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreen> derivedFaces, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldCreation> creations, bool probeWorstCase, bool placementProbe, float maxPlacementScale, int slotBase) {
         var client = m_client;
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
@@ -242,11 +208,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             avatarBodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: bodyColor));
             avatarAccentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (bodyColor * m_noseFactor)));
         }
-
-        var shimmer = ((highlight is not null)
-            ? m_shimmer
-            : null
-        );
 
         // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or the engine's
         // procedural no-signal fallback when unbound). STATIC data — emitted every build (probe and live), so the
@@ -282,8 +243,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // as-authored measure would hand the reservation's word slack to SCENE/SCREEN floods (their ceilings would
         // silently widen by thousands of words), and a placement flood still rejects exactly one instance past the
         // headroom. Only the LIVE build emits the rows as authored — static stamps baked into instructions, animated
-        // rows through the replay pool (worst-case under any probe). Selection amber and the change shimmer tint a
-        // stamp's palette (albedo-only; the all-distinct probe bound covers the extra registrations).
+        // rows through the replay pool (worst-case under any probe).
         if (
             placementProbe ||
             probeWorstCase
@@ -307,25 +267,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 creations: creations,
                 placements: placements,
                 textCatalog: m_text.Catalog,
-                tintFor: ((highlight is null)
-                ? null
-                : id => {
-                    if (highlight.IsPlacementSelected(id: id)) {
-                        return (SelectionTint, SelectionTintBlend);
-                    }
-
-                    if (
-                        (shimmer is { } pulses) &&
-                        (pulses.PlacementIntensity(
-                        id: id,
-                        now: shimmerNow
-                    ) is > 0f and var pulse)
-                    ) {
-                        return (ShimmerTint, (pulse * ShimmerBlendMax));
-                    }
-
-                    return null;
-                })
+                tintFor: null
             );
         }
 
@@ -623,18 +565,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         return false;
     }
 
-    /// <summary>Advances this emitter's content clock and, while a change-shimmer pulse is live, bumps the shimmer
-    /// component of <see cref="WriteRevision"/> so the composition host rebuilds and the pulse's decay animates. Call once per produced
-    /// frame, before the host captures, with the world's presentation clock — never a wall-clock read: the number the
-    /// host compares and the number the pulse tint is computed from are the same one.</summary>
-    /// <param name="seconds">The world's content clock, in seconds.</param>
-    public void AdvanceContentClock(double seconds) {
-        m_contentSeconds = seconds;
-
-        if (m_shimmer.HasLivePulse(now: seconds)) {
-            m_shimmerRevision++;
-        }
-    }
     /// <summary>Composes a candidate definition's render-relevant sections into <paramref name="builder"/> — World
     /// admission policy (what may enter the document is the document owner's question, never a mode on the generic
     /// emitter contract), factored so the render-capacity oracle can measure it composed alongside whatever
@@ -662,9 +592,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 creations: candidate.Creations,
                 probeWorstCase: true,
                 placementProbe: false,
-                highlight: null,
                 maxPlacementScale: candidate.Authoring.MaxPlacementScale,
-                shimmerNow: 0d,
                 slotBase: m_slotBase
             );
         }
@@ -690,9 +618,7 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 creations: boot.Creations,
                 probeWorstCase: true,
                 placementProbe: true,
-                highlight: null,
                 maxPlacementScale: boot.Authoring.MaxPlacementScale,
-                shimmerNow: 0d,
                 slotBase: context.SlotBase
             );
 
@@ -710,30 +636,22 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             creations: definition.Creations,
             bodyStamps: m_bodyStamps
         );
-        // The editor's pending rows compose over the delivered truth: this ONE rebuild path renders the drag preview at
-        // drag cadence, and release retires the overlay against the identical committed document — no second render
-        // path. The sculpt preview composes OVER the drag-composed rows, so the bench's synthetic creation + placement
-        // render through the same stamp path a committed row uses (stamp-equals-preview).
         Compose(
             builder: builder,
-            screens: m_drag.ComposeScreens(live: definition.Screens),
+            screens: definition.Screens,
             derivedFaces: m_derivedFaceRows,
-            placements: m_workbench.ComposePlacements(live: m_drag.ComposePlacements(live: definition.Placements)),
-            creations: m_workbench.ComposeCreations(live: definition.Creations),
+            placements: definition.Placements,
+            creations: definition.Creations,
             probeWorstCase: false,
             placementProbe: false,
-            highlight: m_targeting,
             maxPlacementScale: definition.Authoring.MaxPlacementScale,
-            shimmerNow: m_contentSeconds,
             slotBase: context.SlotBase
         );
     }
-    /// <summary>Re-baselines the change shimmer against a freshly delivered definition, pulsing every row the delivery
-    /// changed, and re-points this emitter's derived-face screen rows at the same set <see cref="WorldFrameSource"/>
+    /// <summary>Re-points this emitter's derived-face screen rows at the same set <see cref="WorldFrameSource"/>
     /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldCreationFacets.Derive"/>'s
     /// one call site), so the slab geometry this emitter composes and the binder's bound sources can never disagree
-    /// about which face belongs to which placement. Call at the delivery boundary (a definition-revision move), with
-    /// the content clock.</summary>
+    /// about which face belongs to which placement. Call at the delivery boundary (a definition-revision move).</summary>
     /// <param name="definition">The delivered definition.</param>
     /// <param name="derivedFaces">This delivery's derived-face screen rows — always exactly
     /// <c>authoring.derivedFaceScreens</c> entries (<see cref="WorldCreationFacets.Derive"/> pads the reserved range
@@ -745,11 +663,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: derivedFaces);
 
-        m_shimmer.Observe(
-            placements: definition.Placements,
-            speakers: definition.Speakers,
-            now: m_contentSeconds
-        );
         m_derivedFaceRows = derivedFaces;
     }
     /// <inheritdoc/>
@@ -879,22 +792,13 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             slotBase: (context.SlotBase + WorldAvatarCatalog.DynamicTransformCapacity)
         );
     }
-    /// <summary>The pulse intensity for one speaker row — the editor gizmo chip's held tier, read by the frame source
-    /// while it projects chips (a speaker has no world geometry, so its pulse rides its chip).</summary>
-    /// <param name="name">The speaker name.</param>
-    /// <returns>The intensity in [0, 1]; 0 when the row is quiet.</returns>
-    public float SpeakerPulse(string name) => m_shimmer.SpeakerIntensity(
-        name: name,
-        now: m_contentSeconds
-    );
     /// <summary>Writes the program-rebuild watch counters this scene composes over: the client's three
-    /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the editor's
-    /// selection (highlight), drag-overlay, and sculpt-workbench counters, and the shimmer counter this type bumps from
-    /// the content clock.
+    /// (<see cref="WorldClient.WriteRevision"/> — roster, server snapshot, definition delivery), then the continuum
+    /// watch.
     /// <para>
-    /// Seven components, not their sum, and the client's three stay split too. One of them — the client's server
+    /// Four components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
-    /// server revision falling by one while the targeting counter rises by one would leave a sum unmoved and hold a
+    /// server revision falling by one while the continuum counter rises by one would leave a sum unmoved and hold a
     /// stale program. Flattening every counter through to the composition host's componentwise compare is what makes
     /// that impossible rather than merely unlikely (see <see cref="ISdfSceneEmitter.WriteRevision"/>).
     /// </para></summary>
@@ -902,10 +806,6 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public void WriteRevision(Span<int> destination) {
         m_client.WriteRevision(destination: destination[..WorldClient.RevisionComponentCount]);
 
-        destination[WorldClient.RevisionComponentCount] = m_targeting.Revision;
-        destination[(WorldClient.RevisionComponentCount + 1)] = m_drag.Revision;
-        destination[(WorldClient.RevisionComponentCount + 2)] = m_workbench.Revision;
-        destination[(WorldClient.RevisionComponentCount + 3)] = m_shimmerRevision;
-        destination[(WorldClient.RevisionComponentCount + 4)] = m_continuum.Revision;
+        destination[WorldClient.RevisionComponentCount] = m_continuum.Revision;
     }
 }

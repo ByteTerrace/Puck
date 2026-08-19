@@ -202,9 +202,16 @@ Schema-derived capacity fits is
 Runtime overflow is per-channel and attributed (a channel clips at
 its own boundary, never costs another channel), with two separately-latched
 narrations: reservation overflow vs a writer's own declared cap refusal.
-Binding-bar visibility, layout, and scale do not change this arithmetic: the
-writer still emits at most the same twelve slots, eight modifiers, one label,
-and eight hint lines per seat.
+Binding-bar visibility, layout, and scale do not change this arithmetic. The
+slot reservation DOES scale with the authored vocabulary: it is
+`WorldBindingBarCapacity.MaxBanks` (5 — the WoW-addon original's five chord
+banks: resting/LT/RT/LT>RT/RT>LT) times `MaxSlots` (23 — the
+`Puck.Input.Devices.GamepadButtons` catalog's declared-flag count) slots, plus
+the fixed one label, eight modifiers, and eight hint lines every bar draws
+once regardless of bank count — `OverlayCapacity.BindingBarMaxBanks`/
+`BindingBarMaxSlotsPerBank`, composed the same way the Hud ceilings are.
+`OverlayFrameBuilder.MaxElements` was raised (1024 → 2048) to fit this
+reservation beside the others.
 
 ## Bands — what `replace` replaces
 

@@ -20,7 +20,9 @@ differ by a few bits between backends, and on whatever the render happens
 to have resident that frame. None of that is acceptable for code that has to
 produce the *same* answer on every machine, every time.
 
-`IWorldQuery` is the seam that keeps those worlds apart. It is fully
+`IWorldQuery` is the seam that keeps those worlds apart. It is declared in
+`Puck.Maths`, so a provider and a consumer can sit in sibling libraries that
+never reference each other, and it is fully
 fixed-point (`FixedQ4816`/`FixedVector3`/`FixedPosition`) end to end, and every
 method is synchronous — both implementations that exist today are cheap
 enough per call that no async plumbing is warranted.
@@ -162,7 +164,9 @@ every time, by construction.
 ## Gravity in one line
 
 `IWorldQuery` answers geometric questions about a world. A narrower,
-separate interface answers a question one level more abstract:
+separate interface — declared in `Puck.Maths`, so a field's producer and its
+consumers can sit in sibling libraries that never reference each other —
+answers a question one level more abstract:
 
 ```csharp
 public interface IFieldEvaluator {
@@ -227,8 +231,8 @@ all if a different consumer read it differently.
 - [CLAUDE.md](../../CLAUDE.md) — the determinism contract (core rule 4). Note
   that it no longer pairs with a verification contract for the engine: the
   battery that gated one is quarantined with `Puck.Post`.
-- Source: `src/Puck.SignedDistance/Queries/IWorldQuery.cs`,
-  `src/Puck.SignedDistance/Queries/IFieldEvaluator.cs`,
+- Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,
+  `src/Puck.Maths/Geometry/IFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`,
   `src/Puck.SignedDistance/Queries/WorldQueryProviders.cs`.

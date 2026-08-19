@@ -207,7 +207,7 @@ public sealed class WorldEngagement {
         }
 
         table[((int)ChannelRole.MoveStrafe)] = WorldPadElement.LeftStickX;
-        table[((int)ChannelRole.MoveForward)] = WorldPadElement.LeftStickY;
+        table[((int)ChannelRole.MoveAdvance)] = WorldPadElement.LeftStickY;
 
         return table;
     }

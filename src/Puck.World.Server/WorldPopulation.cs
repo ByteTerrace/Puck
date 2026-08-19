@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -120,7 +121,6 @@ public sealed partial class WorldPopulation {
     public WorldSolidField? SolidField => (m_contactField as WorldSolidField);
     /// <summary>The world's compiled target-register table sharing the Drive reach-mask ordinal space.</summary>
     public WorldTargetRegisterTable TargetRegisters => m_targets;
-
     /// <summary>Gets this world's reserved local-seat count — the document's own <c>population.localSeats</c>
     /// declaration, always at the front of the entity table, up to the host's seat ceiling
     /// (<see cref="WorldPopulationLimits.LocalSeatCount"/>).</summary>
@@ -177,6 +177,11 @@ public sealed partial class WorldPopulation {
     // compilations (producer programs read their parameter maps), plus the resolved seat row. Assigned by CompileFixedTables from
     // the constructor (the empty seeds satisfy definite-assignment across that helper call).
     private IReadOnlyList<WorldKit> m_kitRows = [];
+
+    private WorldGravityField? m_gravityField;
+
+    // Reused across ticks: a steady-state population allocates nothing to solve its field.
+    private readonly List<WorldGravityTarget> m_gravityTargets = [];
     private FixedWorldKit[] m_kits = [];
     private IReadOnlyDictionary<string, CompiledBodyMotionProgram> m_bodyMotionPrograms = new Dictionary<string, CompiledBodyMotionProgram>();
     // The world's compiled channel table — kit Actions/PressChannel name resolution reads it once per compile pass.
@@ -279,7 +284,7 @@ public sealed partial class WorldPopulation {
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can
         // override it, but an authority handoff preserves it.
         public required byte CatalogRig { get; set; }
-        public required int[] Designations { get; set; }
+        public required WorldTargetDesignation[] Designations { get; set; }
         // Bumped every time this peer slot transitions inactive -> active. Never reset on disconnect.
         public int Generation { get; set; }
         // True when this entity-table occupant arrived through authority transfer rather than the destination's own

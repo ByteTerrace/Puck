@@ -80,10 +80,10 @@ public sealed class RadicalShadowTowerLaw {
     public QuadraticSurd ActivationThreshold { get; }
     /// <summary>Gets the affine offset <c>u/(2 sqrt(d))+w/2</c>.</summary>
     public QuadraticSurd Center { get; }
-    /// <summary>Gets the required residue class of a channel norm.</summary>
-    public BigInteger ChannelNormResidue { get; }
     /// <summary>Gets the modulus <c>4d</c> for <see cref="ChannelNormResidue"/>.</summary>
     public BigInteger ChannelNormModulus { get; }
+    /// <summary>Gets the required residue class of a channel norm.</summary>
+    public BigInteger ChannelNormResidue { get; }
     /// <summary>Gets the exact first residual coefficient in <c>t_n=sqrt(d)n+c+kappa/n+O(n^-2)</c>.</summary>
     public QuadraticSurd Kappa { get; }
     /// <summary>Gets the exact affine slope <c>sqrt(d)</c>.</summary>
@@ -186,6 +186,47 @@ public sealed class VerifiedRadicalShadowTower {
 }
 /// <summary>Verifies untrusted radical shadow-tower certificates using exact arithmetic.</summary>
 public static class RadicalShadowTowerVerifier {
+    internal static bool TryVerifyMathematics(
+        RadicalShadowTowerCertificate certificate,
+        out RadicalShadowTowerLaw law,
+        out RadicalShadowVerificationFailure failure,
+        RadicalShadowAnalysisLimits? limits,
+        CancellationToken cancellationToken
+    ) {
+        ArgumentNullException.ThrowIfNull(certificate);
+        cancellationToken.ThrowIfCancellationRequested();
+        limits ??= RadicalShadowAnalysisLimits.Default;
+        var parameters = certificate.Parameters;
+
+        if (RadicalShadowTowerAnalyzer.MaximumBitLength(parameters: parameters) > limits.MaximumParameterBitLength) {
+            law = null!;
+            failure = RadicalShadowVerificationFailure.ResourceLimit;
+            return false;
+        }
+        if (!RadicalShadowTowerAnalyzer.IsValidRadicand(value: parameters.D)) {
+            law = null!;
+            failure = RadicalShadowVerificationFailure.InvalidRadicand;
+            return false;
+        }
+
+        law = RadicalShadowTowerAnalyzer.Derive(parameters: parameters);
+        if (certificate.ProofKind != RadicalShadowProofKind.ExactAffine) {
+            failure = RadicalShadowVerificationFailure.UnsupportedProof;
+            return false;
+        }
+        if (law.Kappa.Sign != 0) {
+            failure = RadicalShadowVerificationFailure.AffineIdentityDoesNotHold;
+            return false;
+        }
+        if (law.AffineCenterAt(index: BigInteger.One).Sign <= 0) {
+            failure = RadicalShadowVerificationFailure.AffineSolutionIsNotPositive;
+            return false;
+        }
+
+        failure = RadicalShadowVerificationFailure.None;
+        return true;
+    }
+
     /// <summary>Attempts to turn a raw certificate into an opaque verified value.</summary>
     /// <param name="program">The raw compiled program to verify.</param>
     /// <param name="verified">Receives the opaque verified certificate on success; otherwise <see langword="null"/>.</param>
@@ -240,47 +281,6 @@ public static class RadicalShadowTowerVerifier {
         failure = RadicalShadowVerificationFailure.None;
         return true;
     }
-
-    internal static bool TryVerifyMathematics(
-        RadicalShadowTowerCertificate certificate,
-        out RadicalShadowTowerLaw law,
-        out RadicalShadowVerificationFailure failure,
-        RadicalShadowAnalysisLimits? limits,
-        CancellationToken cancellationToken
-    ) {
-        ArgumentNullException.ThrowIfNull(certificate);
-        cancellationToken.ThrowIfCancellationRequested();
-        limits ??= RadicalShadowAnalysisLimits.Default;
-        var parameters = certificate.Parameters;
-
-        if (RadicalShadowTowerAnalyzer.MaximumBitLength(parameters: parameters) > limits.MaximumParameterBitLength) {
-            law = null!;
-            failure = RadicalShadowVerificationFailure.ResourceLimit;
-            return false;
-        }
-        if (!RadicalShadowTowerAnalyzer.IsValidRadicand(value: parameters.D)) {
-            law = null!;
-            failure = RadicalShadowVerificationFailure.InvalidRadicand;
-            return false;
-        }
-
-        law = RadicalShadowTowerAnalyzer.Derive(parameters: parameters);
-        if (certificate.ProofKind != RadicalShadowProofKind.ExactAffine) {
-            failure = RadicalShadowVerificationFailure.UnsupportedProof;
-            return false;
-        }
-        if (law.Kappa.Sign != 0) {
-            failure = RadicalShadowVerificationFailure.AffineIdentityDoesNotHold;
-            return false;
-        }
-        if (law.AffineCenterAt(index: BigInteger.One).Sign <= 0) {
-            failure = RadicalShadowVerificationFailure.AffineSolutionIsNotPositive;
-            return false;
-        }
-
-        failure = RadicalShadowVerificationFailure.None;
-        return true;
-    }
 }
 /// <summary>The deterministic result of one radical shadow-tower analysis.</summary>
 public sealed class RadicalShadowTowerAnalysis {
@@ -311,6 +311,59 @@ public sealed class RadicalShadowTowerAnalysis {
 }
 /// <summary>Performs exact, deterministic first-pass analysis of radical shadow towers.</summary>
 public static class RadicalShadowTowerAnalyzer {
+    internal static RadicalShadowTowerLaw Derive(RadicalShadowTowerParameters parameters) {
+        var slope = QuadraticSurd.Create(
+            denominator: BigInteger.One,
+            radicand: parameters.D,
+            rationalNumerator: BigInteger.Zero,
+            surdNumerator: BigInteger.One
+        );
+        var center = QuadraticSurd.Create(
+            denominator: (2 * parameters.D),
+            radicand: parameters.D,
+            rationalNumerator: (parameters.W * parameters.D),
+            surdNumerator: parameters.U
+        );
+        var numerator = (
+            ((QuadraticSurd.Rational(value: parameters.V) +
+            (QuadraticSurd.Rational(value: parameters.W) * slope)) +
+            (QuadraticSurd.Rational(value: parameters.W) * center)) -
+            (center * center)
+        );
+        var kappa = (numerator / (QuadraticSurd.Rational(value: 2) * slope));
+        var threshold = (
+            (QuadraticSurd.Rational(value: (8 * parameters.D)) *
+            slope) *
+            kappa.Abs()
+        );
+        var modulus = (4 * parameters.D);
+        var residue = (((parameters.W & BigInteger.One).IsZero
+            ? -(parameters.U * parameters.U)
+            : (parameters.D - (parameters.U * parameters.U)))
+        ).FloorModulo(modulus: modulus);
+
+        return new RadicalShadowTowerLaw(
+            activationThreshold: threshold,
+            center: center,
+            channelNormModulus: modulus,
+            channelNormResidue: residue,
+            kappa: kappa,
+            slope: slope
+        );
+    }
+    internal static bool IsValidRadicand(BigInteger value) {
+        if (value <= BigInteger.Zero) { return false; }
+        var root = BigIntegerFunctions.SquareRoot(value: value);
+
+        return ((root * root) != value);
+    }
+    internal static int MaximumBitLength(RadicalShadowTowerParameters parameters) => checked((int)new[] {
+        BigInteger.Abs(value: parameters.D).GetBitLength(),
+        BigInteger.Abs(value: parameters.U).GetBitLength(),
+        BigInteger.Abs(value: parameters.V).GetBitLength(),
+        BigInteger.Abs(value: parameters.W).GetBitLength(),
+    }.Max());
+
     /// <summary>Analyzes arbitrary-width recurrence parameters under deterministic limits.</summary>
     /// <param name="parameters">The radical recurrence parameters.</param>
     /// <param name="limits">The deterministic limits, or <see langword="null"/> for <see cref="RadicalShadowAnalysisLimits.Default"/>.</param>
@@ -381,59 +434,6 @@ public static class RadicalShadowTowerAnalyzer {
             status: RadicalShadowAnalysisStatus.Undecided
         );
     }
-
-    internal static RadicalShadowTowerLaw Derive(RadicalShadowTowerParameters parameters) {
-        var slope = QuadraticSurd.Create(
-            denominator: BigInteger.One,
-            radicand: parameters.D,
-            rationalNumerator: BigInteger.Zero,
-            surdNumerator: BigInteger.One
-        );
-        var center = QuadraticSurd.Create(
-            denominator: (2 * parameters.D),
-            radicand: parameters.D,
-            rationalNumerator: (parameters.W * parameters.D),
-            surdNumerator: parameters.U
-        );
-        var numerator = (
-            ((QuadraticSurd.Rational(value: parameters.V) +
-            (QuadraticSurd.Rational(value: parameters.W) * slope)) +
-            (QuadraticSurd.Rational(value: parameters.W) * center)) -
-            (center * center)
-        );
-        var kappa = (numerator / (QuadraticSurd.Rational(value: 2) * slope));
-        var threshold = (
-            (QuadraticSurd.Rational(value: (8 * parameters.D)) *
-            slope) *
-            kappa.Abs()
-        );
-        var modulus = (4 * parameters.D);
-        var residue = (((parameters.W & BigInteger.One).IsZero
-            ? -(parameters.U * parameters.U)
-            : (parameters.D - (parameters.U * parameters.U)))
-        ).FloorModulo(modulus: modulus);
-
-        return new RadicalShadowTowerLaw(
-            activationThreshold: threshold,
-            center: center,
-            channelNormModulus: modulus,
-            channelNormResidue: residue,
-            kappa: kappa,
-            slope: slope
-        );
-    }
-    internal static bool IsValidRadicand(BigInteger value) {
-        if (value <= BigInteger.Zero) { return false; }
-        var root = BigIntegerFunctions.SquareRoot(value: value);
-
-        return ((root * root) != value);
-    }
-    internal static int MaximumBitLength(RadicalShadowTowerParameters parameters) => checked((int)new[] {
-        BigInteger.Abs(value: parameters.D).GetBitLength(),
-        BigInteger.Abs(value: parameters.U).GetBitLength(),
-        BigInteger.Abs(value: parameters.V).GetBitLength(),
-        BigInteger.Abs(value: parameters.W).GetBitLength(),
-    }.Max());
 }
 /// <summary>Builds a total evaluator only after exact certificate verification succeeds.</summary>
 public static class RadicalShadowTowerCompiler {

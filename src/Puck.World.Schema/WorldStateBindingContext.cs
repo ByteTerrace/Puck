@@ -37,7 +37,9 @@ public static class WorldStateBindingContext {
         var raw = (rawValue ?? 0L);
 
         return row.Kind switch {
-            CellKind.Bool => ((raw != 0L) ? "true" : "false"),
+            CellKind.Bool => ((raw != 0L)
+            ? "true"
+            : "false"),
             CellKind.Fixed => FixedQ4816.FromRawBits(value: raw).ToString(),
             CellKind.Text => (text ?? string.Empty),
             _ => raw.ToString(provider: CultureInfo.InvariantCulture),
@@ -51,15 +53,16 @@ public static class WorldStateBindingContext {
         rowName = default;
 
         return (
-            (family is not null) && family.StartsWith(
-                value: FamilyPrefix,
-                comparisonType: StringComparison.Ordinal
-            ) &&
+            (family is not null) &&
+            family.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: FamilyPrefix
+        ) &&
             WorldCellName.TryParse(
-                candidate: family[FamilyPrefix.Length..],
-                name: out rowName,
-                reason: out _
-            )
+            candidate: family[FamilyPrefix.Length..],
+            name: out rowName,
+            reason: out _
+        )
         );
     }
     /// <summary>Reads the state published for a seat from a delivered world definition.</summary>
@@ -86,7 +89,10 @@ public static class WorldStateBindingContext {
             name: rowName
         );
 
-        if ((row is null) || Advances(row: row)) {
+        if (
+            (row is null) ||
+            Advances(row: row)
+        ) {
             return false;
         }
 
@@ -94,16 +100,16 @@ public static class WorldStateBindingContext {
             definition: definition,
             rowName: rowName,
             key: (row.IsKeyed
-                ? entityIndex.ToString(provider: CultureInfo.InvariantCulture)
-                : null),
+            ? entityIndex.ToString(provider: CultureInfo.InvariantCulture)
+            : null),
             tick: tick,
             row: out _,
             rawValue: out var rawValue,
             text: out var text
         );
         state = FormatState(
-            row: row,
             rawValue: rawValue,
+            row: row,
             text: text
         );
 
@@ -127,9 +133,9 @@ public static class WorldStateBindingContext {
                 (contexts[index] is not { } context) ||
                 string.IsNullOrEmpty(value: context.State) ||
                 !TryParseFamily(
-                    family: context.Family,
-                    rowName: out var rowName
-                )
+                family: context.Family,
+                rowName: out var rowName
+            )
             ) {
                 continue;
             }
@@ -162,8 +168,8 @@ public static class WorldStateBindingContext {
             }
 
             var canonical = FormatState(
-                row: row,
                 rawValue: parsed,
+                row: row,
                 text: null
             );
 

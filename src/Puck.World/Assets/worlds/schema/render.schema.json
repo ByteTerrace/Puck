@@ -17,7 +17,7 @@
     "shadowCrowdRadius": {
       "description": "The boot soft-shadow crowd radius (world units).",
       "type": "number",
-      "default": 15
+      "default": 0
     },
     "ambientOcclusion": {
       "description": "Whether ambient occlusion boots on.",
@@ -27,7 +27,7 @@
     "renderScale": {
       "$ref": "./common.schema.json#/$defs/WorldRenderScaleTier",
       "description": "The boot render-scale tier.",
-      "default": "Half"
+      "default": "Native"
     },
     "upscaleSharpness": {
       "description": "The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).",

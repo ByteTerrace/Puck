@@ -81,7 +81,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Patches">The synth patch assets.</param>
 /// <param name="Audio">The audio defaults.</param>
 /// <param name="Collision">The contact tuning — a client reads body radius/height from it to frame and interpolate.</param>
-/// <param name="Views">The view defaults (slots, layouts, seat framing).</param>
+/// <param name="Views">The authored window composition (slots, layouts, seat framing), or <see langword="null"/>
+/// when the document authors none — a seatless world composes no seat view.</param>
 /// <param name="Looks">The look rows.</param>
 /// <param name="LookAssignment">The body-to-look assignment.</param>
 /// <param name="Links">The screen links.</param>
@@ -115,7 +116,7 @@ public sealed record WorldProjectionDocument(
     IReadOnlyList<WorldPatch> Patches,
     WorldAudioDefaults Audio,
     WorldCollision Collision,
-    WorldViewDefaults Views,
+    WorldViewDefaults? Views,
     IReadOnlyList<WorldLook> Looks,
     WorldRowAssignment LookAssignment,
     IReadOnlyList<WorldScreenLink> Links,
@@ -214,7 +215,7 @@ public static class WorldProjection {
             Patches: definition.Patches,
             Audio: definition.Audio,
             Collision: definition.Collision,
-            Views: definition.Views,
+            Views: definition.ViewsRaw,
             Looks: definition.Looks,
             LookAssignment: definition.LookAssignment,
             Links: definition.Links,
@@ -289,13 +290,13 @@ public static class WorldProjection {
             StorageRaw: new WorldStorageDefaults(),
             CreationsRaw: projection.Creations,
             PlacementsRaw: projection.Placements,
-            AuthoringRaw: WorldAuthoringDefaults.Default,
+            AuthoringRaw: null,
             SpeakersRaw: projection.Speakers,
             TunesRaw: projection.Tunes,
             PatchesRaw: projection.Patches,
             AudioRaw: projection.Audio,
             CollisionRaw: projection.Collision,
-            HostRaw: WorldHostDefaults.Default,
+            HostRaw: null,
             ViewsRaw: projection.Views,
             LooksRaw: projection.Looks,
             LookAssignmentRaw: projection.LookAssignment,

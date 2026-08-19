@@ -80,6 +80,9 @@
     "collision": {
       "$ref": "./schema/collision.schema.json"
     },
+    "gravity": {
+      "$ref": "./schema/gravity.schema.json"
+    },
     "host": {
       "$ref": "./schema/host.schema.json"
     },
@@ -100,6 +103,9 @@
     },
     "hud": {
       "$ref": "./schema/hud.schema.json"
+    },
+    "icons": {
+      "$ref": "./schema/icons.schema.json"
     },
     "state": {
       "$ref": "./schema/state.schema.json"
@@ -166,6 +172,9 @@
     },
     "judges": {
       "$ref": "./schema/judges.schema.json"
+    },
+    "seatModes": {
+      "$ref": "./schema/seatModes.schema.json"
     },
     "basis": {
       "$ref": "./schema/basis.schema.json"

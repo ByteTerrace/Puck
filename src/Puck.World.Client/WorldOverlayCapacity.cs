@@ -1,3 +1,4 @@
+using Puck.Input.Devices;
 using Puck.Overlays;
 
 namespace Puck.World.Client;
@@ -12,6 +13,8 @@ public static class WorldOverlayCapacity {
     /// <returns>The capacity the composition root hands the overlay.</returns>
     public static OverlayCapacity FromSchema() =>
         new(
+            BindingBarMaxBanks: WorldBindingBarCapacity.MaxBanks,
+            BindingBarMaxSlotsPerBank: GamepadButtonCatalog.Count,
             HudElementsPerPanel: WorldHudCapacity.MaxElementsPerPanel,
             HudElementsPerSeatPanel: WorldHudCapacity.MaxElementsPerSeatPanel,
             HudPanels: WorldHudCapacity.MaxWorldPanels,

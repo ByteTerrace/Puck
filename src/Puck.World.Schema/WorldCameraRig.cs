@@ -12,12 +12,25 @@ namespace Puck.World;
 /// zero disables smoothing. Applies to whichever motion the rig carries.</param>
 public sealed record WorldCameraRig(WorldCameraMotion Motion, WorldCameraAim Aim, WorldCameraLens Lens, float SmoothRate = 0f);
 /// <summary>Defines presentation-only eye motion relative to a camera's resolved reference frame.</summary>
+[JsonDerivedType(typeof(WorldCameraMotion.Fly), typeDiscriminator: "fly")]
 [JsonDerivedType(typeof(WorldCameraMotion.Follow), typeDiscriminator: "follow")]
 [JsonDerivedType(typeof(WorldCameraMotion.Orbit), typeDiscriminator: "orbit")]
 [JsonDerivedType(typeof(WorldCameraMotion.Static), typeDiscriminator: "static")]
 [JsonDerivedType(typeof(WorldCameraMotion.Track), typeDiscriminator: "track")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldCameraMotion {
+    /// <summary>A free camera driven directly by a seat's channel-role input rather than a reference frame — the
+    /// live eye/yaw/pitch are presentation-carried state (never authored per instance), advanced each frame from the
+    /// SAME move/look samples a body seat's channels carry. Never resolved through
+    /// <c>Puck.World.WorldCameraRigCompiler</c> (it has no reference frame to resolve against); the seat's own
+    /// fly-rig integrator (<c>Client.WorldSeatFlyRig</c>) reads only these tunables.</summary>
+    /// <param name="MinSpeed">The slowest operator-settable fly speed, world units per second.</param>
+    /// <param name="MaxSpeed">The fastest operator-settable fly speed, world units per second.</param>
+    /// <param name="DefaultSpeed">The fly speed a seat starts at on entry, clamped to
+    /// [<paramref name="MinSpeed"/>, <paramref name="MaxSpeed"/>].</param>
+    /// <param name="LookRateRadiansPerSecond">The look input's angular rate at full deflection.</param>
+    /// <param name="MaxPitchRadians">The pitch clamp, symmetric about level.</param>
+    public sealed record Fly(float MinSpeed, float MaxSpeed, float DefaultSpeed, float LookRateRadiansPerSecond, float MaxPitchRadians) : WorldCameraMotion;
     /// <summary>Follows the reference frame at a fixed offset.</summary>
     /// <param name="Offset">The eye offset in world or reference-local axes.</param>
     /// <param name="WorldAxes">Whether <paramref name="Offset"/> uses world axes.</param>

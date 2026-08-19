@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -92,6 +93,7 @@ public sealed partial class WorldBody {
                     entityIndex: entityIndex,
                     previousPosition: trajectory.PreviousPosition,
                     position: ref next,
+                    up: in m_up,
                     velocity: ref velocity,
                     orientation: in m_orientation,
                     volumes: collider.Volumes
@@ -99,6 +101,7 @@ public sealed partial class WorldBody {
                 : field.ResolveSweep(
                     previousPosition: trajectory.PreviousPosition,
                     position: ref next,
+                    up: in m_up,
                     velocity: ref velocity,
                     orientation: in m_orientation,
                     volumes: collider.Volumes

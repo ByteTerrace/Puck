@@ -32,19 +32,44 @@ public readonly record struct BindingSlotPlacement(
     float HalfSize,
     float GlyphHalfSize
 );
+/// <summary>Which placement rule a physical button's slot follows.</summary>
+public enum BindingSlotCategory {
+    /// <summary>One of the twelve <see cref="BindingBarLayout.SlotButtons"/> — the mirrored compass-diamond
+    /// clusters.</summary>
+    Classic,
+    /// <summary>One of the three <see cref="BindingBarLayout.CenterButtons"/> (Back/Guide/Start) — the menu row
+    /// between the two clusters.</summary>
+    Center,
+    /// <summary>Any other <see cref="GamepadButtons"/> flag — the exotics row above the menu row.</summary>
+    Exotic,
+}
 /// <summary>
-/// The pure math that places one bar's twelve binding slots — two mirrored six-slot clusters around a bottom-center
-/// anchor: within a cluster the <c>index % 6</c> pattern shapes a diamond (d-pad / face buttons) with the stick press
-/// at its middle and the shoulder at its outer top; slots 6-11 mirror 0-5 across the center. Per-seat placement is
-/// the WRITER's job here (each seat's bar lays out inside its own viewport region), so the layout itself is always
-/// single-bar. No state, no rendering — indices in, placements out.
+/// The pure math that places one bar's binding slots around a bottom-center anchor: the twelve classic buttons as two
+/// mirrored six-slot compass clusters (within a cluster the <c>index % 6</c> pattern shapes a diamond — d-pad / face
+/// buttons — with the stick press at its middle and the shoulder at its outer top; the right cluster mirrors the
+/// left across the center); Back/Guide/Start as a fixed three-slot row directly above the anchor, between the
+/// clusters (real controllers place View–Guide–Menu in that left-to-right order, so <see cref="CenterButtons"/>
+/// fixes it too); and every other physical button (Touchpad, Mute, the grips, …) as a row further above, evenly
+/// spaced left-to-right in AUTHORED slot-set order — the caller's ordering choice, since these buttons carry no
+/// compass direction of their own. A bank's own 2D offset (region-height units, y-down, added by the caller) shifts
+/// this whole placement to stack several banks around one anchor; the layout here is always single-bank. No state,
+/// no rendering — categorized indices in, placements out.
 /// </summary>
 public static class BindingBarLayout {
-    /// <summary>The number of slots a bar places — <see cref="SlotButtons"/>' length as a constant, so the binding
-    /// bar's channel reservation can be composed at compile time.</summary>
+    // The center/exotic rows sit above the anchor (positive YUp) at multiples of the (scaled) button pitch, clear of
+    // the classic clusters' own north-most slots (compass Y = 1, i.e. one button pitch above the anchor already).
+    private const float CenterRowLift = 1.9f;
+    private const float CenterSlotSpacing = 1.15f;
+    private const float ExoticRowLift = (CenterRowLift + 1.7f);
+    private const float ExoticSlotSpacing = 1.15f;
+    // Center/exotic slots carry no compass direction, so their glyph badge nudges toward one fixed corner
+    // (upper-right) rather than PadPictogramLayout's per-direction offset.
+    private const float FixedBadgeCorner = 1f;
+
+    /// <summary>The number of slots a bar places — <see cref="SlotButtons"/>' length as a constant.</summary>
     public const int SlotCount = 12;
 
-    /// <summary>The physical buttons a bar's twelve slots represent, in slot order (the d-pad diamond, left
+    /// <summary>The physical buttons a bar's twelve classic slots represent, in slot order (the d-pad diamond, left
     /// shoulder, left stick, the face diamond, right shoulder, right stick). Exactly <see cref="SlotCount"/>
     /// entries.</summary>
     public static readonly GamepadButtons[] SlotButtons = [
@@ -61,7 +86,31 @@ public static class BindingBarLayout {
         GamepadButtons.RightShoulder,
         GamepadButtons.RightStickPress,
     ];
+    /// <summary>The physical buttons the center row represents, left to right (View/Back, Guide/home, Menu/Start —
+    /// the real-controller order).</summary>
+    public static readonly GamepadButtons[] CenterButtons = [
+        GamepadButtons.Back,
+        GamepadButtons.Guide,
+        GamepadButtons.Start,
+    ];
 
+    /// <summary>Classifies a physical button into its placement category.</summary>
+    /// <param name="button">The physical button (one flag).</param>
+    /// <param name="classicIndex">The button's index into <see cref="SlotButtons"/> when <see cref="BindingSlotCategory.Classic"/>;
+    /// otherwise -1.</param>
+    /// <returns>The button's placement category.</returns>
+    public static BindingSlotCategory Categorize(GamepadButtons button, out int classicIndex) {
+        classicIndex = Array.IndexOf(array: SlotButtons, value: button);
+
+        if (classicIndex >= 0) {
+            return BindingSlotCategory.Classic;
+        }
+
+        return (Array.IndexOf(array: CenterButtons, value: button) >= 0
+            ? BindingSlotCategory.Center
+            : BindingSlotCategory.Exotic
+        );
+    }
     /// <summary>The bar's bottom-center anchor, in region-height units (y-down-from-top). The modifier pips reuse
     /// this so they sit with the bar rather than floating at region center.</summary>
     /// <param name="aspect">The region aspect ratio (width / height).</param>
@@ -72,42 +121,93 @@ public static class BindingBarLayout {
             x: (aspect * 0.5f),
             y: (1f - anchorOffsetY)
         );
-    /// <summary>Places one slot: the shared <see cref="PadPictogramLayout"/> compass geometry (button center + badge
-    /// direction from one source of truth), anchored at the bar's bottom-center point and converted to the overlay's
-    /// y-down frame. <see cref="SlotButtons"/> already feeds the LEFT cluster pre-flipped slot indices (d-pad RIGHT at
-    /// compass-west renders nearest the midpoint — the mirror puts it on the cluster's right side), per the
-    /// primitive's documented mirror semantics.</summary>
-    /// <param name="index">The layout slot index, 0-11.</param>
-    /// <param name="options">The layout tuning.</param>
-    /// <param name="aspect">The region aspect ratio (width / height).</param>
-    /// <returns>The slot's placement in region-height units.</returns>
-    public static BindingSlotPlacement Place(int index, in BindingBarLayoutOptions options, float aspect) {
-        var buttonSize = (options.ButtonSize * options.Scale);
-        var slot = PadPictogramLayout.Resolve(
-            index: index,
-            options: new PadPictogramOptions(
-                ButtonSize: buttonSize,
-                CenterGap: (options.CenterGap * options.Scale),
-                GlyphOffsetRatio: options.GlyphOffsetRatio
-            )
-        );
-        var anchor = BarAnchor(
-            aspect: aspect,
-            anchorOffsetY: options.AnchorOffsetY
-        );
+    private static BindingSlotPlacement FromOffset(Vector2 anchor, float x, float yUp, float buttonSize, in BindingBarLayoutOptions options) {
         var center = new Vector2(
-            x: (anchor.X + slot.X),
-            y: (anchor.Y - slot.YUp)
+            x: (anchor.X + x),
+            y: (anchor.Y - yUp)
         );
+        var badge = ((buttonSize * options.GlyphOffsetRatio) * FixedBadgeCorner);
 
         return new BindingSlotPlacement(
             Center: center,
             GlyphCenter: new Vector2(
-                x: (center.X + slot.GlyphX),
-                y: (center.Y - slot.GlyphYUp)
+                x: (center.X + badge),
+                y: (center.Y - badge)
             ),
             GlyphHalfSize: ((buttonSize * options.GlyphSizeRatio) * 0.5f),
             HalfSize: (buttonSize * 0.5f)
+        );
+    }
+    /// <summary>Places one slot: the shared <see cref="PadPictogramLayout"/> compass geometry for a
+    /// <see cref="BindingSlotCategory.Classic"/> button (button center + badge direction from one source of truth),
+    /// or the fixed menu-row / exotics-row geometry otherwise — anchored at the bar's bottom-center point and
+    /// converted to the overlay's y-down frame. <see cref="SlotButtons"/> already feeds the LEFT cluster pre-flipped
+    /// slot indices (d-pad RIGHT at compass-west renders nearest the midpoint — the mirror puts it on the cluster's
+    /// right side), per the primitive's documented mirror semantics.</summary>
+    /// <param name="category">The slot's placement category (see <see cref="Categorize"/>).</param>
+    /// <param name="categoryIndex">The slot's index within its category: 0-11 for <see cref="BindingSlotCategory.Classic"/>
+    /// (its <see cref="SlotButtons"/> index); 0-2 for <see cref="BindingSlotCategory.Center"/> (its
+    /// <see cref="CenterButtons"/> index); 0-(<paramref name="categoryCount"/>-1) for
+    /// <see cref="BindingSlotCategory.Exotic"/> (its position among the authored slot set's exotics, left to
+    /// right).</param>
+    /// <param name="categoryCount">The total exotic slots in this bar (centers the exotics row); ignored for
+    /// Classic/Center.</param>
+    /// <param name="options">The layout tuning.</param>
+    /// <param name="aspect">The region aspect ratio (width / height).</param>
+    /// <returns>The slot's placement in region-height units.</returns>
+    public static BindingSlotPlacement Place(BindingSlotCategory category, int categoryIndex, int categoryCount, in BindingBarLayoutOptions options, float aspect) {
+        var buttonSize = (options.ButtonSize * options.Scale);
+        var anchor = BarAnchor(
+            aspect: aspect,
+            anchorOffsetY: options.AnchorOffsetY
+        );
+
+        if (category == BindingSlotCategory.Classic) {
+            var slot = PadPictogramLayout.Resolve(
+                index: categoryIndex,
+                options: new PadPictogramOptions(
+                    ButtonSize: buttonSize,
+                    CenterGap: (options.CenterGap * options.Scale),
+                    GlyphOffsetRatio: options.GlyphOffsetRatio
+                )
+            );
+            var center = new Vector2(
+                x: (anchor.X + slot.X),
+                y: (anchor.Y - slot.YUp)
+            );
+
+            return new BindingSlotPlacement(
+                Center: center,
+                GlyphCenter: new Vector2(
+                    x: (center.X + slot.GlyphX),
+                    y: (center.Y - slot.GlyphYUp)
+                ),
+                GlyphHalfSize: ((buttonSize * options.GlyphSizeRatio) * 0.5f),
+                HalfSize: (buttonSize * 0.5f)
+            );
+        }
+
+        if (category == BindingSlotCategory.Center) {
+            var spacing = (buttonSize * CenterSlotSpacing);
+
+            return FromOffset(
+                anchor: anchor,
+                buttonSize: buttonSize,
+                options: in options,
+                x: ((categoryIndex - 1) * spacing),
+                yUp: (buttonSize * CenterRowLift)
+            );
+        }
+
+        var exoticSpacing = (buttonSize * ExoticSlotSpacing);
+        var exoticCenter = ((categoryCount - 1) * 0.5f);
+
+        return FromOffset(
+            anchor: anchor,
+            buttonSize: buttonSize,
+            options: in options,
+            x: ((categoryIndex - exoticCenter) * exoticSpacing),
+            yUp: (buttonSize * ExoticRowLift)
         );
     }
 }

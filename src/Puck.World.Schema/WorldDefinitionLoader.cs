@@ -42,51 +42,42 @@ public static class WorldDefinitionLoader {
         path3: "play.world.json"
     );
 
-    /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
-    /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
-    /// reason (line endings collapsed) and <see langword="false"/>, and the three failure classes are named apart:
-    /// an absent file, an unreadable file, and an invalid document. An incomplete document — one missing a section the
-    /// canonical writer emits — is invalid like any other; the validator names every missing section. A broad catch is
-    /// deliberate: a load boundary must never throw out of <see cref="TryLoadFile"/>. Delegates to
-    /// <see cref="WorldDefinitionFileSource.TryLoad"/> — the one implementation this console path and the replay
-    /// tape's offline re-drive (<c>Server.WorldServer.ApplyRebuild</c>, on a replay drive) share, so a live read and a
-    /// re-drive's later re-read of the same path compute the same content hash — and then resolves every first-fill
-    /// <see cref="WorldDraw"/> site (<see cref="WorldDrawBootResolver"/>) keyed off <paramref name="instanceIdentity"/>,
-    /// so a fresh boot and a fresh <c>world.instance.start</c> draw independently while each stays reproducible. The
-    /// content hash the inner load computes (and replay CAS-pinning elsewhere compares) is taken over the raw authored
-    /// bytes, before this resolution step — a draw's outcome never moves the pin.</summary>
-    /// <param name="path">The file to load.</param>
-    /// <param name="definition">The loaded, draw-resolved definition on success; <see langword="null"/> on failure.</param>
-    /// <param name="reason">The one-line failure reason, or empty on success.</param>
-    /// <param name="instanceIdentity">The running instance's own identity — the draw seed ladder's instance rung.
-    /// Defaults to the boot instance's own name.</param>
-    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads (see
-    /// <see cref="WorldDefinitionValidator.Validate"/>). <see langword="null"/> (the default) is the honest answer
-    /// for a caller with no reachable resolver — an authored adjacency then refuses by name
-    /// for want of proof, exactly like every other call site of the underlying validator.</param>
-    /// <returns><see langword="true"/> when the file loaded and validated.</returns>
-    public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
-        if (!WorldDefinitionFileSource.TryLoad(
-            contentHash: out _,
-            definition: out var loaded,
-            neighbours: neighbours,
-            path: path,
-            reason: out reason
+    // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate
+    // the drawn result. A resolved draw writes a value the validator has already been told the site's domain admits,
+    // so a post-draw refusal can only fire if a domain narrowing went soft — loud rather than a silent bad boot. The
+    // SAME resolver (or null) the caller supplied proves a boot document's own adjacencies here too; a second pass in
+    // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
+    // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
+    private static bool TryResolveDrawsAndRevalidate(WorldDefinition definition, string sourceName, string instanceIdentity, IWorldNeighbourResolver? neighbours, out WorldDefinition? resolved, out string reason) {
+        if (!WorldDrawBootResolver.TryResolve(
+            definition: definition,
+            instanceIdentity: instanceIdentity,
+            reason: out reason,
+            resolved: out var drawn
         )) {
-            definition = null;
+            resolved = null;
+            reason = $"{sourceName} draw refused: {reason}";
 
             return false;
         }
 
-        return TryResolveDrawsAndRevalidate(
-            definition: loaded!,
-            instanceIdentity: instanceIdentity,
+        if (!WorldDefinitionValidator.TryValidate(
+            definition: drawn,
             neighbours: neighbours,
-            reason: out reason,
-            resolved: out definition,
-            sourceName: path
-        );
+            reason: out var resolvedReason
+        )) {
+            resolved = null;
+            reason = $"{sourceName} produced an invalid document after its draws resolved: {resolvedReason}";
+
+            return false;
+        }
+
+        resolved = drawn;
+        reason = string.Empty;
+
+        return true;
     }
+
     /// <summary>Loads and validates a world document from already-read, already-composed UTF-8 JSON bytes — the
     /// bytes-level twin of <see cref="TryLoadFile"/>, for a document that arrived from somewhere other than a local
     /// file (a hosted world's blob-store read). The bytes must already be basis-free: an authored
@@ -169,43 +160,51 @@ public static class WorldDefinitionLoader {
             sourceName: sourceName
         );
     }
-
-    // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate
-    // the drawn result. A resolved draw writes a value the validator has already been told the site's domain admits,
-    // so a post-draw refusal can only fire if a domain narrowing went soft — loud rather than a silent bad boot. The
-    // SAME resolver (or null) the caller supplied proves a boot document's own adjacencies here too; a second pass in
-    // WorldPostBuildWiring.Install re-validates once the storage-backed resolver (if any) is also wired, so a
-    // neighbour reachable only through the cloud still gets proven, not just one reachable on disk.
-    private static bool TryResolveDrawsAndRevalidate(WorldDefinition definition, string sourceName, string instanceIdentity, IWorldNeighbourResolver? neighbours, out WorldDefinition? resolved, out string reason) {
-        if (!WorldDrawBootResolver.TryResolve(
-            definition: definition,
-            instanceIdentity: instanceIdentity,
-            reason: out reason,
-            resolved: out var drawn
-        )) {
-            resolved = null;
-            reason = $"{sourceName} draw refused: {reason}";
-
-            return false;
-        }
-
-        if (!WorldDefinitionValidator.TryValidate(
-            definition: drawn,
+    /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
+    /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
+    /// reason (line endings collapsed) and <see langword="false"/>, and the three failure classes are named apart:
+    /// an absent file, an unreadable file, and an invalid document. An incomplete document — one missing a section the
+    /// canonical writer emits — is invalid like any other; the validator names every missing section. A broad catch is
+    /// deliberate: a load boundary must never throw out of <see cref="TryLoadFile"/>. Delegates to
+    /// <see cref="WorldDefinitionFileSource.TryLoad"/> — the one implementation this console path and the replay
+    /// tape's offline re-drive (<c>Server.WorldServer.ApplyRebuild</c>, on a replay drive) share, so a live read and a
+    /// re-drive's later re-read of the same path compute the same content hash — and then resolves every first-fill
+    /// <see cref="WorldDraw"/> site (<see cref="WorldDrawBootResolver"/>) keyed off <paramref name="instanceIdentity"/>,
+    /// so a fresh boot and a fresh <c>world.instance.start</c> draw independently while each stays reproducible. The
+    /// content hash the inner load computes (and replay CAS-pinning elsewhere compares) is taken over the raw authored
+    /// bytes, before this resolution step — a draw's outcome never moves the pin.</summary>
+    /// <param name="path">The file to load.</param>
+    /// <param name="definition">The loaded, draw-resolved definition on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line failure reason, or empty on success.</param>
+    /// <param name="instanceIdentity">The running instance's own identity — the draw seed ladder's instance rung.
+    /// Defaults to the boot instance's own name.</param>
+    /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads (see
+    /// <see cref="WorldDefinitionValidator.Validate"/>). <see langword="null"/> (the default) is the honest answer
+    /// for a caller with no reachable resolver — an authored adjacency then refuses by name
+    /// for want of proof, exactly like every other call site of the underlying validator.</param>
+    /// <returns><see langword="true"/> when the file loaded and validated.</returns>
+    public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
+        if (!WorldDefinitionFileSource.TryLoad(
+            contentHash: out _,
+            definition: out var loaded,
             neighbours: neighbours,
-            reason: out var resolvedReason
+            path: path,
+            reason: out reason
         )) {
-            resolved = null;
-            reason = $"{sourceName} produced an invalid document after its draws resolved: {resolvedReason}";
+            definition = null;
 
             return false;
         }
 
-        resolved = drawn;
-        reason = string.Empty;
-
-        return true;
+        return TryResolveDrawsAndRevalidate(
+            definition: loaded!,
+            instanceIdentity: instanceIdentity,
+            neighbours: neighbours,
+            reason: out reason,
+            resolved: out definition,
+            sourceName: path
+        );
     }
-
     /// <summary>Resolves the active world definition from an explicit file or the shipped default file. Failure to
     /// load either file refuses the boot.</summary>
     /// <param name="explicitPath">The <c>--world</c> path, or <see langword="null"/>/empty for the shipped default

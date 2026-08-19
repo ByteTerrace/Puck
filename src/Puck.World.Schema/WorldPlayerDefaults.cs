@@ -44,7 +44,6 @@ public sealed record WorldPlayerDefaults(
     /// <see cref="WorldSeatLook.Default"/>.</summary>
     [JsonIgnore]
     public WorldSeatLook SeatLook => (SeatLookRaw ?? WorldSeatLook.Default);
-
     /// <summary>Gets the inert player-presentation defaults.</summary>
     public static WorldPlayerDefaults Default { get; } = new();
 }

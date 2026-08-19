@@ -49,7 +49,14 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         var landed = new WorldLandedMemberCheckpoint(
             AdmissionGrants: [new WorldAdmissionGrant(Capability: WorldCapability.Drive, Subject: GrantSubject.Body(index: 4))],
             BodyColor: new Vector3(x: 1, y: 0, z: 0),
-            Designations: [1, 2],
+            Designations: [
+                WorldTargetDesignation.Body(index: 1),
+                WorldTargetDesignation.AtPoint(point: new FixedVector3(
+                    X: FixedQ4816.FromInteger(value: 7),
+                    Y: FixedQ4816.Zero,
+                    Z: -FixedQ4816.FromInteger(value: 3)
+                ))
+            ],
             DynamicState: dynamicState,
             Mobility: new WorldMobilityIdentity(
                 Incarnation: new WorldEntityAddress(Authority: "row-a", Generation: 1, Index: 0),

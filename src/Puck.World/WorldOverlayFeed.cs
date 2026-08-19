@@ -3,260 +3,153 @@ using Puck.Input;
 using Puck.Input.Devices;
 using Puck.Overlays;
 using Puck.World.Client;
-using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The class of the last edit act the editor HUD tags: a live session lever
-/// (applies now, <c>world.save</c> folds it), an ordinary document mutation (applies live on delivery), or a
-/// document-defaults mutation (next boot; live levers unchanged).</summary>
-internal enum EditorActClass {
-    None,
-    Live,
-    Document,
-    DocumentDefault,
-}
 /// <summary>
 /// The World-side feed behind the unified overlay's binding-bar source: once per produced frame (the node's
 /// <c>FeedTick</c>, render thread) it walks the joined roster seats, resolves each seat's active
-/// <see cref="Puck.Commands.BindingPageView"/> through <see cref="WorldSeatBindings"/>, joins it against the twelve
-/// physical layout slots for the connected controller family — chips lit from the router's carried held state
-/// (<see cref="InputRouter.IsCommandHeld"/>) — scopes it into that seat's split-screen viewport rect
-/// (<see cref="WorldFrameSource.LayoutRegion(int, int, int, float)"/>, editor layout policy included), and publishes one
-/// <see cref="OverlayBindingBarFrame"/> — plus, for every editing seat, one <see cref="OverlayEditorSeat"/> HUD entry
-/// (selection readout, candidate/snap context, live drag line). Zero steady-state allocation: the per-seat arrays and
-/// pressed probes are preallocated and reused, and the HUD lines are re-formatted only when their source facts move
-/// (a selection change, a drag step, a definition delivery) — safe because the feed and the overlay reader run on the
+/// <see cref="Puck.Commands.BindingPageView"/> through <see cref="WorldSeatBindings"/>, joins the resolved
+/// binding-bar policy's authored slot set against EVERY authored bank's own named page for the connected controller
+/// family — chips lit from the router's carried PHYSICAL button state, the same fact reused across every bank
+/// showing that button's slot (<see cref="BindingBarSeatComposer.IsPhysicallyPressed"/>) — scopes it into that
+/// seat's split-screen viewport rect
+/// (<see cref="WorldFrameSource.LayoutRegion(int, int)"/>), and publishes one
+/// <see cref="OverlayBindingBarFrame"/>. Zero steady-state allocation: the per-seat arrays and
+/// pressed probes are preallocated and reused, and the hint lines are re-formatted only when their source facts move
+/// (a page/group flip) — safe because the feed and the overlay reader run on the
 /// same thread, sequentially (see <see cref="BindingBarStore"/>'s remarks).
 /// </summary>
 internal sealed class WorldOverlayFeed {
-    private const int ModifierCapacity = 8;
-    // Secondary-seat bars render at partial opacity so the split-screen HUD stays quiet.
-    private const float MultiSeatBarAlpha = 0.5f;
-    // Session-honesty sweep cadence in published frames (~4 Hz at 120 FPS): the drift hint and exclusive-hold labels
-    // recompute at human cadence, never per frame — DescribeDrift is a verb-scale composition, not a tick fact.
-    private const int SessionSweepFrames = 32;
-
-    private readonly WorldAudioDirector m_audio;
-    private readonly WorldScreenBinder m_binder;
     private readonly WorldBindingBarControl m_bindingBar;
     private readonly WorldSeatBindings m_bindings;
     private readonly WorldClient m_client;
-    private readonly WorldEditorDrag m_drag;
-    private readonly WorldEditorSession m_editor;
-    private readonly EditorHudStore m_editorHudStore;
-    private readonly OverlayEditorSeat[] m_editorSeats;
-    private readonly WorldPrincipal?[] m_exclusiveHolders;
-    // The last edit act's class (fed by the EchoTap wiring and the settings-revision watch), the cached drift hint,
-    // the per-seat exclusive-hold labels, and the generation counter the HUD caches key on — all bumped at human
-    // cadence only.
-    private readonly string[] m_exclusiveLabels;
     private readonly GamepadManager? m_gamepads;
+    private readonly WorldIconTable m_icons;
     private readonly string[][] m_hintLines;
     // Per-SEAT chord-hint cache: the hint lines are formatted once per published view (views are immutable and
     // reference-stable per page), so the per-frame publish is a reference handoff.
     private readonly BindingPageView?[] m_hintViews;
-    private readonly HudCache[] m_hudCaches;
     private readonly OverlayBindingModifier[][] m_modifiers;
-    private readonly Puck.Launcher.PresentPacingControl m_pacing;
-    private readonly WorldPopulation m_population;
+    // Per-SEAT parsed-slot-set cache: re-parses the authored button-name strings only when the resolved
+    // WorldBindingBarAuthoring instance changes (a document delivery or profile switch), never every frame — the
+    // resolved document graph is reference-stable while nothing changes, so reference equality is the change key.
+    private readonly WorldBindingBarAuthoring?[] m_barAuthoringSeen;
+    private readonly GamepadButtons[][] m_barSlotSet;
+    // This tick's active page view per seat — the ONE mutable cell m_pressedByButton's preallocated (per-seat,
+    // ctor-time) closures read, so a physical-press probe threads through every bank's ComposeBank call with no
+    // per-frame delegate allocation.
+    private readonly BindingPageView?[] m_activeBarView;
+    private readonly Func<GamepadButtons, bool>[] m_pressedByButton;
     // One cached pressed-probe delegate per SEAT SLOT (the router's held state is slot-keyed), so the per-frame
     // compose closes over nothing.
     private readonly Func<string, bool>[] m_pressedBySlot;
+    // Cached ONCE (never per tick, never per bank): the icon table's own resolvers are stateless, and the badge
+    // resolver's only per-tick input (the connected family) rides the mutable m_currentFamily cell instead of a
+    // fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedByButton already takes.
+    private readonly Func<GamepadButtons, OverlayResolvedGlyph> m_resolveBadge;
+    private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
+    private readonly Func<string, OverlayResolvedGlyph> m_resolveModifierSource;
+    private GamepadType m_currentFamily;
     private readonly PlayerRoster m_roster;
     private readonly OverlayBindingSeat[] m_seats;
-    private readonly WorldServer m_server;
-    // The session-honesty sources (loopback-local reads): the live render levers
-    // (their Revision is the live-act watch), the live census, the screen binder's runtime inserts, and the server's
-    // grant table for exclusive-hold readouts.
-    private readonly WorldRenderSettings m_settings;
     private readonly OverlayBindingSlot[][] m_slots;
     private readonly BindingBarStore m_store;
-    private readonly WorldEditorTargeting m_targeting;
-    private readonly WorldWorkbench m_workbench;
-
-    private string m_driftHint = "none";
-    private EditorActClass m_lastActClass;
-    // Whether a mutation note arrived since the last sweep — a drift change it caused must not be re-tagged Live.
-    private bool m_mutationNoted;
-    private int m_sessionGeneration;
-    private int m_sessionSweepCountdown;
-    private int m_settingsRevisionSeen;
-
-    // One seat's cached HUD lines + the fact key they were formatted from (re-formatted only on a key change).
-    private struct HudCache {
-        public (int Targeting, int Drag, int Definition, int Session, int Workbench, bool SnapEnabled, float SnapPitch) Key;
-        public string SelectionLine;
-        public string ContextLine;
-        public string SessionLine;
-        public string DragLine;
-    }
 
     /// <summary>Initializes a new instance of the <see cref="WorldOverlayFeed"/> class.</summary>
     /// <param name="roster">The participant roster (which seats are joined).</param>
     /// <param name="bindings">The per-seat binding resolver (each seat's active page view).</param>
     /// <param name="bindingBar">The per-seat authored binding-bar policy and live visibility resolver.</param>
-    /// <param name="client">The client view (its definition revision keys the HUD re-format).</param>
-    /// <param name="editor">The per-seat editor mode (the sole-editor layout policy + editing liveness).</param>
-    /// <param name="targeting">The editor selection state the HUD narrates.</param>
-    /// <param name="drag">The editor drag channel the HUD narrates.</param>
+    /// <param name="client">The client view.</param>
     /// <param name="router">The input router whose carried held state lights the pressed chips.</param>
     /// <param name="store">The binding-bar store the overlay reads.</param>
-    /// <param name="editorHudStore">The editor-HUD store the overlay reads.</param>
-    /// <param name="settings">The live render levers (their revision drives the live-act tag + drift refresh).</param>
-    /// <param name="population">The live census (a drift dimension).</param>
-    /// <param name="binder">The screen binder (runtime inserts are a drift dimension).</param>
-    /// <param name="server">The server whose grant table answers exclusive-hold readouts (loopback-local).</param>
     /// <param name="gamepads">The gamepad manager for family-resolved badge glyphs, or <see langword="null"/>
     /// (a non-Windows host) — the bar then themes for the unknown family.</param>
-    /// <param name="workbench">The sculpt workbench whose bench facts the HUD narrates while a seat sculpts.</param>
-    /// <param name="audio">The audio director (the master-volume lever — a drift dimension).</param>
-    /// <param name="pacing">The present-pacing control (the world.target lever — a drift dimension).</param>
+    /// <param name="icons">The boot document's resolved icon table (badges and bound-action icons alike).</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
-    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, WorldClient client, WorldEditorSession editor, WorldEditorTargeting targeting, WorldEditorDrag drag, InputRouter router, BindingBarStore store, EditorHudStore editorHudStore, WorldRenderSettings settings, WorldPopulation population, WorldScreenBinder binder, WorldServer server, GamepadManager? gamepads, WorldWorkbench workbench, WorldAudioDirector audio, Puck.Launcher.PresentPacingControl pacing) {
+    public WorldOverlayFeed(PlayerRoster roster, WorldSeatBindings bindings, WorldBindingBarControl bindingBar, WorldClient client, InputRouter router, BindingBarStore store, GamepadManager? gamepads, WorldIconTable icons) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: bindingBar);
-        ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: client);
-        ArgumentNullException.ThrowIfNull(argument: drag);
-        ArgumentNullException.ThrowIfNull(argument: editor);
-        ArgumentNullException.ThrowIfNull(argument: editorHudStore);
-        ArgumentNullException.ThrowIfNull(argument: population);
+        ArgumentNullException.ThrowIfNull(argument: icons);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: router);
-        ArgumentNullException.ThrowIfNull(argument: server);
-        ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: store);
-        ArgumentNullException.ThrowIfNull(argument: targeting);
-        ArgumentNullException.ThrowIfNull(argument: workbench);
-        ArgumentNullException.ThrowIfNull(argument: audio);
-        ArgumentNullException.ThrowIfNull(argument: pacing);
 
-        m_audio = audio;
-        m_pacing = pacing;
-        m_workbench = workbench;
         m_bindings = bindings;
         m_bindingBar = bindingBar;
-        m_binder = binder;
         m_client = client;
-        m_drag = drag;
-        m_editor = editor;
-        m_editorHudStore = editorHudStore;
         m_gamepads = gamepads;
-        m_population = population;
-        m_roster = roster;
-        m_server = server;
-        m_settings = settings;
-        m_settingsRevisionSeen = settings.Revision;
-        m_store = store;
-        m_targeting = targeting;
-        m_exclusiveLabels = new string[PlayerRoster.MaxSlots];
-        m_exclusiveHolders = new WorldPrincipal?[PlayerRoster.MaxSlots];
-        Array.Fill(
-            array: m_exclusiveLabels,
-            value: string.Empty
+        m_icons = icons;
+        m_resolveBadge = button => icons.ResolveBadge(
+            button: button,
+            family: m_currentFamily
         );
-        m_editorSeats = new OverlayEditorSeat[PlayerRoster.MaxSlots];
+        m_resolveIcon = icons.ResolveIcon;
+        m_resolveModifierSource = icons.ResolveModifierSource;
+        m_roster = roster;
+        m_store = store;
         m_hintLines = new string[PlayerRoster.MaxSlots][];
         m_hintViews = new BindingPageView?[PlayerRoster.MaxSlots];
-        m_hudCaches = new HudCache[PlayerRoster.MaxSlots];
         m_seats = new OverlayBindingSeat[PlayerRoster.MaxSlots];
         m_slots = new OverlayBindingSlot[PlayerRoster.MaxSlots][];
         m_modifiers = new OverlayBindingModifier[PlayerRoster.MaxSlots][];
         m_pressedBySlot = new Func<string, bool>[PlayerRoster.MaxSlots];
+        m_barAuthoringSeen = new WorldBindingBarAuthoring?[PlayerRoster.MaxSlots];
+        m_barSlotSet = new GamepadButtons[PlayerRoster.MaxSlots][];
+        m_activeBarView = new BindingPageView?[PlayerRoster.MaxSlots];
+        m_pressedByButton = new Func<GamepadButtons, bool>[PlayerRoster.MaxSlots];
 
         for (var index = 0; (index < PlayerRoster.MaxSlots); index++) {
             var slot = index;
 
-            m_hudCaches[index] = new HudCache {
-                ContextLine = string.Empty,
-                DragLine = string.Empty,
-                Key = (-1, -1, -1, -1, -1, false, 0f),
-                SelectionLine = string.Empty,
-                SessionLine = string.Empty,
-            };
             m_hintLines[index] = [];
-            m_slots[index] = new OverlayBindingSlot[BindingBarSeatComposer.SlotSources.Length];
-            m_modifiers[index] = new OverlayBindingModifier[ModifierCapacity];
+            m_slots[index] = new OverlayBindingSlot[(WorldBindingBarCapacity.MaxBanks * GamepadButtonCatalog.Count)];
+            m_modifiers[index] = new OverlayBindingModifier[WorldBindingBarCapacity.MaxModifiers];
+            m_barSlotSet[index] = [];
             m_pressedBySlot[index] = command => router.IsCommandHeld(
                 command: command,
                 slot: slot
             );
+            m_pressedByButton[index] = button => ((m_activeBarView[slot] is { } activeView) && BindingBarSeatComposer.IsPhysicallyPressed(
+                activeView: activeView,
+                button: button,
+                isCommandHeld: m_pressedBySlot[slot]
+            ));
         }
     }
+    // Re-parses a seat's authored slot-set names only when the resolved WorldBindingBarAuthoring instance changes.
+    // An unknown name never reaches here (the document validator refuses it by name before boot); a defensive parse
+    // failure is simply dropped rather than thrown, since this is a per-frame render path.
+    private ReadOnlySpan<GamepadButtons> ResolveSlotSet(int slot, WorldBindingBarAuthoring authoring) {
+        if (!ReferenceEquals(objA: m_barAuthoringSeen[slot], objB: authoring)) {
+            var names = authoring.SlotSet;
+            var parsed = new GamepadButtons[names.Count];
+            var count = 0;
 
-    // The sculpting seat's target line: the model's live edit target (shape / chain goal / brush).
-    private static string ComposeSculptTargetLine(Puck.Forge.Authoring.SculptModel model) {
-        if (model.TargetIsGoal) {
-            var chain = model.TargetGoalChain!.Value;
+            foreach (var name in names) {
+                if (
+                    Enum.TryParse<GamepadButtons>(
+                    value: name,
+                    ignoreCase: false,
+                    result: out var button
+                ) &&
+                    (button != GamepadButtons.None)
+                ) {
+                    parsed[count++] = button;
+                }
+            }
 
-            return string.Create(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"goal chain {chain.Id} ({chain.Goal.X:0.0}, {chain.Goal.Y:0.0}, {chain.Goal.Z:0.0})"
+            m_barSlotSet[slot] = ((count == parsed.Length)
+                ? parsed
+                : parsed[..count]
             );
+            m_barAuthoringSeen[slot] = authoring;
         }
 
-        if (model.SelectedShape is { } shape) {
-            return string.Create(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"shape {shape.Id} {shape.Type} ({shape.Position.X:0.0}, {shape.Position.Y:0.0}, {shape.Position.Z:0.0})"
-            );
-        }
-
-        return "brush - South adds, D-pad cycles";
+        return m_barSlotSet[slot];
     }
-    // The session-honesty line: the last act's class ("live" applies now and folds at world.save; "doc" applied live
-    // on delivery; "defaults" is next-boot only), the world.status session-drift hint
-    // while drift exists, and the exclusive holder of the selection's section. Empty when nothing needs saying.
-    private string ComposeSessionLine(int slot) {
-        var act = m_lastActClass switch {
-            EditorActClass.Live => "live (save folds)",
-            EditorActClass.Document => "doc",
-            EditorActClass.DocumentDefault => "defaults (next boot)",
-            _ => null,
-        };
-        var drift = (((m_driftHint.Length > 0) && !string.Equals(
-            a: m_driftHint,
-            b: "none",
-            comparisonType: StringComparison.Ordinal
-        ))
-            ? m_driftHint
-            : null
-        );
-        var exclusive = ((m_exclusiveLabels[slot].Length > 0)
-            ? m_exclusiveLabels[slot]
-            : null
-        );
 
-        if (
-            (act is null) &&
-            (drift is null) &&
-            (exclusive is null)
-        ) {
-            return string.Empty;
-        }
-
-        var builder = new System.Text.StringBuilder();
-
-        if (act is not null) {
-            _ = builder.Append(value: "act ").Append(value: act);
-        }
-
-        if (drift is not null) {
-            _ = builder.Append(value: ((builder.Length > 0)
-                ? " | "
-                : string.Empty)).Append(value: "drift ").Append(value: drift);
-        }
-
-        if (exclusive is not null) {
-            _ = builder.Append(value: ((builder.Length > 0)
-                ? " | "
-                : string.Empty)).Append(value: "excl ").Append(value: exclusive);
-        }
-
-        return builder.ToString();
-    }
     // The seat's chord-hint lines, re-formatted only when its published view changes (a page/group flip or a
     // recompose — human cadence, never per frame). One ASCII line per command-chord row of the active group:
     // the chord's modifier labels joined by '+', then the row's label (or its command name).
@@ -329,137 +222,6 @@ internal sealed class WorldOverlayFeed {
 
         return null;
     }
-    // Re-format a seat's HUD lines only when the fact key moved: a drag step or a selection/definition change is a
-    // rebuild-scale event anyway, so the transient string cost rides an already-paid frame.
-    private void RefreshHudCache(int slot, ref HudCache cache) {
-        var snap = m_drag.Snap(slot: slot);
-        var key = (m_targeting.Revision, m_drag.Revision, m_client.DefinitionRevision, m_sessionGeneration, m_workbench.Revision, snap.Enabled, snap.Pitch.X);
-
-        if (cache.Key == key) {
-            return;
-        }
-
-        cache.Key = key;
-
-        // A sculpting seat's HUD narrates the BENCH (its target, budget, timeline, and the two undo domains) —
-        // the world-row selection lines return when the bench closes.
-        if (m_workbench.Model(slot: slot) is { } sculpt) {
-            cache.SelectionLine = ComposeSculptTargetLine(model: sculpt);
-            cache.ContextLine = string.Create(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                // ASCII only — the overlay glyph pack is ASCII-95. The next line narrates the sculpt shape budget.
-                handler: $"'{m_workbench.RowId(slot: slot)}' shapes {sculpt.StampShapeCount}/{sculpt.ShapeCapacity} | frame {sculpt.CurrentFrame}/{sculpt.FrameCount}{(sculpt.Playing
-                ? " play"
-                : string.Empty)} | chains {sculpt.Chains.Count}"
-            );
-            cache.SessionLine = ComposeSessionLine(slot: slot);
-            cache.DragLine = string.Create(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"ring {sculpt.HistoryCount}/{Puck.Forge.Authoring.SculptModel.HistoryCapacity} local | uncommitted {m_workbench.UncommittedEdits(slot: slot)} | world.undo = journal"
-            );
-
-            return;
-        }
-
-        if (m_targeting.Selected(slot: slot) is { } selection) {
-            var position = (m_targeting.SelectionPosition(slot: slot) ?? default);
-
-            cache.SelectionLine = string.Create(
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"sel {selection.Describe()} ({position.X:0.0}, {position.Y:0.0}, {position.Z:0.0})"
-            );
-        } else {
-            cache.SelectionLine = "sel none - RT pick/cycle";
-        }
-
-        cache.ContextLine = string.Create(
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            // ASCII only — the overlay glyph pack is ASCII-95 (a non-ASCII rune renders as the blank cell). "rows" is
-            // the definition's total selectable-row count (revision-keyed, so the cache stays honest); the live
-            // in-radius candidate ring is a camera-relative fact editor.status narrates on demand.
-            handler: $"rows {m_targeting.TargetCount} | snap {(snap.Enabled
-            ? "on"
-            : "off")} {snap.Pitch.X:0.##}"
-        );
-        cache.SessionLine = ComposeSessionLine(slot: slot);
-        cache.DragLine = (m_drag.Describe(slot: slot) ?? string.Empty);
-    }
-    // The human-cadence session-honesty sweep: refreshes the drift hint and per-seat exclusive-hold labels every
-    // SessionSweepFrames published frames WHILE a seat edits (the HUD is hidden otherwise, so an idle session pays
-    // nothing), plus immediately after an explicit trigger (a lever write, a mutation note). DescribeDrift's small
-    // transient allocation rides this divided cadence, never the frame path.
-    private void RefreshSessionFacts() {
-        var anyEditing = false;
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            if (m_editor.IsEditing(slot: slot)) {
-                anyEditing = true;
-
-                break;
-            }
-        }
-
-        if (!anyEditing) {
-            return;
-        }
-
-        if (m_sessionSweepCountdown > 0) {
-            m_sessionSweepCountdown--;
-
-            return;
-        }
-
-        m_sessionSweepCountdown = SessionSweepFrames;
-
-        var drift = WorldSessionCapture.DescribeDrift(
-            definition: m_client.Definition,
-            render: m_settings,
-            population: m_population,
-            binder: m_binder,
-            audio: m_audio,
-            pacing: m_pacing
-        );
-
-        if (!string.Equals(
-            a: drift,
-            b: m_driftHint,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            // Drift moved without a lever write or a mutation note in the window: the remaining producers are the live
-            // census / screen-insert levers (or an undo moving the baseline) — session-class either way.
-            if (
-                !m_mutationNoted &&
-                (m_lastActClass != EditorActClass.Live)
-            ) {
-                m_lastActClass = EditorActClass.Live;
-            }
-
-            m_driftHint = drift;
-            m_sessionGeneration++;
-        }
-
-        m_mutationNoted = false;
-
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            WorldPrincipal? holder = null;
-
-            if (
-                m_editor.IsEditing(slot: slot) &&
-                (m_targeting.Selected(slot: slot) is { } selection)
-            ) {
-                holder = m_server.Grants.ExclusiveHolder(
-                    capability: WorldCapability.Mutate,
-                    subject: GrantSubject.Section(section: selection.Section)
-                );
-            }
-
-            if (m_exclusiveHolders[slot] != holder) {
-                m_exclusiveHolders[slot] = holder;
-                m_exclusiveLabels[slot] = (holder?.Describe() ?? string.Empty);
-                m_sessionGeneration++;
-            }
-        }
-    }
     // The primary player's family drives the glyph theme; the first connected pad stands in until per-player
     // family routing exists.
     private GamepadType ResolveFamily() {
@@ -478,45 +240,16 @@ internal sealed class WorldOverlayFeed {
         );
     }
 
-    /// <summary>Notes an applied edit-boundary outcome (the server's <see cref="WorldServer.EchoTap"/> wiring calls
-    /// this beside the toast publish) so the HUD's act-class tag reflects the last act honestly. Runs on the same
-    /// window-pump thread as <see cref="Tick"/>.</summary>
-    /// <param name="documentOnly">Whether the applied edit was document-defaults class (next boot) rather than live.</param>
-    public void NoteMutationApplied(bool documentOnly) {
-        m_lastActClass = (documentOnly
-            ? EditorActClass.DocumentDefault
-            : EditorActClass.Document
-        );
-        m_mutationNoted = true;
-        m_sessionGeneration++;
-        // A mutation can move the drift baseline (a defaults edit redefines what the levers drift FROM), so the next
-        // published frame refreshes the hint.
-        m_sessionSweepCountdown = 0;
-    }
-    /// <summary>Recomposes and publishes this frame's per-seat binding frame and editor-HUD frame (the overlay's
+    /// <summary>Recomposes and publishes this frame's per-seat binding frame (the overlay's
     /// <c>FeedTick</c>).</summary>
     public void Tick() {
-        // A render-lever write since the last frame is a LIVE session act (world.shadows/.ao/.render-scale/…): tag it
-        // and refresh the drift hint on this frame. Human cadence — the levers are console verbs.
-        if (m_settings.Revision != m_settingsRevisionSeen) {
-            m_settingsRevisionSeen = m_settings.Revision;
-            m_lastActClass = EditorActClass.Live;
-            m_sessionGeneration++;
-            m_sessionSweepCountdown = 0;
-        }
-
-        RefreshSessionFacts();
-
         var joined = m_roster.Count;
         var family = ResolveFamily();
-        var barAlpha = ((joined > 1)
-            ? MultiSeatBarAlpha
-            : 1f
-        );
+
+        m_currentFamily = family;
+
         // The SAME layout resolution the frame source renders with, so each bar lands in its seat's actual rect.
-        var soleEditorViewIndex = m_editor.SoleEditorViewIndex();
         var viewIndex = 0;
-        var editorCount = 0;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (!m_roster.IsJoined(slot: slot)) {
@@ -524,41 +257,124 @@ internal sealed class WorldOverlayFeed {
             }
 
             var view = m_bindings.PageView(slot: slot);
-
-            BindingBarSeatComposer.ComposeSlots(
-                barAlpha: barAlpha,
-                destination: m_slots[viewIndex],
-                family: family,
-                isPressed: m_pressedBySlot[slot],
-                view: view
+            var barStatus = m_bindingBar.Status(slot: slot);
+            var authoring = barStatus.Authoring;
+            // The authored text policy resolves ONCE per seat here and shapes what the feed publishes — the writer
+            // stays dumb: a suppressed badge is OverlayResolvedGlyph.None, a suppressed label is the empty string,
+            // and suppressed hints are an empty span, each already a case the writer draws nothing for.
+            var barText = authoring.Text;
+            var barAlpha = ((joined > 1)
+                ? authoring.MultiSeatAlpha
+                : 1f
             );
+            var slotSet = ResolveSlotSet(
+                authoring: authoring,
+                slot: slot
+            );
+            var banks = authoring.Banks;
+            var destination = m_slots[viewIndex];
+            var writeOffset = 0;
+
+            m_activeBarView[slot] = view;
+
+            if (
+                (slotSet.Length > 0) &&
+                (banks.Count > 0)
+            ) {
+                // A player's own "stacked off" preference still needs SOME bank to show — fall back to the full
+                // stack when no authored bank actually names the seat's current page, rather than drawing nothing.
+                var hasActiveBank = false;
+
+                for (var bankIndex = 0; ((bankIndex < banks.Count) && !hasActiveBank); bankIndex++) {
+                    hasActiveBank = string.Equals(
+                        a: banks[bankIndex].PageId,
+                        b: view.PageId,
+                        comparisonType: StringComparison.Ordinal
+                    );
+                }
+
+                var stacked = (barStatus.Stacked || !hasActiveBank);
+
+                for (var bankIndex = 0; ((bankIndex < banks.Count) && (writeOffset < destination.Length)); bankIndex++) {
+                    var bank = banks[bankIndex];
+                    var isActiveBank = string.Equals(
+                        a: bank.PageId,
+                        b: view.PageId,
+                        comparisonType: StringComparison.Ordinal
+                    );
+
+                    if (
+                        (!stacked && !isActiveBank) ||
+                        !m_bindings.TryPageView(
+                        pageId: bank.PageId,
+                        slot: slot,
+                        view: out var bankView
+                    )
+                    ) {
+                        continue;
+                    }
+
+                    var bankAlpha = (barAlpha * (isActiveBank
+                        ? (bank.ActiveAlpha ?? 1f)
+                        : bank.Alpha
+                    ));
+                    var slotCount = Math.Min(
+                        val1: slotSet.Length,
+                        val2: (destination.Length - writeOffset)
+                    );
+
+                    BindingBarSeatComposer.ComposeBank(
+                        bankAlpha: bankAlpha,
+                        bankOffset: new System.Numerics.Vector2(bank.OffsetX, bank.OffsetY),
+                        destination: destination.AsSpan(
+                            start: writeOffset,
+                            length: slotCount
+                        ),
+                        hideUnbound: barStatus.EffectiveHideUnbound,
+                        isPressed: m_pressedByButton[slot],
+                        resolveBadge: m_resolveBadge,
+                        resolveIcon: m_resolveIcon,
+                        slotSet: slotSet[..slotCount],
+                        text: barText,
+                        view: bankView
+                    );
+
+                    writeOffset += slotCount;
+                }
+            }
 
             var modifierCount = BindingBarSeatComposer.ComposeModifiers(
                 destination: m_modifiers[viewIndex],
+                resolveModifierSource: m_resolveModifierSource,
+                text: barText,
                 view: view
             );
             var viewport = WorldFrameSource.LayoutRegion(
                 count: joined,
-                index: viewIndex,
-                soleEditorIndex: soleEditorViewIndex,
-                workbenchFraction: m_client.Definition.Authoring.WorkbenchFraction
+                index: viewIndex
             );
-            var barStatus = m_bindingBar.Status(slot: slot);
-            var authoredLayout = barStatus.Authoring.ResolvedLayout;
+            var authoredLayout = authoring.ResolvedLayout;
 
             m_seats[viewIndex] = new OverlayBindingSeat(
                 Group: view.Group,
-                Hints: HintLinesFor(
-                    slot: slot,
-                    view: view
-                ),
-                Label: (view.Label ?? view.PageId),
+                Hints: (barText
+                    ? HintLinesFor(
+                        slot: slot,
+                        view: view
+                    )
+                    : ReadOnlyMemory<string>.Empty),
+                Label: (barText
+                    ? (view.Label ?? view.PageId)
+                    : string.Empty),
                 Modifiers: m_modifiers[viewIndex].AsMemory(
                     length: modifierCount,
                     start: 0
                 ),
                 PageId: view.PageId,
-                Slots: m_slots[viewIndex],
+                Slots: destination.AsMemory(
+                    length: writeOffset,
+                    start: 0
+                ),
                 Viewport: viewport,
                 Layout: new BindingBarLayoutOptions(
                     ButtonSize: authoredLayout.ButtonSize,
@@ -566,27 +382,10 @@ internal sealed class WorldOverlayFeed {
                     AnchorOffsetY: authoredLayout.AnchorOffsetY,
                     GlyphOffsetRatio: authoredLayout.GlyphOffsetRatio,
                     GlyphSizeRatio: authoredLayout.GlyphSizeRatio,
-                    Scale: authoredLayout.Scale
+                    Scale: barStatus.EffectiveScale
                 ),
                 Visible: !barStatus.Hidden
             );
-
-            if (m_editor.IsEditing(slot: slot)) {
-                ref var cache = ref m_hudCaches[slot];
-
-                RefreshHudCache(
-                    cache: ref cache,
-                    slot: slot
-                );
-                m_editorSeats[editorCount++] = new OverlayEditorSeat(
-                    Viewport: viewport,
-                    SelectionLine: cache.SelectionLine,
-                    ContextLine: cache.ContextLine,
-                    SessionLine: cache.SessionLine,
-                    DragLine: cache.DragLine,
-                    DragActive: m_drag.IsDragging(slot: slot)
-                );
-            }
 
             viewIndex++;
         }
@@ -598,9 +397,5 @@ internal sealed class WorldOverlayFeed {
                 start: 0
             )
         ));
-        m_editorHudStore.Publish(frame: new OverlayEditorHudFrame(Seats: m_editorSeats.AsMemory(
-            length: editorCount,
-            start: 0
-        )));
     }
 }

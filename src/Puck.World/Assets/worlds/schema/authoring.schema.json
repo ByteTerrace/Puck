@@ -28,10 +28,6 @@
       "description": "Live-consumed. The candidate-count cap: at most this many nearest in-radius rows enter the cycle ring.",
       "type": "integer"
     },
-    "workbenchFraction": {
-      "description": "Live-consumed. The full-height fraction a sole editing seat\u0027s viewport takes when 2\u002B seats are joined (the remaining width splits as a live rail among the playing seats) \u2014 read fresh each captured frame by Client.WorldFrameSource.LayoutRegion(int, int, int, float).",
-      "type": "number"
-    },
     "previewDeadlineFrames": {
       "description": "Live-consumed. The drag preview channel\u0027s missing-response fallback: a released overlay with no definition delivery after this many produced frames drops honestly.",
       "type": "integer"
@@ -48,7 +44,6 @@
     "maxPlacementScale",
     "candidateRadius",
     "candidateCap",
-    "workbenchFraction",
     "previewDeadlineFrames",
     "derivedFaceScreens"
   ],

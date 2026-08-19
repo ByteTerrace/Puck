@@ -59,43 +59,34 @@ public enum WorldSeatYawReference : byte {
     World,
     Body,
 }
-/// <param name="SeatRig">The chase framing every seat's view resolves through (the non-editing default).</param>
+/// <param name="SeatRig">The chase framing every seat's view resolves through by default.</param>
 /// <param name="SeatControl">The structural constraints/reference for live seat camera input.</param>
 /// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
-public sealed record WorldViewDefaults(WorldCameraRig SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts) {
-    /// <summary>The engine's default vertical field of view (55 degrees), mirroring
-    /// <c>Puck.SdfVm.Views.OrbitRig.DefaultFieldOfViewRadians</c> — every concrete <c>ISdfCameraRig</c> shares this one
-    /// value, so it is pinned here rather than read from Puck.SdfVm, which Puck.World.Schema must not reference.</summary>
-    private const float EngineDefaultFieldOfViewRadians = (55f * (float.Pi / 180f));
-
+/// <param name="FlyRig">The free-camera rig a seat's control application swaps to while flying (see
+/// <see cref="WorldSeatModeState.Target"/>) — <see langword="null"/> for a world that authors no camera-targeting
+/// mode state. Its <c>motion</c> must be <see cref="WorldCameraMotion.Fly"/> when present.</param>
+public sealed record WorldViewDefaults(WorldCameraRig SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraRig? FlyRig = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
-    /// <summary>Gets the built-in defaults: the engine chase framing every seat wakes on — the same orbit numbers and
-    /// rig-level smoothing `play`/`jump` author, and NO authored layouts (an empty list means the built-in seat ladder
-    /// composes the window). Control feel is NOT here: it is per-seat, on
-    /// <see cref="WorldPlayerDefaults.SeatLook"/>.</summary>
-    public static WorldViewDefaults Default { get; } = new(
+    /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — a rig with no motion, no
+    /// framing and no lens, holding the property non-null between parse and validation. The engine carries no camera
+    /// policy of its own: the standard chase framing is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a
+    /// world inherits it by naming that document as its basis. A document whose census implies a body is refused for
+    /// authoring no <c>views</c> (<c>WorldDefinitionValidator</c>), so nothing ever composes a seat view from this.
+    /// Control feel is not here either: it is per-seat, on <see cref="WorldPlayerDefaults.SeatLook"/>.</summary>
+    public static WorldViewDefaults Absent { get; } = new(
         SeatRig: new WorldCameraRig(
-            Motion: new WorldCameraMotion.Orbit(
-                Distance: 5.4626001f,
-                Yaw: 0f,
-                Pitch: 0.4145069f,
-                PivotOffset: Vector3.Zero
-            ),
-            Aim: new WorldCameraAim.Anchor(
-                Offset: new(
-                    x: 0f,
-                    y: 1f,
-                    z: 0f
-                ),
+            Motion: new WorldCameraMotion.Static(
+                Position: Vector3.Zero,
                 WorldAxes: false
             ),
-            Lens: new WorldCameraLens(FieldOfViewRadians: EngineDefaultFieldOfViewRadians),
-            SmoothRate: 6f
+            Aim: new WorldCameraAim.Forward(FocusDistance: 0f),
+            Lens: new WorldCameraLens(FieldOfViewRadians: 0f)
         ),
         SeatControl: new WorldSeatViewControl(
-            MaxPitch: 1.2f,
-            MinPitch: -0.35f,
+            MaxPitch: 0f,
+            MinPitch: 0f,
             YawReference: WorldSeatYawReference.World
         ),
         Layouts: []

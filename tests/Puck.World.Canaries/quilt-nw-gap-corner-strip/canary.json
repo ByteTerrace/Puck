@@ -26,11 +26,11 @@
       { "type": "response", "name": "the corner pocket carries no local geometry", "stream": "stdout", "verb": "world.collision.probe", "occurrence": 1, "count": 1, "extract": [{ "name": "cornerDistance", "field": "distance" }] },
       { "type": "relation", "name": "the pocket is off the local field's surface", "left": { "value": "cornerDistance" }, "operator": "atLeast", "minimum": 1.0 },
       { "type": "response", "name": "the resting body has a settled height", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 2, "extract": [{ "name": "restY", "field": "pos", "component": 1 }] },
-      { "type": "relation", "name": "the body rests on the delivered floor, not thin air", "left": { "value": "restY" }, "operator": "betweenInclusive", "minimum": 0.049, "maximum": 0.051 },
+      { "type": "relation", "name": "the body rests on the delivered floor, not thin air", "left": { "value": "restY" }, "operator": "betweenInclusive", "minimum": 0.119, "maximum": 0.121 },
       { "type": "response", "name": "contacts reads the corner body", "stream": "stdout", "verb": "world.contacts", "occurrence": 1, "count": 2, "extract": [{ "name": "grounded", "field": "grounded" }] },
       { "type": "relation", "name": "the corner body is grounded", "left": { "value": "grounded" }, "operator": "equal", "right": { "literal": "true" } },
       { "type": "response", "name": "the resting body's height is still settled 600 ticks later", "stream": "stdout", "verb": "player.where", "occurrence": 2, "count": 2, "extract": [{ "name": "laterRestY", "field": "pos", "component": 1 }] },
-      { "type": "relation", "name": "the body still rests on the delivered floor after standing", "left": { "value": "laterRestY" }, "operator": "betweenInclusive", "minimum": 0.049, "maximum": 0.051 },
+      { "type": "relation", "name": "the body still rests on the delivered floor after standing", "left": { "value": "laterRestY" }, "operator": "betweenInclusive", "minimum": 0.119, "maximum": 0.121 },
       { "type": "response", "name": "contacts still reads the corner body grounded 600 ticks later", "stream": "stdout", "verb": "world.contacts", "occurrence": 2, "count": 2, "extract": [{ "name": "laterGrounded", "field": "grounded" }] },
       { "type": "relation", "name": "the corner body is still grounded after standing", "left": { "value": "laterGrounded" }, "operator": "equal", "right": { "literal": "true" } },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }

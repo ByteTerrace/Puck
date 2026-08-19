@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>The generic Shader VM: a backend-neutral packed program model over four-lane values.</Description>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <!--
+        The VM knows nothing about skyboxes, suns, stars, clouds, signed-distance fields, or any other authored
+        effect. It evaluates four-lane values from generic execution inputs, parameters, constants, arithmetic,
+        interpolation, control flow, and deterministic field operations; a vocabulary built on those (Programs/,
+        ShaderSdf) composes them into something an author recognizes. Nothing consumes this project yet — it does
+        not participate in the world render path, which remains Puck.SdfVm's.
+    -->
+    <ItemGroup>
+        <!-- PngEncoder, for host renders of a compiled program. -->
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The GPU half of the interpreter. No kernel includes it yet, so there is nothing here to compile. -->
+        <ShaderInclude Include="Assets\Shaders\**\*.hlsli" />
+    </ItemGroup>
+</Project>

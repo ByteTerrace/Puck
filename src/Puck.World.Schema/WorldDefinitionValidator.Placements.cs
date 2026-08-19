@@ -196,14 +196,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        if (
-            !float.IsFinite(f: authoring.WorkbenchFraction) ||
-            (authoring.WorkbenchFraction <= 0f) ||
-            (authoring.WorkbenchFraction >= 1f)
-        ) {
-            errors.Add(item: $"authoring.workbenchFraction {authoring.WorkbenchFraction} must be finite and strictly between 0 and 1.");
-        }
-
         RequireIntRange(
             value: authoring.PreviewDeadlineFrames,
             min: 1,
@@ -286,7 +278,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 for (var index = 0; (index < shapes.Count); index++) {
-                    if (shapes[index].Type == AvatarPrimitive.Plane) {
+                    if (shapes[index].Type == SdfSolidPrimitive.Plane) {
                         errors.Add(item: $"{path} creation '{fromCreation.CreationId}' shape {index} is an unbounded plane, not a finite body volume.");
                     }
                 }
@@ -930,10 +922,30 @@ public static partial class WorldDefinitionValidator {
                         mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                         ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L)
                     );
+                    // A shape carrying domain ops compiles one collider PER EXPANDED COPY, so the ceiling counts the
+                    // expansion, not the authored shape count. A fold with no rigid-copy expansion has no analytic
+                    // contact geometry at all — refuse it here rather than let the row collide against one copy of
+                    // geometry the renderer draws several times.
+                    var shapeColliders = 0L;
+
+                    foreach (var solidShape in (solidCreation.Document.Shapes ?? [])) {
+                        if (!ShapeDomainOps.TryExpand(
+                            domain: solidShape.Domain,
+                            frames: out var solidFrames,
+                            refusal: out var solidRefusal
+                        )) {
+                            errors.Add(item: $"{path}.solid names creation '{placement.CreationId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
+
+                            continue;
+                        }
+
+                        shapeColliders += solidFrames.Length;
+                    }
+
                     var contribution = CreationStampLattice.MultiplySaturated(
+                        ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
                         left: copies,
-                        right: (solidCreation.Document.Shapes?.Count ?? 0),
-                        ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L)
+                        right: shapeColliders
                     );
                     var previousColliderCount = solidPlacementColliderCount;
 

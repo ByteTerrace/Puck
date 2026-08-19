@@ -24,10 +24,10 @@ public static class CreationFrame {
     // reduces, term by term, to a component permutation with sign flips (result = (q.Z, q.W, -q.X, -q.Y)) — every
     // step is a copy or a negation, never a lossy multiply-accumulate.
     private static readonly Quaternion Yaw180 = new(
+        w: 0f,
         x: 0f,
         y: 1f,
-        z: 0f,
-        w: 0f
+        z: 0f
     );
 
     private static List<T>? ConvertList<T>(IReadOnlyList<T>? source, Func<T, T> convert) {
@@ -100,6 +100,7 @@ public static class CreationFrame {
     /// <param name="document">The author-frame document.</param>
     /// <returns>The equivalent engine-frame document.</returns>
     public static CreationDocument ToEngine(CreationDocument document) => Apply(document: document);
+
     // Every ShapeDomainOp field other than a Symmetry normal is either a scalar (an offset, a spacing/limit/cell
     // magnitude, a material stride) or an axis/plane-selecting enum — both invariant under Yaw180, a diag(-1,1,-1)
     // proper rotation: it negates two axes without swapping which axis is which, so "the X axis"/"the XZ plane"
@@ -110,6 +111,7 @@ public static class CreationFrame {
         ? (symmetry with { Normal = Flip(value: symmetry.Normal) })
         : op
     );
+
     /// <summary>Converts an engine-frame document back to the author frame — the echo/save boundary. The identical
     /// transform to <see cref="ToEngine"/>: a 180° yaw is its own inverse.</summary>
     /// <param name="document">The engine-frame document.</param>

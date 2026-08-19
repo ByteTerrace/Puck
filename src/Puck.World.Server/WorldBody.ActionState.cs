@@ -302,7 +302,7 @@ public sealed partial class WorldBody {
 
         result = ClampRole(
             intent: result,
-            role: ChannelRole.MoveForward
+            role: ChannelRole.MoveAdvance
         );
         result = ClampRole(
             intent: result,

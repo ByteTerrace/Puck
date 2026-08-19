@@ -548,6 +548,14 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     /// when the profile declares no such group.</summary>
     /// <param name="group">The group name to look up.</param>
     public string? RestingPageIdOf(string group) => m_profile.RestingPageIdOf(group: group);
+    /// <summary>Attempts to resolve a page's view by id in the currently-loaded compiled profile, independent of
+    /// which page is currently active.</summary>
+    /// <param name="pageId">The page id to look up.</param>
+    /// <param name="view">The page's view, when found.</param>
+    public bool TryGetPageView(string pageId, out BindingPageView view) => m_profile.TryGetPageView(
+        pageId: pageId,
+        view: out view
+    );
     /// <summary>Sets a slot's active group — the runtime mode flip. A pointer-level switch on the compiled
     /// profile: the active page re-resolves in the new group against the same held modifiers, while the press
     /// latches, the chord tracker, and any armed command chords survive untouched (see remarks). The request is

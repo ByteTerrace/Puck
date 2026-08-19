@@ -55,16 +55,19 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
     }
     private string DescribeHud() {
         var section = server.Definition.Hud;
-        // The cursor policy echoes RESOLVED (authored row, or the built-in default an unauthored row falls back
-        // to) so this read-back and what the drawn cursor actually uses can never disagree.
-        var cursor = (section.Defaults.Cursor ?? WorldHudCursor.Default);
+        // The cursor policy echoes what the drawn cursor actually uses: the authored row, or 'hidden' for an
+        // unauthored one (the engine draws no cursor of its own), so this read-back and the cursor cannot disagree.
+        var cursorText = ((section.Defaults.Cursor is { } cursor)
+            ? string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"cursorHoverRadius={cursor.HoverRadius:0.##} cursorSizePx={cursor.SizePx:0.##} cursorRole={cursor.Role.ToString().ToLowerInvariant()}"
+            )
+            : "cursor=hidden"
+        );
         var lines = new List<string>(capacity: (1 + section.Panels.Count)) {
-            string.Create(
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"[world.hud: enabled {(section.Defaults.Enabled
+            $"[world.hud: enabled {(section.Defaults.Enabled
             ? "true"
-            : "false")} cursorHoverRadius={cursor.HoverRadius:0.##} cursorSizePx={cursor.SizePx:0.##} cursorRole={cursor.Role.ToString().ToLowerInvariant()} panels {section.Panels.Count}/{WorldHudCapacity.MaxWorldPanels}]"
-        ),
+            : "false")} {cursorText} panels {section.Panels.Count}/{WorldHudCapacity.MaxWorldPanels}]",
         };
 
         foreach (var panel in section.Panels) {

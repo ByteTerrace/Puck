@@ -1,5 +1,377 @@
 {
   "basis": "standard.world.json",
+  "bindingOverlays": [
+    {
+      "bindingBar": {
+        "banks": [
+          {
+            "alpha": 1,
+            "id": "resting",
+            "offsetX": 0,
+            "offsetY": 0,
+            "pageId": "base"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.65,
+            "id": "lt",
+            "offsetX": -0.24,
+            "offsetY": -0.18,
+            "pageId": "bbLt"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.65,
+            "id": "rt",
+            "offsetX": 0.24,
+            "offsetY": -0.18,
+            "pageId": "bbRt"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.65,
+            "id": "ltrt",
+            "offsetX": -0.12,
+            "offsetY": -0.34,
+            "pageId": "bbLtRt"
+          },
+          {
+            "activeAlpha": 1,
+            "alpha": 0.65,
+            "id": "rtlt",
+            "offsetX": 0.12,
+            "offsetY": -0.34,
+            "pageId": "bbRtLt"
+          }
+        ],
+        "hideUnbound": false,
+        "text": true,
+        "visible": null,
+        "slotSet": [
+          "DpadUp",
+          "DpadRight",
+          "DpadDown",
+          "DpadLeft",
+          "LeftShoulder",
+          "LeftStickPress",
+          "ButtonNorth",
+          "ButtonWest",
+          "ButtonSouth",
+          "ButtonEast",
+          "RightShoulder",
+          "RightStickPress",
+          "Back",
+          "Guide",
+          "Start",
+          "Touchpad",
+          "Mute",
+          "LeftGrip",
+          "RightGrip",
+          "LeftUpperGrip",
+          "RightUpperGrip",
+          "QuickAccess",
+          "TouchpadLeft"
+        ]
+      },
+      "document": {
+        "wheels": [
+          {
+            "id": "defaultActionWheel",
+            "rings": [
+              {
+                "entries": [
+                  {
+                    "command": "view.override",
+                    "icon": "action.target",
+                    "label": "View Chase",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "view.override",
+                    "icon": "edit.place",
+                    "label": "View RTS",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        1,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "console",
+                    "icon": "edit.op",
+                    "label": "Console",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.channels",
+                    "icon": "edit.link",
+                    "label": "Channels",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.where",
+                    "icon": "action.target",
+                    "label": "Where",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.disengage",
+                    "icon": "edit.exit",
+                    "label": "Disengage",
+                    "sources": null
+                  }
+                ],
+                "id": "ring0"
+              }
+            ]
+          }
+        ]
+      },
+      "id": "null-play"
+    },
+    {
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "rts",
+            "page": {
+              "id": "rtsResting",
+              "entries": []
+            }
+          },
+          {
+            "chord": [
+              "actionWheel"
+            ],
+            "group": "rts",
+            "page": {
+              "id": "rtsWheel",
+              "entries": [
+                {
+                  "command": "player.wheel.select",
+                  "sources": [
+                    "gamepad.rightStick",
+                    "mouse.motion"
+                  ]
+                },
+                {
+                  "activateOn": "Completed",
+                  "command": "player.wheel.commit",
+                  "sources": [
+                    "gamepad.leftShoulder",
+                    "keyboard.tab"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "contexts": [
+          {
+            "family": "layout",
+            "state": "rts",
+            "group": "rts"
+          }
+        ],
+        "modifiers": [],
+        "version": "puck.bindings.v1",
+        "wheels": [
+          {
+            "group": "rts",
+            "holdPages": [
+              "rtsWheel"
+            ],
+            "id": "rtsActionWheel",
+            "rings": [
+              {
+                "entries": [
+                  {
+                    "command": "view.override",
+                    "icon": "action.target",
+                    "label": "View Chase",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "view.override",
+                    "icon": "edit.place",
+                    "label": "View RTS",
+                    "sources": null,
+                    "value": {
+                      "kind": "Axis1D",
+                      "raw": [
+                        1,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "command": "console",
+                    "icon": "edit.op",
+                    "label": "Console",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.channels",
+                    "icon": "edit.link",
+                    "label": "Channels",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.where",
+                    "icon": "action.target",
+                    "label": "Where",
+                    "sources": null
+                  },
+                  {
+                    "command": "player.disengage",
+                    "icon": "edit.exit",
+                    "label": "Disengage",
+                    "sources": null
+                  }
+                ],
+                "id": "rtsWheelRing0",
+                "label": "Ring0"
+              }
+            ],
+            "style": {
+              "axisDeadZone": 0.08,
+              "placement": "ViewportCenter",
+              "selectionGraceSeconds": 0.13,
+              "switchFraction": 0.4
+            }
+          }
+        ]
+      },
+      "id": "null-rts"
+    },
+    {
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "bindingBarShowcase",
+            "page": {
+              "id": "bbResting",
+              "entries": []
+            }
+          },
+          {
+            "chord": [],
+            "group": "bindingBarShowcase",
+            "held": [
+              "look"
+            ],
+            "page": {
+              "id": "bbLt",
+              "entries": []
+            }
+          },
+          {
+            "chord": [
+              "actionWheel"
+            ],
+            "group": "bindingBarShowcase",
+            "page": {
+              "id": "bbRt",
+              "entries": []
+            }
+          },
+          {
+            "chord": [
+              "look",
+              "actionWheel"
+            ],
+            "group": "bindingBarShowcase",
+            "page": {
+              "id": "bbLtRt",
+              "entries": []
+            }
+          },
+          {
+            "chord": [
+              "actionWheel",
+              "look"
+            ],
+            "group": "bindingBarShowcase",
+            "page": {
+              "id": "bbRtLt",
+              "entries": []
+            }
+          }
+        ],
+        "modifiers": [],
+        "version": "puck.bindings.v1"
+      },
+      "id": "null-binding-bar-showcase"
+    }
+  ],
+  "cameras": [
+    {
+      "name": "rts",
+      "anchor": null,
+      "rig": {
+        "aim": {
+          "$type": "worldPoint",
+          "target": [
+            0,
+            0,
+            0
+          ]
+        },
+        "lens": {
+          "fieldOfViewRadians": 0.6
+        },
+        "motion": {
+          "$type": "static",
+          "position": [
+            0,
+            45,
+            18
+          ],
+          "worldAxes": true
+        },
+        "smoothRate": 0
+      },
+      "renderWidth": 1280,
+      "renderHeight": 720
+    }
+  ],
+  "collision": {
+    "requirements": [
+      "SmoothUnionContact",
+      "GradientDerivedUp"
+    ],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "gradientProbe": 0.0
+  },
   "creations": [
     {
       "document": {
@@ -209,6 +581,232 @@
     },
     {
       "document": {
+        "name": "pillar",
+        "palette": [
+          {
+            "color": "state.colors.pillarStone"
+          },
+          {
+            "color": "state.colors.pillarTrim"
+          },
+          {
+            "color": "state.colors.pillarLamp",
+            "emissive": 0.9
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "$type": "symmetry",
+                "normal": [
+                  0,
+                  0,
+                  1
+                ]
+              }
+            ],
+            "id": 0,
+            "material": 1,
+            "name": "plinth",
+            "position": [
+              6,
+              0.3,
+              6
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.8,
+              0.3,
+              0.8
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "$type": "symmetry",
+                "normal": [
+                  0,
+                  0,
+                  1
+                ]
+              }
+            ],
+            "id": 1,
+            "material": 0,
+            "name": "shaft",
+            "position": [
+              6,
+              3.3,
+              6
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.45,
+              2.9,
+              0.45
+            ],
+            "smooth": 0.25,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "$type": "symmetry",
+                "normal": [
+                  0,
+                  0,
+                  1
+                ]
+              }
+            ],
+            "id": 2,
+            "material": 1,
+            "name": "capital",
+            "position": [
+              6,
+              6.35,
+              6
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.8,
+              0.3,
+              0.8
+            ],
+            "smooth": 0.25,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              {
+                "$type": "symmetry",
+                "normal": [
+                  0,
+                  0,
+                  1
+                ]
+              }
+            ],
+            "id": 3,
+            "material": 2,
+            "name": "lamp",
+            "position": [
+              6,
+              7.0,
+              6
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.45,
+              0.45,
+              0.45
+            ],
+            "smooth": 0.1,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "pillar"
+    },
+    {
+      "document": {
+        "name": "planetoid",
+        "palette": [
+          {
+            "color": "state.colors.planetoidCrust"
+          },
+          {
+            "color": "state.colors.planetoidRock"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "core",
+            "position": "state.spatial.zerosVector",
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              1.5,
+              1.5,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "polar",
+                "count": 6
+              }
+            ],
+            "id": 1,
+            "material": 1,
+            "name": "outcrop",
+            "position": [
+              1.32,
+              0,
+              0
+            ],
+            "rotation": "state.spatial.identityQuaternion",
+            "scale": [
+              0.3,
+              0.3,
+              0.3
+            ],
+            "smooth": 0.3,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "planetoid"
+    },
+    {
+      "document": {
         "name": "state.identifiers.pip",
         "palette": [
           {
@@ -329,6 +927,38 @@
     }
   ],
   "documentId": "null",
+  "gravity": {
+    "attractors": [
+      {
+        "placementId": "planetoidNE",
+        "mass": 10.0
+      },
+      {
+        "placementId": "planetoidNW",
+        "mass": 10.0
+      },
+      {
+        "placementId": "planetoidSE",
+        "mass": 10.0
+      },
+      {
+        "placementId": "planetoidSW",
+        "mass": 10.0
+      },
+      {
+        "placementId": "planetoidHub",
+        "mass": 26.0
+      }
+    ],
+    "gravitationalConstant": 45.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
   "hud": {
     "defaults": {
       "cursor": {
@@ -339,6 +969,41 @@
       "enabled": true
     },
     "panels": []
+  },
+  "icons": {
+    "badges": [
+      { "button": "DpadUp", "icon": "dpad.up" },
+      { "button": "DpadRight", "icon": "dpad.right" },
+      { "button": "DpadDown", "icon": "dpad.down" },
+      { "button": "DpadLeft", "icon": "dpad.left" },
+      { "button": "ButtonNorth", "icon": "face.north" },
+      { "button": "ButtonEast", "icon": "face.east" },
+      { "button": "ButtonSouth", "icon": "face.south" },
+      { "button": "ButtonWest", "icon": "face.west" },
+      { "button": "LeftShoulder", "icon": "bumper.left" },
+      { "button": "RightShoulder", "icon": "bumper.right" },
+      { "button": "LeftTrigger", "icon": "trigger.left" },
+      { "button": "RightTrigger", "icon": "trigger.right" },
+      { "button": "LeftStickPress", "icon": "stick.left" },
+      { "button": "RightStickPress", "icon": "stick.right" },
+      { "button": "Back", "icon": "menu.back" },
+      { "button": "Start", "icon": "menu.start" },
+      { "button": "Guide", "icon": "menu.guide" },
+      { "button": "Touchpad", "icon": "menu.touchpad" },
+      { "button": "Mute", "icon": "menu.mute" },
+      { "button": "LeftGrip", "icon": "grip.left" },
+      { "button": "RightGrip", "icon": "grip.right" },
+      { "button": "LeftUpperGrip", "icon": "grip.leftUpper" },
+      { "button": "RightUpperGrip", "icon": "grip.rightUpper" },
+      {
+        "button": "QuickAccess",
+        "icon": "menu.quickAccess",
+        "overrides": [
+          { "family": "SteamControllerTriton", "icon": "action.target" }
+        ]
+      },
+      { "button": "TouchpadLeft", "icon": "touchpad.left" }
+    ]
   },
   "lookAssignment": {
     "rows": [
@@ -408,6 +1073,90 @@
         0
       ],
       "scale": 1,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "pillar",
+      "id": "cornerPillars",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "scale": 1,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "planetoid",
+      "id": "planetoidNE",
+      "position": [
+        6,
+        17,
+        6
+      ],
+      "scale": 1.0,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "planetoid",
+      "id": "planetoidNW",
+      "position": [
+        -6,
+        17,
+        6
+      ],
+      "scale": 1.0,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "planetoid",
+      "id": "planetoidSE",
+      "position": [
+        6,
+        17,
+        -6
+      ],
+      "scale": 1.0,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "planetoid",
+      "id": "planetoidSW",
+      "position": [
+        -6,
+        17,
+        -6
+      ],
+      "scale": 1.0,
+      "solid": {
+        "margin": 0
+      },
+      "yawDegrees": 0
+    },
+    {
+      "creationId": "planetoid",
+      "id": "planetoidHub",
+      "position": [
+        0,
+        24,
+        0
+      ],
+      "scale": 1.8,
       "solid": {
         "margin": 0
       },
@@ -872,6 +1621,26 @@
           {
             "key": "duskZenith",
             "value": "#1B2350"
+          },
+          {
+            "key": "pillarStone",
+            "value": "#D8D2C4"
+          },
+          {
+            "key": "pillarTrim",
+            "value": "#5A5347"
+          },
+          {
+            "key": "pillarLamp",
+            "value": "#FFE7B0"
+          },
+          {
+            "key": "planetoidCrust",
+            "value": "#8C7B6B"
+          },
+          {
+            "key": "planetoidRock",
+            "value": "#5E5348"
           }
         ],
         "kind": "text",
@@ -893,38 +1662,25 @@
     ]
   },
   "views": {
-    "layouts": [],
+    "layouts": [
+      {
+        "name": "rts",
+        "seatCount": 5,
+        "slots": [
+          {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "camera": "rts"
+          }
+        ],
+        "transitionSeconds": 0.4,
+        "transitionRenderScale": 0.5
+      }
+    ],
     "seatControl": {
-      "maxPitch": 1.2,
-      "minPitch": -0.35,
-      "swapRate": 0,
-      "yawReference": "World"
-    },
-    "seatRig": {
-      "aim": {
-        "$type": "anchor",
-        "offset": [
-          0,
-          1,
-          0
-        ],
-        "worldAxes": false
-      },
-      "lens": {
-        "fieldOfViewRadians": 0.9599311
-      },
-      "motion": {
-        "$type": "orbit",
-        "distance": 5.4626001,
-        "pitch": 0.4145069,
-        "pivotOffset": [
-          0,
-          0,
-          0
-        ],
-        "yaw": 0
-      },
-      "smoothRate": 6
+      "swapRate": 0
     }
   }
 }

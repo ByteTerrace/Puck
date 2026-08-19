@@ -25,7 +25,7 @@ public sealed class CreationAuthorFrameLawTests {
         var sphere = new ShapeDocument(
             Id: 0,
             Name: "core",
-            Type: AvatarPrimitive.Sphere,
+            Type: SdfSolidPrimitive.Sphere,
             Position: new Vector3(x: 0f, y: 1f, z: 5f),
             Rotation: Quaternion.Identity,
             Scale: Vector3.One,
@@ -79,7 +79,7 @@ public sealed class CreationAuthorFrameLawTests {
         var capsule = new ShapeDocument(
             Id: 0,
             Name: "cap",
-            Type: AvatarPrimitive.Capsule,
+            Type: SdfSolidPrimitive.Capsule,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: new Vector3(x: 0.5f, y: 1f, z: 0.5f),
@@ -126,7 +126,7 @@ public sealed class CreationAuthorFrameLawTests {
         var sphere = new ShapeDocument(
             Id: 0,
             Name: "eye",
-            Type: AvatarPrimitive.Sphere,
+            Type: SdfSolidPrimitive.Sphere,
             Position: new Vector3(x: 0.3f, y: 1f, z: 0f),
             Rotation: Quaternion.Identity,
             Scale: new Vector3(value: radius),
@@ -189,7 +189,7 @@ public sealed class CreationAuthorFrameLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: "plain",
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: Vector3.One,

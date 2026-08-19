@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>The seat-owned camera read-back. Camera yaw and pitch participate in camera-relative simulation input,
 /// so their observability belongs to the authoritative client/seat core and is available in every executable shape,
 /// including a headless federation canary.</summary>
-internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatFlyRig flyRig) : ICommandModule {
     private string Describe(int slot) {
         const float RadiansToDegrees = (180f / MathF.PI);
         var definition = instances.ResolveRoutedDefinition(slot: slot);
@@ -46,6 +46,15 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             provider: CultureInfo.InvariantCulture,
             handler: $" yaw={((state?.Yaw ?? 0f) * RadiansToDegrees):0.##} pitch={((state?.Pitch ?? 0f) * RadiansToDegrees):0.##} freeLook={(seat?.FreeLooking ?? false).ToString().ToLowerInvariant()} motionControls={(seat?.MotionControlsActive ?? false).ToString().ToLowerInvariant()} angularVelocity=({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})"
         );
+
+        if (flyRig.IsFlying(slot: slot)) {
+            var flyEye = flyRig.Eye(slot: slot);
+
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" flying=true flyEye=({flyEye.X:0.###},{flyEye.Y:0.###},{flyEye.Z:0.###})"
+            );
+        }
 
         return builder.Append(value: ']').ToString();
     }

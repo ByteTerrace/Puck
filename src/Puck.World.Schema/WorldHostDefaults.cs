@@ -48,7 +48,7 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// journaled but the running session's floor cannot retroactively grow — it applies at the next boot (the validator
 /// still gates the new value against engine caps immediately, so a bad authored value never reaches a boot).</description></item>
 /// <item><description><b>Live-consumed</b> (<see cref="MinPlacementScale"/>, <see cref="MaxPlacementScale"/>,
-/// <see cref="CandidateRadius"/>, <see cref="CandidateCap"/>, <see cref="WorkbenchFraction"/>,
+/// <see cref="CandidateRadius"/>, <see cref="CandidateCap"/>,
 /// <see cref="PreviewDeadlineFrames"/>): read fresh from the delivered definition at each use site (a candidate
 /// gather, a layout resolve, a drag-freeze tick) — a mutation takes effect at the very next tick/frame, no restart.
 /// </description></item>
@@ -67,9 +67,6 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// focus point — cycling never walks the whole world (the explicit candidate policy).</param>
 /// <param name="CandidateCap">Live-consumed. The candidate-count cap: at most this many nearest in-radius rows enter
 /// the cycle ring.</param>
-/// <param name="WorkbenchFraction">Live-consumed. The full-height fraction a sole editing seat's viewport takes when
-/// 2+ seats are joined (the remaining width splits as a live rail among the playing seats) — read fresh each captured
-/// frame by <c>Client.WorldFrameSource.LayoutRegion(int, int, int, float)</c>.</param>
 /// <param name="PreviewDeadlineFrames">Live-consumed. The drag preview channel's missing-response fallback: a
 /// released overlay with no definition delivery after this many produced frames drops honestly.</param>
 /// <param name="DerivedFaceScreens">Boot-consumed. The derived screen slots the binder reserves at boot for creation
@@ -83,21 +80,22 @@ public sealed record WorldAuthoringDefaults(
     float MaxPlacementScale,
     float CandidateRadius,
     int CandidateCap,
-    float WorkbenchFraction,
     int PreviewDeadlineFrames,
     int DerivedFaceScreens
 ) {
-    /// <summary>Gets the built-in default authoring policy.</summary>
-    public static WorldAuthoringDefaults Default { get; } = new WorldAuthoringDefaults(
-        AuthoringHeadroomPlacements: 8,
-        AuthoringHeadroomScreens: 4,
-        CandidateCap: 16,
-        CandidateRadius: 32f,
-        DerivedFaceScreens: 4,
-        MaxPlacementScale: 5.0f,
-        MinPlacementScale: 0.2f,
-        PreviewDeadlineFrames: 12,
-        WorkbenchFraction: 0.70f
+    /// <summary>Gets the inert absence — zero headroom, a zero-width scale envelope, no candidates.
+    /// The engine holds no authoring policy of its own: the standard policy is AUTHORED, in
+    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis; a
+    /// world reading this cannot author placements or edit.</summary>
+    public static WorldAuthoringDefaults Absent { get; } = new WorldAuthoringDefaults(
+        AuthoringHeadroomPlacements: 0,
+        AuthoringHeadroomScreens: 0,
+        CandidateCap: 0,
+        CandidateRadius: 0f,
+        DerivedFaceScreens: 0,
+        MaxPlacementScale: 0f,
+        MinPlacementScale: 0f,
+        PreviewDeadlineFrames: 0
     );
 }
 /// <summary>Which graphics backend a world prefers. <see cref="Auto"/> — the default — picks the OS-appropriate backend,
@@ -131,9 +129,10 @@ public enum WorldBackendPreference : byte {
 /// exactly, so <c>Puck.Hosting.EngineTicks.PerRate</c> always derives a whole engine-tick step width — never
 /// truncated, never remainder-carried (<see cref="WorldDefinitionValidator"/> refuses a non-divisor, naming the
 /// nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz — Steam Deck OLED's
-/// two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). Defaults to
-/// <see cref="DefaultRateHz"/> (240), the fixed rate every world ran at before this section existed, so a world
-/// authoring no <c>simulation</c> section boots byte-identically to before.
+/// two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of
+/// its own: an authored section states its rate, the standard 240 Hz is authored in
+/// <c>Assets/worlds/standard.world.json</c>, and a world authoring no <c>simulation</c> section is a rate-0
+/// resident world.
 /// <para><b>The derived-floor seam.</b> This record is deliberately the one place a follow-on validation pass adds
 /// the physics floor (from body size/speed), the interactivity floor (from input latency), the substep-derived
 /// contact clamp (<c>contactHertz &lt;= RateHz * n / 8</c> at substep count <c>n</c> — it coincides with
@@ -141,13 +140,8 @@ public enum WorldBackendPreference : byte {
 /// <c>n</c> is a solver parameter, so its validator arrives with the solver landing that introduces it. A derived
 /// floor belongs here, beside the rate it constrains, never as a second section.</para></param>
 public sealed record WorldSimulationDefaults(
-    int RateHz = WorldSimulationDefaults.DefaultRateHz
-) {
-    /// <summary>The simulation rate every world ran at before this section existed (Hz) — the fallback
-    /// <see cref="WorldDefinition.SimulationRateHz"/> uses for a world authoring no <see cref="WorldDefinition.Simulation"/>
-    /// section.</summary>
-    public const int DefaultRateHz = 240;
-}
+    int RateHz
+);
 /// <summary>
 /// How the world boots its presentation shell — the closed vocabulary <see cref="WorldHostDefaults.Presentation"/> and
 /// the <c>--headless</c> CLI reflection resolve to (see <c>Puck.World.WorldHostSettings.Headless</c>). Deciding this
@@ -178,7 +172,8 @@ public enum WorldHostPresentation : byte {
 /// <see cref="Timing"/> via <c>world.timing</c>): the value the session wakes on;
 /// <c>Puck.World.WorldSessionCapture</c> folds the live values back at <c>world.save</c>.</description></item>
 /// </list>
-/// <see cref="Default"/> reproduces World's current boot exactly.
+/// The standard windowed boot is authored in <c>Assets/worlds/standard.world.json</c>; absence reads
+/// <see cref="Absent"/> (no presentation).
 /// </summary>
 /// <param name="Presentation">Which boot shape the world composes — see <see cref="WorldHostPresentation"/>. Defaults
 /// to <see cref="WorldHostPresentation.Windowed"/>, so every world authored before this field existed boots
@@ -241,20 +236,21 @@ public sealed record WorldHostDefaults(
     // both is refused BY NAME. (WorldPopulationDefaults.CapacityDraw's site cannot do this — see its own remarks.)
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDraw? BackendDraw = null
 ) {
-    /// <summary>Gets the built-in host defaults — reproducing World's current hardcoded boot exactly (windowed, 1280×800,
-    /// auto backend, immediate present, automatic display pacing, R8G8B8A8 surface, ray-query on, timing off, no
-    /// auto-exit, no listener).</summary>
-    public static WorldHostDefaults Default { get; } = new WorldHostDefaults(
-        Presentation: WorldHostPresentation.Windowed,
+    /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
+    /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
+    /// windowed boot is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming
+    /// that document as its basis.</summary>
+    public static WorldHostDefaults Absent { get; } = new WorldHostDefaults(
+        Presentation: WorldHostPresentation.None,
         Backend: WorldBackendPreference.Auto,
-        Width: 1280,
-        Height: 800,
+        Width: 0,
+        Height: 0,
         SurfaceFormat: SurfaceFormat.R8G8B8A8Unorm,
         Fullscreen: false,
         PresentMode: PresentMode.Immediate,
         TargetHertz: 0.0,
         ExitAfterSeconds: 0,
-        RayQuery: true,
+        RayQuery: false,
         Timing: false,
         Genlock: null,
         Listen: null,

@@ -33,7 +33,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldSeatFlyRig flyRig) : ICommandModule {
     // The reserved trailing token an instance-addressed drive-a-player verb carries — see TryStripInstanceToken.
     private const string InstanceTokenPrefix = "instance:";
 
@@ -65,6 +65,9 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     /// <summary>The movement-facing Axis2D command (+Y forward, +X strafe right). The handler routes the dispatch to
     /// the owning device's player; standard binds its left stick to <see cref="MoveStrafeCommand"/> instead.</summary>
     public const string MoveCommand = Puck.World.Client.PlayerCommandNames.MoveCommand;
+    /// <summary>The generic per-seat mode-family flip: <c>player.mode &lt;family&gt; &lt;state&gt; [seat]</c>, or
+    /// <c>player.mode &lt;family&gt; [seat]</c> to read back the seat's current state.</summary>
+    public const string ModeCommand = Puck.World.Client.PlayerCommandNames.ModeCommand;
     /// <summary>The live-camera-framed Axis2D movement command that preserves heading so lateral input strafes and
     /// forward travel turns with look yaw.</summary>
     public const string MoveStrafeCommand = Puck.World.Client.PlayerCommandNames.MoveStrafeCommand;
@@ -88,6 +91,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // same table again when the bound control fires. The command registry and its replay-stable ids therefore never
     // depend on which local, late-mounted, or remote destination documents happened to be readable at boot.
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
+    private readonly WorldSeatFlyRig m_flyRig = flyRig;
 
     // The authored, argument-bearing verbs (assertable on stdout). The drive-a-player verbs take an optional trailing
     // player index reaching the whole population: 1..4 are the local seats, 5..128 the simulated entries.
@@ -120,7 +124,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.designate",
-            description: "Proposes a subject for one authored target register: player.designate <register> <body:n|nearest> [player]. 'nearest' resolves client-side from the latest snapshot inside the player's clamped forward cone; either form submits only the resolved body subject. The server re-resolves activity, authority, range, cone, targetability, and line of sight before writing. Returns player.targets read-back, including the latest refusal.",
+            description: "Proposes a target for one authored target register: player.designate <register> <body:n|nearest|at:x,y,z> [player]. 'nearest' resolves client-side from the latest snapshot inside the player's clamped forward cone; 'at:x,y,z' proposes a world-space point (the seek target a Designated-source producer steers to). The server re-resolves activity, authority, range, cone, targetability, and line of sight (a point checks the same envelope, minus body activity) before writing. Returns player.targets read-back, including the latest refusal.",
             handler: DesignateHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -474,6 +478,10 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         }
 
         foreach (var command in ChannelVerbs()) {
+            yield return Route(command: command);
+        }
+
+        foreach (var command in ModeVerbs()) {
             yield return Route(command: command);
         }
     }

@@ -19,7 +19,7 @@ namespace Puck.World.Client;
 /// are mapped through the identical boundary isometry as terrain and handoff; they are ghosts only in the ownership
 /// sense—the source never simulates them—but remain visible and addressable for cross-boundary interaction.</para>
 /// <para><b>Which placements cross.</b> A neighbour placement carrying a <c>solid</c> facet participates when either
-/// its creation contains an unbounded primitive (<c>CreationGeometry.GetLocalBounds</c>'s
+/// its creation contains an unbounded primitive (<c>SdfSolidGeometry.GetLocalBounds</c>'s
 /// <c>IsUnbounded</c> — an infinite ground plane is relevant everywhere near the
 /// border, regardless of how far its own authored origin sits from the door) or its own reach
 /// (<c>CreationGeometry.Reach</c>, scaled) brings it within the counterpart face's own

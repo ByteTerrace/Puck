@@ -687,7 +687,7 @@ public static class CreationCanonicalizer {
 
             if (
                 (run.ShapeId is { } shapeId) &&
-                ((document.Shapes ?? []).All(predicate: shape => shape.Id != shapeId))
+                ((document.Shapes ?? []).All(predicate: shape => (shape.Id != shapeId)))
             ) {
                 errors.Add(item: new(
                     Message: $"names no shape with id {shapeId}.",
@@ -770,6 +770,7 @@ public static class CreationCanonicalizer {
 
         return DocumentCanonicalizer.Canonicalize(document: Normalize(document: document));
     }
+
     // A non-finite/zero-length direction has no fold plane to normalize to, so it floors to the retired Mirror:
     // true flag's exact plane (UnitX) rather than reaching SdfProgramBuilder.SymmetryPlane's own throwing guard.
     private static Vector3 NormalizeDirection(Vector3 value) {
@@ -851,6 +852,7 @@ public static class CreationCanonicalizer {
             y: Math.Max(val1: (float.IsFinite(f: value.Y) ? value.Y : 0f), val2: 0.001f),
             z: Math.Max(val1: (float.IsFinite(f: value.Z) ? value.Z : 0f), val2: 0.001f)
         );
+
     /// <summary>Normalizes an already-schema-valid document: clamps/defaults every optional member so the in-memory
     /// model never sees a null or an out-of-range value it has to reason about (the load-time half of the document
     /// doctrine). Idempotent — <c>Normalize(Normalize(x))</c> equals <c>Normalize(x)</c> — which is what makes a

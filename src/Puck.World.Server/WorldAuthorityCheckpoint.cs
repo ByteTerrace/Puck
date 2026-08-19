@@ -51,7 +51,7 @@ public sealed record WorldLandedMemberCheckpoint(
     FixedVector3 Position,
     FixedQ4816 Yaw,
     WorldBody.TransferState DynamicState,
-    IReadOnlyList<int> Designations,
+    IReadOnlyList<WorldTargetDesignation> Designations,
     WorldPeerEventEntry? Peer,
     IReadOnlyList<WorldAdmissionGrant> AdmissionGrants,
     IReadOnlyList<WorldGrant> SourceGrants,

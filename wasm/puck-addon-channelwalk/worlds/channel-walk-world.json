@@ -442,7 +442,7 @@
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveForward"
+      "role": "MoveAdvance"
     },
     {
       "name": "strafe",
@@ -907,7 +907,10 @@
           "scalars": {
             "standoffRadius": 2,
             "approach": 0.75,
-            "orbit": 0
+            "orbit": 0,
+            "altitudeGain": 0,
+            "inwardGain": 1.6,
+            "turnScale": 2.5
           },
           "channels": {
           }
@@ -1857,7 +1860,7 @@
       "stickLookRate": 2.6,
       "pitchSensitivity": 0.001,
       "invertYaw": false,
-      "invertPitch": false
+      "invertPitch": false
     }
   }
 }

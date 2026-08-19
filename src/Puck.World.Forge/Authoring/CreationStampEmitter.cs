@@ -34,13 +34,6 @@ public readonly record struct CreationStampInstance(Vector3 Origin, Vector3? Ref
 /// <param name="Origin">The instance origin in world space.</param>
 /// <param name="ReflectionNormal">The optional unit local normal that reflects the creation geometry.</param>
 public readonly record struct FixedCreationStampInstance(FixedVector3 Origin, FixedVector3? ReflectionNormal);
-/// <summary>One primitive copy after a stamp transform has been applied.</summary>
-/// <param name="Shape">The authored shape.</param>
-/// <param name="Center">The primitive's world-axis bound center.</param>
-/// <param name="HalfExtents">The primitive's world-axis bound half-extents.</param>
-/// <param name="UniformScale">The primitive's world scale when it is isotropic; zero otherwise.</param>
-/// <param name="PlaneNormal">The unit world normal for an unbounded plane; zero for a finite primitive.</param>
-public readonly record struct CreationStampPrimitiveCopy(ShapeDocument Shape, Vector3 Center, Vector3 HalfExtents, float UniformScale, Vector3 PlaneNormal);
 /// <summary>A creation stamp's primitive transform prefix, in the deterministic fixed-point domain.</summary>
 /// <param name="Origin">The stamp origin in world space.</param>
 /// <param name="Rotation">The stamp orientation; normalized on entry.</param>
@@ -96,40 +89,6 @@ public static class CreationStampEmitter {
         vector1: value,
         vector2: normal
     )) * normal));
-    // The fixed-point ReflectedShapeTransform, carrying the frame itself instead of a quaternion. The unreflected
-    // result is the shape rotation's three transformed unit axes; the reflected result mirrors all three and negates X
-    // to restore a proper (determinant +1) frame — the same negation the float sibling applies, and for the same
-    // reason: a mirrored basis is improper and no quaternion represents it.
-    private static (FixedVector3 Position, FixedVector3 AxisX, FixedVector3 AxisY, FixedVector3 AxisZ) ReflectedShapeBasis(ShapeDocument shape, FixedVector3? normal) {
-        var rotation = FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize();
-        var axisX = rotation.Rotate(vector: UnitX);
-        var axisY = rotation.Rotate(vector: UnitY);
-        var axisZ = rotation.Rotate(vector: UnitZ);
-        var position = FixedVector3.FromVector3(value: shape.Position);
-
-        if (normal is not { } unitNormal) {
-            return (Position: position, AxisX: axisX, AxisY: axisY, AxisZ: axisZ);
-        }
-
-        return (
-            Position: ReflectFixed(
-            normal: unitNormal,
-            value: position
-        ),
-            AxisX: -ReflectFixed(
-            normal: unitNormal,
-            value: axisX
-        ),
-            AxisY: ReflectFixed(
-            normal: unitNormal,
-            value: axisY
-        ),
-            AxisZ: ReflectFixed(
-            normal: unitNormal,
-            value: axisZ
-        )
-        );
-    }
     private static (Vector3 Position, Quaternion Rotation) ReflectedShapeTransform(ShapeDocument shape, Vector3? normal) {
         if (normal is not { } authoredNormal) {
             return (Position: shape.Position, Rotation: shape.Rotation);
@@ -286,7 +245,7 @@ public static class CreationStampEmitter {
                 (contactMargin is not { } margin) ||
                 (margin == 0f)
             ) {
-                _ = CreationGeometry.AppendScaledPrimitive(
+                _ = SdfSolidGeometry.AppendScaledPrimitive(
                     chain: chain,
                     type: shape.Type,
                     scale: shapeScale,
@@ -297,7 +256,7 @@ public static class CreationStampEmitter {
                 continue;
             }
 
-            chain = CreationGeometry.AppendScaledPrimitive(
+            chain = SdfSolidGeometry.AppendScaledPrimitive(
                 chain: chain.PushField(
                     compose: blend,
                     smooth: smooth
@@ -333,52 +292,70 @@ public static class CreationStampEmitter {
         var reflectionNormal = transform.ReflectionNormal?.Normalize();
 
         foreach (var shape in (document.Shapes ?? [])) {
+            if (!ShapeDomainOps.TryExpand(
+                domain: shape.Domain,
+                frames: out var frames,
+                refusal: out var refusal
+            )) {
+                throw new ArgumentException(
+                    message: $"A contact-emitted creation shape carries {refusal}, so its copies have no contact geometry.",
+                    paramName: nameof(document)
+                );
+            }
+
             var (shapePosition, shapeRotation) = ReflectedShapeTransformFixed(
                 normal: reflectionNormal,
                 shape: shape
             );
+            var local = new SdfRigidFrame(
+                Mirrored: (reflectionNormal is not null),
+                Position: shapePosition,
+                Rotation: shapeRotation
+            );
             var shapeScale = EffectiveFixedScale(value: shape.Scale).ToVector3();
-            var chain = ShapeDomainOps.ApplyFixedSupported(
-                chain: builder
-                    .ResetPoint()
-                    .Translate(offset: transform.Origin.ToVector3())
-                    .Rotate(rotation: stampRotation)
-                    .Scale(scale: new Vector3(value: ((float)((double)stampScale)))),
-                domain: shape.Domain
-            )
-                .Translate(offset: shapePosition.ToVector3())
-                .Rotate(rotation: shapeRotation);
-
             var blend = (shape.Blend ?? SdfBlendOp.Union);
             var smooth = (shape.Smooth ?? 0f);
 
-            if (
-                (contactMargin is not { } margin) ||
-                (margin == 0f)
-            ) {
-                _ = CreationGeometry.AppendScaledPrimitive(
-                    chain: chain,
+            foreach (var frame in frames) {
+                var placed = frame.Compose(inner: local);
+                var chain = builder
+                    .ResetPoint()
+                    .Translate(offset: transform.Origin.ToVector3())
+                    .Rotate(rotation: stampRotation)
+                    .Scale(scale: new Vector3(value: ((float)((double)stampScale))))
+                    .Translate(offset: placed.Position.ToVector3())
+                    .Rotate(rotation: placed.Rotation.ToQuaternion());
+
+                if (
+                    (contactMargin is not { } margin) ||
+                    (margin == 0f)
+                ) {
+                    _ = SdfSolidGeometry.AppendScaledPrimitive(
+                        chain: chain,
+                        type: shape.Type,
+                        scale: shapeScale,
+                        material: materialFor(arg: shape),
+                        blend: blend,
+                        smooth: smooth
+                    );
+
+                    continue;
+                }
+
+                chain = SdfSolidGeometry.AppendScaledPrimitive(
+                    chain: chain.PushField(
+                        compose: blend,
+                        smooth: smooth
+                    ),
                     type: shape.Type,
                     scale: shapeScale,
-                    material: materialFor(arg: shape),
-                    blend: blend,
-                    smooth: smooth
-                );
-                continue;
+                    material: materialFor(arg: shape)
+                ).Dilate(radius: margin);
+                _ = chain.PopField();
             }
-
-            chain = CreationGeometry.AppendScaledPrimitive(
-                chain: chain.PushField(
-                    compose: blend,
-                    smooth: smooth
-                ),
-                type: shape.Type,
-                scale: shapeScale,
-                material: materialFor(arg: shape)
-            ).Dilate(radius: margin);
-            _ = chain.PopField();
         }
     }
+
     // A run's creation-space frame: authored directly, or a riding run's unit-local frame carried by its shape.
     private static (Vector3 Position, Quaternion Rotation) RunFrame(CreationDocument document, TextRunDocument run) {
         if (run.ShapeId is not { } shapeId) {
@@ -401,6 +378,7 @@ public static class CreationStampEmitter {
 
         return (run.Position, run.Rotation);
     }
+
     /// <summary>Returns whether a creation's parts compose against each other — a shape blend other than Union, or an
     /// engraved text run. A stamp of such a creation must be emitted inside one field scope
     /// (<see cref="SdfProgramBuilder.PushField"/>/<see cref="SdfProgramBuilder.PopField"/>): its carves then bite only
@@ -569,7 +547,7 @@ public static class CreationStampEmitter {
         );
     }
     /// <summary>Measures the render-time bounding-sphere radius of a creation after resolving its authored fonts and
-    /// layout options. Shape geometry uses <see cref="CreationGeometry.Reach(AvatarPrimitive, Vector3)"/>; text geometry
+    /// layout options. Shape geometry uses <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, Vector3)"/>; text geometry
     /// is measured from the exact laid-out glyph cells the SDF builder emits, including whitespace advance, wrapping,
     /// alignment, tracking, line spacing, atlas padding, and extrusion.</summary>
     /// <param name="document">The creation document.</param>
@@ -598,7 +576,7 @@ public static class CreationStampEmitter {
         foreach (var shape in (document.Shapes ?? [])) {
             reach = MathF.Max(
                 x: reach,
-                y: ((shape.Position.Length() + CreationGeometry.Reach(
+                y: ((shape.Position.Length() + SdfSolidGeometry.Reach(
                     type: shape.Type,
                     scale: shape.Scale
                 )) * scale)
@@ -666,23 +644,12 @@ public static class CreationStampEmitter {
     /// <param name="transform">The stamp transform.</param>
     /// <param name="visitor">Receives world-axis bounds for each primitive.</param>
     /// <remarks>
-    /// <para>The deterministic counterpart to <see cref="VisitPrimitiveCopies"/>, for the callers whose output reaches
-    /// SIMULATION STATE — the contact colliders. Both compute the same geometry; only the arithmetic domain differs,
-    /// and that difference is the whole point. The single-precision body reaches <see cref="MathF.Sin"/> and
-    /// <see cref="MathF.Cos"/> through its caller's <see cref="Quaternion.CreateFromAxisAngle"/>, and those route to
-    /// the platform's own libm, which is not required to return the same bits on another operating system, another
-    /// architecture, or another runtime version. A collider position is not presentation: it decides where a body
-    /// stops. This body reaches only integer arithmetic.</para>
-    /// <para>Two representation differences, both forced by the domain. Authored floats enter through
-    /// <see cref="FixedVector3.FromVector3"/> and <see cref="FixedQuaternion.FromQuaternion"/> — the one door each, so
-    /// the rounding is not a per-caller decision. And a rotation is carried as its three transformed unit axes rather
-    /// than as a quaternion, which is what lets the reflected case skip the float path's
-    /// matrix-to-quaternion-and-back round trip: that round trip exists only because its callers wanted a quaternion,
-    /// and the frame it recovers is the one computed here directly.</para>
-    /// <para>Rendering must keep calling <see cref="VisitPrimitiveCopies"/>: presentation floats sit outside the
-    /// determinism contract by design, and per-frame fixed-point cost buys nothing there. The two bodies sit adjacent
-    /// so that a change to what a creation's geometry MEANS is visibly owed to both — a divergence between what is
-    /// drawn and what is collided is the failure this adjacency exists to prevent.</para>
+    /// <para>Every value here reaches SIMULATION STATE — a collider position decides where a body stops — so the whole
+    /// body is integer arithmetic. Authored floats enter through <see cref="FixedVector3.FromVector3"/> and
+    /// <see cref="FixedQuaternion.FromQuaternion"/>, the one door each, so the rounding is not a per-caller decision.</para>
+    /// <para>A shape carrying domain ops visits once per expanded copy (<see cref="SdfDomainExpansion"/>); a fold has
+    /// no meaning to a consumer that places geometry rather than transforming a point. A chain with no rigid-copy
+    /// expansion throws, naming the op — the world validator refuses such a document before this runs.</para>
     /// </remarks>
     public static void VisitFixedPrimitiveCopies(CreationDocument document, FixedCreationStampTransform transform, Action<FixedCreationStampPrimitiveCopy> visitor) {
         ArgumentNullException.ThrowIfNull(document);
@@ -696,128 +663,66 @@ public static class CreationStampEmitter {
         var reflectionNormal = transform.ReflectionNormal?.Normalize();
 
         foreach (var shape in (document.Shapes ?? [])) {
-            var bounds = CreationGeometry.GetLocalBounds(type: shape.Type);
+            if (!ShapeDomainOps.TryExpand(
+                domain: shape.Domain,
+                frames: out var frames,
+                refusal: out var refusal
+            )) {
+                throw new ArgumentException(
+                    message: $"A contact-emitted creation shape carries {refusal}, so its copies have no contact geometry.",
+                    paramName: nameof(document)
+                );
+            }
+
+            var bounds = SdfSolidGeometry.GetLocalBounds(type: shape.Type);
             var boundsCenter = FixedVector3.FromVector3(value: bounds.Center);
             var boundsHalfExtents = FixedVector3.FromVector3(value: bounds.HalfExtents);
             var shapeScale = EffectiveFixedScale(value: shape.Scale);
 
-            var (shapePosition, shapeAxisX, shapeAxisY, shapeAxisZ) = ReflectedShapeBasis(
+            var (shapePosition, shapeRotation) = ReflectedShapeTransformFixed(
                 normal: reflectionNormal,
                 shape: shape
             );
-            // Vector3.Transform(bounds.Center * shapeScale, shapeRotation), written against the basis: a rotation
-            // applied to a vector IS the scaled sum of its transformed unit axes.
-            var localBoundsCenter = (shapePosition + (
-                ((shapeAxisX * (boundsCenter.X * shapeScale.X))
-                + (shapeAxisY * (boundsCenter.Y * shapeScale.Y)))
-                + (shapeAxisZ * (boundsCenter.Z * shapeScale.Z))
-            ));
-            var localAxisX = ((shapeAxisX * shapeScale.X) * stampScale);
-            var localAxisY = ((shapeAxisY * shapeScale.Y) * stampScale);
-            var localAxisZ = ((shapeAxisZ * shapeScale.Z) * stampScale);
-            var axisX = stampRotation.Rotate(vector: localAxisX);
-            var axisY = stampRotation.Rotate(vector: localAxisY);
-            var axisZ = stampRotation.Rotate(vector: localAxisZ);
-            var worldCenter = (transform.Origin + stampRotation.Rotate(vector: (localBoundsCenter * stampScale)));
-            var worldHalfExtents = new FixedVector3(
-                X: (((FixedQ4816.Abs(value: axisX.X) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.X) * boundsHalfExtents.Z)),
-                Y: (((FixedQ4816.Abs(value: axisX.Y) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * boundsHalfExtents.Z)),
-                Z: (((FixedQ4816.Abs(value: axisX.Z) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * boundsHalfExtents.Z))
+            var local = new SdfRigidFrame(
+                Mirrored: (reflectionNormal is not null),
+                Position: shapePosition,
+                Rotation: shapeRotation
             );
             var uniformScale = (IsIsotropicallyScaled(shape: shape)
                 ? (stampScale * shapeScale.X)
                 : FixedQ4816.Zero
             );
-            var planeNormal = (bounds.IsUnbounded
-                ? axisY.Normalize()
-                : FixedVector3.Zero
-            );
 
-            visitor(obj: new FixedCreationStampPrimitiveCopy(
-                Center: worldCenter,
-                HalfExtents: worldHalfExtents,
-                PlaneNormal: planeNormal,
-                Shape: shape,
-                UniformScale: uniformScale
-            ));
-        }
-    }
-    /// <summary>Visits every primitive represented by one materialized stamp transform.</summary>
-    /// <param name="document">The creation document.</param>
-    /// <param name="transform">The stamp transform.</param>
-    /// <param name="visitor">Receives world-axis bounds for each primitive.</param>
-    public static void VisitPrimitiveCopies(CreationDocument document, CreationStampTransform transform, Action<CreationStampPrimitiveCopy> visitor) {
-        ArgumentNullException.ThrowIfNull(document);
-        ArgumentNullException.ThrowIfNull(visitor);
+            foreach (var frame in frames) {
+                var placed = frame.Compose(inner: local);
+                // A rotation applied to a vector IS the scaled sum of its transformed unit axes, so the primitive's
+                // world-axis extent falls out of the three axis images without ever forming a matrix.
+                var shapeAxisX = placed.Rotation.Rotate(vector: UnitX);
+                var shapeAxisY = placed.Rotation.Rotate(vector: UnitY);
+                var shapeAxisZ = placed.Rotation.Rotate(vector: UnitZ);
+                var localBoundsCenter = (placed.Position + (
+                    ((shapeAxisX * (boundsCenter.X * shapeScale.X))
+                    + (shapeAxisY * (boundsCenter.Y * shapeScale.Y)))
+                    + (shapeAxisZ * (boundsCenter.Z * shapeScale.Z))
+                ));
+                var axisX = stampRotation.Rotate(vector: ((shapeAxisX * shapeScale.X) * stampScale));
+                var axisY = stampRotation.Rotate(vector: ((shapeAxisY * shapeScale.Y) * stampScale));
+                var axisZ = stampRotation.Rotate(vector: ((shapeAxisZ * shapeScale.Z) * stampScale));
 
-        var stampRotation = Quaternion.Normalize(value: transform.Rotation);
-        var stampScale = MathF.Max(
-            x: MathF.Abs(x: transform.Scale),
-            y: MinimumTransformExtent
-        );
-
-        foreach (var shape in (document.Shapes ?? [])) {
-            var bounds = CreationGeometry.GetLocalBounds(type: shape.Type);
-
-            var (shapePosition, reflectedRotation) = ReflectedShapeTransform(
-                shape: shape,
-                normal: transform.ReflectionNormal
-            );
-            var shapeRotation = Quaternion.Normalize(value: reflectedRotation);
-            var shapeScale = EffectiveScale(value: shape.Scale);
-            var localBoundsCenter = (shapePosition + Vector3.Transform(
-                value: (bounds.Center * shapeScale),
-                rotation: shapeRotation
-            ));
-            var localAxisX = (Vector3.Transform(
-                value: (Vector3.UnitX * shapeScale.X),
-                rotation: shapeRotation
-            ) * stampScale);
-            var localAxisY = (Vector3.Transform(
-                value: (Vector3.UnitY * shapeScale.Y),
-                rotation: shapeRotation
-            ) * stampScale);
-            var localAxisZ = (Vector3.Transform(
-                value: (Vector3.UnitZ * shapeScale.Z),
-                rotation: shapeRotation
-            ) * stampScale);
-            var axisX = Vector3.Transform(
-                rotation: stampRotation,
-                value: localAxisX
-            );
-            var axisY = Vector3.Transform(
-                rotation: stampRotation,
-                value: localAxisY
-            );
-            var axisZ = Vector3.Transform(
-                rotation: stampRotation,
-                value: localAxisZ
-            );
-            var worldCenter = (transform.Origin + Vector3.Transform(
-                rotation: stampRotation,
-                value: (localBoundsCenter * stampScale)
-            ));
-            var worldHalfExtents = new Vector3(
-                x: (((MathF.Abs(x: axisX.X) * bounds.HalfExtents.X) + (MathF.Abs(x: axisY.X) * bounds.HalfExtents.Y)) + (MathF.Abs(x: axisZ.X) * bounds.HalfExtents.Z)),
-                y: (((MathF.Abs(x: axisX.Y) * bounds.HalfExtents.X) + (MathF.Abs(x: axisY.Y) * bounds.HalfExtents.Y)) + (MathF.Abs(x: axisZ.Y) * bounds.HalfExtents.Z)),
-                z: (((MathF.Abs(x: axisX.Z) * bounds.HalfExtents.X) + (MathF.Abs(x: axisY.Z) * bounds.HalfExtents.Y)) + (MathF.Abs(x: axisZ.Z) * bounds.HalfExtents.Z))
-            );
-            var uniformScale = (IsIsotropicallyScaled(shape: shape)
-                ? (stampScale * shapeScale.X)
-                : 0f
-            );
-            var planeNormal = (bounds.IsUnbounded
-                ? Vector3.Normalize(value: axisY)
-                : Vector3.Zero
-            );
-
-            visitor(obj: new CreationStampPrimitiveCopy(
-                Center: worldCenter,
-                HalfExtents: worldHalfExtents,
-                PlaneNormal: planeNormal,
-                Shape: shape,
-                UniformScale: uniformScale
-            ));
+                visitor(obj: new FixedCreationStampPrimitiveCopy(
+                    Center: (transform.Origin + stampRotation.Rotate(vector: (localBoundsCenter * stampScale))),
+                    HalfExtents: new FixedVector3(
+                        X: (((FixedQ4816.Abs(value: axisX.X) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.X) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.X) * boundsHalfExtents.Z)),
+                        Y: (((FixedQ4816.Abs(value: axisX.Y) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Y) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Y) * boundsHalfExtents.Z)),
+                        Z: (((FixedQ4816.Abs(value: axisX.Z) * boundsHalfExtents.X) + (FixedQ4816.Abs(value: axisY.Z) * boundsHalfExtents.Y)) + (FixedQ4816.Abs(value: axisZ.Z) * boundsHalfExtents.Z))
+                    ),
+                    PlaneNormal: (bounds.IsUnbounded
+                    ? axisY.Normalize()
+                    : FixedVector3.Zero),
+                    Shape: shape,
+                    UniformScale: uniformScale
+                ));
+            }
         }
     }
 

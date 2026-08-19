@@ -11,12 +11,15 @@ namespace Puck.Networking.Peers;
 /// close the link: it is reported through <see cref="Events"/> and the link keeps carrying honest traffic.</summary>
 public sealed class PeerLink : IAsyncDisposable {
     private readonly IPeerConnection m_connection;
+
     private readonly Channel<PeerEvent> m_events = Channel.CreateUnbounded<PeerEvent>(options: new UnboundedChannelOptions { SingleReader = true });
+
     private readonly PeerIdentity m_local;
     private readonly Func<DateTimeOffset> m_now;
     private readonly Action<PeerLink>? m_onClosed;
     private readonly byte[] m_remoteSubjectPublicKeyInfo;
     private readonly Stream m_stream;
+
     private readonly SemaphoreSlim m_writeGate = new(initialCount: 1, maxCount: 1);
 
     private int m_closed;
@@ -81,7 +84,7 @@ public sealed class PeerLink : IAsyncDisposable {
             maxBytes: PeerWireProtocol.MaxFrameBytes
         );
 
-        if (!reader.TryFinish(out var wireFailure)) {
+        if (!reader.TryFinish(failure: out var wireFailure)) {
             Publish(@event: new PeerEvent.Refused(Failure: new PeerFailure(
                 Detail: wireFailure.ToString(),
                 Refusal: PeerRefusal.HandshakeMalformed
@@ -228,7 +231,7 @@ public sealed class PeerLink : IAsyncDisposable {
             await WireFrame.WriteAsync(
                 body: writer.ToArray(),
                 ct: ct,
-                kind: (byte)PeerFrameKind.Message,
+                kind: ((byte)PeerFrameKind.Message),
                 stream: m_stream
             ).ConfigureAwait(continueOnCapturedContext: false);
         } finally {

@@ -68,45 +68,6 @@ public readonly record struct WorldPopulationDefaults(
     // which is what every world authoring none delivers.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObserverDisclosure? Disclosure = null
 ) {
-    /// <summary>Gets the resolved per-observer snapshot disclosure policy — <see cref="Disclosure"/>, or
-    /// <see cref="WorldObserverDisclosure.Default"/> when this world authors none.</summary>
-    [JsonIgnore]
-    public WorldObserverDisclosure ObserverDisclosure => (Disclosure ?? WorldObserverDisclosure.Default);
-    /// <summary>Gets the number of reserved local-seat slots this world declares (0..the host's seat ceiling,
-    /// <see cref="WorldPopulationLimits.LocalSeatCount"/>) — ABSENT resolves to <see cref="SeatSpawnsRaw"/>'s row
-    /// count when authored, else 0. This is the document's own declaration; every "exactly N local seats" rule
-    /// (seat activation count, seat spawn count, the census floor) reads this instead of a fixed constant.</summary>
-    [JsonIgnore]
-    public int LocalSeats => (LocalSeatsRaw ?? (SeatSpawnsRaw?.Count ?? 0));
-    /// <summary>Gets the per-seat boot-activation policy, one entry per <see cref="LocalSeats"/> — ABSENT resolves
-    /// to seat 0 Eager (a session always needs a first player) and every remaining seat OnDemand.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<SeatActivationPolicy> SeatActivation => (SeatActivationRaw ?? DeriveSeatActivation(localSeats: LocalSeats));
-    /// <summary>Gets the boot intent-source template every network stand-in wakes on — ABSENT resolves to
-    /// <see cref="IntentSource.Idle"/>.</summary>
-    [JsonIgnore]
-    public IntentSource DefaultPeerSource => (DefaultPeerSourceRaw ?? IntentSource.Idle);
-    /// <summary>Gets the spawn-point name selected by each local seat ordinal, one entry per <see cref="LocalSeats"/>
-    /// — ABSENT resolves to <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> for every seat (see
-    /// <see cref="WorldDefinition.SpawnPoints"/>, which guarantees that name resolves).</summary>
-    [JsonIgnore]
-    public IReadOnlyList<string> SeatSpawns => (SeatSpawnsRaw ?? DeriveSeatSpawns(localSeats: LocalSeats));
-    /// <summary>Gets how simulated peers are distributed at spawn — ABSENT resolves to a degenerate zero-radius disc
-    /// (inert: no simulated peer exists to place unless <see cref="CapacityRaw"/> is authored past the local/network
-    /// seat count).</summary>
-    [JsonIgnore]
-    public WorldDistribution Distribution => (DistributionRaw ?? WorldDistribution.Default);
-    /// <summary>Gets the independently authored producer-state sequences for peer bodies — ABSENT resolves to the
-    /// inert index sequence (no variation).</summary>
-    [JsonIgnore]
-    public WorldPopulationVariation PeerVariation => (PeerVariationRaw ?? WorldPopulationVariation.Default);
-    /// <summary>Gets the independently authored producer-state sequences for local-seat bodies — ABSENT resolves to
-    /// the inert index sequence (no variation).</summary>
-    [JsonIgnore]
-    public WorldPopulationVariation SeatVariation => (SeatVariationRaw ?? WorldPopulationVariation.Default);
-    /// <summary>Gets the stand-in color sequence — ABSENT resolves to the inert additive sequence.</summary>
-    [JsonIgnore]
-    public WorldSequence PeerColors => (PeerColorsRaw ?? WorldSequence.AdditiveDefault);
     /// <summary>Gets the total authoritative body capacity, including reserved local seats — ABSENT resolves to
     /// <see cref="LocalSeats"/> plus <see cref="NetworkPlayers"/> (no simulated peers beyond the seats the document
     /// actually declares).</summary>
@@ -114,6 +75,45 @@ public readonly record struct WorldPopulationDefaults(
     public int Capacity => (CapacityRaw ?? (LocalSeats + NetworkPlayers));
     /// <summary>Gets the inert census — zero local seats, zero capacity, no simulated peers.</summary>
     public static WorldPopulationDefaults Default { get; } = new();
+    /// <summary>Gets the boot intent-source template every network stand-in wakes on — ABSENT resolves to
+    /// <see cref="IntentSource.Idle"/>.</summary>
+    [JsonIgnore]
+    public IntentSource DefaultPeerSource => (DefaultPeerSourceRaw ?? IntentSource.Idle);
+    /// <summary>Gets how simulated peers are distributed at spawn — ABSENT resolves to a degenerate zero-radius disc
+    /// (inert: no simulated peer exists to place unless <see cref="CapacityRaw"/> is authored past the local/network
+    /// seat count).</summary>
+    [JsonIgnore]
+    public WorldDistribution Distribution => (DistributionRaw ?? WorldDistribution.Default);
+    /// <summary>Gets the number of reserved local-seat slots this world declares (0..the host's seat ceiling,
+    /// <see cref="WorldPopulationLimits.LocalSeatCount"/>) — ABSENT resolves to <see cref="SeatSpawnsRaw"/>'s row
+    /// count when authored, else 0. This is the document's own declaration; every "exactly N local seats" rule
+    /// (seat activation count, seat spawn count, the census floor) reads this instead of a fixed constant.</summary>
+    [JsonIgnore]
+    public int LocalSeats => (LocalSeatsRaw ?? (SeatSpawnsRaw?.Count ?? 0));
+    /// <summary>Gets the resolved per-observer snapshot disclosure policy — <see cref="Disclosure"/>, or
+    /// <see cref="WorldObserverDisclosure.Default"/> when this world authors none.</summary>
+    [JsonIgnore]
+    public WorldObserverDisclosure ObserverDisclosure => (Disclosure ?? WorldObserverDisclosure.Default);
+    /// <summary>Gets the stand-in color sequence — ABSENT resolves to the inert additive sequence.</summary>
+    [JsonIgnore]
+    public WorldSequence PeerColors => (PeerColorsRaw ?? WorldSequence.AdditiveDefault);
+    /// <summary>Gets the independently authored producer-state sequences for peer bodies — ABSENT resolves to the
+    /// inert index sequence (no variation).</summary>
+    [JsonIgnore]
+    public WorldPopulationVariation PeerVariation => (PeerVariationRaw ?? WorldPopulationVariation.Default);
+    /// <summary>Gets the per-seat boot-activation policy, one entry per <see cref="LocalSeats"/> — ABSENT resolves
+    /// to seat 0 Eager (a session always needs a first player) and every remaining seat OnDemand.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<SeatActivationPolicy> SeatActivation => (SeatActivationRaw ?? DeriveSeatActivation(localSeats: LocalSeats));
+    /// <summary>Gets the spawn-point name selected by each local seat ordinal, one entry per <see cref="LocalSeats"/>
+    /// — ABSENT resolves to <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> for every seat (see
+    /// <see cref="WorldDefinition.SpawnPoints"/>, which guarantees that name resolves).</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> SeatSpawns => (SeatSpawnsRaw ?? DeriveSeatSpawns(localSeats: LocalSeats));
+    /// <summary>Gets the independently authored producer-state sequences for local-seat bodies — ABSENT resolves to
+    /// the inert index sequence (no variation).</summary>
+    [JsonIgnore]
+    public WorldPopulationVariation SeatVariation => (SeatVariationRaw ?? WorldPopulationVariation.Default);
 
     private static IReadOnlyList<SeatActivationPolicy> DeriveSeatActivation(int localSeats) {
         if (localSeats <= 0) {

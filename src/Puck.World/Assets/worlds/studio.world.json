@@ -328,7 +328,7 @@
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveForward",
+      "role": "MoveAdvance",
       "composition": false
     },
     {

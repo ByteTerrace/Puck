@@ -28,6 +28,7 @@ public sealed partial class WorldPopulation {
         );
 
         body.SetContactField(field: m_contactField);
+        body.SetGravityField(field: m_gravityField);
         body.SetWaterline(level: m_waterline);
 
         var spawn = InhabitantSpawn(
@@ -85,6 +86,7 @@ public sealed partial class WorldPopulation {
         );
 
         player.SetContactField(field: m_contactField);
+        player.SetGravityField(field: m_gravityField);
         player.SetWaterline(level: m_waterline);
 
         player.Pose(
@@ -247,6 +249,7 @@ public sealed partial class WorldPopulation {
         };
 
         body.SetContactField(field: m_contactField);
+        body.SetGravityField(field: m_gravityField);
         body.SetWaterline(level: m_waterline);
 
         var spawnPoint = m_seatSpawns[slot];
@@ -717,7 +720,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Restores a just-detached federated peer after an aborted transfer, preserving its generation,
     /// admission facts, pose, dynamic state, and designation registers.</summary>
-    public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<int>? designations = null) {
+    public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
         ArgumentNullException.ThrowIfNull(argument: grantTemplates);
         if (
             (((uint)(peer.BodyIndex - LocalSeatCount)) >= PeerCapacity) ||
@@ -799,7 +802,7 @@ public sealed partial class WorldPopulation {
     /// non-abort restore caller has nothing to pass — every actual caller today is abort-only, so this defaults to
     /// <see langword="null"/> only for a hypothetical future caller, never today's).</param>
     /// <returns><see langword="true"/> when the seat was restored.</returns>
-    public bool RestoreDetachedSeat(int slot, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<int>? designations = null) {
+    public bool RestoreDetachedSeat(int slot, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
         var entry = m_entries[slot];
 
         if (entry.Active) {
@@ -825,6 +828,7 @@ public sealed partial class WorldPopulation {
         };
 
         body.SetContactField(field: m_contactField);
+        body.SetGravityField(field: m_gravityField);
         body.SetWaterline(level: m_waterline);
         body.Pose(
             position: position,

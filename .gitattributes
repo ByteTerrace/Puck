@@ -1,10 +1,15 @@
-# Line endings: normalize to LF in the repo, check out native per OS.
-* text=auto
-*.sh   text eol=lf
+# Line endings: LF in the repo AND in the working tree, on every OS. `eol=lf` is what makes the
+# checkout match the object store, so no tool, formatter, or editor ever has a conversion to make
+# and there is no such thing as an end-of-line diff here. It overrides core.autocrlf, so a clone
+# with the Windows default still lands LF. .editorconfig carries the same contract for editors.
+* text=auto eol=lf
 # World documents are canonical-byte artifacts (the ouroboros gate: load→save reproduces the file
 # byte-for-byte, and the writer emits LF) — never CRLF-rewritten at checkout.
 *.world.json text eol=lf
-*.ps1  text eol=crlf
+# The only CRLF exceptions: cmd.exe mis-parses LF-terminated labels and multi-line blocks, and
+# Visual Studio rewrites the solution file with CRLF on save. Keep these two in sync with the
+# matching .editorconfig section.
+*.bat  text eol=crlf
 *.cmd  text eol=crlf
 *.slnx text eol=crlf
 

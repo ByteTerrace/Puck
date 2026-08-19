@@ -204,7 +204,7 @@ public static class WorldPlacementStamper {
             );
 
             for (var shape = 0; (shape < WorldPlacementPolicy.MaxShapesPerStamp); shape++) {
-                _ = CreationGeometry.AppendPrimitive(
+                _ = SdfSolidGeometry.AppendPrimitive(
                     chain: builder.ResetPoint()
                         .Translate(offset: center)
                         .Rotate(rotation: Quaternion.Identity)
@@ -212,7 +212,7 @@ public static class WorldPlacementStamper {
                         .Translate(offset: Vector3.Zero)
                         .Rotate(rotation: Quaternion.Identity)
                         .Scale(scale: Vector3.One),
-                    type: AvatarPrimitive.Sphere,
+                    type: SdfSolidPrimitive.Sphere,
                     material: paletteIds[(shape % CreationDocument.PaletteSize)]
                 );
             }

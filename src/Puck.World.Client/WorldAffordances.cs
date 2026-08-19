@@ -53,9 +53,10 @@ public static class WorldAffordances {
     }
     // The context-row admission half: built-in families and their states come from WorldContextFamilies; a
     // state:<row> family is structurally admitted here and resolved against the routed definition's state table at
-    // the document/runtime WorldStateBindingContext gate. Empty members and null rows are the binding compiler's
+    // the document/runtime WorldStateBindingContext gate; an AUTHORED seatModes family resolves against its own
+    // declared states, the same as a built-in family. Empty members and null rows are the binding compiler's
     // findings, not this one's; every refusal here names the offending row.
-    private static void ValidateContexts(BindingProfileDocument document, List<string> errors) {
+    private static void ValidateContexts(BindingProfileDocument document, IReadOnlyList<WorldSeatModeFamily> seatModes, List<string> errors) {
         var rows = (document.Contexts ?? []);
 
         for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
@@ -69,6 +70,26 @@ public static class WorldAffordances {
 
             var states = WorldContextFamilies.StatesOf(family: row.Family);
 
+            if (WorldContextFamilies.IsOpenStates(family: row.Family)) {
+                continue;
+            }
+            if (states is null) {
+                var mode = FindSeatMode(
+                    seatModes: seatModes,
+                    family: row.Family
+                );
+
+                if (mode is not null) {
+                    if (!mode.States.Any(predicate: state => string.Equals(a: state.Name, b: row.State, comparisonType: StringComparison.Ordinal))) {
+                        errors.Add(item: $"contexts row {rowIndex} (family \"{row.Family}\") names state \"{row.State}\", which that family never publishes (states: {string.Join(
+                            separator: ", ",
+                            values: mode.States.Select(selector: state => state.Name)
+                        )})");
+                    }
+
+                    continue;
+                }
+            }
             if ((states is null) && !WorldStateBindingContext.TryParseFamily(
                 family: row.Family,
                 rowName: out _
@@ -87,6 +108,15 @@ public static class WorldAffordances {
                 )})");
             }
         }
+    }
+    private static WorldSeatModeFamily? FindSeatMode(IReadOnlyList<WorldSeatModeFamily> seatModes, string family) {
+        foreach (var mode in (seatModes ?? [])) {
+            if (string.Equals(a: mode.Name, b: family, comparisonType: StringComparison.Ordinal)) {
+                return mode;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Installs the command registry the vocabulary reads through. Called once by the composition root,
@@ -121,16 +151,20 @@ public static class WorldAffordances {
     /// <summary>Runs the vocabulary check over <paramref name="document"/>, appending refusal lines to
     /// <paramref name="errors"/>. The command half is a no-op while no registry is installed; the channel half runs
     /// against <paramref name="channels"/> unconditionally, and structural context-family admission
-    /// (<see cref="WorldContextFamilies"/> plus <c>state:&lt;row&gt;</c>) always runs.</summary>
+    /// (<see cref="WorldContextFamilies"/> plus <c>state:&lt;row&gt;</c> plus <paramref name="seatModes"/>) always
+    /// runs.</summary>
     /// <param name="document">The binding document to check.</param>
     /// <param name="channels">The channel table THIS document is authored against — the declaring world's own
     /// compiled table, never another world's.</param>
+    /// <param name="seatModes">The AUTHORED per-seat mode families THIS document's world declares — the same
+    /// per-document rule as <paramref name="channels"/>.</param>
     /// <param name="errors">The list refusal lines are appended to.</param>
     /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
-    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, List<string> errors) {
+    public static void Validate(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, List<string> errors) {
         ArgumentNullException.ThrowIfNull(argument: channels);
         ValidateContexts(
             document: document,
+            seatModes: seatModes,
             errors: errors
         );
 

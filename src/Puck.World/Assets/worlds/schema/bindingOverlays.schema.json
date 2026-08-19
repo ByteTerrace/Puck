@@ -360,6 +360,37 @@
               "additionalProperties": false
             },
             "default": null
+          },
+          "bindingBar": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "hideUnbound": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "default": null
+              },
+              "stacked": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "default": null
+              },
+              "scale": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "additionalProperties": false,
+            "default": null
           }
         },
         "required": [
@@ -376,13 +407,87 @@
           "null"
         ],
         "properties": {
+          "slotSet": {
+            "description": "The physical buttons this bar shows, in authored order (an exotic button\u0027s left-to-right position in its row follows this order) \u2014 every name validated against the full GamepadButtons catalog by name, unique, so the catalog itself bounds the count (the reservation sizes from Puck.Input.Devices.GamepadButtonCatalog.Count).",
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "banks": {
+            "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares.",
+            "type": "array",
+            "items": {
+              "description": "One stacked binding-bar bank: the page it renders and where it renders relative to the bar\u0027s shared anchor. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "id": {
+                  "description": "The bank\u0027s stable id \u2014 its mutation address (unique within the authoring row).",
+                  "type": "string"
+                },
+                "pageId": {
+                  "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile.",
+                  "type": "string"
+                },
+                "offsetX": {
+                  "description": "This bank\u0027s horizontal displacement from the bar\u0027s shared anchor, in region-height units (the same unit WorldBindingBarLayout\u0027s lengths use).",
+                  "type": "number"
+                },
+                "offsetY": {
+                  "description": "This bank\u0027s vertical displacement, region-height units, Y DOWN (positive moves toward the bottom of the seat\u0027s viewport).",
+                  "type": "number"
+                },
+                "alpha": {
+                  "description": "This bank\u0027s opacity when it is NOT the seat\u0027s currently active page.",
+                  "type": "number"
+                },
+                "activeAlpha": {
+                  "description": "This bank\u0027s opacity when it IS the seat\u0027s currently active page; null draws fully opaque (1.0) while active.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "id",
+                "pageId",
+                "offsetX",
+                "offsetY",
+                "alpha"
+              ],
+              "additionalProperties": false
+            }
+          },
           "enabled": {
             "description": "Whether the bar is shown when no live override hides it.",
             "type": "boolean",
             "default": true
           },
+          "text": {
+            "description": "Whether the bar draws the ATLAS TEXT it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier pips, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier pips all still draw.",
+            "type": "boolean",
+            "default": true
+          },
+          "hideUnbound": {
+            "description": "Whether a slot with no bound act on its bank\u0027s page should not render at all, rather than drawing the DISABLED tier-0 plate. A player\u0027s own BindingBarPreferences.HideUnbound overrides this.",
+            "type": "boolean",
+            "default": false
+          },
+          "multiSeatAlpha": {
+            "description": "The opacity every joined seat\u0027s bar renders at while two or more seats are joined \u2014 the split-screen quieting lever, multiplied into each bank\u0027s own alpha; 1 keeps multi-seat bars fully opaque.",
+            "type": "number",
+            "default": 1
+          },
           "layout": {
-            "description": "The bar layout; null uses Default.",
+            "description": "The bar\u0027s tuning; null uses Default.",
             "type": [
               "object",
               "null"
@@ -430,6 +535,10 @@
             "default": null
           }
         },
+        "required": [
+          "slotSet",
+          "banks"
+        ],
         "additionalProperties": false,
         "default": null
       }

@@ -233,6 +233,7 @@ public sealed record SdfFrame(
     /// existed — so a frame that never sets it renders bit-identically. Rides the sky-horizon row's <c>.w</c> lane
     /// (KEEP IN SYNC with <c>SdfWorldEngine.PackSkyFrame</c> and sdf-world.hlsli's <c>worldSkyEnabled</c>).</summary>
     public bool SkyEnabled { get; init; }
+
     /// <summary>The sky gradient's straight-up (zenith) color. Read only while <see cref="SkyEnabled"/>.</summary>
     public Vector3 SkyZenithColor { get; init; } = DefaultSkyZenithColor;
     /// <summary>The sky gradient's horizon-band color — the gradient's middle stop. Read only while
@@ -249,12 +250,15 @@ public sealed record SdfFrame(
     /// <see cref="SkyEnabled"/>; the engine host-bakes it into a <c>pow()</c> exponent
     /// (<c>SdfWorldEngine.PackSkyFrame</c>) rather than deriving one per pixel.</summary>
     public float SkySunDiscRadians { get; init; } = DefaultSkySunDiscRadians;
+
     /// <summary>The visible sun disc's peak additive brightness. Zero (the default) draws no disc. Read only while
     /// <see cref="SkyEnabled"/>.</summary>
     public float SkySunDiscIntensity { get; init; }
+
     /// <summary>The star field's cell count per octahedral sky-projection axis. Read only while
     /// <see cref="SkyEnabled"/>.</summary>
     public float SkyStarDensity { get; init; } = DefaultSkyStarDensity;
+
     /// <summary>The star field's peak per-star brightness. Zero (the default) draws no stars. Read only while
     /// <see cref="SkyEnabled"/>.</summary>
     public float SkyStarBrightness { get; init; }
@@ -266,21 +270,25 @@ public sealed record SdfFrame(
     /// <summary>How far a twinkling star dips below its steady brightness, in <c>[0, 1]</c>. Read only while
     /// <see cref="SkyEnabled"/>.</summary>
     public float SkyStarTwinkleDepth { get; init; }
+
     /// <summary>The fundamental scintillation rate in hertz — each twinkling star runs at a small harmonic and its own
     /// phase of it, on the deterministic tick clock (<see cref="SampleIndex"/>). Read only while
     /// <see cref="SkyEnabled"/>.</summary>
     public float SkyStarTwinkleRate { get; init; } = DefaultSkyStarTwinkleRate;
     /// <summary>The cloud layer's colour (linear RGB). Read only while <see cref="SkyEnabled"/>.</summary>
     public Vector3 SkyCloudColor { get; init; } = Vector3.One;
+
     /// <summary>The fraction of the sky the cloud layer covers, in <c>[0, 1]</c>. Zero (the default) draws no
     /// clouds. Read only while <see cref="SkyEnabled"/>.</summary>
     public float SkyCloudCoverage { get; init; }
+
     /// <summary>The width of a cloud's edge in the noise's unit range, in <c>(0, 1]</c>. Read only while
     /// <see cref="SkyEnabled"/>.</summary>
     public float SkyCloudSoftness { get; init; } = DefaultSkyCloudSoftness;
     /// <summary>The size of one cloud cell in layer units (the layer sits at unit height). Read only while
     /// <see cref="SkyEnabled"/>.</summary>
     public float SkyCloudScale { get; init; } = DefaultSkyCloudScale;
+
     /// <summary>The cloud lattice's hash seed. Read only while <see cref="SkyEnabled"/>.</summary>
     public uint SkyCloudSeed { get; init; }
     /// <summary>The cloud layer's wind in layer units per second along world X and Z, integrated on

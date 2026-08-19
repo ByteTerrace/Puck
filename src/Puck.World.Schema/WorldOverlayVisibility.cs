@@ -16,8 +16,8 @@ public enum OverlayFact : byte {
     WheelOpen,
     /// <summary>The seat's console is open.</summary>
     ConsoleOpen,
-    /// <summary>The seat is in the editor.</summary>
-    EditorActive,
+    /// <summary>The seat's fly control application is active (see <see cref="WorldSeatModeState.Target"/>).</summary>
+    SeatFlying,
 }
 /// <summary>An overlay element's visibility condition — the presentation twin of <see cref="ActionPredicate"/>, over
 /// <see cref="OverlayFact"/>s. Absent on an element means always visible.</summary>

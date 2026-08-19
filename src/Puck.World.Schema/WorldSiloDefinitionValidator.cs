@@ -8,104 +8,6 @@ namespace Puck.World;
 /// row's loaded world definition carries <c>host.authority</c> — that fact depends on the referenced document, not
 /// this one, and is refused by name at activation instead.</remarks>
 public static class WorldSiloDefinitionValidator {
-    /// <summary>Validates a silo document.</summary>
-    /// <param name="definition">The document to validate.</param>
-    /// <param name="reason">Why validation failed, naming the offending row, or empty on success.</param>
-    /// <returns><see langword="true"/> when every check holds.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static bool TryValidate(WorldSiloDefinition definition, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        if (!string.Equals(
-            a: definition.Schema,
-            b: WorldSiloDefinition.SchemaVersion,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            reason = $"schema '{definition.Schema}' is not '{WorldSiloDefinition.SchemaVersion}'";
-
-            return false;
-        }
-
-        if (definition.Doors.Budget < 0) {
-            reason = $"doors.budget {definition.Doors.Budget} is negative";
-
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(value: definition.StateDir)) {
-            reason = "stateDir is required";
-
-            return false;
-        }
-
-        if (!TryValidateStore(
-            store: definition.Store,
-            reason: out reason
-        )) {
-            return false;
-        }
-
-        if (!TryValidateClustering(
-            clustering: definition.Clustering,
-            reason: out reason
-        )) {
-            return false;
-        }
-
-        var worldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var keyFiles = new Dictionary<string, WorldSafeName>(comparer: StringComparer.OrdinalIgnoreCase);
-        var pinnedCount = 0;
-
-        foreach (var world in definition.Worlds) {
-            if (world.Owner == Guid.Empty) {
-                reason = $"world '{world.World}' names an empty owner oid";
-
-                return false;
-            }
-
-            if (!worldIds.Add(item: world.World.Value)) {
-                reason = $"world id '{world.World}' is declared more than once";
-
-                return false;
-            }
-
-            if (!TryValidateFederationKey(
-                world: world.World,
-                federation: world.Federation,
-                reason: out reason
-            )) {
-                return false;
-            }
-
-            var keyFileFull = Path.GetFullPath(path: world.Federation.KeyFile);
-
-            if (keyFiles.TryGetValue(
-                key: keyFileFull,
-                value: out var sharedWith
-            )) {
-                reason = $"worlds '{sharedWith}' and '{world.World}' share the key file '{world.Federation.KeyFile}' — every world signs under its own key";
-
-                return false;
-            }
-
-            keyFiles[keyFileFull] = world.World;
-
-            if (world.Pinned) {
-                pinnedCount++;
-            }
-        }
-
-        if (pinnedCount > definition.Doors.Budget) {
-            reason = $"{pinnedCount} pinned world(s) exceed the declared doors.budget of {definition.Doors.Budget}";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-
     private static bool TryValidateClustering(WorldSiloClustering clustering, out string reason) {
         switch (clustering.Kind) {
             case WorldSiloClusteringKind.Localhost:
@@ -199,6 +101,104 @@ public static class WorldSiloDefinitionValidator {
                 reason = $"store.kind '{store.Kind}' is not recognized";
 
                 return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+
+    /// <summary>Validates a silo document.</summary>
+    /// <param name="definition">The document to validate.</param>
+    /// <param name="reason">Why validation failed, naming the offending row, or empty on success.</param>
+    /// <returns><see langword="true"/> when every check holds.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static bool TryValidate(WorldSiloDefinition definition, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!string.Equals(
+            a: definition.Schema,
+            b: WorldSiloDefinition.SchemaVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"schema '{definition.Schema}' is not '{WorldSiloDefinition.SchemaVersion}'";
+
+            return false;
+        }
+
+        if (definition.Doors.Budget < 0) {
+            reason = $"doors.budget {definition.Doors.Budget} is negative";
+
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(value: definition.StateDir)) {
+            reason = "stateDir is required";
+
+            return false;
+        }
+
+        if (!TryValidateStore(
+            store: definition.Store,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        if (!TryValidateClustering(
+            clustering: definition.Clustering,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        var worldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var keyFiles = new Dictionary<string, WorldSafeName>(comparer: StringComparer.OrdinalIgnoreCase);
+        var pinnedCount = 0;
+
+        foreach (var world in definition.Worlds) {
+            if (world.Owner == Guid.Empty) {
+                reason = $"world '{world.World}' names an empty owner oid";
+
+                return false;
+            }
+
+            if (!worldIds.Add(item: world.World.Value)) {
+                reason = $"world id '{world.World}' is declared more than once";
+
+                return false;
+            }
+
+            if (!TryValidateFederationKey(
+                world: world.World,
+                federation: world.Federation,
+                reason: out reason
+            )) {
+                return false;
+            }
+
+            var keyFileFull = Path.GetFullPath(path: world.Federation.KeyFile);
+
+            if (keyFiles.TryGetValue(
+                key: keyFileFull,
+                value: out var sharedWith
+            )) {
+                reason = $"worlds '{sharedWith}' and '{world.World}' share the key file '{world.Federation.KeyFile}' — every world signs under its own key";
+
+                return false;
+            }
+
+            keyFiles[keyFileFull] = world.World;
+
+            if (world.Pinned) {
+                pinnedCount++;
+            }
+        }
+
+        if (pinnedCount > definition.Doors.Budget) {
+            reason = $"{pinnedCount} pinned world(s) exceed the declared doors.budget of {definition.Doors.Budget}";
+
+            return false;
         }
 
         reason = string.Empty;

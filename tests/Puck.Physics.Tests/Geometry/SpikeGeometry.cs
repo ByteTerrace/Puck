@@ -1,5 +1,4 @@
 using Puck.Maths;
-using Puck.SignedDistance.Queries;
 
 namespace Puck.Physics.Tests.Geometry;
 

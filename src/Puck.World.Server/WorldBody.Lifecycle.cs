@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -269,6 +270,20 @@ public sealed partial class WorldBody {
             roll: rollRadians,
             yaw: m_yaw
         );
+        // A teleport invalidates the CONTACT state, not just the pose. The body did not walk anywhere: it is
+        // somewhere else, standing on nothing, and whatever surface it was grounded on a moment ago says nothing
+        // about where it is now. Carrying that state forward keeps the held up axis too, and a body integrating the
+        // new location's gravity along the OLD location's up falls sideways out of the world — a seat posed under a
+        // planetoid is pulled toward it, along an axis still pointing at the floor it left.
+        //
+        // The axis is re-seated rather than steered: the rate limit that keeps a walked reorientation continuous is
+        // exactly wrong here, because nothing continuous happened.
+        m_grounded = false;
+        m_lastContactCount = 0;
+        m_obstructionWitness = FixedVector3.Zero;
+        m_obstructionWitnessGraceTicks = 0;
+        m_upNeedsReseat = true;
+
         CommitTeleport();
         m_continuity = EntityContinuity.Teleport;
     }
@@ -513,6 +528,12 @@ public sealed partial class WorldBody {
     /// <param name="field">The world contact field.</param>
     public void SetContactField(IContactField? field) {
         m_contactField = field;
+    }
+    /// <summary>Sets (or clears) the world gravity field this body reads its solved acceleration and up axis from —
+    /// the population hands it the live field on activation and every rebuild.</summary>
+    /// <param name="field">The world gravity field, or <see langword="null"/> for a world authoring none.</param>
+    public void SetGravityField(WorldGravityField? field) {
+        m_gravityField = field;
     }
     /// <summary>Sets the screen-engagement latch — the engagement route's write. A transition in either direction drops
     /// the staged transient input images and clears the last routed intent, so a stale image cannot leak as a stuck

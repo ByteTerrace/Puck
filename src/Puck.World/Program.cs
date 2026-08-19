@@ -210,8 +210,9 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
         return 1;
     }
 }
-// Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Default,
-// which reproduces World's current boot) overlaid by the nullable CLI flags. Backend authority differs by source — a CLI
+// Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Absent —
+// no presentation; the standard windowed boot is authored in standard.world.json) overlaid by the nullable CLI flags.
+// Backend authority differs by source — a CLI
 // assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
 var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(
     major: 10,
@@ -326,7 +327,7 @@ if (hostSettings.Headless) {
     services.AddSingleton(implementationInstance: recordingSource);
 
     // The trimmed GPU host (windowing, allocator, one complete launch-selected backend), the render root, overlays,
-    // the audio device, screens/machines verbs, gamepads, and the editor. Only the selected backend enters this
+    // the audio device, screens/machines verbs, and gamepads. Only the selected backend enters this
     // service provider so its neutral compute services and presenter name the same physical device and shader
     // format.
     services.AddWorldPresentation(hostsOnDirectX: hostsOnDirectX);

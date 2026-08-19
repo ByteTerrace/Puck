@@ -5,6 +5,7 @@ using Puck.Forge.Authoring;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
 using Puck.Physics;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -53,15 +54,17 @@ public abstract record WorldCollider {
 /// units; 0 takes the evaluator's own default. Meaningful only when a requirement selects field contact.</param>
 public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requirements, float ContactSkin,
     int MaxIterations, float MaxSlopeDegrees, float GradientProbe) {
-    /// <summary>Gets the inert contact tuning — no requirements (the cheapest analytic path), a minimal skin, the
-    /// smallest working iteration count, a conservative walkable-slope floor, and the evaluator's own gradient-probe
-    /// default.</summary>
-    public static WorldCollision Default { get; } = new(
-        Requirements: [],
-        ContactSkin: 0.02f,
-        MaxIterations: 4,
-        MaxSlopeDegrees: 60f,
-        GradientProbe: 0f
+    /// <summary>Gets the inert absence — no requirements, zero skin, zero iterations, a solver that never relaxes.
+    /// The engine holds no contact tuning of its own: the standard tuning is AUTHORED, in
+    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis. A
+    /// document whose census implies a body is refused for authoring no <c>collision</c>, so only a bodyless world
+    /// ever reads this.</summary>
+    public static WorldCollision Absent { get; } = new(
+        ContactSkin: 0f,
+        GradientProbe: 0f,
+        MaxIterations: 0,
+        MaxSlopeDegrees: 0f,
+        Requirements: []
     );
 }
 /// <summary>A contact quality authored by the world, independent of the engine implementation that supplies it.</summary>
@@ -174,33 +177,35 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
                     )
                         ?? throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' is not defined."));
 
-                    CreationStampEmitter.VisitPrimitiveCopies(
+                    // The fixed-point enumeration, not a single-precision one: every value below lands in a collider
+                    // volume, and a body collider decides where a body stops.
+                    CreationStampEmitter.VisitFixedPrimitiveCopies(
                         document: creation.EngineDocument,
-                        transform: new CreationStampTransform(
-                            Origin: Vector3.Zero,
-                            Rotation: Quaternion.Identity,
-                            Scale: 1f,
+                        transform: new FixedCreationStampTransform(
+                            Origin: FixedVector3.Zero,
+                            Rotation: FixedQuaternion.Identity,
+                            Scale: FixedQ4816.One,
                             ReflectionNormal: null
                         ),
                         visitor: copy => {
-                            if (copy.Shape.Type == AvatarPrimitive.Plane) {
+                            if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                                 throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' contains an unbounded plane.");
                             }
 
                             if (
-                                (copy.Shape.Type == AvatarPrimitive.Sphere) &&
-                                (copy.UniformScale > 0f)
+                                (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
+                                (copy.UniformScale > FixedQ4816.Zero)
                             ) {
-                                var sphere = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
+                                var sphere = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
                                 volumes.Add(item: Sphere(
-                                    center: FixedVector3.FromVector3(value: copy.Center),
-                                    radius: FixedQ4816.FromDouble(value: (sphere.HalfExtents.X * copy.UniformScale))
+                                    center: copy.Center,
+                                    radius: (FixedQ4816.FromDouble(value: sphere.HalfExtents.X) * copy.UniformScale)
                                 ));
                             } else {
                                 volumes.Add(item: Box(
-                                    center: FixedVector3.FromVector3(value: copy.Center),
-                                    halfExtents: FixedVector3.FromVector3(value: copy.HalfExtents),
+                                    center: copy.Center,
+                                    halfExtents: copy.HalfExtents,
                                     rotation: FixedQuaternion.Identity
                                 ));
                             }

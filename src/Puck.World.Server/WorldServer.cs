@@ -49,14 +49,13 @@ public enum WorldEditEchoKind {
     BodyMotion,
 }
 /// <summary>One edit-boundary outcome echoed beside the loud stderr line — the payload of
-/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the editor HUD's act-class tag, the drag
-/// channel's frozen-preview retirement) narrates outcomes without scraping stderr.</summary>
+/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the edit-echo cue lane) narrates outcomes
+/// without scraping stderr.</summary>
 /// <param name="Message">The human-readable outcome line (no brackets).</param>
 /// <param name="Rejected">Whether the outcome is a rejection/denial.</param>
 /// <param name="Kind">The edit-boundary class the outcome belongs to.</param>
-/// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the correlation key a
-/// released drag preview retires against (<c>WorldEditorDrag.NoteRejected</c>) and the at-site position source the
-/// applied-cue lane derives from; <see langword="null"/> otherwise.</param>
+/// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the at-site position
+/// source the applied-cue lane derives from; <see langword="null"/> otherwise.</param>
 /// <param name="Denied">Whether the rejection was a capability denial (a missing mutate grant, a refused grant
 /// acquisition) rather than a validator/guard rejection — the discriminator the cue lane's <c>grant.denied</c> vs
 /// <c>mutation.rejected</c> tokens ride.</param>

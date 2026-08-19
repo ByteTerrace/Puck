@@ -384,6 +384,13 @@ public static partial class WorldDefinitionValidator {
                     required.Add(item: "releaseRadius");
                 }
             }
+            // An op's parameter set is its full runtime read set, kit-independent (the WanderScalars precedent):
+            // WorldBody.FaceSensorTarget reads both scalars on every fire, and Scalar's dictionary read throws on a
+            // missing name — a producer this validator admitted without them would crash the sim on first target.
+            if (program.Contains(operation: BodyMotionOp.FaceSensorTarget)) {
+                required.Add(item: "inwardGain");
+                required.Add(item: "turnScale");
+            }
 
             foreach (var scalar in required) {
                 if (!parameters.Scalars.ContainsKey(key: scalar)) {
@@ -797,7 +804,7 @@ public static partial class WorldDefinitionValidator {
         "weaveFrequencyBase", "weaveFrequencyRange", "altitudeGain", "activityRateBase", "activityRateRange",
         "strafeWave", "turnWave", "upWave", "pitchWave", "rollTurn", "pressThreshold", "altitudeBase", "altitudeRange",
     ];
-    private static readonly string[] AttendScalars = ["standoffRadius", "approach", "orbit"];
+    private static readonly string[] AttendScalars = ["standoffRadius", "approach", "orbit", "altitudeGain"];
 
     /// <summary>The tuning facets a body motion program's selected operations read from a kit's declared
     /// <see cref="WorldMotionModel"/> — the validator's own mapping (never convention; see

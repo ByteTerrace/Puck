@@ -101,7 +101,7 @@ internal sealed partial class PlayerCommandModule {
                 Principal: context.ActingPrincipal(),
                 EntityIndex: (instanceSlot - 1),
                 Intent: instanceChannels.RoleOrdinals.Intent(
-                    moveForward: FixedQ4816.FromDouble(value: iForward),
+                    moveAdvance: FixedQ4816.FromDouble(value: iForward),
                     moveStrafe: FixedQ4816.FromDouble(value: iStrafe),
                     turn: FixedQ4816.FromDouble(value: iYaw),
                     moveUp: FixedQ4816.FromDouble(value: iUp),
@@ -169,7 +169,7 @@ internal sealed partial class PlayerCommandModule {
                     Principal: context.ActingPrincipal(),
                     EntityIndex: location.EntityIndex,
                     Intent: routedChannels.RoleOrdinals.Intent(
-                        moveForward: FixedQ4816.FromDouble(value: forward),
+                        moveAdvance: FixedQ4816.FromDouble(value: forward),
                         moveStrafe: FixedQ4816.FromDouble(value: strafe),
                         turn: FixedQ4816.FromDouble(value: yaw),
                         moveUp: FixedQ4816.FromDouble(value: up),
@@ -203,13 +203,13 @@ internal sealed partial class PlayerCommandModule {
             return pendingError;
         }
 
-        // The fly channel order (forward, strafe, up, yaw, pitch, roll) maps onto PlayerIntent (MoveForward, MoveStrafe,
+        // The fly channel order (forward, strafe, up, yaw, pitch, roll) maps onto PlayerIntent (MoveAdvance, MoveStrafe,
         // Turn, MoveUp, Pitch, Roll) — the "yaw" channel is the Turn rate.
         m_link.SubmitCommand(command: new WorldCommand.EnqueueSegment(
             Principal: context.ActingPrincipal(),
             EntityIndex: (resolvedIndex - 1),
             Intent: m_channels.RoleOrdinals.Intent(
-                moveForward: FixedQ4816.FromDouble(value: forward),
+                moveAdvance: FixedQ4816.FromDouble(value: forward),
                 moveStrafe: FixedQ4816.FromDouble(value: strafe),
                 turn: FixedQ4816.FromDouble(value: yaw),
                 moveUp: FixedQ4816.FromDouble(value: up),

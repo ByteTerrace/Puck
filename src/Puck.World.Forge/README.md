@@ -9,27 +9,23 @@ forge — see the `rom-forge` skill.
 `Authoring/` is the authored-content document family `Puck.World` embeds
 inline: `puck.creation.v1` (`CreationDocument`/`CreationCanonicalizer`),
 `puck.audio.v1`, and `puck.synth.v1`, all riding the shared
-`DocumentCanonicalizer` core. `CreationGeometry`, `CreationFrame`,
-`CreationDocumentPatcher`, `ChainRig`/`ChainSolver`, `EditHistory<T>`, and
-`GridSnap` live here too. `SculptModel` — the sculpt workbench's live edit
-session — holds a `CreationDocument` directly (the document IS the model);
-`CreationDocumentPatcher` is the generic dotted/indexed document-path walker
-its `TrySet`/`TryRemove` ride, addressed by `Puck.World.EditorSculptCommandModule`'s
-`editor.sculpt.set`/`.remove` verbs. Host-side float on purpose —
-authoring/presentation math, outside the simulation-state determinism
-contract.
+`DocumentCanonicalizer` core. `CreationFrame` and `GridSnap` live here too.
+Host-side float on purpose — authoring/presentation math, outside the
+simulation-state determinism contract.
 
 ## The creation author frame
 
 Every `puck.creation.v1` position, rotation, and camera offset is authored in
 ONE frame — right-handed, +Y up, +Z the front a shape faces, +X screen-right
-when looking at that front (the sculpt workbench's own view) — a 180° yaw
-about +Y away from the engine's own frame (+Y up, −Z forward). `CreationFrame`
-is the one place that crosses between them; nothing else in the document or
-the engine names either frame.
+when looking at that front — a 180° yaw about +Y away from the engine's own
+frame (+Y up, −Z forward). `CreationFrame` is the one place that crosses
+between them; nothing else in the document or the engine names either frame.
 
-`CreationGeometry` is the one place that decides a primitive's unit shape, so
-an authored `scale` of `(1,1,1)` IS the primitive's unit size:
+The primitive vocabulary and its dimensions belong to `Puck.SignedDistance`:
+`SdfSolidPrimitive` names the shapes and `SdfSolidGeometry` is the one place
+that decides a primitive's unit shape, so an authored `scale` of `(1,1,1)` is
+the primitive's unit size. `CreationGeometry` keeps only the document-shaped
+half — the reach a whole creation implies, shapes and text runs together.
 
 | Primitive | Unit shape | `scale` reads as |
 |---|---|---|
@@ -50,9 +46,20 @@ creation space — after the placement/creation frame chain, before the
 shape's own translate/rotate/scale. An absent/empty list is a no-op and
 keeps a creation's canonical bytes and hash unchanged.
 
-| `$type` | Builder call | Fixed-point solid field |
+The render path applies them as point folds. The contact paths — the analytic
+collider set and the fixed-point solid field — take the rigid copies
+`SdfDomainExpansion` derives instead, so contact carries every copy the fold
+draws. An op with no expansion is refused by name on a solid placement.
+
+| `$type` | Builder call | Contact |
 |---|---|---|
-| `symmetry` | `SymmetryPlane(normal, offset)` | yes |
-| `repeat` | `RepeatLimited(spacing, limit)` | yes |
-| `polar` | `RepeatPolar(count, axis, mirror, materialStride)` | no — render only; a solid placement collides against the unfolded shape |
-| `wallpaper` | `WallpaperFold(group, cell, limit, plane, materialStride, lodDistance)` | no — render only; a solid placement collides against the unfolded shape |
+| `symmetry` | `SymmetryPlane(normal, offset)` | 2 copies |
+| `repeat` | `RepeatLimited(spacing, limit)` | one copy per lattice cell; needs a whole-number `limit` (an absent one is unbounded and refuses) |
+| `polar` | `RepeatPolar(count, axis, mirror, materialStride)` | `count` copies, doubled when `mirror` is set |
+| `wallpaper` | `WallpaperFold(group, cell, limit, plane, materialStride, lodDistance)` | none — refused on a solid placement |
+
+Copies compose across the list, capped by `SdfDomainExpansion.DefaultCopyBudget`.
+Expansion is exact only for a prototype inside the fold's fundamental domain:
+on a symmetry plane's positive side, inside a repeat's centre cell, between a
+polar sector's walls. A prototype straddling a wall renders clipped and
+collides whole.

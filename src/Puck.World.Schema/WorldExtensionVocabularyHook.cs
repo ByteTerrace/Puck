@@ -26,10 +26,6 @@ namespace Puck.World;
 /// loudly and by cause, rather than taking a tick down.</para>
 /// </remarks>
 public static class WorldExtensionVocabularyHook {
-    /// <summary>Answers whether a key names a registered screen-machine engine
-    /// (<see cref="Abstractions.Machines.IScreenMachineEngine"/>). Installed once by the composition root's module
-    /// initializer; read through <see cref="IsRegisteredScreenMachineEngine"/>, never directly.</summary>
-    public static Func<string, bool>? ScreenMachineEngineCheck { get; set; }
     /// <summary>Answers whether a key names a shipped post-render extension (a shader set found by its
     /// <c>puck.shader.v1</c> manifest — this project cannot reference <c>Puck.Shaders</c>, so the catalog never
     /// appears here). Installed once by the composition root's module initializer, the same required,
@@ -37,18 +33,11 @@ public static class WorldExtensionVocabularyHook {
     /// available at module-initializer time, so absence can only mean no composition root installed it. Read
     /// through <see cref="IsRegisteredPostRenderExtension"/>, never directly.</summary>
     public static Func<string, bool>? PostRenderExtensionCheck { get; set; }
+    /// <summary>Answers whether a key names a registered screen-machine engine
+    /// (<see cref="Abstractions.Machines.IScreenMachineEngine"/>). Installed once by the composition root's module
+    /// initializer; read through <see cref="IsRegisteredScreenMachineEngine"/>, never directly.</summary>
+    public static Func<string, bool>? ScreenMachineEngineCheck { get; set; }
 
-    /// <summary>Determines whether <paramref name="engineId"/> names a registered screen-machine engine.</summary>
-    /// <param name="engineId">The candidate engine id.</param>
-    /// <returns><see langword="true"/> when an engine is registered under that id.</returns>
-    /// <exception cref="InvalidOperationException"><see cref="ScreenMachineEngineCheck"/> was never installed. The
-    /// check is never skipped: skipping it would pass a document no host can run.</exception>
-    public static bool IsRegisteredScreenMachineEngine(string engineId) {
-        return ((ScreenMachineEngineCheck is { } check)
-            ? check(engineId)
-            : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.ScreenMachineEngineCheck was never installed — Puck.World's module initializer should have wired it before any validator ran; a screen-machine engine key cannot be checked here, and is never assumed valid.")
-        );
-    }
     /// <summary>Determines whether <paramref name="extensionId"/> names a registered post-render extension.</summary>
     /// <param name="extensionId">The candidate extension id.</param>
     /// <returns><see langword="true"/> when an extension is registered under that id.</returns>
@@ -58,6 +47,17 @@ public static class WorldExtensionVocabularyHook {
         return ((PostRenderExtensionCheck is { } check)
             ? check(extensionId)
             : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.PostRenderExtensionCheck was never installed — Puck.World's module initializer should have wired it before any validator ran; a post-render extension key cannot be checked here, and is never assumed valid.")
+        );
+    }
+    /// <summary>Determines whether <paramref name="engineId"/> names a registered screen-machine engine.</summary>
+    /// <param name="engineId">The candidate engine id.</param>
+    /// <returns><see langword="true"/> when an engine is registered under that id.</returns>
+    /// <exception cref="InvalidOperationException"><see cref="ScreenMachineEngineCheck"/> was never installed. The
+    /// check is never skipped: skipping it would pass a document no host can run.</exception>
+    public static bool IsRegisteredScreenMachineEngine(string engineId) {
+        return ((ScreenMachineEngineCheck is { } check)
+            ? check(engineId)
+            : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.ScreenMachineEngineCheck was never installed — Puck.World's module initializer should have wired it before any validator ran; a screen-machine engine key cannot be checked here, and is never assumed valid.")
         );
     }
 }

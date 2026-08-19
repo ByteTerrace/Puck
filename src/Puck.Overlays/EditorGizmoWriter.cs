@@ -2,8 +2,9 @@ namespace Puck.Overlays;
 
 /// <summary>
 /// The editor-gizmo writer: draws each EDITING seat's projected gizmo chips from an <see cref="IEditorGizmoSource"/>
-/// snapshot — an icon chip (the world icon grammar's speaker/bed symbols) at every projected pose, and a translucent
-/// hairline radius RING for region rows — all inside a <see cref="OverlayFrameBuilder.BeginClip"/> scope on the
+/// snapshot — an icon chip (the resolved speaker/bed plate icons the constructor is handed) at every projected
+/// pose, and a translucent hairline radius RING for region rows — all inside a
+/// <see cref="OverlayFrameBuilder.BeginClip"/> scope on the
 /// seat's viewport rect (a chip near a split boundary cuts, never bleeds). The chip-state tiers carry the
 /// editor semantics for free: selection lights the ACCENT tier, a live change shimmer the HELD tier. Pure record
 /// emission; no GPU types (a surface is a writer, never a new shader).
@@ -22,24 +23,33 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
     /// count; anything past it is refused at the gizmo channel's own boundary, attributed.</summary>
     public const int MaxChipsPerSeat = 16;
 
+    private readonly OverlayResolvedGlyph m_bedIcon;
+    private readonly OverlayResolvedGlyph m_speakerIcon;
     private readonly IEditorGizmoSource m_source;
 
     /// <summary>Initializes a new instance of the <see cref="EditorGizmoWriter"/> class.</summary>
     /// <param name="source">The gizmo snapshot source.</param>
+    /// <param name="speakerIcon">The resolved plate icon for a point-speaker chip — the caller's own icon table
+    /// entry for <c>edit.speaker</c>; <see cref="OverlayResolvedGlyph.None"/> draws a blank plate.</param>
+    /// <param name="bedIcon">The resolved plate icon for an ambient-bed chip — <c>edit.bed</c>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public EditorGizmoWriter(IEditorGizmoSource source) {
+    public EditorGizmoWriter(IEditorGizmoSource source, OverlayResolvedGlyph speakerIcon, OverlayResolvedGlyph bedIcon) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        m_bedIcon = bedIcon;
         m_source = source;
+        m_speakerIcon = speakerIcon;
     }
 
     void IOverlaySeatEmitter<OverlayGizmoSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) =>
         EmitSeat(
+            bedIcon: m_bedIcon,
             builder: builder,
-            seat: in seat
+            seat: in seat,
+            speakerIcon: m_speakerIcon
         );
 
-    private static void EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat) {
+    private static void EmitSeat(OverlayFrameBuilder builder, in OverlayGizmoSeat seat, OverlayResolvedGlyph speakerIcon, OverlayResolvedGlyph bedIcon) {
         var chips = seat.Chips.Span;
         var region = seat.Viewport;
 
@@ -85,19 +95,23 @@ public sealed class EditorGizmoWriter : IOverlaySeatEmitter<OverlayGizmoSeat> {
                 );
             }
 
+            var icon = (chip.Bed
+                ? bedIcon
+                : speakerIcon);
+
             builder.WriteIcon(
                 accent: chip.Selected,
                 alpha: ChipAlpha,
+                badgeGlyph0: 0,
+                badgeGlyph1: 0,
                 bound: true,
                 centerX: chip.CenterX,
                 centerY: chip.CenterY,
-                glyph: OverlayGlyphId.None,
                 glyphHalf: 0f,
                 glyphOffsetX: 0f,
                 glyphOffsetY: 0f,
-                icon: (chip.Bed
-                ? OverlayIconId.AudioBed
-                : OverlayIconId.AudioSpeaker),
+                iconGlyph0: icon.Glyph0,
+                iconGlyph1: icon.Glyph1,
                 plateHalf: PlateHalf,
                 pressed: chip.Pulse
             );

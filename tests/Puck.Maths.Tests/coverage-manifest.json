@@ -3955,6 +3955,16 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FieldEvaluatorCapabilities..ctor(System.Boolean)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.FieldEvaluatorCapabilities.WarpFree",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
       "Id": "Puck.Maths.FieldHomology<TValue,TOps>.BettiNumber(System.Int32)",
       "State": "covered",
       "CoveredBy": [
@@ -9656,6 +9666,26 @@
       "State": "uncovered"
     },
     {
+      "Id": "Puck.Maths.IFieldEvaluator.Capabilities",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IFieldEvaluator.TryDistance(Puck.Maths.FixedPosition,Puck.Maths.FixedQ4816&,System.Int32&)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IFieldEvaluator.TryFieldGradient(Puck.Maths.FixedPosition,Puck.Maths.FixedQ4816,Puck.Maths.FixedVector3&)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IFieldEvaluator.TryFieldGradient(Puck.Maths.FixedPosition,Puck.Maths.FixedVector3&)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
       "Id": "Puck.Maths.IFieldMaterial<TValue,TSelf>.TryInvert(TValue,TValue&)",
       "State": "covered",
       "CoveredBy": [
@@ -9759,6 +9789,36 @@
       "CoveredBy": [
         "presented.material-fused-identities"
       ]
+    },
+    {
+      "Id": "Puck.Maths.IWorldQuery.Capabilities",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IWorldQuery.LineOfSight(Puck.Maths.FixedPosition,Puck.Maths.FixedPosition)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IWorldQuery.Overlap(Puck.Maths.FixedPosition,Puck.Maths.FixedQ4816)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IWorldQuery.Raycast(Puck.Maths.FixedPosition,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816,Puck.Maths.RayHit&)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IWorldQuery.SphereCast(Puck.Maths.FixedPosition,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.RayHit&)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.IWorldQuery.TryGroundHeight(Puck.Maths.FixedPosition,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816&)",
+      "State": "waived",
+      "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
     },
     {
       "Id": "Puck.Maths.IncidenceAlgebra<TValue,TOps>.Algebra",
@@ -16534,6 +16594,26 @@
       ]
     },
     {
+      "Id": "Puck.Maths.QueryCapabilities..ctor(System.Boolean,System.Boolean,System.Boolean)",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.QueryCapabilities.HasBlocked",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.QueryCapabilities.HasHeightfield",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.QueryCapabilities.HasOccupancy",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
       "Id": "Puck.Maths.RadicalShadowAnalysisLimits..ctor(System.Int32,System.Int32,System.Int32)",
       "State": "covered",
       "CoveredBy": [
@@ -17156,6 +17236,36 @@
         "presented.zeta-reciprocal-round-trip",
         "presented.zeta-traces-vs-walk-counts"
       ]
+    },
+    {
+      "Id": "Puck.Maths.RayHit..ctor(Puck.Maths.FixedPosition,Puck.Maths.FixedVector3,Puck.Maths.FixedQ4816,System.Int32,Puck.Maths.WorldQueryConfidence)",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.RayHit.Confidence",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.RayHit.Distance",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.RayHit.Material",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.RayHit.Normal",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.RayHit.Point",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
     },
     {
       "Id": "Puck.Maths.ReedSolomon.BuildGenerator(Puck.Maths.BinaryField<T>,T,System.Int32,System.Span<T>)",
@@ -21729,6 +21839,21 @@
         "sampling.alias-table-frequency-at-scale",
         "sampling.alias-table-frequency-distribution"
       ]
+    },
+    {
+      "Id": "Puck.Maths.WorldQueryConfidence.Bounded",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.WorldQueryConfidence.Exact",
+      "State": "waived",
+      "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own."
+    },
+    {
+      "Id": "Puck.Maths.WorldQueryConfidence.value__",
+      "State": "waived",
+      "Reason": "The compiler-generated enum storage field, not authored API."
     },
     {
       "Id": "Puck.Maths.ZeroDivisorWitness..ctor(System.Int64,System.Int64)",

@@ -57,9 +57,9 @@ public readonly record struct WorldQualityPreset(
 /// Optional; absent leaves <paramref name="Lighting"/>/<paramref name="Sky"/> static.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
-    float ShadowCrowdRadius = 15f,
+    float ShadowCrowdRadius = 0f,
     bool AmbientOcclusion = false,
-    WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Half,
+    WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Native,
     float UpscaleSharpness = 0f,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
@@ -69,43 +69,23 @@ public sealed record WorldRenderDefaults(
     WorldRenderSky? Sky = null,
     WorldRenderCycle? Cycle = null
 ) {
-    // Exact-128 is the built-in scene, so boot in the measured fleet posture that retains ample headroom above the
-    // 60-FPS floor. High/native remains a live quality preset rather than silently changing the population.
-    /// <summary>Gets the built-in default render levers — the boot values and preset table.</summary>
-    public static WorldRenderDefaults Default { get; } = new WorldRenderDefaults();
+    /// <summary>Gets the inert absence — shadows off, no crowd radius, no ambient occlusion, native scale, no
+    /// authored presets. The engine holds no render posture of its own: the standard boot levers and preset table
+    /// are AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits them by naming that document
+    /// as its basis.</summary>
+    public static WorldRenderDefaults Absent { get; } = new WorldRenderDefaults();
 
-    /// <summary>Gets the low quality preset (the authored one, or the built-in).</summary>
-    [JsonIgnore]
-    public WorldQualityPreset Low => (LowRaw ?? new WorldQualityPreset(
-        AmbientOcclusion: false,
-        RenderScale: WorldRenderScaleTier.Half,
-        Shadows: ShadowTier.Off
-    ));
-    /// <summary>Gets the medium quality preset (the authored one, or the built-in).</summary>
-    [JsonIgnore]
-    public WorldQualityPreset Medium => (MediumRaw ?? new WorldQualityPreset(
-        AmbientOcclusion: true,
-        RenderScale: WorldRenderScaleTier.ThreeQuarter,
-        Shadows: ShadowTier.Medium
-    ));
-    /// <summary>Gets the high quality preset (the authored one, or the built-in).</summary>
-    [JsonIgnore]
-    public WorldQualityPreset High => (HighRaw ?? new WorldQualityPreset(
-        AmbientOcclusion: true,
-        RenderScale: WorldRenderScaleTier.Native,
-        Shadows: ShadowTier.High
-    ));
-
-    /// <summary>Returns the preset for a quality tier keyword (case-insensitive <c>low</c>/<c>medium</c>/<c>high</c>), or
-    /// <see langword="null"/> when the token names none.</summary>
+    /// <summary>Returns the authored preset for a quality tier keyword (case-insensitive
+    /// <c>low</c>/<c>medium</c>/<c>high</c>), or <see langword="null"/> when the token names none or the world
+    /// authors no such preset — the <c>world.quality</c> verb refuses by name either way.</summary>
     /// <param name="name">The quality tier keyword.</param>
-    /// <returns>The matching preset, or <see langword="null"/>.</returns>
+    /// <returns>The matching authored preset, or <see langword="null"/>.</returns>
     public WorldQualityPreset? Preset(string name) {
         return (name.ToUpperInvariant() switch {
-            "LOW" => Low,
-            "MEDIUM" => Medium,
-            "HIGH" => High,
-            _ => ((WorldQualityPreset?)null),
+            "LOW" => LowRaw,
+            "MEDIUM" => MediumRaw,
+            "HIGH" => HighRaw,
+            _ => null,
         });
     }
 }

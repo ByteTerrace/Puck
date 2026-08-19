@@ -21,7 +21,13 @@ Primary code:
 
 ## Document shape
 
-Every world requires:
+The engine declares no rig of its own: `views` is REQUIRED exactly when the
+census implies a body (`population.capacity > 0`), the same derived refusal
+`kits` carries, and a seatless document may author none. The standard chase
+framing below is AUTHORED, in `src/Puck.World/Assets/worlds/standard.world.json`
+— a world inherits it by naming that document as its `basis` (`null.world.json`
+does, authoring only its own `layouts` and `seatControl.swapRate` delta), or
+states its own:
 
 ```json
 "views": {
@@ -161,9 +167,18 @@ named `cameras` for `Follow`, `Static`, and `Track` views.
 Named `cameras` resolve through authored anchors independently of the seat
 state. `views.layouts` maps normalized slots to joined seats or named cameras.
 An empty list uses the built-in one-to-four-seat ladder. Layout transition
-duration and render scale remain authored on each layout.
+duration and render scale remain authored on each layout. A layout whose
+`seatCount` no joined-seat count can reach (5+) is selectable only through
+`view.override layout <name>` — the authoring shape for an override-only view.
+Under a camera-only layout, a joined seat the layout binds no seat slot to
+falls back to the first camera-bearing slot's region and camera
+(`WorldFrameSource`), so the cursor, the radial wheel, and pointer
+unprojection ride the view the player is looking at. The composer's active
+selection also publishes the `layout` context family every tick, so a world
+can flip a seat's binding group with the view (see documents.md, context
+rows).
 
-## Pointer, cursor, editor
+## Pointer, cursor, fly camera
 
 `WorldPointerSink` is the one window observer. `WorldSeatViewInput` drains
 motion only for camera steering and asks the active preference whether the
@@ -173,10 +188,12 @@ the presentation projection only: the same relative motion, wheel, and button
 events independently enter `Puck.Commands` through `InputSources.Mouse` while
 absolute cursor position remains observer-only.
 
-`WorldEditorSession` remains a mode coordinator and supplies an explicit
-editor rig while editing; the play chase state stays on the seat and resumes
-after exit. Named cameras and editor rigs do not alter the logical movement
-basis.
+`WorldSeatFlyRig` is the seat's fly control application: `player.mode`
+activates it (a mode state whose `target` is `"camera"`), seeding the fly
+camera from the seat's current chase framing (no pose pop) and resolving it
+against the world-authored `views.flyRig` each frame; the play chase state
+stays on the seat and resumes when the mode flips back. Named cameras and the
+fly rig do not alter the logical movement basis.
 
 ## Verbs
 
@@ -187,7 +204,10 @@ basis.
   slot occupants.
 - `world.view.pointer` — reads pointer position, viewport mapping, visibility,
   arming reason, buttons, hover, and system-release generation.
-- `view.override camera|layout <name|auto>` — live composition override.
+- `view.override camera|layout <name|auto>` — live composition override. It is
+  bindable: a bound dispatch (wheel sector / chord row, no tokens) selects the
+  LAYOUT override by its constant Axis1D value — 0 or less clears to auto, n
+  selects the nth authored `views.layouts` row (document order, 1-based).
 - `world.row.set views.seatRig <json>` — replace seat framing.
 - `world.row.set views.seatControl <json>` — replace yaw reference/pitch band.
 - `world.row.set playerDefaults.seatLook <json>` — replace world-floor input
