@@ -209,7 +209,7 @@ shape is refused by default: Drive takes `body:<n>` (bounded by the
 population) or `all` (trusted only); Observe takes `body:<n>`, plus
 `screen:<n>`/`region:<name>`/`seat:<n>` for untrusted event consumers, or
 `all` for trusted principals; Control takes `screen:<n>` (any),
-`body:<n>` (any, bounded by the population — a context-routes possession
+`body:<n>` (any, bounded by the population — a control-application possession
 target, [engagement.md](engagement.md)), `composition` (trusted), `all` (trusted
 or Peer); Mutate takes `section:<name>` (the DISPATCH lane) or `state:<name>`
 (the CROSS-DOCUMENT write-back lane) or `all` (trusted); Edit takes
@@ -442,8 +442,8 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 ## Verifying
 
 The acting-principal/administration contract is proved by
-`AuthorityAdministrationLawTests` and the engage/disengage-authority contract by
-`EngageAuthorityLawTests`, both in `tests/Puck.World.Tests` with code-built
+`AuthorityAdministrationLawTests` and the compose/dissolve-authority contract by
+`EngageAuthorityLawTests` and `ControlApplicationLawTests`, both in `tests/Puck.World.Tests` with code-built
 furniture. For ad-hoc work: every denial case
 needs a control (actor holding the grant succeeds), keep actor ≠ target
 (every seat is seeded wide, so self-targeting discriminates nothing), and

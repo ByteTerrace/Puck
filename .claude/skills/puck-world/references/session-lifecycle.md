@@ -58,15 +58,24 @@ pre-park immediate-teardown behavior), the SAME call instead:
 `WorldServer.ReclaimExpiredEscrows` (same tick-driven, no-wall-clock,
 replay-deterministic shape `OwnershipEscrow.DeadlineTick` already established)
 — tears down every entry where `Active && Parked && tick >= ParkedUntilTick`:
-drops the body, clears `Active`/`Parked`/`IsRemoteHuman`. **Grant revocation on
-a peer disconnect is NOT deferred** — `ApplyServerEvent`'s `PeerDisconnected`
-case still revokes the disconnected generation's grants immediately, exactly as
-before park-with-grace existed; only the body/occupancy half defers. Deferring
-the grant half too would mean reshaping `WorldServerEvent.PeerDisconnected`'s
-ordered-domain/replay-tape contract (`RevokedGrants` is computed and applied at
-dispatch time), which is out of this wave's scope — a named gap, not an
-oversight. A local seat never held generation-scoped grants to revoke, so this
-asymmetry has no seat-side counterpart.
+drops the body, clears `Active`/`Parked`/`IsRemoteHuman`, and reports the
+reclaimed PEER generation through its `reclaimed` sink. **Grant revocation rides
+the same deadline.** `ApplyPeerDisconnected` returns whether the entry parked;
+`ApplyServerEvent`'s `PeerDisconnected` case revokes `RevokedGrants` immediately
+only for the generations that did NOT park (an authored-zero grace, or no live
+match), and `WorldServer.Step` revokes each reclaimed generation's rows —
+through the ordinary `Revoke` door, off `m_grants.Rows` — right after the sweep.
+One connection-loss event, one timing rule: a reconnect inside the grace window
+resumes onto live authority instead of a re-mint. A local seat never held
+generation-scoped grants to revoke, so this has no seat-side counterpart. It
+stays replay-deterministic for the same reason the body half does: the deadline
+is a pure function of the reproduced disconnect tick and the authored
+`reconnectGraceSeconds`, so the revoke fires at the identical tick on a re-drive
+with no separate tape entry.
+
+Proved by `tests/Puck.World.Tests/ParkedGrantReleaseLawTests.cs` — a positive
+grace retains the rows across a step, an authored-zero grace releases them
+immediately, and a one-tick grace releases them once the sweep crosses it.
 
 Park state is **population state, not a mutation** — it carries no
 `WorldMutation` ordinal (the catalog is 64/64 full; this was never a candidate

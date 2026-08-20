@@ -231,10 +231,28 @@ public sealed class WorldThemeResolve {
         EaseStd: ResolveBezier(bezier: motion.EaseStd)
     );
     private static OverlayThemeValues.IconSet ResolveIcon(WorldThemeIcon icon) => new(StrokeHalfWidth: icon.StrokeHalfWidth);
+    private static OverlayThemeValues.ChromeSet ResolveChrome(WorldThemeChrome chrome) => new(
+        BarHintAlpha: chrome.BarHintAlpha,
+        BarLabelAlpha: chrome.BarLabelAlpha,
+        CursorAlpha: chrome.CursorAlpha,
+        CursorDotMaxHalf: chrome.CursorDotMaxHalf,
+        CursorDotRatio: chrome.CursorDotRatio,
+        CursorLabelGap: chrome.CursorLabelGap,
+        DimQuietAlpha: chrome.DimQuietAlpha,
+        WheelActiveRingAlpha: chrome.WheelActiveRingAlpha,
+        WheelActiveRingOffset: chrome.WheelActiveRingOffset,
+        WheelHubDotHalf: chrome.WheelHubDotHalf,
+        WheelHubLabelGap: chrome.WheelHubLabelGap,
+        WheelLabelAlpha: chrome.WheelLabelAlpha,
+        WheelMarkerGapRatio: chrome.WheelMarkerGapRatio,
+        WheelMarkerHalf: chrome.WheelMarkerHalf,
+        WheelRingAlpha: chrome.WheelRingAlpha
+    );
     private static OverlayThemeValues ResolveCore(WorldDefinition definition, ulong tick) {
         var theme = definition.Theme;
 
         return new OverlayThemeValues(
+            Chrome: ResolveChrome(chrome: theme.Chrome),
             Color: ResolveColor(color: theme.Color, definition: definition, tick: tick),
             Diegetic: ResolveDiegetic(diegetic: theme.Diegetic, definition: definition, tick: tick),
             Elevation: ResolveElevation(elevation: theme.Elevation, definition: definition, tick: tick),

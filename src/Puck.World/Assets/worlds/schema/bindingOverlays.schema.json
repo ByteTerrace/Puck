@@ -422,7 +422,7 @@
         ],
         "properties": {
           "slotSet": {
-            "description": "The physical buttons this bar shows, in authored order (an exotic button\u0027s left-to-right position in its row follows this order) \u2014 every name validated against the full GamepadButtons catalog by name, unique, so the catalog itself bounds the count (the reservation sizes from Puck.Input.Devices.GamepadButtonCatalog.Count).",
+            "description": "The physical controls this bar shows, by INPUT SOURCE ID (gamepad.buttonSouth, mouse.button1, \u2026) in authored order (an exotic slot\u0027s left-to-right position in its row follows this order) \u2014 the same vocabulary a binding entry\u0027s sources speak, every id validated against the engine\u0027s input-source catalog, unique, at most MaxSlots.",
             "type": "array",
             "items": {
               "type": [
@@ -435,7 +435,7 @@
             "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares.",
             "type": "array",
             "items": {
-              "description": "One stacked binding-bar bank: the page it renders and where it renders relative to the bar\u0027s shared anchor. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page).",
+              "description": "One stacked binding-bar bank: the page it renders and its position in the stack. Several banks of the SAME slot set render simultaneously, each showing what that bank\u0027s OWN page binds \u2014 the WoW-addon original\u0027s \u0022five banks of one compass\u0022 idea (resting, LT, RT, LT\u003ERT, RT\u003ELT are the natural five, though a bank may name any page). The engine ARRANGES the stack from Order alone, pitching it off the authored theme\u0027s spacing grid; the two offsets exist only for a world that wants to place one bank by hand.",
               "type": [
                 "object",
                 "null"
@@ -449,13 +449,9 @@
                   "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile.",
                   "type": "string"
                 },
-                "offsetX": {
-                  "description": "This bank\u0027s horizontal displacement from the bar\u0027s shared anchor, in region-height units (the same unit WorldBindingBarLayout\u0027s lengths use).",
-                  "type": "number"
-                },
-                "offsetY": {
-                  "description": "This bank\u0027s vertical displacement, region-height units, Y DOWN (positive moves toward the bottom of the seat\u0027s viewport).",
-                  "type": "number"
+                "order": {
+                  "description": "This bank\u0027s place in the derived stack (unique within the authoring row): 0 sits on the bar\u0027s shared anchor, and each higher order fans one step further out and up.",
+                  "type": "integer"
                 },
                 "alpha": {
                   "description": "This bank\u0027s opacity when it is NOT the seat\u0027s currently active page.",
@@ -468,13 +464,28 @@
                     "null"
                   ],
                   "default": null
+                },
+                "offsetX": {
+                  "description": "Overrides the derived horizontal displacement from the bar\u0027s shared anchor, in region-height units; null takes the derived arrangement. Authoring one offset overrides BOTH axes\u0027 derivation only for the axis it names.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "offsetY": {
+                  "description": "Overrides the derived vertical displacement, region-height units, Y DOWN (positive moves toward the bottom of the seat\u0027s viewport); null takes the derived arrangement.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
                 "id",
                 "pageId",
-                "offsetX",
-                "offsetY",
+                "order",
                 "alpha"
               ],
               "additionalProperties": false
@@ -507,39 +518,172 @@
               "null"
             ],
             "properties": {
+              "scale": {
+                "description": "The uniform cluster scale.",
+                "type": "number",
+                "default": 1
+              },
               "buttonSize": {
                 "description": "The unscaled slot-plate size.",
-                "type": "number"
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
               },
               "centerGap": {
                 "description": "The unscaled extra half-gap between the mirrored clusters.",
-                "type": "number"
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
               },
               "anchorOffsetY": {
                 "description": "The anchor\u0027s lift above the viewport\u0027s bottom edge.",
-                "type": "number"
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
               },
               "glyphOffsetRatio": {
-                "description": "The gamepad glyph\u0027s corner offset as a fraction of ButtonSize.",
-                "type": "number"
+                "description": "The badge\u0027s corner offset as a fraction of ButtonSize.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
               },
               "glyphSizeRatio": {
-                "description": "The gamepad glyph\u0027s size as a fraction of ButtonSize.",
-                "type": "number"
+                "description": "The badge\u0027s size as a fraction of ButtonSize.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
               },
-              "scale": {
-                "description": "The uniform cluster scale.",
-                "type": "number"
+              "centerRowLift": {
+                "description": "The menu row\u0027s lift above the anchor, in scaled button sizes.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "centerSlotSpacing": {
+                "description": "The menu row\u0027s slot pitch, in scaled button sizes.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "exoticRowLift": {
+                "description": "The exotics row\u0027s lift above the anchor, in scaled button sizes.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "exoticSlotSpacing": {
+                "description": "The exotics row\u0027s slot pitch, in scaled button sizes.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "badgeCorner": {
+                "description": "The fixed corner direction a menu/exotics slot\u0027s badge nudges toward (the compass categories take their direction from the pad pictogram geometry instead).",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "modifierHalfRatio": {
+                "description": "The modifier indicator\u0027s plate half-extent, in scaled button sizes.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "modifierSpacingRatio": {
+                "description": "The modifier indicators\u0027 pitch, in scaled button sizes.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "modifierGlyphRatio": {
+                "description": "The modifier badge\u0027s half-extent, as a fraction of the modifier plate half.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "labelCellRatio": {
+                "description": "The page label\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "labelCellMinPx": {
+                "description": "The page label\u0027s glyph-cell floor, px.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "labelGapRatio": {
+                "description": "The page label\u0027s drop below the anchor, as a fraction of the modifier plate half.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "hintCellRatio": {
+                "description": "A chord-hint line\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "hintCellMinPx": {
+                "description": "A chord-hint line\u0027s glyph-cell floor, px.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "hintLineStepRatio": {
+                "description": "The chord-hint line pitch, as a fraction of the hint cell height.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "hintBaseGapRatio": {
+                "description": "The hint stack\u0027s lift above the anchor, as a fraction of the modifier plate half.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
               }
             },
-            "required": [
-              "buttonSize",
-              "centerGap",
-              "anchorOffsetY",
-              "glyphOffsetRatio",
-              "glyphSizeRatio",
-              "scale"
-            ],
             "additionalProperties": false,
             "default": null
           },

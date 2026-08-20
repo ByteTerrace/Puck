@@ -767,7 +767,7 @@ public sealed partial class WorldServer {
             capability: WorldCapability.Mutate,
             subject: GrantSubject.Section(section: lever.Section)
         ) is { IsAllowed: false } verdict) {
-            var denial = $"{principal.Describe()} cannot mutate section:{lever.Section.ToString().ToLowerInvariant()} ({verdict.DescribeDenial()}) — {lever.Kind} lever dropped";
+            var denial = $"{principal.Describe()} cannot mutate section:{lever.Section.ToString().ToLowerInvariant()} ({verdict.DescribeDenial()}) — {lever.Name} lever dropped";
 
             Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
             EchoTap?.Invoke(obj: new WorldEditEcho(

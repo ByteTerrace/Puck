@@ -962,31 +962,35 @@ matching the existing first-row binding-layer consumer in `WorldIdentity`.
 `world.binding-bar [on|off|auto] [player]` reads the resolved policy and controls
 its live visibility override.
 
-`bindingBar.slotSet` (required, non-empty) names the physical buttons the bar
-shows, in authored order — every name validated by exact (case-sensitive) match
-against the full `Puck.Input.Devices.GamepadButtons` catalog
-(`GamepadButtonVocabularyHook`, the `Puck.Input`-vocabulary seam Schema reaches
-the same way it reaches command/channel vocabulary), refusing an unknown name by
-it, a duplicate by index, and the whole list past
-`WorldBindingBarCapacity.MaxSlots` (23, the catalog's own declared-flag count —
-duplicates make the ceiling practically unreachable via valid authoring, which
-is the honest state, not a bug). The classic twelve (`BindingBarLayout.SlotButtons`)
-render in their fixed compass-diamond positions regardless of authored order;
-`Back`/`Guide`/`Start` render as a fixed three-slot row above the anchor, left to
-right in that real-controller order regardless of authored order; every other
-name (Touchpad, Mute, the grips, …) renders in a row further above, left to
-right in AUTHORED order — `BindingBarLayout.Categorize`/`Place`'s documented
-placement rule.
+`bindingBar.slotSet` (required, non-empty) names the physical controls the bar
+shows by INPUT SOURCE ID (`gamepad.buttonSouth`, `gamepad.leftTrigger`,
+`mouse.button1`, …) — the same vocabulary a binding entry's `sources` speak,
+validated against `Puck.Input.InputSourceVocabulary` through
+`InputSourceVocabularyHook` (the `Puck.Input`-vocabulary seam Schema reaches the
+same way it reaches command/channel vocabulary), refusing an unknown id by it, a
+duplicate by index, and the whole list past `WorldBindingBarCapacity.MaxSlots`
+(32 — a declared document ceiling now that no device enum bounds the vocabulary).
+The classic twelve (`BindingBarLayout.SlotSources`) render in their fixed
+compass-diamond positions regardless of authored order; `gamepad.back`/
+`gamepad.guide`/`gamepad.start` (`CenterSources`) render as a fixed three-slot
+row above the anchor, left to right in that real-controller order regardless of
+authored order; every other id (touchpad, mute, the grips, a mouse button, …)
+renders in a row further above, left to right in AUTHORED order —
+`BindingBarLayout.Categorize`/`Place`'s documented placement rule.
 
 `bindingBar.banks` (required, 1..`WorldBindingBarCapacity.MaxBanks` = 5 — the
 WoW-addon original's five chord states: resting/LT/RT/LT>RT/RT>LT) is a keyed
-list of `(id, pageId, offsetX, offsetY, alpha, activeAlpha?)` rows: each bank
-renders the WHOLE authored `slotSet` against its OWN named page (a
+list of `(id, pageId, order, alpha, activeAlpha?, offsetX?, offsetY?)` rows: each
+bank renders the WHOLE authored `slotSet` against its OWN named page (a
 `BindingPageDefinition.Id` — validated to exist somewhere in the COMPOSED
 binding profile, checked after `BindingProfile.Compile` succeeds, since only the
-whole overlay stack's result can answer that), displaced by its own 2D offset
-(region-height units, y-down, the same unit `WorldBindingBarLayout`'s lengths
-use) from the bar's shared anchor, at its authored `alpha` — or `activeAlpha`
+whole overlay stack's result can answer that), displaced from the bar's shared
+anchor by an arrangement the ENGINE derives from `order` alone (unique per row;
+`BindingBarLayout.BankOffset` fans alternate sides and climbs one row per pair,
+pitched off the authored theme's `space3`/`space2` steps times the button size,
+so a retheme re-pitches the stack without re-authoring a bank) — `offsetX`/
+`offsetY` are optional per-axis overrides for a world that wants one bank placed
+by hand. Each draws at its authored `alpha` — or `activeAlpha`
 (default 1.0) when that bank's page is the seat's CURRENTLY active one. A
 player's own `identity.bindings`-stored `BindingProfileDocument.BindingBar`
 (`Puck.Commands.BindingBarPreferences`: `hideUnbound`/`stacked`/`scale`, all
@@ -996,27 +1000,31 @@ back to every bank when none of them actually names the active page, rather than
 drawing nothing) and a `scale` override, resolved in `WorldBindingBarControl.Status`.
 
 `bindingBar.text` (default `true`) is the bar's ATLAS-TEXT switch: `false` drops
-every text run the bar writes — the letter badges (`LB`/`RB`, `LT`/`RT`,
-`LS`/`RS`, the menu trio, the exotics — the glyphs `OverlayGamepadGlyphs.BadgeLabel`
-routes to the shared atlas), the active page's name under the modifier pips, and
-the chord-hint lines above them — leaving a purely pictographic bar: the plates,
-the PROCEDURAL badge glyphs (the d-pad arrows and the face-position diamonds),
-the bound actions' icons, and the pips all still draw. The policy resolves ONCE
+every text run the bar writes — every badge whose authored icon row carries a
+`label` (`LB`/`RB`, `LT`/`RT`, `LS`/`RS`, the menu trio, the exotics), the
+active page's name under the modifier
+indicators, and the chord-hint lines above them — leaving a purely pictographic
+bar: the plates, the PROCEDURAL badge glyphs (the d-pad arrows and the
+face-position diamonds), the bound actions' icons, and the indicators all still
+draw. The policy resolves ONCE
 per seat in `WorldOverlayFeed.Tick` and shapes what it publishes (a suppressed
-badge is `OverlayGlyphId.None`, a suppressed label the empty string, suppressed
+badge is `OverlayResolvedGlyph.None`, a suppressed label the empty string, suppressed
 hints an empty span — each already a case `BindingBarWriter` draws nothing for),
 so the writer carries no text policy of its own. `standard.world.json` authors
 `"text": false`; `null.world.json` keeps the text (its showcase banks name their
 page).
 
-Every rendered slot's `Pressed` state reflects the PHYSICAL button's live carry
+Every rendered slot's `Pressed` state reflects the PHYSICAL control's live carry
 (`BindingBarSeatComposer.IsPhysicallyPressed`, resolved once from the seat's
-ACTIVE page view and reused across every bank showing that button — a button's
-momentary press state does not depend on which bank/page is drawing it). Glyph
-resolution stays family-agnostic by design (`OverlayGamepadGlyphs.Resolve`
-ignores its `family` parameter): no per-family (Switch/Xbox/DualSense) glyph
-art exists today, so the `family` seam is threaded through end to end and
-falls back to the neutral procedural/lettered glyphs everywhere.
+ACTIVE page view by input source id and reused across every bank showing that
+control — a control's momentary press state does not depend on which bank/page is
+drawing it). Badge content comes from `icons.badges`, keyed by the SAME input
+source id: `WorldIconTable.ResolveBadge` is the one door a slot, a modifier
+indicator, and a chord hint all go through, checking the row's per-family
+override (`Puck.Input.Devices.GamepadType` member name) before its default icon.
+A source with no badge row simply draws no badge, so badging a control the
+gamepad vocabulary never named (`mouse.button1`) is an authoring act, not a code
+change.
 
 **Overlay visibility (`visible`).** Every overlay element — a `hud.panels` row, a
 seat's player-scope panel, `hud.defaults` (the gate over every world panel),
@@ -1043,8 +1051,9 @@ matching context row's group (document order) → the seat's requested group
 A family is one of three kinds: a BUILT-IN engine family
 (`WorldContextFamilies` — the output of one per-seat single-valued state
 machine): `roster` publishes `unjoined|claimed|pending|active`, `engagement`
-publishes `engaged|none` (a loopback read over the grant table's Control
-route, synced once at post-build wiring and every tick post-step via
+publishes `engaged|none` (a loopback read of whether the grant table's
+control-application set names anything beyond the seat's own body, synced once
+at post-build wiring and every tick post-step via
 `WorldSeatContextSync.Publish`), and `layout` publishes the window composer's
 active layout selection (an authored `views.layouts` name, or `builtin`) — an
 OPEN-states family (`WorldContextFamilies.IsOpenStates`): any state token is

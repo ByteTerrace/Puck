@@ -1,7 +1,7 @@
 namespace Puck.Input.Devices;
 
 /// <summary>The declared <see cref="GamepadType"/> vocabulary, derived from the enum itself — the icon badge-override
-/// family-name hook resolves here, the same shape <see cref="GamepadButtonCatalog"/> takes for button names.</summary>
+/// family-name hook resolves here.</summary>
 public static class GamepadFamilyCatalog {
     /// <summary>Gets the number of declared non-<see cref="GamepadType.Unknown"/> families — the true cardinality a
     /// per-badge family-override ceiling equals.</summary>

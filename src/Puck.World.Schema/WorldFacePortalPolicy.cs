@@ -134,23 +134,19 @@ public static class WorldFacePortalPolicy {
     /// <param name="row">The derived face row.</param>
     /// <param name="crossingFloor">The document's <see cref="CrossingFloor"/>.</param>
     /// <param name="aperture">The region on success; otherwise <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the face's shape kind maps onto a region arm.</returns>
+    /// <returns><see langword="true"/> when the face's shape kind opens a region.</returns>
     public static bool TryAperture(in WorldFaceRow row, FixedQ4816 crossingFloor, out WorldFaceAperture? aperture) {
-        switch (row.Aperture) {
-            case WorldFaceApertureKind.Box:
-                aperture = new WorldFaceAperture.Box(
-                    Frame: row.Frame,
-                    Depth: FixedQ4816.Max(
-                        x: row.Frame.HalfDepth,
-                        y: crossingFloor
-                    )
-                );
+        if (row.Aperture is not { } recipe) {
+            aperture = null;
 
-                return true;
-            default:
-                aperture = null;
-
-                return false;
+            return false;
         }
+
+        aperture = recipe.Open(
+            arg1: row.Frame,
+            arg2: crossingFloor
+        );
+
+        return true;
     }
 }

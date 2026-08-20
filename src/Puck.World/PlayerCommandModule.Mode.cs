@@ -12,10 +12,10 @@ internal sealed partial class PlayerCommandModule {
     // ReconcileInhabitants placed it this boot.
     private static string CameraPlacementId(int slot) => $"{WorldSeatModeState.CameraPlacementIdPrefix}{slot}";
     // Composes the camera control application: possesses the seat's designated camera body through the SAME
-    // Engage/Control(+per-tick Drive) gated path any other possession target uses (Server.WorldEngagement) — never a
-    // bespoke authority check. Capture:true idles the seat's own avatar for the duration, exactly like an ordinary
+    // ComposeControl/Control(+per-tick Drive) gated path any other possession target uses (Server.WorldEngagement) — never a
+    // bespoke authority check. Exclusive composition drops the seat's own-body application for the duration, exactly like an ordinary
     // vehicle possession; WorldPerceptionAnchor then swaps the seat's camera eye/audio listener/HUD bindings onto the
-    // camera body as a side effect of the SAME route, not a second mechanism. Refuses (mutating nothing) when the
+    // camera body as a side effect of the SAME application set, not a second mechanism. Refuses (mutating nothing) when the
     // world declares no camera body for this seat, or the server's own Control check denies the actor — the ModeHandler
     // caller has already checked Drive over the target SEAT's own body; this is the separate Control check the route
     // itself requires.
@@ -51,9 +51,9 @@ internal sealed partial class PlayerCommandModule {
             )
         );
 
-        m_link.SubmitCommand(command: new WorldCommand.Engage(
-            Capture: true,
+        m_link.SubmitCommand(command: new WorldCommand.ComposeControl(
             EntityIndex: slot,
+            Exclusive: true,
             Principal: actingPrincipal,
             Target: target,
             TargetPrincipal: WorldPrincipal.Seat(slot: slot)
@@ -61,9 +61,9 @@ internal sealed partial class PlayerCommandModule {
 
         return true;
     }
-    // Dissolves the camera control application through the ordinary Disengage door — the avatar resumes driving
-    // itself and the perceived body/camera eye/audio listener fall back to it the instant WorldEngagement clears the
-    // route, mirroring ActivateCameraApplication's own single mechanism.
+    // Dissolves the camera control application through the ordinary DissolveControl door — the avatar resumes driving
+    // itself and the perceived body/camera eye/audio listener fall back to it the instant WorldEngagement restores the
+    // own-body application, mirroring ActivateCameraApplication's own single mechanism.
     private void DeactivateCameraApplication(WorldPrincipal actingPrincipal, int slot) {
         WorldCameraApplication.Deactivate(
             actingPrincipal: actingPrincipal,
@@ -303,14 +303,14 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: CameraCommand,
-            description: $"Toggles a seat's Free Cam: player.camera [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary Engage door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
+            description: $"Toggles a seat's Free Cam: player.camera [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary ComposeControl door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
             handler: CameraHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: ModeCommand,
-            description: "Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): player.mode <family> <state> [seat] (seat 1..4, default 1). player.mode <family> [seat] reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the camera control application: the seat possesses its declared camera body through the ordinary Engage door (the same possession primitive player.engage uses) — its own body intent diverts to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig); leaving such a state disengages, restoring the seat's own body. An unknown family or state is refused by name, naming every admissible sibling.",
+            description: "Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): player.mode <family> <state> [seat] (seat 1..4, default 1). player.mode <family> [seat] reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the camera control application: the seat possesses its declared camera body through the ordinary ComposeControl door (the same possession primitive player.engage uses) — its own body intent diverts to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig); leaving such a state disengages, restoring the seat's own body. An unknown family or state is refused by name, naming every admissible sibling.",
             handler: ModeHandler,
             routing: CommandRouting.Simulation
         );

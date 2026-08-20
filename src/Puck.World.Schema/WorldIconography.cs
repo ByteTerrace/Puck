@@ -10,7 +10,13 @@ public static class WorldIconCapacity {
     public const int MaxBadges = 32;
     /// <summary>The most icon rows one world authors.</summary>
     public const int MaxIcons = 128;
-    /// <summary>The most characters a <see cref="WorldIconRow.Label"/> carries.</summary>
+    /// <summary>The most characters a <see cref="WorldIconRow.Label"/> carries — the ONE declaration of the label
+    /// arity the whole draw path is cut for.</summary>
+    /// <remarks>KEEP IN SYNC with the two shapes that carry a resolved label downstream, neither of which can grow
+    /// without a wire change: <c>Puck.Overlays.OverlayResolvedGlyph</c> holds exactly two glyph slots
+    /// (<c>Glyph0</c>/<c>Glyph1</c>), and <c>Puck.Overlays.OverlayFrameBuilder.WriteIcon</c> packs exactly two 7-bit
+    /// badge-glyph fields into the icon element's state word (bits 9..15 and 16..22). Raising this constant alone
+    /// silently truncates every third character at the composer.</remarks>
     public const int MaxLabelChars = 2;
 }
 
@@ -101,14 +107,16 @@ public sealed record WorldIconRow(
 /// <param name="Family">The controller family name.</param>
 /// <param name="Icon">The icon name this family shows instead of the row's default.</param>
 public sealed record WorldIconBadgeOverride(string Family, string Icon);
-/// <summary>One physical-button badge mapping: which authored icon a <c>GamepadButtons</c> flag (by declared member
-/// name) shows on the binding bar, with optional per-family overrides — this replaces the engine's baked
-/// button→glyph switch and makes the dormant controller-family seam real as data.</summary>
-/// <param name="Button">The physical button (a declared, non-<c>None</c> <c>GamepadButtons</c> member name).</param>
+/// <summary>One physical-control badge mapping: which authored icon an INPUT SOURCE ID shows on the binding bar, with
+/// optional per-family overrides — the engine holds no button→glyph switch, and a control the bar can name is a
+/// control a badge row can key. A slot, a modifier indicator, and a chord hint all resolve their badge through this
+/// one table, by the same id.</summary>
+/// <param name="Source">The physical control's input source id (<c>gamepad.buttonSouth</c>, <c>gamepad.leftTrigger</c>,
+/// <c>mouse.button1</c>, …).</param>
 /// <param name="Icon">The default icon name.</param>
 /// <param name="OverridesRaw">Family-specific overrides — ABSENT resolves to none.</param>
 public sealed record WorldIconBadgeRow(
-    string Button,
+    string Source,
     string Icon,
     [property: JsonPropertyName("overrides"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldIconBadgeOverride>? OverridesRaw = null
 ) {

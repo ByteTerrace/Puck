@@ -18,12 +18,13 @@ public static class WorldContextFamilies {
     public const string Layout = "layout";
     /// <summary>The layout state while the built-in seat ladder composes the window.</summary>
     public const string LayoutBuiltin = "builtin";
-    /// <summary>The engagement family: whether the seat's acting principal holds a Control route over a screen.</summary>
+    /// <summary>The engagement family: whether the seat's acting principal has composed any control application
+    /// beyond its own body.</summary>
     public const string Engagement = "engagement";
-    /// <summary>The engagement state while the seat's principal holds a Control route (<c>IWorldGrantsView.ControlRoute</c>
-    /// answers a screen).</summary>
+    /// <summary>The engagement state while the seat's principal's <c>IWorldGrantsView.Applications</c> set names any
+    /// target other than its own body.</summary>
     public const string EngagementEngaged = "engaged";
-    /// <summary>The engagement state while the seat's principal holds no Control route.</summary>
+    /// <summary>The engagement state while the seat's principal holds only its own-body application.</summary>
     public const string EngagementNone = "none";
     /// <summary>The roster family: a seat's participant-lifecycle state.</summary>
     public const string Roster = "roster";

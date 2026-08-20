@@ -82,7 +82,7 @@ registry a camera rig resolves against (`Views.SdfCameraView.Resolve` is its
 only consumer). `Puck.SdfVm.Views` holds the camera-rig shapes
 (`OrbitRig`/`FollowRig`/`FixedRig`/`FirstPersonRig`/`DollyRig`) and
 `ViewStack`, the budgeted round-robin registry for offscreen view content
-(`SdfCameraView`/`GuestSurfaceView`/`NestedWorldView`) with the
+(`SdfCameraView`/`WorldSessionView`) with the
 self-reference rule that keeps a screen wired to its own view from
 compounding frame over frame.
 

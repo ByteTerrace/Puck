@@ -129,36 +129,21 @@ public static class WorldSubmissionCodec {
         Detail: detail,
         Refusal: refusal
     );
-    private static WorldLeverKind LeverFromWire(byte value) => value switch {
-        0 => WorldLeverKind.MasterVolume,
-        1 => WorldLeverKind.Shadows,
-        2 => WorldLeverKind.AmbientOcclusion,
-        3 => WorldLeverKind.AmbientOcclusionQuality,
-        4 => WorldLeverKind.FarBound,
-        5 => WorldLeverKind.ShadowFarExit,
-        6 => WorldLeverKind.ShadowAccumulation,
-        7 => WorldLeverKind.ShadowMask,
-        8 => WorldLeverKind.ShadowMarch,
-        9 => WorldLeverKind.RenderScale,
-        10 => WorldLeverKind.UpscaleSharpness,
-        11 => WorldLeverKind.TargetHertz,
-        _ => throw UnknownWire<WorldLeverKind>(value: value),
-    };
-    private static byte LeverToWire(WorldLeverKind value) => value switch {
-        WorldLeverKind.MasterVolume => 0,
-        WorldLeverKind.Shadows => 1,
-        WorldLeverKind.AmbientOcclusion => 2,
-        WorldLeverKind.AmbientOcclusionQuality => 3,
-        WorldLeverKind.FarBound => 4,
-        WorldLeverKind.ShadowFarExit => 5,
-        WorldLeverKind.ShadowAccumulation => 6,
-        WorldLeverKind.ShadowMask => 7,
-        WorldLeverKind.ShadowMarch => 8,
-        WorldLeverKind.RenderScale => 9,
-        WorldLeverKind.UpscaleSharpness => 10,
-        WorldLeverKind.TargetHertz => 11,
-        _ => throw UnknownEnum(value: value),
-    };
+    // The lever leaf is keyed by the knob's registered NAME, not an ordinal: the vocabulary is a composition-time
+    // registration (Client.WorldSessionLevers), so the wire carries the token and the applier owns which tokens
+    // resolve. An empty name can address no registration, so it is refused here rather than travelling.
+    private static string ReadLeverName(BinaryReader reader) {
+        var value = reader.ReadString();
+
+        if (value.Length == 0) {
+            throw new LeafCodecException(failure: Fail(
+                detail: "session lever name is empty",
+                refusal: WorldCodecRefusal.PayloadMalformed
+            ));
+        }
+
+        return value;
+    }
     private static Type? MutationType(byte kind) {
         try {
             foreach (var entry in WorldMutationKindCatalog.All()) {
@@ -325,14 +310,14 @@ public static class WorldSubmissionCodec {
             EntityIndex: entity,
             Principal: principal
         ),
-            7 => new WorldCommand.Engage(
+            7 => new WorldCommand.ComposeControl(
             Principal: principal,
             EntityIndex: entity,
             Target: ReadSubject(reader: reader),
-            Capture: reader.ReadBoolean(),
+            Exclusive: reader.ReadBoolean(),
             TargetPrincipal: ReadPrincipal(reader: reader)
         ),
-            8 => new WorldCommand.Disengage(
+            8 => new WorldCommand.DissolveControl(
             Principal: principal,
             EntityIndex: entity,
             TargetPrincipal: ReadPrincipal(reader: reader)
@@ -1094,15 +1079,15 @@ public static class WorldSubmissionCodec {
                 writer.Write(value: ((byte)5)); writer.Write(value: value.X); writer.Write(value: value.Z); writer.Write(value: value.YawRadians); writer.Write(value: value.Seconds); break;
             case WorldCommand.Stop:
                 writer.Write(value: ((byte)6)); break;
-            case WorldCommand.Engage value:
+            case WorldCommand.ComposeControl value:
                 writer.Write(value: ((byte)7)); WriteSubject(
                     writer,
                     value.Target
-                ); writer.Write(value: value.Capture); WritePrincipal(
+                ); writer.Write(value: value.Exclusive); WritePrincipal(
                     writer,
                     value.TargetPrincipal
                 ); break;
-            case WorldCommand.Disengage value:
+            case WorldCommand.DissolveControl value:
                 writer.Write(value: ((byte)8)); WritePrincipal(
                     writer,
                     value.TargetPrincipal
@@ -1651,9 +1636,10 @@ public static class WorldSubmissionCodec {
             bytes,
             reader => new WorldSessionLever(
                 Section: ReadSection(reader: reader),
-                Kind: LeverFromWire(value: reader.ReadByte()),
+                Name: ReadLeverName(reader: reader),
                 A: reader.ReadDouble(),
-                B: reader.ReadDouble()
+                B: reader.ReadDouble(),
+                Seat: reader.ReadInt32()
             ),
             out lever,
             out failure
@@ -1932,9 +1918,10 @@ public static class WorldSubmissionCodec {
                     writer,
                     lever.Section
                 );
-                writer.Write(value: LeverToWire(value: lever.Kind));
+                writer.Write(value: (lever.Name ?? string.Empty));
                 writer.Write(value: lever.A);
                 writer.Write(value: lever.B);
+                writer.Write(value: lever.Seat);
             },
             out bytes,
             out failure

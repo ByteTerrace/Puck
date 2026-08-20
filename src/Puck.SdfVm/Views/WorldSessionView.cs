@@ -7,27 +7,26 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm.Views;
 
 /// <summary>
-/// A session-observed world's independent render — the successor <see cref="NestedWorldView"/>'s own remarks name
-/// ("reuse only after those gaps close; a successor is acceptable"), built for docs/vision.md's "Observation
-/// and display" section. Wraps an independent <see cref="ISdfFrameSource"/> (a
-/// <see cref="SdfCompositionFrameSource"/> composing a destination's own static geometry) through its own offscreen
-/// <see cref="SdfWorldEngine"/>, exactly like <see cref="NestedWorldView"/> — the difference that matters is how it
-/// captures: never through the host's own clock.
+/// A session-observed world's independent render, built for docs/vision.md's "Observation and display" section.
+/// Wraps an independent <see cref="ISdfFrameSource"/> (a <see cref="SdfCompositionFrameSource"/> composing a
+/// destination's own static geometry) through its own offscreen <see cref="SdfWorldEngine"/>, exactly like
+/// <see cref="SdfCameraView"/> films the host world — the difference that matters is how it captures: never
+/// through the host's own clock.
 /// </summary>
 /// <remarks>
-/// <para><b>Timing, contrasted with <see cref="NestedWorldView"/>.</b> That type's own remarks name its gap
-/// plainly: it "uses the host presentation clock" — <c>context.Host.FrameDeltaSeconds</c>/<c>InterpolationAlpha</c>
-/// — which docs/vision.md's "Ruled out" table rejects outright ("Host interpolation for destination views":
-/// independently scheduled or remote worlds do not share a presentation coordinate). This type instead measures
-/// its own produced-frame interval — real wall time between this view's own <see cref="Resolve"/> calls, zero on
-/// the first — and hands that to <see cref="ISdfFrameSource.CaptureFrame"/>'s <c>deltaSeconds</c>: never the
+/// <para><b>Timing.</b> The host presentation clock (<c>context.Host.FrameDeltaSeconds</c>/
+/// <c>InterpolationAlpha</c>) is what docs/vision.md's "Ruled out" table rejects outright ("Host interpolation for
+/// destination views": independently scheduled or remote worlds do not share a presentation coordinate). This type
+/// instead measures its own produced-frame interval — real wall time between this view's own
+/// <see cref="Resolve"/> calls, zero on the first — and hands that to
+/// <see cref="ISdfFrameSource.CaptureFrame"/>'s <c>deltaSeconds</c>: never the
 /// host's clock (this view's own produce cadence, not the host's per-frame one), so a dressed frame's own
 /// time-based ease (a chase-camera <c>SmoothRate</c>, an accumulated presentation clock) advances across produced
 /// frames, including the ones this view's round-robin turn skips. <c>interpolationAlpha</c> stays fixed at zero:
-/// the wrapped content carries no live-body pose to interpolate through this general seam (see
-/// <c>Puck.World.Client.WorldSessionMirror</c>'s own staged-boundary remarks) — the away-seat dresser derives its
-/// own alpha independently, from the mirror's snapshot-arrival timestamp, never from this parameter.</para>
-/// <para>Budgeted like <see cref="NestedWorldView"/> and <see cref="SdfCameraView"/> (<see cref="IsBudgeted"/> is
+/// the wrapped content carries no live-body pose to interpolate through this general seam — the away-seat dresser
+/// derives its own alpha independently, from the mirror's snapshot-arrival timestamp, never from this
+/// parameter.</para>
+/// <para>Budgeted like <see cref="SdfCameraView"/> (<see cref="IsBudgeted"/> is
 /// <see langword="true"/>): <see cref="ViewStack"/>'s own refresh-divisor/round-robin budget and its
 /// persisted-last-handle-on-skip contract are what satisfy "retain the last completed image when the budget skips a
 /// refresh" — nothing here duplicates that.</para>
@@ -57,7 +56,7 @@ public sealed class WorldSessionView : IViewContent, IDisposable {
     // H3: the last successfully produced frame's output handle — served while m_engine is torn down and awaiting
     // rebuild (see Resolve's catch below), and while no frame has ever completed (0, the ordinary "no signal" value).
     private nint m_lastGoodHandle;
-    // This view's own produced-frame clock (see the type remarks' "fix over NestedWorldView"): the wall-clock
+    // This view's own produced-frame clock (see the type remarks' timing paragraph): the wall-clock
     // timestamp of this view's own last Resolve, and whether one has happened yet — never the host's per-frame
     // clock, and never advanced on a frame this view's own round-robin turn skipped (Resolve simply is not called
     // on those).

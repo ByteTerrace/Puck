@@ -259,6 +259,7 @@ internal static class WorldPostBuildWiring {
         var renderSettings = services.GetRequiredService<WorldRenderSettings>();
         var screenBinder = services.GetRequiredService<WorldScreenBinder>();
         var pacing = services.GetRequiredService<PresentPacingControl>();
+        var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
 
         worldServer.SaveEffectTap = tick => {
             var target = definitionSource.SourcePath;
@@ -270,6 +271,7 @@ internal static class WorldPostBuildWiring {
                     population: worldServer.Population,
                     binder: screenBinder,
                     audio: audioDirector,
+                    bindingBar: bindingBarVisibility,
                     pacing: pacing,
                     tick: tick
                 );

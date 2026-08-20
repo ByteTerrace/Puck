@@ -102,8 +102,8 @@ public sealed class WorldHandleTable {
         for (var index = 0; (index < projected.Length); index++) {
             var subject = projected[index];
             // Keep the OUTGOING slot's generation when this index still names the IDENTICAL subject it named before —
-            // the common case, since WorldGrants.Revision is process-global (bumped by every principal's grant/revoke
-            // and by SetControlRoute/ClearControlRoute) while a rebuild it triggers here often reprojects to the exact
+            // the common case, since WorldGrants.Revision is process-global (bumped by every principal's grant and
+            // revoke) while a rebuild it triggers here often reprojects to the exact
             // same array for THIS principal/capability. Minting fresh regardless would invalidate every live handle of
             // every principal on any unrelated write — "revocation is a cleared slot, O(1), immediate" would otherwise
             // become "every write clears every slot of every principal". Only an index whose designation actually

@@ -28,7 +28,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldTextCatalog textCatalog) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     private CommandResult Submit(WorldMutation mutation) {
@@ -378,6 +378,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         population: server.Population,
                         binder: screenBinder,
                         audio: audioDirector,
+                        bindingBar: bindingBarVisibility,
                         pacing: pacing,
                         tick: (server.NextInputTick - 1UL)
                     );
@@ -477,6 +478,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     population: server.Population,
                     binder: screenBinder,
                     audio: audioDirector,
+                    bindingBar: bindingBarVisibility,
                     pacing: pacing
                 );
                 var audioCurve = (string.Equals(

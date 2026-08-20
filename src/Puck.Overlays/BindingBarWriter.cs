@@ -18,14 +18,19 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     public const int MaxLineChars = 46;
 
     private readonly IBindingBarSource m_source;
+    private readonly OverlayThemeStore m_theme;
 
     /// <summary>Initializes a new instance of the <see cref="BindingBarWriter"/> class.</summary>
     /// <param name="source">The binding-bar snapshot source.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public BindingBarWriter(IBindingBarSource source) {
+    /// <param name="theme">The live resolved theme.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
+    /// <see langword="null"/>.</exception>
+    public BindingBarWriter(IBindingBarSource source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: theme);
 
         m_source = source;
+        m_theme = theme;
     }
 
     void IOverlaySeatEmitter<OverlayBindingSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) =>
@@ -49,6 +54,9 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         }
 
         var layout = seat.Layout;
+        var chrome = m_theme.Current.Chrome;
+        var space = m_theme.Current.Space;
+        var scaledButtonSize = (layout.ButtonSize * layout.Scale);
         var regionWidthPx = (region.Width * builder.Width);
         var regionHeightPx = (region.Height * builder.Height);
         var regionOriginX = (region.X * builder.Width);
@@ -70,12 +78,20 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 categoryIndex: slot.CategoryIndex,
                 options: in layout
             );
-            var centerX = ((regionOriginX + (placement.Center.X * regionHeightPx)) + (slot.BankOffset.X * regionHeightPx));
-            var centerY = ((regionOriginY + (placement.Center.Y * regionHeightPx)) + (slot.BankOffset.Y * regionHeightPx));
+            var derived = BindingBarLayout.BankOffset(
+                buttonSize: scaledButtonSize,
+                order: slot.BankOrder,
+                space: in space
+            );
+            var bankOffset = (slot.BankOffsetOverride ?? derived);
+            var centerX = ((regionOriginX + (placement.Center.X * regionHeightPx)) + (bankOffset.X * regionHeightPx));
+            var centerY = ((regionOriginY + (placement.Center.Y * regionHeightPx)) + (bankOffset.Y * regionHeightPx));
 
             builder.WriteIcon(
                 accent: slot.Accent,
-                alpha: slot.Alpha,
+                alpha: (slot.Bound
+                ? slot.Alpha
+                : (slot.Alpha * chrome.DimQuietAlpha)),
                 badgeGlyph0: slot.BadgeGlyph0,
                 badgeGlyph1: slot.BadgeGlyph1,
                 bound: slot.Bound,
@@ -99,14 +115,13 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         );
         var anchorX = (regionOriginX + (anchor.X * regionHeightPx));
         var anchorY = (regionOriginY + (anchor.Y * regionHeightPx));
-        var scaledButtonSize = (layout.ButtonSize * layout.Scale);
-        var modifierHalf = ((scaledButtonSize * 0.35f) * regionHeightPx);
-        var modifierSpacing = ((scaledButtonSize * 1.1f) * regionHeightPx);
+        var modifierHalf = ((scaledButtonSize * layout.ModifierHalfRatio) * regionHeightPx);
+        var modifierSpacing = ((scaledButtonSize * layout.ModifierSpacingRatio) * regionHeightPx);
         // The page NAME rides directly under the modifiers — the visible half of the page model: squeeze a trigger chord
         // and the bar both re-renders AND says which page it turned to, so a sparse page still reads.
         var labelCell = Math.Max(
-            val1: 12,
-            val2: ((int)(modifierHalf * 1.9f))
+            val1: ((int)layout.LabelCellMinPx),
+            val2: ((int)(modifierHalf * layout.LabelCellRatio))
         );
 
         if (!string.IsNullOrEmpty(value: seat.Label)) {
@@ -116,7 +131,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
 
             builder.WriteText(
-                alpha: 0.9f,
+                alpha: chrome.BarLabelAlpha,
                 cellHeight: labelCell,
                 maxChars: MaxLineChars,
                 role: OverlayColorRole.TextPrimary,
@@ -125,7 +140,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                     cellHeight: labelCell,
                     chars: labelChars
                 ) * 0.5f)),
-                y: (anchorY + (modifierHalf * 1.4f))
+                y: (anchorY + (modifierHalf * layout.LabelGapRatio))
             );
         }
 
@@ -146,13 +161,13 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 accent: false,
                 alpha: (modifier.Held
                 ? 1f
-                : 0.35f),
+                : chrome.DimQuietAlpha),
                 badgeGlyph0: modifier.BadgeGlyph0,
                 badgeGlyph1: modifier.BadgeGlyph1,
                 bound: true,
                 centerX: (anchorX + ((index - ((modifierCount - 1) * 0.5f)) * modifierSpacing)),
                 centerY: anchorY,
-                glyphHalf: (modifierHalf * 0.8f),
+                glyphHalf: (modifierHalf * layout.ModifierGlyphRatio),
                 glyphOffsetX: 0f,
                 glyphOffsetY: 0f,
                 iconGlyph0: 0,
@@ -171,11 +186,11 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         }
 
         var hintCell = Math.Max(
-            val1: 10,
-            val2: ((int)(modifierHalf * 1.6f))
+            val1: ((int)layout.HintCellMinPx),
+            val2: ((int)(modifierHalf * layout.HintCellRatio))
         );
-        var hintLineStep = (hintCell * 1.3f);
-        var hintBaseY = (anchorY - (modifierHalf * 2.2f));
+        var hintLineStep = (hintCell * layout.HintLineStepRatio);
+        var hintBaseY = (anchorY - (modifierHalf * layout.HintBaseGapRatio));
         // Bounded and pinned: a page with many command-chord rows would otherwise lose its overflow silently at the
         // shared record pool's boundary, by draw-order accident. The first MaxHintLines rows draw; the rest are
         // refused at the bar's reservation and attributed to the bar — boundedness is what makes the reservation
@@ -214,7 +229,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
 
             builder.WriteText(
-                alpha: 0.6f,
+                alpha: chrome.BarHintAlpha,
                 cellHeight: hintCell,
                 maxChars: MaxLineChars,
                 role: OverlayColorRole.TextDim,

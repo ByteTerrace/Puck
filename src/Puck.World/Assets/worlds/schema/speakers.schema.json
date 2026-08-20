@@ -117,7 +117,8 @@
             "type": [
               "number",
               "null"
-            ]
+            ],
+            "default": null
           },
           "name": {
             "description": "The speaker\u0027s stable name \u2014 its mutation address.",
@@ -136,7 +137,6 @@
           "center",
           "radius",
           "innerRadius",
-          "fadeSeconds",
           "name",
           "feed"
         ],

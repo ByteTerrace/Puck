@@ -3,7 +3,7 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm.Views;
 
 // The lazy engine-creation shape every filming view (a view that renders a world composition but never bakes a
-// carve into its own brick pool — NestedWorldView, WorldSessionView) shares: capacity 0 gives a 1-float filler pool
+// carve into its own brick pool — SdfCameraView, WorldSessionView) shares: capacity 0 gives a 1-float filler pool
 // and the shader's conservative uncarved-hull fallback, so a filming view's pool never wastes real memory on carves
 // it never bakes.
 internal static class SdfFilmingViewEngine {

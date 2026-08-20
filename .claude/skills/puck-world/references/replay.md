@@ -21,8 +21,9 @@ reports MATCH or MISMATCH naming the first divergent tick. Files (all in
 
 - Extension `.puckreplay`, stored under `<WorldStateRoot.Resolve()>/Replays`
   (so `--state-dir` isolates replays too).
-- `Magic = 0x504B_5259` ("PKRY") + `ShapeToken = 1` (pinned permanently).
-  The current key includes session, rebuild, and screen-operation entry kinds.
+- `Magic = 0x504B_4341` ("PKCA") + `ShapeToken = 1` (pinned permanently).
+  The current key covers the re-shaped control-application commands and the
+  mutation/undo/composition/query entry kinds.
   A tape with any retired magic refuses by name (`ShapeMismatch`, no tolerant
   reader; re-record it). The full retirement
   chain (each value opaque, never a sequence) lives in the comment above
@@ -66,16 +67,14 @@ through the injected `addonHostFactory` rather than reusing the live
 session's.
 
 Per tick: ONE ordered authority/server-event list plus the intent list
-(`WorldReplayTickInput`). `WorldReplayEntry` has exactly TEN cases:
-`Command` (discriminant 0), `Grant(grant, actor)` (1),
-`Revoke(grant, actor)` (2), `PeerAdmitted` (3), `PeerDisconnected` (4),
-`AddonLifecycle(lifecycle, actor)` (5),
-`Rebuild(kind, pathHint, force, contentHash, actor)` (6),
-`ScreenOp(op, contentSignature, actor)` (7), `Session(request)` (8), and
-`Designation(designation, actor)` (9). There is deliberately **no `Mutation`
-case**: `WorldMutation` is outside the tape's capture scope, so a
-`replay.verify` MATCH is structurally incapable of observing a document edit —
-never cite one as mutation-path evidence (see "The pose hash — what a MATCH proves" below). The
+(`WorldReplayTickInput`). `WorldReplayEntry` discriminants:
+`Command` (0), `Grant(grant, actor)` (1), `Revoke(grant, actor)` (2),
+`PeerAdmitted` (3), `PeerDisconnected` (4), `AddonLifecycle(lifecycle, actor)`
+(5), `Rebuild(kind, pathHint, force, contentHash, actor)` (6),
+`ScreenOp(op, contentSignature, actor)` (7), `Session(request)` (8),
+`Designation(designation, actor)` (9), `RateLever(paused)` (10),
+`Transfer` (11), `Mutation(mutation, actor)` (12), `Undo(count, actor)` (13),
+`Composition(composition, actor)` (14), and `Query(query, actor)` (15). The
 peer events
 carry generation-bearing identities and
 the grants minted/revoked through the ordinary server doors. The
@@ -111,15 +110,21 @@ absent, or hashed content differs in either direction. Other screen ops carry
 no content signature. An authority denial is also taped, with no signature,
 so the denial replays through the same Control check.
 
-**Capture scope, precisely: 8 of the 13 envelope payload kinds** (Command,
-Grant, Revoke, Session, AddonLifecycle, Rebuild, ScreenOp, Designation), the
-two server-event kinds, plus the separate intent buffer. All six `SessionRequest` variants are
+**Capture scope: every one of the 13 envelope payload kinds except `Lever`**
+(Command, Grant, Revoke, Session, AddonLifecycle, Rebuild, ScreenOp,
+Designation, Mutation, Undo, Composition, Query), the two server-event kinds,
+plus the separate intent buffer. The boot instance's own schedule lever is
+captured under its own `RateLever` entry instead of the payload leaf. All six `SessionRequest` variants are
 captured through the shared session leaf before apply and re-executed through
 `WorldServer.ApplySession` during the offline drive. The replay uses its captured
 player document to construct a detached profile catalog, so a replayed
-`SetPlayerSection` changes neither the live catalog nor persistent state. NOT
-captured: Mutation, Undo, Composition, Lever, Query. Structural
-exclusions: a mounted guest's DRIVING is never recorded — it is RE-DERIVED
+`SetPlayerSection` changes neither the live catalog nor persistent state.
+`Mutation`/`Undo` re-enqueue through the ordinary buffered door
+(`EnqueueMutation`/`EnqueueUndo`, drained by the SAME tick's `DrainPendingOps`),
+so the whole apply pipeline re-executes and a refusal reproduces as the
+identical refusal; `Composition` applies synchronously; a `Query` is
+re-executed and its answer discarded, since a query moves no simulation state.
+Structural exclusions: a mounted guest's DRIVING is never recorded — it is RE-DERIVED
 by re-running the pinned guests during the drive (the stronger property);
 only the LIFECYCLE ACT of mounting/unmounting a guest is captured, not its
 per-tick output. `replay.*` verbs never reach the loopback. Machine state is
@@ -133,11 +138,11 @@ than silently uncaptured); `world.addon.mount`/`.unmount` are the ordered
 alternative and are NOT refused while armed.
 
 **Replay verification is side-effect-free (owner ruling, 2026-08-06).** Replay
-is faithful re-execution of the captured commands/intents/session stream from
-a boot-anchored snapshot; out-of-band console mutations sit outside the tape
-by accepted boundary (`Mutation` carries no replay entry kind at all — see
-above), so a document edit typed mid-session is never re-applied by a
-re-drive. A rule-fired `ActionEffect.Save` DOES re-derive deterministically
+is faithful re-execution of the captured submission/intent stream from a
+boot-anchored snapshot. A mid-session document edit IS re-applied now, through
+the same buffered mutation door the live session used — which is re-execution,
+not a stored effect being replayed, so the side-effect-free property is
+unchanged: the pipeline touches the shadow server's own document only. A rule-fired `ActionEffect.Save` DOES re-derive deterministically
 during a drive, exactly like any other rule effect (the same gate, the same
 tick), but its tap is engine I/O — `WorldPostBuildWiring`'s live closure
 writes the world's own loaded file — so `WorldReplaySnapshot.Drive` wires its
@@ -182,12 +187,13 @@ Seat occupancy is observed only because active body indices and poses determine
 which rows enter the hash. Say that plainly when a verification leans on
 `replay.verify`.
 
-The mutation path is not merely unhashed, it is UNCAPTURED: `WorldReplayEntry`
-has no `Mutation` case at all (ten cases, listed above), so a tape recorded
-across a session that edited the document carries no record of the edit and a
-re-drive never re-applies it. A MATCH over such a session is therefore
-structurally incapable of being evidence about the mutation path — for a
-mutation-path determinism claim, run the identical stdin script in TWO
+The mutation path is CAPTURED but still UNHASHED: a re-drive re-applies each
+recorded mutation through the ordinary pipeline, so a divergence in the apply
+path can move a later pose and surface as a MISMATCH — but a mutation whose only
+effect is document state the pose never reads still leaves the trace identical.
+A MATCH is therefore evidence that the mutation stream re-executed without
+disturbing the pose trajectory, never that the resulting document matched. For a
+document-state determinism claim, run the identical stdin script in TWO
 independent fresh boots and diff the streams instead.
 
 ## Lifecycle

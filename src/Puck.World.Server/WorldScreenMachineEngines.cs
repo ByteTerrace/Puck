@@ -24,4 +24,15 @@ public static class WorldScreenMachineEngines {
         new GamingBrickEngine(),
         new AdvancedGamingBrickEngine(),
     ];
+
+    private static readonly WorldExtensionRegistry<IScreenMachineEngine> Registry = new(
+        extensions: All,
+        keyOf: static engine => engine.Id
+    );
+
+    /// <summary>Returns whether a document-declared engine key names an engine this build ships — the ONE registry
+    /// every composition root's <see cref="WorldExtensionVocabularyHook.ScreenMachineEngineCheck"/> wiring reads, so
+    /// no root builds a second one of its own.</summary>
+    /// <param name="key">The document-declared engine key.</param>
+    public static bool IsRegistered(string key) => Registry.IsRegistered(key: key);
 }

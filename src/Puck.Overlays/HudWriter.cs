@@ -13,7 +13,6 @@ namespace Puck.Overlays;
 public sealed class HudWriter {
     // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.
     private const int GaugeLabelChars = 16;
-    private const float GaugeTrackAlpha = 0.35f;
 
     /// <summary>The render elements one authored gauge expands into — a track rect, a fill rect, and one label run —
     /// the per-element cost <see cref="OverlayChannelLeases"/> multiplies into the Hud element reservation (the
@@ -29,6 +28,7 @@ public sealed class HudWriter {
 
     private readonly IHudBindingResolver m_bindings;
     private readonly IHudSource m_source;
+    private readonly OverlayThemeStore m_theme;
 
     private OverlayHudFrame m_frame;
     private bool m_hasFrame;
@@ -36,13 +36,16 @@ public sealed class HudWriter {
     /// <summary>Initializes a new instance of the <see cref="HudWriter"/> class.</summary>
     /// <param name="source">The HUD structure source.</param>
     /// <param name="bindings">The live binding resolver.</param>
+    /// <param name="theme">The live resolved theme.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public HudWriter(IHudSource source, IHudBindingResolver bindings) {
+    public HudWriter(IHudSource source, IHudBindingResolver bindings, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: bindings);
+        ArgumentNullException.ThrowIfNull(argument: theme);
 
         m_source = source;
         m_bindings = bindings;
+        m_theme = theme;
     }
 
     // Substitution only — the brace/escape grammar is parsed once by the host's document layer and arrives here as
@@ -164,7 +167,7 @@ public sealed class HudWriter {
         // Track (always the full extent) + fill (scaled by the resolved fraction) + a short value label — the
         // GaugeElementCost records the reservation counts per gauge.
         builder.WriteRect(
-            alpha: GaugeTrackAlpha,
+            alpha: m_theme.Current.Chrome.DimQuietAlpha,
             h: h,
             radius: 0f,
             role: OverlayColorRole.SurfaceInset,

@@ -214,9 +214,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   and generated identity, and a `line`/`response`/`sequence` assertion's
   `authority` selector reads a specific one's transcript) — re-run whichever
   proofs your change touches. The
-  acting-principal/administration and engage/disengage-authority contracts
+  acting-principal/administration and control-application authority contracts
   are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
-  `EngageAuthorityLawTests`); a retired battery leaves no record directory
+  `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
   behind — its history is in git, and its contract is validated by running
   the app until a law or canary owns it. Do NOT create new persisted runner/battery artifacts without asking, and do
   NOT repair a rotted fixture — quarantine it and move on (validation currency
@@ -259,7 +259,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | HUD schema caps, overlay reservation arithmetic, bands/`replace`, bindings, HUD verbs | [references/hud.md](references/hud.md) |
 | Camera rigs, world-owned `views.seatControl`, portable `playerDefaults.seatLook`, the seat-owned movement/render/read-back state, pointer/cursor stack, radial action menu, layouts, and `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
 | Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
-| `player.engage`, context routes (screen or body target, capture policy, channel mask), latch/route repair, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
+| `player.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
 | Addon rows, mounting, pump points, channels, fuel, ABI verdicts, the `world.addon.mount` verb family | [references/addons.md](references/addons.md) |

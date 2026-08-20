@@ -362,7 +362,7 @@ govern; what survives as WORK is carried in
 summary; the CODE outranks it on any point of disagreement.
 
 Two settled rulings worth restating here because their absence is invisible:
-ownership latching is unified through this table (screen engagement's
+ownership latching is unified through this table (control applications'
 occupancy included — do not invent a parallel ownership mechanism), and the
 authority decision is deliberately not modeled as a lattice or quotient
 (see the state document's "What is NOT algebra" entry).
@@ -587,7 +587,8 @@ the command that needs it, plus the reversed order as the discriminating
 control.
 
 Principal/grant enforcement (denial/control pairs per player-facing verb) is
-proved by `AuthorityAdministrationLawTests` and `EngageAuthorityLawTests` in
+proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
+`ControlApplicationLawTests` in
 `tests/Puck.World.Tests`.
 
 A change that moves simulation math is expected to change replay hashes;

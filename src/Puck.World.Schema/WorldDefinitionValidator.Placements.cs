@@ -478,8 +478,8 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.CreationId}' carries timeline frames) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
                 }
 
-                // The derived face itself: its shape kind must map onto a region arm (WorldFaceApertureKind), and its
-                // frame must be yaw-only. A face may be DRAWN on any primitive at any orientation; a DOOR is narrower.
+                // The derived face itself: its shape kind must open an aperture (WorldFaceApertures), and its frame
+                // must be yaw-only. A face may be DRAWN on any primitive at any orientation; a DOOR is narrower.
                 if (faces.TryFind(
                     placementId: placement.Id,
                     faceName: source.Face,
@@ -487,7 +487,7 @@ public static partial class WorldDefinitionValidator {
                 )) {
                     if (portalRow.ShapeType is not { } shapeType) {
                         errors.Add(item: $"{facePath}.portal names face '{source.Face}', which declares no concrete shape (shapeId {(portalRow.ShapeId?.ToString(provider: CultureInfo.InvariantCulture) ?? "null")}) — a door needs a surface to open, so it has no aperture mapping.");
-                    } else if (portalRow.Aperture == WorldFaceApertureKind.None) {
+                    } else if (portalRow.Aperture is null) {
                         errors.Add(item: $"{facePath}.portal names face '{source.Face}', whose shape is a {shapeType} — only Box maps onto a walkable aperture today; a curved or unbounded face has no aperture mapping.");
                     }
 
@@ -575,7 +575,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
     }
-    // The kit rows (SIM-AFFECTING): name presence/uniqueness, one motion program, producer parameters, and actions.
+    // The kit rows (SIM-AFFECTING): name presence/uniqueness, one motion program, producer parameters, actions, and
+    // the machine-pad map.
     private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
         var kitNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var programRows = BodyMotionProgramRows(programs: definition.BodyMotionPrograms);
@@ -670,6 +671,27 @@ public static partial class WorldDefinitionValidator {
                         stateSlots: stateSlots,
                         targetRegisterNames: targetRegisterNames
                     );
+                }
+            }
+
+            // The pad map is the SAME channel-name vocabulary actions key off, resolved at the other destination a
+            // control application can carry a kit to: a screen's booted machine. Any declared channel may bind
+            // (a movement role reaches a stick, a composition channel reaches a button), unlike actions, which are
+            // composition-only.
+            if (kit.PadRaw is not null) {
+                foreach (var (channelName, element) in kit.Pad) {
+                    if (
+                        string.IsNullOrWhiteSpace(value: channelName) ||
+                        !allChannelNames.Contains(item: channelName)
+                    ) {
+                        errors.Add(item: $"{path}.pad names '{channelName}', which is not a declared channel.");
+
+                        continue;
+                    }
+
+                    if (!Enum.IsDefined(value: element)) {
+                        errors.Add(item: $"{path}.pad['{channelName}'] element '{element}' is not a defined WorldPadElement.");
+                    }
                 }
             }
 

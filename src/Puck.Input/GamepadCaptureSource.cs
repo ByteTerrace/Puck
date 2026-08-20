@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Reflection;
 
 using Puck.Commands;
 using Puck.Input.Devices;
@@ -15,12 +14,6 @@ namespace Puck.Input;
 /// (<see cref="IInputArbiter.DrainFrame"/>) and hands the result in.
 /// </summary>
 public sealed class GamepadCaptureSource {
-    // Derived from GamepadButtons itself, not a hand-kept parallel list: every named flag (other than None)
-    // must have a same-named constant in InputSources.Gamepad (ButtonSouth -> InputSources.Gamepad.ButtonSouth).
-    // Built once via Enum.GetValues at type init and throws immediately if a flag has no matching source,
-    // rather than the bit silently never reaching GamepadState.
-    private static readonly (GamepadButtons Flag, string Source)[] ButtonSources = BuildButtonSources();
-
     // Which analog and motion controls each device last reported active, so the first return-to-rest emits an explicit zero
     // without streaming redundant zeroes forever. The edge clears InputRouter's carried sample while ensuring a newly
     // connected, untouched pad does not reserve/join a player lane merely because its sticks are centered.
@@ -33,43 +26,6 @@ public sealed class GamepadCaptureSource {
     private readonly Func<InputDeviceId, bool> m_isActiveFor;
     private readonly InputRouter m_router;
 
-    private static (GamepadButtons Flag, string Source)[] BuildButtonSources() {
-        var gamepadSources = typeof(InputSources.Gamepad);
-        var flags = Enum.GetValues<GamepadButtons>();
-        var map = new List<(GamepadButtons Flag, string Source)>(capacity: flags.Length);
-        var highestBit = -1;
-
-        foreach (var flag in flags) {
-            if (flag == GamepadButtons.None) {
-                continue;
-            }
-
-            var name = flag.ToString();
-            var field = (gamepadSources.GetField(
-                bindingAttr: BindingFlags.Public | BindingFlags.Static,
-                name: name
-            )
-                ?? throw new InvalidOperationException(message: ((string)$"GamepadButtons.{name} has no matching InputSources.Gamepad.{name} source constant. Every digital button must be reachable as an InputSignal source or it can never be bound (nor synthesized by an addon). Add 'public const string {name} = \"gamepad.{char.ToLowerInvariant(c: name[0])}{name[1..]}\";' to InputSources.Gamepad.")));
-
-            map.Add(item: (flag, ((string)field.GetValue(obj: null)!)));
-
-            var bit = BitOperations.TrailingZeroCount(value: ((uint)flag));
-
-            if (bit > highestBit) {
-                highestBit = bit;
-            }
-        }
-
-        // The sibling hand-sync: GamepadButtonEdges reserves one press-stamp slot per bit, sized by a compile-time
-        // constant (InlineArray requires one) that cannot itself be derived from the enum at compile time. This
-        // assert is the runtime backstop — it fails loudly, once, at the same type-init point as the check above,
-        // instead of the coalescer indexing out of range on a fresh pad's first press of the forgotten button.
-        if ((highestBit + 1) > GamepadButtonEdges.Count) {
-            throw new InvalidOperationException(message: ((string)$"GamepadButtons defines a flag at bit {highestBit} but GamepadButtonEdges.Count is only {GamepadButtonEdges.Count}. Bump GamepadButtonEdges.Count to at least {(highestBit + 1)}."));
-        }
-
-        return [.. map];
-    }
     // A device absent from this frame's accepted set — disconnected OR rejected by the focus predicate — can no
     // longer deliver a return-to-rest through this capture path. InputRouter carries samples until an explicit
     // zero/release, so the latch pays every edge it still owes before it is dropped. Removing during enumeration
@@ -80,7 +36,7 @@ public sealed class GamepadCaptureSource {
                 continue;
             }
 
-            foreach (var (flag, source) in ButtonSources) {
+            foreach (var (flag, source) in GamepadButtonCatalog.Sources) {
                 if (0 != (latch.HeldButtons & flag)) {
                     m_router.Capture(signal: InputSignal.Release(
                         captureTick: frameTick,
@@ -254,7 +210,7 @@ public sealed class GamepadCaptureSource {
             value: out var analogLatch
         );
 
-        foreach (var (flag, source) in ButtonSources) {
+        foreach (var (flag, source) in GamepadButtonCatalog.Sources) {
             if (0 != (drain.Pressed & flag)) {
                 var edge = edges[BitOperations.TrailingZeroCount(value: ((uint)flag))];
 

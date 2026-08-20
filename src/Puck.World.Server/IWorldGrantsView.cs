@@ -4,8 +4,8 @@ namespace Puck.World.Server;
 
 /// <summary>
 /// The surface of <see cref="WorldGrants"/> reachable through <see cref="WorldServer.Grants"/> — every read the
-/// engagement view, the addon runtime, and the grant/mutation command modules need, plus the two engagement-route
-/// writes (<see cref="SetControlRoute"/>/<see cref="ClearControlRoute"/>) that record a route the caller already
+/// engagement view, the addon runtime, and the grant/mutation command modules need, plus the two control-application
+/// writes (<see cref="SetApplications"/>/<see cref="ClearApplications"/>) that record a set the caller already
 /// permission-checked, rather than administer authority. <see cref="WorldGrants.TryGrant"/> and
 /// <see cref="WorldGrants.Revoke"/> — the two doors that add or remove authority — are deliberately absent from this
 /// interface: those run only behind <see cref="WorldServer.Grant"/>/<see cref="WorldServer.Revoke"/>'s
@@ -131,41 +131,29 @@ public interface IWorldGrantsView {
     /// for and what was held.</summary>
     /// <param name="principal">The principal to project.</param>
     IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> Held(WorldPrincipal principal);
-    /// <summary>Returns the subject a principal is routed to (its single Control route — a screen OR a body, the
-    /// context-routes widening), or <see langword="null"/>.</summary>
+    /// <summary>Returns the <see cref="ControlApplication"/> set <paramref name="principal"/> holds — the whole of
+    /// its engagement state. A participant that has composed nothing reports the default single own-body
+    /// application, so an unengaged seat and an engaged one are read the same way; a principal with no body of its
+    /// own (Console, Addon, World) reports an empty set. The returned list is the live storage, invalidated by the
+    /// next <see cref="SetApplications"/>/<see cref="ClearApplications"/> on the same principal.</summary>
     /// <param name="principal">The principal.</param>
-    GrantSubject? ControlRoute(WorldPrincipal principal);
-    /// <summary>Determines whether <paramref name="principal"/>'s route captures its source body — <see langword="true"/> is
-    /// today's engagement behavior (the source idles, <c>WorldBody.SetEngaged</c> latches), <see langword="false"/> is
-    /// the mirrored policy (the source keeps integrating its own pose while the same resolved intent also reaches the
-    /// route target). Reports <see langword="true"/> (the permissive default) when the principal holds no route at
-    /// all, since nothing reads this without a live route to ask about first.</summary>
-    /// <param name="principal">The routed principal.</param>
-    bool RouteCapture(WorldPrincipal principal);
-    /// <summary>Returns the channel ordinals <paramref name="principal"/>'s route reaches — document-authored on the route
-    /// row (a screen's <c>WorldScreenRoute.Channels</c>), defaulting to every ordinal when the route names none or the
-    /// principal holds no route at all.</summary>
-    /// <param name="principal">The routed principal.</param>
-    ChannelReachMask RouteChannelMask(WorldPrincipal principal);
-    /// <summary>Collects every principal routed to <paramref name="target"/> into <paramref name="into"/> (cleared
-    /// first) — the multiplayer-cabinet merge set for a screen target, or a body target's contributor set.
-    /// Allocation-free with a reused list: iterates the concrete dictionaries with struct enumerators.</summary>
-    /// <param name="target">The route target subject (screen or body).</param>
+    IReadOnlyList<ControlApplication> Applications(WorldPrincipal principal);
+    /// <summary>Collects every principal whose COMPOSED application set applies to <paramref name="target"/> into
+    /// <paramref name="into"/> (cleared first) — the multiplayer-cabinet merge set for a screen target. An
+    /// uncomposed participant's implicit own-body application is not a composition and is never collected.</summary>
+    /// <param name="target">The application target subject (screen or body).</param>
     /// <param name="into">The reusable destination list.</param>
-    void CollectRouteHolders(GrantSubject target, List<WorldPrincipal> into);
-    /// <summary>Repoints a principal's route to <paramref name="target"/> — the engagement latch's storage,
-    /// generalized: drops any prior route the principal held (a re-engage/re-possess) and records the new one plus its
-    /// capture policy and channel mask. The permission to route (a Control grant over the target or the wildcard) is
-    /// checked separately by the caller; this only records the resolved route.</summary>
-    /// <param name="principal">The routed principal.</param>
-    /// <param name="target">The route target subject (screen or body).</param>
-    /// <param name="capture">Whether the route captures the source body (idles it) or mirrors (leaves it driving).</param>
-    /// <param name="channelMask">The channel ordinals this route reaches.</param>
-    void SetControlRoute(WorldPrincipal principal, GrantSubject target, bool capture, ChannelReachMask channelMask);
-    /// <summary>Clears a principal's route (every Control screen/body route subject it holds) — the disengage half.
-    /// Returns whether the principal had a route.</summary>
-    /// <param name="principal">The principal to disengage.</param>
-    bool ClearControlRoute(WorldPrincipal principal);
+    void CollectApplicationHolders(GrantSubject target, List<WorldPrincipal> into);
+    /// <summary>Replaces <paramref name="principal"/>'s application set. The permission to apply (a Control grant
+    /// over each target, or the wildcard) is checked separately by the caller; this only records the resolved set.
+    /// A set equal to the default is stored as the default itself, never as a composition.</summary>
+    /// <param name="principal">The principal.</param>
+    /// <param name="applications">The complete replacement set.</param>
+    void SetApplications(WorldPrincipal principal, IReadOnlyList<ControlApplication> applications);
+    /// <summary>Restores <paramref name="principal"/>'s set to its own-body default. Returns whether it had composed
+    /// anything.</summary>
+    /// <param name="principal">The principal.</param>
+    bool ClearApplications(WorldPrincipal principal);
 
     /// <summary>Gets the grant-table change counter a <see cref="WorldHandleTable"/> (and the addon runtime's own
     /// disclosure cache) compares against its own last-seen value to decide whether it must re-project before

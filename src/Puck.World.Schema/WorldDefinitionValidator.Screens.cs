@@ -490,12 +490,12 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The engage-route policy: a finite non-negative radius, plus authored channel names (kebab-case, non-empty),
-    // plus the context-routes widening's two route-row fields: the channel MASK (channelNames must resolve) and the
-    // authored TRANSLATION table (each row's channel must resolve to a defined WorldPadElement). engageChannel is
-    // CONSUMED (WorldServer.ResolveEngageProbes resolves it against the same declared-channel ordinal table), so it
-    // is held to the same "must resolve" bar — a misspelled name is otherwise a silent, permanent no-op. cycleChannel
-    // stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only bar.
-    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, List<string> errors) {
+    // plus the channel MASK (channelNames must resolve) and the pad KIT reference (padKits must carry it).
+    // engageChannel is CONSUMED (WorldServer.ResolveEngageProbes resolves it against the same declared-channel
+    // ordinal table), so it is held to the same "must resolve" bar — a misspelled name is otherwise a silent,
+    // permanent no-op. cycleChannel stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only
+    // bar.
+    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, ISet<string> padKits, List<string> errors) {
         if (
             !float.IsFinite(f: route.EngageRadius) ||
             (route.EngageRadius < 0f)
@@ -540,18 +540,11 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (route.Translation is { } translation) {
-            for (var index = 0; (index < translation.Count); index++) {
-                var row = translation[index];
-
-                if (!channelNames.Contains(item: row.Channel)) {
-                    errors.Add(item: $"{path}.translation[{index}].channel '{row.Channel}' names no declared channel.");
-                }
-
-                if (!Enum.IsDefined(value: row.Element)) {
-                    errors.Add(item: $"{path}.translation[{index}].element '{row.Element}' is not a defined WorldPadElement.");
-                }
-            }
+        if (
+            (route.Kit is { Length: > 0 } kit) &&
+            !padKits.Contains(item: kit)
+        ) {
+            errors.Add(item: $"{path}.kit '{kit}' names no kit carrying a pad map.");
         }
     }
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a

@@ -136,7 +136,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         link.SubmitSessionLever(
             lever: new WorldSessionLever(
                 Section: WorldSection.Audio,
-                Kind: WorldLeverKind.MasterVolume,
+                Name: WorldSessionLevers.MasterVolume,
                 A: volume
             ),
             principal: context.ActingPrincipal()

@@ -17,7 +17,8 @@ public readonly record struct OverlayThemeValues(
     OverlayThemeValues.ElevationSet Elevation,
     OverlayThemeValues.DiegeticSet Diegetic,
     OverlayThemeValues.MotionSet Motion,
-    OverlayThemeValues.IconSet Icon
+    OverlayThemeValues.IconSet Icon,
+    OverlayThemeValues.ChromeSet Chrome
 ) {
     /// <summary>One scrim's fill color plus its own opacity.</summary>
     public readonly record struct Scrim(RgbaColor Color, float Alpha);
@@ -169,6 +170,43 @@ public readonly record struct OverlayThemeValues(
     /// <summary>The procedural icon feel that IS authored (the AA ramps stay <see cref="DesignTokens.Icon"/>
     /// rendering-correctness constants, never authored).</summary>
     public readonly record struct IconSet(float StrokeHalfWidth);
+    /// <summary>The CPU writers' own chrome — the quiet/lit opacities and the px geometry each writer used to hold
+    /// as a private constant. Alphas are <c>[0, 1]</c>, <c>*Half</c>/<c>*Gap</c>/<c>*Offset</c> are px, and
+    /// <c>*Ratio</c> is a multiple of the shape it names.</summary>
+    /// <param name="DimQuietAlpha">The one quiet-dim opacity every writer reaches for: an unbound bar slot, an
+    /// unheld modifier indicator, a gauge track, a console selection band.</param>
+    /// <param name="BarLabelAlpha">The binding bar's page-name opacity.</param>
+    /// <param name="BarHintAlpha">The binding bar's chord-hint opacity.</param>
+    /// <param name="CursorAlpha">The drawn cursor's ring opacity.</param>
+    /// <param name="CursorDotRatio">The cursor's center-dot half-extent, as a fraction of the ring radius.</param>
+    /// <param name="CursorDotMaxHalf">The cursor center dot's half-extent ceiling, px.</param>
+    /// <param name="CursorLabelGap">The hover label's clearance outside the ring, px.</param>
+    /// <param name="WheelRingAlpha">A non-active wheel ring's stroke and label opacity.</param>
+    /// <param name="WheelActiveRingAlpha">The active wheel ring's stroke opacity.</param>
+    /// <param name="WheelActiveRingOffset">The second (heavier-shell) stroke's radial offset, px.</param>
+    /// <param name="WheelLabelAlpha">The hub dot's, marker's, and active-ring labels' opacity.</param>
+    /// <param name="WheelHubDotHalf">The wheel hub dot's half-extent, px.</param>
+    /// <param name="WheelMarkerHalf">The hovered-sector marker dot's half-extent, px.</param>
+    /// <param name="WheelMarkerGapRatio">The marker's clearance outside the ring, as a multiple of the cell
+    /// height.</param>
+    /// <param name="WheelHubLabelGap">The active-ring label's clearance below the hub dot, px.</param>
+    public readonly record struct ChromeSet(
+        float DimQuietAlpha,
+        float BarLabelAlpha,
+        float BarHintAlpha,
+        float CursorAlpha,
+        float CursorDotRatio,
+        float CursorDotMaxHalf,
+        float CursorLabelGap,
+        float WheelRingAlpha,
+        float WheelActiveRingAlpha,
+        float WheelActiveRingOffset,
+        float WheelLabelAlpha,
+        float WheelHubDotHalf,
+        float WheelMarkerHalf,
+        float WheelMarkerGapRatio,
+        float WheelHubLabelGap
+    );
 
     /// <summary>Gets the inert zero theme (no authored theme, no chrome) — every color transparent black, every
     /// scalar zero. The default value of this struct already IS this, since every nested field type zero-defaults;

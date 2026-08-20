@@ -404,7 +404,7 @@ What survives them, as work rather than prose:
   submissions are still bare passthroughs, so a mid-recording mutation or undo does not replay, and
   `replay.verify` proves the pose trajectory only.
 - **Unverified, check before scheduling** — session-lever routing (`world.volume`, the render levers,
-  `world.save`); per-route translation and channel masks (document-only, no `player.engage` override
+  `world.save`); a screen route's pad kit and channel masks (document-only, no `player.engage` override
   for the mask); whether fuel is still the only stop for a spinning guest.
 - **Navigation.** The decision worth keeping: navigation derives walkability from the SDF a world
   already authors, and adopts Puck's existing quantize-once boundary rather than inventing one — the

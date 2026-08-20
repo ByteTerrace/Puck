@@ -586,9 +586,9 @@ public sealed partial class WorldServer {
             var principal = WorldPrincipal.Seat(slot: slot);
             var target = GrantSubject.Screen(index: engageProbeScreens[slot]);
 
-            if (m_engagement.Engage(
+            if (m_engagement.Compose(
                 actingPrincipal: principal,
-                capture: true,
+                exclusive: true,
                 entityIndex: slot,
                 target: target,
                 targetPrincipal: principal
@@ -635,8 +635,25 @@ public sealed partial class WorldServer {
         // past market.retentionSeconds so the section's lifetime listing count stays bounded.
         PruneExpiredMarketListings(tick: tick);
         // Reconnect-park recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's.
-        m_population.ReclaimExpiredParks(tick: tick);
+        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's. Each
+        // reclaimed peer generation's grant rows are revoked right here, through the ordinary door, so the grant
+        // release and the body teardown share one deadline.
+        m_reclaimedParks.Clear();
+        m_population.ReclaimExpiredParks(
+            reclaimed: m_reclaimedParks,
+            tick: tick
+        );
+
+        foreach (var stale in m_reclaimedParks) {
+            foreach (var row in m_grants.Rows(principal: stale)) {
+                Revoke(
+                    grant: row,
+                    actor: WorldPrincipal.Console
+                );
+            }
+        }
+
+        m_reclaimedParks.Clear();
         m_addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         m_engagement.FoldTick();
@@ -835,18 +852,31 @@ public sealed partial class WorldServer {
 
                 break;
             case WorldServerEvent.PeerDisconnected disconnected:
-                foreach (var grant in disconnected.RevokedGrants) {
-                    Revoke(
-                        grant: grant,
-                        actor: WorldPrincipal.Console
-                    );
-                }
+                // Grant release rides the SAME ParkedUntilTick deadline the body teardown does: a generation that
+                // PARKED keeps its rows through the grace window (a reconnect inside it resumes onto live authority
+                // rather than a re-mint), and ReclaimExpiredParks revokes them at the deadline. A generation that
+                // did not park (an authored-zero grace, or no live match) releases here, immediately, unchanged.
+                var parkedGenerations = new HashSet<WorldPrincipal>();
 
                 foreach (var peer in disconnected.Entries) {
-                    m_population.ApplyPeerDisconnected(
+                    if (m_population.ApplyPeerDisconnected(
                         peer: in peer,
                         tick: NextInputTick
-                    );
+                    )) {
+                        _ = parkedGenerations.Add(item: WorldPrincipal.Peer(
+                            index: peer.BodyIndex,
+                            generation: peer.Generation
+                        ));
+                    }
+                }
+
+                foreach (var grant in disconnected.RevokedGrants) {
+                    if (!parkedGenerations.Contains(item: grant.Principal)) {
+                        Revoke(
+                            grant: grant,
+                            actor: WorldPrincipal.Console
+                        );
+                    }
                 }
 
                 break;

@@ -29,7 +29,7 @@ public sealed class PortalArrivalValidationLawTests {
     // separately, WorldPortalCounterpart's own placement/face resolution) checks a portal-bearing placement against.
     // Mirrors Fixtures.BuildBallCreation's own canonicalize-at-build shape (a real creation, hash COMPILER-derived
     // through the SAME pipeline the validator re-verifies, never hand-pinned). The face names a BOX shape because a
-    // portal facet needs a surface that maps onto a walkable aperture (WorldFaceApertureKind) — the aperture refusal
+    // portal facet needs a surface that opens a walkable aperture (WorldFaceApertures) — the aperture refusal
     // is its own law below, so every other law here must clear it to discriminate on what it is actually testing.
     private static WorldCreation BuildDoorCreation() => BuildDoorCreation(faceNamesShape: true, faceShapeType: SdfSolidPrimitive.Box);
     private static WorldCreation BuildDoorCreation(SdfSolidPrimitive faceShapeType, bool faceNamesShape) {

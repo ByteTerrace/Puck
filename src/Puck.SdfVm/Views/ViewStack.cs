@@ -19,10 +19,10 @@ public readonly record struct ViewId(int Value) {
     public bool IsValid => (Value >= 0);
 }
 /// <summary>One piece of view content — anything that can produce a samplable image handle for a screen surface (or
-/// any other consumer) to show: a posed offscreen world render, a hosted guest's raw framebuffer, a nested world's
-/// own offscreen composite. The shared vocabulary <see cref="ViewStack"/> registers, budgets, and resolves by name;
-/// see <see cref="Views.SdfCameraView"/>/<see cref="Views.GuestSurfaceView"/>/<see cref="Views.NestedWorldView"/> for
-/// the three shapes built against it.</summary>
+/// any other consumer) to show. The shared vocabulary <see cref="ViewStack"/> registers, budgets, and resolves by
+/// name; see <see cref="Views.SdfCameraView"/> (a posed offscreen world render) and
+/// <see cref="Views.WorldSessionView"/> (another world's own offscreen composite) for the shapes built against
+/// it.</summary>
 public interface IViewContent {
     /// <summary>Drops device-owned state after device loss. The next <see cref="Resolve"/> rebuilds it against the
     /// replacement device. Default no-op for content that only forwards an externally owned handle.</summary>
@@ -39,11 +39,10 @@ public interface IViewContent {
     Vector3 RoomGlow { get; }
     /// <summary>Whether this content counts against <see cref="OffscreenRenderBudget.PerProducedFrame"/>'s round-robin
     /// share. <see langword="true"/> (the default) for anything that pays a real render pass to resolve (an offscreen world
-    /// engine submit) — <see cref="Views.SdfCameraView"/> and <see cref="Views.NestedWorldView"/> both do.
+    /// engine submit) — <see cref="Views.SdfCameraView"/> and <see cref="Views.WorldSessionView"/> both do.
     /// <see langword="false"/> for content whose <see cref="Resolve"/> is a cheap read of state some other path
-    /// already refreshed (<see cref="Views.GuestSurfaceView"/> — its producer delegate is already ticked/uploaded by
-    /// its owner every frame, so gating it behind the budget would only serve a stale cached handle on the frames it
-    /// is skipped).</summary>
+    /// already refreshed (a producer delegate already ticked/uploaded by its owner every frame, so gating it behind
+    /// the budget would only serve a stale cached handle on the frames it is skipped).</summary>
     bool IsBudgeted => true;
 }
 /// <summary>This frame's shared render inputs, handed to every <see cref="IViewContent.Resolve"/> call — the same
@@ -79,10 +78,10 @@ public readonly record struct ViewRenderContext(
     Func<int, nint> ResolveScreenSource
 );
 /// <summary>
-/// Manages named, role-neutral view content for diegetic screens and other image consumers. A posed offscreen camera render
-/// (<see cref="Views.SdfCameraView"/>), a hosted guest's raw framebuffer (<see cref="Views.GuestSurfaceView"/>), and a
-/// fully nested world's own offscreen composite (<see cref="Views.NestedWorldView"/>) all register, budget, and
-/// resolve through this one small vocabulary — no consumer-specific channel exists.
+/// Manages named, role-neutral view content for diegetic screens and other image consumers. A posed offscreen camera
+/// render (<see cref="Views.SdfCameraView"/>) and another world's own offscreen composite
+/// (<see cref="Views.WorldSessionView"/>) both register, budget, and resolve through this one small vocabulary — no
+/// consumer-specific channel exists.
 /// <para>
 /// Registering a view is cheap: up to
 /// <see cref="OffscreenRenderBudget.RegisteredViews"/> may be live at once — but only <see cref="OffscreenRenderBudget.PerProducedFrame"/>

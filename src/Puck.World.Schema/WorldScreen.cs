@@ -93,15 +93,11 @@ public abstract record WorldScreenSource {
     /// destination row's own facts.
     /// </summary>
     /// <remarks>
-    /// <para><b>Staged boundary — no avatar/pose mirroring yet.</b> The session projection renders the destination's
-    /// authored static placement geometry (terrain, structures — whatever a fixed camera would already show with
-    /// nobody standing in the world); live embodied bodies in the destination are not yet mirrored into the image.</para>
-    /// <para><b>Staged boundary — no sub-tick interpolation.</b> The projection re-renders whenever the destination
-    /// delivers a new definition (a real content change), never on the host's own presentation alpha — it reads
-    /// neither <c>Puck.SdfVm.ISdfFrameSource.CaptureFrame</c>'s host delta/alpha nor the destination's
-    /// Tick/StepTicks for easing, so "the destination's clock, never the host's" is satisfied by construction rather
-    /// than by a second interpolation implementation. Smooth interpolation of moving destination content is
-    /// meaningless before the avatar mirror above lands, so it is deferred with it.</para>
+    /// <para>The projection renders the destination's authored static placement geometry (terrain, structures) plus
+    /// every mirrored-active body, each posed from the destination's own previous/current snapshot pair at
+    /// <c>WorldSessionMirror.InterpolationAlpha</c> — the destination's clock, never the host's presentation alpha
+    /// (<c>Client.WorldSessionSceneEmitter</c>). Creation text stays omitted until session delivery transports pinned
+    /// font assets.</para>
     /// <para><b>Staged boundary — global scope only.</b> A <c>user</c>/<c>group</c>-scoped destination makes the
     /// resolved image viewer-dependent, and the shipped one-image-per-screen-index binding shows every viewer the
     /// same image — showing one viewer's world to everyone would be silently wrong, so a session face naming a
@@ -195,9 +191,8 @@ public readonly record struct WorldFeedProfile(int Width, int Height, uint Refre
         Width: 320
     );
 }
-/// <summary>The neutral pad element an authored <see cref="WorldScreenTranslationRow"/> maps a channel onto — the
-/// context-routes widening's replacement for <c>WorldEngagement.Translate</c>'s old hard-wired map. Named after the
-/// engine-neutral <c>MachinePadState</c>'s own axis/button vocabulary; a translation row picks exactly one.</summary>
+/// <summary>The neutral pad element a <see cref="WorldKit.Pad"/> entry maps a channel onto. Named after the
+/// engine-neutral <c>MachinePadState</c>'s own axis/button vocabulary; a pad entry picks exactly one.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldPadElement>))]
 public enum WorldPadElement : byte {
     /// <summary>The left stick's X axis.</summary>
@@ -237,18 +232,14 @@ public enum WorldPadElement : byte {
     /// <summary>The back/select/view/minus button.</summary>
     Back,
 }
-/// <summary>One authored channel→pad-element mapping row — a <see cref="WorldScreenRoute.Translation"/> entry.</summary>
-/// <param name="Channel">The declared channel name this row reads.</param>
-/// <param name="Element">The neutral pad element the channel's value drives.</param>
-public readonly record struct WorldScreenTranslationRow(string Channel, WorldPadElement Element);
 /// <summary>The route policy a <see cref="WorldScreen"/> carries: whether a player may engage the screen, the activation
 /// radius, whether engaging auto-boots the selected magazine entry, the world-event channels a gesture drives it
-/// through, which channel ordinals the route reaches, and how those channels translate to the target's pad image. The
-/// optional members each default to the inert/baked choice: no auto-boot, no gesture channel, every channel reached,
-/// and the engine's default translation (the two movement roles to the left stick — <c>MoveStrafe</c>/
-/// <c>MoveAdvance</c>, structural ordinals, never a channel name). The default names no gameplay channel: a
-/// route whose machine needs a face button (or any other element) must author that row explicitly — see
-/// <c>Server.WorldEngagement.CompileTranslation</c>.</summary>
+/// through, which channel ordinals a control application onto it reaches, and which kit's pad map gives those
+/// channels their meaning at the machine. The optional members each default to the inert/baked choice: no auto-boot,
+/// no gesture channel, every channel reached, and the engine's default pad map (the two movement roles to the left
+/// stick — <c>MoveStrafe</c>/<c>MoveAdvance</c>, structural ordinals, never a channel name). The default names no
+/// gameplay channel: a screen whose machine needs a face button (or any other element) must name a kit whose
+/// <see cref="WorldKit.Pad"/> binds it.</summary>
 /// <param name="Engageable">Whether a player may engage this screen.</param>
 /// <param name="EngageRadius">The world-unit radius a player must be inside to engage (meaningful only when
 /// <paramref name="Engageable"/>). Validated finite and non-negative.</param>
@@ -258,17 +249,17 @@ public readonly record struct WorldScreenTranslationRow(string Channel, WorldPad
 /// <see langword="null"/> (the default) for a route that does not answer gestures. The author chooses this name freely;
 /// the engine never special-cases a spelling. Omitted from the wire when null.</param>
 /// <param name="CycleChannel">Same, for advancing the magazine selector. Omitted from the wire when null.</param>
-/// <param name="Channels">The declared channel names this route's mask reaches — a masked-out channel keeps flowing to
-/// the routed body's own pose (relevant under the capture:false mirror policy) but never reaches this route's target.
-/// <see langword="null"/> (the default) reaches every declared channel. Omitted from the wire when null.</param>
-/// <param name="Translation">The authored channel→pad-element rows this route's target reads, replacing the engine's
-/// default when present. <see langword="null"/> uses the engine mapping. Omitted from the wire when
-/// null.</param>
+/// <param name="Channels">The declared channel names an application onto this screen reaches — a masked-out channel
+/// keeps flowing to the source body's own pose (when the own-body application is retained) but never reaches this
+/// screen. <see langword="null"/> (the default) reaches every declared channel. Omitted from the wire when null.</param>
+/// <param name="Kit">The <see cref="WorldKit.Name"/> whose <see cref="WorldKit.Pad"/> map an application onto this
+/// screen wears, or <see langword="null"/> for the engine's default pad map. The named kit must carry a pad map —
+/// refused by name otherwise. Omitted from the wire when null.</param>
 public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Channels = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenTranslationRow>? Translation = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null) {
     /// <summary>Gets a screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(
         Engageable: false,

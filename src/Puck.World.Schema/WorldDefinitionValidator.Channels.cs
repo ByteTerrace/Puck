@@ -45,23 +45,25 @@ public static partial class WorldDefinitionValidator {
         if (authoring.SlotSet is null) {
             errors.Add(item: $"{path}.slotSet is required.");
         } else {
-            // No explicit count ceiling: known-name + uniqueness below already bound the slot set by the button
-            // catalog itself, which is what the overlay reservation sizes from.
-            var seenButtons = new HashSet<string>(comparer: StringComparer.Ordinal);
+            if (authoring.SlotSet.Count > WorldBindingBarCapacity.MaxSlots) {
+                errors.Add(item: $"{path}.slotSet declares {authoring.SlotSet.Count} entries, exceeding the {WorldBindingBarCapacity.MaxSlots}-slot ceiling.");
+            }
+
+            var seenSources = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             for (var index = 0; (index < authoring.SlotSet.Count); index++) {
-                var name = authoring.SlotSet[index];
+                var source = authoring.SlotSet[index];
                 var slotPath = $"{path}.slotSet[{index}]";
 
-                if (string.IsNullOrWhiteSpace(value: name)) {
+                if (string.IsNullOrWhiteSpace(value: source)) {
                     errors.Add(item: $"{slotPath} is required.");
-                } else if (!seenButtons.Add(item: name)) {
-                    errors.Add(item: $"{slotPath} '{name}' is duplicated.");
+                } else if (!seenSources.Add(item: source)) {
+                    errors.Add(item: $"{slotPath} '{source}' is duplicated.");
                 } else if (
-                    (GamepadButtonVocabularyHook.IsKnownButtonName is { } isKnown) &&
-                    !isKnown(name)
+                    (InputSourceVocabularyHook.IsKnownSourceId is { } isKnown) &&
+                    !isKnown(source)
                 ) {
-                    errors.Add(item: $"{slotPath} '{name}' is not a declared GamepadButtons name.");
+                    errors.Add(item: $"{slotPath} '{source}' is not a declared input source id.");
                 }
             }
         }
@@ -74,6 +76,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.banks declares {authoring.Banks.Count} entries, exceeding the {WorldBindingBarCapacity.MaxBanks}-bank ceiling.");
         } else {
             var seenBanks = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var seenOrders = new HashSet<int>();
 
             for (var index = 0; (index < authoring.Banks.Count); index++) {
                 var bank = authoring.Banks[index];
@@ -95,12 +98,26 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{bankPath}.pageId is required.");
                 }
 
-                if (!float.IsFinite(f: bank.OffsetX)) {
-                    errors.Add(item: $"{bankPath}.offsetX {bank.OffsetX} must be a finite number.");
+                // The stack arrangement is derived from order alone, so a repeated order would place two banks on
+                // top of each other with nothing to say which is in front.
+                if (bank.Order < 0) {
+                    errors.Add(item: $"{bankPath}.order {bank.Order} must not be negative.");
+                } else if (!seenOrders.Add(item: bank.Order)) {
+                    errors.Add(item: $"{bankPath}.order {bank.Order} is duplicated.");
                 }
 
-                if (!float.IsFinite(f: bank.OffsetY)) {
-                    errors.Add(item: $"{bankPath}.offsetY {bank.OffsetY} must be a finite number.");
+                if (
+                    (bank.OffsetX is { } offsetX) &&
+                    !float.IsFinite(f: offsetX)
+                ) {
+                    errors.Add(item: $"{bankPath}.offsetX {offsetX} must be a finite number.");
+                }
+
+                if (
+                    (bank.OffsetY is { } offsetY) &&
+                    !float.IsFinite(f: offsetY)
+                ) {
+                    errors.Add(item: $"{bankPath}.offsetY {offsetY} must be a finite number.");
                 }
 
                 if (
@@ -125,39 +142,64 @@ public static partial class WorldDefinitionValidator {
         }
 
         RequirePositive(
-            value: layout.ButtonSize,
-            name: $"{path}.layout.buttonSize",
-            errors: errors
-        );
-        RequireNonNegative(
-            value: layout.CenterGap,
-            name: $"{path}.layout.centerGap",
-            errors: errors
-        );
-
-        if (
-            !float.IsFinite(f: layout.AnchorOffsetY) ||
-            (layout.AnchorOffsetY < 0f) ||
-            (layout.AnchorOffsetY > 1f)
-        ) {
-            errors.Add(item: $"{path}.layout.anchorOffsetY {layout.AnchorOffsetY} is outside 0..1.");
-        }
-
-        RequireNonNegative(
-            value: layout.GlyphOffsetRatio,
-            name: $"{path}.layout.glyphOffsetRatio",
-            errors: errors
-        );
-        RequirePositive(
-            value: layout.GlyphSizeRatio,
-            name: $"{path}.layout.glyphSizeRatio",
-            errors: errors
-        );
-        RequirePositive(
             value: layout.Scale,
             name: $"{path}.layout.scale",
             errors: errors
         );
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.buttonSize", value: layout.ButtonSize);
+        RequireOptionalNonNegative(errors: errors, name: $"{path}.layout.centerGap", value: layout.CenterGap);
+
+        if (
+            (layout.AnchorOffsetY is { } anchorOffsetY) &&
+            (!float.IsFinite(f: anchorOffsetY) || (anchorOffsetY < 0f) || (anchorOffsetY > 1f))
+        ) {
+            errors.Add(item: $"{path}.layout.anchorOffsetY {anchorOffsetY} is outside 0..1.");
+        }
+
+        RequireOptionalNonNegative(errors: errors, name: $"{path}.layout.glyphOffsetRatio", value: layout.GlyphOffsetRatio);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.glyphSizeRatio", value: layout.GlyphSizeRatio);
+        RequireOptionalNonNegative(errors: errors, name: $"{path}.layout.centerRowLift", value: layout.CenterRowLift);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.centerSlotSpacing", value: layout.CenterSlotSpacing);
+        RequireOptionalNonNegative(errors: errors, name: $"{path}.layout.exoticRowLift", value: layout.ExoticRowLift);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.exoticSlotSpacing", value: layout.ExoticSlotSpacing);
+        RequireOptionalFinite(errors: errors, name: $"{path}.layout.badgeCorner", value: layout.BadgeCorner);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.modifierHalfRatio", value: layout.ModifierHalfRatio);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.modifierSpacingRatio", value: layout.ModifierSpacingRatio);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.modifierGlyphRatio", value: layout.ModifierGlyphRatio);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.labelCellRatio", value: layout.LabelCellRatio);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.labelCellMinPx", value: layout.LabelCellMinPx);
+        RequireOptionalFinite(errors: errors, name: $"{path}.layout.labelGapRatio", value: layout.LabelGapRatio);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.hintCellRatio", value: layout.HintCellRatio);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.hintCellMinPx", value: layout.HintCellMinPx);
+        RequireOptionalPositive(errors: errors, name: $"{path}.layout.hintLineStepRatio", value: layout.HintLineStepRatio);
+        RequireOptionalFinite(errors: errors, name: $"{path}.layout.hintBaseGapRatio", value: layout.HintBaseGapRatio);
+    }
+    private static void RequireOptionalFinite(float? value, string name, List<string> errors) {
+        if (value is { } authored) {
+            RequireFinite(
+                errors: errors,
+                name: name,
+                value: authored
+            );
+        }
+    }
+    private static void RequireOptionalNonNegative(float? value, string name, List<string> errors) {
+        if (value is { } authored) {
+            RequireNonNegative(
+                errors: errors,
+                name: name,
+                value: authored
+            );
+        }
+    }
+    private static void RequireOptionalPositive(float? value, string name, List<string> errors) {
+        if (value is { } authored) {
+            RequirePositive(
+                errors: errors,
+                name: name,
+                value: authored
+            );
+        }
     }
     // One authored icon string, refused by name when it names no row in the composed icon table.
     private static void CheckComposedIcon(string? icon, string door, IReadOnlySet<string> iconNames, List<string> errors) {

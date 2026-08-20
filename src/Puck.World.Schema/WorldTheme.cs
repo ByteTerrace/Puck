@@ -283,6 +283,53 @@ public sealed record WorldThemeIcon(float StrokeHalfWidth) {
     /// <summary>Gets the inert absence — a zero-width stroke.</summary>
     public static WorldThemeIcon Absent { get; } = new(StrokeHalfWidth: 0f);
 }
+/// <summary>The CPU overlay writers' own chrome — the authored twin of
+/// <c>Puck.Overlays.OverlayThemeValues.ChromeSet</c>: the quiet/lit opacities and the px geometry each writer used to
+/// hold as a private constant. Alphas are <c>[0, 1]</c>, <c>*Half</c>/<c>*Gap</c>/<c>*Offset</c> are px, and
+/// <c>*Ratio</c> is a multiple of the shape it names. Every field is a plain float — none of it is worth live
+/// dynamism, so none is a <see cref="BindableScalar"/>.</summary>
+/// <param name="DimQuietAlpha">The one quiet-dim opacity every writer reaches for: an unbound bar slot, an unheld
+/// modifier indicator, a gauge track, a console selection band.</param>
+/// <param name="BarLabelAlpha">The binding bar's page-name opacity.</param>
+/// <param name="BarHintAlpha">The binding bar's chord-hint opacity.</param>
+/// <param name="CursorAlpha">The drawn cursor's ring opacity.</param>
+/// <param name="CursorDotRatio">The cursor's center-dot half-extent, as a fraction of the ring radius.</param>
+/// <param name="CursorDotMaxHalf">The cursor center dot's half-extent ceiling, px.</param>
+/// <param name="CursorLabelGap">The hover label's clearance outside the ring, px.</param>
+/// <param name="WheelRingAlpha">A non-active wheel ring's stroke and label opacity.</param>
+/// <param name="WheelActiveRingAlpha">The active wheel ring's stroke opacity.</param>
+/// <param name="WheelActiveRingOffset">The second (heavier-shell) stroke's radial offset, px.</param>
+/// <param name="WheelLabelAlpha">The hub dot's, marker's, and active-ring labels' opacity.</param>
+/// <param name="WheelHubDotHalf">The wheel hub dot's half-extent, px.</param>
+/// <param name="WheelMarkerHalf">The hovered-sector marker dot's half-extent, px.</param>
+/// <param name="WheelMarkerGapRatio">The marker's clearance outside the ring, as a multiple of the cell height.</param>
+/// <param name="WheelHubLabelGap">The active-ring label's clearance below the hub dot, px.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldThemeChrome(
+    float DimQuietAlpha,
+    float BarLabelAlpha,
+    float BarHintAlpha,
+    float CursorAlpha,
+    float CursorDotRatio,
+    float CursorDotMaxHalf,
+    float CursorLabelGap,
+    float WheelRingAlpha,
+    float WheelActiveRingAlpha,
+    float WheelActiveRingOffset,
+    float WheelLabelAlpha,
+    float WheelHubDotHalf,
+    float WheelMarkerHalf,
+    float WheelMarkerGapRatio,
+    float WheelHubLabelGap
+) {
+    /// <summary>Gets the inert absence — every opacity and every extent zero (no authored theme, no chrome).</summary>
+    public static WorldThemeChrome Absent { get; } = new(
+        BarHintAlpha: 0f, BarLabelAlpha: 0f, CursorAlpha: 0f, CursorDotMaxHalf: 0f, CursorDotRatio: 0f,
+        CursorLabelGap: 0f, DimQuietAlpha: 0f, WheelActiveRingAlpha: 0f, WheelActiveRingOffset: 0f,
+        WheelHubDotHalf: 0f, WheelHubLabelGap: 0f, WheelLabelAlpha: 0f, WheelMarkerGapRatio: 0f,
+        WheelMarkerHalf: 0f, WheelRingAlpha: 0f
+    );
+}
 /// <summary>
 /// The <c>theme</c> document section: the baked "Instrument + grafts" design system
 /// (<c>Puck.Overlays.DesignTokens</c>), promoted to document data. A keyless section — one authored theme per
@@ -296,6 +343,7 @@ public sealed record WorldThemeIcon(float StrokeHalfWidth) {
 /// <param name="Diegetic">The diegetic material recipe.</param>
 /// <param name="Motion">The motion recipe.</param>
 /// <param name="Icon">The procedural icon feel.</param>
+/// <param name="Chrome">The CPU writers' own opacity/px chrome.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldThemeSection(
     WorldThemeColor Color,
@@ -305,15 +353,16 @@ public sealed record WorldThemeSection(
     WorldThemeElevation Elevation,
     WorldThemeDiegetic Diegetic,
     WorldThemeMotion Motion,
-    WorldThemeIcon Icon
+    WorldThemeIcon Icon,
+    WorldThemeChrome Chrome
 ) {
     /// <summary>Gets the inert absence — a fully zeroed token block (no authored theme, no chrome). The engine holds
     /// no theme of its own: the standard "Instrument + grafts" recipe is AUTHORED, in
     /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis.</summary>
     public static WorldThemeSection Absent { get; } = new(
-        Color: WorldThemeColor.Absent, Diegetic: WorldThemeDiegetic.Absent, Elevation: WorldThemeElevation.Absent,
-        Icon: WorldThemeIcon.Absent, Motion: WorldThemeMotion.Absent, Radius: WorldThemeRadius.Absent,
-        Space: WorldThemeSpace.Absent, Type: WorldThemeType.Absent
+        Chrome: WorldThemeChrome.Absent, Color: WorldThemeColor.Absent, Diegetic: WorldThemeDiegetic.Absent,
+        Elevation: WorldThemeElevation.Absent, Icon: WorldThemeIcon.Absent, Motion: WorldThemeMotion.Absent,
+        Radius: WorldThemeRadius.Absent, Space: WorldThemeSpace.Absent, Type: WorldThemeType.Absent
     );
 }
 /// <summary>The theme's two engine-side perceptual floors — never authored, always enforced. A literal value below

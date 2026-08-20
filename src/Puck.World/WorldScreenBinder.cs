@@ -563,7 +563,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         foreach (var index in m_reconcileRemovals) {
             // Machine disposal and its own admin cleanup (engagement disengage, link teardown) happen server-side
             // now, inside WorldServer.Install (Server.WorldMachineHost.ReconcileScreens + WorldEngagement.
-            // DisengageScreen) — see this type's own remarks. This pass only drops the presentation-side slot.
+            // DissolveScreen) — see this type's own remarks. This pass only drops the presentation-side slot.
             if (m_slots.Remove(
                 key: index,
                 value: out var slot

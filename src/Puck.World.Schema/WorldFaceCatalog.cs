@@ -7,15 +7,6 @@ using Puck.SignedDistance;
 
 namespace Puck.World;
 
-/// <summary>Which region arm a face's named shape maps to.</summary>
-public enum WorldFaceApertureKind : byte {
-    /// <summary>The shape kind has no aperture mapping — the face can be drawn, but it cannot be walked through.
-    /// A portal facet on such a face is refused by name at validation.</summary>
-    None,
-
-    /// <summary>A planar rectangular aperture (<see cref="WorldFaceAperture.Box"/>).</summary>
-    Box,
-}
 /// <summary>
 /// One derived face: the geometry a placement's declared creation face resolves to, plus the screen source it shows
 /// and the slot that source claims.
@@ -25,7 +16,8 @@ public enum WorldFaceApertureKind : byte {
 /// <param name="ShapeId">The named shape id, or <see langword="null"/> when the face names none.</param>
 /// <param name="ShapeType">The named shape's primitive kind, or <see langword="null"/> when the face names none.</param>
 /// <param name="Frame">The face's derived geometry.</param>
-/// <param name="Aperture">Which region arm the named shape maps to.</param>
+/// <param name="Aperture">The region recipe the named shape's primitive opens (<see cref="WorldFaceApertures"/>), or
+/// <see langword="null"/> when it opens none — the face can be drawn, but not walked through.</param>
 /// <param name="Source">The resolved screen source.</param>
 /// <param name="ScreenIndex">The reserved derived-face screen index this row occupies, or <c>-1</c> when it holds
 /// none — either because <paramref name="Source"/> renders nothing or because the band was exhausted (see
@@ -38,7 +30,7 @@ public readonly record struct WorldFaceRow(
     int? ShapeId,
     SdfSolidPrimitive? ShapeType,
     WorldFaceFrame Frame,
-    WorldFaceApertureKind Aperture,
+    WorldFaceApertureRecipe? Aperture,
     WorldScreenSource Source,
     int ScreenIndex,
     bool SlotStarved
@@ -124,20 +116,6 @@ public sealed class WorldFaceCatalog {
     /// (<c>authoring.derivedFaceScreens</c>).</summary>
     public int SlotCapacity { get; }
 
-    // Only a Box maps onto the rectangular-slab arm today. Every other primitive — and a face naming no shape at
-    // all — draws its billboard but opens no aperture, so a portal facet on one is refused rather than silently
-    // walked through a rectangle nobody authored.
-    //
-    // THE ONE SHAPE-KIND DECISION. WorldDefinitionValidator's portal refusal and WorldFacePortalPolicy.TryAperture's
-    // region builder both read the WorldFaceApertureKind this method returns off the derived WorldFaceRow — neither
-    // re-asks ShapeType. TryAperture's own switch is the one remaining sibling: it dispatches on the KIND this
-    // method assigns to build each arm's region, so a new WorldFaceApertureKind arm owes both switches an entry, or
-    // TryAperture's default will silently answer "no aperture" for a shape the validator already approved.
-    private static WorldFaceApertureKind ApertureFor(ShapeDocument? shape) =>
-        ((shape is { Type: SdfSolidPrimitive.Box })
-            ? WorldFaceApertureKind.Box
-            : WorldFaceApertureKind.None
-        );
     private static bool DeclaresCamera(WorldDefinition definition, string name) {
         foreach (var camera in definition.Cameras) {
             if (string.Equals(
@@ -213,7 +191,7 @@ public sealed class WorldFaceCatalog {
                         placement: placement,
                         shape: shape
                     ),
-                    Aperture: ApertureFor(shape: shape),
+                    Aperture: WorldFaceApertures.For(primitive: shape?.Type),
                     Source: source,
                     ScreenIndex: seated,
                     SlotStarved: starved

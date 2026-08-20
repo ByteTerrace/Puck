@@ -214,16 +214,18 @@ public sealed partial class WorldServer {
             return $"[player.channels: p{index} body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over an occupied local seat (see world.population); nothing folds here]";
         }
 
-        // The route summary — context-routes widening: what target (if any) this seat's channels also reach, its
-        // capture policy, and its channel mask, so the same read-back that already shows the fold shows the routing
-        // truth beside it (CLAUDE.md's read-back rule: no decision surface without an echoing verb).
-        var routePrincipal = WorldPrincipal.Seat(slot: bodyIndex);
-        var routeText = ((m_grants.ControlRoute(principal: routePrincipal) is { } route)
-            ? $"route={route.Describe()}({(m_grants.RouteCapture(principal: routePrincipal)
-                ? "capture"
-                : "mirror")},mask=0x{m_grants.RouteChannelMask(principal: routePrincipal).Bits:x4})"
-            : "route=none"
-        );
+        // The application-set summary: every target this seat's channels reach, each with its kit and reach mask, so
+        // the same read-back that already shows the fold shows the whole engagement truth beside it (CLAUDE.md's
+        // read-back rule: no decision surface without an echoing verb). The own-body member is listed like any
+        // other, so its ABSENCE — capture — is legible rather than inferred.
+        var applyPrincipal = WorldPrincipal.Seat(slot: bodyIndex);
+        var applications = m_grants.Applications(principal: applyPrincipal);
+        var routeText = $"applications={((applications.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ",",
+                values: applications.Select(selector: static application => application.Describe())
+            ))}";
 
         var channels = m_population.Channels;
         var h = m_channelReadBase[bodyIndex];

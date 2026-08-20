@@ -8,12 +8,13 @@ namespace Puck.World;
 /// <summary>
 /// The <c>world.save</c> session-capture fold. A running world holds live session state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
-/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a
-/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>). The live census count
+/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), the machines a
+/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>), and the forced
+/// binding-bar visibility the <c>world.binding-bar</c> lever writes (<see cref="WorldBindingBarVisibility"/>). The live census count
 /// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately not folded — <c>networkPlayers</c> is a durable
 /// remote-admission cap, not the transient running count, so a save persists the authored cap and the running census is
 /// session-only. <see cref="Capture"/> composes a snapshot definition — the live definition
-/// (mutations already applied) with those three session dimensions folded into their document homes — so a save is a
+/// (mutations already applied) with those session dimensions folded into their document homes — so a save is a
 /// faithful snapshot of what is playing, and re-booting the saved file reproduces it.
 /// </summary>
 /// <remarks>Saved-bytes-only (the default policy): capture composes the snapshot the writer serializes; it never mutates
@@ -40,6 +41,28 @@ internal static class WorldSessionCapture {
     private static WorldAudioDefaults CaptureAudio(WorldAudioDirector audio, WorldAudioDefaults defaults) => (defaults with {
         MasterGain = audio.EffectiveMasterVolume,
     });
+    // Fold the binding-bar session lever into the world's own bar authoring. The lever is per-seat and the document
+    // has exactly one world-scoped bar row, so the PRIMARY local seat (slot 0, player 1) is the seat that folds; the
+    // other seats' overrides are live-only, having no document home to land in. An unengaged seat 0 (auto) leaves the
+    // authored value untouched, the same lever-owns-now/document-owns-boot asymmetry CaptureAudio states.
+    private static IReadOnlyList<WorldBindingOverlay>? CaptureBindingOverlays(WorldDefinition definition, WorldBindingBarVisibility visibility) {
+        var overlays = definition.BindingOverlaysRaw;
+
+        if (
+            (overlays is not { Count: > 0 }) ||
+            (overlays[0]?.BindingBar is not { } bar) ||
+            (visibility.Override(slot: 0) is not { } forced) ||
+            (bar.Enabled == forced)
+        ) {
+            return overlays;
+        }
+
+        var captured = new List<WorldBindingOverlay>(collection: overlays);
+
+        captured[0] = (overlays[0] with { BindingBar = (bar with { Enabled = forced }) });
+
+        return captured;
+    }
     /// <summary>Owns canonical document and hash capture for every persisted asset-row family.</summary>
     private static IReadOnlyList<TAsset> CaptureCanonicalAssets<TAsset, TDocument>(
         IReadOnlyList<TAsset> assets,
@@ -370,9 +393,11 @@ internal static class WorldSessionCapture {
     }
 
     /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
-    /// peer-source default, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
+    /// peer-source default, screen inserts, the master-volume lever, the primary seat's forced binding-bar
+    /// visibility) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
-    /// <see cref="WorldDefinition.Audio"/>'s master gain, and every advancing <see cref="WorldDefinition.State"/> row/cell
+    /// <see cref="WorldDefinition.Audio"/>'s master gain, <see cref="WorldDefinition.BindingOverlays"/>'s first row,
+    /// and every advancing <see cref="WorldDefinition.State"/> row/cell
     /// settled at <paramref name="tick"/> (see this type's remarks). The transient census count is not folded.</summary>
     /// <param name="definition">The server's live definition (mutations already applied).</param>
     /// <param name="render">The live render levers.</param>
@@ -380,17 +405,23 @@ internal static class WorldSessionCapture {
     /// <param name="binder">The live screen binder (runtime machine inserts).</param>
     /// <param name="audio">The audio director (the <c>world.volume</c> session lever).</param>
     /// <param name="pacing">The live present-pacing control (the <c>world.target</c> session lever).</param>
+    /// <param name="bindingBar">The live per-seat binding-bar visibility (the <c>world.binding-bar</c> session lever).</param>
     /// <param name="tick">The server's completed tick — the instant <c>state</c>'s advancing rows/cells settle at.</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, ulong tick) {
+    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, WorldBindingBarVisibility bindingBar, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: render);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: pacing);
+        ArgumentNullException.ThrowIfNull(argument: bindingBar);
 
         return (definition with {
+            BindingOverlaysRaw = CaptureBindingOverlays(
+            definition: definition,
+            visibility: bindingBar
+        ),
             RenderRaw = CaptureRender(
             render: render,
             defaults: definition.Render
@@ -429,16 +460,17 @@ internal static class WorldSessionCapture {
     }
     /// <summary>A cheap, verb-time (never per-tick) description of which session dimensions have drifted from the loaded
     /// document's defaults: <c>none</c> when a save would reproduce the file, else a <c>+</c>-joined list of the drifted
-    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>, <c>audio</c>) — the honest <c>world.status</c> session-drift hint.</summary>
+    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>, <c>links</c>, <c>audio</c>, <c>host</c>, <c>bindings</c>) — the honest <c>world.status</c> session-drift hint.</summary>
     /// <param name="definition">The server's live definition.</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table.</param>
     /// <param name="binder">The live screen binder.</param>
     /// <param name="audio">The audio director (the master-volume lever).</param>
     /// <param name="pacing">The live present-pacing control (the <c>world.target</c> lever).</param>
+    /// <param name="bindingBar">The live per-seat binding-bar visibility (the <c>world.binding-bar</c> lever).</param>
     /// <returns>The drift hint token.</returns>
-    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing) {
-        var drifted = new List<string>(capacity: 5);
+    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, WorldBindingBarVisibility bindingBar) {
+        var drifted = new List<string>(capacity: 7);
 
         if (CaptureRender(
             render: render,
@@ -486,6 +518,18 @@ internal static class WorldSessionCapture {
             pacing: pacing
         ) != definition.Host) {
             drifted.Add(item: "host");
+        }
+
+        // Reference-compares against the raw rows: CaptureBindingOverlays hands the SAME list back whenever nothing
+        // folded, so an unforced (or already-agreeing) bar never reports drift.
+        if (!ReferenceEquals(
+            objA: CaptureBindingOverlays(
+            definition: definition,
+            visibility: bindingBar
+        ),
+            objB: definition.BindingOverlaysRaw
+        )) {
+            drifted.Add(item: "bindings");
         }
 
         return ((drifted.Count == 0)

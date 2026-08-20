@@ -74,7 +74,7 @@
             ]
           },
           "channels": {
-            "description": "The declared channel names this route\u0027s mask reaches \u2014 a masked-out channel keeps flowing to the routed body\u0027s own pose (relevant under the capture:false mirror policy) but never reaches this route\u0027s target. null (the default) reaches every declared channel. Omitted from the wire when null.",
+            "description": "The declared channel names an application onto this screen reaches \u2014 a masked-out channel keeps flowing to the source body\u0027s own pose (when the own-body application is retained) but never reaches this screen. null (the default) reaches every declared channel. Omitted from the wire when null.",
             "type": [
               "array",
               "null"
@@ -86,46 +86,12 @@
               ]
             }
           },
-          "translation": {
-            "description": "The authored channel\u2192pad-element rows this route\u0027s target reads, replacing the engine\u0027s default when present. null uses the engine mapping. Omitted from the wire when null.",
+          "kit": {
+            "description": "The Name whose Pad map an application onto this screen wears, or null for the engine\u0027s default pad map. The named kit must carry a pad map \u2014 refused by name otherwise. Omitted from the wire when null.",
             "type": [
-              "array",
+              "string",
               "null"
-            ],
-            "items": {
-              "description": "One authored channel\u2192pad-element mapping row \u2014 a Translation entry.",
-              "type": "object",
-              "properties": {
-                "channel": {
-                  "description": "The declared channel name this row reads.",
-                  "type": "string"
-                },
-                "element": {
-                  "description": "The neutral pad element the channel\u0027s value drives.",
-                  "enum": [
-                    "LeftStickX",
-                    "LeftStickY",
-                    "RightStickX",
-                    "RightStickY",
-                    "LeftTrigger",
-                    "RightTrigger",
-                    "South",
-                    "East",
-                    "West",
-                    "North",
-                    "DpadUp",
-                    "DpadDown",
-                    "DpadLeft",
-                    "DpadRight",
-                    "LeftShoulder",
-                    "RightShoulder",
-                    "Start",
-                    "Back"
-                  ]
-                }
-              },
-              "additionalProperties": false
-            }
+            ]
           }
         },
         "additionalProperties": false

@@ -24,29 +24,6 @@ public readonly record struct RgbaColor(float R, float G, float B, float A) {
         z: B,
         w: A
     );
-
-    /// <summary>Builds an opaque color from a 24-bit hex literal, spec notation <c>#RRGGBB</c> (e.g. <c>0x0E1013</c>).</summary>
-    /// <param name="hexRgb">The 24-bit <c>0xRRGGBB</c> value.</param>
-    /// <param name="alpha">The alpha channel, 0-1 (default fully opaque).</param>
-    /// <returns>The color.</returns>
-    public static RgbaColor FromHex(uint hexRgb, float alpha = 1f) => new(
-        A: alpha,
-        B: (((hexRgb >> 0) & 0xFFu) / 255f),
-        G: (((hexRgb >> 8) & 0xFFu) / 255f),
-        R: (((hexRgb >> 16) & 0xFFu) / 255f)
-    );
-    /// <summary>Builds a color from 0-255 channel bytes and an explicit alpha, spec notation <c>rgba(r,g,b,a)</c>.</summary>
-    /// <param name="r">The red channel, 0-255.</param>
-    /// <param name="g">The green channel, 0-255.</param>
-    /// <param name="b">The blue channel, 0-255.</param>
-    /// <param name="alpha">The alpha channel, 0-1.</param>
-    /// <returns>The color.</returns>
-    public static RgbaColor FromRgba(byte r, byte g, byte b, float alpha) => new(
-        A: alpha,
-        B: (b / 255f),
-        G: (g / 255f),
-        R: (r / 255f)
-    );
 }
 /// <summary>
 /// One bloom hue's ring + halo pair (the <c>bloom.*</c> tier-1 lit-state recipe; see

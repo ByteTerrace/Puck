@@ -536,12 +536,14 @@ public sealed partial class WorldBody {
     public void SetGravityField(WorldGravityField? field) {
         m_gravityField = field;
     }
-    /// <summary>Sets the screen-engagement latch — the engagement route's write. A transition in either direction drops
-    /// the staged transient input images and clears the last routed intent, so a stale image cannot leak as a stuck
-    /// direction into the machine (engaging) or burst the avatar into motion (disengaging); the client seat drops its
-    /// own held device state in the same operation. The tape and any wire-timed lane press are untouched — a scripted
-    /// tape keeps driving whichever target now owns the intent. A no-op if the latch is unchanged.</summary>
-    /// <param name="engaged">Whether the player is engaged on a screen (its intent diverted to the screen's machine).</param>
+    /// <summary>Sets the capture latch — a PROJECTION of the owning principal's control-application set, written by
+    /// <c>Server.WorldEngagement.SyncLatch</c> alone and never independently: engaged means that set omits this
+    /// body's own-body application. A transition in either direction drops the staged transient input images and
+    /// clears the last routed intent, so a stale image cannot leak as a stuck direction into the target (engaging) or
+    /// burst the avatar into motion (disengaging); the client seat drops its own held device state in the same
+    /// operation. The tape and any wire-timed lane press are untouched — a scripted tape keeps driving whichever
+    /// target now owns the intent. A no-op if the latch is unchanged.</summary>
+    /// <param name="engaged">Whether this body's own intent is diverted away from its avatar.</param>
     public void SetEngaged(bool engaged) {
         if (engaged == m_engaged) {
             return;
@@ -714,14 +716,13 @@ public sealed partial class WorldBody {
     /// resolve <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and
     /// an unenveloped kit returns the requested/kit rate unchanged.</summary>
     public FixedQ4816 EffectiveMoveSpeed => ResolveMoveSpeed();
-    /// <summary>Gets a value indicating whether this route captures this body — the route table's <c>RouteCapture</c> latched onto the body at
-    /// <c>Engage</c> time. While captured its resolved per-frame intent is diverted to the route's target (read via
-    /// <see cref="EngagedIntent"/>) instead of driving the avatar, which stands idle. <see langword="false"/> while
-    /// unrouted, or while routed under the mirrored (capture:false) policy — either way the avatar keeps integrating
-    /// normally.</summary>
+    /// <summary>Gets a value indicating whether this body's own-body control application has been dropped. While it
+    /// has, the resolved per-frame intent reaches only the set's other targets (read via <see cref="EngagedIntent"/>)
+    /// and the avatar stands idle. <see langword="false"/> while the own-body application is held — whether alone or
+    /// beside a mirrored target — and the avatar keeps integrating normally.</summary>
     public bool Engaged => m_engaged;
     /// <summary>Gets the intent resolved on the most recent <see cref="Advance"/> — captured every tick regardless of
-    /// capture policy, so a routed body's channels are available for translation/passthrough whether or not the
+    /// the latch, so an applied body's channels are available for translation/passthrough whether or not the
     /// avatar itself is idled. The <see cref="PlayerIntent"/> default (all channels zero) before the first advance.</summary>
     public PlayerIntent EngagedIntent => m_engagedIntent;
     /// <summary>Gets the authoritative deterministic orientation.</summary>

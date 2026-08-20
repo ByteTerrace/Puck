@@ -4,7 +4,7 @@ using Puck.Hosting;
 namespace Puck.SdfVm.Views;
 
 /// <summary>
-/// [view-timing] plumbing shared by <see cref="SdfCameraView"/>, <see cref="NestedWorldView"/>, and
+/// [view-timing] plumbing shared by <see cref="SdfCameraView"/>, <see cref="WorldSessionView"/>, and
 /// <see cref="ViewStack"/> — the same arming state <see cref="Puck.SdfVm.SdfEngineNode"/> reads for its GPU
 /// <c>[world-timing]</c> digest, consulted through <see cref="GpuTimingControl.Shared"/> so three call sites do not
 /// each duplicate the read (and so bench.run / the gpu.timing switch / the world.timing verb arm it live mid-session,

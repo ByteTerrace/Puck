@@ -24,52 +24,38 @@ internal sealed partial class PlayerCommandModule {
 
         var actingPrincipal = context.ActingPrincipal();
         var targetPrincipal = TargetPrincipalFor(index: index);
-        // A READ-ONLY peek of the decision Server.WorldEngagement.Disengage will make — the console echo's source of
-        // truth (see WorldEngagement.PeekDisengage's own remarks for why this is safe over loopback). The command
+        // A READ-ONLY peek of the decision Server.WorldEngagement.Dissolve will make — the console echo's source of
+        // truth (see WorldEngagement.PeekDissolve's own remarks for why this is safe over loopback). The command
         // below is submitted UNCONDITIONALLY regardless of the peek, so the SERVER's own check is what actually
-        // decides (a denied-disengage attack case must be refused there, never merely by this client choosing not to
+        // decides (a denied-dissolve attack case must be refused there, never merely by this client choosing not to
         // submit).
-        var outcome = m_server.Engagement.PeekDisengage(
+        var outcome = m_server.Engagement.PeekDissolve(
             actingPrincipal: actingPrincipal,
             entityIndex: (index - 1),
             targetPrincipal: targetPrincipal
         );
 
-        m_link.SubmitCommand(command: new WorldCommand.Disengage(
+        m_link.SubmitCommand(command: new WorldCommand.DissolveControl(
             EntityIndex: (index - 1),
             Principal: actingPrincipal,
             TargetPrincipal: targetPrincipal
         ));
 
-        if (outcome == DisengageOutcome.Denied) {
-            return CommandResult.Error(output: $"[player.disengage: {actingPrincipal.Describe()} lacks control over p{index}'s screen — see world.why]");
+        if (outcome == ControlOutcome.Denied) {
+            return CommandResult.Error(output: $"[player.disengage: {actingPrincipal.Describe()} lacks control over an application p{index} holds — see world.why]");
         }
 
-        // Only a true disengage (ordinary, or the stuck-latch repair) drops p{index}'s held device state; the
-        // route-without-latch repair means the entity was never actually engaged, so there is nothing to release.
-        // This is client-side held state only — a BindingEntryMode.Toggle latch (InputRouter) survives a disengage
-        // on purpose, since rerouting input is not a stop.
+        // A dissolve drops p{index}'s held device state. This is client-side held state only — a
+        // BindingEntryMode.Toggle latch (InputRouter) survives a dissolve on purpose, since rerouting input is not a
+        // stop.
         if (
-            ((outcome == DisengageOutcome.RepairedLatch) || (outcome == DisengageOutcome.Disengaged)) &&
+            (outcome == ControlOutcome.Dissolved) &&
             IsSeat(index: index)
         ) {
             m_roster.Seat(slot: PlayerRoster.SlotFromDisplay(number: index))?.ReleaseAllHeld();
         }
 
-        if (
-            (outcome == DisengageOutcome.RepairedLatch) ||
-            (outcome == DisengageOutcome.RepairedRoute)
-        ) {
-            // The latch and the route disagreed (see WorldEngagement.ResolveDisengage's own remarks for the decision) —
-            // a consistency repair, not the ordinary success/no-op pair, so it gets its own distinct echo rather than
-            // silently reading as either.
-            return Echoed(
-                args: in args,
-                handler: $"[player.disengage: p{index}'s engagement latch/route was inconsistent — repaired]"
-            );
-        }
-
-        return ((outcome == DisengageOutcome.Disengaged)
+        return ((outcome == ControlOutcome.Dissolved)
             ? Echoed(
                 args: in args,
                 handler: $"[player.disengage: p{index} disengaged]"
@@ -149,7 +135,7 @@ internal sealed partial class PlayerCommandModule {
         // Authority check happens before any mutation, including the auto-insert boot below: it checks the acting
         // principal (the submitter), not the target player's own principal — every seat is pre-seeded Control/all,
         // so checking the target would pass unconditionally. This is a client-side precheck against the server's
-        // grant table; the mutation itself re-checks the identical pair atomically in WorldCommand.Engage's apply.
+        // grant table; the mutation itself re-checks the identical pair atomically in ComposeControl's apply.
         var actingPrincipal = context.ActingPrincipal();
 
         if (m_server.Engagement.CheckEngage(
@@ -226,9 +212,9 @@ internal sealed partial class PlayerCommandModule {
         // same breath as the submission.
         var targetPrincipal = TargetPrincipalFor(index: index);
 
-        m_link.SubmitCommand(command: new WorldCommand.Engage(
-            Capture: capture,
+        m_link.SubmitCommand(command: new WorldCommand.ComposeControl(
             EntityIndex: (index - 1),
+            Exclusive: capture,
             Principal: actingPrincipal,
             Target: target,
             TargetPrincipal: targetPrincipal
@@ -308,7 +294,7 @@ internal sealed partial class PlayerCommandModule {
         return false;
     }
     // Parses player.engage's target token: a bare non-negative integer names a SCREEN (the historical, unchanged
-    // shape); "screen:<n>"/"body:<n>" name either explicitly (the context-routes widening) — the SAME grammar
+    // shape); "screen:<n>"/"body:<n>" name either explicitly — the SAME grammar
     // world.grant's subject token already uses, so an operator who knows one already knows the other. Any other
     // GrantSubject shape (all/section/profile/composition) is not a legitimate engage target and is rejected.
     private static bool TryParseEngageTarget(ReadOnlySpan<char> token, out GrantSubject target) {

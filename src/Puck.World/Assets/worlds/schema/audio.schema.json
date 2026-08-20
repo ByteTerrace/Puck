@@ -42,22 +42,22 @@
             "description": "The referenced Id the cue voices (must resolve).",
             "type": "string"
           },
+          "placement": {
+            "description": "Where the cue sounds: PlacementAtSite (spatial, at the event\u0027s world position \u2014 the shimmer\u0027s audio twin; events with no derivable site fall back to the listener), PlacementListener (UI feedback \u2014 rides the listener pose, so distance 0 renders full gain and the mixer\u0027s on-top-of-listener pan hold centers it), or emitter:\u003Cname\u003E (sounds from the named speaker\u0027s resolved pose and support radius).",
+            "type": "string"
+          },
           "gainThousandths": {
             "description": "The cue\u0027s voice gain in thousandths (1000 = unity), or null for unity. Bounded by MaxLevel \u00D7 1000 \u2014 the shared audio gain ceiling in the cue table\u0027s integer unit.",
             "type": [
               "integer",
               "null"
-            ]
-          },
-          "placement": {
-            "description": "Where the cue sounds: PlacementAtSite (spatial, at the event\u0027s world position \u2014 the shimmer\u0027s audio twin; events with no derivable site fall back to the listener), PlacementListener (UI feedback \u2014 rides the listener pose, so distance 0 renders full gain and the mixer\u0027s on-top-of-listener pan hold centers it), or emitter:\u003Cname\u003E (sounds from the named speaker\u0027s resolved pose and support radius).",
-            "type": "string"
+            ],
+            "default": null
           }
         },
         "required": [
           "event",
           "patchId",
-          "gainThousandths",
           "placement"
         ],
         "additionalProperties": false

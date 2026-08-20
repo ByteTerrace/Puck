@@ -87,14 +87,14 @@ count of outstanding appends and the most recently acknowledged one back.
 
 ## Document validation
 
-`WorldSiloDataHookInstaller` wires every `Puck.World.Schema` injection seam a
-document load's own validator needs — including
-`WorldExtensionVocabularyHook`'s screen-machine-engine and post-render-
-extension checks, read against `WorldScreenMachineEngines` and the
-`WorldPostRenderExtensions` shipped-manifest catalog (`Puck.World.Server`) —
-the same sources `Puck.World`'s own installer reads, so a document declaring
-a `screens[]` machine or a `render.extensions[]` row validates identically whether
-`silo.publish`/activation loads it here or the desktop boots it. The silo
+`WorldSiloDataHookInstaller` calls the SAME
+`Puck.World.Client.WorldSchemaVocabularyHooks.Install` the desktop client and
+the test suite do, supplying only the two predicates that live in
+`Puck.World.Server` (`WorldScreenMachineEngines.IsRegistered` and the
+`WorldPostRenderExtensions` shipped-manifest check), so a document declaring a
+`screens[]` machine, a `render.extensions[]` row, a `bindingBar.slotSet` id, or
+an `icons.badges` source validates identically whether `silo.publish`/activation
+loads it here or the desktop boots it. The silo
 mounts no machine or addon host regardless (the checkpoint arm gate already
 refuses a row that pumps one), so a validated key never actually runs here.
 

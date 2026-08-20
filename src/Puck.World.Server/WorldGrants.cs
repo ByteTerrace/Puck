@@ -59,7 +59,15 @@ namespace Puck.World.Server;
 /// </remarks>
 public sealed class WorldGrants : IWorldGrantsView {
     private static readonly long DefaultHoldCeiling = Puck.Maths.FixedQ4816.FromDouble(value: WorldGrant.DefaultHoldSeconds).Value;
+    // The per-body-index own-body default sets, minted on first read and never mutated afterward — every
+    // uncomposed participant shares its index's instance.
+    private static readonly IReadOnlyList<ControlApplication>?[] s_ownBodyApplications = new IReadOnlyList<ControlApplication>?[WorldPopulationLimits.CapacityCeiling];
     private readonly Dictionary<WorldPrincipal, PrincipalGrants> m_byPrincipal = new();
+    // Every principal that has COMPOSED an application set away from its own-body default. An absent row IS the
+    // default (see DefaultApplications) — the single storage engagement lives in, distinct from the capability sets
+    // above: a Control grant authorizes composing, it never mints an application, so a route and a latch can no
+    // longer disagree.
+    private readonly Dictionary<WorldPrincipal, List<ControlApplication>> m_applications = new();
     // (capability, subject) -> the exclusive holder. Only exclusive grants appear here.
     private readonly Dictionary<ExclusiveKey, WorldPrincipal> m_exclusive = new();
     // (principal, capability, subject) -> the row's per-tick dispatch budget. Written by TryGrant on every accepted
@@ -662,8 +670,8 @@ public sealed class WorldGrants : IWorldGrantsView {
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Seat) && (((uint)subject.Value) < ((uint)WorldPopulationLimits.LocalSeatCount))) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
             WorldCapability.Control => ((subject.Kind == GrantSubjectKind.Screen) ||
-                // A route target may also be a BODY (context-routes widening) — a possession/co-drive route, bounded
-                // by the population exactly like Drive/Observe's own body subjects.
+                // A control application's target may be a BODY — a possession/co-drive application, bounded by the
+                // population exactly like Drive/Observe's own body subjects.
                 ((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 ((subject.Kind == GrantSubjectKind.Composition) && trustedWildcard) ||
                 ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Peer)))),
@@ -689,7 +697,73 @@ public sealed class WorldGrants : IWorldGrantsView {
     private static bool IsProjectable(GrantSubject subject) =>
         (subject.Kind is GrantSubjectKind.Body or GrantSubjectKind.Screen or GrantSubjectKind.Section or GrantSubjectKind.State);
     private static string Label(WorldCapability capability) => capability.ToString().ToLowerInvariant();
-    private void NotifyRouteTransition(WorldPrincipal principal, GrantSubject? previous, GrantSubject? current) {
+    // Drops every composed application whose target this principal no longer holds Control over, restoring the
+    // own-body application when that leaves the set with nothing else. The own-body member itself is never dropped
+    // here: an application set with no own body IS capture, and losing an unrelated grant must not capture an
+    // avatar. Whoever revoked the hold already exercised the authority this teardown is a consequence of.
+    private void DissolveUnauthorizedApplications(WorldPrincipal principal) {
+        if (!m_applications.TryGetValue(
+            key: principal,
+            value: out var composed
+        )) {
+            return;
+        }
+
+        var own = GrantSubject.Body(index: principal.Index);
+        var survivors = new List<ControlApplication>(capacity: composed.Count);
+
+        foreach (var application in composed) {
+            if (
+                (application.Target == own) ||
+                Allows(
+                capability: WorldCapability.Control,
+                principal: principal,
+                subject: application.Target
+            ).IsAllowed
+            ) {
+                survivors.Add(item: application);
+            }
+        }
+
+        if (survivors.Count == composed.Count) {
+            return;
+        }
+
+        if (survivors.Count == 0) {
+            survivors.AddRange(collection: DefaultApplications(principal: principal));
+        }
+
+        SetApplications(
+            applications: survivors,
+            principal: principal
+        );
+    }
+    // The application set a participant holds when it has composed nothing: its own body alone, passthrough over
+    // every ordinal. Cached per body index so the per-tick fold's read allocates nothing; a principal with no body
+    // of its own (Console, Addon, World) applies to nothing by default.
+    private static IReadOnlyList<ControlApplication> DefaultApplications(WorldPrincipal principal) {
+        if (principal.Kind is not (PrincipalKind.Seat or PrincipalKind.Peer)) {
+            return [];
+        }
+
+        var index = principal.Index;
+
+        if (((uint)index) >= ((uint)s_ownBodyApplications.Length)) {
+            return [];
+        }
+
+        return (s_ownBodyApplications[index] ??= [ControlApplication.OwnBody(bodyIndex: index)]);
+    }
+    private static bool Holds(IReadOnlyList<ControlApplication> applications, GrantSubject target) {
+        for (var index = 0; (index < applications.Count); index++) {
+            if (applications[index].Target == target) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private void NotifyApplicationTransition(WorldPrincipal principal, GrantSubject? previous, GrantSubject? current) {
         if (previous == current) {
             return;
         }
@@ -699,6 +773,19 @@ public sealed class WorldGrants : IWorldGrantsView {
             previous,
             current
         );
+    }
+    private static bool SameApplications(IReadOnlyList<ControlApplication> first, IReadOnlyList<ControlApplication> second) {
+        if (first.Count != second.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < first.Count); index++) {
+            if (first[index] != second[index]) {
+                return false;
+            }
+        }
+
+        return true;
     }
     // Non-Drive permissive defaults shared by seats and the console: Observe over every subject, Control over every
     // screen, Mutate over every section except Grants (the console alone is seeded over it, see below), and Edit
@@ -964,46 +1051,57 @@ public sealed class WorldGrants : IWorldGrantsView {
         return true;
     }
     /// <inheritdoc/>
-    public bool ClearControlRoute(WorldPrincipal principal) {
-        var priorRoute = (m_byPrincipal.TryGetValue(
+    public IReadOnlyList<ControlApplication> Applications(WorldPrincipal principal) {
+        return (m_applications.TryGetValue(
             key: principal,
-            value: out var grants
+            value: out var composed
         )
-            ? grants.RouteTarget()
-            : null
+            ? composed
+            : DefaultApplications(principal: principal)
         );
-        var cleared = ((priorRoute is not null) && grants.ClearRoutes());
+    }
+    /// <inheritdoc/>
+    public bool ClearApplications(WorldPrincipal principal) {
+        if (!m_applications.TryGetValue(
+            key: principal,
+            value: out var composed
+        )) {
+            return false;
+        }
 
-        if (cleared) {
-            m_revision++;
-            NotifyRouteTransition(
+        _ = m_applications.Remove(key: principal);
+
+        foreach (var dissolved in composed) {
+            NotifyApplicationTransition(
                 current: null,
-                previous: priorRoute,
+                previous: dissolved.Target,
                 principal: principal
             );
         }
 
-        return cleared;
+        foreach (var restored in DefaultApplications(principal: principal)) {
+            NotifyApplicationTransition(
+                current: restored.Target,
+                previous: null,
+                principal: principal
+            );
+        }
+
+        return true;
     }
     /// <inheritdoc/>
-    public void CollectRouteHolders(GrantSubject target, List<WorldPrincipal> into) {
+    public void CollectApplicationHolders(GrantSubject target, List<WorldPrincipal> into) {
         into.Clear();
 
-        foreach (var pair in m_byPrincipal) {
-            if (pair.Value.HoldsRoute(subject: target)) {
-                into.Add(item: pair.Key);
+        foreach (var pair in m_applications) {
+            foreach (var application in pair.Value) {
+                if (application.Target == target) {
+                    into.Add(item: pair.Key);
+
+                    break;
+                }
             }
         }
-    }
-    /// <inheritdoc/>
-    public GrantSubject? ControlRoute(WorldPrincipal principal) {
-        return (m_byPrincipal.TryGetValue(
-            key: principal,
-            value: out var grants
-        )
-            ? grants.RouteTarget()
-            : null
-        );
     }
     /// <inheritdoc/>
     public string Describe(WorldPrincipal? filter) {
@@ -1377,14 +1475,15 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// re-establishes it).</summary>
     /// <param name="seatCount">The reserved local-seat count — identical to the value passed at construction.</param>
     public void Reset(int seatCount) {
-        var droppedRoutes = new List<(WorldPrincipal Principal, GrantSubject Target)>();
+        var droppedApplications = new List<(WorldPrincipal Principal, GrantSubject Target)>();
 
-        foreach (var (principal, grants) in m_byPrincipal) {
-            if (grants.RouteTarget() is { } target) {
-                droppedRoutes.Add(item: (principal, target));
+        foreach (var (principal, applications) in m_applications) {
+            foreach (var application in applications) {
+                droppedApplications.Add(item: (principal, application.Target));
             }
         }
 
+        m_applications.Clear();
         m_byPrincipal.Clear();
         m_exclusive.Clear();
         m_budgets.Clear();
@@ -1397,8 +1496,8 @@ public sealed class WorldGrants : IWorldGrantsView {
         m_seededSections.Clear();
         m_handleTables.Clear();
 
-        foreach (var (principal, target) in droppedRoutes) {
-            NotifyRouteTransition(
+        foreach (var (principal, target) in droppedApplications) {
+            NotifyApplicationTransition(
                 current: null,
                 previous: target,
                 principal: principal
@@ -1442,15 +1541,6 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// <returns>Whether a grant was actually removed.</returns>
     public bool Revoke(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
         var removed = false;
-        var priorRoute = ((capability == WorldCapability.Control)
-            ? (m_byPrincipal.TryGetValue(
-                key: principal,
-                value: out var priorGrants
-            )
-                ? priorGrants.RouteTarget()
-                : null)
-            : null
-        );
 
         if (m_byPrincipal.TryGetValue(
             key: principal,
@@ -1507,44 +1597,16 @@ public sealed class WorldGrants : IWorldGrantsView {
             // independent edit made here.
             m_revision++;
 
+            // Revoking Control re-tests every application this principal stands on: the authority to apply and the
+            // application are separate storage, so nothing else would ever drop one whose authority has been
+            // withdrawn. Re-testing (rather than matching the revoked subject) is what makes a WILDCARD revoke drop
+            // the concrete applications it was the only basis for.
             if (capability == WorldCapability.Control) {
-                var currentRoute = (m_byPrincipal.TryGetValue(
-                    key: principal,
-                    value: out var currentGrants
-                )
-                    ? currentGrants.RouteTarget()
-                    : null
-                );
-
-                NotifyRouteTransition(
-                    current: currentRoute,
-                    previous: priorRoute,
-                    principal: principal
-                );
+                DissolveUnauthorizedApplications(principal: principal);
             }
         }
 
         return removed;
-    }
-    /// <inheritdoc/>
-    public bool RouteCapture(WorldPrincipal principal) {
-        return (
-            !m_byPrincipal.TryGetValue(
-            key: principal,
-            value: out var grants
-        ) ||
-            grants.RouteCapture()
-        );
-    }
-    /// <inheritdoc/>
-    public ChannelReachMask RouteChannelMask(WorldPrincipal principal) {
-        return (m_byPrincipal.TryGetValue(
-            key: principal,
-            value: out var grants
-        )
-            ? grants.RouteChannelMask()
-            : ChannelReachMask.All
-        );
     }
     /// <summary>Snapshots the complete rows one peer principal currently holds, including every payload lane a peer
     /// may legally carry. Peer disconnect events carry this image so replay revokes the identical rows through the
@@ -1605,31 +1667,48 @@ public sealed class WorldGrants : IWorldGrantsView {
         return rows;
     }
     /// <inheritdoc/>
-    public void SetControlRoute(WorldPrincipal principal, GrantSubject target, bool capture, ChannelReachMask channelMask) {
-        ref var grants = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: m_byPrincipal,
-            exists: out _,
-            key: principal
-        );
-        var priorRoute = grants.RouteTarget();
+    public void SetApplications(WorldPrincipal principal, IReadOnlyList<ControlApplication> applications) {
+        ArgumentNullException.ThrowIfNull(argument: applications);
 
-        grants.ClearRoutes();
-        grants.Add(
-            capability: WorldCapability.Control,
-            subject: target
-        );
-        grants.SetRoutePolicy(
-            capture: capture,
-            channelMask: channelMask
-        );
-        // The Control subject set just changed (a route added, any prior one cleared) — the same handle-table
-        // staleness signal TryGrant/Revoke bump, since this writes the identical per-principal storage they do.
-        m_revision++;
-        NotifyRouteTransition(
-            principal: principal,
-            previous: priorRoute,
-            current: grants.RouteTarget()
-        );
+        var previous = Applications(principal: principal);
+        var composed = new List<ControlApplication>(collection: applications);
+
+        // The default set has exactly one canonical representation — an ABSENT row — so a set composed back to the
+        // default never lingers as a stored row that CollectApplicationHolders would then report as a composition.
+        if (SameApplications(
+            first: composed,
+            second: DefaultApplications(principal: principal)
+        )) {
+            _ = m_applications.Remove(key: principal);
+        } else {
+            m_applications[principal] = composed;
+        }
+
+        foreach (var dropped in previous) {
+            if (!Holds(
+                applications: composed,
+                target: dropped.Target
+            )) {
+                NotifyApplicationTransition(
+                    current: null,
+                    previous: dropped.Target,
+                    principal: principal
+                );
+            }
+        }
+
+        foreach (var added in composed) {
+            if (!Holds(
+                applications: previous,
+                target: added.Target
+            )) {
+                NotifyApplicationTransition(
+                    current: added.Target,
+                    previous: null,
+                    principal: principal
+                );
+            }
+        }
     }
     /// <summary>Collects stale generations for one peer index. The caller revokes their rows through
     /// <see cref="WorldServer.Revoke"/>; this method never bypasses that door.</summary>
@@ -1878,16 +1957,6 @@ public sealed class WorldGrants : IWorldGrantsView {
             return false;
         }
 
-        var priorRoute = ((grant.Capability == WorldCapability.Control)
-            ? (m_byPrincipal.TryGetValue(
-                key: grant.Principal,
-                value: out var priorGrants
-            )
-                ? priorGrants.RouteTarget()
-                : null)
-            : null
-        );
-
         if (grant.Exclusive) {
             m_exclusive[new ExclusiveKey(
                 Capability: grant.Capability,
@@ -1971,14 +2040,6 @@ public sealed class WorldGrants : IWorldGrantsView {
         );
         m_revision++;
 
-        if (grant.Capability == WorldCapability.Control) {
-            NotifyRouteTransition(
-                principal: grant.Principal,
-                previous: priorRoute,
-                current: grants.RouteTarget()
-            );
-        }
-
         return true;
     }
 
@@ -2001,8 +2062,7 @@ public sealed class WorldGrants : IWorldGrantsView {
         IReadOnlyList<GrantSubject> Control,
         IReadOnlyList<GrantSubject> Mutate,
         IReadOnlyList<GrantSubject> Edit,
-        bool RouteCapture,
-        ulong RouteChannelMaskBits
+        IReadOnlyList<ControlApplication> Applications
     );
     /// <summary>The grant table's own checkpointed state — every table this class owns.</summary>
     public sealed record WorldGrantsCheckpoint(
@@ -2035,9 +2095,24 @@ public sealed class WorldGrants : IWorldGrantsView {
                 Control: [.. (grants.For(capability: WorldCapability.Control) ?? [])],
                 Mutate: [.. (grants.For(capability: WorldCapability.Mutate) ?? [])],
                 Edit: [.. (grants.For(capability: WorldCapability.Edit) ?? [])],
-                RouteCapture: grants.RouteCapture(),
-                RouteChannelMaskBits: grants.RouteChannelMask().Bits
+                Applications: [.. (m_applications.GetValueOrDefault(key: principal) ?? [])]
             ));
+        }
+
+        // A principal may have composed an application set without holding any capability row of its own, so the
+        // application table is swept separately rather than assumed to be a subset of the capability table.
+        foreach (var (principal, applications) in m_applications) {
+            if (!m_byPrincipal.ContainsKey(key: principal)) {
+                principals.Add(item: new WorldGrantsPrincipalCheckpoint(
+                    Principal: principal,
+                    Drive: [],
+                    Observe: [],
+                    Control: [],
+                    Mutate: [],
+                    Edit: [],
+                    Applications: [.. applications]
+                ));
+            }
         }
 
         return new WorldGrantsCheckpoint(
@@ -2063,6 +2138,7 @@ public sealed class WorldGrants : IWorldGrantsView {
     public void Restore(WorldGrantsCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
+        m_applications.Clear();
         m_byPrincipal.Clear();
         m_exclusive.Clear();
         m_budgets.Clear();
@@ -2097,12 +2173,12 @@ public sealed class WorldGrants : IWorldGrantsView {
             foreach (var subject in row.Edit) {
                 grants.Add(capability: WorldCapability.Edit, subject: subject);
             }
-            grants.SetRoutePolicy(
-                capture: row.RouteCapture,
-                channelMask: new ChannelReachMask(Bits: row.RouteChannelMaskBits)
-            );
 
             m_byPrincipal[row.Principal] = grants;
+
+            if (row.Applications.Count > 0) {
+                m_applications[row.Principal] = [.. row.Applications];
+            }
         }
 
         foreach (var row in checkpoint.Exclusive) {
@@ -2187,14 +2263,6 @@ public sealed class WorldGrants : IWorldGrantsView {
         private HashSet<GrantSubject>? m_control;
         private HashSet<GrantSubject>? m_mutate;
         private HashSet<GrantSubject>? m_edit;
-        // The route's own policy payload (capture, channel mask), set with the route subject by SetControlRoute.
-        // Stale once the route is cleared — nothing reads them without a live route.
-        //
-        // Stored INVERTED (m_routeMirror: true means capture:false) so a route never established through
-        // SetControlRoute reads its default bool zero-value as captured (RouteCapture() true) — the discriminator
-        // WorldEngagement.ResolveDisengage needs to distinguish an ordinary disengage from a route-without-latch repair.
-        private bool m_routeMirror;
-        private ChannelReachMask m_routeChannelMask;
 
         // Exhaustive over WorldCapability's five declared members ONLY, mirroring For's own arms exactly — see its
         // comment for why the fallthrough throws instead of defaulting to m_edit.
@@ -2222,15 +2290,6 @@ public sealed class WorldGrants : IWorldGrantsView {
         public void Add(WorldCapability capability, GrantSubject subject) {
             _ = Set(capability: capability).Add(item: subject);
         }
-        public readonly bool ClearRoutes() {
-            if (m_control is not { } control) {
-                return false;
-            }
-
-            var removed = control.RemoveWhere(match: static subject => (subject.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Body));
-
-            return (removed > 0);
-        }
         // Exhaustive over WorldCapability's five declared members only — a future member has no storage field to
         // fall back to, so this throws rather than silently sharing m_edit's slot. This is defense-in-depth, not a
         // live gate: every data path is filtered by IsLegitimateSubject or a closed parse before storage is
@@ -2247,41 +2306,8 @@ public sealed class WorldGrants : IWorldGrantsView {
             message: $"WorldCapability.{capability} has no storage arm in PrincipalGrants.For — add a field and a case here before granting it."
         ),
         };
-        // Whether the Control set holds EXACTLY this subject — used both for the ordinary membership test and for
-        // CollectRouteHolders' route-holder scan, which now queries a screen OR a body target identically.
-        public readonly bool HoldsRoute(GrantSubject subject) {
-            return (m_control?.Contains(item: subject) ?? false);
-        }
         public readonly bool Remove(WorldCapability capability, GrantSubject subject) {
             return (For(capability: capability)?.Remove(item: subject) ?? false);
-        }
-        // Defaults to captured/all when no route is held, or when a route was never established through
-        // SetControlRoute (see m_routeMirror's remarks) — RouteCapture/RouteChannelMask's own callers already treat
-        // "no route" as the all-permissive baseline (see IWorldGrantsView's remarks), so this never needs its own
-        // null-route branch.
-        public readonly bool RouteCapture() => !m_routeMirror;
-        public readonly ChannelReachMask RouteChannelMask() => ((m_routeChannelMask.Bits == 0UL)
-            ? ChannelReachMask.All
-            : m_routeChannelMask
-        );
-        // The one route a principal holds, if any — a Control subject that is a REAL route target (Screen or Body),
-        // never the wildcard/composition rows the same set also carries.
-        public readonly GrantSubject? RouteTarget() {
-            if (m_control is { } control) {
-                foreach (var subject in control) {
-                    if (subject.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Body) {
-                        return subject;
-                    }
-                }
-            }
-
-            return null;
-        }
-        // Writes the route's capture/mask payload alongside its subject — called only from SetControlRoute, in the
-        // same breath as the route subject itself.
-        public void SetRoutePolicy(bool capture, ChannelReachMask channelMask) {
-            m_routeMirror = !capture;
-            m_routeChannelMask = channelMask;
         }
     }
     // The reverse-index key for the exclusive-holder table.

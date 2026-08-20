@@ -35,21 +35,20 @@ internal sealed class WorldOverlayFeed {
     // WorldBindingBarAuthoring instance changes (a document delivery or profile switch), never every frame — the
     // resolved document graph is reference-stable while nothing changes, so reference equality is the change key.
     private readonly WorldBindingBarAuthoring?[] m_barAuthoringSeen;
-    private readonly GamepadButtons[][] m_barSlotSet;
-    // This tick's active page view per seat — the ONE mutable cell m_pressedByButton's preallocated (per-seat,
+    private readonly string[][] m_barSlotSet;
+    // This tick's active page view per seat — the ONE mutable cell m_pressedBySource's preallocated (per-seat,
     // ctor-time) closures read, so a physical-press probe threads through every bank's ComposeBank call with no
     // per-frame delegate allocation.
     private readonly BindingPageView?[] m_activeBarView;
-    private readonly Func<GamepadButtons, bool>[] m_pressedByButton;
+    private readonly Func<string, bool>[] m_pressedBySource;
     // One cached pressed-probe delegate per SEAT SLOT (the router's held state is slot-keyed), so the per-frame
     // compose closes over nothing.
     private readonly Func<string, bool>[] m_pressedBySlot;
-    // Cached ONCE (never per tick, never per bank): the icon table's own resolvers are stateless, and the two
-    // family-aware resolvers' only per-tick input (the connected family) rides the mutable m_currentFamily cell
-    // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedByButton already takes.
-    private readonly Func<GamepadButtons, OverlayResolvedGlyph> m_resolveBadge;
+    // Cached ONCE (never per tick, never per bank): the icon table's own resolvers are stateless, and the
+    // family-aware badge resolver's only per-tick input (the connected family) rides the mutable m_currentFamily cell
+    // instead of a fresh closure, the same "mutable cell + preallocated delegate" shape m_pressedBySource already takes.
+    private readonly Func<string, OverlayResolvedGlyph> m_resolveBadge;
     private readonly Func<string?, OverlayResolvedGlyph> m_resolveIcon;
-    private readonly Func<string, OverlayResolvedGlyph> m_resolveModifierSource;
     private GamepadType m_currentFamily;
     private readonly PlayerRoster m_roster;
     private readonly OverlayBindingSeat[] m_seats;
@@ -81,15 +80,11 @@ internal sealed class WorldOverlayFeed {
         m_client = client;
         m_gamepads = gamepads;
         m_icons = icons;
-        m_resolveBadge = button => icons.ResolveBadge(
-            button: button,
-            family: m_currentFamily
+        m_resolveBadge = source => icons.ResolveBadge(
+            family: m_currentFamily,
+            source: source
         );
         m_resolveIcon = icons.ResolveIcon;
-        m_resolveModifierSource = source => icons.ResolveModifierSource(
-            source: source,
-            family: m_currentFamily
-        );
         m_roster = roster;
         m_store = store;
         m_hintLines = new string[PlayerRoster.MaxSlots][];
@@ -99,54 +94,33 @@ internal sealed class WorldOverlayFeed {
         m_modifiers = new OverlayBindingModifier[PlayerRoster.MaxSlots][];
         m_pressedBySlot = new Func<string, bool>[PlayerRoster.MaxSlots];
         m_barAuthoringSeen = new WorldBindingBarAuthoring?[PlayerRoster.MaxSlots];
-        m_barSlotSet = new GamepadButtons[PlayerRoster.MaxSlots][];
+        m_barSlotSet = new string[PlayerRoster.MaxSlots][];
         m_activeBarView = new BindingPageView?[PlayerRoster.MaxSlots];
-        m_pressedByButton = new Func<GamepadButtons, bool>[PlayerRoster.MaxSlots];
+        m_pressedBySource = new Func<string, bool>[PlayerRoster.MaxSlots];
 
         for (var index = 0; (index < PlayerRoster.MaxSlots); index++) {
             var slot = index;
 
             m_hintLines[index] = [];
-            m_slots[index] = new OverlayBindingSlot[(WorldBindingBarCapacity.MaxBanks * GamepadButtonCatalog.Count)];
+            m_slots[index] = new OverlayBindingSlot[(WorldBindingBarCapacity.MaxBanks * WorldBindingBarCapacity.MaxSlots)];
             m_modifiers[index] = new OverlayBindingModifier[WorldBindingBarCapacity.MaxModifiers];
             m_barSlotSet[index] = [];
             m_pressedBySlot[index] = command => router.IsCommandHeld(
                 command: command,
                 slot: slot
             );
-            m_pressedByButton[index] = button => ((m_activeBarView[slot] is { } activeView) && BindingBarSeatComposer.IsPhysicallyPressed(
+            m_pressedBySource[index] = source => ((m_activeBarView[slot] is { } activeView) && BindingBarSeatComposer.IsPhysicallyPressed(
                 activeView: activeView,
-                button: button,
-                isCommandHeld: m_pressedBySlot[slot]
+                isCommandHeld: m_pressedBySlot[slot],
+                source: source
             ));
         }
     }
-    // Re-parses a seat's authored slot-set names only when the resolved WorldBindingBarAuthoring instance changes.
-    // An unknown name never reaches here (the document validator refuses it by name before boot); a defensive parse
-    // failure is simply dropped rather than thrown, since this is a per-frame render path.
-    private ReadOnlySpan<GamepadButtons> ResolveSlotSet(int slot, WorldBindingBarAuthoring authoring) {
+    // Snapshots a seat's authored slot set only when the resolved WorldBindingBarAuthoring instance changes — the
+    // authored ids ARE the ids the composer matches a page's bindings against, so this copies rather than parses.
+    private ReadOnlySpan<string> ResolveSlotSet(int slot, WorldBindingBarAuthoring authoring) {
         if (!ReferenceEquals(objA: m_barAuthoringSeen[slot], objB: authoring)) {
-            var names = authoring.SlotSet;
-            var parsed = new GamepadButtons[names.Count];
-            var count = 0;
-
-            foreach (var name in names) {
-                if (
-                    Enum.TryParse<GamepadButtons>(
-                    value: name,
-                    ignoreCase: false,
-                    result: out var button
-                ) &&
-                    (button != GamepadButtons.None)
-                ) {
-                    parsed[count++] = button;
-                }
-            }
-
-            m_barSlotSet[slot] = ((count == parsed.Length)
-                ? parsed
-                : parsed[..count]
-            );
+            m_barSlotSet[slot] = [.. authoring.SlotSet];
             m_barAuthoringSeen[slot] = authoring;
         }
 
@@ -328,13 +302,16 @@ internal sealed class WorldOverlayFeed {
 
                     BindingBarSeatComposer.ComposeBank(
                         bankAlpha: bankAlpha,
-                        bankOffset: new System.Numerics.Vector2(bank.OffsetX, bank.OffsetY),
+                        bankOffsetOverride: (((bank.OffsetX is not null) || (bank.OffsetY is not null))
+                            ? new System.Numerics.Vector2((bank.OffsetX ?? 0f), (bank.OffsetY ?? 0f))
+                            : null),
+                        bankOrder: bank.Order,
                         destination: destination.AsSpan(
                             start: writeOffset,
                             length: slotCount
                         ),
                         hideUnbound: barStatus.EffectiveHideUnbound,
-                        isPressed: m_pressedByButton[slot],
+                        isPressed: m_pressedBySource[slot],
                         resolveBadge: m_resolveBadge,
                         resolveIcon: m_resolveIcon,
                         slotSet: slotSet[..slotCount],
@@ -348,7 +325,7 @@ internal sealed class WorldOverlayFeed {
 
             var modifierCount = BindingBarSeatComposer.ComposeModifiers(
                 destination: m_modifiers[viewIndex],
-                resolveModifierSource: m_resolveModifierSource,
+                resolveBadge: m_resolveBadge,
                 text: barText,
                 view: view
             );
@@ -380,11 +357,26 @@ internal sealed class WorldOverlayFeed {
                 ),
                 Viewport: viewport,
                 Layout: new BindingBarLayoutOptions(
-                    ButtonSize: authoredLayout.ButtonSize,
-                    CenterGap: authoredLayout.CenterGap,
-                    AnchorOffsetY: authoredLayout.AnchorOffsetY,
-                    GlyphOffsetRatio: authoredLayout.GlyphOffsetRatio,
-                    GlyphSizeRatio: authoredLayout.GlyphSizeRatio,
+                    AnchorOffsetY: authoredLayout.ResolvedAnchorOffsetY,
+                    BadgeCorner: authoredLayout.ResolvedBadgeCorner,
+                    ButtonSize: authoredLayout.ResolvedButtonSize,
+                    CenterGap: authoredLayout.ResolvedCenterGap,
+                    CenterRowLift: authoredLayout.ResolvedCenterRowLift,
+                    CenterSlotSpacing: authoredLayout.ResolvedCenterSlotSpacing,
+                    ExoticRowLift: authoredLayout.ResolvedExoticRowLift,
+                    ExoticSlotSpacing: authoredLayout.ResolvedExoticSlotSpacing,
+                    GlyphOffsetRatio: authoredLayout.ResolvedGlyphOffsetRatio,
+                    GlyphSizeRatio: authoredLayout.ResolvedGlyphSizeRatio,
+                    HintBaseGapRatio: authoredLayout.ResolvedHintBaseGapRatio,
+                    HintCellMinPx: authoredLayout.ResolvedHintCellMinPx,
+                    HintCellRatio: authoredLayout.ResolvedHintCellRatio,
+                    HintLineStepRatio: authoredLayout.ResolvedHintLineStepRatio,
+                    LabelCellMinPx: authoredLayout.ResolvedLabelCellMinPx,
+                    LabelCellRatio: authoredLayout.ResolvedLabelCellRatio,
+                    LabelGapRatio: authoredLayout.ResolvedLabelGapRatio,
+                    ModifierGlyphRatio: authoredLayout.ResolvedModifierGlyphRatio,
+                    ModifierHalfRatio: authoredLayout.ResolvedModifierHalfRatio,
+                    ModifierSpacingRatio: authoredLayout.ResolvedModifierSpacingRatio,
                     Scale: barStatus.EffectiveScale
                 ),
                 Visible: !barStatus.Hidden

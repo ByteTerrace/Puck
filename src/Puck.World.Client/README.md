@@ -81,10 +81,17 @@ root-crossing dependency was the audio director, narrowed to
   `SdfDocumentModel.cs`) and its declared refusals (`SdfRefusal.cs`).
 - `WorldCompositionState.cs` — the delivered composition state
   `WorldViewComposer` writes and readers consume.
-- `WorldSessionLeverSink.cs` — writes an accepted session lever onto the live
-  presentation service it names (render settings, present pacing, audio mix
-  gain via `IWorldAudioLever`) — the only write path for those knobs, reached
-  only past the server's grant check.
+- `WorldSessionLeverSink.cs` — the name-keyed applier: writes an accepted
+  session lever onto whichever live presentation service was registered under
+  its token, the only write path for those knobs, reached only past the
+  server's grant check. An unregistered token is refused by name.
+- `WorldSessionLevers.cs` — the knob vocabulary (the `world.<knob>` verb names
+  without their prefix) and the composition-time registration binding each to
+  render settings, present pacing, the audio mix gain (`IWorldAudioLever`), or
+  the binding-bar visibility.
+- `WorldBindingBarVisibility.cs` — the live per-seat binding-bar visibility
+  override the `binding-bar` lever writes and the root's bar-policy resolver
+  reads.
 - `WorldSessionRenderEnvelope.cs` — the session projection's joint
   word/instance capacity measurer, and the process-wide window-lease counter
   (`WorldSessionWindowLeases`) `world.faces` reads back.

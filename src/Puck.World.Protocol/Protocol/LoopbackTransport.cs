@@ -16,9 +16,9 @@ namespace Puck.World.Protocol;
 /// Every record tap fires immediately before its write reaches the server (before <see cref="IWorldServerHost.Submit"/>
 /// is called), so the tape captures the submission stream in the exact order the server saw it — including the
 /// interleaving between a driving command and a grant change, which is the coordinate an authority verdict is pinned
-/// against. <see cref="IntentTap"/>/<see cref="CommandTap"/>/<see cref="GrantTap"/>/<see cref="RevokeTap"/>/
-/// <see cref="SessionTap"/>/<see cref="AddonLifecycleTap"/> are captured on tape today; the envelope/ordered-domain
-/// reshape does not add or remove tape coverage beyond that.
+/// against. Every ordered-domain payload kind a client can submit has a tap here or an apply-time twin on the server
+/// (<c>WorldServer.RebuildTap</c>/<c>ScreenOpTap</c>), so the tape's capture scope is the whole submission surface
+/// rather than a chosen subset.
 /// </para>
 /// </remarks>
 public sealed class LoopbackTransport : IServerLink {
@@ -45,6 +45,10 @@ public sealed class LoopbackTransport : IServerLink {
     /// replay whose fresh world never re-mounted (or re-unmounted) a guest re-drives a differently-composed
     /// simulation. <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldAddonLifecycle, WorldPrincipal>? AddonLifecycleTap { get; set; }
+    /// <summary>Gets an optional record tap invoked with every window-composition submission before it reaches the
+    /// server, carrying the composition and its actor. <see langword="null"/> (the default) is a free
+    /// pass-through.</summary>
+    public Action<WorldComposition, WorldPrincipal>? CompositionTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every authority command before it applies — one kind of entry in
     /// the captured per-tick authority stream. <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldCommand>? CommandTap { get; set; }
@@ -56,6 +60,16 @@ public sealed class LoopbackTransport : IServerLink {
     /// hardest on the addon path, where the re-run guest is checked against the replayed world's own table.
     /// <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldGrant, WorldPrincipal>? GrantTap { get; set; }
+    /// <summary>Gets an optional record tap invoked with every document mutation before it reaches the server,
+    /// carrying the mutation and its acting principal. A mutation the apply pipeline goes on to refuse is still
+    /// taped, so the refusal reproduces identically on replay — the same reasoning <see cref="GrantTap"/> carries.
+    /// <see langword="null"/> (the default) is a free pass-through.</summary>
+    public Action<WorldMutation, WorldPrincipal>? MutationTap { get; set; }
+    /// <summary>Gets an optional record tap invoked with every read-back query before it reaches the server, carrying
+    /// the query and the identity the envelope stamped. Captured because a query crosses the same Observe gate a
+    /// grant change moves, so a replay that skipped it would exercise a different admission history.
+    /// <see langword="null"/> (the default) is a free pass-through.</summary>
+    public Action<WorldQuery, WorldPrincipal>? QueryTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every submitted intent before it reaches the server — the seam the
     /// replay tape captures the live per-tick intent stream through. <see langword="null"/> (the default) is a free
     /// pass-through; set only while a recording is armed.</summary>
@@ -66,6 +80,9 @@ public sealed class LoopbackTransport : IServerLink {
     /// <summary>Gets an optional record tap invoked with every session request before it applies. Occupancy, profile, and
     /// population changes are authoritative inputs to later simulation ticks.</summary>
     public Action<SessionRequest>? SessionTap { get; set; }
+    /// <summary>Gets an optional record tap invoked with every journal undo before it reaches the server, carrying the
+    /// entry count and its actor. <see langword="null"/> (the default) is a free pass-through.</summary>
+    public Action<int, WorldPrincipal>? UndoTap { get; set; }
 
     // Mints the next envelope for the LOCAL connection (id 0, generation 0) — Sequence/CorrelationId both simple
     // monotonic counters (see their own field remarks).
@@ -148,6 +165,13 @@ public sealed class LoopbackTransport : IServerLink {
             payload: new WorldSubmissionPayload.Query(Value: query),
             envelope: out var envelope
         )) {
+            if (envelope.Payload is WorldSubmissionPayload.Query canonical) {
+                QueryTap?.Invoke(
+                    arg1: canonical.Value,
+                    arg2: envelope.Principal
+                );
+            }
+
             m_server.Submit(
                 envelope: envelope,
                 completion: result => completion(((WorldSubmissionResult.Query)result).Answer)
@@ -185,12 +209,13 @@ public sealed class LoopbackTransport : IServerLink {
         }
     }
     /// <inheritdoc/>
-    public void SubmitComposition(WorldComposition composition, WorldPrincipal principal) {
-        Submit(
+    public void SubmitComposition(WorldComposition composition, WorldPrincipal principal) =>
+        SubmitTapped(
+            payload: new WorldSubmissionPayload.Composition(Value: composition),
             principal: principal,
-            payload: new WorldSubmissionPayload.Composition(Value: composition)
+            selectValue: static payload => payload.Value,
+            tap: CompositionTap
         );
-    }
     /// <inheritdoc/>
     public void SubmitDesignation(WorldDesignation designation, WorldPrincipal principal) =>
         SubmitTapped(
@@ -277,17 +302,19 @@ public sealed class LoopbackTransport : IServerLink {
         );
     }
     /// <inheritdoc/>
-    public void SubmitUndo(int count, WorldPrincipal principal) {
-        Submit(
+    public void SubmitUndo(int count, WorldPrincipal principal) =>
+        SubmitTapped(
+            payload: new WorldSubmissionPayload.Undo(Count: count),
             principal: principal,
-            payload: new WorldSubmissionPayload.Undo(Count: count)
+            selectValue: static payload => payload.Count,
+            tap: UndoTap
         );
-    }
     /// <inheritdoc/>
-    public void SubmitWorldMutation(WorldMutation mutation) {
-        Submit(
+    public void SubmitWorldMutation(WorldMutation mutation) =>
+        SubmitTapped(
+            payload: new WorldSubmissionPayload.Mutation(Value: mutation),
             principal: mutation.Principal,
-            payload: new WorldSubmissionPayload.Mutation(Value: mutation)
+            selectValue: static payload => payload.Value,
+            tap: MutationTap
         );
-    }
 }

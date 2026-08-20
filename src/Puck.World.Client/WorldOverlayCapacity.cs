@@ -1,4 +1,3 @@
-using Puck.Input.Devices;
 using Puck.Overlays;
 
 namespace Puck.World.Client;
@@ -15,7 +14,7 @@ public static class WorldOverlayCapacity {
         new(
             BindingBarMaxBanks: WorldBindingBarCapacity.MaxBanks,
             BindingBarMaxModifiers: WorldBindingBarCapacity.MaxModifiers,
-            BindingBarMaxSlotsPerBank: GamepadButtonCatalog.Count,
+            BindingBarMaxSlotsPerBank: WorldBindingBarCapacity.MaxSlots,
             HudElementsPerPanel: WorldHudCapacity.MaxElementsPerPanel,
             HudElementsPerSeatPanel: WorldHudCapacity.MaxElementsPerSeatPanel,
             HudPanels: WorldHudCapacity.MaxWorldPanels,

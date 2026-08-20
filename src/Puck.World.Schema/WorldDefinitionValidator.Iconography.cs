@@ -97,7 +97,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"icons.badges declares {icons.Badges.Count} rows, exceeding the {WorldIconCapacity.MaxBadges}-badge ceiling.");
         }
 
-        var seenButtons = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var seenSources = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < icons.Badges.Count); index++) {
             var badge = icons.Badges[index];
@@ -109,16 +109,15 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: badge.Button)) {
-                errors.Add(item: $"{path}.button is required.");
-            } else if (!seenButtons.Add(item: badge.Button)) {
-                errors.Add(item: $"{path}.button '{badge.Button}' is duplicated.");
+            if (string.IsNullOrWhiteSpace(value: badge.Source)) {
+                errors.Add(item: $"{path}.source is required.");
+            } else if (!seenSources.Add(item: badge.Source)) {
+                errors.Add(item: $"{path}.source '{badge.Source}' is duplicated.");
             } else if (
-                (GamepadButtonVocabularyHook.IsKnownButtonName is { } isKnownButton) &&
-                !isKnownButton(badge.Button) &&
-                (badge.Button is not ("LeftTrigger" or "RightTrigger"))
+                (InputSourceVocabularyHook.IsKnownSourceId is { } isKnownSource) &&
+                !isKnownSource(badge.Source)
             ) {
-                errors.Add(item: $"{path}.button '{badge.Button}' is not a declared GamepadButtons name (nor the analog 'LeftTrigger'/'RightTrigger' pseudo-buttons the modifier indicators also badge).");
+                errors.Add(item: $"{path}.source '{badge.Source}' is not a declared input source id.");
             }
 
             if (string.IsNullOrWhiteSpace(value: badge.Icon)) {

@@ -79,6 +79,19 @@ public sealed partial class WorldServer {
                 break;
         }
     }
+    // Whether the principal's application set names anything other than its own body — the "already engaged" test
+    // the context-button probe skips on. Reads the one storage; there is no separate latch to consult.
+    private bool HasComposedApplication(WorldPrincipal principal) {
+        var own = GrantSubject.Body(index: principal.Index);
+
+        foreach (var application in m_grants.Applications(principal: principal)) {
+            if (application.Target != own) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private void QueueRouteTransition(WorldPrincipal principal, GrantSubject? previous, GrantSubject? current) {
         var sourceBody = principal.Kind switch {
             PrincipalKind.Seat => principal.Index,
@@ -148,7 +161,7 @@ public sealed partial class WorldServer {
     /// seat's pre-move position (this tick's population has not advanced yet — <c>Step</c> calls this before
     /// <see cref="WorldPopulation.AdvanceSeats"/>), and would actually pass <see cref="WorldEngagement.CheckEngage"/>.
     /// <para>
-    /// <see cref="WorldEngagement.Engage"/>'s own remarks leave engageable/proximity/machine policy to the caller
+    /// <see cref="WorldEngagement.Compose"/>'s own remarks leave engageable/proximity/machine policy to the caller
     /// (ordinarily the client, ahead of a manual <c>player.engage</c>'s submission) — this is that same policy,
     /// resolved here instead, from document and grant state alone. Pure sim state in, pure sim state out: a shadow
     /// replay re-derives the identical decision at the identical tick from the identical taped inputs, with nothing
@@ -176,10 +189,9 @@ public sealed partial class WorldServer {
 
             var principal = WorldPrincipal.Seat(slot: slot);
 
-            // A seat already routed somewhere (captured OR mirrored) keeps that ONE route — Engage re-points rather
-            // than stacking, and re-pointing an active possession/mirror off an unrelated button press is not this
-            // feature's job.
-            if (m_grants.ControlRoute(principal: principal) is not null) {
+            // A seat that has composed anything beyond its own body keeps that set — composing off an unrelated
+            // button press over an active possession/mirror is not this feature's job.
+            if (HasComposedApplication(principal: principal)) {
                 continue;
             }
 

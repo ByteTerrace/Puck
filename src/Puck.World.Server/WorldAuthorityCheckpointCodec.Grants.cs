@@ -50,8 +50,35 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: row.Edit,
             writeItem: WriteSubject
         );
-        writer.WriteBoolean(value: row.RouteCapture);
-        writer.WriteUInt64(value: row.RouteChannelMaskBits);
+        WriteArray(
+            writer: writer,
+            items: row.Applications,
+            writeItem: WriteControlApplication
+        );
+    }
+    private static void WriteControlApplication(WireWriter writer, ControlApplication application) {
+        WriteSubject(
+            writer: writer,
+            subject: application.Target
+        );
+        writer.WriteString(value: (application.Kit ?? string.Empty));
+        writer.WriteUInt64(value: application.Reach.Bits);
+    }
+    private static ControlApplication ReadControlApplication(ref WireReader reader) {
+        var target = ReadSubject(reader: ref reader);
+        var kit = reader.ReadString(
+            field: "control application kit",
+            maxBytes: MaxStringBytes
+        );
+        var reach = reader.ReadUInt64();
+
+        return new ControlApplication(
+            Kit: ((kit.Length == 0)
+            ? null
+            : kit),
+            Reach: new ChannelReachMask(Bits: reach),
+            Target: target
+        );
     }
     private static WorldGrants.WorldGrantsPrincipalCheckpoint ReadGrantsPrincipal(ref WireReader reader) {
         var principal = ReadPrincipal(reader: ref reader);
@@ -80,18 +107,20 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "grants edit subjects",
             readItem: static (ref WireReader r) => ReadSubject(reader: ref r)
         );
-        var routeCapture = reader.ReadBoolean();
-        var routeChannelMaskBits = reader.ReadUInt64();
+        var applications = ReadArray(
+            reader: ref reader,
+            field: "grants control applications",
+            readItem: static (ref WireReader r) => ReadControlApplication(reader: ref r)
+        );
 
         return new WorldGrants.WorldGrantsPrincipalCheckpoint(
+            Applications: applications,
             Control: control,
             Drive: drive,
             Edit: edit,
             Mutate: mutate,
             Observe: observe,
-            Principal: principal,
-            RouteCapture: routeCapture,
-            RouteChannelMaskBits: routeChannelMaskBits
+            Principal: principal
         );
     }
     private static byte[] EncodeGrants(WorldGrants.WorldGrantsCheckpoint section) {

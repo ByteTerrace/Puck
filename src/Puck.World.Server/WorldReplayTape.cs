@@ -184,6 +184,10 @@ public sealed class WorldReplayTape {
         m_transport.RevokeTap = null;
         m_transport.SessionTap = null;
         m_transport.AddonLifecycleTap = null;
+        m_transport.MutationTap = null;
+        m_transport.UndoTap = null;
+        m_transport.CompositionTap = null;
+        m_transport.QueryTap = null;
         m_liveServer.RebuildTap = null;
         m_liveServer.ScreenOpTap = null;
         m_liveServer.ServerEventTap = null;
@@ -600,6 +604,22 @@ public sealed class WorldReplayTape {
         m_transport.AddonLifecycleTap = (lifecycle, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.AddonLifecycle(
             Actor: actor,
             Value: lifecycle
+        ));
+        m_transport.MutationTap = (mutation, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Mutation(
+            Actor: actor,
+            Value: mutation
+        ));
+        m_transport.UndoTap = (count, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(
+            Actor: actor,
+            Count: count
+        ));
+        m_transport.CompositionTap = (composition, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Composition(
+            Actor: actor,
+            Value: composition
+        ));
+        m_transport.QueryTap = (query, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Query(
+            Actor: actor,
+            Value: query
         ));
         // Apply-time, not submission-time — see WorldServer.RebuildTap's own remarks for why Reset's hash cannot be
         // known any earlier (m_base is private, server-internal state that can move between submission and drain).

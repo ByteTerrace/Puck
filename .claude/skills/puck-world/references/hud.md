@@ -205,8 +205,8 @@ narrations: reservation overflow vs a writer's own declared cap refusal.
 Binding-bar visibility, layout, and scale do not change this arithmetic. The
 slot reservation DOES scale with the authored vocabulary: it is
 `WorldBindingBarCapacity.MaxBanks` (5 — the WoW-addon original's five chord
-banks: resting/LT/RT/LT>RT/RT>LT) times `MaxSlots` (23 — the
-`Puck.Input.Devices.GamepadButtons` catalog's declared-flag count) slots, plus
+banks: resting/LT/RT/LT>RT/RT>LT) times `MaxSlots` (32 — the declared ceiling on
+one bar's authored slot set, now that it names input source ids) slots, plus
 the fixed one label, eight modifiers, and eight hint lines every bar draws
 once regardless of bank count — `OverlayCapacity.BindingBarMaxBanks`/
 `BindingBarMaxSlotsPerBank`, composed the same way the Hud ceilings are.

@@ -65,6 +65,15 @@ public static class InputSourceVocabulary {
             sourceId: sourceId
         );
     }
+    /// <summary>Indicates whether <paramref name="sourceId"/> names a recognized physical control — the name half of
+    /// <see cref="TryResolveDeclaredKind"/>, for a caller that admits every declared value kind.</summary>
+    /// <param name="sourceId">The provider-neutral source id text (e.g. <c>"gamepad.buttonSouth"</c>).</param>
+    public static bool IsKnownSourceId(string sourceId) {
+        return TryResolveDeclaredKind(
+            kind: out _,
+            sourceId: sourceId
+        );
+    }
     /// <summary>Indicates whether <paramref name="sourceId"/> names a control explicitly marked
     /// <see cref="InputSourceUnaddressableAttribute"/> — a control unaddressable for a reason its declared
     /// <see cref="CommandValueKind"/> alone does not say (today only a text payload). A caller narrowing

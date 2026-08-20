@@ -179,9 +179,6 @@ public enum WorldHostPresentation : byte {
 /// to <see cref="WorldHostPresentation.Windowed"/>, so every world authored before this field existed boots
 /// byte-identically; the <c>--headless</c> CLI flag reflects <see cref="WorldHostPresentation.None"/> for a single run
 /// without editing the document.</param>
-/// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or
-/// <see langword="null"/> when <paramref name="BackendDraw"/> draws it — omitting both reads as
-/// <see cref="WorldBackendPreference.Auto"/>.</param>
 /// <param name="BackendDraw">The backend choice's authored-randomness facet, or <see langword="null"/> for an ordinary
 /// literal <paramref name="Backend"/>. A boot-only site (<see cref="WorldDrawSites.HostBackend"/>): the resolver draws
 /// it once at composition, writes the settled preference into <paramref name="Backend"/>, clears this facet, and
@@ -216,9 +213,11 @@ public enum WorldHostPresentation : byte {
 /// <param name="Authority">The TCP endpoint at which this world's authority is reached when another world resolves
 /// it as a destination, or <see langword="null"/> when the authority is colocated with the resolver. Colocation
 /// short-circuits the authority transport; it does not select a separate transfer path.</param>
+/// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or
+/// <see langword="null"/> when <paramref name="BackendDraw"/> draws it — omitting both reads as
+/// <see cref="WorldBackendPreference.Auto"/>.</param>
 public sealed record WorldHostDefaults(
     WorldHostPresentation Presentation,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend,
     int Width,
     int Height,
     SurfaceFormat SurfaceFormat,
@@ -231,6 +230,7 @@ public sealed record WorldHostDefaults(
     string? Genlock,
     string? Listen,
     string? Authority = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend = null,
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
     // both is refused BY NAME. (WorldPopulationDefaults.CapacityDraw's site cannot do this — see its own remarks.)

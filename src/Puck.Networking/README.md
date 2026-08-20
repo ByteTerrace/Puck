@@ -145,8 +145,8 @@ open.
 `System.Net.Quic` needs msquic: it ships in-box on Windows 11 and Windows
 Server 2022 (with TLS 1.3 in Schannel); on Linux install `libmsquic` (the
 Microsoft package feed carries it) — without it `QuicPeerTransport.IsSupported`
-is false and the host binary exits 2. QUIC is UDP: a `--listen <port>` opens a
-UDP port, not a TCP one.
+is false, and a host that needs QUIC must refuse rather than fall back. QUIC is
+UDP: a `--listen <port>` opens a UDP port, not a TCP one.
 
 ## The dependency firewall
 
@@ -165,5 +165,3 @@ There is no engine gate over this project. Verify by building
 `PersistentRequestLaneLawTests` is the lane state machine's own gate, and its
 `Peers/` laws (mutual delivery, three peers, refusals, restart, channel
 binding) run over the real QUIC transport on loopback, not mocks.
-[`src/Puck.Networking.Host`](../Puck.Networking.Host/README.md) is a runnable
-console demonstration of the peer substrate.

@@ -27,7 +27,8 @@ public sealed record WorldKit(
     [property: JsonPropertyName("actions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, ActionSpec>? ActionsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
     WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap,
-    float Mass = 0f
+    float Mass = 0f,
+    [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null
 ) {
     /// <summary>Gets the kit's composition bindings, keyed by declared channel name (validated against the world's
     /// channel table — a kit naming an undeclared channel is a dead name; a declared composition channel with no
@@ -35,6 +36,13 @@ public sealed record WorldKit(
     /// resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, ActionSpec> Actions => (ActionsRaw ?? EmptyActions);
+    /// <summary>Gets the kit's machine-pad bindings, keyed by the same declared channel names <see cref="Actions"/>
+    /// keys off — what a channel MEANS when this kit is worn by a control application whose target is a screen's
+    /// booted machine, rather than by a body. One vocabulary, two destinations: a kit binding <c>jump</c> to a body
+    /// action and to <see cref="WorldPadElement.South"/> answers both. A kit carrying no pad map cannot be named by
+    /// a <see cref="WorldScreenRoute.Kit"/>; ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, WorldPadElement> Pad => (PadRaw ?? EmptyPad);
     /// <summary>Gets the producer parameter maps keyed by authored producer-program name — ABSENT resolves to
     /// none.</summary>
     [JsonIgnore]
@@ -42,6 +50,7 @@ public sealed record WorldKit(
 
     private static readonly IReadOnlyDictionary<string, BodyProgramParameters> EmptyProducers = new Dictionary<string, BodyProgramParameters>(comparer: StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, ActionSpec> EmptyActions = new Dictionary<string, ActionSpec>(comparer: StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, WorldPadElement> EmptyPad = new Dictionary<string, WorldPadElement>(comparer: StringComparer.Ordinal);
 }
 /// <summary>Declares how a kit responds to other dynamic bodies. Interactions and targeting remain available in
 /// both modes; only <see cref="Solid"/> authorizes physical depenetration.</summary>

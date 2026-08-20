@@ -342,7 +342,7 @@ public sealed partial class WorldPopulation {
     /// at all — the zero-cost path every world without an <c>engageChannel</c>-bearing screen takes.</param>
     /// <param name="engageEdges">Receives, per slot, whether that slot's probe ordinal fired a rising edge this tick
     /// (the caller — <see cref="Puck.World.Server.WorldServer.Step"/> — routes each into
-    /// <see cref="Puck.World.Server.WorldEngagement.Engage"/>). Every entry is written for an active slot; an inactive
+    /// <see cref="Puck.World.Server.WorldEngagement.Compose"/>). Every entry is written for an active slot; an inactive
     /// slot is left at the caller's own default (callers pass a freshly zeroed span).</param>
     public void AdvanceSeats(ulong tick, ulong stepTicks, ulong stepStartEngineTick, ReadOnlySpan<int> engageProbeOrdinals, Span<bool> engageEdges) {
         for (var slot = 0; (slot < LocalSeatCount); slot++) {

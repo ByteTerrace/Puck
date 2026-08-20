@@ -18,7 +18,7 @@ public sealed partial class WorldBody {
     /// with none — the default, zero-cost path). <see cref="Puck.World.Server.WorldServer.Step"/> resolves eligibility
     /// (screen radius, machine-bearing, un-engaged, authority) before calling this and supplies the ordinal only when
     /// eligible; a fired edge here only reports it — the caller performs the actual
-    /// <see cref="Puck.World.Server.WorldEngagement.Engage"/> afterward, through the same authority path a manual
+    /// <see cref="Puck.World.Server.WorldEngagement.Compose"/> afterward, through the same authority path a manual
     /// <c>player.engage</c> takes.</param>
     /// <param name="entityIndex">The source body's population index.</param>
     /// <param name="effectTargets">The pre-step entity target image.</param>
@@ -46,9 +46,8 @@ public sealed partial class WorldBody {
         // tape > submitted, gated by the possession latch — with the action-track lanes overlaid).
         var intent = NextIntent(stepTicks: stepTicks);
 
-        // Captured EVERY Advance, regardless of capture policy — the context-routes widening's mirror form
-        // (capture:false) needs this body's resolved intent for its route's translation/passthrough even while the
-        // avatar keeps integrating below. Reading it costs nothing beyond a struct copy already computed above.
+        // Captured EVERY Advance, regardless of the latch — a mirrored application set needs this body's resolved
+        // intent for its targets' translation/passthrough even while the avatar keeps integrating below. Reading it costs nothing beyond a struct copy already computed above.
         m_engagedIntent = intent;
 
         // The SAME edge test ProcessLaneActions uses below (bit crossing the ordinal's threshold, previous tick's bit

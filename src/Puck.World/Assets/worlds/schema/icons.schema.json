@@ -67,14 +67,14 @@
         "null"
       ],
       "items": {
-        "description": "One physical-button badge mapping: which authored icon a GamepadButtons flag (by declared member name) shows on the binding bar, with optional per-family overrides \u2014 this replaces the engine\u0027s baked button\u2192glyph switch and makes the dormant controller-family seam real as data.",
+        "description": "One physical-control badge mapping: which authored icon an INPUT SOURCE ID shows on the binding bar, with optional per-family overrides \u2014 the engine holds no button\u2192glyph switch, and a control the bar can name is a control a badge row can key. A slot, a modifier indicator, and a chord hint all resolve their badge through this one table, by the same id.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
-          "button": {
-            "description": "The physical button (a declared, non-NoneGamepadButtons member name).",
+          "source": {
+            "description": "The physical control\u0027s input source id (gamepad.buttonSouth, gamepad.leftTrigger, mouse.button1, \u2026).",
             "type": "string"
           },
           "icon": {
@@ -113,7 +113,7 @@
           }
         },
         "required": [
-          "button",
+          "source",
           "icon"
         ],
         "additionalProperties": false

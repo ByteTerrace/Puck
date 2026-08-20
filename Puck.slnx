@@ -24,7 +24,6 @@
         <Project Path="src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" />
         <Project Path="src/Puck.Maths/Puck.Maths.csproj" />
         <Project Path="src/Puck.Networking/Puck.Networking.csproj" />
-        <Project Path="src/Puck.Networking.Host/Puck.Networking.Host.csproj" />
         <Project Path="src/Puck.Overlays/Puck.Overlays.csproj" />
         <Project Path="src/Puck.Physics/Puck.Physics.csproj" />
         <Project Path="src/Puck.Platform/Puck.Platform.csproj" />

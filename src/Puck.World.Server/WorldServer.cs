@@ -220,6 +220,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     // Reused scratch for the despawn-ownership guard (FireWorldRuleEffect's RemovePlacement arm) — rule-fire cadence
     // only, cleared and refilled on every check rather than allocated per firing.
     private readonly List<int> m_ruleInhabitantScratch = [];
+    // The peer generations this tick's park sweep reclaimed — drained immediately after the sweep so their grant
+    // rows are revoked on the same deadline as their body teardown.
+    private readonly List<WorldPrincipal> m_reclaimedParks = [];
 
     // The contributor rows that reached the last write, per seat, capped at MaxReadContributorsPerSeat — a
     // find-or-add slice (RecordContributor) tagging each contributing principal trusted/untrusted plus a bitmask of
@@ -391,10 +394,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// rebuild, undo, addon lifecycle) and for a fired world-rule effect.</summary>
     public Action<WorldEditEcho>? EchoTap { get; set; }
     /// <summary>Gets the engagement fold (headless design §1.8) — the seat/peer→screen route decision
-    /// (<see cref="WorldCommand.Engage"/>/<see cref="WorldCommand.Disengage"/> apply through it, from
+    /// (<see cref="WorldCommand.ComposeControl"/>/<see cref="WorldCommand.DissolveControl"/> apply through it, from
     /// <see cref="ApplyCommand"/>), its per-tick pad fold (<see cref="Server.WorldEngagement.FoldTick"/>, folded into
     /// every <see cref="WorldSnapshot"/>), and the screen-removal admin cleanup
-    /// (<c>Puck.World.WorldScreenBinder.ReconcileScreens</c> calls <see cref="Server.WorldEngagement.DisengageScreen"/>
+    /// (<c>Puck.World.WorldScreenBinder.ReconcileScreens</c> calls <see cref="Server.WorldEngagement.DissolveScreen"/>
     /// directly — loopback-only, like every other client↔server call that has not yet crossed a wire).</summary>
     public WorldEngagement Engagement => m_engagement;
     /// <summary>Gets this instance's own render-capacity oracle — configured by whatever presentation-side content

@@ -9,7 +9,6 @@ namespace Puck.Overlays;
 /// every other surface.
 /// </summary>
 public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
-    private const float CursorAlpha = 0.9f;
     // The same emptied-viewport guard the marker writer applies before opening a clip scope on the region.
     private const float MinRegionExtent = 0.05f;
 
@@ -54,6 +53,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
 
         // Hover lights the accent tier; the bare cursor keeps the seat's world-authored hue. Geometry scales off
         // the authored ring radius: the center dot rides at roughly a fifth of it, the label clear of the ring.
+        var chrome = m_theme.Current.Chrome;
         var role = (seat.Hover
             ? OverlayColorRole.Accent
             : seat.Role
@@ -64,11 +64,11 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             max: MaxSizePx
         );
         var dotHalf = Math.Clamp(
-            max: 4f,
+            max: chrome.CursorDotMaxHalf,
             min: 1f,
-            value: (ringRadius * 0.22f)
+            value: (ringRadius * chrome.CursorDotRatio)
         );
-        var labelOffset = (ringRadius + 5f);
+        var labelOffset = (ringRadius + chrome.CursorLabelGap);
 
         builder.BeginClip(
             h: (region.Height * builder.Height),
@@ -77,7 +77,7 @@ public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
             y: (region.Y * builder.Height)
         );
         builder.WriteRing(
-            alpha: CursorAlpha,
+            alpha: chrome.CursorAlpha,
             centerX: seat.X,
             centerY: seat.Y,
             radius: ringRadius,

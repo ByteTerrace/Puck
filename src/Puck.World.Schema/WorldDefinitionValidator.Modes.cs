@@ -1,11 +1,6 @@
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // The built-in context-family names (Client.WorldContextFamilies' own constants) an authored seatModes family
-    // must not collide with — Schema cannot reference Client (layering), so this is the deliberate mirror; keep it in
-    // sync with WorldContextFamilies.Families whenever a built-in family is added, renamed, or removed.
-    private static readonly string[] s_reservedContextFamilyNames = ["roster", "engagement", "layout"];
-
     private static void ValidateSeatModes(WorldDefinition definition, List<string> errors) {
         var families = definition.SeatModes;
 
@@ -13,6 +8,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        var reserved = (ContextFamilyVocabularyHook.ReservedFamilyNames ?? []);
         var familyNames = new HashSet<string>(comparer: StringComparer.Ordinal);
         var needsCameraRig = false;
 
@@ -28,13 +24,8 @@ public static partial class WorldDefinitionValidator {
 
             if (string.IsNullOrWhiteSpace(value: family.Name)) {
                 errors.Add(item: $"{path}.name is required.");
-            } else if (
-                Array.IndexOf(
-                array: s_reservedContextFamilyNames,
-                value: family.Name
-            ) >= 0
-            ) {
-                errors.Add(item: $"{path}.name '{family.Name}' collides with a built-in context family — {string.Join(", ", s_reservedContextFamilyNames)}.");
+            } else if (reserved.Contains(value: family.Name)) {
+                errors.Add(item: $"{path}.name '{family.Name}' collides with a built-in context family — {string.Join(", ", reserved)}.");
             } else if (family.Name.StartsWith(
                 value: WorldStateBindingContext.FamilyPrefix,
                 comparisonType: StringComparison.Ordinal

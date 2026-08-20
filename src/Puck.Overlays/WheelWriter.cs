@@ -10,13 +10,8 @@ namespace Puck.Overlays;
 /// published in the snapshot, so what this draws and what a release commits can never disagree.
 /// </summary>
 public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
-    private const float ActiveRingAlpha = 0.95f;
-    private const float HubDotHalf = 3f;
-    private const float LabelAlpha = 1f;
-    private const float MarkerHalf = 3.5f;
     // The same emptied-viewport guard the cursor writer applies before opening a clip scope on the region.
     private const float MinRegionExtent = 0.05f;
-    private const float RingAlpha = 0.55f;
 
     /// <summary>The active-ring label's character clamp — <see cref="MaxSectorLabelChars"/>' hub-label twin.</summary>
     public const int MaxRingLabelChars = 16;
@@ -72,7 +67,9 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             return;
         }
 
-        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: m_theme.Current.Type.MicroSize);
+        var theme = m_theme.Current;
+        var chrome = theme.Chrome;
+        var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: theme.Type.MicroSize);
 
         builder.BeginClip(
             h: (region.Height * builder.Height),
@@ -83,13 +80,13 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
         // The hub dot — quiet, in the dim hue: a release here cancels, so nothing about it should read committal.
         builder.WriteRect(
-            alpha: LabelAlpha,
-            h: (HubDotHalf * 2f),
-            radius: HubDotHalf,
+            alpha: chrome.WheelLabelAlpha,
+            h: (chrome.WheelHubDotHalf * 2f),
+            radius: chrome.WheelHubDotHalf,
             role: OverlayColorRole.TextDim,
-            w: (HubDotHalf * 2f),
-            x: (seat.CenterX - HubDotHalf),
-            y: (seat.CenterY - HubDotHalf)
+            w: (chrome.WheelHubDotHalf * 2f),
+            x: (seat.CenterX - chrome.WheelHubDotHalf),
+            y: (seat.CenterY - chrome.WheelHubDotHalf)
         );
 
         for (var ringIndex = 0; (ringIndex < ringCount); ringIndex++) {
@@ -98,8 +95,8 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
             builder.WriteRing(
                 alpha: (isActive
-                ? ActiveRingAlpha
-                : RingAlpha),
+                ? chrome.WheelActiveRingAlpha
+                : chrome.WheelRingAlpha),
                 centerX: seat.CenterX,
                 centerY: seat.CenterY,
                 radius: centerline,
@@ -111,10 +108,10 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             if (isActive) {
                 // A second stroke one pixel out reads as a heavier shell — the active-ring highlight.
                 builder.WriteRing(
-                    alpha: ActiveRingAlpha,
+                    alpha: chrome.WheelActiveRingAlpha,
                     centerX: seat.CenterX,
                     centerY: seat.CenterY,
-                    radius: (centerline + 1.5f),
+                    radius: (centerline + chrome.WheelActiveRingOffset),
                     role: OverlayColorRole.TextPrimary
                 );
             }
@@ -150,23 +147,23 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
 
                 if (isHovered) {
                     // The marker sits on the sector's own angle, just outside the ring.
-                    var markerRadius = (centerline + (cellHeight * 1.6f));
+                    var markerRadius = (centerline + (cellHeight * chrome.WheelMarkerGapRatio));
 
                     builder.WriteRect(
-                        alpha: LabelAlpha,
-                        h: (MarkerHalf * 2f),
-                        radius: MarkerHalf,
+                        alpha: chrome.WheelLabelAlpha,
+                        h: (chrome.WheelMarkerHalf * 2f),
+                        radius: chrome.WheelMarkerHalf,
                         role: OverlayColorRole.Accent,
-                        w: (MarkerHalf * 2f),
-                        x: ((seat.CenterX + (MathF.Sin(x: angle) * markerRadius)) - MarkerHalf),
-                        y: ((seat.CenterY - (MathF.Cos(x: angle) * markerRadius)) - MarkerHalf)
+                        w: (chrome.WheelMarkerHalf * 2f),
+                        x: ((seat.CenterX + (MathF.Sin(x: angle) * markerRadius)) - chrome.WheelMarkerHalf),
+                        y: ((seat.CenterY - (MathF.Cos(x: angle) * markerRadius)) - chrome.WheelMarkerHalf)
                     );
                 }
 
                 builder.WriteText(
                     alpha: (isActive
-                    ? LabelAlpha
-                    : RingAlpha),
+                    ? chrome.WheelLabelAlpha
+                    : chrome.WheelRingAlpha),
                     cellHeight: cellHeight,
                     maxChars: MaxSectorLabelChars,
                     role: (isHovered
@@ -198,13 +195,13 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
             );
 
             builder.WriteText(
-                alpha: LabelAlpha,
+                alpha: chrome.WheelLabelAlpha,
                 cellHeight: cellHeight,
                 maxChars: MaxRingLabelChars,
                 role: OverlayColorRole.TextPrimary,
                 text: activeLabel,
                 x: (seat.CenterX - (activeWidth * 0.5f)),
-                y: ((seat.CenterY + (HubDotHalf * 2f)) + 2f)
+                y: ((seat.CenterY + (chrome.WheelHubDotHalf * 2f)) + chrome.WheelHubLabelGap)
             );
         }
 

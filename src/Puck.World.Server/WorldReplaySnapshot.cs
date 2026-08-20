@@ -50,6 +50,29 @@ public abstract record WorldReplayEntry {
     internal sealed record Session(SessionRequest Value) : WorldReplayEntry;
     /// <summary>A target-register designation and its acting principal.</summary>
     internal sealed record Designation(WorldDesignation Value, WorldPrincipal Actor) : WorldReplayEntry;
+    /// <summary>A submitted document mutation and its acting principal — buffered to the tick boundary on re-drive
+    /// through the same <c>Server.WorldServer.EnqueueMutation</c> door a live submission uses, so the whole apply
+    /// pipeline (admission, compose, whole-document validate, capacity, install, journal) re-executes rather than a
+    /// recorded effect being replayed. A mutation the pipeline refuses reproduces as the identical refusal.</summary>
+    /// <param name="Value">The submitted mutation.</param>
+    /// <param name="Actor">The principal that submitted it.</param>
+    internal sealed record Mutation(WorldMutation Value, WorldPrincipal Actor) : WorldReplayEntry;
+    /// <summary>A journal undo (<c>world.undo</c>) — buffered to the tick boundary on re-drive exactly as a live
+    /// submission is, so the recorded journal tail is replayed back through the same all-or-nothing gates.</summary>
+    /// <param name="Count">The number of journal entries to undo.</param>
+    /// <param name="Actor">The principal that submitted it.</param>
+    internal sealed record Undo(int Count, WorldPrincipal Actor) : WorldReplayEntry;
+    /// <summary>A window-composition override (<c>view.override</c>) and its acting principal — applied
+    /// synchronously on re-drive, exactly as it is live.</summary>
+    /// <param name="Value">The composition submission.</param>
+    /// <param name="Actor">The principal that submitted it.</param>
+    internal sealed record Composition(WorldComposition Value, WorldPrincipal Actor) : WorldReplayEntry;
+    /// <summary>A read-back query and the identity the envelope stamped. Re-executed on re-drive at the same
+    /// position it held live, so any read-back state its composition touches is reproduced; the answer itself is
+    /// discarded, since a query moves no simulation state and the tape's verdict is the pose trace.</summary>
+    /// <param name="Value">The query.</param>
+    /// <param name="Actor">The identity the envelope stamped.</param>
+    internal sealed record Query(WorldQuery Value, WorldPrincipal Actor) : WorldReplayEntry;
     /// <summary>A server-authored peer admission, emitted at the point of effect.</summary>
     /// <param name="Value">The ordered admission event.</param>
     internal sealed record PeerAdmitted(WorldServerEvent.PeerAdmitted Value) : WorldReplayEntry;
@@ -224,7 +247,7 @@ public sealed class WorldReplaySnapshot {
     // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
     // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
     // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_4259u; // "PKBY" — puck replay tape; re-keyed for authority-transfer peer facts.
+    private const uint Magic = 0x504B_4341u; // "PKCA" — puck replay tape; re-keyed for control applications and the four ordered-domain leaves.
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
     // (found vs. expected) instead of decoding it as nonsense.
@@ -431,6 +454,63 @@ public sealed class WorldReplaySnapshot {
 
         return designation;
     }
+    private static WorldComposition ReadCompositionLeaf(BinaryReader reader) {
+        var bytes = ReadLeafBytes(
+            reader: reader,
+            what: "composition leaf"
+        );
+
+        if (
+            !WorldSubmissionCodec.TryDecodeComposition(
+            bytes: bytes,
+            composition: out var composition,
+            failure: out var failure
+        ) ||
+            (composition is null)
+        ) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay composition leaf: {failure}");
+        }
+
+        return composition;
+    }
+    private static WorldMutation ReadMutationLeaf(BinaryReader reader) {
+        var bytes = ReadLeafBytes(
+            reader: reader,
+            what: "mutation leaf"
+        );
+
+        if (
+            !WorldSubmissionCodec.TryDecodeMutation(
+            bytes: bytes,
+            mutation: out var mutation,
+            failure: out var failure
+        ) ||
+            (mutation is null)
+        ) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay mutation leaf: {failure}");
+        }
+
+        return mutation;
+    }
+    private static WorldQuery ReadQueryLeaf(BinaryReader reader) {
+        var bytes = ReadLeafBytes(
+            reader: reader,
+            what: "query leaf"
+        );
+
+        if (
+            !WorldSubmissionCodec.TryDecodeQuery(
+            bytes: bytes,
+            query: out var query,
+            failure: out var failure
+        ) ||
+            (query is null)
+        ) {
+            throw new InvalidDataException(message: $"Corrupt .puckreplay query leaf: {failure}");
+        }
+
+        return query;
+    }
     private static WorldReplayEntry ReadEntry(BinaryReader reader) {
         var kind = reader.ReadByte();
 
@@ -465,6 +545,22 @@ public sealed class WorldReplaySnapshot {
         ),
             10 => new WorldReplayEntry.RateLever(Paused: reader.ReadBoolean()),
             11 => ReadTransferEntry(reader: reader),
+            12 => new WorldReplayEntry.Mutation(
+            Value: ReadMutationLeaf(reader: reader),
+            Actor: ReadPrincipal(reader: reader)
+        ),
+            13 => new WorldReplayEntry.Undo(
+            Count: reader.ReadInt32(),
+            Actor: ReadPrincipal(reader: reader)
+        ),
+            14 => new WorldReplayEntry.Composition(
+            Value: ReadCompositionLeaf(reader: reader),
+            Actor: ReadPrincipal(reader: reader)
+        ),
+            15 => new WorldReplayEntry.Query(
+            Value: ReadQueryLeaf(reader: reader),
+            Actor: ReadPrincipal(reader: reader)
+        ),
             _ => throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}."),
         };
     }
@@ -942,6 +1038,48 @@ public sealed class WorldReplaySnapshot {
             writer: writer
         );
     }
+    private static void WriteCompositionLeaf(BinaryWriter writer, WorldComposition composition) {
+        if (!WorldSubmissionCodec.TryEncodeComposition(
+            bytes: out var bytes,
+            composition: composition,
+            failure: out var failure
+        )) {
+            throw new WorldReplayCodecException(message: $"the canonical composition leaf refused while writing .puckreplay: {failure}");
+        }
+
+        WriteLeafBytes(
+            bytes: bytes,
+            writer: writer
+        );
+    }
+    private static void WriteMutationLeaf(BinaryWriter writer, WorldMutation mutation) {
+        if (!WorldSubmissionCodec.TryEncodeMutation(
+            bytes: out var bytes,
+            mutation: mutation,
+            failure: out var failure
+        )) {
+            throw new WorldReplayCodecException(message: $"the canonical mutation leaf refused while writing .puckreplay: {failure}");
+        }
+
+        WriteLeafBytes(
+            bytes: bytes,
+            writer: writer
+        );
+    }
+    private static void WriteQueryLeaf(BinaryWriter writer, WorldQuery query) {
+        if (!WorldSubmissionCodec.TryEncodeQuery(
+            bytes: out var bytes,
+            query: query,
+            failure: out var failure
+        )) {
+            throw new WorldReplayCodecException(message: $"the canonical query leaf refused while writing .puckreplay: {failure}");
+        }
+
+        WriteLeafBytes(
+            bytes: bytes,
+            writer: writer
+        );
+    }
     // The authority-INPUT tagged union: one discriminant byte, then the entry's own payload. Kept distinct from the
     // command tagged union below — that one discriminates WorldCommand's sealed subtypes, this one discriminates what
     // KIND of authority write crossed the link at all.
@@ -1067,6 +1205,51 @@ public sealed class WorldReplaySnapshot {
                 WriteTransferLeaf(
                     transfer: transfer,
                     writer: writer
+                );
+
+                break;
+            case WorldReplayEntry.Mutation mutation:
+                writer.Write(value: ((byte)12));
+                WriteMutationLeaf(
+                    writer: writer,
+                    mutation: mutation.Value
+                );
+                WritePrincipal(
+                    writer: writer,
+                    principal: mutation.Actor
+                );
+
+                break;
+            case WorldReplayEntry.Undo undo:
+                writer.Write(value: ((byte)13));
+                writer.Write(value: undo.Count);
+                WritePrincipal(
+                    writer: writer,
+                    principal: undo.Actor
+                );
+
+                break;
+            case WorldReplayEntry.Composition composition:
+                writer.Write(value: ((byte)14));
+                WriteCompositionLeaf(
+                    writer: writer,
+                    composition: composition.Value
+                );
+                WritePrincipal(
+                    writer: writer,
+                    principal: composition.Actor
+                );
+
+                break;
+            case WorldReplayEntry.Query query:
+                writer.Write(value: ((byte)15));
+                WriteQueryLeaf(
+                    writer: writer,
+                    query: query.Value
+                );
+                WritePrincipal(
+                    writer: writer,
+                    principal: query.Actor
                 );
 
                 break;
@@ -1511,6 +1694,34 @@ public sealed class WorldReplaySnapshot {
                             principal: screenOp.Actor,
                             expectedContentHash: screenOp.ContentHash
                         );
+
+                        break;
+                    case WorldReplayEntry.Mutation mutation:
+                        // Buffered to the tick boundary through the ordinary door, drained by THIS tick's
+                        // server.Step call below (DrainPendingOps) — a live mutation never applies synchronously
+                        // either, so the whole apply pipeline re-executes at the same point it did live.
+                        server.EnqueueMutation(mutation: mutation.Value);
+
+                        break;
+                    case WorldReplayEntry.Undo undo:
+                        server.EnqueueUndo(
+                            count: undo.Count,
+                            principal: undo.Actor
+                        );
+
+                        break;
+                    case WorldReplayEntry.Composition composition:
+                        server.ApplyComposition(
+                            composition: composition.Value,
+                            principal: composition.Actor
+                        );
+
+                        break;
+                    case WorldReplayEntry.Query query:
+                        // Re-executed so any read-back state the composition touches is reproduced at the same
+                        // position it was live; the answer itself is discarded, since the tape's verdict is the pose
+                        // trace and a query moves no simulation state.
+                        _ = server.Answer(query: query.Value);
 
                         break;
                     case WorldReplayEntry.RateLever:

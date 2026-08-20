@@ -193,7 +193,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             width: width
         );
         m_bindingBarWriter = ((sources.BindingBar is { } bindingBar)
-            ? new BindingBarWriter(source: bindingBar)
+            ? new BindingBarWriter(source: bindingBar, theme: m_theme)
             : null
         );
         m_commandRecorder = services.CommandRecorder;
@@ -226,7 +226,8 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         m_hudWriter = (((sources.Hud is { } hudSource) && (sources.HudBindings is { } hudBindings))
             ? new HudWriter(
                 bindings: hudBindings,
-                source: hudSource
+                source: hudSource,
+                theme: m_theme
             )
             : null
         );

@@ -286,7 +286,7 @@ public sealed partial class WorldServer {
                 return WorldSubmissionResult.Ack.Instance;
             case WorldSubmissionPayload.ScreenOp screenOp:
                 // Synchronous, like Command/Grant/Revoke — never buffered to the tick boundary — so a following
-                // WorldCommand.Engage submitted in the same batch (player.engage's auto-insert precheck) observes
+                // WorldCommand.ComposeControl submitted in the same batch (player.engage's auto-insert precheck) observes
                 // this op's effect immediately. See WorldScreenOp's own remarks for why.
                 TryApplyScreenOp(
                     op: screenOp.Value,
@@ -716,9 +716,9 @@ public sealed partial class WorldServer {
         // dictionary diff over a handful of declared screens), and the one choke point every screen-affecting
         // mutation AND every whole-document rebuild both pass through. The host reports which indices it removed;
         // this project (not the host — see WorldMachineHost's own remarks on why) owns the engagement-side admin
-        // cleanup for them: m_engagement.DisengageScreen runs before the removed slot's machine is disposed.
+        // cleanup for them: m_engagement.DissolveScreen runs before the removed slot's machine is disposed.
         foreach (var removed in m_machines.ReconcileScreens(screens: definition.Screens)) {
-            m_engagement.DisengageScreen(screenIndex: removed);
+            m_engagement.DissolveScreen(screenIndex: removed);
         }
 
         // Cable links reconcile AFTER screens (a link resolves against the live slot set) — the SAME choke point,
@@ -1296,14 +1296,15 @@ public sealed partial class WorldServer {
     public void ApplyCommand(WorldCommand command, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
         ArgumentNullException.ThrowIfNull(argument: command);
 
-        // Engage/Disengage are Control-over-SCREEN commands, never Drive-over-BODY ones — the generic gate below does
-        // not apply to them at all, so they branch out first. Both apply through Server.WorldEngagement, which runs
-        // its own check-then-mutate (see its own remarks); nothing here duplicates that check.
+        // The control-application commands are Control-over-TARGET commands, never Drive-over-BODY ones — the
+        // generic gate below does not apply to them at all, so they branch out first. Both apply through
+        // Server.WorldEngagement, which runs its own check-then-mutate (see its own remarks); nothing here
+        // duplicates that check.
         switch (command) {
-            case WorldCommand.Engage engage:
+            case WorldCommand.ComposeControl compose:
                 if (!CheckEngagePolicy(
-                    entityIndex: engage.EntityIndex,
-                    target: engage.Target,
+                    entityIndex: compose.EntityIndex,
+                    target: compose.Target,
                     reason: out var reason
                 )) {
                     Console.Error.WriteLine(value: $"[world.engage denied: {reason}]");
@@ -1311,20 +1312,20 @@ public sealed partial class WorldServer {
                     return;
                 }
 
-                _ = m_engagement.Engage(
-                    entityIndex: engage.EntityIndex,
-                    target: engage.Target,
-                    capture: engage.Capture,
-                    actingPrincipal: engage.Principal,
-                    targetPrincipal: engage.TargetPrincipal
+                _ = m_engagement.Compose(
+                    entityIndex: compose.EntityIndex,
+                    target: compose.Target,
+                    exclusive: compose.Exclusive,
+                    actingPrincipal: compose.Principal,
+                    targetPrincipal: compose.TargetPrincipal
                 );
 
                 return;
-            case WorldCommand.Disengage disengage:
-                _ = m_engagement.Disengage(
-                    entityIndex: disengage.EntityIndex,
-                    actingPrincipal: disengage.Principal,
-                    targetPrincipal: disengage.TargetPrincipal
+            case WorldCommand.DissolveControl dissolve:
+                _ = m_engagement.Dissolve(
+                    entityIndex: dissolve.EntityIndex,
+                    actingPrincipal: dissolve.Principal,
+                    targetPrincipal: dissolve.TargetPrincipal
                 );
 
                 return;

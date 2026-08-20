@@ -28,19 +28,35 @@ no presentation project, no `Puck.Overlays`, no `Puck.Input`, no
 reference fails the build with a `PUCKARCH` diagnostic naming the arrival
 path.
 
-Three validation/serialization paths genuinely need knowledge this project is
-denied. One crosses through `BindingVocabularyHook.cs` — a static injection
-point the composition root wires with a module initializer
-(`WorldDataHookInstaller` in `Puck.World`) before `Main` runs: linting a
-composed binding overlay against the live command/channel vocabulary (which
-needs `Puck.Input`, which this project must not see). The other crosses through
-`MutationKindVocabularyHook.cs`: a `MutationKindMask` field
-(`WorldGrant.KindMask`) needs to round-trip its admitted kinds by NAME
-(`verbs:UpsertStateCell,RemoveStateCell`), and the name↔ordinal catalog
-(`WorldMutationKindCatalog`) reflects over `WorldMutation`'s nested records —
-which live in `Puck.World.Protocol`, downstream of this project. Every
-validation path is covered without this project ever naming `Puck.Input` or
-`Puck.World.Protocol`.
+Several validation/serialization paths genuinely need knowledge this project is
+denied. Each crosses through a static injection point every composition root
+wires with a module initializer before `Main` runs — one shared method,
+`Puck.World.Client.WorldSchemaVocabularyHooks.Install`, called by
+`WorldDataHookInstaller` (`Puck.World`), `WorldSiloDataHookInstaller`
+(`Puck.World.Silo`), and `TestHookInstaller` (`tests/Puck.World.Tests`), so a
+seam one process wires and another does not cannot exist:
+
+- `BindingVocabularyHook.cs` lints a composed binding overlay against the live
+  command/channel vocabulary (which needs `Puck.Input`).
+- `InputSourceVocabularyHook.cs` answers whether a string names a declared
+  physical control — the id a `bindingBar.slotSet` entry and an `icons.badges`
+  row are keyed by, resolved against `Puck.Input.InputSourceVocabulary`.
+- `GamepadFamilyVocabularyHook.cs` answers whether a badge override's family
+  name is a declared `Puck.Input.Devices.GamepadType` member.
+- `ContextFamilyVocabularyHook.cs` supplies the built-in context-family names an
+  authored `seatModes` family must not collide with, derived from
+  `Puck.World.Client.WorldContextFamilies.Families` rather than mirrored here.
+- `MutationKindVocabularyHook.cs` round-trips a `MutationKindMask` field
+  (`WorldGrant.KindMask`) by NAME (`verbs:UpsertStateCell,RemoveStateCell`)
+  against `WorldMutationKindCatalog`, which lives in `Puck.World.Protocol`,
+  downstream of this project.
+- `WorldExtensionVocabularyHook.cs` checks a `screens[]` engine key and a
+  `render.extensions[]` key against the catalogs in `Puck.World.Server`; those
+  two arrive as parameters to the shared installer, since `Puck.World.Client`
+  does not reference `Puck.World.Server` either.
+
+Every validation path is covered without this project ever naming `Puck.Input`,
+`Puck.World.Client`, or `Puck.World.Protocol`.
 
 ## Namespace note
 

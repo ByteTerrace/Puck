@@ -559,6 +559,36 @@
       "mass": {
         "type": "number",
         "default": 0
+      },
+      "pad": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": {
+          "description": "The neutral pad element a Pad entry maps a channel onto. Named after the engine-neutral MachinePadState\u0027s own axis/button vocabulary; a pad entry picks exactly one.",
+          "enum": [
+            "LeftStickX",
+            "LeftStickY",
+            "RightStickX",
+            "RightStickY",
+            "LeftTrigger",
+            "RightTrigger",
+            "South",
+            "East",
+            "West",
+            "North",
+            "DpadUp",
+            "DpadDown",
+            "DpadLeft",
+            "DpadRight",
+            "LeftShoulder",
+            "RightShoulder",
+            "Start",
+            "Back"
+          ]
+        },
+        "default": null
       }
     },
     "required": [

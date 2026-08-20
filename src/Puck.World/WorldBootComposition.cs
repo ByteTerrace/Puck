@@ -180,16 +180,22 @@ internal static class WorldBootComposition {
             return client;
         });
 
+        // The live per-seat binding-bar visibility overrides the binding-bar lever writes and WorldBindingBarControl
+        // reads. Core data: the read-back verb and the world.save fold both exist headless.
+        services.AddSingleton<WorldBindingBarVisibility>();
+
         // The accepted-session-lever applier: the ONLY writer of the live presentation knobs the lever verbs move
-        // (world.volume / world.shadows / world.target and their siblings). Every dependency (render settings,
-        // present pacing, audio director) is core data, so the sink itself constructs core; its ATTACHMENT to the
-        // client (WorldClient.AttachSessionLevers) happens in the shared post-build wiring step (WorldPostBuildWiring)
-        // instead of the old render-root factory, so a lever still reaches the client headless (dropped harmlessly,
-        // per WorldClient's own doc comment) instead of never being wired at all.
-        services.AddSingleton(implementationFactory: static sp => new WorldSessionLeverSink(
+        // (world.volume / world.shadows / world.target / world.binding-bar and their siblings), registered here by
+        // name. Every dependency (render settings, present pacing, audio director, bar visibility) is core data, so
+        // the sink itself constructs core; its ATTACHMENT to the client (WorldClient.AttachSessionLevers) happens in
+        // the shared post-build wiring step (WorldPostBuildWiring) instead of the old render-root factory, so a lever
+        // still reaches the client headless (dropped harmlessly, per WorldClient's own doc comment) instead of never
+        // being wired at all.
+        services.AddSingleton(implementationFactory: static sp => WorldSessionLevers.Compose(
             settings: sp.GetRequiredService<WorldRenderSettings>(),
             pacing: sp.GetRequiredService<PresentPacingControl>(),
-            audio: sp.GetRequiredService<WorldAudioDirector>()
+            audio: sp.GetRequiredService<WorldAudioDirector>(),
+            bindingBar: sp.GetRequiredService<WorldBindingBarVisibility>()
         ));
 
         // The frame-rate witness (a plain 2-second rolling window over presentation-fed deltas — no device

@@ -450,11 +450,11 @@ data in `world.screens`/`screen.state`, never a crash. A machine screen is
 engine-neutral (`Puck.Abstractions.Machines`): `WorldBootComposition`
 registers the SM83 family (`gaming-brick`) and the ARM7TDMI machine
 (`advanced-gaming-brick`) onto `WorldMachineHost`, and `player.engage`
-diverts a player's intent wire onto the machine — the same `PlayerIntent`
-currency, translated once into a neutral pad image, folded server-side
-(`WorldEngagement.FoldTick`) and read directly by `WorldMachineHost.Advance`
-inside `WorldServer.Step`; engagement authority rides the grant table's
-`Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
+composes a control application onto the machine — the same `PlayerIntent`
+currency, translated once into a neutral pad image through the named kit's
+`pad` map, folded server-side (`WorldEngagement.FoldTick`) and read directly by
+`WorldMachineHost.Advance` inside `WorldServer.Step`; the authority to compose
+rides the grant table's `Control` capability. See [`Puck.World.Server`](../Puck.World.Server/README.md) for the full contract.
 
 ## Native capture
 
@@ -571,8 +571,8 @@ now lives. `ordered-domain`,
 `headless-boot`, `lane-present-deletion`, `hud-document`, and
 `engagement-dissolution` have no committed battery at all — validate them by
 running the app. Principal/grant enforcement and engage/disengage authority
-are proved by `AuthorityAdministrationLawTests` and `EngageAuthorityLawTests`
-in `tests/Puck.World.Tests`.
+are proved by `AuthorityAdministrationLawTests`, `EngageAuthorityLawTests`, and
+`ControlApplicationLawTests` in `tests/Puck.World.Tests`.
 
 The former World proof suite (proof.cs and its standalone harnesses) was quarantined
 out of the build on 2026-08-02 with the rest of `experimental/`; nothing has

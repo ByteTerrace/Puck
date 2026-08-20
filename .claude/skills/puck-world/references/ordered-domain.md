@@ -168,14 +168,17 @@ fields are plumbed for the wire, not consumed locally.
   `DeliverDefinition`, `DeliverComposition`, `DeliverSessionLever`.
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).
-- `LoopbackTransport` carries the five submission/input replay taps (`IntentTap`,
-  `CommandTap`, `GrantTap`, `RevokeTap`, `AddonLifecycleTap`), each firing
-  immediately BEFORE the write reaches the server and after canonical frame
-  decode — a grant (or a mount/unmount) the door refuses is still taped, so
-  the refusal reproduces identically on replay (see [replay.md](replay.md)).
-  `WorldServer.ServerEventTap` separately records the two server-event cases
-  after their point of effect. `WorldServer.RebuildTap` and `ScreenOpTap`
-  capture rebuilds and screen operations at their server apply points.
+- `LoopbackTransport` carries one replay tap per submission kind (`IntentTap`,
+  `CommandTap`, `GrantTap`, `RevokeTap`, `SessionTap`, `DesignationTap`,
+  `AddonLifecycleTap`, `MutationTap`, `UndoTap`, `CompositionTap`, `QueryTap`),
+  each firing immediately BEFORE the write reaches the server and after
+  canonical frame decode — a grant, a mount/unmount, or a mutation the door
+  refuses is still taped, so the refusal reproduces identically on replay (see
+  [replay.md](replay.md)). `WorldServer.ServerEventTap` separately records the
+  two server-event cases after their point of effect. `WorldServer.RebuildTap`
+  and `ScreenOpTap` capture rebuilds and screen operations at their server apply
+  points instead of at submission, because their CAS pin is not knowable any
+  earlier. Every ordered-domain payload kind is therefore covered.
 
 ## Intents — the separate buffer
 

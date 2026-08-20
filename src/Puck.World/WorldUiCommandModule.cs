@@ -1,4 +1,6 @@
 using Puck.Commands;
+using Puck.World.Client;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -21,11 +23,11 @@ namespace Puck.World;
 /// cannot is a caller being lied to.
 /// <para>Registered in every boot shape so the command vocabulary stays stable; its presentation dependencies are
 /// optional and handlers refuse by name when unavailable.</para></remarks>
-internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null) : ICommandModule {
+internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null) : ICommandModule {
     /// <summary>The binding-bar visibility and read-back verb.</summary>
     public const string BindingBarCommand = "world.binding-bar";
 
-    private static CommandResult BindingBarHandler(in WireArgs args, WorldBindingBarControl? bindingBarControl) {
+    private static CommandResult BindingBarHandler(CommandContext context, in WireArgs args, IServerLink link, WorldBindingBarControl? bindingBarControl) {
         if (bindingBarControl is null) {
             return CommandResult.Error(output: "[world.binding-bar: policy resolver is unavailable]");
         }
@@ -89,9 +91,23 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
         var slot = (player - 1);
 
         if (writesOverride) {
-            bindingBarControl.SetOverride(
-                slot: slot,
-                visible: visibilityOverride
+            // Routed, not written: the server checks Mutate over section:bindings — the section the bar's authoring
+            // lives in — and the client applies it on accept. Over loopback DeliverSessionLever runs synchronously
+            // inside SubmitSessionLever, so the read-back below honestly reports the unchanged override when the
+            // lever was denied.
+            link.SubmitSessionLever(
+                lever: new WorldSessionLever(
+                    A: ((visibilityOverride is not { } forced)
+                    ? WorldSessionLevers.BindingBarAuto
+                    : (forced
+                        ? 1.0
+                        : 0.0
+                    )),
+                    Name: WorldSessionLevers.BindingBar,
+                    Seat: slot,
+                    Section: WorldSection.Bindings
+                ),
+                principal: context.ActingPrincipal()
             );
         }
 
@@ -111,7 +127,7 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
             ? "on"
             : "off")} visible {((authoring.Visible is null)
             ? "always"
-            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layout buttonSize {layout.ButtonSize:0.###} centerGap {layout.CenterGap:0.###} anchorOffsetY {layout.AnchorOffsetY:0.###} glyphOffsetRatio {layout.GlyphOffsetRatio:0.###} glyphSizeRatio {layout.GlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
+            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layout buttonSize {layout.ResolvedButtonSize:0.###} centerGap {layout.ResolvedCenterGap:0.###} anchorOffsetY {layout.ResolvedAnchorOffsetY:0.###} glyphOffsetRatio {layout.ResolvedGlyphOffsetRatio:0.###} glyphSizeRatio {layout.ResolvedGlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
     }
 
     /// <inheritdoc/>
@@ -160,10 +176,12 @@ internal sealed class WorldUiCommandModule(WorldRenderProbe? renderProbe = null,
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: BindingBarCommand,
-            description: "Reads or overrides one local seat's resolved on-screen binding bar: world.binding-bar [on|off|auto] [player], or world.binding-bar [player]. on/off force visibility; auto returns to authored enabled/rest behavior. The read-back reports the resolved world-or-identity policy, its text policy (off = a purely pictographic bar: no letter badges, no page name, no chord hints), its authored slot/bank counts, the resolved (world-or-player) hideUnbound and stacked preferences, current hidden state and reason, and every layout value (scale reflects a player's own override when set). Player defaults to 1 (1..4).",
-            handler: (_, args) => BindingBarHandler(
+            description: "Reads or overrides one local seat's resolved on-screen binding bar: world.binding-bar [on|off|auto] [player], or world.binding-bar [player]. on/off force visibility; auto returns to authored enabled/rest behavior. The override is a session lever — checked against Mutate over section:bindings before it applies, and player 1's forced state folds into bindingOverlays[0].bindingBar.enabled at world.save. The read-back reports the resolved world-or-identity policy, its text policy (off = a purely pictographic bar: no letter badges, no page name, no chord hints), its authored slot/bank counts, the resolved (world-or-player) hideUnbound and stacked preferences, current hidden state and reason, and every layout value (scale reflects a player's own override when set). Player defaults to 1 (1..4).",
+            handler: (context, args) => BindingBarHandler(
                 args: in args,
-                bindingBarControl: bindingBarControl
+                bindingBarControl: bindingBarControl,
+                context: context,
+                link: link
             )
         );
     }

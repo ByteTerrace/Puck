@@ -757,11 +757,11 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// <c>UpsertScreen</c>/<c>RemoveScreen</c> world mutation, called from <see cref="WorldServer"/>'s own Install
     /// path when the definition changes. Removals are reconciled first: a slot whose index is no longer declared has
     /// its machine disposed and its entry dropped — the caller is responsible for the engagement-side admin cleanup
-    /// (<see cref="WorldEngagement.DisengageScreen"/>) over the returned indices, since this type holds no grant-table
+    /// (<see cref="WorldEngagement.DissolveScreen"/>) over the returned indices, since this type holds no grant-table
     /// reference by design. Then, for a declared index whose source changed, machine boots/ejects; a non-machine
     /// source change is a no-op here (presentation applies it).</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
-    /// <returns>The screen indices removed this call — feed each to <see cref="WorldEngagement.DisengageScreen"/>.</returns>
+    /// <returns>The screen indices removed this call — feed each to <see cref="WorldEngagement.DissolveScreen"/>.</returns>
     public IReadOnlyList<int> ReconcileScreens(IReadOnlyList<WorldScreen> screens) {
         if (m_disposed) {
             return [];

@@ -4,6 +4,7 @@ using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.SdfVm;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -319,12 +320,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     // Submits one live presentation-knob write through the server's grant check (WorldServer.ApplySessionLever) instead
     // of writing the injected service here. Defaults to the Render section because most of these knobs fold into it;
     // world.target passes Host explicitly.
-    private void SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, double b = 0.0, WorldSection section = WorldSection.Render) {
+    private void SubmitLever(WorldPrincipal principal, string name, double a, double b = 0.0, WorldSection section = WorldSection.Render) {
         link.SubmitSessionLever(
             lever: new WorldSessionLever(
                 A: a,
                 B: b,
-                Kind: kind,
+                Name: name,
                 Section: section
             ),
             principal: principal
@@ -335,11 +336,11 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     // console echo must still read the settings/pacing service ONLY after the lever has actually applied (or been
     // refused). Over loopback DeliverSessionLever runs synchronously inside SubmitSessionLever, so formatEcho is
     // invoked immediately after the submit call returns — never before it, and never from a stale prior read.
-    private CommandResult SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, Func<CommandResult> formatEcho, double b = 0.0, WorldSection section = WorldSection.Render) {
+    private CommandResult SubmitLever(WorldPrincipal principal, string name, double a, Func<CommandResult> formatEcho, double b = 0.0, WorldSection section = WorldSection.Render) {
         SubmitLever(
             a: a,
             b: b,
-            kind: kind,
+            name: name,
             principal: principal,
             section: section
         );
@@ -559,7 +560,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // never a live read taken separately and possibly before that.
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.Shadows,
+                    name: WorldSessionLevers.Shadows,
                     a: reach,
                     b: crowdRadius,
                     formatEcho: () => new CommandResult(Output: ShadowEcho(settings: settings))
@@ -585,7 +586,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.AmbientOcclusion,
+                    name: WorldSessionLevers.AmbientOcclusion,
                     a: (resolved
                     ? 1.0
                     : 0.0),
@@ -634,7 +635,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     )) {
                         SubmitLever(
                             principal: context.ActingPrincipal(),
-                            kind: WorldLeverKind.FarBound,
+                            name: WorldSessionLevers.FarBound,
                             a: (laneState
                             ? 1.0
                             : 0.0)
@@ -642,7 +643,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     } else {
                         SubmitLever(
                             principal: context.ActingPrincipal(),
-                            kind: WorldLeverKind.ShadowFarExit,
+                            name: WorldSessionLevers.ShadowFarExit,
                             a: (laneState
                             ? 1.0
                             : 0.0)
@@ -661,7 +662,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.FarBound,
+                    name: WorldSessionLevers.FarBound,
                     a: (bothState
                     ? 1.0
                     : 0.0)
@@ -669,7 +670,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowFarExit,
+                    name: WorldSessionLevers.ShadowFarExit,
                     a: (bothState
                     ? 1.0
                     : 0.0),
@@ -698,7 +699,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowAccumulation,
+                    name: WorldSessionLevers.ShadowAccumulation,
                     a: (state
                     ? 1.0
                     : 0.0),
@@ -756,7 +757,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowMask,
+                    name: WorldSessionLevers.ShadowMask,
                     a: ((double)resolved),
                     formatEcho: () => new CommandResult(Output: DescribeShadowMask())
                 );
@@ -808,7 +809,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.AmbientOcclusionQuality,
+                    name: WorldSessionLevers.AmbientOcclusionQuality,
                     a: ((double)resolved),
                     formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality())
                 );
@@ -860,7 +861,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowMarch,
+                    name: WorldSessionLevers.ShadowMarch,
                     a: ((double)resolved),
                     formatEcho: () => new CommandResult(Output: DescribeShadowMarch())
                 );
@@ -940,7 +941,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.RenderScale,
+                    name: WorldSessionLevers.RenderScale,
                     a: scale,
                     formatEcho: () => {
                         var liveScale = settings.RenderScale;
@@ -969,7 +970,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.UpscaleSharpness,
+                    name: WorldSessionLevers.UpscaleSharpness,
                     a: sharpness,
                     formatEcho: () => new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]")
                 );
@@ -996,7 +997,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 ) {
                     return SubmitLever(
                         principal: context.ActingPrincipal(),
-                        kind: WorldLeverKind.TargetHertz,
+                        name: WorldSessionLevers.TargetHertz,
                         a: 0.0,
                         section: WorldSection.Host,
                         formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]")
@@ -1019,7 +1020,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // The echo formats INSIDE the completion — after the lever has applied (or been refused).
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.TargetHertz,
+                    name: WorldSessionLevers.TargetHertz,
                     a: hz,
                     section: WorldSection.Host,
                     formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]")
@@ -1044,13 +1045,13 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.Shadows,
+                    name: WorldSessionLevers.Shadows,
                     a: ShadowTiers.Scale(tier: preset.Shadows),
                     b: settings.ShadowCrowdRadius
                 );
                 SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.AmbientOcclusion,
+                    name: WorldSessionLevers.AmbientOcclusion,
                     a: (preset.AmbientOcclusion
                     ? 1.0
                     : 0.0)
@@ -1060,7 +1061,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.RenderScale,
+                    name: WorldSessionLevers.RenderScale,
                     a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale),
                     formatEcho: () => new CommandResult(Output: DescribeQuality())
                 );

@@ -82,38 +82,38 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
         Principal,
         EntityIndex
     );
-    /// <summary>Routes an entity's intent onto a target — a diegetic screen (today's <c>player.engage</c> UX,
-    /// unchanged) or another body (possession) — the context-routes widening of the old screen-only engage path,
-    /// dissolved off <c>WorldEngagement</c>'s old loopback-only surface into a principal-carrying command (headless
-    /// design §1.8). The server checks <see cref="Principal"/> — the submitter, never <paramref name="TargetPrincipal"/>
-    /// — holds <see cref="WorldCapability.Control"/> over <see cref="Target"/> before any mutation (never the generic
+    /// <summary>Composes a <see cref="ControlApplication"/> onto <see cref="TargetPrincipal"/>'s application set —
+    /// the <c>player.engage</c> wire path. The target is a diegetic screen's booted machine or another body
+    /// (possession); the application's kit and channel reach are resolved SERVER-SIDE from document data (a screen's
+    /// authored <c>WorldScreenRoute.Kit</c>/<c>Channels</c>, or passthrough over every ordinal for a body target), so
+    /// nothing here needs carrying that is a deterministic function of already-replayed state. The server checks
+    /// <see cref="Principal"/> — the submitter, never <see cref="TargetPrincipal"/> — holds
+    /// <see cref="WorldCapability.Control"/> over <see cref="Target"/> before any mutation (never the generic
     /// <see cref="WorldCapability.Drive"/>-over-body gate every other command passes through — see
-    /// <c>Server.WorldServer.ApplyCommand</c>'s own remarks). The route's channel mask is resolved server-side from
-    /// document data (a screen's authored <c>WorldScreenRoute.Channels</c>, or every ordinal for a body target) —
-    /// never carried on this command, since it is a deterministic function of already-replayed state.</summary>
+    /// <c>Server.WorldServer.ApplyCommand</c>'s own remarks).</summary>
     /// <param name="Principal">The acting identity — the submitter, checked for Control over <see cref="Target"/>.</param>
-    /// <param name="EntityIndex">The 0-based entity index being routed.</param>
-    /// <param name="Target">The route's target subject — a screen or a body.</param>
-    /// <param name="Capture">Whether the route captures the source body (idles it, today's behavior) or mirrors it
-    /// (the source keeps integrating its own pose while the same resolved intent also reaches the target).</param>
-    /// <param name="TargetPrincipal">The identity the route is recorded under — the resolved identity of
-    /// the entity being routed (a local seat's own claimed identity, or a population entry's <see cref="PrincipalKind.Peer"/>
-    /// identity), distinct from <see cref="Principal"/> whenever an actor routes an entity that is not itself.</param>
-    public sealed record Engage(WorldPrincipal Principal, int EntityIndex, GrantSubject Target, bool Capture, WorldPrincipal TargetPrincipal) : WorldCommand(
+    /// <param name="EntityIndex">The 0-based entity index whose intent the composed application carries.</param>
+    /// <param name="Target">The application's target subject — a screen or a body.</param>
+    /// <param name="Exclusive">Whether composing DROPS the participant's own-body application (the source avatar
+    /// idles — the classic capture) or retains it beside the new one (the source keeps integrating its own pose
+    /// while the same resolved intent also reaches the target).</param>
+    /// <param name="TargetPrincipal">The identity whose application set is composed — the resolved identity of the
+    /// entity being applied (a local seat's own claimed identity, or a population entry's
+    /// <see cref="PrincipalKind.Peer"/> identity), distinct from <see cref="Principal"/> whenever an actor composes
+    /// an application for an entity that is not itself.</param>
+    public sealed record ComposeControl(WorldPrincipal Principal, int EntityIndex, GrantSubject Target, bool Exclusive, WorldPrincipal TargetPrincipal) : WorldCommand(
         Principal,
         EntityIndex
     );
-    /// <summary>Disengages an entity from whichever target it is routed to (a screen or a body) — the
-    /// <c>player.disengage</c> wire path, dissolved off <c>WorldEngagement</c> the same way <see cref="Engage"/> was.
-    /// The server reads the entity's capture latch and its <see cref="TargetPrincipal"/>'s Control route together and
-    /// decides among four outcomes (see <c>Server.WorldEngagement.Disengage</c>'s own remarks): a stuck latch (latch
-    /// set, no route) self-heals unconditionally; a route with no latch requires <see cref="Principal"/> to hold
-    /// Control over that route's target before it is cleared; an ordinary engaged disengage requires the identical
-    /// check over the currently-routed target; and disengaging an entity that was never routed is a friendly no-op.</summary>
-    /// <param name="Principal">The acting identity — the submitter, checked for Control wherever the decision needs it.</param>
-    /// <param name="EntityIndex">The 0-based entity index being disengaged.</param>
-    /// <param name="TargetPrincipal">The identity the engagement route is recorded under — see <see cref="Engage.TargetPrincipal"/>.</param>
-    public sealed record Disengage(WorldPrincipal Principal, int EntityIndex, WorldPrincipal TargetPrincipal) : WorldCommand(
+    /// <summary>Dissolves every non-own-body <see cref="ControlApplication"/> in <see cref="TargetPrincipal"/>'s set,
+    /// restoring the default single own-body application — the <c>player.disengage</c> wire path. The server checks
+    /// <see cref="Principal"/> holds <see cref="WorldCapability.Control"/> over each dissolved application's target;
+    /// dissolving a set that is already the default is a friendly no-op (see <see cref="ControlOutcome"/>).</summary>
+    /// <param name="Principal">The acting identity — the submitter, checked for Control over each dissolved target.</param>
+    /// <param name="EntityIndex">The 0-based entity index whose applications are dissolved.</param>
+    /// <param name="TargetPrincipal">The identity whose application set is dissolved — see
+    /// <see cref="ComposeControl.TargetPrincipal"/>.</param>
+    public sealed record DissolveControl(WorldPrincipal Principal, int EntityIndex, WorldPrincipal TargetPrincipal) : WorldCommand(
         Principal,
         EntityIndex
     );
@@ -140,37 +140,21 @@ public readonly record struct DurableStateValue(string Name, FixedQ4816 Value, u
 /// <param name="Kind">Whether the body replaced or added to the value.</param>
 /// <param name="StorageKind">The durable slot's numeric representation.</param>
 public readonly record struct DurableStateOutput(ulong Tick, string PlayerId, int EntityIndex, DurableStateValue Value, WorldDocumentWriteKind Kind, ActionStateKind StorageKind);
-/// <summary>The outcome of a <c>player.disengage</c> — dissolved off <c>WorldEngagement</c>'s old internal enum into
-/// shared protocol vocabulary so both the client's pre-submission read (the console echo's source of truth) and the
-/// server's actual apply agree on the same four states. A denial is never confused with the friendly "was not engaged"
-/// no-op, and a latch/route inconsistency is never silently swallowed by either. The two repaired cases are kept
-/// distinct (rather than one shared value) because only one of them warrants dropping the entity's held device
-/// state — see <c>Server.WorldEngagement.Disengage</c>'s own remarks for the full decision.</summary>
-public enum DisengageOutcome : byte {
-    /// <summary>The entity was not engaged on any screen (the latch was clear and no route existed) — a friendly
-    /// no-op. Nothing changed.</summary>
-    NotEngaged,
+/// <summary>The outcome of a <see cref="WorldCommand.DissolveControl"/> — shared protocol vocabulary so the client's
+/// pre-submission read (the console echo's source of truth) and the server's actual apply agree. A denial is never
+/// confused with the friendly "held nothing to dissolve" no-op.</summary>
+public enum ControlOutcome : byte {
+    /// <summary>The participant's application set was already the default (its own body alone) — a friendly no-op.
+    /// Nothing changed.</summary>
+    NotApplied,
 
-    /// <summary>The entity was truly engaged (the latch and the route agreed), or a route existed with no latch, and
-    /// the acting principal lacks Control over the relevant screen — refused loudly. Nothing changed.</summary>
+    /// <summary>The acting principal lacks <see cref="WorldCapability.Control"/> over at least one applied target —
+    /// refused loudly. Nothing changed.</summary>
     Denied,
 
-    /// <summary>Either the entity was truly captured (the latch and the route agreed) and the actor held Control over
-    /// the target, or the route was a deliberate mirror (capture:false — the latch never sets by design) and the
-    /// actor held Control over the target — both are an ordinary successful disengage, and the route was cleared
-    /// (plus the latch, when it was set).</summary>
-    Disengaged,
-
-    /// <summary>The capture latch was set with no matching Control route (an admin revoke stripped the route out
-    /// from under a genuinely captured entity) — self-heals unconditionally, since nothing here touches the grant
-    /// table. A held device state is dropped, exactly as an ordinary <see cref="Disengaged"/> outcome does.</summary>
-    RepairedLatch,
-
-    /// <summary>A Control route existed with no matching capture latch, and the route was never established as a
-    /// deliberate mirror (a bare <c>world.grant … control screen:N</c>/<c>control body:N</c> with no matching
-    /// engage) — cleared only after the same Control check an ordinary disengage requires. No held device state is
-    /// dropped: the entity was never actually captured, so there is nothing to release.</summary>
-    RepairedRoute,
+    /// <summary>Every non-own-body application was dissolved and the own-body application restored; the source
+    /// avatar resumes driving itself. The caller drops the entity's held device state.</summary>
+    Dissolved,
 }
 /// <summary>Identifies which pose components a <see cref="WorldCommand.SnapPose"/> replaces. One shape today, and the
 /// enum stays because the wire tag it carries is what lets a second one arrive without re-versioning the leaf.</summary>

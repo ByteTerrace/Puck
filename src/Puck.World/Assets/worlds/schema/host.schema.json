@@ -11,19 +11,6 @@
         "None"
       ]
     },
-    "backend": {
-      "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendDraw draws it \u2014 omitting both reads as Auto.",
-      "type": [
-        "string",
-        "null"
-      ],
-      "enum": [
-        "auto",
-        "directx",
-        "vulkan",
-        null
-      ]
-    },
     "width": {
       "description": "The window client width in pixels.",
       "type": "integer"
@@ -91,6 +78,20 @@
       ],
       "default": null
     },
+    "backend": {
+      "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendDraw draws it \u2014 omitting both reads as Auto.",
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "auto",
+        "directx",
+        "vulkan",
+        null
+      ]
+    },
     "backendDraw": {
       "$ref": "./common.schema.json#/$defs/WorldDraw",
       "description": "The backend choice\u0027s authored-randomness facet, or null for an ordinary literal Backend. A boot-only site (HostBackend): the resolver draws it once at composition, writes the settled preference into Backend, clears this facet, and narrates the settlement on stderr \u2014 the only surface that can say the backend was drawn at all, since a settled field is indistinguishable from an authored one thereafter. Its natural spelling is a weighted text source over the backend tokens (auto/directx/ vulkan \u2014 a one-context Markov table with bound 1, the degenerate flat weighted draw), parsed through ParseBackend at settle. A token naming no backend refuses by name. Drawing the name rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is inserted, and reads at the authoring site as a number nothing explains. Declared together with Backend it is refused by name \u2014 this record is a class, so presence is honestly observable here, unlike CapacityDraw\u0027s struct-typed site.",
@@ -99,7 +100,6 @@
   },
   "required": [
     "presentation",
-    "backend",
     "width",
     "height",
     "surfaceFormat",

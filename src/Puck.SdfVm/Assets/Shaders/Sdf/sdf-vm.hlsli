@@ -1223,7 +1223,7 @@ float sdfBrickVoxel(uint baseWord, uint3 dims, int3 coord) {
 float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 #ifdef SDF_SAMPLED_REGIONS
     // A POOL-LESS engine (SdfWorldEngineOptions.BrickPoolVoxelCapacity 0 — every offscreen filming view: SdfCameraView,
-    // NestedWorldView) binds a single-float FILLER for sdfBrickPool so the always-present binding stays valid, yet it
+    // WorldSessionView) binds a single-float FILLER for sdfBrickPool so the always-present binding stays valid, yet it
     // never bakes a brick. Sampling that filler would read 0 (its lone/OOB word), and a stored 0 is distance 0 = the box
     // interior sitting entirely on the carve surface, so the Subtraction compose would carve a box-shaped HOLE across the
     // whole region (the same defect an allocated-but-unbaked pool has). Detect the filler by element count and return the

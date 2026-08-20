@@ -504,6 +504,90 @@
         "strokeHalfWidth"
       ],
       "additionalProperties": false
+    },
+    "chrome": {
+      "description": "The CPU writers\u0027 own opacity/px chrome.",
+      "type": "object",
+      "properties": {
+        "dimQuietAlpha": {
+          "description": "The one quiet-dim opacity every writer reaches for: an unbound bar slot, an unheld modifier indicator, a gauge track, a console selection band.",
+          "type": "number"
+        },
+        "barLabelAlpha": {
+          "description": "The binding bar\u0027s page-name opacity.",
+          "type": "number"
+        },
+        "barHintAlpha": {
+          "description": "The binding bar\u0027s chord-hint opacity.",
+          "type": "number"
+        },
+        "cursorAlpha": {
+          "description": "The drawn cursor\u0027s ring opacity.",
+          "type": "number"
+        },
+        "cursorDotRatio": {
+          "description": "The cursor\u0027s center-dot half-extent, as a fraction of the ring radius.",
+          "type": "number"
+        },
+        "cursorDotMaxHalf": {
+          "description": "The cursor center dot\u0027s half-extent ceiling, px.",
+          "type": "number"
+        },
+        "cursorLabelGap": {
+          "description": "The hover label\u0027s clearance outside the ring, px.",
+          "type": "number"
+        },
+        "wheelRingAlpha": {
+          "description": "A non-active wheel ring\u0027s stroke and label opacity.",
+          "type": "number"
+        },
+        "wheelActiveRingAlpha": {
+          "description": "The active wheel ring\u0027s stroke opacity.",
+          "type": "number"
+        },
+        "wheelActiveRingOffset": {
+          "description": "The second (heavier-shell) stroke\u0027s radial offset, px.",
+          "type": "number"
+        },
+        "wheelLabelAlpha": {
+          "description": "The hub dot\u0027s, marker\u0027s, and active-ring labels\u0027 opacity.",
+          "type": "number"
+        },
+        "wheelHubDotHalf": {
+          "description": "The wheel hub dot\u0027s half-extent, px.",
+          "type": "number"
+        },
+        "wheelMarkerHalf": {
+          "description": "The hovered-sector marker dot\u0027s half-extent, px.",
+          "type": "number"
+        },
+        "wheelMarkerGapRatio": {
+          "description": "The marker\u0027s clearance outside the ring, as a multiple of the cell height.",
+          "type": "number"
+        },
+        "wheelHubLabelGap": {
+          "description": "The active-ring label\u0027s clearance below the hub dot, px.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "dimQuietAlpha",
+        "barLabelAlpha",
+        "barHintAlpha",
+        "cursorAlpha",
+        "cursorDotRatio",
+        "cursorDotMaxHalf",
+        "cursorLabelGap",
+        "wheelRingAlpha",
+        "wheelActiveRingAlpha",
+        "wheelActiveRingOffset",
+        "wheelLabelAlpha",
+        "wheelHubDotHalf",
+        "wheelMarkerHalf",
+        "wheelMarkerGapRatio",
+        "wheelHubLabelGap"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -514,7 +598,8 @@
     "elevation",
     "diegetic",
     "motion",
-    "icon"
+    "icon",
+    "chrome"
   ],
   "additionalProperties": false,
   "default": null

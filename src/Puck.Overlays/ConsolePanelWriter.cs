@@ -168,7 +168,7 @@ public sealed class ConsolePanelWriter {
             );
 
             builder.WriteRect(
-                alpha: 0.35f,
+                alpha: theme.Chrome.DimQuietAlpha,
                 h: cellHeight,
                 radius: 0f,
                 role: OverlayColorRole.TextDim,

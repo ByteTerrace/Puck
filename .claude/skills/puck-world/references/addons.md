@@ -230,10 +230,10 @@ tick by `Server/WorldEventFeed.cs` after the population settles: seat
 join/leave, region enter/exit (a placement's `WorldPlacementRegion` facet —
 a named sphere, addressed by the carrying placement's own `Id`), collision
 pairs (a flat proximity test — NOT the physical contact resolver, which has
-no body-vs-body form here), and route engaged/disengaged. Route edges are
-currently queued by `WorldServer.ApplyCommand` for manual Engage/Disengage
-outcomes; context-button auto-engage and direct grant/revoke route changes do
-not queue them. The fifth,
+no body-vs-body form here), and control-application engaged/disengaged.
+Application edges are queued from `WorldGrants`' own set writes, so every
+member added or removed fires one — including the context-button auto-engage
+and a revoke-driven dissolution. The fifth,
 machine-memory watches, is ADDON-scoped (`WorldAddonRow.MemoryWatches`, each
 a `(screen, address, length)` row) and reads `Server.WorldMachineHost`
 DIRECTLY (`WorldMachineHost` implements `IWorldMachineMemoryPeek` itself,

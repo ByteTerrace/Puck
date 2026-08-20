@@ -115,16 +115,16 @@ public abstract record WorldSpeaker(
     /// <param name="Center">The region's extent center, world space.</param>
     /// <param name="Radius">The region's outer radius — the envelope's zero and the cull edge.</param>
     /// <param name="InnerRadius">The full-presence inner radius; <c>0</c> shoulders the envelope from the center.</param>
+    /// <param name="Feed">The feed it plays.</param>
     /// <param name="FadeSeconds">The presence slew bound in seconds (null = the audio defaults'
     /// <c>DefaultBedFadeSeconds</c>).</param>
-    /// <param name="Feed">The feed it plays.</param>
     public sealed record Bed(
         string Name,
         DocumentVector3 Center,
         float Radius,
         float InnerRadius,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FadeSeconds,
-        WorldSpeakerFeed Feed
+        WorldSpeakerFeed Feed,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FadeSeconds = null
     ) : WorldSpeaker(
         Name: Name,
         Feed: Feed,
@@ -171,19 +171,19 @@ public sealed record WorldEmission(string PatchId, float Level, float? Radius = 
 /// </summary>
 /// <param name="Event">The event token (must be one of <see cref="EventTokens"/>).</param>
 /// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> the cue voices (must resolve).</param>
-/// <param name="GainThousandths">The cue's voice gain in thousandths (1000 = unity), or <see langword="null"/> for
-/// unity. Bounded by <see cref="CreationSoundDocument.MaxLevel"/> × 1000 — the shared audio gain ceiling in the cue
-/// table's integer unit.</param>
 /// <param name="Placement">Where the cue sounds: <see cref="PlacementAtSite"/> (spatial, at the event's world
 /// position — the shimmer's audio twin; events with no derivable site fall back to the listener),
 /// <see cref="PlacementListener"/> (UI feedback — rides the listener pose, so distance 0 renders full gain and the
 /// mixer's on-top-of-listener pan hold centers it), or <c>emitter:&lt;name&gt;</c> (sounds from the named speaker's
 /// resolved pose and support radius).</param>
+/// <param name="GainThousandths">The cue's voice gain in thousandths (1000 = unity), or <see langword="null"/> for
+/// unity. Bounded by <see cref="CreationSoundDocument.MaxLevel"/> × 1000 — the shared audio gain ceiling in the cue
+/// table's integer unit.</param>
 public sealed record WorldAudioCue(
     string Event,
     string PatchId,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? GainThousandths,
-    string Placement
+    string Placement,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? GainThousandths = null
 ) {
     /// <summary>A capability denial — a mutate attempt without its grant, or a refused grant acquisition.</summary>
     public const string GrantDenied = "grant.denied";

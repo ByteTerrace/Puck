@@ -296,7 +296,7 @@ public sealed class WorldFaceCatalogLawTests {
         // Geometry is never taken away by a refusal: the shape kinds that cannot be walked through still derive a
         // frame and still show a feed.
         Assert.True(condition: Validates(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere, carriesPortal: false)));
-        Assert.Equal(expected: WorldFaceApertureKind.None, actual: DoorRow(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere, carriesPortal: false)).Aperture);
+        Assert.Null(@object: DoorRow(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere, carriesPortal: false)).Aperture);
     }
 
     // ---- The slot budget ----
@@ -361,7 +361,7 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.True(condition: starved.SlotStarved);
         Assert.Equal(expected: -1, actual: starved.ScreenIndex);
         Assert.NotEqual(expected: default, actual: starved.Frame);
-        Assert.Equal(expected: WorldFaceApertureKind.Box, actual: starved.Aperture);
+        Assert.Equal(expected: SdfSolidPrimitive.Box, actual: starved.Aperture?.Primitive);
         Assert.Contains(collection: catalog.Notices, filter: notice => (notice.Contains(value: starved.PlacementId, comparisonType: StringComparison.Ordinal) && notice.Contains(comparisonType: StringComparison.Ordinal, value: "DARKENED")));
         Assert.Equal(expected: WorldPlacementPolicy.DerivedFaceBase, actual: catalog.Rows[0].ScreenIndex);
         Assert.Equal(expected: (WorldPlacementPolicy.DerivedFaceBase + 1), actual: catalog.Rows[1].ScreenIndex);

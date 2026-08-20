@@ -128,6 +128,27 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             icon: theme.Icon
         );
+        ValidateThemeChrome(
+            chrome: theme.Chrome,
+            errors: errors
+        );
+    }
+    private static void ValidateThemeChrome(WorldThemeChrome chrome, List<string> errors) {
+        RequireUnitFloat(errors: errors, path: "theme.chrome.dimQuietAlpha", value: chrome.DimQuietAlpha);
+        RequireUnitFloat(errors: errors, path: "theme.chrome.barLabelAlpha", value: chrome.BarLabelAlpha);
+        RequireUnitFloat(errors: errors, path: "theme.chrome.barHintAlpha", value: chrome.BarHintAlpha);
+        RequireUnitFloat(errors: errors, path: "theme.chrome.cursorAlpha", value: chrome.CursorAlpha);
+        RequireUnitFloat(errors: errors, path: "theme.chrome.cursorDotRatio", value: chrome.CursorDotRatio);
+        RequireNonNegative(errors: errors, name: "theme.chrome.cursorDotMaxHalf", value: chrome.CursorDotMaxHalf);
+        RequireNonNegative(errors: errors, name: "theme.chrome.cursorLabelGap", value: chrome.CursorLabelGap);
+        RequireUnitFloat(errors: errors, path: "theme.chrome.wheelRingAlpha", value: chrome.WheelRingAlpha);
+        RequireUnitFloat(errors: errors, path: "theme.chrome.wheelActiveRingAlpha", value: chrome.WheelActiveRingAlpha);
+        RequireNonNegative(errors: errors, name: "theme.chrome.wheelActiveRingOffset", value: chrome.WheelActiveRingOffset);
+        RequireUnitFloat(errors: errors, path: "theme.chrome.wheelLabelAlpha", value: chrome.WheelLabelAlpha);
+        RequireNonNegative(errors: errors, name: "theme.chrome.wheelHubDotHalf", value: chrome.WheelHubDotHalf);
+        RequireNonNegative(errors: errors, name: "theme.chrome.wheelMarkerHalf", value: chrome.WheelMarkerHalf);
+        RequireNonNegative(errors: errors, name: "theme.chrome.wheelMarkerGapRatio", value: chrome.WheelMarkerGapRatio);
+        RequireNonNegative(errors: errors, name: "theme.chrome.wheelHubLabelGap", value: chrome.WheelHubLabelGap);
     }
     private static void ValidateThemeColor(WorldThemeColor color, WorldDefinition definition, List<string> errors) {
         RequireBindableColor(color: color.SurfaceBase, definition: definition, errors: errors, path: "theme.color.surfaceBase");

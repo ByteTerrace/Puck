@@ -24,8 +24,7 @@
           {
             "alpha": 1,
             "id": "resting",
-            "offsetX": 0,
-            "offsetY": 0,
+            "order": 0,
             "pageId": "base"
           }
         ],
@@ -33,25 +32,30 @@
         "multiSeatAlpha": 0.5,
         "layout": {
           "anchorOffsetY": 0.36666667,
+          "badgeCorner": 1,
           "buttonSize": 0.075,
           "centerGap": 0.1,
+          "centerRowLift": 1.9,
+          "centerSlotSpacing": 1.15,
+          "exoticRowLift": 3.6,
+          "exoticSlotSpacing": 1.15,
           "glyphOffsetRatio": 0.4375,
           "glyphSizeRatio": 0.53333336,
           "scale": 1
         },
         "slotSet": [
-          "DpadUp",
-          "DpadRight",
-          "DpadDown",
-          "DpadLeft",
-          "LeftShoulder",
-          "LeftStickPress",
-          "ButtonNorth",
-          "ButtonWest",
-          "ButtonSouth",
-          "ButtonEast",
-          "RightShoulder",
-          "RightStickPress"
+          "gamepad.dpadUp",
+          "gamepad.dpadRight",
+          "gamepad.dpadDown",
+          "gamepad.dpadLeft",
+          "gamepad.leftShoulder",
+          "gamepad.leftStickPress",
+          "gamepad.buttonNorth",
+          "gamepad.buttonWest",
+          "gamepad.buttonSouth",
+          "gamepad.buttonEast",
+          "gamepad.rightShoulder",
+          "gamepad.rightStickPress"
         ],
         "text": false,
         "visible": {
@@ -641,31 +645,31 @@
       { "name": "view.freeCam", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25A1" } }
     ],
     "badges": [
-      { "button": "DpadUp", "icon": "dpad.up" },
-      { "button": "DpadRight", "icon": "dpad.right" },
-      { "button": "DpadDown", "icon": "dpad.down" },
-      { "button": "DpadLeft", "icon": "dpad.left" },
-      { "button": "ButtonNorth", "icon": "face.north" },
-      { "button": "ButtonEast", "icon": "face.east" },
-      { "button": "ButtonSouth", "icon": "face.south" },
-      { "button": "ButtonWest", "icon": "face.west" },
-      { "button": "LeftShoulder", "icon": "bumper.left" },
-      { "button": "RightShoulder", "icon": "bumper.right" },
-      { "button": "LeftTrigger", "icon": "trigger.left" },
-      { "button": "RightTrigger", "icon": "trigger.right" },
-      { "button": "LeftStickPress", "icon": "stick.left" },
-      { "button": "RightStickPress", "icon": "stick.right" },
-      { "button": "Back", "icon": "menu.back" },
-      { "button": "Start", "icon": "menu.start" },
-      { "button": "Guide", "icon": "menu.guide" },
-      { "button": "Touchpad", "icon": "menu.touchpad" },
-      { "button": "Mute", "icon": "menu.mute" },
-      { "button": "LeftGrip", "icon": "grip.left" },
-      { "button": "RightGrip", "icon": "grip.right" },
-      { "button": "LeftUpperGrip", "icon": "grip.leftUpper" },
-      { "button": "RightUpperGrip", "icon": "grip.rightUpper" },
-      { "button": "QuickAccess", "icon": "menu.quickAccess" },
-      { "button": "TouchpadLeft", "icon": "touchpad.left" }
+      { "source": "gamepad.dpadUp", "icon": "dpad.up" },
+      { "source": "gamepad.dpadRight", "icon": "dpad.right" },
+      { "source": "gamepad.dpadDown", "icon": "dpad.down" },
+      { "source": "gamepad.dpadLeft", "icon": "dpad.left" },
+      { "source": "gamepad.buttonNorth", "icon": "face.north" },
+      { "source": "gamepad.buttonEast", "icon": "face.east" },
+      { "source": "gamepad.buttonSouth", "icon": "face.south" },
+      { "source": "gamepad.buttonWest", "icon": "face.west" },
+      { "source": "gamepad.leftShoulder", "icon": "bumper.left" },
+      { "source": "gamepad.rightShoulder", "icon": "bumper.right" },
+      { "source": "gamepad.leftTrigger", "icon": "trigger.left" },
+      { "source": "gamepad.rightTrigger", "icon": "trigger.right" },
+      { "source": "gamepad.leftStickPress", "icon": "stick.left" },
+      { "source": "gamepad.rightStickPress", "icon": "stick.right" },
+      { "source": "gamepad.back", "icon": "menu.back" },
+      { "source": "gamepad.start", "icon": "menu.start" },
+      { "source": "gamepad.guide", "icon": "menu.guide" },
+      { "source": "gamepad.touchpad", "icon": "menu.touchpad" },
+      { "source": "gamepad.mute", "icon": "menu.mute" },
+      { "source": "gamepad.leftGrip", "icon": "grip.left" },
+      { "source": "gamepad.rightGrip", "icon": "grip.right" },
+      { "source": "gamepad.leftUpperGrip", "icon": "grip.leftUpper" },
+      { "source": "gamepad.rightUpperGrip", "icon": "grip.rightUpper" },
+      { "source": "gamepad.quickAccess", "icon": "menu.quickAccess" },
+      { "source": "gamepad.touchpadLeft", "icon": "touchpad.left" }
     ]
   },
   "kits": [
@@ -1152,6 +1156,23 @@
     },
     "icon": {
       "strokeHalfWidth": 0.08
+    },
+    "chrome": {
+      "dimQuietAlpha": 0.35,
+      "barLabelAlpha": 0.9,
+      "barHintAlpha": 0.6,
+      "cursorAlpha": 0.9,
+      "cursorDotRatio": 0.22,
+      "cursorDotMaxHalf": 4,
+      "cursorLabelGap": 5,
+      "wheelRingAlpha": 0.55,
+      "wheelActiveRingAlpha": 0.95,
+      "wheelActiveRingOffset": 1.5,
+      "wheelLabelAlpha": 1,
+      "wheelHubDotHalf": 3,
+      "wheelMarkerHalf": 3.5,
+      "wheelMarkerGapRatio": 1.6,
+      "wheelHubLabelGap": 2
     }
   }
 }
