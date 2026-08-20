@@ -54,7 +54,7 @@ The shared shell is `src/Puck.World.Server/WorldServerStepShell.cs`: drain pendi
 TCP work → `WorldServer.Step` → `WorldConsoleWaitGate.PublishTick` (the
 `world.wait` clock counts completed simulation ticks) → replay `NoteTick`
 when armed. `WorldSimulation` wraps it with seat-intent submission before the
-shell and seat-context sync plus analog/editor latching after it. The launcher
+shell and seat-context sync plus the per-tick analog clear after it. The launcher
 owns time, pacing off `IFixedStepSimulation.RatePerSecond` (authored per world
 via the document's `simulation.rateHz` field — the standard 240 Hz lives in
 `standard.world.json`, and a world authoring no section is rate-0 resident; see

@@ -179,30 +179,16 @@ public static class WorldColor {
         sequence: sequence
     );
     /// <summary>Parses the state-binding arm of the color grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
-    /// <c>state.&lt;row&gt;.&lt;key&gt;</c>. A hex literal, or anything else, is not a binding.</summary>
+    /// <c>state.&lt;row&gt;.&lt;key&gt;</c>. A hex literal, or anything else, is not a binding. Delegates to
+    /// <see cref="BindableState.TryParseBinding"/> — the shared grammar every bindable document token speaks.</summary>
     /// <param name="value">The authored color.</param>
     /// <param name="row">The bound row name.</param>
     /// <param name="key">The bound cell key, or <see langword="null"/> for the row's slot cell.</param>
-    public static bool TryParseBinding(string? value, out string row, out string? key) {
-        row = string.Empty;
-        key = null;
-
-        if (
-            string.IsNullOrEmpty(value: value) ||
-            !HudBindingVocabulary.TryParse(
-            binding: out var binding,
-            token: value
-        ) ||
-            (binding.Kind != HudBindingKind.StateNamed)
-        ) {
-            return false;
-        }
-
-        row = binding.StateName!;
-        key = binding.StateCellKey;
-
-        return true;
-    }
+    public static bool TryParseBinding(string? value, out string row, out string? key) => BindableState.TryParseBinding(
+        key: out key,
+        row: out row,
+        value: value
+    );
 
     /// <summary>The refusal every color-bearing field shares.</summary>
     public const string Grammar = "must be #RRGGBB, or state.<row>[.<key>] naming a Text cell that holds one";

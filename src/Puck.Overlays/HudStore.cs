@@ -129,7 +129,7 @@ public interface IHudBindingResolver {
 /// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>, published only when
 /// the delivered world definition's HUD section actually changes (structure — panels/elements/rects/bindings), not
 /// every frame; live binding values are resolved separately by <see cref="HudWriter"/> every produced frame. Same
-/// threading contract as <see cref="EditorHudStore"/>.
+/// threading contract as every other overlay store.
 /// </summary>
 public sealed class HudStore : IHudSource {
     private readonly PublishBuffer<OverlayHudFrame> m_buffer = new();

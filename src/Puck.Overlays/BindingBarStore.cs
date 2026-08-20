@@ -45,7 +45,7 @@ public readonly record struct OverlayBindingSlot(
     bool Bound = true,
     bool Accent = false
 );
-/// <summary>One declared modifier as the renderer consumes it (the trigger pips between the clusters).</summary>
+/// <summary>One declared modifier as the renderer consumes it (the trigger indicators between the clusters).</summary>
 /// <param name="BadgeGlyph0">The modifier's first (or only) badge atlas glyph index, 1-based, 0 = none.</param>
 /// <param name="BadgeGlyph1">The modifier badge's second atlas glyph index, 1-based, 0 = a single-glyph badge.</param>
 /// <param name="Held">Whether the active page's chord requires (i.e. the player holds) this modifier.</param>
@@ -61,13 +61,13 @@ public readonly record struct OverlayBindingModifier(
 /// <param name="Viewport">The seat's viewport rect in normalized frame space (its <c>LayoutRegion</c>).</param>
 /// <param name="PageId">The seat's currently active page id (diagnostics / transitions).</param>
 /// <param name="Group">The seat's active page group (diagnostics / transitions).</param>
-/// <param name="Label">The active page's display label — drawn beside the modifier pips so holding a trigger chord
+/// <param name="Label">The active page's display label — drawn beside the modifier indicators so holding a trigger chord
 /// NAMES the page it turned to; empty draws nothing.</param>
 /// <param name="Slots">Every rendered slot, one entry per (bank, physical button) pair in the authored slot set —
 /// bank-major, slot-set order within a bank.</param>
 /// <param name="Modifiers">The declared modifiers, in profile order.</param>
 /// <param name="Hints">The active group's command-chord hint lines (e.g. <c>"LT+RT Snapshot"</c>), pre-formatted
-/// ASCII — rendered as small text above the modifier pips so a chord-fired act is discoverable.</param>
+/// ASCII — rendered as small text above the modifier indicators so a chord-fired act is discoverable.</param>
 /// <param name="Layout">The authored layout resolved for this seat.</param>
 /// <param name="Visible">Whether this seat's bar currently draws.</param>
 public readonly record struct OverlayBindingSeat(

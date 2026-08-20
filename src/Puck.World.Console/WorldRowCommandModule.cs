@@ -42,6 +42,17 @@ namespace Puck.World;
 public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
     private const string PropertiesNamesPath = "properties.names";
 
+    // world.row.step read-your-writes guard within ONE tick window. A step reads a WHOLE row off the live definition,
+    // mutates one field, and submits a whole-row upsert; two steps to the SAME row in one window (before the buffered
+    // mutations drain) both compose from the same stale base and drain FIFO, so the later upsert reverts the earlier's
+    // field — both echoing success. The window is the tick every pre-drain submission targets (server.NextInputTick);
+    // the set is the rows a step has already claimed in it, cleared when the window advances. A second step against a
+    // claimed row is refused by name rather than silently lost. Steps in DIFFERENT windows (a held chord repeating
+    // once per tick) never collide and are never refused — the set is empty each new window. Console-side control
+    // state, single-threaded on the command pump; off every hashed simulation path.
+    private ulong m_stepWindow;
+    private readonly HashSet<string> m_stepRowsThisWindow = new(comparer: StringComparer.Ordinal);
+
     // The section table — the one thing that legitimately stays as data (CLAUDE.md: a table over these rows is
     // vocabulary, not logic to duplicate per section). Built once per type: no entry closes over a particular
     // WorldServer — the four sections whose mutation reads live document state (inputHold/views.seatRig/
@@ -1014,7 +1025,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.row.step",
-            description: "Steps ONE FIELD inside a document row or section by a delta — world.row.step <path> <delta>, one level deeper than world.row.set's own whole-row/whole-section path. <path> is <section>.<field> for a keyless section (render.sharpness) or <section>.<key>.<field> for a keyed one (creations.myrow.document.shapes[3].material) — the same section table world.row.set resolves against. Field-type semantics: a JSON number adds delta; a JSON boolean toggles on any nonzero delta; a named enum (the row's own C# member spelling) cycles forward/backward by delta's sign, wrapping. A vector, a nested object, or a plain (non-enum) string refuses by name. Bindable: a chord row carries the delta as a constant Axis1D value in place of the argument; the typed form takes an explicit numeric token. Buffers and applies through the SAME section Upsert world.row.set uses, at the tick boundary; a full-document revalidation still gates the result. Echoes [world.row.step: <path> <old> -> <new>].",
+            description: "Steps ONE FIELD inside a document row or section by a delta — world.row.step <path> <delta>, one level deeper than world.row.set's own whole-row/whole-section path. <path> is <section>.<field> for a keyless section (render.sharpness) or <section>.<key>.<field> for a keyed one (creations.myrow.document.shapes[3].material) — the same section table world.row.set resolves against. Field-type semantics: a number adds delta, typed by the field's real CLR type (an integer field steps in exact integer arithmetic, a float/double field in floating point — a fractional step on a whole-numbered float lands, and an out-of-range integer step refuses by name rather than throwing); a JSON boolean toggles on any nonzero delta; a named enum (the row's own C# member spelling) cycles forward/backward by delta's sign, wrapping. A vector, a nested object, or a plain (non-enum) string refuses by name. Bindable: a chord row carries the delta as a constant Axis1D value in place of the argument; the typed form takes an explicit numeric token. Buffers and applies through the SAME section Upsert world.row.set uses, at the tick boundary; a full-document revalidation still gates the result, and the accept/reject narration arrives there (no synchronous applied-result echo). A second step against the same row in one tick window is refused by name — both would compose from the same pre-drain base and the later would revert the earlier; fence with world.wait between steps.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -1072,6 +1083,24 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             return CommandResult.Error(output: $"[world.row.step: {resolveError}]");
         }
 
+        // Read-your-writes guard (see m_stepRowsThisWindow): every pre-drain submission targets NextInputTick, so it
+        // is the window a same-row collision lives inside. A new window empties the claimed-row set.
+        var window = server.NextInputTick;
+
+        if (window != m_stepWindow) {
+            m_stepWindow = window;
+            m_stepRowsThisWindow.Clear();
+        }
+
+        // The ROW identity (section, or section.key) the field lives inside — path with its trailing field segment
+        // removed. The whole-row upsert collides at this grain, not the field grain: two steps to different fields of
+        // ONE row still stomp each other.
+        var rowIdentity = path[..(path.Length - fieldPath.Length - 1)];
+
+        if (m_stepRowsThisWindow.Contains(item: rowIdentity)) {
+            return CommandResult.Error(output: $"[world.row.step: {path}: row '{rowIdentity}' already has a step buffered this tick — a second step composes from the same pre-drain base and would revert the first; fence with world.wait, or use world.row.set for the final value]");
+        }
+
         var read = section.Read(
             server,
             key
@@ -1085,8 +1114,8 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             delta: delta,
             error: out var stepError,
             fieldPath: fieldPath,
-            newText: out var newText,
-            oldText: out var oldText,
+            newText: out _,
+            oldText: out _,
             root: read.Row!,
             rowType: section.RowType
         )) {
@@ -1104,9 +1133,15 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             return CommandResult.Error(output: $"[world.row.step: {path}: {upsertError}]");
         }
 
+        // Claim the row for this window only once the upsert is genuinely buffered — a step that refused above never
+        // blocks a later well-formed one.
+        _ = m_stepRowsThisWindow.Add(item: rowIdentity);
         link.SubmitWorldMutation(mutation: outcome.Mutation!);
 
-        return new CommandResult(Output: $"[world.row.step: {path} {oldText} -> {newText}]");
+        // A buffered mutation verb (echo model 3): no synchronous applied-result line — the whole-row upsert composes
+        // and revalidates at the tick boundary, and WorldServer.EchoTap narrates the accept/reject there. Asserting
+        // old -> new here would claim an outcome the drain can still reject.
+        return CommandResult.None;
     }
     // Resolves a step path against the SAME section table world.row.set uses, one level deeper: the longest
     // section-key prefix (dot-boundary match) wins, so a dotted section name (hud.panels, views.seatRig) is never

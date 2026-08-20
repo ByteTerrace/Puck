@@ -28,6 +28,11 @@ public static class GamepadButtonCatalog {
     /// <summary>Returns whether a name is a declared, non-<see cref="GamepadButtons.None"/> flag, by exact
     /// (case-sensitive) member name.</summary>
     /// <param name="name">The candidate member name.</param>
+    /// <remarks><see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/> alone would ACCEPT a numeric spelling
+    /// (<c>"1"</c>, <c>"01"</c>, <c>"+1"</c>, a comma-joined flag list) — unboundedly many strings for one flag, which
+    /// both defeats the uniqueness that bounds the binding-bar slot-set count and lets a numeric badge key validate
+    /// yet never match the runtime <see cref="Enum.ToString()"/> lookup. Requiring the parsed value's canonical name
+    /// to round-trip back to the exact input admits only the declared member spellings.</remarks>
     public static bool IsKnownName(string name) => (
         Enum.TryParse<GamepadButtons>(
             value: name,
@@ -35,6 +40,6 @@ public static class GamepadButtonCatalog {
             result: out var button
         ) &&
         (button != GamepadButtons.None) &&
-        Enum.IsDefined(value: button)
+        (Enum.GetName(value: button) == name)
     );
 }

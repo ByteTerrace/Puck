@@ -284,7 +284,7 @@ services.AddSingleton(implementationFactory: static provider => WorldStorageSync
     worlds: provider.GetRequiredService<Puck.World.Server.WorldOwnedWorlds>()
 ));
 // The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
-// Assets/worlds/default.world.json as its basis for the standard movement/roster/editor/sculpt rows, or authors its
+// Assets/worlds/default.world.json as its basis for the standard movement/roster rows, or authors its
 // own, or has none), composed per seat with the seat's profile bindings and its live session rebinds. One
 // WorldSeatBindings resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
 // IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal. Constructed here

@@ -17,8 +17,11 @@ namespace Puck.World;
 /// <para><b>Path grammar</b>: dot-separated segments, each an optional trailing <c>[n]</c> array index —
 /// <c>shapes[3].scale</c>, <c>sharpness</c> — the same grammar the (now-deleted) creation-document patcher used, so
 /// a document member is addressable the day it exists, with zero stepper code.</para>
-/// <para><b>Field-type semantics</b>: a JSON number ADDS <c>delta</c> (staying an integer literal when the current
-/// value already is one); a JSON boolean TOGGLES on any nonzero delta; a JSON string whose declared CLR type (walked
+/// <para><b>Field-type semantics</b>: a number ADDS <c>delta</c>, typed by the leaf's declared CLR type (walked by
+/// plain reflection off the row's own <c>Type</c>, never by how JSON spelled the value) — an integer field steps in
+/// exact integer arithmetic, a float/double/decimal field in floating point, so a fractional step on a whole-numbered
+/// float lands and an out-of-range integer step refuses by name rather than throwing; a JSON boolean TOGGLES on any
+/// nonzero delta; a JSON string whose declared CLR type (walked
 /// by plain reflection off the row's own <c>Type</c> — a row's own field types, never a JsonTypeInfo, since the leaf
 /// needs an <see cref="Type.IsEnum"/> answer no JSON metadata carries) is an enum CYCLES forward/backward by
 /// <c>delta</c>'s sign, wrapping, spelled exactly as the row's own C# member (the wire's one enum spelling — see
@@ -28,6 +31,26 @@ namespace Puck.World;
 public static class WorldRowFieldStepper {
     private readonly record struct Segment(string Name, int? Index);
 
+    // The CLR floating-point families a numeric leaf steps in floating point (a fractional delta lands, and a whole
+    // value stays a float rather than snapping to an integer). Nullable<T> is already unwrapped by TryResolveClrType.
+    private static bool IsFloatingClrType(Type type) =>
+        (type == typeof(float)) ||
+        (type == typeof(double)) ||
+        (type == typeof(decimal)) ||
+        (type == typeof(Half));
+    // The CLR integer families a numeric leaf steps in integer arithmetic — the current value stays EXACT (never
+    // routed through a float that loses precision past 2^24) and the delta is rounded to whole steps.
+    private static bool IsIntegralClrType(Type type) =>
+        (type == typeof(byte)) ||
+        (type == typeof(sbyte)) ||
+        (type == typeof(short)) ||
+        (type == typeof(ushort)) ||
+        (type == typeof(int)) ||
+        (type == typeof(uint)) ||
+        (type == typeof(long)) ||
+        (type == typeof(ulong)) ||
+        (type == typeof(nint)) ||
+        (type == typeof(nuint));
     private static Type? ElementTypeOf(Type collectionType) {
         if (collectionType.IsArray) {
             return collectionType.GetElementType();
@@ -309,21 +332,58 @@ public static class WorldRowFieldStepper {
 
                 break;
             }
-            case JsonValueKind.Number when leaf.AsValue().TryGetValue<long>(value: out var currentLong): {
-                var appliedLong = checked((long)Math.Round(value: (currentLong + delta), mode: MidpointRounding.AwayFromZero));
+            case JsonValueKind.Number: {
+                // Type the numeric step by the field's REAL CLR type, never by how JSON SPELLED the value:
+                // SerializeToNode renders a float 8f as the integer literal `8`, so keying on the JSON kind would step
+                // a float field in integer arithmetic (8 - 0.4 rounds back to 8, a silent no-op). The CLR type is
+                // authoritative — an integer field steps exactly in integer space, a float field in floating point.
+                _ = TryResolveClrType(
+                    error: out _,
+                    leafType: out var numericType,
+                    rowType: rowType,
+                    segments: segments
+                );
 
-                oldText = currentLong.ToString(provider: CultureInfo.InvariantCulture);
-                newText = appliedLong.ToString(provider: CultureInfo.InvariantCulture);
-                replacement = JsonValue.Create(value: appliedLong)!;
+                // When reflection cannot reach the leaf's CLR type (a member no property walk resolves), fall back to
+                // the JSON spelling — best effort, the only signal left.
+                var stepInteger = ((numericType is { } resolved)
+                    ? IsIntegralClrType(type: resolved)
+                    : leaf.AsValue().TryGetValue<long>(value: out _)
+                );
 
-                break;
-            }
-            case JsonValueKind.Number when leaf.AsValue().TryGetValue<double>(value: out var currentDouble): {
-                var appliedDouble = (currentDouble + delta);
+                if (stepInteger) {
+                    // Round the delta to whole steps and add in integer space so the current value stays exact past
+                    // 2^24. A delta or sum outside long's range refuses by name rather than throwing OverflowException
+                    // up through the dispatcher (which catches nothing) — a malformed step submits nothing.
+                    long currentLong;
+                    long appliedLong;
 
-                oldText = currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
-                newText = appliedDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
-                replacement = JsonValue.Create(value: appliedDouble)!;
+                    try {
+                        currentLong = leaf.GetValue<long>();
+                        appliedLong = checked(currentLong + (long)Math.Round(value: delta, mode: MidpointRounding.AwayFromZero));
+                    } catch (Exception exception) when (exception is OverflowException or FormatException or InvalidOperationException) {
+                        error = $"'{fieldPath}': integer step out of range (delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
+
+                        return false;
+                    }
+
+                    oldText = currentLong.ToString(provider: CultureInfo.InvariantCulture);
+                    newText = appliedLong.ToString(provider: CultureInfo.InvariantCulture);
+                    replacement = JsonValue.Create(value: appliedLong)!;
+                } else {
+                    var currentDouble = leaf.GetValue<double>();
+                    var appliedDouble = (currentDouble + delta);
+
+                    if (!double.IsFinite(d: appliedDouble)) {
+                        error = $"'{fieldPath}': step result is not finite (current {currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)}, delta {delta.ToString(format: "0.####", provider: CultureInfo.InvariantCulture)})";
+
+                        return false;
+                    }
+
+                    oldText = currentDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
+                    newText = appliedDouble.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
+                    replacement = JsonValue.Create(value: appliedDouble)!;
+                }
 
                 break;
             }

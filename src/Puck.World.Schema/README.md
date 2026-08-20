@@ -210,7 +210,7 @@ directory.
 **Bindings compose in layers.** A seat's effective binding document is the
 world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
 — the shipped `Assets/worlds/default.world.json` template carries the standard
-movement, roster, editor, and sculpt document; the engine itself ships none,
+movement and roster document; the engine itself ships none,
 and a world authoring none binds nothing), then the seat's owned identity
 world's `bindingOverlays`, then live session rebinds — merged by
 `WorldBindingComposer.cs` with explicit keys (chord rows on the group plus
@@ -221,8 +221,7 @@ with an earlier one absorbing it and rewriting every chord that held it;
 `contexts` rows — `{family, state, group}`, deriving a seat's active group
 from published engine state — on the `(family, state)` pair, a later layer
 overriding in place and new keys appending). The engine names no group: it
-publishes facts (`roster`, `engagement`, `editor` — the editor session's
-`none`/`editing`/`sculpting`) and the document's `contexts` rows say which
+publishes facts (`roster`, `engagement`, `layout`) and the document's `contexts` rows say which
 group each selects; a seat with no matching row resolves in the first row's
 group, and `player.bind` lands on the seat's active group's resting page.
 The merged document compiles once per change through the binding stack in

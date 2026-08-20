@@ -18,7 +18,7 @@ The VM is deliberately incurious about what it draws. A diegetic screen samples 
 
 **The world document.** `puck.world.def.v1` is what the running game boots from: one closed mutation vocabulary of whole-row upserts and whole-section replacements addressed by stable id, and one thick validator that runs over the *entire* composed candidate document — never a partial section check — before anything swaps in. Applied mutations append to a journal; the journal *is* the undo engine, replaying base-plus-history through the identical apply path rather than restoring stored snapshots. Saving compacts the journal against a new baseline, folding live session state back into its own section homes.
 
-**The game.** `Puck.World` is the live composition root and the only thing you run. It is server-authoritative — the server owns the definition, the entity table and the journal; the client interpolates snapshots and submits intents, and never simulates. Local seats share a screen through data-driven layouts. Editing, sculpting, inhabitation, audio, cabinets and the console all live here.
+**The game.** `Puck.World` is the live composition root and the only thing you run. It is server-authoritative — the server owns the definition, the entity table and the journal; the client interpolates snapshots and submits intents, and never simulates. Local seats share a screen through data-driven layouts. Inhabitation, audio, cabinets and the console all live here, and content authoring is document-row editing through that console rather than a bespoke editor.
 
 ## The discipline: refuse to grow a noun
 
@@ -66,7 +66,7 @@ There is a real gap between what is designed and what is landed, and Puck names 
 
 **The demonstration.** The destination is one unbroken session in which a person talks about Puck, plays it, edits it, generates content inside it, and captures the video of itself — and walks away with a replay tape that reproduces the run somewhere else. Every piece of that has a seam today and several have working implementations; none of it is stitched into a single continuous take.
 
-**The creative loop.** From inside the hub you will sculpt a creature, animate it, bake it into a cartridge, and place it in a dungeon. The sculpt workbench, the timeline, the IK rig and the cartridge forge all exist; none is yet hosted in the running game. Boot loads into the hub, and later a diegetic moment is meant to hand you the editor, which stays always-on for developers and agents.
+**The creative loop.** From inside the hub you will sculpt a creature, animate it, bake it into a cartridge, and place it in a dungeon. The authoring model, the timeline, the IK rig and the cartridge forge exist as libraries; none is yet hosted as an in-session authoring surface, and sculpting today is document-row editing through the console. Boot loads into the hub.
 
 **The recursion.** A world will contain a screen that shows another world — genuinely simulated and rendered, not a camera trick. The engine already has the piece that does this. The questions it decides — whether a nested world gets a full server or a reduced one, how its tick relates to the host's, what it costs to draw — are open and unsurveyed. Puck already ships one weaker form: a screen inside the world showing a live capture of the very window it lives in, kept from exploding by a structural self-reference rule rather than by careful authoring.
 

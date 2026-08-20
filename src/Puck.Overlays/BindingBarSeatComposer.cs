@@ -100,15 +100,15 @@ public static class BindingBarSeatComposer {
 
         return ((binding is not null) && isCommandHeld(binding.Command));
     }
-    /// <summary>Composes the bar's modifier pips from a page view (the active page's chord IS the held modifier
+    /// <summary>Composes the bar's modifier indicators from a page view (the active page's chord IS the held modifier
     /// sequence, so <see cref="BindingModifierView.Required"/> doubles as "held right now").</summary>
     /// <param name="view">The seat's active page view.</param>
-    /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> leaves each pip a bare plate
-    /// (every modifier badge resolves from a text LABEL).</param>
+    /// <param name="text">Whether the bar draws its atlas text; <see langword="false"/> leaves each modifier a bare
+    /// plate (every modifier badge resolves from a text LABEL).</param>
     /// <param name="resolveModifierSource">Resolves a modifier's provider-neutral input source id to its badge
     /// content — the caller's own icon table.</param>
-    /// <param name="destination">The destination pips; at least <c>view.Modifiers.Count</c> entries.</param>
-    /// <returns>The number of pips written.</returns>
+    /// <param name="destination">The destination modifiers; at least <c>view.Modifiers.Count</c> entries.</param>
+    /// <returns>The number of modifiers written.</returns>
     public static int ComposeModifiers(BindingPageView view, bool text, Func<string, OverlayResolvedGlyph> resolveModifierSource, Span<OverlayBindingModifier> destination) {
         ArgumentNullException.ThrowIfNull(argument: view);
         ArgumentNullException.ThrowIfNull(argument: resolveModifierSource);

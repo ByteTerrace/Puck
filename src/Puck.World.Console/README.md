@@ -44,7 +44,7 @@ a placeholder.
 A module moves here when every type its constructor and handlers touch is
 reachable from this project's own reference set. A module whose ctor or
 handlers touch `WorldClient`, `PlayerRoster`, the seat surface (e.g.
-`WorldSeatAuthorityRouter`), views, HUD, editor, screens, audio, or recording
+`WorldSeatAuthorityRouter`), views, HUD, screens, audio, or recording
 stays in `Puck.World` instead — those verbs need a live player-facing session
 this project never carries. `Puck.World.Addons` is likewise out of reach (not
 in this project's reference set), so `WorldAddonCommandModule` (the

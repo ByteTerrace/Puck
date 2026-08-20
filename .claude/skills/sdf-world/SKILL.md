@@ -14,10 +14,9 @@ envelope, content seams, and unsupported graph requests was deleted on
 `SdfWorldRenderBuilder` directly.
 
 > **Unification-contract alignment** (see docs/vision.md): world content is
-> authored and loaded in-session — the sculpt workbench (`editor.sculpt.edit`
-> and its sibling verbs), the `world.*` mutation verbs, and
-> `world.load`/`world.save` — never only through a CLI flag. `Puck.World` has
-> no content-authoring flags at all.
+> authored and loaded in-session — the `world.row.set`/`world.row.step`
+> document-row mutation verbs and `world.load`/`world.save` — never only
+> through a CLI flag. `Puck.World` has no content-authoring flags at all.
 
 > **`Puck.Demo.*` symbols below are recorded history.** `Puck.Demo` is
 > quarantined under `experimental/`: read it as prior art, but it may not be

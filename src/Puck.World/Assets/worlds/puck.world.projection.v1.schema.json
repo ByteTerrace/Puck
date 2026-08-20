@@ -4229,7 +4229,7 @@
             "additionalProperties": false
           },
           "bindingBar": {
-            "description": "The on-screen bar policy carried with this binding layer; null preserves the always-visible reference layout.",
+            "description": "The on-screen bar policy carried with this binding layer; null carries no policy on this layer, so bar resolution falls through to the world-authored policy, and to Absent (no bar drawn) when neither an identity nor the world authors one.",
             "type": [
               "object",
               "null"
@@ -4300,7 +4300,7 @@
                 "default": true
               },
               "text": {
-                "description": "Whether the bar draws the ATLAS TEXT it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier pips, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier pips all still draw.",
+                "description": "Whether the bar draws the ATLAS TEXT it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
                 "type": "boolean",
                 "default": true
               },

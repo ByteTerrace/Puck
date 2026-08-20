@@ -12,11 +12,11 @@ namespace Puck.Commands;
 /// guessed value — the same loud-completeness shape the addon lane discriminant uses, and for the same reason (the
 /// value decides reachability, so landing somewhere by omission is the one outcome worth an enum member to prevent).
 /// <para>
-/// The discriminator is gesture versus authoring, not player versus editor: a chord that sculpts is input, a verb that
-/// names a document target is authority. Drawing the line at "editor verbs are authority" instead is the obvious
-/// reading and is wrong — the engine's own default binding document binds roughly fifty editor and sculpt gesture
-/// verbs (add, commit, delete, spawn, grab), which is the chord-first authoring interface, so that line would fail the
-/// shipped document at boot.
+/// The discriminator is gesture versus authoring: a chord that produces input is <see cref="Bindable"/> even when it
+/// drives authoring, while a verb that names a document target (a world grant, a row mutation) is authority and
+/// <see cref="Unbindable"/>. Drawing the line at "content-authoring verbs are authority" instead is the obvious reading
+/// and is wrong — the chord-first interface binds gesture verbs that author content, so that line would fail a
+/// shipped binding document at boot.
 /// </para>
 /// </remarks>
 public enum CommandBindability : byte {
@@ -29,7 +29,7 @@ public enum CommandBindability : byte {
     Bindable = 1,
 
     /// <summary>The command may not be named by any binding document. Authority verbs live here: the world grant and
-    /// mutation surface, screen/replay/feature control, profile administration, and the editor's text-authoring paths
-    /// (never its gesture verbs — see the remarks on <see cref="CommandBindability"/>).</summary>
+    /// mutation surface, screen/replay/feature control, and profile administration (never a content-authoring gesture
+    /// verb — see the remarks on <see cref="CommandBindability"/>).</summary>
     Unbindable = 2,
 }

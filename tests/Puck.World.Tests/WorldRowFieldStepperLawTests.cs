@@ -36,6 +36,17 @@ public sealed class WorldRowFieldStepperLawTests {
             ["items"] = array,
         };
     }
+    // A row whose `ratio` (a double CLR field) carries a RAW JSON literal — used to spell a whole-numbered float as
+    // the integer literal `8`, exactly as SerializeToNode renders it, so the CLR-vs-spelling typing is exercised.
+    private static JsonObject RowWithRatioLiteral(string ratioJson) => new() {
+        ["count"] = 3L,
+        ["ratio"] = JsonNode.Parse(json: ratioJson),
+        ["enabled"] = false,
+        ["mode"] = TestMode.Alpha.ToString(),
+        ["label"] = "fixed",
+        ["nested"] = new JsonObject { ["count"] = 7L },
+        ["items"] = new JsonArray(),
+    };
 
     [Fact]
     public void IntegerField_AddsDeltaAndReportsOldNew() {
@@ -62,6 +73,50 @@ public sealed class WorldRowFieldStepperLawTests {
         Assert.Null(@object: error);
         Assert.Equal(expected: "1.5", actual: oldText);
         Assert.Equal(expected: "1.75", actual: newText);
+    }
+    [Fact]
+    public void FloatField_WholeNumberValue_StepsFractionally_TypedByClrTypeNotJsonSpelling() {
+        // A double field holding a whole number serializes as the integer literal `8` (SerializeToNode renders 8f as
+        // `8`), so keying on the JSON kind would take an integer step (8 + 0.5 -> 9). The CLR type is authoritative.
+        var row = RowWithRatioLiteral(ratioJson: "8");
+
+        Assert.True(condition: WorldRowFieldStepper.TryStep(root: row, rowType: typeof(TestRow), fieldPath: "ratio", delta: 0.5f, oldText: out var oldText, newText: out var newText, error: out var error));
+        Assert.Null(@object: error);
+        Assert.Equal(expected: "8", actual: oldText);
+        Assert.Equal(expected: "8.5", actual: newText);
+    }
+    [Fact]
+    public void FloatField_WholeNumberValue_FractionalStep_IsNotAnIntegerNoOp() {
+        // The bug's second face: an integer step rounds 8 - 0.4 back to 8 and echoes a no-op as success. Floating-point
+        // typing lands the real value.
+        var row = RowWithRatioLiteral(ratioJson: "8");
+
+        Assert.True(condition: WorldRowFieldStepper.TryStep(root: row, rowType: typeof(TestRow), fieldPath: "ratio", delta: -0.4f, oldText: out var oldText, newText: out var newText, error: out _));
+        Assert.Equal(expected: "8", actual: oldText);
+        Assert.Equal(expected: "7.6", actual: newText);
+    }
+    [Fact]
+    public void IntegerField_LargeValue_StepsExactlyAboveFloatPrecision() {
+        // 1e8 exceeds float's 2^24 integer-exact ceiling; adding the delta in float space would round 100000001 back
+        // to 100000000 (a silent no-op). Integer arithmetic keeps the current value exact.
+        var row = Row(count: 100_000_000L);
+
+        Assert.True(condition: WorldRowFieldStepper.TryStep(root: row, rowType: typeof(TestRow), fieldPath: "count", delta: 1f, oldText: out var oldText, newText: out var newText, error: out var error));
+        Assert.Null(@object: error);
+        Assert.Equal(expected: "100000000", actual: oldText);
+        Assert.Equal(expected: "100000001", actual: newText);
+    }
+    [Fact]
+    public void IntegerField_OverflowingDelta_RefusesByName_NeverThrows() {
+        var row = Row(count: 3L);
+
+        // The call itself must NOT throw (the dispatcher catches nothing) — it returns a by-name refusal.
+        Assert.False(condition: WorldRowFieldStepper.TryStep(root: row, rowType: typeof(TestRow), fieldPath: "count", delta: 1e19f, oldText: out _, newText: out _, error: out var error));
+        Assert.Contains(actualString: error, comparisonType: StringComparison.Ordinal, expectedSubstring: "out of range");
+        // Control: an in-range delta on the identical field steps cleanly, and the refused step submitted nothing.
+        Assert.True(condition: WorldRowFieldStepper.TryStep(root: row, rowType: typeof(TestRow), fieldPath: "count", delta: 5f, oldText: out _, newText: out var newText, error: out var controlError));
+        Assert.Null(@object: controlError);
+        Assert.Equal(expected: "8", actual: newText);
     }
     [Theory]
     [InlineData(1f)]

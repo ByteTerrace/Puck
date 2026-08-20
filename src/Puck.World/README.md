@@ -81,8 +81,7 @@ dotnet run --project src/Puck.World -c Release -- --headless --exit-after-second
 separate product (the unification contract): the SAME console verb surface
 drives both shapes, minus whatever presentation composed. The command
 VOCABULARY itself must be identical in every shape — the document validators
-check a world's `bindingOverlays` (the shipped `default.world.json` template's
-editor pages included, for every world naming it as a basis)
+check a world's `bindingOverlays`
 against whatever this composition registers, so a genuinely presentation-only
 verb (`world.fps`/`.gpu`/`render*`/`view*`, audio, recording) refuses as
 UNKNOWN over headless stdin, while `player.mode` (and the fly camera
@@ -297,8 +296,8 @@ Facts a script needs:
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/` — the checked-in worlds (`worlds/*.world.json`, count them there
   rather than here: `default` — a partial `basis` template carrying the one
-  shipped binding document (movement, roster, editor groups, and
-  the `contexts` rows that map roster and editor states to them); the engine
+  shipped binding document (movement and roster groups, and
+  the `contexts` rows that map roster states to them); the engine
   itself ships no bindings, so a world names this basis, authors its own, or
   has none — `play` — the hub and boot default — `dive`, `kart`, `jump`
   — the four-world charter's whole game roster, 2026-08-06 — plus `studio`, a

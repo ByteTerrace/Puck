@@ -18,7 +18,6 @@ public sealed class BindingBarAuthoringValidationLawTests {
         yield return ["layout.scale", Policy(layout: layout with { Scale = 0f }), Policy(layout: layout with { Scale = 0.01f })];
         yield return ["slotSet[0]", Policy(layout: layout) with { SlotSet = ["NotARealButton"] }, Policy(layout: layout) with { SlotSet = ["DpadUp"] }];
         yield return ["slotSet[1]", Policy(layout: layout) with { SlotSet = ["DpadUp", "DpadUp"] }, Policy(layout: layout) with { SlotSet = ["DpadUp", "DpadRight"] }];
-        yield return ["slotSet declares 24 entries", Policy(layout: layout) with { SlotSet = [.. Enumerable.Repeat(element: "DpadUp", count: 24)] }, Policy(layout: layout) with { SlotSet = ["DpadUp"] }];
         yield return ["banks must declare at least one bank", Policy(layout: layout) with { Banks = [] }, Policy(layout: layout)];
         yield return ["banks declares 6 entries", Policy(layout: layout) with { Banks = [.. Enumerable.Repeat(element: OneBank[0], count: 6)] }, Policy(layout: layout)];
         yield return ["banks[1].id", Policy(layout: layout) with { Banks = [OneBank[0], OneBank[0]] }, Policy(layout: layout) with { Banks = [OneBank[0], (OneBank[0] with { Id = "second" })] }];

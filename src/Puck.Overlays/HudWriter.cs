@@ -3,12 +3,12 @@ namespace Puck.Overlays;
 /// <summary>
 /// The authored-HUD writer: renders <see cref="HudStore"/>'s structural snapshot in four separate calls —
 /// <see cref="EmitUnder"/>, <see cref="EmitReplace"/>, <see cref="EmitOver"/> (the world-scope bands, one per band,
-/// so <c>UnifiedOverlayNode</c>'s banded pipeline can sequence them around the five first-party writers' base slot)
+/// so <c>UnifiedOverlayNode</c>'s banded pipeline can sequence them around the four first-party writers' base slot)
 /// and <see cref="EmitSeatPanels"/> (the player-scope per-seat panels, unbanded — see its own remarks). Each call
 /// resolves every bound element's live value through <see cref="IHudBindingResolver"/> at emission time
 /// (presentation float; resolved fresh every produced frame, never cached across frames) and draws rect/text/gauge
 /// elements confined to their owning panel's rect via <see cref="OverlayFrameBuilder.BeginClip"/>, the same
-/// clip-scope contract <see cref="EditorHudWriter"/> uses.
+/// clip-scope contract every per-seat writer uses.
 /// </summary>
 public sealed class HudWriter {
     // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.

@@ -111,8 +111,8 @@ public static class BindingBarLayout {
             : BindingSlotCategory.Exotic
         );
     }
-    /// <summary>The bar's bottom-center anchor, in region-height units (y-down-from-top). The modifier pips reuse
-    /// this so they sit with the bar rather than floating at region center.</summary>
+    /// <summary>The bar's bottom-center anchor, in region-height units (y-down-from-top). The modifier indicators
+    /// reuse this so they sit with the bar rather than floating at region center.</summary>
     /// <param name="aspect">The region aspect ratio (width / height).</param>
     /// <param name="anchorOffsetY">The anchor's lift above the bottom edge, as a fraction of the height.</param>
     /// <returns>The anchor point.</returns>

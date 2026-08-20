@@ -46,9 +46,16 @@ public sealed record BindingProfileDocument(
 /// <param name="Stacked">Overrides whether every authored bank renders (<see langword="true"/>) or only the active
 /// bank (<see langword="false"/>).</param>
 /// <param name="Scale">Overrides the authored layout's uniform cluster scale.</param>
+/// <param name="ContrastBoost">A multiplier, in <c>[1, 2]</c>, applied over the resolved theme's scrim alphas and
+/// text contrast at the one theme resolve point — 1 leaves the authored theme unchanged; 2 pushes every scrim
+/// toward opaque and every text role toward its highest-contrast tone. An accessibility seam, never a binding.</param>
+/// <param name="UiScale">A multiplier, in <c>[0.5, 2]</c>, applied over the resolved theme's spacing and type sizes
+/// at the same resolve point — 1 leaves the authored theme unchanged. An accessibility seam, never a binding.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingBarPreferences(
     bool? HideUnbound = null,
     bool? Stacked = null,
-    float? Scale = null
+    float? Scale = null,
+    float? ContrastBoost = null,
+    float? UiScale = null
 );

@@ -71,4 +71,88 @@ public static class HexColor {
 
         return false;
     }
+    /// <summary>Formats an RGBA quad (each component in <c>[0, 1]</c>) as an uppercase <c>#RRGGBB</c> string when
+    /// opaque, else <c>#RRGGBBAA</c> — the baked-alpha form a theme token authors when it carries partial
+    /// transparency.</summary>
+    /// <param name="rgba">The RGBA color.</param>
+    /// <returns>The <c>#RRGGBB</c>/<c>#RRGGBBAA</c> string.</returns>
+    public static string FormatRgba(Vector4 rgba) {
+        var rgb = Format(rgb: new Vector3(x: rgba.X, y: rgba.Y, z: rgba.Z));
+
+        return ((rgba.W >= 1f)
+            ? rgb
+            : string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{rgb}{((int)MathF.Round(x: (Math.Clamp(max: 1f, min: 0f, value: rgba.W) * 255f))):X2}"
+            )
+        );
+    }
+    /// <summary>Parses a <c>#RRGGBB</c> (opaque) or <c>#RRGGBBAA</c> (baked-alpha) string, falling back when it does
+    /// not parse.</summary>
+    /// <param name="value">The candidate string.</param>
+    /// <param name="fallback">The RGBA color returned when <paramref name="value"/> does not parse.</param>
+    /// <returns>The RGBA color.</returns>
+    public static Vector4 ParseRgba(string? value, Vector4 fallback) =>
+        (TryParseRgba(
+            rgba: out var rgba,
+            value: value
+        )
+            ? rgba
+            : fallback);
+    /// <summary>Parses a <c>#RRGGBB</c> (opaque, alpha 1) or <c>#RRGGBBAA</c> (baked-alpha) string.</summary>
+    /// <param name="value">The candidate string.</param>
+    /// <param name="rgba">The RGBA color, each component in <c>[0, 1]</c>.</param>
+    /// <returns><see langword="true"/> when <paramref name="value"/> is a well-formed <c>#RRGGBB</c>/<c>#RRGGBBAA</c>
+    /// string.</returns>
+    public static bool TryParseRgba(string? value, out Vector4 rgba) {
+        if (TryParse(
+            rgb: out var rgb,
+            value: value
+        )) {
+            rgba = new Vector4(
+                x: rgb.X,
+                y: rgb.Y,
+                z: rgb.Z,
+                w: 1f
+            );
+
+            return true;
+        }
+
+        if (
+            (value is { Length: 9 }) &&
+            (value[0] == '#') &&
+            int.TryParse(
+                s: value.AsSpan(
+                    start: 1,
+                    length: 6
+                ),
+                style: NumberStyles.HexNumber,
+                provider: CultureInfo.InvariantCulture,
+                result: out var packed
+            ) &&
+            int.TryParse(
+                s: value.AsSpan(
+                    start: 7,
+                    length: 2
+                ),
+                style: NumberStyles.HexNumber,
+                provider: CultureInfo.InvariantCulture,
+                result: out var alpha
+            )
+        ) {
+            rgba = new Vector4(
+                x: (((packed >> 16) & 0xff) / 255f),
+                y: (((packed >> 8) & 0xff) / 255f),
+                z: ((packed & 0xff) / 255f),
+                w: (alpha / 255f)
+            );
+
+            return true;
+        }
+
+        rgba = default;
+
+        return false;
+    }
 }
