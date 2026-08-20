@@ -15,7 +15,7 @@ internal sealed class WorldOverlayFacts {
 
     private readonly WorldClient m_client;
     private readonly IConsoleSessions? m_consoles;
-    private readonly WorldSeatFlyRig m_flyRig;
+    private readonly WorldSeatBindings m_seatBindings;
     private readonly WorldPointer? m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
@@ -30,17 +30,17 @@ internal sealed class WorldOverlayFacts {
 
     /// <summary>Initializes the evaluator over the fact owners. Presentation-only owners are optional: a headless
     /// composition has no pointer, wheel, or console, and their facts read false there.</summary>
-    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldServer server, WorldSeatFlyRig flyRig, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles) {
+    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldServer server, WorldSeatBindings seatBindings, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles) {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(server);
-        ArgumentNullException.ThrowIfNull(flyRig);
+        ArgumentNullException.ThrowIfNull(seatBindings);
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(wheel);
         m_client = client;
         m_roster = roster;
         m_server = server;
-        m_flyRig = flyRig;
+        m_seatBindings = seatBindings;
         m_router = router;
         m_wheel = wheel;
         m_pointer = pointer;
@@ -157,7 +157,7 @@ internal sealed class WorldOverlayFacts {
         slot: slot,
         visible: out var visible
     ) && visible),
-        OverlayFact.SeatFlying => m_flyRig.IsFlying(slot: slot),
+        OverlayFact.SeatFlying => m_seatBindings.IsCameraModeActive(slot: slot),
         _ => false,
     };
 

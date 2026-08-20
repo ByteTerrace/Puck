@@ -188,7 +188,7 @@ internal static class ParityCommand {
                 fileName: "dotnet",
                 arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
-                timeout: RemainingBudget(clock: suiteClock)
+                timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
             );
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
             Console.Error.WriteLine(value: $"ERROR: could not start the Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -224,7 +224,7 @@ internal static class ParityCommand {
         // script was consumed rather than the process merely living until --exit-after-seconds.
         script.AppendLine(value: "wire.errors");
 
-        var remaining = RemainingBudget(clock: suiteClock);
+        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
 
         if (remaining <= TimeSpan.FromSeconds(value: 1)) {
             Console.Error.WriteLine(value: $"ERROR: the {SuiteBudget.TotalSeconds:0}-second whole-suite budget was exhausted before the {entry} {backend} leg started.");
@@ -346,11 +346,6 @@ internal static class ParityCommand {
         }
 
         throw new IOException(message: "Could not create a fresh random parity run directory after 8 attempts.");
-    }
-    private static TimeSpan RemainingBudget(Stopwatch clock) {
-        var remaining = (SuiteBudget - clock.Elapsed);
-
-        return ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromMilliseconds(value: 1));
     }
     private static int Usage() {
         Console.Error.WriteLine(

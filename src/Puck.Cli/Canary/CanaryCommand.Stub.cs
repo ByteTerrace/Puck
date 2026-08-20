@@ -63,7 +63,7 @@ internal static partial class CanaryCommand {
 
         WriteSelfUpdateConfigFile(cacheRoot: installDirectory, path: updateConfigPath, releaseDirectory: releaseDirectory, trustAnchor: trustAnchor);
 
-        var remaining = RemainingBudget(clock: suiteClock);
+        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
         var bootTimeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
 
         if (bootTimeout <= TimeSpan.Zero) {
@@ -91,7 +91,7 @@ internal static partial class CanaryCommand {
             ],
             input: string.Empty,
             installDirectory: installDirectory,
-            timeout: RemainingBudget(clock: suiteClock)
+            timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
         );
 
         WriteLegConfirmationFixtures(installDirectory: installDirectory, runDirectory: runDirectory);
@@ -128,7 +128,7 @@ internal static partial class CanaryCommand {
         StubInstallFiles.WritePointer(fileName: "current", installDirectory: installDirectory, value: StubReleaseVersion);
         StubInstallFiles.WritePointer(fileName: "last-good", installDirectory: installDirectory, value: StubBaselineVersion);
 
-        var remaining = RemainingBudget(clock: suiteClock);
+        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
         var bootTimeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
 
         if (bootTimeout <= TimeSpan.Zero) {
@@ -155,7 +155,7 @@ internal static partial class CanaryCommand {
             ],
             input: string.Empty,
             installDirectory: installDirectory,
-            timeout: RemainingBudget(clock: suiteClock)
+            timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
         );
 
         WriteLegConfirmationFixtures(installDirectory: installDirectory, runDirectory: runDirectory);

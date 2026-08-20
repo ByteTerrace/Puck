@@ -1206,7 +1206,7 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 // ordinary Subtraction-blend instance so the marches stop paying O(carve-count). data0 = (boxMin.xyz, cellSize); data1 =
 // (smooth, packedDims, brickWordOffset, boundaryFloor). Stored values are pre-scaled c/lambda (lambda = sqrt(3) folded in
 // at BAKE time), which makes the trilinear interpolant 1-Lipschitz and march-safe with NO stepScale change and an
-// unchanged zero set (carve-bake plan section 1). Determinism: manual trilinear (8 explicit loads + a precise lerp chain,
+// unchanged zero set. Determinism: manual trilinear (8 explicit loads + a precise lerp chain,
 // fp-contraction pinned OFF) is bit-stable across SPIR-V/DXIL by the same argument as the point evaluator; the baked
 // VALUES carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
 #ifdef SDF_SAMPLED_REGIONS
@@ -1247,7 +1247,7 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     float3 local = ((p - boxMin) / cellSize);
 
     // OUTSIDE the box: dist(p, box) + boundaryFloor is a valid (scaled) lower bound on distance to any interior zero
-    // (carve-bake plan section 1) — positive, so a Subtraction compose stays saturated and the accumulator is exact.
+    // — positive, so a Subtraction compose stays saturated and the accumulator is exact.
     // Discontinuous at the box face, but legal under Boolean composition and the surface is strictly interior (margin),
     // so no rendered seam can exist.
     if (any(local < 0.0) || any(local > float3(dims))) {

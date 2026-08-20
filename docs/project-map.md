@@ -197,9 +197,11 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real windo
 ## Experimental projects
 
 `experimental/` holds `Puck.BareMetal` (freestanding Native AOT runtime, UEFI
-kernels, direct hardware bring-up) and the quarantined `Puck.Demo`,
-`Puck.Post`, `tools/`, and both `scripts/` trees. The quarantine rules —
-read as prior art, never build, run, fix, or revive — live in
+kernels, direct hardware bring-up), `Puck.Platform.Switch` (moved from
+`src/Puck.Platform/Switch/`), and the quarantined `Puck.Demo`, `Puck.Post`,
+`Puck.Bench`, and both `scripts/` trees (`scripts/world`, `scripts/recording`).
+The quarantine rules — read as prior art, never build, run, fix, or revive —
+live in
 [CLAUDE.md](../CLAUDE.md) and
 [experimental/README.md](../experimental/README.md); this map carries only
 the structural fact: no experimental tree is in `Puck.slnx`, the root build,
@@ -216,5 +218,4 @@ filter somewhere else.
 | `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), and the layering report (`architecture`). Kind `Tool`: it consumes the tree and nothing consumes it. |
 | `src/Puck.Analyzers/` | The repository's Roslyn analyzers — the `[VerifiedCode]` brand enforcement (VER001–VER010) and its code fixes. Kind `Analyzer`: `Directory.Build.props` hands it to every project as a compiler extension (`OutputItemType="Analyzer"`, `ReferenceOutputAssembly="false"`), which is why it never appears in any project's resolved reference set. |
 | `build/` | Build policy the whole tree imports: the `[VerifiedCode]` marker source, the architecture ledger (`Architecture.props`), the gate (`Puck.Architecture.targets` + `PuckArchitectureGate.cs`), and the NuGet packaging policy (`Packaging.targets` — shared version and metadata, applied only to projects that opt in with `<IsPackable>true</IsPackable>`; the tree default is `false`). |
-| `tools/` | Quarantined under `experimental/` (2026-08-02): read as prior art, never built or run. It held batteries, generation, and frame utilities. |
 | `.claude/skills/` | Current factual and procedural agent references for repository-specific work. |

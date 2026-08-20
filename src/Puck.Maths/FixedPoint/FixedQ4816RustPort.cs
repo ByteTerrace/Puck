@@ -35,8 +35,6 @@ public static class FixedQ4816RustPort {
     private const ulong LcgSeed = 0x9E3779B97F4A7C15UL;
     private const int VectorTargetCount = 2000;
 
-    // --- Structured inputs + LCG sweep -----------------------------------------------------
-
     private static ulong AdvanceState(ulong state) => unchecked(((state * LcgMultiplier) + LcgIncrement));
     // Every named branch in FixedQ4816.Pow/PowMagnitude, explicitly: zero base at every exponent sign, the
     // exact identity exponents (0, 1, -1) at both signs of base, the squaring ladder's whole-exponent range
@@ -347,8 +345,6 @@ public static class FixedQ4816RustPort {
         sb.Append(value: "];\n\n");
         return sb.ToString();
     }
-    // --- Rust source formatting -------------------------------------------------------------
-
     private static string FormatI64Array(string name, IReadOnlyList<long> values, int perLine, string comment) {
         var sb = new StringBuilder();
 

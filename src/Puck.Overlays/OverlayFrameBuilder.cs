@@ -674,7 +674,7 @@ public sealed class OverlayFrameBuilder {
 
         // The CALLER'S OWN maxChars clamp, not a reservation limit — report the truncated tail on the same
         // writer's-own-cap path as NoteRefused so a silent per-character drop cannot hide behind a record-level
-        // narration. Covers the whole-run-refused edge case too (maxChars <= 0) that used to vanish silently.
+        // narration. Covers the whole-run-refused case too (maxChars <= 0), which reports rather than vanishing.
         if (count < text.Length) {
             RefuseOwnCap(
                 index: channelIndex,

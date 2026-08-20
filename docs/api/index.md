@@ -4,7 +4,7 @@ Generated member reference for the reusable Puck libraries listed below. Project
 manuals provide conceptual guidance where available; this site is built directly
 from source declarations and XML documentation.
 
-> Scope: API generation currently includes the eight libraries below. Other
+> Scope: API generation currently includes the ten libraries below. Other
 > projects remain documented by their project README, subsystem guide, or skill.
 
 ## Libraries
@@ -15,8 +15,10 @@ from source declarations and XML documentation.
 | [Puck.Assets](xref:Puck.Assets) | Content-addressed asset loading and caching: a byte-source abstraction, SHA-256 content hashing, and an LRU cache. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Assets/README.md) |
 | [Puck.Attestation](xref:Puck.Attestation) | Issuer-signed claims that travel between federated worlds and verify offline against an authored trust list: canonical CBOR, chain walk, replay marks, and sealed attestations. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Attestation/README.md) |
 | [Puck.Commands](xref:Puck.Commands) | Typed, named input for simulations that advance in fixed steps. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Commands/README.md) |
+| [Puck.Hosting](xref:Puck.Hosting) | Recursive render-node hosting, capability propagation, fixed-step simulation context, and cross-thread publish buffers. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Hosting/README.md) |
 | [Puck.Input](xref:Puck.Input) | Cross-platform game-controller input — Nintendo Switch Pro, Sony DualSense, and Xbox pads normalized through the command system. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Input/README.md) |
 | [Puck.Maths](xref:Puck.Maths) | Signed and unsigned deterministic fixed-point math, spatial primitives, reproducible randomness, and integer algorithms. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Maths/README.md) |
+| [Puck.Physics](xref:Puck.Physics) | Deterministic fixed-point simulation kernels: gravity, contact geometry, and a substep sequential-impulse rigid solver. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Physics/README.md) |
 | [Puck.Text](xref:Puck.Text) | Render-agnostic font atlas generation and text layout (MSDF/MTSDF). | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Text/README.md) |
 | [Puck.Vulkan](xref:Puck.Vulkan) | A from-scratch, interface-driven Vulkan layer. | [README](https://github.com/ByteTerrace/Puck/blob/main/src/Puck.Vulkan/README.md) |
 

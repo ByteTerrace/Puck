@@ -7,7 +7,9 @@ draws can take the control plane away). Every capability is a verb; `help` is
 generated from the registered commands. Infrastructure lives in
 `src/Puck.Commands/` (`CommandRegistry.cs`, `CommandDefinition.cs`,
 `CommandRouting.cs`, `TextCommandSource.cs`, `WireArgs.cs`); the modules
-live in `src/Puck.World/*CommandModule.cs`.
+live in `src/Puck.World/*CommandModule.cs` and, for the server-only doors
+moved out of `Puck.World`, `src/Puck.World.Console/*CommandModule.cs` (see
+the project table in the main `SKILL.md`).
 
 ## Contents
 

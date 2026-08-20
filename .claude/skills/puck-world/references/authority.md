@@ -409,15 +409,12 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   the row), `[world.mutation rejected: …]`, contention
   `[world.grant: body:<n> driven by both … this tick — …]`.
 - `world.refusals [door]` prints the DECLARED refusal catalog
-  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`): 91 declarations across eight
+  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`): 97 declarations across eight
   doors today: `addon.mutate` (11), `grant.authority` (3), `hud.validate`
-  (10), `replay.tape` (6), `sdf.decode` (34), `world.rule.compile` (25),
-  `world.interaction.compile` (1), `world.rule.effect` (1) — the last three
-  landed with the rules/interactions substrate (see
-  [documents.md](documents.md)'s `rules` section) and are not yet reflected
-  anywhere else in this skill's prose; re-run the count (`puck search
-  "\[Refusal\(" src -M 0`) rather than trusting this list once the rules
-  surface moves again. It does NOT cover console-tier text refusals (parse
+  (11), `replay.tape` (9), `sdf.decode` (34), `world.rule.compile` (27),
+  `world.interaction.compile` (1), `world.rule.effect` (1) — re-run the count
+  (`puck search "\[Refusal\(" src -M 0`) rather than trusting this list once
+  the surface moves again. It does NOT cover console-tier text refusals (parse
   errors, `Conflicts` reasons, module refusals) — never claim that
   coverage. Tagging is one-directional: it proves a door cannot refuse with
   an unlisted reason, not that every listed reason has a live call site.

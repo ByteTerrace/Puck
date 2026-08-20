@@ -239,10 +239,10 @@ public sealed class SdfBenchScene {
     // Header facts, refreshed each Advance while running (constant during a run) — the report names them.
     private uint m_width;
 
-    // The carve-bake settle planner for the sdf.carves workload (carve-bake plan §4), settle 0 (IMMEDIATE): a carves
+    // The carve-bake settle planner for the sdf.carves workload, settle 0 (IMMEDIATE): a carves
     // config bakes its cluster on the first frame it emits, so the warm window absorbs the bake and the sampled window
     // measures the baked steady state. Shares the process-wide SdfCarveBakePlanner.Enabled gate with the debug pool —
-    // off (the default) means every carves rung stays analytic, bit-identical to today (the switch's A/B off leg).
+    // off means every carves rung stays analytic, bit-identical to a fully unbaked run (the switch's A/B off leg).
     private readonly SdfCarveBakePlanner m_carvePlanner = new(settleFrames: 0);
     private readonly List<SdfBenchConfig> m_configs = [];
     private readonly List<SdfBenchResult> m_results = [];

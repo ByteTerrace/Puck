@@ -14,7 +14,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         var familyNames = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var needsFlyRig = false;
+        var needsCameraRig = false;
 
         for (var index = 0; (index < families.Count); index++) {
             var family = families[index];
@@ -79,7 +79,7 @@ public static partial class WorldDefinitionValidator {
                 )) {
                     errors.Add(item: $"{statePath}.target '{state.Target}' is not admitted — {WorldSeatModeState.CameraTarget}.");
                 } else {
-                    needsFlyRig = true;
+                    needsCameraRig = true;
                 }
             }
 
@@ -94,10 +94,10 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (
-            needsFlyRig &&
-            (definition.Views.FlyRig is null)
+            needsCameraRig &&
+            (definition.Views.CameraRig is null)
         ) {
-            errors.Add(item: "seatModes declares a state targeting 'camera' but views.flyRig is not authored.");
+            errors.Add(item: "seatModes declares a state targeting 'camera' but views.cameraRig is not authored.");
         }
     }
 }

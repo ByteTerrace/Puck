@@ -170,6 +170,7 @@ public static class WorldCameraRigCompiler {
                 rotation: anchor.Orientation
             ));
             var eye = rig.Motion switch {
+                WorldCameraMotion.FirstPerson => referencePosition,
                 WorldCameraMotion.Follow follow => ResolveFollow(
                 referencePosition: referencePosition,
                 orientation: anchor.Orientation,

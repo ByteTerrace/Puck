@@ -232,7 +232,7 @@ all if a different consumer read it differently.
   that it no longer pairs with a verification contract for the engine: the
   battery that gated one is quarantined with `Puck.Post`.
 - Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,
-  `src/Puck.Maths/Geometry/IFieldEvaluator.cs`,
+  `src/Puck.Maths/FixedPoint/IFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`,
   `src/Puck.SignedDistance/Queries/WorldQueryProviders.cs`.

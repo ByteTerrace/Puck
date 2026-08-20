@@ -140,8 +140,6 @@ internal static class ReferencesCommand {
 
         return AnalysisEmitter.Emit(records: records, json: options.Json, quiet: options.Quiet);
     }
-    // ---- symbol discovery -------------------------------------------------------------------
-
     // Declarations ordered by display string then documentation-comment id, so groups are stable across runs.
     //
     // FindSourceDeclarationsAsync's predicate overload (used even for an exact-name query) walks symbols
@@ -214,8 +212,6 @@ internal static class ReferencesCommand {
             ITypeSymbol => ((filter & SymbolFilter.Type) != 0),
             _ => ((filter & SymbolFilter.Member) != 0),
         };
-    // ---- record collection ------------------------------------------------------------------
-
     private static void AddDeclarations(ISymbol symbol, string relation, List<AnalysisRecord> records, HashSet<(string, int, int, string)> seen) {
         var identity = Identity(symbol: symbol);
         var kind = symbol.Kind.ToString();
@@ -329,8 +325,6 @@ internal static class ReferencesCommand {
             ? await SymbolFinder.FindDerivedInterfacesAsync(type: type, solution: solution, transitive: true)
             : await SymbolFinder.FindDerivedClassesAsync(type: type, solution: solution, transitive: true));
     }
-    // ---- helpers ----------------------------------------------------------------------------
-
     private static bool Add(
         string path,
         int line,
@@ -415,8 +409,6 @@ internal static class ReferencesCommand {
 
         return filter;
     }
-    // ---- target resolution ------------------------------------------------------------------
-
     // The file the workspace loader is pointed at: an explicit --project or --solution, else the nearest solution
     // walking up from the working directory and then from the executable's own directory.
     private static string? ResolveTarget(ReferencesOptions options) {

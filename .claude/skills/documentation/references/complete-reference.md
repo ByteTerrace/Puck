@@ -25,7 +25,7 @@ to make, it is stale; update it in the same change and say so.
 
 | Surface | Audience | Register | Section |
 |---|---|---|---|
-| Every `README.md` outside `.claude/` — the root README, and project and sub-folder READMEs under `src/`, `tests/`, `tools/`, `templates/` and `experimental/` — plus everything under `docs/`. The `src/Puck.Maths/*/README.md` wings additionally take the shape §3 gives them | **People**, including middle- and high-school students | Human narrative | §3 |
+| Every `README.md` outside `.claude/` — the root README, and project and sub-folder READMEs under `src/`, `tests/` and `experimental/` — plus everything under `docs/`. The `src/Puck.Maths/*/README.md` wings additionally take the shape §3 gives them | **People**, including middle- and high-school students | Human narrative | §3 |
 | XML documentation comments on code members | **Developers reading the API**, in an editor or in generated reference output | Reference | §4 |
 | `.claude/skills/*/SKILL.md`; `CLAUDE.md`; other `.claude/` agent material | **Agents mid-task** | Operational | §5 |
 

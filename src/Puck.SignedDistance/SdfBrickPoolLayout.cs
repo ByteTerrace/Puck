@@ -1,7 +1,7 @@
 namespace Puck.SignedDistance;
 
 /// <summary>
-/// The STATIC, host-derivable slot layout of the SDF brick pool (carve-bake plan §3). The pool is one persistent
+/// The STATIC, host-derivable slot layout of the SDF brick pool. The pool is one persistent
 /// device-local <c>float</c> buffer partitioned into <see cref="MaxBricks"/> equal slots of <see cref="VoxelsPerBrick"/>
 /// voxels each; slot <c>i</c> owns the contiguous word run at <see cref="SlotWordOffset(int)"/>. Because the layout is a
 /// pure function of the slot index, the carve-bake planner computes each brick instruction's <c>brickWordOffset</c> lane
@@ -13,7 +13,7 @@ public static class SdfBrickPoolLayout {
     /// lattice). A baked brick may be smaller per axis (the planner sizes it to its bin), but never larger — the slot's
     /// reserved footprint is always the full cube.</summary>
     public const int BrickDim = 128;
-    /// <summary>The number of independent brick slots the pool holds — the LRU eviction set (carve-bake plan §4). A
+    /// <summary>The number of independent brick slots the pool holds — the LRU eviction set. A
     /// SampledRegion instance addresses exactly one slot's word run.</summary>
     public const int MaxBricks = 8;
     /// <summary>The pool's total voxel (word) capacity when every slot is provisioned at full resolution:

@@ -296,8 +296,8 @@ in a change loop.
 | Exhaustive | `--settings tests/Puck.Maths.Tests/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an entire carrier |
 | Bench | `--settings tests/Puck.Maths.Tests/bench.runsettings` | timing | on demand; breach-tolerant, gates no value |
 
-**Do not run the `Exhaustive` tier or `Puck.Post` reflexively.** They are
-minutes-to-many-minutes each and neither supports running a subset. Run one only
+**Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes
+and does not support running a subset. Run it only
 when the member you touched names it as its gate of record, which
 `coverage-manifest.json` and `Coverage.cs`'s waiver reasons will tell you by
 name. When in doubt, check the waiver rather than running the tier.

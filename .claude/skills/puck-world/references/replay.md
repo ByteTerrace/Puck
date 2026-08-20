@@ -32,11 +32,12 @@ reports MATCH or MISMATCH naming the first divergent tick. Files (all in
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
-- The declared `replay.tape` refusal catalog has seven members: shape
-  mismatch; four addon-receipt mismatches; rebuild content mismatch; rebuild
-  source unavailable. `ScreenOpContentMismatch` is emitted by
-  `WorldMachineHost` as a named screen-op refusal, not a `ReplayRefusal` enum
-  member.
+- The declared `replay.tape` refusal catalog has nine members: shape
+  mismatch, rate mismatch, three addon-receipt mismatches, rebuild content
+  mismatch, rebuild source unavailable, a rate-zero tape carrying recorded
+  ticks, and a tampered transfer content signature. `ScreenOpContentMismatch`
+  is emitted by `WorldMachineHost` as a named screen-op refusal, not a
+  `ReplayRefusal` enum member.
 - Command/grant/revoke/session bodies are length-prefixed instances of the same
   canonical `WorldSubmissionCodec` leaves used by the frame grammar and
   loopback. That leaf owns exhaustive two-direction wire maps and preserves
@@ -110,9 +111,9 @@ absent, or hashed content differs in either direction. Other screen ops carry
 no content signature. An authority denial is also taped, with no signature,
 so the denial replays through the same Control check.
 
-**Capture scope, precisely: 7 of the 12 envelope payload kinds** (Command,
-Grant, Revoke, Session, AddonLifecycle, Rebuild, ScreenOp), the two server-event
-kinds, plus the separate intent buffer. All six `SessionRequest` variants are
+**Capture scope, precisely: 8 of the 13 envelope payload kinds** (Command,
+Grant, Revoke, Session, AddonLifecycle, Rebuild, ScreenOp, Designation), the
+two server-event kinds, plus the separate intent buffer. All six `SessionRequest` variants are
 captured through the shared session leaf before apply and re-executed through
 `WorldServer.ApplySession` during the offline drive. The replay uses its captured
 player document to construct a detached profile catalog, so a replayed

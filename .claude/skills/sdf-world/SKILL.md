@@ -223,10 +223,11 @@ composition host to wrap that emitter's `Emit` in a
 `SdfProgramBuilder.BeginMaterialScope()` scope (`SdfMaterialScope`), clamping
 any positional reach to the emitter's OWN added materials instead of leaving
 it to author discipline (the `SdfDriftMonolith` hazard the scope mechanism
-was built to close). `OverworldFrameSource` still hand-builds its own
-program (not yet wired onto `SdfCompositionFrameSource`); `WorldSceneEmitter`/
-`CreatorSceneEmitter`/`SdfDebugEmitter` (in `Puck.SdfVm.Debug`) are the ported
-emission cores.
+was built to close). `Puck.World.Client.WorldFrameSource` (the split-out
+successor to the retired `OverworldFrameSource`) is wired onto
+`SdfCompositionFrameSource`, composing `WorldSceneEmitter`/
+`WorldSdfDocumentEmitter`/`WorldAdjacencySceneEmitter`; `SdfDebugEmitter` (in
+`Puck.SdfVm.Debug`) is the debug-takeover emission core.
 
 **Anchors (`Puck.SdfVm` root).** `SdfAnchor` (position + orientation
 snapshot, `System.Numerics` float) / `ISdfAnchorSource` (the read seam) /
@@ -339,23 +340,15 @@ rejection was an attributed stderr line and exit 2, never a mid-host crash.
 It RETIRED with `Puck.Demo`'s composition root, so the pre-flight side has
 no live owner today; the doctrine waits for the next graph-building host.
 
-**The capacity probe (the envelope pattern, live in the overworld).**
-`OverworldFrameSource` builds ONE worst-case probe program — every diegetic
-screen lit, the creator pool in its largest emission form (including its
-reserved per-shape modifier ops) — measures it (the probe is never rendered),
-and feeds the result through `SdfWorldRenderSpec.ProgramWordCapacity` /
+**The capacity probe (the envelope pattern, live in `Puck.World.Client.WorldFrameSource`).**
+Composing `SdfCompositionFrameSource` runs ONE worst-case probe across its
+emitters — every diegetic screen lit, all 128 avatars, the reserved placement
+instances, and the worst-case animated pool — measures it (the probe is never
+rendered), and feeds the result through `SdfWorldRenderSpec.ProgramWordCapacity` /
 `InstanceCapacity`, so live rebuilds vary freely BELOW the frozen envelope.
-Any NEW optional emission MUST also be added to the probe (`BuildProgram`'s
-`probeWorstCase` path), or a live rebuild can outgrow the buffers and
+Any NEW optional emission MUST also declare a `Probe` branch on its
+`ISdfSceneEmitter`, or a live rebuild can outgrow the buffers and
 `UploadProgram` throws loudly.
-
-**The screen-slot borrow (index 3).** Creator mode's preview easel borrows
-screen-surface slot 3 (`CreatorSceneRenderer.PreviewScreenIndex`) while the
-mode is up: the frame source suppresses that cabinet's `ScreenSlab` (it
-degrades to its lit flat material for the session, relights on exit) and the
-render node muxes the slot's provider to the bake preview — BOTH gate on the
-same flag in the same rebuild, so the surface table and the sources can never
-disagree. Copy that shape for any future slot sharing: one flag, one rebuild.
 
 ## Shader build mechanics
 

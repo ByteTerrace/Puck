@@ -62,8 +62,8 @@ its own commit what was and was not checked.
 
 The one narrow cross-backend check that exists is `puck parity`: for each
 authored pattern world under `tests/Puck.Parity/` (gradient, edges,
-modifiers, glyphs — each stressing one contract slice) plus the shipped default
-world,
+modifiers, glyphs, film grain — each stressing one contract slice) plus the
+shipped default world,
 it boots the real `Puck.World` windowed on Vulkan and on Direct3D 12,
 screenshots the same fenced simulation moment in each run, and compares the
 backend pair under the relaxed envelope (benign ±1-LSB shader-codegen noise

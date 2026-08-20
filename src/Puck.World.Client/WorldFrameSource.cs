@@ -75,8 +75,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // BOOT-CONSUMED: the reserved derived-face screen count (WorldAuthoringDefaults.DerivedFaceScreens) — the binder's
     // frozen derived-face slot range, re-pointed live at each delivery.
     private readonly int m_derivedFaceScreens;
-    // The seat's fly control application: camera rig swap, read during dress.
-    private readonly WorldSeatFlyRig m_flyRig;
+    // The seat's published mode state — whether views.cameraRig frames it instead of views.seatRig, read during dress.
+    private readonly WorldSeatBindings m_seatBindings;
     // The room's content sources, and the host that composes them. The host owns the capacity probe, the
     // dynamic-transform buffer and its slot assignment, and the rebuild-on-revision-change predicate.
     private readonly WorldSceneEmitter m_emitter;
@@ -164,7 +164,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
     /// <param name="envelope">The render-capacity oracle configured here with the probed floors and the emitter's
     /// candidate measurer, so the server can reject an over-envelope scene/screen mutation at apply time.</param>
-    /// <param name="flyRig">The seat fly control application (camera rig swap).</param>
+    /// <param name="seatBindings">The seat's published mode state — whether <c>views.cameraRig</c> frames it instead
+    /// of <c>views.seatRig</c>.</param>
     /// <param name="animator">The animated-placement replay pool.</param>
     /// <param name="audio">The narrow audio-director seam — the emitter derivation reconciled at the delivery
     /// boundary and the per-frame snapshot publisher.</param>
@@ -187,7 +188,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     /// delegate (never a direct <c>WorldIconTable</c> reference) because <c>Puck.World.Client</c> cannot reference
     /// <c>Puck.World</c>, which owns the table.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatFlyRig flyRig, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon) {
+    public WorldFrameSource(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -197,7 +198,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: envelope);
-        ArgumentNullException.ThrowIfNull(argument: flyRig);
+        ArgumentNullException.ThrowIfNull(argument: seatBindings);
         ArgumentNullException.ThrowIfNull(argument: animator);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: composition);
@@ -234,7 +235,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         m_simulation = simulation;
         m_settings = settings;
         m_binder = binder;
-        m_flyRig = flyRig;
+        m_seatBindings = seatBindings;
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
 
@@ -833,13 +834,14 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             Orientation: bodyOrientation,
             Position: bodyPosition
         );
-        var rig = m_flyRig.ResolveRig(
-            anchor: in anchor,
-            chase: chase,
-            deltaSeconds: deltaSeconds,
-            flyRig: views.FlyRig,
-            slot: slot,
-            time: m_elapsedSeconds
+        // views.cameraRig frames the seat instead of the ordinary chase rig while its published mode state targets
+        // camera (see WorldSeatBindings.IsCameraModeActive) — resolved through the SAME WorldCameraRigCompiler
+        // pipeline as chase/orbit, against this SAME anchor: the anchor above already resolved to the seat's
+        // PERCEIVED body, which possession has already retargeted onto the camera body by the time this runs, so no
+        // second anchor resolve is needed here.
+        var rig = ((m_seatBindings.IsCameraModeActive(slot: slot) && (views.CameraRig is { } cameraRig))
+            ? WorldCameraRigCompiler.Compile(rig: cameraRig)
+            : chase
         );
         var fieldOfView = 0f;
 
@@ -1171,9 +1173,6 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // by its position among the joined players. The procedural catalog's dynamic transforms are separate and always
         // supplied in full; the active-only program addresses only its avatars' stable leaf ranges.
         var joinedCount = m_roster.Count;
-
-        // Self-heal a seat that left the roster while flying (its camera drops).
-        m_flyRig.PruneDeparted();
 
         // The authored `markers` section's candidate instances, resolved once for every seat's own cull below.
         ComposeMarkerCandidates(definition: m_client.Definition);

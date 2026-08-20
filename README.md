@@ -113,9 +113,10 @@ rules and generates the layering block from each project's own declaration.
 | Emulators | `Puck.HumbleGamingBrick` · `Puck.AdvancedGamingBrick` · `Puck.GamingBricks` · the two `.Post` batteries | the GB/GBC and GBA cores, their shared instance/fork/snapshot scaffold, and the conformance and determinism batteries that gate them |
 | Tooling | `Puck.Cli` · `Puck.Analyzers` | the `puck` verbs, the verified-code and architecture analyzers |
 
-`experimental/` holds quarantined trees (`Puck.Demo`, `Puck.Post`, `Puck.BareMetal`,
-the old `tools/` and `scripts/`): read as prior art, never built, run, or revived
-in place — see [experimental/README.md](experimental/README.md).
+`experimental/` holds quarantined trees (`Puck.Demo`, `Puck.Post`, `Puck.Bench`,
+`Puck.BareMetal`, `Puck.Platform.Switch`, and `scripts/`): read as prior art,
+never built, run, or revived in place — see
+[experimental/README.md](experimental/README.md).
 
 ## 📦 Packages
 

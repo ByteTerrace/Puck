@@ -167,12 +167,12 @@ a template with no document row behind it at all.
 
 ## The overlay reservation — what refuses at construction
 
-`OverlayChannel` has EIGHT members, value = draw priority for the first five:
-`Console = 0`, `BindingBar = 1`, `Gizmos = 2`, `EditorHud = 3`, `Toast = 4`,
-`Hud = 5`, `Cursor = 6`, `Wheel = 7`. The FIVE first-party writers are
-`ConsolePanelWriter`, `BindingBarWriter`, `EditorGizmoWriter`,
-`EditorHudWriter`, `ToastWriter` (`FirstPartyChannelCount = 5`); `HudWriter`
-is the sixth channel, banded, not one of the five; `WheelWriter` and
+`OverlayChannel` has SEVEN members, value = draw priority for the first four:
+`Console = 0`, `BindingBar = 1`, `Markers = 2`, `Toast = 3`, `Hud = 4`,
+`Cursor = 5`, `Wheel = 6`. The FOUR first-party writers are
+`ConsolePanelWriter`, `BindingBarWriter`, `MarkerWriter`, `ToastWriter`
+(`FirstPartyChannelCount = 4`); `HudWriter`
+is the fifth channel, banded, not one of the four; `WheelWriter` and
 `CursorWriter` are the frame's last two scopes (wheel drawn first, cursor on
 top), outside the replace-band suppression — see [views.md](views.md).
 

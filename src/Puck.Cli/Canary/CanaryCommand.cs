@@ -68,7 +68,7 @@ internal static partial class CanaryCommand {
                 fileName: "dotnet",
                 arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
-                timeout: RemainingBudget(clock: suiteClock)
+                timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
             );
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
             Console.Error.WriteLine(value: $"ERROR: could not start the one Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -107,7 +107,7 @@ internal static partial class CanaryCommand {
                 fileName: "dotnet",
                 arguments: ["build", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
-                timeout: RemainingBudget(clock: suiteClock)
+                timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
             );
 
             if (stubBuild.TimedOut || (stubBuild.ExitCode != 0)) {
@@ -238,7 +238,7 @@ internal static partial class CanaryCommand {
         // the exact response count is checked. A process that merely lived until --exit-after-seconds cannot satisfy it.
         input += $"wire.errors{Environment.NewLine}";
 
-        var remaining = RemainingBudget(clock: suiteClock);
+        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
         var timeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
 
         if (timeout <= TimeSpan.Zero) {
@@ -467,7 +467,7 @@ internal static partial class CanaryCommand {
             scriptTexts[role.Id] = input;
         }
 
-        var remaining = RemainingBudget(clock: suiteClock);
+        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
         var timeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
 
         if (timeout <= TimeSpan.Zero) {
@@ -903,11 +903,6 @@ internal static partial class CanaryCommand {
         }
 
         throw new IOException(message: "Could not create a fresh random canary run directory after 8 attempts.");
-    }
-    private static TimeSpan RemainingBudget(Stopwatch clock) {
-        var remaining = (SuiteBudget - clock.Elapsed);
-
-        return ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromMilliseconds(value: 1));
     }
     private static bool PathsEqual(string left, string right) =>
         (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).Equals(x: left, y: right);

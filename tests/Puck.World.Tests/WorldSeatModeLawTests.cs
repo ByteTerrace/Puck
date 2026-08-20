@@ -25,13 +25,13 @@ public sealed class WorldSeatModeLawTests {
         States: [new WorldSeatModeState(Name: OffState), new WorldSeatModeState(Name: OnState, Target: "camera")],
         DefaultState: defaultState
     );
-    // A document authoring the family plus a views.flyRig (required whenever any state targets "camera") and a
+    // A document authoring the family plus a views.cameraRig (required whenever any state targets "camera") and a
     // contexts row mapping (editing, on) -> the flying group, with a resting-group chord page too.
     private static WorldDefinition DocumentWithFamily(WorldSeatModeFamily family) => Fixtures.BuildDocument() with {
         SeatModesRaw = [family],
         ViewsRaw = (Fixtures.BuildDocument().Views with {
-            FlyRig = new WorldCameraRig(
-                Motion: new WorldCameraMotion.Fly(MinSpeed: 0.5f, MaxSpeed: 64f, DefaultSpeed: 8f, LookRateRadiansPerSecond: 2.6f, MaxPitchRadians: 1.45f),
+            CameraRig = new WorldCameraRig(
+                Motion: new WorldCameraMotion.FirstPerson(),
                 Aim: new WorldCameraAim.Forward(FocusDistance: 1f),
                 Lens: new WorldCameraLens(FieldOfViewRadians: 0.9f)
             ),
@@ -160,12 +160,12 @@ public sealed class WorldSeatModeLawTests {
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: control, reason: out var controlReason), userMessage: controlReason);
     }
     [Fact]
-    public void CameraTargetingState_WithoutAnAuthoredFlyRig_RefusesByName() {
+    public void CameraTargetingState_WithoutAnAuthoredCameraRig_RefusesByName() {
         var denied = Fixtures.BuildDocument() with { SeatModesRaw = [Family()] };
         var control = DocumentWithFamily(family: Family());
 
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var reason));
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "views.flyRig is not authored");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "views.cameraRig is not authored");
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: control, reason: out var controlReason), userMessage: controlReason);
     }
     [Fact]

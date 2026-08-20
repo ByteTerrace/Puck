@@ -9,8 +9,8 @@ namespace Puck.Storage;
 /// <summary>
 /// The Azure Blob backend. Its version token is the blob ETag — the download ETag on a read, and a
 /// <c>BlobRequestConditions.IfMatch</c> on a conditional write, catching a 412 as a precondition
-/// failure. This is the true optimistic-concurrency path the cloud arc exercises; the same seam the local backend
-/// implements best-effort. <see cref="ListAsync"/> answers the discovery half of the contract — the caller's own
+/// failure. This is the true optimistic-concurrency path; the local backend implements the same seam best-effort.
+/// <see cref="ListAsync"/> answers the discovery half of the contract — the caller's own
 /// listed keys, in the same object-relative key space a read/write address carries; an edge-shaped target routes List
 /// to <see cref="AzureBlobObjectStorageTarget.DirectEndpoint"/> instead of the edge (see that property's remarks —
 /// the edge cannot serve List at all), addressing the account's stored layout rather than the edge's view of it (see
@@ -58,7 +58,7 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
     //   edge, via edge — container {namespace},    blob {objectId}/{key}
     //   edge, direct   — container {objectId},     blob {namespace}/{key}
     //
-    // The third row is the account's REAL layout: the edge rewrite maps /{namespace}/{container}/{rest} to container
+    // The third row is the account's real layout: the edge rewrite maps /{namespace}/{container}/{rest} to container
     // {container}, blob {namespace}/{rest}, so what the SDK addresses as container {namespace}, blob {objectId}/{key}
     // is stored as container {objectId}, blob {namespace}/{key}. LIST can never be served through the edge (see
     // AzureBlobObjectStorageTarget.DirectEndpoint), so it goes direct to the account and must address that stored
@@ -86,7 +86,7 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend,
     // segment for a query-string-only List Blobs/Containers request to occupy, so it 404s unconditionally before
     // reaching blob storage (see AzureBlobObjectStorageTarget.DirectEndpoint). An edge-shaped target therefore never
     // sends LIST through its own ServiceUri: it resolves against DirectEndpoint instead — parsed exactly like the
-    // target's own connection string/service URI — or refuses BY NAME, with zero network I/O, when none is
+    // target's own connection string/service URI — or refuses by name, with zero network I/O, when none is
     // authored; that refusal is the point (never a silent empty result). A raw-shaped target (EdgeNamespace null) is
     // already a direct account connection, so it resolves exactly like GetServiceClient.
     private BlobServiceClient GetListServiceClient(AzureBlobObjectStorageTarget target) {

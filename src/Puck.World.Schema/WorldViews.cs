@@ -62,11 +62,14 @@ public enum WorldSeatYawReference : byte {
 /// <param name="SeatRig">The chase framing every seat's view resolves through by default.</param>
 /// <param name="SeatControl">The structural constraints/reference for live seat camera input.</param>
 /// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
-/// <param name="FlyRig">The free-camera rig a seat's control application swaps to while flying (see
-/// <see cref="WorldSeatModeState.Target"/>) — <see langword="null"/> for a world that authors no camera-targeting
-/// mode state. Its <c>motion</c> must be <see cref="WorldCameraMotion.Fly"/> when present.</param>
+/// <param name="CameraRig">The rig a seat's view resolves through while its published mode state targets
+/// <see cref="WorldSeatModeState.CameraTarget"/> — <see langword="null"/> for a world that authors no
+/// camera-targeting mode state. Resolved through the ordinary <c>Puck.World.WorldCameraRigCompiler</c> pipeline
+/// against whichever body the seat currently perceives from (the possessed camera body — see
+/// <c>Puck.World.Server.WorldEngagement</c>), exactly like <see cref="SeatRig"/> resolves against the seat's own
+/// avatar; no bespoke per-frame integrator reads this field.</param>
 public sealed record WorldViewDefaults(WorldCameraRig SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraRig? FlyRig = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraRig? CameraRig = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
     /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — a rig with no motion, no

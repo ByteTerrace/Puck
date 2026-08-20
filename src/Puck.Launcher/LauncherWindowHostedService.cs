@@ -304,7 +304,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // in original press order, allowing a freshly-installed profile or modality to recover continuous
                 // channels without synthesizing a Started edge.
                 var heldDigitalInput = new HeldDigitalInputState();
-                // CLOSED-LOOP present timing (VK_KHR_present_wait): the presenter confirms each present and reports the
+                // Closed-loop present timing (VK_KHR_present_wait): the presenter confirms each present and reports the
                 // instant it was confirmed. The pacer observes this rhythm — reporting the measured display interval
                 // (delta between consecutive confirmed presents) — but does not re-anchor the render deadline to the
                 // confirmation timestamp: for Vulkan that timestamp is the CPU instant vkWaitForPresentKHR returned
@@ -320,7 +320,7 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // measured present interval — proof the closed loop is live and what the real display cadence is. Off
                 // by default so a shipped run isn't noisy.
                 var logPresentTiming = m_options.LogPresentTiming;
-                // GENLOCK (latency phase-align): when an external frame producer (a live camera) publishes arrival
+                // Genlock (latency phase-align): when an external frame producer (a live camera) publishes arrival
                 // timestamps, the aligner biases the render deadline toward them with a light PI filter on the phase
                 // error, so the frame that samples a fresh arrival starts (and presents) as soon after it as possible —
                 // full VRR rate preserved, the fixed-step sim untouched. Silent with no publisher;
@@ -366,13 +366,13 @@ public sealed class LauncherWindowHostedService : BackgroundService {
                 // always equal the measured interval. An optional IPresentationSkipFeedback presenter (Vulkan) folds its
                 // running skipped-present tally into the same line. Arming is the live GpuTimingControl.Shared state (a
                 // bench arm / the demo's gpu.timing switch / Puck.World's world.timing verb flip it mid-session, and the
-                // run-doc host.timing field seeds it) — so ONE switch lights both the GPU per-pass digest and this CPU
+                // run-doc host.timing field seeds it) — so one switch lights both the GPU per-pass digest and this CPU
                 // hub. Each armed iteration publishes a sample into the frame-timing hub, and the throttled stderr digest
-                // is one SUBSCRIBER of that hub rather than a private code path — the bench runner is another.
+                // is one subscriber of that hub rather than a private code path — the bench runner is another.
                 var frameTimingSkipFeedback = (m_presenter as IPresentationSkipFeedback);
                 var frameTimingProducedFrames = 0UL;
                 // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
-                // (console pump alone) AND the fallback while the registered simulation reports 0 (an authored
+                // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
                 // simulation.rateHz durable stop) — the pump's own calling cadence is presentation-adjacent host
                 // pacing, never sim state, and EngineTicks.PerRate refuses zero outright. The registered simulation
                 // still gates whether it actually steps internally (WorldSimulation.ShouldStepBoot); this value only

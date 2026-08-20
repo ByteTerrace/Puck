@@ -26,7 +26,6 @@ namespace Puck.Overlays;
 public sealed class OverlayGlyphSdfPack {
     private const int PackHashBytes = 32;
     private const int PackHeaderBytes = (((sizeof(uint) * 5) + sizeof(float)) + (PackHashBytes * 3));
-    // ---- the prepacked artifact ---------------------------------------------------------------------------------
     // The pack is ~1.4 MiB of already-flattened cells (larger once a world appends icon glyphs), but building it
     // from the atlas decodes the WHOLE combined MTSDF PNG (4435x4440 RGBA ~79 MiB, >=150 MiB transient with the
     // decoder's scanlines) at every startup. The binary artifact below persists the finished pack beside the atlas,

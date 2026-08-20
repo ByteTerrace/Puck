@@ -33,7 +33,7 @@ namespace Puck.World;
 /// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
 /// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
 /// </remarks>
-internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldSeatFlyRig flyRig) : ICommandModule {
+internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopulation population, WorldScreenBinder screens, WorldDefinition definition, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     // The reserved trailing token an instance-addressed drive-a-player verb carries — see TryStripInstanceToken.
     private const string InstanceTokenPrefix = "instance:";
 
@@ -91,7 +91,6 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // same table again when the bound control fires. The command registry and its replay-stable ids therefore never
     // depend on which local, late-mounted, or remote destination documents happened to be readable at boot.
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
-    private readonly WorldSeatFlyRig m_flyRig = flyRig;
 
     // The authored, argument-bearing verbs (assertable on stdout). The drive-a-player verbs take an optional trailing
     // player index reaching the whole population: 1..4 are the local seats, 5..128 the simulated entries.

@@ -21,7 +21,7 @@ namespace Puck.SdfVm;
 /// <param name="ViewsCore">The Stage 1 core-ops variant (exotic op/shape cases compiled out).</param>
 /// <param name="Composite">The Stage 2 source-agnostic compositor kernel.</param>
 /// <param name="BrickBake">The standalone carve-union brick baker (<c>sdf-brick-bake.comp</c>) — dispatched only when
-/// the engine provisions a brick pool (carve-bake plan §3).</param>
+/// the engine provisions a brick pool.</param>
 public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Sky,
     ReadOnlyMemory<byte> Beam,

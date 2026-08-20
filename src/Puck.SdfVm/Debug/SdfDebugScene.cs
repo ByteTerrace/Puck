@@ -82,11 +82,11 @@ public sealed class SdfDebugScene {
 
     private readonly List<SdfDebugOp> m_ops = [];
     private readonly List<SdfCarve> m_carves = [];
-    // The carve-bake settle planner for THIS live pool (carve-bake plan §4): the interactive debug scene's default
+    // The carve-bake settle planner for THIS live pool: the interactive debug scene's default
     // settle window. It watches m_carves + Revision, hands settled clusters off to a background brick bake, and emits
     // adopted bins as SampledRegion instances (SdfDebugRenderer.EmitCarves routes through it). Every carve mutation
     // bumps Revision (Bump), which the planner reads as the invalidation signal — a new/removed carve inside a baked
-    // bin re-emits analytic the same rebuild and re-bakes next settle (plan §3). Reached as SdfDebugMode.CarveBake.
+    // bin re-emits analytic the same rebuild and re-bakes next settle. Reached as SdfDebugMode.CarveBake.
     private readonly SdfCarveBakePlanner m_carvePlanner = new(settleFrames: SdfCarveBakePlanner.DefaultSettleFrames);
     private float[] m_params = DefaultParams(kind: SdfDebugShapeKind.Torus);
     private float[] m_params2 = [];

@@ -10,7 +10,7 @@ namespace Puck.Overlays;
 /// </summary>
 public sealed class CursorWriter : IOverlaySeatEmitter<OverlayCursorSeat> {
     private const float CursorAlpha = 0.9f;
-    // The same emptied-viewport guard the gizmo writer applies before opening a clip scope on the region.
+    // The same emptied-viewport guard the marker writer applies before opening a clip scope on the region.
     private const float MinRegionExtent = 0.05f;
 
     /// <summary>The hover-label character clamp — the ONE source <see cref="OverlayChannelLeases"/> reads for the

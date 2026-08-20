@@ -87,7 +87,7 @@ public sealed class SdfGalleryScene {
             Plaque: [
                 "Eight spheres blended in a long alternating SmoothUnion/ChamferUnion chain — each blend accumulates a",
                 "least-significant-bit of rounding, so a deep chain drifts. The scoped field accumulator bounds where",
-                "this can reach (docs/sdf-vm-evolution-roadmap). Inspect the seams under debug.view.normals.",
+                "this can reach. Inspect the seams under debug.view.normals.",
             ]
         ),
         new ExhibitEntry(

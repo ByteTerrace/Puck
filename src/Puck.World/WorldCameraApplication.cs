@@ -1,34 +1,28 @@
-using Puck.World.Client;
 using Puck.World.Protocol;
 
 namespace Puck.World;
 
 /// <summary>
-/// The fly control application's dissolve, in one place: the rig stops framing the seat and the seat's captured
-/// intent source is re-admitted on both halves (the authoritative submission and the client-side mirror), so no
-/// caller can perform half of it. <c>player.mode</c> leaving a
-/// <see cref="WorldSeatModeState.CameraTarget"/> state runs this, and so does the composition root when a mode
-/// reseed drops that state under a live application (<see cref="WorldSeatBindings.CameraApplicationDropped"/>).
-/// Composing the application is <c>PlayerCommandModule.Mode.cs</c>'s alone — it is the only path holding the
-/// authority check that gates entry.
+/// The camera control application's dissolve, in one place: disengages the seat's possession route through the
+/// ordinary door <c>player.disengage</c> uses, so the avatar resumes driving itself and the perceived body/camera
+/// eye/audio listener fall back to it as a side effect of the SAME route WorldEngagement already tracks — never a
+/// second mechanism. <c>player.mode</c> leaving a <see cref="WorldSeatModeState.CameraTarget"/> state runs this, and
+/// so does the composition root when a mode reseed drops that state under a live application
+/// (<see cref="WorldSeatBindings.CameraApplicationDropped"/>). Composing the application is
+/// <c>PlayerCommandModule.Mode.cs</c>'s alone — it is the only path holding the authority check that gates entry.
 /// </summary>
 internal static class WorldCameraApplication {
-    /// <summary>Dissolves seat <paramref name="slot"/>'s fly application, restoring the intent source latched when
-    /// it was composed. A no-op-shaped call on an inactive seat restores <see cref="IntentSource.Live"/>.</summary>
-    /// <param name="flyRig">The seat fly rig holding the latched source.</param>
-    /// <param name="link">The link the restoring <see cref="WorldCommand.SetControl"/> is submitted through.</param>
-    /// <param name="roster">The client roster carrying the seat's own mirror of the source.</param>
-    /// <param name="actingPrincipal">The principal the restoring submission is stamped with — the server's Drive
-    /// gate checks it against the target body exactly as <c>player.control</c> does.</param>
+    /// <summary>Disengages seat <paramref name="slot"/>'s camera control application. A no-op-shaped call on an
+    /// already-disengaged seat (the ordinary <c>NotEngaged</c> outcome).</summary>
+    /// <param name="link">The link the disengaging <see cref="WorldCommand.Disengage"/> is submitted through.</param>
+    /// <param name="actingPrincipal">The principal the disengage submission is stamped with — the server's Control
+    /// gate checks it against the target's own route exactly as <c>player.disengage</c> does.</param>
     /// <param name="slot">The 0-based seat slot.</param>
-    public static void Deactivate(WorldSeatFlyRig flyRig, IServerLink link, PlayerRoster roster, WorldPrincipal actingPrincipal, int slot) {
-        var priorSource = flyRig.Deactivate(slot: slot);
-
-        link.SubmitCommand(command: new WorldCommand.SetControl(
-            Principal: actingPrincipal,
+    public static void Deactivate(IServerLink link, WorldPrincipal actingPrincipal, int slot) {
+        link.SubmitCommand(command: new WorldCommand.Disengage(
             EntityIndex: slot,
-            Source: priorSource
+            Principal: actingPrincipal,
+            TargetPrincipal: WorldPrincipal.Seat(slot: slot)
         ));
-        roster.Seat(slot: slot)?.SetIntentSource(source: priorSource);
     }
 }

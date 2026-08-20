@@ -5,45 +5,69 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
-    // Diverts the seat's own body intent to Idle (the existing player.control contract, applied on both halves so
-    // the mask lands with no tick gap) and activates the fly rig, seeded from the current chase framing. The SetControl
-    // is stamped with the ACTING principal (never the target seat's own), so the server's Drive gate
-    // (WorldServer.ApplyCommand) checks the ACTOR's authority over the target body exactly as player.control does; the
-    // ModeHandler caller has already refused the whole command when that authority is absent, so this only ever runs
-    // for a command the server will accept — nothing here mutates local state ahead of a doomed submission.
-    private void ActivateCameraApplication(WorldPrincipal actingPrincipal, int slot) {
-        var controller = m_roster.Seat(slot: slot);
-        // The source to restore on exit. A seat that is ALREADY diverted (Idle) when this runs — a prior application
-        // torn down without a clean deactivate, e.g. a world reseed dropping the mode state — must never record the
-        // diversion itself as the restore target, or exit would leave the seat permanently dead-stick; fall back to
-        // Live so exit re-admits the live device. The fly rig holds this alongside its own active flag, so a departed
-        // seat's prune clears it too.
-        var priorSource = (controller?.Source ?? IntentSource.Live);
-
-        if (priorSource.IsIdle) {
-            priorSource = IntentSource.Live;
+    // The population placement id backing seat <paramref name="slot"/>'s camera body. A camera-capable world
+    // authors one inhabited placement per local seat it wants Free Cam over (standard.world.json's
+    // "camera-seat-<n>" rows); WorldClient.TryInhabitantBody resolves the placement's CURRENT entity index rather
+    // than a baked constant, since an inhabited body's table slot is not authored — it is wherever
+    // ReconcileInhabitants placed it this boot.
+    private static string CameraPlacementId(int slot) => $"camera-seat-{slot}";
+    // Composes the camera control application: possesses the seat's designated camera body through the SAME
+    // Engage/Control(+per-tick Drive) gated path any other possession target uses (Server.WorldEngagement) — never a
+    // bespoke authority check. Capture:true idles the seat's own avatar for the duration, exactly like an ordinary
+    // vehicle possession; WorldPerceptionAnchor then swaps the seat's camera eye/audio listener/HUD bindings onto the
+    // camera body as a side effect of the SAME route, not a second mechanism. Refuses (mutating nothing) when the
+    // world declares no camera body for this seat, or the server's own Control check denies the actor — the ModeHandler
+    // caller has already checked Drive over the target SEAT's own body; this is the separate Control check the route
+    // itself requires.
+    private bool ActivateCameraApplication(WorldPrincipal actingPrincipal, int slot) {
+        if (!m_client.TryInhabitantBody(
+            index: out var cameraBody,
+            placementId: CameraPlacementId(slot: slot)
+        )) {
+            return false;
         }
 
-        m_link.SubmitCommand(command: new WorldCommand.SetControl(
-            Principal: actingPrincipal,
-            EntityIndex: slot,
-            Source: IntentSource.Idle
-        ));
-        controller?.SetIntentSource(source: IntentSource.Idle);
-        m_flyRig.Activate(
-            priorSource: priorSource,
-            slot: slot
+        var target = GrantSubject.Body(index: cameraBody);
+
+        if (m_server.Engagement.CheckEngage(
+            actingPrincipal: actingPrincipal,
+            target: target
+        ) is { IsAllowed: false }) {
+            return false;
+        }
+
+        // The seat's own Drive grant over its camera body — minted here rather than authored in the document,
+        // because an inhabited placement's entity index is resolved at runtime (ReconcileInhabitants places it),
+        // never a fixed body:<n> a document `grants` row could name. A seat cannot grant a subject that is not its
+        // own body (HoldsForAdministration), so this rides under Console, exactly as an admission's own Drive
+        // template does. Idempotent — re-entering camera mode re-grants the identical row.
+        m_link.SubmitGrant(
+            actor: WorldPrincipal.Console,
+            grant: new WorldGrant(
+                Principal: WorldPrincipal.Seat(slot: slot),
+                Capability: WorldCapability.Drive,
+                Subject: target,
+                Exclusive: false
+            )
         );
+
+        m_link.SubmitCommand(command: new WorldCommand.Engage(
+            Capture: true,
+            EntityIndex: slot,
+            Principal: actingPrincipal,
+            Target: target,
+            TargetPrincipal: WorldPrincipal.Seat(slot: slot)
+        ));
+
+        return true;
     }
-    // Restores the seat's captured intent source (held by the fly rig) and deactivates the fly rig — the chase rig
-    // re-anchors to the avatar deterministically, so there is no pose to restore. The restoring SetControl carries the
-    // acting principal for the same Drive-gate reason ActivateCameraApplication does.
+    // Dissolves the camera control application through the ordinary Disengage door — the avatar resumes driving
+    // itself and the perceived body/camera eye/audio listener fall back to it the instant WorldEngagement clears the
+    // route, mirroring ActivateCameraApplication's own single mechanism.
     private void DeactivateCameraApplication(WorldPrincipal actingPrincipal, int slot) {
         WorldCameraApplication.Deactivate(
             actingPrincipal: actingPrincipal,
-            flyRig: m_flyRig,
             link: m_link,
-            roster: m_roster,
             slot: slot
         );
     }
@@ -161,11 +185,11 @@ internal sealed partial class PlayerCommandModule {
         var wasCamera = IsCameraTarget(state: previousState);
         var isCamera = IsCameraTarget(state: targetState);
 
-        // Composing or dissolving the fly control application idles/restores the TARGET body and swaps its rig and
-        // binding group — a Drive-authority act. Gate it on the ACTOR's Drive over the target body (the same grant the
-        // server's SetControl door checks), so a session holding Drive over only its own body cannot idle another
-        // seat's body or hijack its fly rig by naming a trailing [seat]. A pure non-camera flip is presentation only
-        // and needs no such authority.
+        // Composing or dissolving the camera control application possesses/releases the TARGET body — a Drive
+        // authority act. Gate it on the ACTOR's Drive over the target body (the same grant the server's own
+        // possession door checks), so a session holding Drive over only its own body cannot idle another seat's
+        // body or hijack its camera application by naming a trailing [seat]. A pure non-camera flip is presentation
+        // only and needs no such authority.
         if (wasCamera != isCamera) {
             var actingPrincipal = context.ActingPrincipal();
 
@@ -174,7 +198,7 @@ internal sealed partial class PlayerCommandModule {
                 capability: WorldCapability.Drive,
                 subject: GrantSubject.Body(index: slot)
             ).IsAllowed) {
-                return CommandResult.Error(output: $"[{ModeCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} — {actingPrincipal.Describe()} cannot drive body:{slot} to compose the fly control application]");
+                return CommandResult.Error(output: $"[{ModeCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} — {actingPrincipal.Describe()} cannot drive body:{slot} to compose the camera control application]");
             }
 
             if (wasCamera) {
@@ -182,11 +206,11 @@ internal sealed partial class PlayerCommandModule {
                     actingPrincipal: actingPrincipal,
                     slot: slot
                 );
-            } else {
-                ActivateCameraApplication(
-                    actingPrincipal: actingPrincipal,
-                    slot: slot
-                );
+            } else if (!ActivateCameraApplication(
+                actingPrincipal: actingPrincipal,
+                slot: slot
+            )) {
+                return CommandResult.Error(output: $"[{ModeCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} — no camera body available (declare a '{CameraPlacementId(slot: slot)}' inhabited placement, or {actingPrincipal.Describe()} lacks Control over it — see world.why)]");
             }
         }
 
@@ -206,7 +230,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: ModeCommand,
-            description: "Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): player.mode <family> <state> [seat] (seat 1..4, default 1). player.mode <family> [seat] reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the fly control application: the seat's own body intent diverts to Idle (the same player.control idle contract — a live tape or player.press still drives it) and the world-authored views.flyRig frames the seat instead, seeded from the current chase framing (no pose pop); leaving such a state restores the seat's prior intent source. An unknown family or state is refused by name, naming every admissible sibling.",
+            description: "Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): player.mode <family> <state> [seat] (seat 1..4, default 1). player.mode <family> [seat] reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the camera control application: the seat possesses its declared camera body through the ordinary Engage door (the same possession primitive player.engage uses) — its own body intent diverts to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig); leaving such a state disengages, restoring the seat's own body. An unknown family or state is refused by name, naming every admissible sibling.",
             handler: ModeHandler,
             routing: CommandRouting.Simulation
         );

@@ -207,7 +207,7 @@ static const uint SdfBenchParams = 37u;
 // reserved. A SEPARATE row from SdfBenchParams (whose four lanes are full). KEEP IN SYNC with
 // SdfWorldEngine.PackScreenLights + SdfFrame's EnableShadowProxy/UseCameraTileShadowMask/UseFastSoftShadowMarch fields.
 static const uint SdfShadowProxyParams = 38u;
-// The F1 FAR-FIELD lever row (perf plan Phase 5.1): x = disable the beam-published per-tile far bound (1 = the A/B
+// The F1 FAR-FIELD lever row: x = disable the beam-published per-tile far bound (1 = the A/B
 // "off" side — the fine march ignores plane 3 and runs to MaxDistance exactly as pre-F1; 0 = the DEFAULT shipped
 // behavior with the far bound ACTIVE, so an unset frame uploads 0 and the feature is ON); y = disable the F2 shadow
 // light-side exit (RESERVED for F2, not yet consumed); zw reserved. A SEPARATE row from SdfShadowProxyParams (whose
@@ -557,7 +557,7 @@ static const float TileGapMinStep = 0.15;
 // SAFE: the teleport just does not arm, and the fine march is pixel-identical whether or not it teleports (the jump
 // lands at secondEntry <= the true re-entry). Four stalled steps keep gap-less tile cost bounded.
 static const int TileGapStallLimit = 4;
-// F1 FAR BOUND (perf plan Phase 5.1): after the gap search resolves, a bounded TAIL phase cone-marches from the
+// F1 FAR BOUND: after the gap search resolves, a bounded TAIL phase cone-marches from the
 // resolved t to prove the far bound — the depth past which the tile's cone cannot produce any footprint-accepted hit
 // through MaxDistance. TileFarSteps caps that extra beam cost (the tail is a latency-rich single-thread march, per the
 // beam kernel's design). Sixteen steps is enough to walk a live tile's near band + one gap + a second band into a
@@ -1077,7 +1077,7 @@ struct TileBounds {
     float farBound;
 };
 
-// F1 TAIL PHASE (perf plan Phase 5.1). Proves the FAR BOUND: the depth past which the tile's cone cannot produce any
+// F1 TAIL PHASE. Proves the FAR BOUND: the depth past which the tile's cone cannot produce any
 // hit the fine march would ACCEPT, all the way to MaxDistance. Marches forward from `startT` with a FOOTPRINT-INFLATED
 // clearance threshold — the load-bearing correctness fact. The fine march accepts a hit at fieldDistance <
 // max(SurfaceEpsilon, footprint*t) (sdf-world-views computes footprint = 2*right.w/rectDims.y; the beam computes the
@@ -1412,7 +1412,7 @@ bool worldScreenLightsDisabled() {
     return false;
 #endif
 }
-// The F1 FAR-BOUND A/B lever (perf plan Phase 5.1). Rides SdfFarFieldParams.x: 0 (the DEFAULT, an unset frame) keeps
+// The F1 FAR-BOUND A/B lever. Rides SdfFarFieldParams.x: 0 (the DEFAULT, an unset frame) keeps
 // the beam-published far bound ACTIVE (the shipped behavior — the fine march exits at traveled >= farBound); 1 pushes
 // the far bound out of reach so the march runs to MaxDistance exactly as pre-F1 (the paired-run "off" side). Decoded
 // only under SDF_SCREEN_SOURCES (the world-views kernel is the sole SDF-hit shader). KEEP IN SYNC with

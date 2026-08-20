@@ -74,9 +74,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
     /// <summary>Raised with a 0-based seat slot whose authored mode-family reseed (<see cref="SyncSeat"/>, on a
     /// world load/reload/reset or a route change) just dropped a published state targeting
-    /// <see cref="WorldSeatModeState.CameraTarget"/> — the state a live fly control application was composed from.
-    /// This type owns the published state, not the rig, so the composition root closes the teardown through the same
-    /// exit <c>player.mode</c> takes when it leaves such a state.</summary>
+    /// <see cref="WorldSeatModeState.CameraTarget"/> — the state a live camera control application was composed from.
+    /// This type owns the published state, not the possession route, so the composition root closes the teardown
+    /// through the same exit <c>player.mode</c> takes when it leaves such a state.</summary>
     public event Action<int>? CameraApplicationDropped;
 
     private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, BindingProfileDocument? profile, BindingProfileDocument? session) {
@@ -301,9 +301,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     /// <summary>Resets every AUTHORED mode family the seat's routed document declares to its default state and
     /// re-derives the seat's active group, so a slot rejoined by a different occupant never inherits the departed
     /// one's published mode (and the group that mode selected). The seat-departure fact
-    /// (<see cref="PlayerRoster.VacateSeat"/>) is its only caller; the fly rig's own departure teardown
-    /// (<see cref="WorldSeatFlyRig.PruneDeparted"/>) owns the rig half, so this raises no
-    /// <see cref="CameraApplicationDropped"/>.</summary>
+    /// (<see cref="PlayerRoster.VacateSeat"/>) is its only caller; it raises no <see cref="CameraApplicationDropped"/>
+    /// (a departed seat submits nothing, so any possession route it held goes inert regardless of the published-state
+    /// reset here — the same standing behavior any other possession target's departure already has).</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public void ResetSeatModes(int slot) {
         if (((uint)slot) >= SeatCount) {
@@ -316,6 +316,15 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         );
         DeriveActiveGroup(slot: slot);
     }
+    /// <summary>Returns a value indicating whether seat <paramref name="slot"/>'s currently published state, on any
+    /// AUTHORED family its routed document declares, targets <see cref="WorldSeatModeState.CameraTarget"/> — the
+    /// frame source's own condition for resolving <see cref="WorldViewDefaults.CameraRig"/> instead of
+    /// <see cref="WorldViewDefaults.SeatRig"/>.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public bool IsCameraModeActive(int slot) => ((((uint)slot) < SeatCount) && PublishesCameraTarget(
+        families: m_definitions[slot].SeatModes,
+        slot: slot
+    ));
     /// <summary>Resolves an AUTHORED (world-declared) seat-mode family by name for seat <paramref name="slot"/>'s
     /// currently routed document — the lookup <c>player.mode</c> validates a family/state token through. Built-in
     /// families (roster, engagement, layout) are never resolved here; they are not player-settable.</summary>

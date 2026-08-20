@@ -466,16 +466,6 @@ internal static class WorldBootComposition {
         // boot world is render-less by construction, so it works identically headless or windowed.
         services.AddSingleton<ICommandModule, WorldRateCommandModule>();
 
-        // The seat fly control application's rig (seat channels + views.flyRig; the mode flip, honest-idle
-        // diversion, and camera-application composition live in PlayerCommandModule.Mode.cs, over the generic
-        // player.mode verb — see WorldSeatModeState.Target). CORE (not presentation-only): document/session state
-        // over WorldClient/IServerLink, with no GPU-typed dependency anywhere in the chain, and a world's binding
-        // document validates against whatever this composition registers — a headless boot that left the vocabulary
-        // unregistered would refuse the SAME document a windowed boot admits, which is exactly the
-        // command-vocabulary-parity gap this composition must not have (see
-        // WorldDefinitionValidator.ValidateBindingOverlays / BindingVocabularyHook).
-        services.AddSingleton<WorldSeatFlyRig>();
-
         // The binding bar's per-seat authored policy resolver. Core so its read-back remains available headless;
         // presentation only consumes the resolved layout and visibility when it builds a bar frame.
         // The overlay-visibility fact evaluator: every overlay element's authored `visible` predicate reads it. Core
@@ -484,7 +474,7 @@ internal static class WorldBootComposition {
             client: sp.GetRequiredService<WorldClient>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             server: sp.GetRequiredService<WorldServer>(),
-            flyRig: sp.GetRequiredService<WorldSeatFlyRig>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             router: () => sp.GetRequiredService<InputRouter>(),
             wheel: () => sp.GetService<WorldWheelFeed>(),
             pointer: sp.GetService<WorldPointer>(),
@@ -789,7 +779,7 @@ internal static class WorldBootComposition {
                 settings: sp.GetRequiredService<WorldRenderSettings>(),
                 binder: binder,
                 envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
-                flyRig: sp.GetRequiredService<WorldSeatFlyRig>(),
+                seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
                 animator: sp.GetRequiredService<WorldStampPool>(),
                 audio: sp.GetRequiredService<WorldAudioDirector>(),
                 anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),

@@ -57,7 +57,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // at t42.
     private const uint FrameInstanceGridBindingIndex = 47;
     private const uint InstanceMaskBindingIndex = 7; // sdf-beam.comp (u1) / sdf-world-views.comp (t13): per-tile instance mask, written by the beam prepass, read by Stage 1; the per-tile word count is the LIVE uploaded program's InstanceMaskWordCount (pushed per frame, capped at the construction width the buffer was sized for)
-    private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame (carve-bake plan §3): ~1-2 ms background-budget
+    private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
     private const int PushConstantByteLength = (((sizeof(uint) * 4) * 2) + (sizeof(uint) * 2)); // 40-byte CompositeParams; word 6 = screenMask, word 7 = instanceMaskWordCount, word 8 = sampleIndex (the shadow estimator's deterministic net index), word 9 = the shadow accumulator's epoch + enable bit. Vulkan guarantees 128 bytes of push range, so this stays well inside the floor.
@@ -107,7 +107,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const uint WorkgroupEdge = 8;
 
     /// <summary>The default carve-bake brick pool capacity in voxels (f32 words) — <see cref="SdfBrickPoolLayout.TotalVoxels"/>
-    /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution (carve-bake plan §3).</summary>
+    /// = 16.7M voxels = 64 MB, i.e. <see cref="SdfBrickPoolLayout.MaxBricks"/> slots at full resolution.</summary>
     public const int DefaultBrickPoolVoxelCapacity = SdfBrickPoolLayout.TotalVoxels;
     /// <summary>The frame-ring depth: how many produced frames may be in flight on the GPU at once. Every per-frame
     /// mutable resource — the command buffer, the host-visible per-frame buffers (viewport / dynamic-transform /
@@ -143,7 +143,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // that buffer + the shared pool (as a UAV). The per-slot state advances one slice per produced frame (RecordBrickBakeSlices).
     private readonly IGpuComputePipeline? m_brickBakePipeline;
     private readonly IGpuShaderModule? m_brickBakeShaderModule;
-    // The carve-bake brick pool (carve-bake plan §3): one persistent device-local f32 buffer the sliced bake writes and
+    // The carve-bake brick pool: one persistent device-local f32 buffer the sliced bake writes and
     // the beam + views kernels sample. Always allocated (a 1-float filler when the pool is disabled), always bound to
     // the beam/views sets, since both kernels compile the sdfBrickPool binding unconditionally (SDF_SAMPLED_REGIONS).
     private readonly IGpuBuffer m_brickPoolBuffer;
@@ -593,7 +593,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             sizeBytes: ((((((ulong)m_viewportCapacity) * m_tileGridX) * m_tileGridY) * ((uint)instanceMaskStorageWordCount)) * sizeof(uint))
         );
 
-        // The carve-bake brick pool (carve-bake plan §3): one persistent DEVICE-LOCAL f32 buffer — device-local so the
+        // The carve-bake brick pool: one persistent DEVICE-LOCAL f32 buffer — device-local so the
         // bake kernel can write it as a UAV (an upload heap forbids UAVs on Direct3D 12) and the beam/views sample it as
         // an SRV. Frozen at the constructed capacity. When the pool is disabled (capacity 0) a single-float filler keeps
         // the always-present sdfBrickPool binding valid — the kernels compile the binding unconditionally, and

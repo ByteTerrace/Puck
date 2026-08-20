@@ -29,7 +29,7 @@ public interface ISdfBrickBakeService {
     void RequestBrickBake(int slot, BrickBakeRequest request);
 }
 /// <summary>
-/// The SETTLE PLANNER (carve-bake plan §4): content-blind plumbing that watches a live carve pool, bins carves by
+/// The SETTLE PLANNER: content-blind plumbing that watches a live carve pool, bins carves by
 /// centre into a uniform lattice, and hands a settled cluster's UNION field off to a background GPU bake — then emits
 /// that bin as ONE <see cref="SdfShapeType.SampledRegion"/> instance the kernels sample O(1) instead of its dozens/
 /// hundreds of analytic subtraction instances. An in-flight or freshly edited cluster stays fully analytic; a bin
@@ -63,18 +63,18 @@ public sealed class SdfCarveBakePlanner {
     // 4096-carve cap even if every carve lands in one bin, but the guard keeps the planner total.
     private const int MaxCarvesPerBrick = 4096;
 
-    /// <summary>The uniform bin lattice's cell edge in world units (plan §4 — brick-sized boxes of edge 6.0). Carves
+    /// <summary>The uniform bin lattice's cell edge in world units (brick-sized boxes of edge 6.0). Carves
     /// bin by NEAREST cell centre (round, not floor) so a cluster authored around a lattice point stays in ONE bin
     /// instead of splintering across the eight cells meeting at that point.</summary>
     public const float BinEdge = 6.0f;
     /// <summary>The settle window for the interactive debug pool: a bin bakes after this many produced frames with no
-    /// membership change (plan §4 — 120 ≈ 2 s at 60 fps). The bench adapter and <c>sdf.bake now</c> use 0.</summary>
+    /// membership change (120 ≈ 2 s at 60 fps). The bench adapter and <c>sdf.bake now</c> use 0.</summary>
     public const int DefaultSettleFrames = 120;
     /// <summary>A carve thinner than this many nominal voxels (<c>radius &lt; MinCarveVoxelRadius · h</c>, h =
     /// <see cref="BinEdge"/>/<see cref="SdfBrickPoolLayout.BrickDim"/>) can't meet the trilinear fidelity budget, so it
-    /// stays analytic and never joins a bin's bakeable set (plan §4).</summary>
+    /// stays analytic and never joins a bin's bakeable set.</summary>
     public const int MinCarveVoxelRadius = 4;
-    /// <summary>The minimum hard-Subtraction carve count a bin needs to be bake-eligible (plan §4): below this the
+    /// <summary>The minimum hard-Subtraction carve count a bin needs to be bake-eligible: below this the
     /// analytic instances are cheaper than a brick's fixed pool + instruction footprint.</summary>
     public const int MinHardCarvesToBake = 16;
 
@@ -96,15 +96,15 @@ public sealed class SdfCarveBakePlanner {
     private int m_frame;
     private int m_lastRevision;
 
-    /// <summary>The process-wide carve-bake feature gate (plan §5). Off (the default) makes every planner emit analytic
-    /// always — bit-identical to today; on lets settled clusters bake. Flipped by the <c>sdf.carve-bake</c> switch.</summary>
+    /// <summary>Gets or sets the process-wide carve-bake feature gate. On (the default) lets settled clusters bake;
+    /// off makes every planner emit analytic always. Flipped by the <c>sdf.carve-bake</c> switch.</summary>
     public static bool Enabled {
         get => EnabledFlag;
         set => EnabledFlag = value;
     }
-    /// <summary>The live per-phase bin counts (<c>Analytic</c> / <c>Baking</c> / <c>Brick</c>). The readiness signal a
+    /// <summary>Gets the live per-phase bin counts (<c>Analytic</c> / <c>Baking</c> / <c>Brick</c>). The readiness signal a
     /// settle-0 bench adapter polls so its warm window absorbs the bake and its sampled window measures the baked steady
-    /// state (plan §4/§6): a carves scene is "settled" once no bin is still <c>Baking</c> and at least one has adopted a
+    /// state: a carves scene is "settled" once no bin is still <c>Baking</c> and at least one has adopted a
     /// <c>Brick</c>. Zero-allocation — a cheap walk of the live bin map.</summary>
     public (int Analytic, int Baking, int Brick) PhaseCounts => CountPhases();
 
@@ -569,7 +569,7 @@ public sealed class SdfCarveBakePlanner {
             ? "on"
             : "off")} | bins {m_bins.Count} ({brick} brick, {baking} baking, {analytic} analytic) | slots {slotsUsed}/{SdfBrickPoolLayout.MaxBricks} | settle {m_settleFrames}f | rev {m_lastRevision}";
     }
-    /// <summary>Emits the carve pool at rebuild time (plan §2/§4): one <see cref="SdfShapeType.SampledRegion"/> instance
+    /// <summary>Emits the carve pool at rebuild time: one <see cref="SdfShapeType.SampledRegion"/> instance
     /// per adopted bin, and analytic subtraction instances for every carve not represented by a brick. When
     /// <see cref="Enabled"/> is off — or nothing has been adopted yet — this is a byte-identical analytic emission (the
     /// switch's OFF proof). Called from <see cref="Puck.SdfVm.Debug.SdfDebugRenderer"/> in place of the raw carve loop.</summary>

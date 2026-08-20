@@ -683,9 +683,8 @@ straight into a sticky `HashMismatch` fault instead of refusing in place.
   byte length back rather than assuming `count * stride`. Every reserved-must-be-zero and shape guard
   is checked in order, and any failure is a deterministic refusal naming the cell index (or entry
   index, for the name table) — a stale guest can smuggle no meaning into a reserved field.
-- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[44.0.0]`. The battery
-  stage that used to assert the loaded assembly's major version left the build with `Puck.Post`;
-  the pin is now held by review, not by a gate.
+- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[44.0.0]`. Nothing in the
+  build asserts the loaded assembly's major version, so the pin is held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
 

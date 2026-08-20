@@ -24,6 +24,16 @@ internal static class CliProcess {
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
         RunCapturedAsync(arguments: arguments, fileName: fileName, input: input, timeout: timeout).GetAwaiter().GetResult();
 
+    /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time, floored at one
+    /// millisecond so a caller never passes a zero or negative timeout to <see cref="RunCaptured"/>.</summary>
+    /// <param name="clock">The running suite clock.</param>
+    /// <param name="budget">The suite-wide time budget.</param>
+    public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) {
+        var remaining = (budget - clock.Elapsed);
+
+        return ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromMilliseconds(value: 1));
+    }
+
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) {
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         var startInfo = new ProcessStartInfo {

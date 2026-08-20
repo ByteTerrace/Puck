@@ -104,7 +104,7 @@ public sealed class HeadlessTickHostedService : BackgroundService {
             var frequency = Stopwatch.Frequency;
             var maxFrameTicks = (EngineTicks.PerSecond / 4UL);
             // The registered simulation declares its own rate; DefaultUpdateRate is the null-simulation fallback
-            // (console pump alone) AND the fallback while the registered simulation reports 0 (an authored
+            // (console pump alone) and the fallback while the registered simulation reports 0 (an authored
             // simulation.rateHz durable stop) — the loop's own pacing (this wait grid, and the pump's calling
             // cadence below) is presentation-adjacent host pacing, never sim state, and must never depend on a rate
             // that can legitimately be zero (EngineTicks.PerRate refuses zero outright). The registered simulation

@@ -2091,10 +2091,10 @@ public sealed class SdfProgram {
                     // centre is boxMin + extent/2 and its radius is |extent|/2. This contains the whole box and thus the
                     // brick's zero set (strictly interior by the bake margin), so a Subtraction-blend brick instance masks
                     // exactly as any analytic carve does — and outside the box the shape's own candidate (dist(p, box) +
-                    // boundaryFloor) is a sound lower bound (see sdfSampledRegion / the carve-bake plan §1). The dims live
+                    // boundaryFloor) is a sound lower bound (see sdfSampledRegion). The dims live
                     // in Data1.y as a 3x10-bit uint pack (KEEP IN SYNC with the 0x3FFu unpack in sdfSampledRegion); cellSize
                     // is Data0.w. TryGetLocalBound feeding ShapeReachRadius/AnalyzeLipschitz gives it factor 1 (no warp, no
-                    // ellipsoid eccentricity), exactly as the plan requires.
+                    // ellipsoid eccentricity).
                     var packedDims = BitConverter.SingleToUInt32Bits(value: instruction.Data1.Y);
                     var extent = (new Vector3(
                         x: packedDims & 0x3FFu,

@@ -217,39 +217,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         switch (rig.Motion) {
-            case WorldCameraMotion.Fly fly:
-                if (
-                    !float.IsFinite(f: fly.MinSpeed) ||
-                    !float.IsFinite(f: fly.MaxSpeed) ||
-                    (fly.MinSpeed <= 0f) ||
-                    (fly.MaxSpeed < fly.MinSpeed)
-                ) {
-                    errors.Add(item: $"{path}.motion needs a positive, finite minSpeed and a maxSpeed no smaller than it.");
-                }
-
-                if (
-                    !float.IsFinite(f: fly.DefaultSpeed) ||
-                    (fly.DefaultSpeed < fly.MinSpeed) ||
-                    (fly.DefaultSpeed > fly.MaxSpeed)
-                ) {
-                    errors.Add(item: $"{path}.motion.defaultSpeed must be finite and within [minSpeed, maxSpeed].");
-                }
-
-                if (
-                    !float.IsFinite(f: fly.LookRateRadiansPerSecond) ||
-                    (fly.LookRateRadiansPerSecond <= 0f)
-                ) {
-                    errors.Add(item: $"{path}.motion.lookRateRadiansPerSecond must be positive and finite.");
-                }
-
-                if (
-                    !float.IsFinite(f: fly.MaxPitchRadians) ||
-                    (fly.MaxPitchRadians <= 0f) ||
-                    (fly.MaxPitchRadians >= (MathF.PI / 2f))
-                ) {
-                    errors.Add(item: $"{path}.motion.maxPitchRadians must be finite and within (0, pi/2).");
-                }
-
+            case WorldCameraMotion.FirstPerson:
                 break;
             case WorldCameraMotion.Follow follow:
                 if (!IsFinite(value: follow.Offset)) {
@@ -802,15 +770,15 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: "views.seatRig.motion must be orbit because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
         }
 
-        if (views.FlyRig is { } flyRig) {
+        if (views.CameraRig is { } cameraRig) {
             ValidateRig(
-                rig: flyRig,
-                path: "views.flyRig",
+                rig: cameraRig,
+                path: "views.cameraRig",
                 errors: errors
             );
 
-            if (flyRig.Motion is not WorldCameraMotion.Fly) {
-                errors.Add(item: "views.flyRig.motion must be fly — it is the rig a camera-targeting mode state swaps to.");
+            if (cameraRig.Motion is not WorldCameraMotion.FirstPerson) {
+                errors.Add(item: "views.cameraRig.motion must be firstPerson — it is the rig a camera-targeting mode state resolves through.");
             }
         }
 
