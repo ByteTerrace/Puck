@@ -119,10 +119,6 @@ public enum WorldSection : byte {
     /// <c>WorldMutation.SetLookAssignment</c>. Presentation-only authority (restyle the crowd, never reshape it).</summary>
     Looks,
 
-    /// <summary>The cable-link rows — groups of screens whose machines advance as one interleaved unit, targeted by
-    /// <c>WorldMutation.UpsertScreenLink</c> / <c>WorldMutation.RemoveScreenLink</c>.</summary>
-    Links,
-
     /// <summary>The document-authored grant rows (see <see cref="WorldDefinition.Grants"/>) — capability holds a world
     /// ships with, applied at boot alongside the permissive seed. Targeted by <c>WorldMutation.UpsertGrant</c> /
     /// <c>WorldMutation.RemoveGrant</c>.</summary>
@@ -249,6 +245,14 @@ public enum GrantSubjectKind : byte {
     /// <remarks>Distinct from <see cref="Region"/>, which addresses the same placement's volume facet for
     /// <see cref="WorldCapability.Observe"/> and confers no write authority.</remarks></summary>
     Placement,
+
+    /// <summary>A single authored <c>adjacencies</c> row, by its stable <see cref="WorldAdjacency.Name"/> value
+    /// (<see cref="GrantSubject.Id"/>) — <see cref="Region"/>'s twin for the federation seam: the
+    /// <c>linkEstablished</c>/<c>linkDropped</c> world event family's gating subject (see
+    /// <c>Server.WorldEventFeed</c>). Legitimate only for <see cref="WorldCapability.Observe"/>, untrusted
+    /// principals only, and — exactly like <see cref="Region"/> — never bound-checked against the document: an event
+    /// simply never fires for a name no adjacency row carries.</summary>
+    Adjacency,
 }
 /// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, a document section,
 /// or one named row of a section. A zero-alloc value key into the grant table's per-capability subject sets: row names
@@ -257,8 +261,8 @@ public enum GrantSubjectKind : byte {
 /// <param name="Kind">The subject flavor.</param>
 /// <param name="Value">The 0-based body/screen/seat index, or the <see cref="WorldSection"/> ordinal for a section;
 /// zero for every named and wildcard kind.</param>
-/// <param name="Id">The state, region, creation, or placement id for named subject kinds; <see langword="null"/>
-/// otherwise.</param>
+/// <param name="Id">The state, region, creation, placement, or adjacency id for named subject kinds;
+/// <see langword="null"/> otherwise.</param>
 public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, string? Id = null) {
     /// <summary>Gets the wildcard subject — the capability over its whole domain.</summary>
     public static GrantSubject All { get; } = new(
@@ -274,6 +278,13 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Value: 0
     );
 
+    /// <summary>Creates a single authored <c>adjacencies</c> row subject by its stable row name.</summary>
+    /// <param name="name">The adjacency row name (<see cref="WorldAdjacency.Name"/>).</param>
+    public static GrantSubject Adjacency(string name) => new(
+        Id: name,
+        Kind: GrantSubjectKind.Adjacency,
+        Value: 0
+    );
     /// <summary>Creates a single body by 0-based entity index.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public static GrantSubject Body(int index) => new(
@@ -289,7 +300,8 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
     );
     /// <summary>Describes a short stable label for console echoes — <c>all</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>,
     /// <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>, <c>composition</c>, <c>region:&lt;name&gt;</c>,
-    /// <c>seat:&lt;n&gt;</c>, <c>creation:&lt;id&gt;</c>, <c>placement:&lt;id&gt;</c>.</summary>
+    /// <c>seat:&lt;n&gt;</c>, <c>creation:&lt;id&gt;</c>, <c>placement:&lt;id&gt;</c>,
+    /// <c>adjacency:&lt;name&gt;</c>.</summary>
     /// <returns>The label.</returns>
     public string Describe() => Kind switch {
         GrantSubjectKind.All => "all",
@@ -302,6 +314,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         GrantSubjectKind.Seat => $"seat:{Value}",
         GrantSubjectKind.Creation => $"creation:{Id}",
         GrantSubjectKind.Placement => $"placement:{Id}",
+        GrantSubjectKind.Adjacency => $"adjacency:{Id}",
         _ => "?",
     };
     /// <summary>Creates a single <c>placements</c> row by its stable id.</summary>
@@ -346,7 +359,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
     );
     /// <summary>Parses a subject token (<c>all</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
     /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c> | <c>seat:&lt;n&gt;</c> |
-    /// <c>creation:&lt;id&gt;</c> | <c>placement:&lt;id&gt;</c>) — shared by
+    /// <c>creation:&lt;id&gt;</c> | <c>placement:&lt;id&gt;</c> | <c>adjacency:&lt;name&gt;</c>) — shared by
     /// <c>Puck.World.GrantSubjectJsonConverter</c>
     /// and <c>Puck.World.WorldGrantCommandModule</c>'s <c>world.grant</c>/<c>world.revoke</c> console verbs, so a
     /// document-sourced subject (a <c>WorldCapabilityRequest.Subject</c>, a <see cref="WorldGrant.Subject"/> row)
@@ -481,6 +494,18 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
             (token.Length > 10)
         ) {
             subject = Placement(id: token[10..].ToString());
+
+            return true;
+        }
+
+        if (
+            token.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "adjacency:"
+        ) &&
+            (token.Length > 10)
+        ) {
+            subject = Adjacency(name: token[10..].ToString());
 
             return true;
         }
@@ -691,12 +716,14 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
 /// refusals and same clear-on-re-grant rule as <see cref="KindMask"/>.</param>
 /// <param name="EventBudget">The per-tick event-cell allowance for an <see cref="WorldCapability.Observe"/> row over
 /// an event-bearing subject (<see cref="GrantSubjectKind.Body"/>, <see cref="GrantSubjectKind.Screen"/>,
-/// <see cref="GrantSubjectKind.Region"/>, or <see cref="GrantSubjectKind.Seat"/>) — a grant-row property alongside
+/// <see cref="GrantSubjectKind.Region"/>, <see cref="GrantSubjectKind.Seat"/>, or
+/// <see cref="GrantSubjectKind.Adjacency"/>) — a grant-row property alongside
 /// <see cref="Budget"/>, metering a different cost: <see cref="Budget"/> meters query dispatch (a guest asking), this
 /// meters event push volume (the host telling) — two separate meters, never one renamed. A row with no
 /// <see cref="EventBudget"/> still observes normally (a bare <c>observe body:&lt;n&gt;</c> keeps working exactly as
 /// before) but receives no events for that subject. Required (refused by name otherwise) on an Observe row over
-/// <see cref="GrantSubjectKind.Region"/>, <see cref="GrantSubjectKind.Seat"/>, or <see cref="GrantSubjectKind.Screen"/>,
+/// <see cref="GrantSubjectKind.Region"/>, <see cref="GrantSubjectKind.Seat"/>, <see cref="GrantSubjectKind.Screen"/>,
+/// or <see cref="GrantSubjectKind.Adjacency"/>,
 /// since those subject kinds carry no other live meaning — an event-bearing subject with no event budget would be
 /// accepted-and-inert, the identical rule <see cref="Budget"/>'s own <c>0</c>-refusal enforces. That requirement
 /// stacks with (never replaces) the pre-existing rule that every untrusted principal's Observe row also needs

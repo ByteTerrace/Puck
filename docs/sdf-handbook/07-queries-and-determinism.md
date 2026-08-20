@@ -58,7 +58,9 @@ remember to do it. `Capabilities` — a small struct of booleans
 (`HasHeightfield`/`HasBlocked`/`HasOccupancy`) — is meant to be checked once
 at startup, not per call: a provider that lacks a layer degrades gracefully
 (a raycast without an occupancy grid falls back to the flat heightfield)
-rather than throwing per query.
+rather than throwing per query. A layer counts as present only when it
+carries content — an allocated but entirely empty layer reports absent, so
+"present" really does mean "this one can answer."
 
 Every answer is tagged with a `WorldQueryConfidence`:
 
@@ -86,6 +88,22 @@ float-to-fixed conversion happens at the edges of authoring, never inside
 the per-tick query path. This provider is cheap, coarse by construction (a
 cell's answer is only as precise as the cell), and never sub-cell-exact —
 hence `Bounded`.
+
+Coarse is not the same as sloppy, and the difference is worth being precise
+about. `Bounded` means *quantized and conservatively dilated*, not
+*approximate*: a cast enumerates every cell its swept volume can reach and
+intersects the segment with that cell's box analytically, so "clear" means
+no cell in the artifact can be reached — never that no probe happened to
+land on one. Where the answer is deliberately loose it is loose in the safe
+direction: a swept sphere is tested against each cell box dilated by the
+radius on each axis, which contains the true rounded-rectangle sweep, so
+contact can be reported slightly early at a box corner but never late.
+`Overlap` uses the exact clamp-to-box test and is the tighter of the two.
+The two layers also resolve Y differently, because they carry different
+information: a blocked cell is authored as a footprint with no height and
+so blocks at every Y, while the heightfield blocks where the swept volume's
+lowest point reaches its authored ground. Both answer `LineOfSight`, which
+is why an artifact carrying only one layer still answers it.
 
 **`SdfFieldEvaluator`** is a second, independent interpreter of the *same*
 instruction stream the GPU's `mapCore` walks — not a codegen of the shader,

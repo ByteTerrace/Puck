@@ -36,7 +36,10 @@ shade it; this library never names a device, a window, or a shader.
 
 `SdfSolidPrimitive` is the closed vocabulary of solids that carry a unit-size
 law and a finite local bound; `SdfSolidGeometry` is the one place that decides
-what each one measures, so an authored scale of `(1,1,1)` is its unit size.
+what each one measures, so an authored scale of `(1,1,1)` is its unit size. It
+also answers whether a given scale emits at all —
+`SdfSolidGeometry.TryValidateScaledPrimitive` is the predicate a document
+validator asks before an authoring path reaches an emission that would throw.
 
 `SdfProgramBuilder` builds an `SdfProgram` as an ordered stream of point
 transforms, field operations, shapes, and materials — reset/translate/rotate,

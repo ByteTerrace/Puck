@@ -299,6 +299,20 @@ public sealed partial class WorldPopulation {
             m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
+        // A resumed connection rides the same PeerAdmitted event as a fresh one, and a replay reaches it against an
+        // entry the recorded disconnect left parked — unpark it here so the re-drive lands where the live resume
+        // did. Live, TryResumeParkedPeer already cleared the park (and bumped the revision), so this is idempotent
+        // there; the generation guard keeps a hypothetical different-generation admission at a parked index from
+        // silently unparking a stranger's body.
+        if (
+            entry.Parked &&
+            (entry.Generation == peer.Generation)
+        ) {
+            entry.Parked = false;
+            entry.ParkedUntilTick = null;
+            m_revision++;
+        }
+
         entry.IsAuthorityTransferred = peer.AuthorityTransferred;
         entry.PlacementId = peer.PlacementId;
         entry.CatalogRig = peer.CatalogRig;
@@ -319,8 +333,10 @@ public sealed partial class WorldPopulation {
     /// <see cref="Entry.Parked"/> instead, and <see cref="IsAdmittedPeer"/> (hence <see cref="IsHumanOccupied"/>)
     /// keeps reading <see langword="true"/> through the grace window since <see cref="Entry.IsRemoteHuman"/> is
     /// untouched. Only the BODY half is deferred: the disconnected generation's grant rows are released
-    /// unconditionally by the caller (<c>Server.WorldServer.ApplyServerEvent</c>), because a reconnect mints a fresh
-    /// generation rather than resuming onto this one — see that arm for the argument.</summary>
+    /// unconditionally by the caller (<c>Server.WorldServer.ApplyServerEvent</c>) — authority follows the
+    /// connection, and a verified-identity reconnect that resumes this body
+    /// (<see cref="TryResumeParkedPeer"/>) re-mints its admission templates through the ordinary
+    /// <c>PeerAdmitted</c> event; see that arm for the argument.</summary>
     /// <param name="peer">The recorded peer entry.</param>
     /// <param name="tick">The current tick — the basis a finite <see cref="Entry.ParkedUntilTick"/> is stamped
     /// from.</param>
@@ -527,12 +543,10 @@ public sealed partial class WorldPopulation {
     /// own remarks): drops the body, clears <see cref="Entry.Active"/> and (for a peer) <see cref="Entry.IsRemoteHuman"/>,
     /// exactly as an immediate disconnect already did before park-with-grace existed. Covers both local seats and
     /// peers in one pass — the same <c>Active &amp;&amp; Parked</c> gate discriminates a park regardless of
-    /// <see cref="PopulationKind"/>, so there is no separate seat/peer sweep. A reclaimed PEER generation is reported
-    /// through <paramref name="reclaimed"/> so any rows it still holds are revoked here; a live disconnect leaves
-    /// none (<c>Server.WorldServer.ApplyServerEvent</c> releases them at the event), so the one producer this sink
-    /// still serves is <see cref="Restore"/>, which parks a captured remote human alongside a grant table restored
-    /// with its rows. A local seat never held generation-scoped grants, so it reports nothing. Driven purely
-    /// by <paramref name="tick"/> — no wall clock, no
+    /// <see cref="PopulationKind"/>, so there is no separate seat/peer sweep. Grant rows are never this sweep's to
+    /// release: a peer generation's rows go at its <c>PeerDisconnected</c> event, and a restored parked generation's
+    /// go at <c>Server.WorldServer.RestoreCheckpoint</c> — by the time a park expires here, its principal holds
+    /// nothing. Driven purely by <paramref name="tick"/> — no wall clock, no
     /// randomness — so it is exactly as replay-deterministic as <c>Server.WorldServer.ReclaimExpiredEscrows</c>,
     /// which this mirrors and is swept beside every tick.
     /// <para><b>Revival re-stamp.</b> This method is per-tick and so never runs for a rate-0 world (the step loop
@@ -549,9 +563,7 @@ public sealed partial class WorldPopulation {
     /// teardown in the same pass — the visitor's window restarts at the revival tick, so it must survive at least
     /// one full sweep before it can expire.</para></summary>
     /// <param name="tick">The current (just-completed) simulation tick.</param>
-    /// <param name="reclaimed">Optional sink for each reclaimed peer generation — the caller revokes their grant rows
-    /// through the ordinary door at this same point.</param>
-    public void ReclaimExpiredParks(ulong tick, List<WorldPrincipal>? reclaimed = null) {
+    public void ReclaimExpiredParks(ulong tick) {
         var signedTick = unchecked((long)tick);
         var changed = false;
 
@@ -586,13 +598,6 @@ public sealed partial class WorldPopulation {
                 entry.PlacementId = null;
 
                 if (entry.IsRemoteHuman) {
-                    // Reported so the caller can revoke whatever rows this generation still holds. A live disconnect
-                    // already released its own at the event, so what this reaches is a park the grant table outlived:
-                    // Restore parks a captured remote human beside a grant table restored with its rows.
-                    reclaimed?.Add(item: WorldPrincipal.Peer(
-                        index: index,
-                        generation: entry.Generation
-                    ));
                     entry.IsRemoteHuman = false;
                     entry.AdmissionInstalledGrantTemplates = [];
                     entry.AdmissionRevokedKeys.Clear();

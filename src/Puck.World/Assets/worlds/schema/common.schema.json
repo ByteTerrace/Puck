@@ -352,6 +352,28 @@
       ],
       "additionalProperties": false
     },
+    "WorldMachineCable": {
+      "description": "One machine\u0027s cable-port declaration \u2014 the machine-tier home of cable linking. A cable is the SET of declared machine sources naming the same cable name, derived by MachineCableGroups; no port ever points at another port, so reciprocity holds by construction and a one-port cable is a validation refusal rather than a dangling half-pair.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
+          "type": "string"
+        },
+        "position": {
+          "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "position"
+      ],
+      "additionalProperties": false
+    },
     "WorldScreenSourceMachine": {
       "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
       "properties": {
@@ -372,6 +394,11 @@
             "string",
             "null"
           ]
+        },
+        "cable": {
+          "$ref": "#/$defs/WorldMachineCable",
+          "description": "This machine\u0027s cable port (see WorldMachineCable), or null for an unlinked machine. Legal only on a declared screens row\u0027s own source \u2014 a magazine entry or a placement face\u0027s source is refused one (validated), because a cable is a standing physical connection of the machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when null, so every machine source authored before cables existed round-trips unchanged.",
+          "default": null
         }
       },
       "required": [

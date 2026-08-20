@@ -284,7 +284,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     /// <inheritdoc/>
     public ReadOnlySpan<string> PassLabels => OverlayPassLabels;
     /// <inheritdoc/>
-    public string? PendingCapturePath => m_pendingCapturePath;
+    public string? PendingCapturePath => (m_pendingCapturePath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
 
     // Reads back this node's own render target (the overlay composited over the world — what the player actually
     // sees) and writes it as a PNG: a new, separately-fenced submit sequenced after the draw above on the same queue.
@@ -485,15 +485,16 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         floats[11] = m_builder.Glyphs.GlyphCount;  // the pack's total glyph count (ASCII + this boot's appended icons)
     }
     // Not drawing this frame: hand a pending capture down the chain (the shared decorator forwarding contract) so
-    // the readback lands on whatever actually produced the shown frame.
+    // the readback lands on whatever actually produced the shown frame. Keeping it armed when the inner cannot serve
+    // it is what stops a request from vanishing silently — PendingCapturePath keeps reporting it until some node
+    // writes the file, and a later frame this node does draw serves it here instead.
     private void ForwardPendingCapture() {
         if (m_pendingCapturePath is not { } path) {
             return;
         }
 
-        m_pendingCapturePath = null;
-
         if (m_inner is ICaptureRequestTarget target) {
+            m_pendingCapturePath = null;
             target.RequestCapture(path: path);
         }
     }

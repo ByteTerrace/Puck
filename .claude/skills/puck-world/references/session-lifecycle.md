@@ -9,7 +9,7 @@ or the `$parked:` reserved rule channel.
 
 - The two join/leave doors
 - Park-with-grace
-- Body-resume (local seats only)
+- Body-resume (seats and verified peers)
 - The `$parked:<bodyRef>` reserved rule channel
 - Read-back: `world.parked`
 - Authoring reconnect policy over the primitive
@@ -28,9 +28,9 @@ or the `$parked:` reserved rule channel.
   `DisconnectPeerConnection` → the ordered-domain `WorldServerEvent.PeerAdmitted`/
   `PeerDisconnected` → `ApplyServerEvent` → `WorldPopulation.ApplyPeerAdmitted`/
   `ApplyPeerDisconnected`. `Server.WorldTcpHost`'s Hello door is the one live
-  caller. **The Hello handshake carries NO persistent identity** — only the
-  wire-protocol key — which is exactly why peer body-resume (below) is not
-  built: there is nothing to match a reconnecting peer against.
+  caller, and the admission door's verified attestation identity
+  (`identityDomain`/`identitySubject`) is what a reconnecting peer is matched
+  against for body-resume (below).
 
 ## Park-with-grace (deliverable: reconnect primitives)
 
@@ -58,35 +58,42 @@ pre-park immediate-teardown behavior), the SAME call instead:
 `WorldServer.ReclaimExpiredEscrows` (same tick-driven, no-wall-clock,
 replay-deterministic shape `OwnershipEscrow.DeadlineTick` already established)
 — tears down every entry where `Active && Parked && tick >= ParkedUntilTick`:
-drops the body, clears `Active`/`Parked`/`IsRemoteHuman`, and reports the
-reclaimed PEER generation through its `reclaimed` sink. **Grant revocation rides
-the same deadline.** `ApplyPeerDisconnected` returns whether the entry parked;
-`ApplyServerEvent`'s `PeerDisconnected` case revokes `RevokedGrants` immediately
-only for the generations that did NOT park (an authored-zero grace, or no live
-match), and `WorldServer.Step` revokes each reclaimed generation's rows —
-through the ordinary `Revoke` door, off `m_grants.Rows` — right after the sweep.
-One connection-loss event, one timing rule: a reconnect inside the grace window
-resumes onto live authority instead of a re-mint. A local seat never held
-generation-scoped grants to revoke, so this has no seat-side counterpart. It
-stays replay-deterministic for the same reason the body half does: the deadline
-is a pure function of the reproduced disconnect tick and the authored
-`reconnectGraceSeconds`, so the revoke fires at the identical tick on a re-drive
-with no separate tape entry.
+drops the body, clears `Active`/`Parked`/`IsRemoteHuman`. It never touches the
+grant table — by the time a park expires, its generation holds nothing.
 
-Proved by `tests/Puck.World.Tests/ParkedGrantReleaseLawTests.cs` — a positive
-grace retains the rows across a step, an authored-zero grace releases them
-immediately, and a one-tick grace releases them once the sweep crosses it.
+**The park defers the BODY only; a peer's AUTHORITY follows the CONNECTION.**
+`ApplyServerEvent`'s `PeerDisconnected` case revokes `RevokedGrants`
+unconditionally, whether or not the entry parked: while disconnected nothing
+can exercise the rows, yet an `Exclusive` subject the generation reserved would
+refuse every live acquirer — for the whole grace window, and forever at rate 0,
+where the compiled grace is `Never` and `ReclaimExpiredParks` never runs at
+all. A verified-identity reconnect that resumes the parked body re-mints its
+admission templates through the ordinary `PeerAdmitted` event (below), so what
+does not survive the gap is exactly a live acquisition beyond the templates.
+The release rides `ApplyServerEvent`, the same door a replay re-drives the
+recorded event through, so a re-drive reproduces it at the identical tick with
+no separate tape entry. A checkpoint restore releases a restored park's rows
+the same way, at `WorldServer.RestoreCheckpoint` itself — a restored parked
+generation's connection did not survive the restore, so its rows and exclusive
+reservations go before the first step. A local seat's park leaves its rows
+entirely alone (the one participant whose table survives intact to a resume).
+
+Proved by `tests/Puck.World.Tests/ParkedGrantReleaseLawTests.cs`: a disconnect
+releases an exclusively-held subject to a rival immediately (positive grace,
+authored-zero grace, and rate 0 alike) while the body stays parked; a local
+seat's rows survive park and resume — and the same restore untouched; a
+restored park's rows go at the restore itself; a resume-shaped `PeerAdmitted`
+event unparks the retained body and re-mints the fresh connection's rows.
 
 Park state is **population state, not a mutation** — it carries no
-`WorldMutation` ordinal (the catalog is 64/64 full; this was never a candidate
-for a 65th kind) and is never journaled. It IS replay-deterministic on its own
+`WorldMutation` ordinal and is never journaled. It IS replay-deterministic on its own
 terms: `ParkedUntilTick` is a pure function of the tick the disconnect landed
 on (itself replay-reproduced) plus the document-authored `reconnectGraceSeconds`,
 so `ReclaimExpiredParks` fires identically on replay with no separate tape
 entry, the same way `ReclaimExpiredEscrows`'s mutation-shaped reclaim needs
 none.
 
-## Body-resume (local seats only)
+## Body-resume (seats and verified peers)
 
 A re-Join to a seat that `WorldPopulation.IsSeatParked` reports parked tries
 `TryResumeParkedSeat` BEFORE falling back to `ActivateSeat`'s fresh-spawn path.
@@ -103,11 +110,18 @@ is left completely untouched (so a later, correctly-identified re-Join can
 still recover it before grace expires) and `WorldServer.ApplySession`'s `Join`
 case refuses the request by name, distinct from an authority denial.
 
-**Peer body-resume is not implemented.** See the Hello-door gap above — there
-is no identity signal at peer-admission time to resume against, so a
-reconnecting peer's TCP connection always claims a fresh slot via
-`TryAdmitRemotePeer`'s `HighestFreeSlot`, which correctly SKIPS a still-parked
-slot (its `Active` stays true) without ever reusing it.
+**Peer body-resume matches on the VERIFIED admission identity.** An ordinary
+connect (never a transfer commit) whose door verdict's
+(`identityDomain`, `identitySubject`) pair matches a parked peer resumes that
+SAME retained body and generation in place
+(`WorldPopulation.TryResumeParkedPeer`, called from
+`WorldServer.TryAdmitVerifiedParticipant`), then re-dispatches the ordinary
+`PeerAdmitted` event carrying the fresh connection's minted admission
+templates — which is also what unparks and re-mints a replayed resume
+(`ApplyPeerAdmitted`'s generation-guarded unpark). An unverified or
+non-matching reconnect claims a fresh slot via `TryAdmitRemotePeer`'s
+`HighestFreeSlot`, which SKIPS a still-parked slot (its `Active` stays true)
+without ever reusing it.
 
 ## The `$parked:<bodyRef>` reserved rule channel
 

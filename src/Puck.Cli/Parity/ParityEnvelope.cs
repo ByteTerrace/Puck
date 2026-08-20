@@ -27,7 +27,7 @@ internal static class ParityEnvelope {
     public const double MaxMeanDelta = 0.35;
 
     /// <summary>Measures one frame pair. Alpha is ignored — composed screenshots are opaque and the channel carries
-    /// no scene content. The caller refuses mismatched extents before measuring; this method requires them equal.</summary>
+    /// no scene content. The caller refuses a mismatched pair before measuring; this method requires them equal.</summary>
     /// <param name="left">One decoded frame.</param>
     /// <param name="right">The other decoded frame, with the same extent.</param>
     /// <returns>The measured divergence and its envelope verdict.</returns>

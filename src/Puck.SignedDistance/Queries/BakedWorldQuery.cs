@@ -5,24 +5,44 @@ namespace Puck.SignedDistance.Queries;
 /// <summary>
 /// Pure fixed-point <see cref="IWorldQuery"/> over a baked <see cref="WorldQueryArtifact"/> — the query-namespace
 /// generalization of a flat walk grid, adding the heightfield layer and the cast/overlap verbs a walk grid never
-/// needed, and keeping its "out of bounds reads as not blocked" blocked-bitmap
-/// contract. Every answer carries <see cref="WorldQueryConfidence.Bounded"/> — a baked artifact is
-/// resolution-quantized by construction, never sub-cell-exact. Assumes every position lies in a single
-/// <see cref="FixedPosition"/> cell (cell 0,0,0 — true for anything room/arena scale); a caller spanning multiple
-/// 2^20-unit cells must normalize positions into the SAME cell before querying (this provider reads only
-/// <c>.Local</c>, matching every other room-scale fixed-point consumer).
+/// needed, and keeping its "out of bounds reads as not blocked" blocked-bitmap contract. Every answer carries
+/// <see cref="WorldQueryConfidence.Bounded"/> — a baked artifact is resolution-quantized by construction, never
+/// sub-cell-exact. Assumes every position lies in a single <see cref="FixedPosition"/> cell (cell 0,0,0 — true for
+/// anything room/arena scale); a caller spanning multiple 2^20-unit cells must normalize positions into the SAME
+/// cell before querying — this provider reads only <c>.Local</c>, unlike <see cref="SdfFieldEvaluator"/>, which
+/// rebases hierarchical cells itself.
+/// <para>
+/// <b>Conservative by construction.</b> No verb samples the segment at discrete points. A cast enumerates every cell
+/// whose column the swept volume can reach and intersects the segment with that cell's box analytically, so an
+/// answer of "clear" means no cell in the artifact can be reached, not that no probe happened to land on one. Entry
+/// parameters round down and exit parameters round up, so fixed-point truncation can only widen an interval, never
+/// narrow it past the truth.
+/// </para>
+/// <para>
+/// <b>Where the answer is deliberately loose.</b> A swept sphere is tested against each cell box dilated by the
+/// radius on each axis — an axis-aligned dilation that contains the true rounded-rectangle sweep, so contact can be
+/// reported up to <c>radius * (sqrt(2) - 1)</c> early at a box corner. <see cref="Overlap"/> uses the exact
+/// clamp-to-box Euclidean test instead, so it is the tighter of the two; a cast never reports clear where
+/// <see cref="Overlap"/> reports blocked.
+/// </para>
+/// <para>
+/// <b>The 2.5D meaning of Y.</b> A blocked cell comes from a footprint with no height
+/// (<see cref="WorldQueryBlockerInput"/>) and therefore blocks at every Y — an infinite vertical column. The height
+/// layer blocks where the swept volume's lowest point reaches at or below the cell's authored ground. Both layers
+/// answer every cast and <see cref="LineOfSight"/>, which is the fallback <see cref="QueryCapabilities"/> describes:
+/// an artifact carrying only one layer still answers with it.
+/// </para>
 /// </summary>
 public sealed class BakedWorldQuery : IWorldQuery {
     private readonly WorldQueryArtifact m_artifact;
-    private readonly FixedQ4816 m_cellSize;
 
     /// <summary>Wraps a baked artifact.</summary>
     /// <param name="artifact">The baked artifact to query.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="artifact"/> is <see langword="null"/>.</exception>
     public BakedWorldQuery(WorldQueryArtifact artifact) {
         ArgumentNullException.ThrowIfNull(argument: artifact);
 
         m_artifact = artifact;
-        m_cellSize = FixedQ4816.FromRawBits(value: artifact.CellSizeRaw);
     }
 
     /// <inheritdoc/>
@@ -32,17 +52,134 @@ public sealed class BakedWorldQuery : IWorldQuery {
         HasOccupancy: false
     );
 
-    private bool AnyBlockedWithinRadius(FixedQ4816 x, FixedQ4816 z, FixedQ4816 radius) {
-        if (!m_artifact.HasBlocked) {
-            return false;
+    // Saturating raw addition: a sum overflows exactly when both addends share a sign the sum does not.
+    private static long AddRawSaturating(long left, long right) {
+        var sum = unchecked((left + right));
+
+        return ((((left ^ sum) & (right ^ sum)) < 0L)
+            ? ((left < 0L) ? long.MinValue : long.MaxValue)
+            : sum
+        );
+    }
+    private static int ClampIndex(Int128 value, int maximum) =>
+        ((value < Int128.Zero)
+            ? 0
+            : ((value > maximum)
+                ? maximum
+                : ((int)value)
+            )
+        );
+    private static long ClampToLong(Int128 value) =>
+        ((value < long.MinValue)
+            ? long.MinValue
+            : ((value > long.MaxValue)
+                ? long.MaxValue
+                : ((long)value)
+            )
+        );
+    // Directed Q48.16 division: the floor (roundUp false) or the ceiling (roundUp true) of numerator/denominator,
+    // exact whenever the quotient is exact, saturating at the carrier. Every slab entry takes the floor and every
+    // slab exit the ceiling, which is what keeps truncation from closing an interval the segment really enters.
+    private static long DivideRawDirected(long numeratorRaw, long denominatorRaw, bool roundUp) {
+        var highBits = (numeratorRaw >> 47);
+
+        // A numerator narrower than 48 signed bits — every coordinate difference a room-scale grid can produce —
+        // shifts into a long without loss, and a 64-bit divide is an order of magnitude cheaper than a 128-bit one.
+        if (
+            (highBits == 0L) ||
+            (highBits == -1L)
+        ) {
+            var narrowNumerator = (numeratorRaw << 16);
+            var narrowQuotient = (narrowNumerator / denominatorRaw);
+            var narrowRemainder = (narrowNumerator % denominatorRaw);
+
+            if (narrowRemainder != 0L) {
+                var narrowPositive = ((narrowRemainder > 0L) == (denominatorRaw > 0L));
+
+                if (roundUp) {
+                    if (narrowPositive) {
+                        narrowQuotient++;
+                    }
+                } else if (!narrowPositive) {
+                    narrowQuotient--;
+                }
+            }
+
+            return narrowQuotient;
         }
 
-        if (!TryCellIndices(
-            column: out var centerColumn,
-            row: out var centerRow,
-            x: x,
-            z: z
-        )) {
+        var numerator = ((((Int128)numeratorRaw)) << 16);
+        var denominator = ((Int128)denominatorRaw);
+        var quotient = (numerator / denominator);
+        var remainder = (numerator % denominator);
+
+        if (remainder != Int128.Zero) {
+            var positive = ((numerator > Int128.Zero) == (denominatorRaw > 0L));
+
+            if (roundUp) {
+                if (positive) {
+                    quotient += Int128.One;
+                }
+            } else if (!positive) {
+                quotient -= Int128.One;
+            }
+        }
+
+        return ClampToLong(value: quotient);
+    }
+    // Intersects the sweep with the axis slab [lowRaw, highRaw], narrowing [enterRaw, exitRaw] in place. Returns
+    // false once the running interval is empty, which is the "this cell cannot be reached" answer.
+    private static bool NarrowSlab(long originRaw, long directionRaw, long lowRaw, long highRaw, ref long enterRaw, ref long exitRaw) {
+        if (directionRaw == 0L) {
+            return (
+                (originRaw >= lowRaw) &&
+                (originRaw <= highRaw)
+            );
+        }
+
+        var nearBoundRaw = ((directionRaw > 0L) ? lowRaw : highRaw);
+        var farBoundRaw = ((directionRaw > 0L) ? highRaw : lowRaw);
+        var nearRaw = DivideRawDirected(
+            denominatorRaw: directionRaw,
+            numeratorRaw: SubtractRawSaturating(
+                left: nearBoundRaw,
+                right: originRaw
+            ),
+            roundUp: false
+        );
+        var farRaw = DivideRawDirected(
+            denominatorRaw: directionRaw,
+            numeratorRaw: SubtractRawSaturating(
+                left: farBoundRaw,
+                right: originRaw
+            ),
+            roundUp: true
+        );
+
+        if (nearRaw > enterRaw) {
+            enterRaw = nearRaw;
+        }
+
+        if (farRaw < exitRaw) {
+            exitRaw = farRaw;
+        }
+
+        return (enterRaw <= exitRaw);
+    }
+    private static long ScaleRawSaturating(long valueRaw, long scaleRaw) =>
+        ClampToLong(value: (((((Int128)valueRaw)) * scaleRaw) >> 16));
+    // Saturating raw subtraction: a difference overflows exactly when the operands differ in sign and the result
+    // takes the subtrahend's.
+    private static long SubtractRawSaturating(long left, long right) {
+        var difference = unchecked((left - right));
+
+        return ((((left ^ right) & (left ^ difference)) < 0L)
+            ? ((left < 0L) ? long.MinValue : long.MaxValue)
+            : difference
+        );
+    }
+    private bool AnyBlockedWithinRadius(FixedQ4816 x, FixedQ4816 z, FixedQ4816 radius) {
+        if (!m_artifact.HasBlocked) {
             return false;
         }
 
@@ -50,54 +187,64 @@ public sealed class BakedWorldQuery : IWorldQuery {
             val1: 0L,
             val2: radius.Value
         );
-        var cellsRadius = ((int)Math.Min(
-            val1: Math.Max(
-                val1: m_artifact.Width,
-                val2: m_artifact.Height
+
+        // The disc is clamped to the artifact rather than rejected when its center falls outside: an in-bounds cell
+        // the disc provably covers is blocked whether or not the center itself is on the grid.
+        if (!TryColumnSpan(
+            first: out var firstColumn,
+            highRaw: AddRawSaturating(
+                left: x.Value,
+                right: radiusRaw
             ),
-            val2: ((radiusRaw / m_artifact.CellSizeRaw) + 1L)
-        ));
-        var radiusSquared = (((Int128)radiusRaw) * radiusRaw);
+            last: out var lastColumn,
+            lowRaw: SubtractRawSaturating(
+                left: x.Value,
+                right: radiusRaw
+            )
+        )) {
+            return false;
+        }
 
-        for (var row = Math.Max(
-            val1: 0,
-            val2: (centerRow - cellsRadius)
-        ); (row <= Math.Min(
-            val1: (m_artifact.Height - 1),
-            val2: (centerRow + cellsRadius)
-        )); row++) {
-            for (var column = Math.Max(
-                val1: 0,
-                val2: (centerColumn - cellsRadius)
-            ); (column <= Math.Min(
-                val1: (m_artifact.Width - 1),
-                val2: (centerColumn + cellsRadius)
-            )); column++) {
-                var cellIndex = ((row * m_artifact.Width) + column);
+        if (!TryRowSpan(
+            first: out var firstRow,
+            highRaw: AddRawSaturating(
+                left: z.Value,
+                right: radiusRaw
+            ),
+            last: out var lastRow,
+            lowRaw: SubtractRawSaturating(
+                left: z.Value,
+                right: radiusRaw
+            )
+        )) {
+            return false;
+        }
 
-                if (!IsBlockedCell(cellIndex: cellIndex)) {
+        var radiusSquared = ((((Int128)radiusRaw)) * radiusRaw);
+
+        for (var row = firstRow; (row <= lastRow); row++) {
+            var cellMinZRaw = RowMinZRaw(row: row);
+            var closestZRaw = Math.Clamp(
+                max: (cellMinZRaw + m_artifact.CellSizeRaw),
+                min: cellMinZRaw,
+                value: z.Value
+            );
+            var dz = ((((Int128)z.Value)) - closestZRaw);
+
+            for (var column = firstColumn; (column <= lastColumn); column++) {
+                if (!m_artifact.IsBlockedCell(cellIndex: ((row * m_artifact.Width) + column))) {
                     continue;
                 }
 
-                var cellMinXRaw = (m_artifact.OriginXRaw + (((long)column) * m_artifact.CellSizeRaw));
-                var cellMinZRaw = (m_artifact.OriginZRaw + (((long)row) * m_artifact.CellSizeRaw));
-                var cellMaxXRaw = (cellMinXRaw + m_artifact.CellSizeRaw);
-                var cellMaxZRaw = (cellMinZRaw + m_artifact.CellSizeRaw);
+                var cellMinXRaw = ColumnMinXRaw(column: column);
                 var closestXRaw = Math.Clamp(
-                    value: x.Value,
+                    max: (cellMinXRaw + m_artifact.CellSizeRaw),
                     min: cellMinXRaw,
-                    max: cellMaxXRaw
+                    value: x.Value
                 );
-                var closestZRaw = Math.Clamp(
-                    value: z.Value,
-                    min: cellMinZRaw,
-                    max: cellMaxZRaw
-                );
-                var dx = (((Int128)x.Value) - closestXRaw);
-                var dz = (((Int128)z.Value) - closestZRaw);
-                var distanceSquared = ((dx * dx) + (dz * dz));
+                var dx = ((((Int128)x.Value)) - closestXRaw);
 
-                if (distanceSquared <= radiusSquared) {
+                if (((dx * dx) + (dz * dz)) <= radiusSquared) {
                     return true;
                 }
             }
@@ -105,19 +252,14 @@ public sealed class BakedWorldQuery : IWorldQuery {
 
         return false;
     }
-    private bool IsBlockedCell(int cellIndex) {
-        var word = (cellIndex >> 6);
-
-        return (
-            (word >= 0) &&
-            (word < m_artifact.Blocked.Length) &&
-            ((m_artifact.Blocked[word] & (1UL << (cellIndex & 63))) != 0UL)
+    private long ColumnMinXRaw(int column) =>
+        AddRawSaturating(
+            left: m_artifact.OriginXRaw,
+            right: (((long)column) * m_artifact.CellSizeRaw)
         );
-    }
-    // A single stepped march shared by Raycast (radius == 0) and SphereCast (radius > 0): steps in CELL-SIZE
-    // increments along the normalized direction, testing the blocked bitmap (padded by radius for the sphere case)
-    // and the heightfield (a sample below its cell's authored ground counts as a hit on the ground plane). Integer
-    // step COUNT, fixed-point step math throughout — deterministic, no trig.
+    // Enumerates the cells the swept volume can reach, column by column in sweep order, and keeps the nearest
+    // contact. A column contributes nothing beyond the running best once the sweep cannot enter it earlier than that
+    // best, which is the whole early-out: no cell is visited twice and no cell outside the swept band is visited.
     private bool March(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, FixedQ4816 radius, out RayHit hit) {
         hit = default;
 
@@ -130,87 +272,256 @@ public sealed class BakedWorldQuery : IWorldQuery {
             return false;
         }
 
-        var steps = (((int)(((double)maxDist) / ((double)m_cellSize))) + 1);
-        var position = origin.Local;
-        var traveled = FixedQ4816.Zero;
-
-        for (var i = 0; (i <= steps); i++) {
-            var blocked = ((radius > FixedQ4816.Zero)
-                ? AnyBlockedWithinRadius(
-                    x: position.X,
-                    z: position.Z,
-                    radius: radius
-                )
-                : (TryCellIndex(
-                    x: position.X,
-                    z: position.Z,
-                    cellIndex: out var cellIndex
-                ) && IsBlockedCell(cellIndex: cellIndex))
-            );
-            var groundHit = (m_artifact.HasHeightfield && TryCellIndex(
-                x: position.X,
-                z: position.Z,
-                cellIndex: out var groundCell
-            ) && (m_artifact.HeightRaw[groundCell] != WorldQueryArtifact.NoHeightSentinel) && (position.Y <= FixedQ4816.FromRawBits(value: m_artifact.HeightRaw[groundCell])));
-
-            if (
-                blocked ||
-                groundHit
-            ) {
-                hit = new RayHit(
-                    Confidence: WorldQueryConfidence.Bounded,
-                    Distance: traveled,
-                    Material: -1,
-                    Normal: new FixedVector3(
-                        X: FixedQ4816.Zero,
-                        Y: FixedQ4816.One,
-                        Z: FixedQ4816.Zero
-                    ),
-                    Point: FixedPosition.FromLocal(local: position)
-                );
-
-                return true;
-            }
-
-            if (traveled >= maxDist) {
-                break;
-            }
-
-            var stepDistance = FixedQ4816.Min(
-                x: m_cellSize,
-                y: (maxDist - traveled)
-            );
-
-            position += (direction * stepDistance);
-            traveled += stepDistance;
-        }
-
-        return false;
-    }
-    private bool TryCellIndex(FixedQ4816 x, FixedQ4816 z, out int cellIndex) {
-        if (!TryCellIndices(
-            column: out var column,
-            row: out var row,
-            x: x,
-            z: z
-        )) {
-            cellIndex = -1;
-
+        if (
+            !m_artifact.HasBlocked &&
+            !m_artifact.HasHeightfield
+        ) {
             return false;
         }
 
-        cellIndex = ((row * m_artifact.Width) + column);
+        var sweep = new Sweep(
+            direction: direction,
+            maxDistanceRaw: maxDist.Value,
+            origin: origin.Local,
+            radiusRaw: Math.Max(
+                val1: 0L,
+                val2: radius.Value
+            )
+        );
+
+        if (!TryColumnSpan(
+            first: out var firstColumn,
+            highRaw: sweep.MaxXRaw,
+            last: out var lastColumn,
+            lowRaw: sweep.MinXRaw
+        )) {
+            return false;
+        }
+
+        var contact = default(Contact);
+        var step = ((sweep.DirectionXRaw < 0L) ? -1 : 1);
+
+        for (var column = ((step < 0) ? lastColumn : firstColumn); ((column >= firstColumn) && (column <= lastColumn)); column += step) {
+            if (!TryColumnWindow(
+                column: column,
+                enterRaw: out var windowEnterRaw,
+                exitRaw: out var windowExitRaw,
+                sweep: sweep
+            )) {
+                continue;
+            }
+
+            if (
+                contact.Found &&
+                (
+                    (contact.DistanceRaw <= 0L) ||
+                    (
+                        (sweep.DirectionXRaw != 0L) &&
+                        (windowEnterRaw > contact.DistanceRaw)
+                    )
+                )
+            ) {
+                break;
+            }
+
+            ScanColumn(
+                column: column,
+                contact: ref contact,
+                sweep: sweep,
+                windowEnterRaw: windowEnterRaw,
+                windowExitRaw: windowExitRaw
+            );
+        }
+
+        if (!contact.Found) {
+            return false;
+        }
+
+        hit = BuildHit(
+            contact: contact,
+            sweep: sweep
+        );
 
         return true;
     }
-    private bool TryCellIndices(FixedQ4816 x, FixedQ4816 z, out int column, out int row) {
-        column = -1;
-        row = -1;
+    private RayHit BuildHit(in Contact contact, in Sweep sweep) {
+        var cellMinXRaw = ColumnMinXRaw(column: contact.Column);
+        var cellMinZRaw = RowMinZRaw(row: contact.Row);
+        var centerXRaw = AddRawSaturating(
+            left: sweep.OriginXRaw,
+            right: ScaleRawSaturating(
+                scaleRaw: contact.DistanceRaw,
+                valueRaw: sweep.DirectionXRaw
+            )
+        );
+        var centerYRaw = AddRawSaturating(
+            left: sweep.OriginYRaw,
+            right: ScaleRawSaturating(
+                scaleRaw: contact.DistanceRaw,
+                valueRaw: sweep.DirectionYRaw
+            )
+        );
+        var centerZRaw = AddRawSaturating(
+            left: sweep.OriginZRaw,
+            right: ScaleRawSaturating(
+                scaleRaw: contact.DistanceRaw,
+                valueRaw: sweep.DirectionZRaw
+            )
+        );
+
+        // The contact point is the touched geometry's own surface, not the sweeping center: the center clamped onto
+        // the cell box for the XZ pair, and the authored ground height for a heightfield contact.
+        return new RayHit(
+            Confidence: WorldQueryConfidence.Bounded,
+            Distance: FixedQ4816.FromRawBits(value: contact.DistanceRaw),
+            Material: -1,
+            Normal: new FixedVector3(
+                X: FixedQ4816.Zero,
+                Y: FixedQ4816.One,
+                Z: FixedQ4816.Zero
+            ),
+            Point: FixedPosition.FromLocal(local: new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: Math.Clamp(
+                    max: (cellMinXRaw + m_artifact.CellSizeRaw),
+                    min: cellMinXRaw,
+                    value: centerXRaw
+                )),
+                Y: FixedQ4816.FromRawBits(value: (contact.Ground ? contact.HeightRaw : centerYRaw)),
+                Z: FixedQ4816.FromRawBits(value: Math.Clamp(
+                    max: (cellMinZRaw + m_artifact.CellSizeRaw),
+                    min: cellMinZRaw,
+                    value: centerZRaw
+                ))
+            ))
+        );
+    }
+    private long RowMinZRaw(int row) =>
+        AddRawSaturating(
+            left: m_artifact.OriginZRaw,
+            right: (((long)row) * m_artifact.CellSizeRaw)
+        );
+    private void ScanColumn(in Sweep sweep, int column, long windowEnterRaw, long windowExitRaw, ref Contact contact) {
+        // Both coordinates are linear in the sweep parameter, so the Z the sweep can reach inside this column is
+        // bounded by its values at the window's two ends, dilated by the radius. One tick of slack absorbs the
+        // rounding of the two scaled endpoints.
+        var windowMinZRaw = AddRawSaturating(
+            left: sweep.OriginZRaw,
+            right: ScaleRawSaturating(
+                scaleRaw: windowEnterRaw,
+                valueRaw: sweep.DirectionZRaw
+            )
+        );
+        var windowMaxZRaw = AddRawSaturating(
+            left: sweep.OriginZRaw,
+            right: ScaleRawSaturating(
+                scaleRaw: windowExitRaw,
+                valueRaw: sweep.DirectionZRaw
+            )
+        );
+
+        if (windowMinZRaw > windowMaxZRaw) {
+            (windowMinZRaw, windowMaxZRaw) = (windowMaxZRaw, windowMinZRaw);
+        }
+
+        if (!TryRowSpan(
+            first: out var firstRow,
+            highRaw: AddRawSaturating(
+                left: windowMaxZRaw,
+                right: (sweep.RadiusRaw + 1L)
+            ),
+            last: out var lastRow,
+            lowRaw: SubtractRawSaturating(
+                left: windowMinZRaw,
+                right: (sweep.RadiusRaw + 1L)
+            )
+        )) {
+            return;
+        }
+
+        for (var row = firstRow; (row <= lastRow); row++) {
+            var cellIndex = ((row * m_artifact.Width) + column);
+            var blocked = m_artifact.IsBlockedCell(cellIndex: cellIndex);
+            var grounded = m_artifact.TryHeightRaw(
+                cellIndex: cellIndex,
+                heightRaw: out var heightRaw
+            );
+
+            if (
+                !blocked &&
+                !grounded
+            ) {
+                continue;
+            }
+
+            var cellMinZRaw = RowMinZRaw(row: row);
+            // The column window IS this cell's dilated X slab — every cell in the column shares it — so the X
+            // narrowing is already done and only the Z and Y axes are left.
+            var enterRaw = windowEnterRaw;
+            var exitRaw = windowExitRaw;
+
+            if (!NarrowSlab(
+                directionRaw: sweep.DirectionZRaw,
+                enterRaw: ref enterRaw,
+                exitRaw: ref exitRaw,
+                highRaw: AddRawSaturating(
+                    left: (cellMinZRaw + m_artifact.CellSizeRaw),
+                    right: sweep.RadiusRaw
+                ),
+                lowRaw: SubtractRawSaturating(
+                    left: cellMinZRaw,
+                    right: sweep.RadiusRaw
+                ),
+                originRaw: sweep.OriginZRaw
+            )) {
+                continue;
+            }
+
+            if (blocked) {
+                contact.Consider(
+                    column: column,
+                    distanceRaw: enterRaw,
+                    ground: false,
+                    heightRaw: 0L,
+                    row: row
+                );
+            }
+
+            if (!grounded) {
+                continue;
+            }
+
+            var groundEnterRaw = enterRaw;
+            var groundExitRaw = exitRaw;
+
+            // Ground contact is the same slab narrowing against the half-space "the swept volume's lowest point is
+            // at or below the authored height", so a sphere grounds one radius above the terrain, not centered in it.
+            if (NarrowSlab(
+                directionRaw: sweep.DirectionYRaw,
+                enterRaw: ref groundEnterRaw,
+                exitRaw: ref groundExitRaw,
+                highRaw: AddRawSaturating(
+                    left: heightRaw,
+                    right: sweep.RadiusRaw
+                ),
+                lowRaw: long.MinValue,
+                originRaw: sweep.OriginYRaw
+            )) {
+                contact.Consider(
+                    column: column,
+                    distanceRaw: groundEnterRaw,
+                    ground: true,
+                    heightRaw: heightRaw,
+                    row: row
+                );
+            }
+        }
+    }
+    private bool TryCellIndex(FixedQ4816 x, FixedQ4816 z, out int cellIndex) {
+        cellIndex = -1;
 
         if (
             (m_artifact.Width <= 0) ||
-            (m_artifact.Height <= 0) ||
-            (m_artifact.CellSizeRaw <= 0L)
+            (m_artifact.Height <= 0)
         ) {
             return false;
         }
@@ -227,74 +538,130 @@ public sealed class BakedWorldQuery : IWorldQuery {
             return false;
         }
 
-        column = ((int)columnLong);
-        row = ((int)rowLong);
+        cellIndex = ((((int)rowLong) * m_artifact.Width) + ((int)columnLong));
 
         return true;
     }
-
-    /// <inheritdoc/>
-    public bool LineOfSight(FixedPosition from, FixedPosition to) {
-        if (!m_artifact.HasBlocked) {
-            return true;
-        }
-
-        var delta = (to.Local - from.Local);
-        var distance = new FixedVector3(
-            X: delta.X,
-            Y: FixedQ4816.Zero,
-            Z: delta.Z
-        ).Length;
-
-        if (distance <= FixedQ4816.Zero) {
-            return true;
-        }
-
-        var steps = Math.Max(
-            val1: 1,
-            val2: (((int)(((double)distance) / ((double)m_cellSize))) + 1)
+    private bool TryColumnSpan(long lowRaw, long highRaw, out int first, out int last) =>
+        TryIndexSpan(
+            axisCells: m_artifact.Width,
+            first: out first,
+            highRaw: highRaw,
+            last: out last,
+            lowRaw: lowRaw,
+            originRaw: m_artifact.OriginXRaw
         );
-        var stepInverse = (FixedQ4816.One / FixedQ4816.FromInteger(value: steps));
+    private bool TryColumnWindow(in Sweep sweep, int column, out long enterRaw, out long exitRaw) {
+        var cellMinXRaw = ColumnMinXRaw(column: column);
 
-        for (var step = 1; (step < steps); step++) {
-            var t = (stepInverse * FixedQ4816.FromInteger(value: step));
-            var x = (from.Local.X + (delta.X * t));
-            var z = (from.Local.Z + (delta.Z * t));
+        enterRaw = 0L;
+        exitRaw = sweep.MaxDistanceRaw;
 
-            if (
-                TryCellIndex(
-                cellIndex: out var cellIndex,
-                x: x,
-                z: z
-            ) &&
-                IsBlockedCell(cellIndex: cellIndex)
-            ) {
-                return false;
-            }
-        }
-
-        return true;
+        return NarrowSlab(
+            directionRaw: sweep.DirectionXRaw,
+            enterRaw: ref enterRaw,
+            exitRaw: ref exitRaw,
+            highRaw: AddRawSaturating(
+                left: (cellMinXRaw + m_artifact.CellSizeRaw),
+                right: sweep.RadiusRaw
+            ),
+            lowRaw: SubtractRawSaturating(
+                left: cellMinXRaw,
+                right: sweep.RadiusRaw
+            ),
+            originRaw: sweep.OriginXRaw
+        );
     }
-    /// <inheritdoc/>
-    public bool Overlap(FixedPosition center, FixedQ4816 radius) {
-        if (!m_artifact.HasBlocked) {
+    private bool TryIndexSpan(long originRaw, int axisCells, long lowRaw, long highRaw, out int first, out int last) {
+        first = 0;
+        last = -1;
+
+        if (axisCells <= 0) {
             return false;
         }
 
-        return AnyBlockedWithinRadius(
-            x: center.Local.X,
-            z: center.Local.Z,
-            radius: radius
+        var cellSize = ((Int128)m_artifact.CellSizeRaw);
+        var lowIndex = ((((Int128)lowRaw) - originRaw).FloorDivide(divisor: cellSize));
+        var highIndex = ((((Int128)highRaw) - originRaw).FloorDivide(divisor: cellSize));
+
+        if (
+            (highIndex < Int128.Zero) ||
+            (lowIndex > (axisCells - 1))
+        ) {
+            return false;
+        }
+
+        first = ClampIndex(
+            maximum: (axisCells - 1),
+            value: lowIndex
+        );
+        last = ClampIndex(
+            maximum: (axisCells - 1),
+            value: highIndex
+        );
+
+        return true;
+    }
+    private bool TryRowSpan(long lowRaw, long highRaw, out int first, out int last) =>
+        TryIndexSpan(
+            axisCells: m_artifact.Height,
+            first: out first,
+            highRaw: highRaw,
+            last: out last,
+            lowRaw: lowRaw,
+            originRaw: m_artifact.OriginZRaw
+        );
+
+    /// <inheritdoc/>
+    public bool LineOfSight(FixedPosition from, FixedPosition to) {
+        var delta = (to.Local - from.Local);
+        var reach = delta.Length;
+
+        if (reach <= FixedQ4816.Zero) {
+            // A degenerate segment is exactly the question "is this one point reachable", which the shortest
+            // possible cast answers without a second code path.
+            return !March(
+                dir: new FixedVector3(
+                    X: FixedQ4816.Zero,
+                    Y: FixedQ4816.One,
+                    Z: FixedQ4816.Zero
+                ),
+                hit: out _,
+                maxDist: FixedQ4816.Epsilon,
+                origin: from,
+                radius: FixedQ4816.Zero
+            );
+        }
+
+        // The march runs along a Q48.16 unit vector whose per-component quantization walks the far endpoint off by
+        // roughly one tick per world unit of reach. Extending the reach by four times that bound keeps the requested
+        // endpoint inside the marched interval, so a blocker sitting on it still blocks.
+        return !March(
+            dir: delta,
+            hit: out _,
+            maxDist: FixedQ4816.FromRawBits(value: AddRawSaturating(
+                left: reach.Value,
+                right: ((reach.Value >> 14) + 64L)
+            )),
+            origin: from,
+            radius: FixedQ4816.Zero
         );
     }
     /// <inheritdoc/>
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) =>
+        AnyBlockedWithinRadius(
+            radius: radius,
+            x: center.Local.X,
+            z: center.Local.Z
+        );
+    /// <inheritdoc/>
     public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
         March(
-            origin: origin,
             dir: dir,
+            hit: out hit,
             maxDist: maxDist,
-            radius: FixedQ4816.Zero,
-            hit: out hit
+            origin: origin,
+            radius: FixedQ4816.Zero
         );
     /// <inheritdoc/>
     public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
@@ -312,27 +679,23 @@ public sealed class BakedWorldQuery : IWorldQuery {
         if (
             !m_artifact.HasHeightfield ||
             !TryCellIndex(
-            x: position.Local.X,
-            z: position.Local.Z,
-            cellIndex: out var cellIndex
-        )
+                cellIndex: out var cellIndex,
+                x: position.Local.X,
+                z: position.Local.Z
+            ) ||
+            !m_artifact.TryHeightRaw(
+                cellIndex: cellIndex,
+                heightRaw: out var raw
+            )
         ) {
             return false;
         }
 
-        var raw = m_artifact.HeightRaw[cellIndex];
-
-        if (raw == WorldQueryArtifact.NoHeightSentinel) {
-            return false;
-        }
-
         var candidate = FixedQ4816.FromRawBits(value: raw);
-        var minY = (position.Local.Y - probeDown);
-        var maxY = (position.Local.Y + probeUp);
 
         if (
-            (candidate < minY) ||
-            (candidate > maxY)
+            (candidate < (position.Local.Y - probeDown)) ||
+            (candidate > (position.Local.Y + probeUp))
         ) {
             return false;
         }
@@ -340,5 +703,79 @@ public sealed class BakedWorldQuery : IWorldQuery {
         groundY = candidate;
 
         return true;
+    }
+
+    // The nearest contact found so far. Ties keep the first considered, which fixes an order the column/row walk
+    // already fixes, so the answer does not depend on how the band happened to be enumerated.
+    private struct Contact {
+        public int Column;
+        public long DistanceRaw;
+        public bool Found;
+        public bool Ground;
+        public long HeightRaw;
+        public int Row;
+
+        public void Consider(long distanceRaw, int column, int row, bool ground, long heightRaw) {
+            if (
+                Found &&
+                (distanceRaw >= DistanceRaw)
+            ) {
+                return;
+            }
+
+            Column = column;
+            DistanceRaw = distanceRaw;
+            Found = true;
+            Ground = ground;
+            HeightRaw = heightRaw;
+            Row = row;
+        }
+    }
+    // One swept query in raw Q48.16: an origin, a unit direction, a sweep length, and the swept sphere's radius
+    // (zero for a ray). MinXRaw/MaxXRaw bound the X the swept volume can reach over the whole sweep.
+    private readonly struct Sweep {
+        public readonly long DirectionXRaw;
+        public readonly long DirectionYRaw;
+        public readonly long DirectionZRaw;
+        public readonly long MaxDistanceRaw;
+        public readonly long MaxXRaw;
+        public readonly long MinXRaw;
+        public readonly long OriginXRaw;
+        public readonly long OriginYRaw;
+        public readonly long OriginZRaw;
+        public readonly long RadiusRaw;
+
+        public Sweep(FixedVector3 origin, FixedVector3 direction, long maxDistanceRaw, long radiusRaw) {
+            var endXRaw = AddRawSaturating(
+                left: origin.X.Value,
+                right: ScaleRawSaturating(
+                    scaleRaw: maxDistanceRaw,
+                    valueRaw: direction.X.Value
+                )
+            );
+
+            DirectionXRaw = direction.X.Value;
+            DirectionYRaw = direction.Y.Value;
+            DirectionZRaw = direction.Z.Value;
+            MaxDistanceRaw = maxDistanceRaw;
+            MaxXRaw = AddRawSaturating(
+                left: Math.Max(
+                    val1: origin.X.Value,
+                    val2: endXRaw
+                ),
+                right: (radiusRaw + 1L)
+            );
+            MinXRaw = SubtractRawSaturating(
+                left: Math.Min(
+                    val1: origin.X.Value,
+                    val2: endXRaw
+                ),
+                right: (radiusRaw + 1L)
+            );
+            OriginXRaw = origin.X.Value;
+            OriginYRaw = origin.Y.Value;
+            OriginZRaw = origin.Z.Value;
+            RadiusRaw = radiusRaw;
+        }
     }
 }

@@ -253,25 +253,6 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             select: static server => server.Definition.Patches
         )
     ),
-        ["links"] = new RowSection(
-        RowType: typeof(WorldScreenLink),
-        Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldScreenLink,
-            toMutation: static (principal, screenLink) => new WorldMutation.UpsertScreenLink(
-                Link: screenLink,
-                Principal: principal
-            )
-        ),
-        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveScreenLink(
-            Name: name,
-            Principal: principal
-        )),
-        Read: ReadRowByKey(
-            info: WorldJsonContext.Default.WorldScreenLink,
-            keyOf: static row => row.Name,
-            select: static server => server.Definition.Links
-        )
-    ),
         ["looks"] = new RowSection(
         RowType: typeof(WorldLook),
         Upsert: Upsert(
@@ -538,6 +519,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         // Authored payload is SECONDS (WorldInputHoldAuthoring), matching the document field itself; compiled to the
         // mutation's ticks wire shape against the ADDRESSED row's own current rate.
         ["inputHold"] = new RowSection(
+        ReadsLiveDocument: true,
         RowType: typeof(WorldInputHoldAuthoring),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldInputHoldAuthoring,
@@ -587,6 +569,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         // The two views sub-rows RMW the CURRENT Views row (SetViewDefaults carries the whole section) — the same
         // read-modify-write world.row.set views.seatRig/world.view.look performed before folding into this table.
         ["views.seatRig"] = new RowSection(
+        ReadsLiveDocument: true,
         RowType: typeof(WorldCameraProgram),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldCameraProgram,
@@ -602,6 +585,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
         ["views.seatControl"] = new RowSection(
+        ReadsLiveDocument: true,
         RowType: typeof(WorldSeatViewControl),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSeatViewControl,
@@ -617,6 +601,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
         ["playerDefaults.seatLook"] = new RowSection(
+        ReadsLiveDocument: true,
         RowType: typeof(WorldSeatLook),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldSeatLook,
@@ -894,6 +879,56 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
 
         return CommandResult.Error(output: $"[{verb}: unknown path '{path}' — {admissible}]");
     }
+    /// <summary>Composes the <c>world.row.set</c> mutation for one dotted path and raw JSON tail WITHOUT submitting
+    /// it — the seam the routed twin (<c>player.row.set</c>, which follows a crossed seat's authority route) reuses,
+    /// so the routed grammar and the local grammar can never drift. A section whose mutation composes against the
+    /// addressed world's own live document is refused by name (a routed write's document lives at the destination),
+    /// and so is the bare-name <c>properties.names</c> exception, which carries no JSON row.</summary>
+    /// <param name="path">The dotted document member path (the <c>world.row.set</c> vocabulary).</param>
+    /// <param name="json">The raw JSON row tail.</param>
+    /// <param name="principal">The composing principal. Informational for a routed submission — the destination
+    /// re-stamps the envelope with the traveler's own transfer principal before admission.</param>
+    /// <param name="mutation">The composed mutation, on success.</param>
+    /// <param name="error">The named refusal, on failure.</param>
+    /// <returns><see langword="true"/> when the mutation composed.</returns>
+    public static bool TryComposeRoutedSet(string path, string json, WorldPrincipal principal, out WorldMutation? mutation, out string error) {
+        mutation = null;
+
+        if (!s_sections.TryGetValue(
+            key: path,
+            value: out var section
+        )) {
+            error = $"unknown path '{path}' — {string.Join(
+                separator: ", ",
+                values: s_sections.Keys.Where(predicate: static key => !s_sections[key].ReadsLiveDocument).Order(comparer: StringComparer.Ordinal)
+            )}";
+
+            return false;
+        }
+
+        if (section.ReadsLiveDocument) {
+            error = $"'{path}' composes against the addressed world's own live document, which a routed write cannot read — author it on the destination's console";
+
+            return false;
+        }
+
+        var outcome = section.Upsert(
+            arg1: null!,
+            arg2: principal,
+            arg3: json
+        );
+
+        if (outcome.Mutation is not { } composed) {
+            error = (outcome.Error ?? "the row did not parse");
+
+            return false;
+        }
+
+        mutation = composed;
+        error = string.Empty;
+
+        return true;
+    }
     // Type-erased upsert factory (server-agnostic form): parses <paramref name="info"/>'s shape from the raw JSON
     // tail and hands the parsed value to <paramref name="toMutation"/> — the ONE generic seam most of the section
     // table closes over.
@@ -943,7 +978,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.row.set",
-            description: "Upserts ANY document row or section by its dotted MEMBER PATH — the document's own camelCase JSON names (see puck schema for payload shapes): world.row.set <path> <json>. Keyed sections (kits, cameras, screens, speakers, placements, creations, tunes, patches, links, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, groups.kinds, interactions.interactions) upsert one row addressed by its own key; keyless sections (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, views.seatControl, playerDefaults.seatLook) replace the whole row. ONE grammar exception: properties.names takes a BARE NAME token, not JSON — world.row.set properties.names <name> declares it idempotently. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary like every WorldMutation; a full-document revalidation rejects loudly. This verb performs NO schema validation of its own — a JSON parse failure echoes inline and submits nothing; every semantic check still runs at apply.",
+            description: "Upserts ANY document row or section by its dotted MEMBER PATH — the document's own camelCase JSON names (see puck schema for payload shapes): world.row.set <path> <json>. Keyed sections (kits, cameras, screens, speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, groups.kinds, interactions.interactions) upsert one row addressed by its own key; keyless sections (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, views.seatControl, playerDefaults.seatLook) replace the whole row. ONE grammar exception: properties.names takes a BARE NAME token, not JSON — world.row.set properties.names <name> declares it idempotently. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary like every WorldMutation; a full-document revalidation rejects loudly. This verb performs NO schema validation of its own — a JSON parse failure echoes inline and submits nothing; every semantic check still runs at apply.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -965,7 +1000,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.row.remove",
-            description: "Removes ONE row from a KEYED document section by its dotted MEMBER PATH and key: world.row.remove <path> <key>. Keyed sections are the same set world.row.set upserts into (kits, cameras, screens [key is the integer index], speakers, placements, creations, tunes, patches, links, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, groups.kinds, interactions.interactions), plus properties.names (BARE NAME token — world.row.remove properties.names <name>). A KEYLESS path (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, playerDefaults.seatLook) has no remove — it is refused by name. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary; rejected loudly if no row carries that key.",
+            description: "Removes ONE row from a KEYED document section by its dotted MEMBER PATH and key: world.row.remove <path> <key>. Keyed sections are the same set world.row.set upserts into (kits, cameras, screens [key is the integer index], speakers, placements, creations, tunes, patches, looks, addons, bindingOverlays, state, rules, hud.panels, views.layouts, groups.kinds, interactions.interactions), plus properties.names (BARE NAME token — world.row.remove properties.names <name>). A KEYLESS path (motion, render, audio, authoring, collision, host, inputHold, hud.defaults, spawnPoints, views.seatRig, playerDefaults.seatLook) has no remove — it is refused by name. An unknown path is refused by name, naming every admissible sibling. Buffers and applies at the tick boundary; rejected loudly if no row carries that key.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -1288,7 +1323,10 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     // each given the addressed row's own WorldServer as their leading parameter. RowType is the row's own CLR type
     // (typeof(T), the SAME T every other member closes over) — the reflection root WorldRowFieldStepper walks an
     // enum leaf's vocabulary through, since a JsonNode carries no type of its own.
-    private sealed record RowSection(Func<WorldServer, WorldPrincipal, string, RowOutcome> Upsert, Func<WorldServer, WorldPrincipal, string, RowOutcome>? Remove, Func<WorldServer, string, RowReadOutcome> Read, Type RowType);
+    // ReadsLiveDocument marks the entries whose mutation composes against the ADDRESSED world's own live document
+    // (the server-reading Upsert overload) — the routed composer refuses them by name, since a routed write's
+    // document lives at the destination.
+    private sealed record RowSection(Func<WorldServer, WorldPrincipal, string, RowOutcome> Upsert, Func<WorldServer, WorldPrincipal, string, RowOutcome>? Remove, Func<WorldServer, string, RowReadOutcome> Read, Type RowType, bool ReadsLiveDocument = false);
     // A parsed-and-built mutation, or the reason building one failed — the ONE outcome shape every section entry
     // returns, so the two verb handlers stay generic over which section answered.
     private readonly record struct RowOutcome(WorldMutation? Mutation, string? Error) {

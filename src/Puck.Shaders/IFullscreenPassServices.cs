@@ -23,6 +23,9 @@ public interface IFullscreenPassServices {
     IGpuQueueSubmitter QueueSubmitter { get; }
     /// <summary>Gets the shader module factory.</summary>
     IGpuShaderModuleFactory ShaderModuleFactory { get; }
+    /// <summary>Gets the surface transfer factory the pass reads its own render target back through to serve an armed
+    /// capture (<see cref="Puck.Abstractions.Presentation.ICaptureRequestTarget"/>).</summary>
+    IGpuSurfaceTransferFactory SurfaceTransferFactory { get; }
     /// <summary>Gets the vertex buffer factory.</summary>
     IGpuVertexBufferFactory VertexBufferFactory { get; }
 }

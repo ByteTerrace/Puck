@@ -232,6 +232,106 @@ public sealed class LinkLivenessLawTests {
         Assert.Equal(expected: [peer], actual: observed);
     }
 
+    [Fact]
+    public void LinkEdgesGateOnTheAdjacencyRowsOwnSubject() {
+        var definition = SeamDocument(graceSeconds: 0.05f);
+        var grace = definition.AdjacencyLivenessGraceTicks(adjacency: definition.Adjacencies!.Single()!).Ticks;
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        for (var tick = 0; (tick < grace); tick++) {
+            fixture.Step();
+        }
+
+        // The gate is the row's OWN subject — the grantable `observe adjacency:<name>` an addon's event filter
+        // consults — never the wildcard, which no untrusted principal can ever hold.
+        var dropped = fixture.Server.Events.Edges.Single(predicate: static edge => (edge.Family == WorldEventFamily.LinkDropped));
+
+        Assert.Equal(expected: GrantSubject.Adjacency(name: LinkRow), actual: dropped.GateA);
+        Assert.Null(@object: dropped.GateB);
+
+        fixture.Server.Events.ObserveLinkDelivery(adjacencyName: LinkRow);
+        fixture.Step();
+
+        var established = fixture.Server.Events.Edges.Single(predicate: static edge => (edge.Family == WorldEventFamily.LinkEstablished));
+
+        Assert.Equal(expected: GrantSubject.Adjacency(name: LinkRow), actual: established.GateA);
+    }
+    [Fact]
+    public void AnUntrustedObserveAdjacencyRowRequiresAnEventBudget_AndATrustedPrincipalIsRefusedOne() {
+        using var fixture = Fixtures.FreshServer(definition: SeamDocument(graceSeconds: 0.05f));
+
+        var addon = WorldPrincipal.Addon(name: "probe");
+        var subject = GrantSubject.Adjacency(name: LinkRow);
+
+        Laws.RefusalWithControl(
+            lawId: "authority.untrusted-observe-adjacency-requires-events",
+            deniedOutcome: () => {
+                fixture.Server.Grant(
+                    actor: WorldPrincipal.Console,
+                    grant: new WorldGrant(
+                        Budget: 4,
+                        Capability: WorldCapability.Observe,
+                        Exclusive: false,
+                        Principal: addon,
+                        Subject: subject
+                    )
+                );
+
+                return fixture.Server.Grants.Allows(
+                    capability: WorldCapability.Observe,
+                    principal: addon,
+                    subject: subject
+                ).IsAllowed;
+            },
+            controlOutcome: () => {
+                fixture.Server.Grant(
+                    actor: WorldPrincipal.Console,
+                    grant: new WorldGrant(
+                        Budget: 4,
+                        Capability: WorldCapability.Observe,
+                        EventBudget: 4,
+                        Exclusive: false,
+                        Principal: addon,
+                        Subject: subject
+                    )
+                );
+
+                return (fixture.Server.Grants.Allows(
+                    capability: WorldCapability.Observe,
+                    principal: addon,
+                    subject: subject
+                ).IsAllowed &&
+                    fixture.Server.Grants.TryGetEventBudget(
+                    capability: WorldCapability.Observe,
+                    principal: addon,
+                    subject: subject,
+                    budget: out _
+                ));
+            });
+
+        // A trusted principal has no consumer for the event-only subject — refused on the same terms as
+        // region/seat, so the row cannot sit in a seat's set as an inert hold.
+        fixture.Server.Grant(
+            actor: WorldPrincipal.Console,
+            grant: new WorldGrant(
+                Capability: WorldCapability.Observe,
+                Exclusive: false,
+                Principal: WorldPrincipal.Seat(slot: 1),
+                Subject: subject
+            )
+        );
+
+        Assert.Equal(
+            expected: GrantRule.WildcardHold,
+            actual: fixture.Server.Grants.Allows(
+                capability: WorldCapability.Observe,
+                principal: WorldPrincipal.Seat(slot: 1),
+                subject: subject
+            ).Rule
+        );
+    }
+
     private static long AlarmCell(WorldFixture fixture) =>
         fixture.Server.Definition.State.Single(predicate: static row => (row.Name.Value == "alarm")).Cells!.Single().Value;
     private static WorldDefinition GatedSeamDocument(float graceSeconds) {

@@ -22,9 +22,9 @@ internal sealed partial class WorldScreenBinder {
     /// <see cref="Server.WorldMachineHost.AudioMachine"/>.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     public IAudioMachine? AudioMachine(int index) => m_machines.AudioMachine(index: index);
-    /// <summary>Returns the live cable-link set as document rows — a facade over
+    /// <summary>Returns the live cable-link set as derived groups — a facade over
     /// <see cref="Server.WorldMachineHost.CaptureLinks"/>, the <c>world.save</c> fold source.</summary>
-    public IReadOnlyList<WorldScreenLink> CaptureLinks() => m_machines.CaptureLinks();
+    public IReadOnlyList<WorldMachineCableGroup> CaptureLinks() => m_machines.CaptureLinks();
     /// <summary>Returns the current same-device image-view handle bound to a screen index, or 0 when the index is unbound, not
     /// declared, or nothing has been published yet — the live state <c>world.screens</c> reports.</summary>
     /// <param name="index">The engine screen-surface index.</param>

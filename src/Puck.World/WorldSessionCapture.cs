@@ -108,16 +108,24 @@ internal static class WorldSessionCapture {
     // boot-only field is preserved as authored.
     private static WorldHostDefaults CaptureHost(WorldHostDefaults host, PresentPacingControl pacing) =>
         (host with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
-    // Fold the live cable-link set back into the Links section (the world.save home for screen.link / world.row.set links).
-    // When the binder holds no runtime links, the document's own Links carries forward unchanged, so declared links not
-    // yet established at boot are preserved rather than dropped.
-    private static IReadOnlyList<WorldScreenLink> CaptureLinks(WorldDefinition definition, WorldScreenBinder binder) {
-        var live = binder.CaptureLinks();
+    // The cable port each screen should carry after a save, from the binder's link table — the authoritative set
+    // (declared groups reconcile into it, dormant included, and screen.link/.unlink edit it): a member screen folds
+    // its (name, position) home onto its row's machine source, and a screen in no link folds null (an unlink clears
+    // the port). A link over a screen whose folded source is not a machine is unrepresentable in the document and is
+    // left out — the runtime group simply does not survive the save.
+    private static Dictionary<int, WorldMachineCable> BuildCableMap(WorldScreenBinder binder) {
+        var map = new Dictionary<int, WorldMachineCable>();
 
-        return ((live.Count == 0)
-            ? definition.Links
-            : live
-        );
+        foreach (var group in binder.CaptureLinks()) {
+            for (var position = 0; (position < group.Screens.Count); position++) {
+                map[group.Screens[position]] = new WorldMachineCable(
+                    Name: group.Name,
+                    Position: position
+                );
+            }
+        }
+
+        return map;
     }
     private static IReadOnlyList<WorldPatch> CapturePatches(IReadOnlyList<WorldPatch> patches) =>
         CaptureCanonicalAssets(
@@ -146,11 +154,12 @@ internal static class WorldSessionCapture {
         RenderScale = NearestRenderScaleTier(scale: render.RenderScale),
         UpscaleSharpness = render.UpscaleSharpness,
     });
-    // Fold a live machine insert on each declared screen back into that row's Machine source, and the live magazine
-    // selector back into that row's Magazine.Selected; a screen with no live insert / no magazine keeps its declared
-    // source / magazine untouched.
+    // Fold a live machine insert on each declared screen back into that row's Machine source, the live cable-link
+    // table back into each machine source's cable port, and the live magazine selector back into that row's
+    // Magazine.Selected; a screen with no live insert / no link / no magazine keeps its declared row untouched.
     private static IReadOnlyList<WorldScreen> CaptureScreens(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
         var captured = new List<WorldScreen>(capacity: screens.Count);
+        var cables = BuildCableMap(binder: binder);
 
         foreach (var screen in screens) {
             var row = (binder.TryReadMachineInsert(
@@ -163,11 +172,20 @@ internal static class WorldSessionCapture {
                     Source = new WorldScreenSource.Machine(
                     ContentPath: contentPath,
                     Engine: engine,
-                    Options: options
+                    Options: options,
+                    Cable: (screen.Source as WorldScreenSource.Machine)?.Cable
                 ),
                 })
                 : screen
             );
+
+            if (row.Source is WorldScreenSource.Machine machine) {
+                var cable = cables.GetValueOrDefault(key: screen.Index);
+
+                if (machine.Cable != cable) {
+                    row = (row with { Source = (machine with { Cable = cable }) });
+                }
+            }
 
             if (
                 (row.Magazine is { } magazine) &&
@@ -233,53 +251,6 @@ internal static class WorldSessionCapture {
             ),
             replace: static (tune, canonical) => (tune with { Document = canonical.Document, Hash = canonical.Hash })
         );
-    // Content-compare the folded live link set against the document's Links rows (name + ordered members), the same way
-    // ScreensDrifted compares machine sources: true exactly when a world.save would rewrite the Links section. The capture
-    // preserves declared-link order (ReconcileLinks establishes rows in declared order), so a save that reproduces the file
-    // reports no drift.
-    private static bool LinksDrifted(WorldDefinition definition, WorldScreenBinder binder) {
-        var captured = CaptureLinks(
-            binder: binder,
-            definition: definition
-        );
-
-        if (ReferenceEquals(
-            objA: captured,
-            objB: definition.Links
-        )) {
-            return false;
-        }
-
-        var declared = definition.Links;
-
-        if (captured.Count != declared.Count) {
-            return true;
-        }
-
-        for (var index = 0; (index < captured.Count); index++) {
-            var live = captured[index];
-            var row = declared[index];
-
-            if (
-                !string.Equals(
-                a: live.Name,
-                b: row.Name,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                (live.Screens.Count != row.Screens.Count)
-            ) {
-                return true;
-            }
-
-            for (var member = 0; (member < live.Screens.Count); member++) {
-                if (live.Screens[member] != row.Screens[member]) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
     // The nearest safe render-scale tier to a continuous live scale — the reverse of WorldRenderScaleTiers.Scale, matching
     // WorldCommandModule.RenderScaleName's tolerance so a tier round-trips exactly and a continuous override quantizes to
     // its closest tier (the document holds only tiers). WorldRenderScaleTiers lives with the document model, so the
@@ -300,6 +271,8 @@ internal static class WorldSessionCapture {
         return best;
     }
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
+        var cables = BuildCableMap(binder: binder);
+
         foreach (var screen in screens) {
             if (
                 binder.TryReadMachineInsert(
@@ -324,6 +297,15 @@ internal static class WorldSessionCapture {
                 b: options,
                 comparisonType: StringComparison.Ordinal
             ))
+            ) {
+                return true;
+            }
+
+            // Cable drift: the live link table's port for this screen differs from the declared machine source's —
+            // a runtime screen.link, an unlink, or a member/order change (the same comparison the save's fold makes).
+            if (
+                (screen.Source is WorldScreenSource.Machine declaredMachine) &&
+                (declaredMachine.Cable != cables.GetValueOrDefault(key: screen.Index))
             ) {
                 return true;
             }
@@ -434,11 +416,6 @@ internal static class WorldSessionCapture {
             screens: definition.Screens,
             binder: binder
         ),
-            // The live cable-link set folds into the Links section (declared + runtime), so a save reproduces the groups.
-            LinksRaw = CaptureLinks(
-            binder: binder,
-            definition: definition
-        ),
             CreationsRaw = CaptureCreations(creations: definition.Creations),
             TunesRaw = CaptureTunes(tunes: definition.Tunes),
             PatchesRaw = CapturePatches(patches: definition.Patches),
@@ -460,7 +437,7 @@ internal static class WorldSessionCapture {
     }
     /// <summary>A cheap, verb-time (never per-tick) description of which session dimensions have drifted from the loaded
     /// document's defaults: <c>none</c> when a save would reproduce the file, else a <c>+</c>-joined list of the drifted
-    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>, <c>links</c>, <c>audio</c>, <c>host</c>, <c>bindings</c>) — the honest <c>world.status</c> session-drift hint.</summary>
+    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>, <c>audio</c>, <c>host</c>, <c>bindings</c>) — the honest <c>world.status</c> session-drift hint.</summary>
     /// <param name="definition">The server's live definition.</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table.</param>
@@ -470,7 +447,7 @@ internal static class WorldSessionCapture {
     /// <param name="bindingBar">The live per-seat binding-bar visibility (the <c>world.binding-bar</c> lever).</param>
     /// <returns>The drift hint token.</returns>
     public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, WorldBindingBarVisibility bindingBar) {
-        var drifted = new List<string>(capacity: 7);
+        var drifted = new List<string>(capacity: 6);
 
         if (CaptureRender(
             render: render,
@@ -491,17 +468,6 @@ internal static class WorldSessionCapture {
             binder: binder
         )) {
             drifted.Add(item: "screens");
-        }
-
-        // Links drift: the folded live link set differs by content from the document's rows (a runtime screen.link, an
-        // unlink, or a member-set change). A reference compare would be a false positive — CaptureLinks returns a FRESH
-        // list whenever the binder holds any link, so a purely-declared link set (which a save reproduces byte-for-byte)
-        // would otherwise report drift forever.
-        if (LinksDrifted(
-            binder: binder,
-            definition: definition
-        )) {
-            drifted.Add(item: "links");
         }
 
         if (

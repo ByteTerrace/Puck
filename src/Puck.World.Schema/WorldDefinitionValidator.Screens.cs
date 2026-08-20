@@ -49,50 +49,62 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{name} '{channel}' must be non-empty kebab-case.");
         }
     }
-    // The cable links: name required/kebab/unique; two or more screens; every index declared; no duplicate within a link;
-    // no screen in two links. NOT validated: engine identity of the members — that is a RUNTIME fact (a screen.insert
-    // changes it), so the binder reports a dormant link with a reason rather than the validator rejecting the row.
-    private static void ValidateLinks(IReadOnlyList<WorldScreenLink> links, HashSet<int> screenIndices, List<string> errors) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var claimed = new HashSet<int>();
+    // The machine cable groups, derived from the declared screens rows' machine-source cable ports: each port's name
+    // kebab-case, each cable plugged by two or more ports, positions unique and contiguous from 0 (cable order is the
+    // linking engine's player order, so a gap or duplicate is a lie about who runs when). A screen carries at most one
+    // port by construction (one Cable member per source). NOT validated: engine identity of the members — that is a
+    // RUNTIME fact (a screen.insert changes it), so the binder reports a dormant group with a reason rather than the
+    // validator rejecting the port.
+    private static void ValidateMachineCables(IReadOnlyList<WorldScreen> screens, List<string> errors) {
+        var cables = new Dictionary<string, List<(int Position, int Screen, string Path)>>(comparer: StringComparer.Ordinal);
 
-        for (var index = 0; (index < links.Count); index++) {
-            var link = links[index];
-            var path = $"links[{index}]";
+        foreach (var screen in screens) {
+            if (screen?.Source is not WorldScreenSource.Machine { Cable: { } cable }) {
+                continue;
+            }
 
-            if (link is null) {
-                errors.Add(item: $"{path} is required.");
+            var path = $"screens[{screen.Index}].source.machine.cable";
+
+            if (
+                string.IsNullOrWhiteSpace(value: cable.Name) ||
+                !IsKebabCase(value: cable.Name)
+            ) {
+                errors.Add(item: $"{path}.name '{cable.Name}' must be non-empty kebab-case.");
 
                 continue;
             }
 
-            if (
-                string.IsNullOrWhiteSpace(value: link.Name) ||
-                !IsKebabCase(value: link.Name)
-            ) {
-                errors.Add(item: $"{path}.name '{link.Name}' must be non-empty kebab-case.");
-            } else if (!names.Add(item: link.Name)) {
-                errors.Add(item: $"{path}.name '{link.Name}' is duplicated.");
-            }
-
-            if (
-                (link.Screens is null) ||
-                (link.Screens.Count < 2)
-            ) {
-                errors.Add(item: $"{path}.screens requires two or more screen indices.");
+            if (cable.Position < 0) {
+                errors.Add(item: $"{path}.position {cable.Position} must be non-negative.");
 
                 continue;
             }
 
-            var withinLink = new HashSet<int>();
+            if (!cables.TryGetValue(
+                key: cable.Name,
+                value: out var members
+            )) {
+                members = [];
+                cables[cable.Name] = members;
+            }
 
-            foreach (var screen in link.Screens) {
-                if (!screenIndices.Contains(item: screen)) {
-                    errors.Add(item: $"{path}.screens names undeclared screen {screen}.");
-                } else if (!withinLink.Add(item: screen)) {
-                    errors.Add(item: $"{path}.screens names screen {screen} twice.");
-                } else if (!claimed.Add(item: screen)) {
-                    errors.Add(item: $"{path}.screens: screen {screen} is already in another link.");
+            members.Add(item: (cable.Position, screen.Index, path));
+        }
+
+        foreach (var (name, members) in cables) {
+            if (members.Count < 2) {
+                errors.Add(item: $"cable '{name}' has one plugged port (screen {members[0].Screen}) — a cable links two or more machines; plug another declared machine source into it or drop the port.");
+
+                continue;
+            }
+
+            var positions = new HashSet<int>();
+
+            foreach (var member in members) {
+                if (!positions.Add(item: member.Position)) {
+                    errors.Add(item: $"{member.Path}.position {member.Position} is already taken on cable '{name}' — cable order needs one machine per position.");
+                } else if (member.Position >= members.Count) {
+                    errors.Add(item: $"{member.Path}.position {member.Position} leaves a gap on cable '{name}' — positions are contiguous 0..{(members.Count - 1)}.");
                 }
             }
         }
@@ -129,6 +141,7 @@ public static partial class WorldDefinitionValidator {
                 destinationNames: destinationNames,
                 fontNames: fontNames,
                 hasTextCatalog: hasTextCatalog,
+                cablePermitted: false,
                 errors: errors
             );
         }
@@ -550,13 +563,23 @@ public static partial class WorldDefinitionValidator {
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
     // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
     // live CONSOLE (the caller counts these against the one-live ceiling).
-    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, HashSet<string> cameras, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, HashSet<string> cameras, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, bool cablePermitted, List<string> errors) {
         switch (source) {
             case null:
                 errors.Add(item: $"{path} is required.");
 
                 return false;
             case WorldScreenSource.Machine machine:
+                // A cable port is a standing physical connection of the machine that owns the slot — a declared
+                // screens row's own source. A magazine entry rotates content through the slot and a placement face's
+                // source has no stable screen identity to fold a group back onto, so a port there is refused.
+                if (
+                    !cablePermitted &&
+                    (machine.Cable is not null)
+                ) {
+                    errors.Add(item: $"{path}.machine.cable is only legal on a declared screens row's own source — a magazine entry or face source cannot plug a cable.");
+                }
+
                 if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
                     errors.Add(item: $"{path}.machine.engine is required.");
                 } else if (!WorldExtensionVocabularyHook.IsRegisteredScreenMachineEngine(engineId: machine.Engine)) {

@@ -33,6 +33,11 @@ public static partial class WorldDefinitionValidator {
     // A look scale feeds the stamp pool's per-instance bound radius; an unbounded one is a GPU-SAFETY issue (a
     // spatial-cull metadata blow-up), not a taste one, so it carries a hard ceiling beside MaxSurfaceDimension.
     private const float MaxLookScale = 16f;
+    // The largest |dot| of a screen frame's unit right/up pair the document may author. A screen's frame is read twice
+    // — the client derives the slab's orientation and UV frame from it, the server's collider projects its half-extents
+    // onto the same axes — and only an orthogonal pair makes those two the same solid. The bound matches
+    // Puck.SignedDistance's own screen-frame door and Puck.Abstractions' CameraSnapshot basis check.
+    private const float MaximumScreenBasisSkew = 1e-3f;
     private const float MinimumBasisLengthSquared = 1e-8f;
     // PlanarImpulse.BodyDirection quantizes to FixedQ4816 (step 2^-16) before reaching the sim; that rounds a unit
     // vector's length by at most ~1.3e-5. This tolerance sits ~8x above that quantization floor and far below any
@@ -194,6 +199,12 @@ public static partial class WorldDefinitionValidator {
         return WorldChannelTable.Compile(channels: channels);
     }
     private static bool IsFinite(Vector3 value) => (float.IsFinite(f: value.X) && float.IsFinite(f: value.Y) && float.IsFinite(f: value.Z));
+    // |cos| between a screen frame's two axes: 0 for the orthogonal pair the slab's geometry and collider both assume,
+    // 1 for a parallel one. Callers must have cleared finiteness and non-degeneracy first, or this reads NaN.
+    private static float ScreenBasisSkew(WorldScreen screen) => MathF.Abs(x: Vector3.Dot(
+        vector1: Vector3.Normalize(value: screen.Right),
+        vector2: Vector3.Normalize(value: screen.Up)
+    ));
     // Held pointer steer carries full 3D camera facing and therefore needs every Face role. Axis2D look-steer is the
     // upright action-game arm: yaw turns FaceX/FaceZ while vertical input remains camera pitch. Both need a world yaw
     // reference — a camera that follows the body cannot also lead it.
@@ -1254,6 +1265,8 @@ public static partial class WorldDefinitionValidator {
                 ).LengthSquared() <= MinimumBasisLengthSquared)
                 ) {
                     errors.Add(item: $"{path} right/up vectors must be non-zero and linearly independent.");
+                } else if (ScreenBasisSkew(screen: screen) > MaximumScreenBasisSkew) {
+                    errors.Add(item: $"{path} right/up vectors must be orthogonal (the unit axes' dot product is {ScreenBasisSkew(screen: screen)}, and at most {MaximumScreenBasisSkew} is accepted). They are the slab's local +X/+Y: the render path derives the slab's orientation and sampled UV from them while the collider projects its half-extents onto them, so a skewed pair renders and collides as different solids.");
                 }
 
                 if (
@@ -1278,6 +1291,7 @@ public static partial class WorldDefinitionValidator {
                     destinationNames: destinationNames,
                     fontNames: fontNames,
                     hasTextCatalog: (definition.Text is not null),
+                    cablePermitted: true,
                     errors: errors
                 )) {
                     consoleLiveIndices.Add(item: screen.Index);
@@ -1341,10 +1355,9 @@ public static partial class WorldDefinitionValidator {
             )} both do.");
         }
 
-        // The cable links resolve against the declared screen index set built above.
-        ValidateLinks(
-            links: definition.Links,
-            screenIndices: screenIndices,
+        // The machine cable groups derive from the declared screens rows' own machine sources, validated beside them.
+        ValidateMachineCables(
+            screens: definition.Screens,
             errors: errors
         );
 

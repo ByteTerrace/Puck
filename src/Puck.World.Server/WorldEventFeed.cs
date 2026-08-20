@@ -78,9 +78,9 @@ public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubje
 /// the local tick, so a taped run reproduces the identical edge sequence and the identical <c>$link:</c> values. The
 /// tape does not carry the delivered CONTENT (poses, definition revisions): a replay reproduces WHEN a seam went
 /// dark, never what the neighbour was showing.</para>
-/// <para>Link edges gate on <see cref="GrantSubject.All"/>. Today's <c>GrantSubjectKind</c> vocabulary carries no
-/// adjacency-row subject — the tight analogue would be a <c>Region</c> twin keyed by adjacency name — so the gate is
-/// the wildcard plus a nonzero event budget rather than a narrower subject that does not exist.</para>
+/// <para>Link edges gate on <see cref="GrantSubject.Adjacency"/> — the authored row's own name, <c>Region</c>'s twin
+/// for the federation seam — so an addon receives them through an <c>observe adjacency:&lt;name&gt;</c> row carrying
+/// an event budget, exactly as the region family gates on its placement id.</para>
 /// </remarks>
 public sealed class WorldEventFeed {
     private readonly List<WorldEventEdge> m_edges = [];
@@ -330,7 +330,7 @@ public sealed class WorldEventFeed {
                     state.Dropped = false;
                     m_edges.Add(item: new WorldEventEdge(
                         Family: WorldEventFamily.LinkEstablished,
-                        GateA: GrantSubject.All,
+                        GateA: GrantSubject.Adjacency(name: name),
                         GateB: null,
                         A: thisOrdinal,
                         B: 0L
@@ -353,7 +353,7 @@ public sealed class WorldEventFeed {
             state.Dropped = true;
             m_edges.Add(item: new WorldEventEdge(
                 Family: WorldEventFamily.LinkDropped,
-                GateA: GrantSubject.All,
+                GateA: GrantSubject.Adjacency(name: name),
                 GateB: null,
                 A: thisOrdinal,
                 B: state.StaleTicks
@@ -689,6 +689,19 @@ public sealed class WorldEventFeed {
         ? state.StaleTicks
         : 0L
     );
+    /// <summary>Returns whether the adjacency row named <paramref name="adjacencyName"/> is currently dropped — the
+    /// link pass's own latched verdict as of the most recent <see cref="Collect"/> (set on the tick the staleness
+    /// reaches the row's compiled <c>livenessGraceSeconds</c>, cleared on the next delivered refresh), so a consumer
+    /// asks the one comparison this feed owns instead of re-spelling it from <see cref="LinkStalenessTicks"/> and the
+    /// compiled grace. <see langword="false"/> for a row whose sensing is disabled (an unauthored grace), a row with
+    /// no tick mapping (a positive grace at simulation rate 0), and a row this feed has never seen — exactly the
+    /// cases the pass itself never drops.</summary>
+    /// <param name="adjacencyName">The authored <c>adjacencies</c> row name.</param>
+    /// <returns>Whether the row's last emitted edge state is dropped.</returns>
+    public bool LinkDropped(string adjacencyName) => (m_links.TryGetValue(
+        key: adjacencyName,
+        value: out var state
+    ) && state.Dropped);
     /// <summary>Records that the adjacency row named <paramref name="adjacencyName"/> received a delivered neighbour
     /// refresh, to be consumed by the next <see cref="Collect"/>. The one link-liveness input — see this type's own
     /// remarks for why it is taped rather than re-derived.</summary>

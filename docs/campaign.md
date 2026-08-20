@@ -407,9 +407,10 @@ What survives them, as work rather than prose:
   hole. The witness is one real-path refusal-with-control canary: a non-privileged principal
   authoring a binding whose destination is an administrative verb must refuse, while the same
   mutation naming an ordinary verb applies.
-- **Replay coverage.** `WorldReplayEntry` captures 12 kinds. Mutation, undo, composition and query
-  submissions are still bare passthroughs, so a mid-recording mutation or undo does not replay, and
-  `replay.verify` proves the pose trajectory only.
+- **Replay coverage.** `WorldReplayEntry` captures the full submission stream now — mutation, undo,
+  composition, query, rebuild, screen op, transfer, and the `LinkDelivery` federation-liveness leaf
+  included — but `replay.verify` still proves the pose trajectory only: the hash covers no document,
+  grant-table, or HUD state, and delivered neighbour CONTENT stays untaped.
 - **Unverified, check before scheduling** — session-lever routing (`world.volume`, the render levers,
   `world.save`); a screen route's pad kit and channel masks (document-only, no `player.engage` override
   for the mask); whether fuel is still the only stop for a spinning guest.

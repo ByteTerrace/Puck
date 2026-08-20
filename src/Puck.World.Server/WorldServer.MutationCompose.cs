@@ -398,7 +398,6 @@ public sealed partial class WorldServer {
         WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
         WorldMutation.SetPlayerDefaults => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
-        WorldMutation.UpsertScreenLink or WorldMutation.RemoveScreenLink => WorldSection.Links,
         WorldMutation.UpsertGrant or WorldMutation.RemoveGrant => WorldSection.Grants,
         WorldMutation.UpsertHudPanel or WorldMutation.RemoveHudPanel or WorldMutation.UpsertHudElement or WorldMutation.RemoveHudElement or WorldMutation.SetHudDefaults => WorldSection.Hud,
         // Generate's OBSERVABLE effect is a state write, so it shares the state section's coarse hold; its narrower
@@ -421,10 +420,15 @@ public sealed partial class WorldServer {
     ),
     };
     /// <summary>Owns canonical document validation and authored-hash matching at the mutation composition boundary.</summary>
+    // `hash` is the row's AUTHORED hash lane (a creation's HashRaw, a tune/patch's stored Hash) — never a computed
+    // property, whose canonicalize-on-read would throw on a hostile document in the caller's own argument list,
+    // before this boundary's refusal could run. Null means the submitter carried none: the canonical hash is adopted
+    // (an absent hash is trivially self-consistent — WorldCreation.Hash's own rule), while a CARRIED hash must equal
+    // the one this pipeline computes.
     private static bool TryCanonicalizeDocument<TDocument>(
         TDocument document,
         string id,
-        string hash,
+        string? hash,
         string kind,
         Func<TDocument, string, Puck.Assets.Documents.CanonicalDocument<TDocument>> canonicalize,
         out TDocument canonicalDocument,
@@ -436,18 +440,25 @@ public sealed partial class WorldServer {
                 arg1: document,
                 arg2: id
             );
-        } catch (Puck.Assets.Documents.DocumentValidationException exception) {
+        } catch (Exception exception) when (exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException) {
+            // The canonicalizer refuses a malformed document with DocumentValidationException; an unresolved
+            // `state.` reference inside the document surfaces as InvalidOperationException from the value's own
+            // read. Both are the submitter's document being inadmissible at this boundary — a loud refusal, never a
+            // tick-killing throw (this arm decides submissions from remote travelers and peers).
             canonicalDocument = document;
             reason = exception.Message.ReplaceLineEndings(replacementText: " ");
 
             return false;
         }
 
-        if (!string.Equals(
+        if (
+            (hash is not null) &&
+            !string.Equals(
             a: hash,
             b: canonical.Hash,
             comparisonType: StringComparison.Ordinal
-        )) {
+        )
+        ) {
             canonicalDocument = document;
             reason = $"{kind} '{id}' hash '{hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
 
@@ -636,7 +647,7 @@ public sealed partial class WorldServer {
                     if (!TryCanonicalizeDocument(
                         document: m.Creation.Document,
                         id: m.Creation.Id,
-                        hash: m.Creation.Hash,
+                        hash: m.Creation.HashRaw,
                         kind: "creation",
                         canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
                             document: document,
@@ -987,32 +998,6 @@ public sealed partial class WorldServer {
                 return true;
             case WorldMutation.SetLookAssignment m:
                 candidate = (current with { LookAssignmentRaw = m.Assignment });
-
-                return true;
-            case WorldMutation.UpsertScreenLink m:
-                candidate = (current with {
-                    LinksRaw = Upsert(
-                    list: current.Links,
-                    item: m.Link,
-                    keyOf: static link => link.Name
-                ),
-                });
-
-                return true;
-            case WorldMutation.RemoveScreenLink m:
-                if (!Remove(
-                    list: current.Links,
-                    key: m.Name,
-                    keyOf: static link => link.Name,
-                    result: out var links
-                )) {
-                    candidate = current;
-                    reason = $"no cable link named '{m.Name}'";
-
-                    return false;
-                }
-
-                candidate = (current with { LinksRaw = links });
 
                 return true;
             case WorldMutation.UpsertGrant m:

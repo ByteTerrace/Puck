@@ -458,7 +458,7 @@ public sealed class WorldGrants : IWorldGrantsView {
         if (
             (grant.Capability == WorldCapability.Observe) &&
             (grant.EventBudget is null) &&
-            (grant.Subject.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Region or GrantSubjectKind.Seat)
+            (grant.Subject.Kind is GrantSubjectKind.Screen or GrantSubjectKind.Region or GrantSubjectKind.Seat or GrantSubjectKind.Adjacency)
         ) {
             reason = $"observe {grant.Subject.Describe()} requires an explicit events:<n> — this subject carries no query meaning, only events, so a row with no event budget would be accepted-and-inert";
 
@@ -712,13 +712,15 @@ public sealed class WorldGrants : IWorldGrantsView {
         return capability switch {
             WorldCapability.Drive => (((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
-            // Observe additionally admits Screen/Region/Seat, untrusted principals only — the three event-only
+            // Observe additionally admits Screen/Region/Seat/Adjacency, untrusted principals only — the event-only
             // subject kinds the world-events feed gates: a screen for machine-memory watches, a region for
-            // enter/exit, a local seat for join/leave. Region is unbounded (an unknown name simply never fires);
-            // Seat is bounded to the reserved local-seat band.
+            // enter/exit, a local seat for join/leave, an adjacency row for the federation link family. Region and
+            // Adjacency are unbounded (an unknown name simply never fires); Seat is bounded to the reserved
+            // local-seat band.
             WorldCapability.Observe => (((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Screen)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Region)) ||
+                (!trustedWildcard && (subject.Kind == GrantSubjectKind.Adjacency)) ||
                 (!trustedWildcard && (subject.Kind == GrantSubjectKind.Seat) && (((uint)subject.Value) < ((uint)WorldPopulationLimits.LocalSeatCount))) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
             WorldCapability.Control => ((subject.Kind == GrantSubjectKind.Screen) ||
@@ -949,8 +951,8 @@ public sealed class WorldGrants : IWorldGrantsView {
                 ? " or the wildcard 'all'"
                 : "")}"),
             WorldCapability.Observe => (trusted
-            ? "observe must name a concrete body (observe body:<n>) or the wildcard 'all' — screen/region/seat are event-only subjects with no trusted-principal consumer"
-            : "observe must name a concrete body, screen, region, or seat (observe body:<n> | observe screen:<n> | observe region:<name> | observe seat:<n>)"),
+            ? "observe must name a concrete body (observe body:<n>) or the wildcard 'all' — screen/region/seat/adjacency are event-only subjects with no trusted-principal consumer"
+            : "observe must name a concrete body, screen, region, seat, or adjacency (observe body:<n> | observe screen:<n> | observe region:<name> | observe seat:<n> | observe adjacency:<name>)"),
             WorldCapability.Control => $"control must name a concrete screen or body (control screen:<n> | control body:<n>){((trusted || (principal.Kind == PrincipalKind.Peer))
             ? " or the wildcard 'all'"
             : "")}",

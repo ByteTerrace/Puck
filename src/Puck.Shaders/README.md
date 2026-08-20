@@ -125,7 +125,11 @@ IRenderNode pass = new FullscreenPassNode(
 `IFullscreenPassServices` is the GPU seam a composition root resolves from
 its one registered backend (command recorder, render-target factory,
 descriptor allocator, device context, graphics pipeline factory, queue
-submitter, shader-module factory, vertex-buffer factory).
+submitter, shader-module factory, surface-transfer factory, vertex-buffer
+factory). The pass is an `ICaptureRequestTarget`: an armed capture reads
+back the pass's own render target — the composed result — and prints
+`[capture] <set name> -> <path>` on stderr; a frame the pass passes through
+untouched forwards the request to its inner node instead.
 `ShaderSetManifest.ConfigJsonSchema()` emits the config schema as a JSON
 Schema object; `manifest.TryBindConfig(config, out values, out reason)` is
 the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and

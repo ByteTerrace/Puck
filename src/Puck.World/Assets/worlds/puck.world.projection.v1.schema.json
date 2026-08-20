@@ -899,6 +899,29 @@
                       "string",
                       "null"
                     ]
+                  },
+                  "cable": {
+                    "description": "This machine\u0027s cable port (see WorldMachineCable), or null for an unlinked machine. Legal only on a declared screens row\u0027s own source \u2014 a magazine entry or a placement face\u0027s source is refused one (validated), because a cable is a standing physical connection of the machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when null, so every machine source authored before cables existed round-trips unchanged.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "name": {
+                        "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
+                        "type": "string"
+                      },
+                      "position": {
+                        "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "position"
+                    ],
+                    "additionalProperties": false,
+                    "default": null
                   }
                 },
                 "required": [
@@ -1290,6 +1313,10 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "cable": {
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/cable",
+                          "default": null
                         }
                       },
                       "required": [
@@ -5406,6 +5433,10 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "cable": {
+                          "$ref": "#/properties/screens/items/properties/source/anyOf/2/properties/cable",
+                          "default": null
                         }
                       },
                       "required": [
@@ -6710,35 +6741,6 @@
         "rows"
       ],
       "additionalProperties": false
-    },
-    "links": {
-      "description": "The screen links.",
-      "type": "array",
-      "items": {
-        "description": "A cable-linked group of screens whose machines advance as one interleaved unit. The binder steps the link, never its members individually, so the engine\u0027s deterministic interleave \u2014 not the host\u0027s frame order \u2014 decides who runs when. Every member must resolve to a machine from the same engine, and that engine must implement IMachineLinkingEngine; a link whose members do not currently satisfy that is reported dormant, never silently dropped.",
-        "type": [
-          "object",
-          "null"
-        ],
-        "properties": {
-          "name": {
-            "description": "The link\u0027s stable kebab-case name (its mutation address).",
-            "type": "string"
-          },
-          "screens": {
-            "description": "The engine screen indices in cable order (2 or more, no duplicates).",
-            "type": "array",
-            "items": {
-              "type": "integer"
-            }
-          }
-        },
-        "required": [
-          "name",
-          "screens"
-        ],
-        "additionalProperties": false
-      }
     },
     "hud": {
       "description": "The HUD section.",
@@ -8171,7 +8173,6 @@
     "views",
     "looks",
     "lookAssignment",
-    "links",
     "hud"
   ],
   "additionalProperties": false,

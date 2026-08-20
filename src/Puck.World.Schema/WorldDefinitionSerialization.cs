@@ -51,7 +51,6 @@ namespace Puck.World;
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
 [JsonSerializable(typeof(WorldKit))]
 [JsonSerializable(typeof(WorldScreen))]
-[JsonSerializable(typeof(WorldScreenLink))]
 [JsonSerializable(typeof(WorldCamera))]
 // An authored camera rig is an ordered op-list program (the bodyMotionPrograms pattern promoted to cameras).
 [JsonSerializable(typeof(WorldCameraProgram))]

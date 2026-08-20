@@ -409,14 +409,22 @@ public static class CreationCanonicalizer {
                                 Path: $"{opPath}.spacing"
                             ));
                         }
-                        if (
-                            (repeat.Limit is { } limit) &&
-                            !IsFinite(vector: limit)
-                        ) {
-                            errors.Add(item: new(
-                                Message: "limit is non-finite.",
-                                Path: $"{opPath}.limit"
-                            ));
+                        if (repeat.Limit is { } limit) {
+                            if (!IsFinite(vector: limit)) {
+                                errors.Add(item: new(
+                                    Message: "limit is non-finite.",
+                                    Path: $"{opPath}.limit"
+                                ));
+                            } else if (
+                                (limit.X > ShapeDomainOp.Repeat.UnboundedLimit) ||
+                                (limit.Y > ShapeDomainOp.Repeat.UnboundedLimit) ||
+                                (limit.Z > ShapeDomainOp.Repeat.UnboundedLimit)
+                            ) {
+                                errors.Add(item: new(
+                                    Message: $"limit exceeds {ShapeDomainOp.Repeat.UnboundedLimit}, which an absent limit already means.",
+                                    Path: $"{opPath}.limit"
+                                ));
+                            }
                         }
 
                         break;
@@ -429,6 +437,14 @@ public static class CreationCanonicalizer {
                             errors.Add(item: new(
                                 Message: $"axis '{axis}' is not recognized.",
                                 Path: $"{opPath}.axis"
+                            ));
+                        }
+                        // The render fold bakes the sector count into the program as a float, and past 2^24 the
+                        // shader reads back a different count than the host claims.
+                        if (polar.Count > SdfProgramBuilder.MaxExactFloatSectorCount) {
+                            errors.Add(item: new(
+                                Message: $"count {polar.Count} exceeds the {SdfProgramBuilder.MaxExactFloatSectorCount} sectors the packed program represents exactly.",
+                                Path: $"{opPath}.count"
                             ));
                         }
 
@@ -808,14 +824,14 @@ public static class CreationCanonicalizer {
                 : 0f)
             ),
             ShapeDomainOp.Repeat repeat => new ShapeDomainOp.Repeat(
-                Limit: NormalizeNonNegative(value: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))),
+                Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))),
                 Spacing: NormalizeSpacing(value: repeat.Spacing)
             ),
             ShapeDomainOp.Polar polar => new ShapeDomainOp.Polar(
                 Axis: (Enum.IsDefined(value: (polar.Axis ?? SdfPolarAxis.Y))
                 ? (polar.Axis ?? SdfPolarAxis.Y)
                 : SdfPolarAxis.Y),
-                Count: Math.Max(val1: polar.Count, val2: 1),
+                Count: Math.Clamp(value: polar.Count, min: 1, max: SdfProgramBuilder.MaxExactFloatSectorCount),
                 MaterialStride: Math.Max(val1: (polar.MaterialStride ?? 0), val2: 0),
                 Mirror: (polar.Mirror ?? false)
             ),
@@ -840,11 +856,19 @@ public static class CreationCanonicalizer {
             _ => op,
         };
     }
-    private static Vector3 NormalizeNonNegative(Vector3 value) =>
+    private static float ClampCellLimit(float value) =>
+        Math.Clamp(
+            value: (float.IsFinite(f: value)
+            ? value
+            : 0f),
+            min: 0f,
+            max: ShapeDomainOp.Repeat.UnboundedLimit
+        );
+    private static Vector3 NormalizeCellLimit(Vector3 value) =>
         new(
-            x: Math.Max(val1: (float.IsFinite(f: value.X) ? value.X : 0f), val2: 0f),
-            y: Math.Max(val1: (float.IsFinite(f: value.Y) ? value.Y : 0f), val2: 0f),
-            z: Math.Max(val1: (float.IsFinite(f: value.Z) ? value.Z : 0f), val2: 0f)
+            x: ClampCellLimit(value: value.X),
+            y: ClampCellLimit(value: value.Y),
+            z: ClampCellLimit(value: value.Z)
         );
     private static Vector3 NormalizeSpacing(Vector3 value) =>
         new(
@@ -1033,6 +1057,34 @@ public static class CreationCanonicalizer {
                     Message: "scale is non-finite.",
                     Path: $"shapes[{i}].scale"
                 ));
+            } else {
+                // Every emission path reads a scale's magnitude, so a negative component changes no geometry it can
+                // reach — it only makes the shape's reach disagree with the bound its placement ships. Mirroring
+                // already has a spelling: a symmetry domain op.
+                if (
+                    (shape.Scale.X < 0f) ||
+                    (shape.Scale.Y < 0f) ||
+                    (shape.Scale.Z < 0f)
+                ) {
+                    errors.Add(item: new(
+                        Message: "scale has a negative component; emission reads scale magnitudes, so the sign mirrors nothing — author a mirror as a symmetry domain op.",
+                        Path: $"shapes[{i}].scale"
+                    ));
+                }
+
+                if (
+                    Enum.IsDefined(value: shape.Type) &&
+                    !SdfSolidGeometry.TryValidateScaledPrimitive(
+                    refusal: out var scaleRefusal,
+                    scale: shape.Scale,
+                    type: shape.Type
+                )
+                ) {
+                    errors.Add(item: new(
+                        Message: $"scale authors {scaleRefusal}.",
+                        Path: $"shapes[{i}].scale"
+                    ));
+                }
             }
             if (!IsFinite(quaternion: shape.Rotation)) {
                 errors.Add(item: new(

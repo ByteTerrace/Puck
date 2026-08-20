@@ -542,14 +542,15 @@ printf 'world.status\nplayer.where 1\nworld.grants console\n' |
 capture of the next composed frame rather than taking one — fence a frame
 (`world.wait`) before reading the file. Its stdout echo says `pending <path>`
 precisely because no file exists yet; the resolved path arrives on **stderr**
-when the frame lands (`[capture] unified overlay -> <path>`, or `[debug]
-captured frame N -> <path>` when the overlay drew nothing and forwarded the
-request down to the engine node). Arming a second capture while one is still
+when the frame lands, named by whichever node in the render chain served it:
+`[capture] unified overlay -> <path>`, `[capture] <shader-set id> -> <path>`
+from a composed `render.extensions` pass, or `[debug] captured frame N ->
+<path>` from the engine node at the bottom. A node that draws nothing this
+frame forwards the request inward, so the readback always lands on the node
+that actually produced the shown frame. Arming a second capture while one is still
 pending is REFUSED by name — the earlier path would never be written — and a
 request still outstanding when the run ends prints a `WARNING` naming it. A
-scripted caller can therefore always tell "written" from "never happened",
-which the pre-2026-08-05 echo (a bare path, printed at arming time) could
-not.
+scripted caller can therefore always tell "written" from "never happened".
 
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
 manifests under `tests/Puck.World.Canaries/` — `sdf-decode-sign-refusal`

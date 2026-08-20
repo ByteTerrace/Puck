@@ -728,10 +728,10 @@ public sealed partial class WorldServer {
             m_engagement.DissolveScreen(screenIndex: removed);
         }
 
-        // Cable links reconcile AFTER screens (a link resolves against the live slot set) — the SAME choke point,
-        // so a live UpsertScreenLink/RemoveScreenLink mutation AND a whole-document rebuild (world.reset/.load/
+        // Cable groups reconcile AFTER screens (a group resolves against the live slot set) — the SAME choke
+        // point, so a live UpsertScreen carrying a cable port AND a whole-document rebuild (world.reset/.load/
         // .reload) both establish/tear down live links, not merely the boot constructor.
-        m_machines.ReconcileLinks(links: definition.Links);
+        m_machines.ReconcileLinks(links: definition.MachineCableGroups());
 
         if (rebuildPopulation) {
             m_population.Rebuild(

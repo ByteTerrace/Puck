@@ -320,8 +320,9 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
     /// <exception cref="ArgumentOutOfRangeException">A dimension is not finite, the derived lifted bound radius (see
-    /// remarks) is not finite, <paramref name="material"/> is negative, <paramref name="lift"/> is not a defined
-    /// <see cref="SdfLift"/>, or <paramref name="smooth"/> is not finite.</exception>
+    /// remarks) is not finite, the profile's slant vector is shorter than
+    /// <see cref="MinTrapezoidProfileSlant"/>, <paramref name="material"/> is negative, <paramref name="lift"/> is
+    /// not a defined <see cref="SdfLift"/>, or <paramref name="smooth"/> is not finite.</exception>
     public SdfProgramBuilder Trapezoid(float bottomHalfWidth, float topHalfWidth, float halfHeight, SdfLift lift, float liftAmount, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         // Signs are absorbed (MathF.Abs on all three half-extents, MathF.Max(0) on the lift).
         RequireFinite(
@@ -366,6 +367,23 @@ public sealed partial class SdfProgramBuilder {
                 y: heightAbs
             ).Length()
         );
+        // The exact 2D core projects onto the slanted side by dividing by that side's squared length, so a profile
+        // whose slant vanishes has no shape to be the distance to: the fixed-point evaluator divides by zero and the
+        // shader propagates NaN through every blend downstream. The bound is the representation's, not taste's — see
+        // MinTrapezoidProfileSlant. Refused here rather than nudged (as Ellipse nudges a perfect circle) because
+        // there is no nearby non-degenerate trapezoid to nudge toward: both the width difference and the height are
+        // vanishing at once, so the authored shape has no extent in either profile direction.
+        var slant = new Vector2(
+            x: (topAbs - bottomAbs),
+            y: (heightAbs + heightAbs)
+        );
+
+        if (slant.LengthSquared() < (MinTrapezoidProfileSlant * MinTrapezoidProfileSlant)) {
+            throw new ArgumentOutOfRangeException(
+                message: $"A trapezoid profile's slant vector (topHalfWidth − bottomHalfWidth, 2·halfHeight) must be at least {MinTrapezoidProfileSlant} long; this one is {slant.Length()}, which the deterministic fixed-point field evaluator cannot distinguish from a point.",
+                paramName: nameof(halfHeight)
+            );
+        }
 
         RequireFiniteLiftedReach(
             lift: lift,

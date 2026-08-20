@@ -103,6 +103,9 @@ struct ScreenSurfaceData {
     float4 origin;  // xyz = world-space front-face center, w = unused (pad)
 };
 [[vk::binding(10, 0)]] StructuredBuffer<ScreenSurfaceData> screenSurfaces : register(t4);
+// The screenSurfaces[] / sdfDecalCells[] / screenSourceN entry count — the width every screen index is bounded
+// against before it indexes one. KEEP IN SYNC with SdfProgramBuilder.MaxScreenSurfaces.
+static const uint SdfScreenSurfaceCount = 32u;
 // The screen source images (nearest-filtered, so emulator/child pixels stay crisp) — one per screen index (0..31),
 // THIRTY-TWO separate combined-image-sampler bindings (12..43; DXC's vk::combinedImageSampler does not support an ARRAY
 // texture, only a scalar one, so a true single Vulkan combined-image-sampler array isn't expressible in this HLSL — see
@@ -188,7 +191,7 @@ struct ScreenSurfaceData {
 // (position/orientation/extent) is the SAME screenSurfaces[i] entry above — a screen is an area emitter, so it needs
 // only its color here. KEEP IN SYNC with SdfWorldEngine's screen-light buffer packing.
 [[vk::binding(11, 0)]] StructuredBuffer<float4> sdfScreenLights : register(t38);
-static const uint SdfScreenLightEnv = 32u;
+static const uint SdfScreenLightEnv = SdfScreenSurfaceCount;
 
 // Grid-lock overlay rows (grid-locking §4a): FOUR float4 rows AFTER the env entry (env stays at 32 — load-bearing as
 // the screen-count loop bound above). KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's Grid* fields.
@@ -435,6 +438,16 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     }
 
     uint screenIndex = (uint)(material - SDF_SCREEN_MATERIAL - 1);
+
+    // The sibling of sdf-world-rt-debug's hitMaterial guard: an out-of-bounds structured-buffer read is zeroed on
+    // Direct3D 12 by spec but only defined under robustBufferAccess on Vulkan, so the bound makes both backends agree
+    // by construction rather than by driver luck. Falling back to the material-shaded path is the same answer a zeroed
+    // entry would produce here (no decal, no bound source), and the host refuses such an id, so no valid program
+    // reaches this branch and no composed pixel moves.
+    if (screenIndex >= SdfScreenSurfaceCount) {
+        return false;
+    }
+
     ScreenSurfaceData surface = screenSurfaces[screenIndex];
     float3 local = (hitPoint - surface.origin.xyz);
     float2 uv = float2(
@@ -486,8 +499,8 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     float luminance = dot(sampled, CrtLumaWeights);
     sampled += ((CrtBloomGain * smoothstep(CrtBloomThreshold, 1.0, luminance)) * sampled);
 
-    // Fresnel glass glint when CrtGlint is non-zero: a faint rim brighten at glancing view angles. The normalize is
-    // load-bearing — the surface's right/up pair is unit but NOT guaranteed orthogonal (see SdfScreenSurface).
+    // Fresnel glass glint when CrtGlint is non-zero: a faint rim brighten at glancing view angles. The pair is
+    // orthonormal by contract (SdfScreenSurface), so the normalize only absorbs the uploaded table's float drift.
     float3 screenNormal = normalize(cross(surface.right.xyz, surface.up.xyz));
     float glint = pow((1.0 - saturate(dot(-rayDirection, screenNormal))), CrtGlintPower);
 
@@ -2337,7 +2350,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // screen-surface table, its color from the per-frame framebuffer average. The dot(screenNormal, -L) gate
                 // is the "light through the glass" cue — a screen only lights what sits in front of its face.
                 // SdfScreenLightEnv doubles as the screen-slot COUNT (the environment entry sits right after 0..count-1).
-                // The normalize is load-bearing: right/up are unit but not guaranteed orthogonal (see SdfScreenSurface).
+                // right/up are orthonormal by contract (SdfScreenSurface); the normalize absorbs upload float drift.
                 // The engine-bench sdf.screen-lights lever skips the whole additive loop (the CRTs stop spilling glow).
                 if (!worldScreenLightsDisabled()) {
                     for (uint lightIndex = 0u; (lightIndex < screenLightLoopBound()); lightIndex++) {

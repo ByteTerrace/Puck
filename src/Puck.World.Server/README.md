@@ -133,6 +133,11 @@ A disconnected seat or peer does not drop its body on the spot — it PARKS
 (`Entry.Parked`/`ParkedUntilTick`) for `population.reconnectGraceSeconds` (converted to ticks at compile),
 retained pose/state and all, before `ReclaimExpiredParks` tears it down; a
 matching re-Join resumes the retained body instead of minting a fresh one.
+The park defers the BODY only: a disconnecting peer generation's grant rows are
+released at the `PeerDisconnected` event itself (and a checkpoint restore
+releases a restored park's at `RestoreCheckpoint`); a verified-identity
+reconnect that resumes the parked body re-mints its admission templates
+through the ordinary `PeerAdmitted` event.
 See [references/session-lifecycle.md](../../.claude/skills/puck-world/references/session-lifecycle.md)
 for the full contract.
 

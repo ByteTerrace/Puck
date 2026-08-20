@@ -46,7 +46,6 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("views"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? ViewsRaw = null,
     [property: JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLook>? LooksRaw = null,
     [property: JsonPropertyName("lookAssignment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRowAssignment? LookAssignmentRaw = null,
-    [property: JsonPropertyName("links"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenLink>? LinksRaw = null,
     [property: JsonPropertyName("grants"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGrant>? GrantsRaw = null,
     [property: JsonPropertyName("hud"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHudSection? HudRaw = null,
     [property: JsonPropertyName("icons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIconographySection? IconsRaw = null,
@@ -188,9 +187,6 @@ public sealed record WorldDefinition(
     /// kit at all — the derived refusal <see cref="WorldDefinitionValidator"/> applies rather than a flat floor.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldKit> Kits => (KitsRaw ?? []);
-    /// <summary>Gets the cable-link rows — ABSENT resolves to none.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldScreenLink> Links => (LinksRaw ?? []);
     /// <summary>Gets the look→entity assignment policy — ABSENT resolves to <see cref="WorldRowAssignment.Default"/>.</summary>
     [JsonIgnore]
     public WorldRowAssignment LookAssignment => (LookAssignmentRaw ?? WorldRowAssignment.Default);
@@ -253,6 +249,51 @@ public sealed record WorldDefinition(
             seconds: adjacency.LivenessGraceSeconds,
             ratePerSecond: ((uint)SimulationRateHz)
         );
+    }
+    /// <summary>Derives the machine cable groups from the declared <see cref="Screens"/> rows' machine sources — the
+    /// world DECLARES per-machine cable ports (<see cref="WorldMachineCable"/> on
+    /// <see cref="WorldScreenSource.Machine"/>), and the engine derives each cable's ordered screen set here.
+    /// Members are ordered by their authored <see cref="WorldMachineCable.Position"/>, groups by cable name
+    /// (ordinal), so the derivation is reproducible regardless of screen-row order. Shape rules (two or more ports,
+    /// unique contiguous positions, no port outside a declared row's own source) are
+    /// <see cref="WorldDefinitionValidator"/>'s; this derivation orders whatever is authored.</summary>
+    /// <returns>The derived groups, in cable-name order; empty when no declared machine source names a cable.</returns>
+    public IReadOnlyList<WorldMachineCableGroup> MachineCableGroups() {
+        SortedDictionary<string, List<(int Position, int Screen)>>? cables = null;
+
+        foreach (var screen in Screens) {
+            if (screen?.Source is not WorldScreenSource.Machine { Cable: { } cable }) {
+                continue;
+            }
+
+            cables ??= new SortedDictionary<string, List<(int, int)>>(comparer: StringComparer.Ordinal);
+
+            if (!cables.TryGetValue(
+                key: cable.Name,
+                value: out var members
+            )) {
+                members = [];
+                cables[cable.Name] = members;
+            }
+
+            members.Add(item: (cable.Position, screen.Index));
+        }
+
+        if (cables is null) {
+            return [];
+        }
+
+        var groups = new List<WorldMachineCableGroup>(capacity: cables.Count);
+
+        foreach (var (name, members) in cables) {
+            members.Sort(comparison: static (a, b) => a.Position.CompareTo(value: b.Position));
+            groups.Add(item: new WorldMachineCableGroup(
+                Name: name,
+                Screens: [.. members.Select(selector: static member => member.Screen)]
+            ));
+        }
+
+        return groups;
     }
     /// <summary>Gets the render-lever boot defaults and quality-preset table — ABSENT resolves to
     /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the standard posture is authored in

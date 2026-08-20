@@ -189,7 +189,16 @@ action state by declared name rather than document-local ordinal:
 The bridge is why holding jump across a handoff remains one physical hold
 rather than release-then-press. `player.press`, `player.channels`,
 `player.state`, `player.targets`, `world.contacts`, and `player.where` follow
-the same seat route after a crossing. A new seat-facing verb that reads the
+the same seat route after a crossing, and so do the seat-routed document
+writes `player.row.set`/`player.state.cell.set` — the `world.row.set`/
+`world.state.cell.set` grammars submitted through the seat's current
+authority (`WorldFederatedServerLink.SubmitWorldMutation` → the federation
+`Routed` lane → `WorldForwardedAuthority.TryApplySubmission`, where the
+DESTINATION re-stamps the envelope with the traveler's own transfer principal
+and its ordinary admission door — row-scoped grants included — decides it; the
+verdict narrates on the destination's transcript). That is how a
+contribution-slot holder fills its slot from the console it is sitting at. A
+new seat-facing verb that reads the
 boot population directly is a routing defect.
 
 ## Contact across the overlap

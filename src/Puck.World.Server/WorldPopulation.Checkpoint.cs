@@ -123,8 +123,9 @@ public sealed partial class WorldPopulation {
     /// <paramref name="tick"/>, exactly as <see cref="ApplyPeerDisconnected"/> parks a live disconnect — the
     /// connection that occupied it does not survive a restore (<see cref="WorldOutputHub"/>/<see cref="WorldTcpHost"/>
     /// state is excluded from the checkpoint), so a captured non-parked remote human is always stale: nothing will
-    /// ever again feed a fresh federated intent into that slot under this process's own tables, and treating it as
-    /// still live would let park-with-grace's own accepted-reconnect window silently vanish under a restart.</summary>
+    /// ever again feed a fresh federated intent into that slot under this process's own tables. Only the BODY parks;
+    /// the generation's grant rows are released by <c>WorldServer.RestoreCheckpoint</c> right after the grant table
+    /// restores, on the same argument the disconnect arm applies.</summary>
     /// <param name="checkpoint">The captured state to restore.</param>
     /// <param name="defaults">The player defaults a restored profiled body's identity resolves colors against.</param>
     /// <param name="tick">The restored current tick — the basis a freshly parked <see cref="Entry.ParkedUntilTick"/>

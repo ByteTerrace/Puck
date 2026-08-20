@@ -56,6 +56,32 @@ Coverage-from-outline systems produce excellent antialiased text, but coverage
 is not a conservative distance field. Use such output in the decal or overlay
 tier, not as marchable geometry.
 
+## Negative authored scale as a mirroring spelling
+
+**Current decision:** Rejected. A negative per-axis scale on a creation shape
+is refused at the creation document validator.
+
+Mirroring already has a spelling: the `SymmetryPlane` domain op, authored as a
+`symmetry` entry in a shape's domain list, which reflects across an arbitrary
+plane, is an exact isometry, and expands to rigid copies so contact matches
+render. A sign on a scale component would be a second spelling of the same
+mechanism, and a strictly weaker one — it can only mirror across the shape's
+own axis planes.
+
+It also does not mirror anything today. Every emission path reads a scale's
+magnitude (`SdfSolidGeometry.AppendScaledPrimitive`,
+`CreationStampEmitter.EffectiveScale`), so the sign changes no geometry; its
+only observable effect was that reach disagreed with the emitted surface, and
+because reach folds into a running maximum seeded at zero, the placement
+shipped a cull bound of nothing but its margin around geometry that was still
+there. `SdfSolidGeometry.Reach` reads magnitudes for the same reason its
+emission sibling does, so the two describe one object whatever the caller
+hands them.
+
+**Reconsider when:** A scale sign is given a meaning emission actually
+implements, and that meaning is something the symmetry domain op cannot
+express.
+
 ## Runtime chamfer distance transform
 
 **Current decision:** Rejected.

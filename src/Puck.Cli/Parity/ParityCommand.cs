@@ -92,24 +92,40 @@ internal static class ParityCommand {
             }
         }
 
-        if (frames.Values.Select(selector: static image => (image.Width, image.Height)).Distinct().Count() != 1) {
-            Console.Error.WriteLine(value: "ERROR: the captured frames disagree on extent; the legs did not observe the same window.");
-
-            return 2;
-        }
-
         var failed = false;
 
         foreach (var (name, _) in entries) {
-            var verdict = ParityEnvelope.Compare(left: frames[$"{name}-vulkan"], right: frames[$"{name}-directx"]);
+            var left = frames[$"{name}-vulkan"];
+            var right = frames[$"{name}-directx"];
+
+            // Per pair, not corpus-wide: an entry's window extent is its own document's authored host, and the corpus
+            // deliberately mixes them (the pattern worlds author their own; the shipped entry inherits the standard
+            // one). What must hold is that one entry's two backend legs observed the same window.
+            if ((left.Width != right.Width) || (left.Height != right.Height)) {
+                Console.Error.WriteLine(value: $"ERROR: the {name} legs disagree on extent ({left.Width}x{left.Height} vulkan vs {right.Width}x{right.Height} directx); they did not observe the same window.");
+
+                return 2;
+            }
+
+            var verdict = ParityEnvelope.Compare(left: left, right: right);
 
             Console.WriteLine(value: $"parity: {name} vulkan vs directx — {Describe(verdict: verdict)} => {(verdict.Passed ? "PASS" : "FAIL")}");
             failed |= !verdict.Passed;
         }
 
         // The comparator's own red leg: two different authored patterns from the SAME backend. If the envelope
-        // accepts this pair it can no longer refuse anything, and every green above is void.
-        var discriminator = ParityEnvelope.Compare(left: frames["gradient-vulkan"], right: frames["edges-vulkan"]);
+        // accepts this pair it can no longer refuse anything, and every green above is void. Both are pattern worlds
+        // authoring one extent; a corpus change that broke that would otherwise fault inside the comparator.
+        var gradientFrame = frames["gradient-vulkan"];
+        var edgesFrame = frames["edges-vulkan"];
+
+        if ((gradientFrame.Width != edgesFrame.Width) || (gradientFrame.Height != edgesFrame.Height)) {
+            Console.Error.WriteLine(value: "ERROR: the gradient and edges pattern worlds no longer author one window extent, so the comparator's red leg cannot be measured.");
+
+            return 2;
+        }
+
+        var discriminator = ParityEnvelope.Compare(left: gradientFrame, right: edgesFrame);
 
         Console.WriteLine(value: $"parity: discriminator (gradient vs edges, same backend) — {Describe(verdict: discriminator)} => {(discriminator.Passed ? "UNEXPECTED PASS" : "FAIL (expected)")}");
 

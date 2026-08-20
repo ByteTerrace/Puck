@@ -197,7 +197,6 @@ nested records, which are the authority:
 | Host | SetHostDefaults 30 |
 | Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33 |
 | Looks | UpsertLook 34, RemoveLook 35, SetLookAssignment 36 |
-| Links | UpsertScreenLink 37, RemoveScreenLink 38 |
 | Grants | UpsertGrant 39, RemoveGrant 40 |
 | Hud | UpsertHudPanel 41, RemoveHudPanel 42, UpsertHudElement 43, RemoveHudElement 44, SetHudDefaults 45 |
 | State | UpsertStateRow 46, RemoveStateRow 47 (whole row), UpsertStateCell 49, RemoveStateCell 50 (one cell), Generate 51 (one draw at a draw SITE) |
@@ -207,6 +206,10 @@ nested records, which are the authority:
 | Groups | UpsertGroupKind 56, RemoveGroupKind 57, FormGroup 58, JoinGroup 59, LeaveGroup 60, KickMember 61, OfferOwnership 62, SettleOwnership 63 |
 | PlayerDefaults | SetPlayerDefaults 64 |
 | Market | CreateMarketListing 65, PlaceMarketBid 66, BuyoutMarketListing 67, CancelMarketListing 68, SettleMarketListing 69, PruneMarketListings 70 |
+
+Ordinals 37/38 (the retired screen-link pair) are unassigned and never reused:
+machine cable linking is authored on the `Machine` source itself
+(`WorldMachineCable`), so cable edits ride `UpsertScreen`.
 
 Rules the catalog encodes:
 
@@ -254,8 +257,8 @@ Rules the catalog encodes:
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog declares 71 kinds (ordinals 0–70) on a 128-bit lane.**
-Ordinals 71–127 are free; a colliding ordinal is still a boot failure, not an
+**FIRST — the catalog declares 69 kinds on a 128-bit lane (0–70 with 37/38
+retired).** Ordinals 71–127 are free; a colliding ordinal is still a boot failure, not an
 option. A genuinely new kind is
 a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
 is this an existing kind's payload? Most proposals are — a new section reuses

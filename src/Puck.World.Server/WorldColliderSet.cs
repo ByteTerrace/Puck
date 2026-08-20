@@ -171,6 +171,10 @@ internal sealed class WorldColliderSet : IContactField {
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
     // axes. Exact for the axis-aligned screens the built-in world ships; conservative (bounding) for a rotated slab.
+    // The authored Right/Up are used as the box axes directly, which is sound only because they are orthogonal: the
+    // validator refuses a skewed frame (WorldDefinitionValidator's screen basis rule), so this triple and the
+    // orthonormal rotation the client stamps the slab with are the same frame. Relaxing that rule would make this
+    // collider and the rendered slab different solids.
     private static (FixedVector3 Center, FixedVector3 HalfExtents) ScreenBox(WorldScreen screen) {
         var normal = FixedVector3.Cross(
             left: FixedVector3.FromVector3(value: screen.Right),

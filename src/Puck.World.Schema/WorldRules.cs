@@ -179,9 +179,9 @@ public static class WorldRuleFacts {
     /// forever, so a staleness gate (<c>compareState($link:north, greaterOrEqual, 240)</c>) stays closed rather than
     /// spuriously opening.
     /// <para>The argument is an <c>adjacencies</c> row name, refused at compile time
-    /// (<see cref="WorldRuleRefusal.LinkChannelMalformed"/>) when no such row is declared. Unrelated to
-    /// <see cref="WorldSection.Links"/>, which is the screen cable-link section (<c>screen.link</c>); this channel
-    /// names a federation seam.</para>
+    /// (<see cref="WorldRuleRefusal.LinkChannelMalformed"/>) when no such row is declared. Unrelated to the machine
+    /// cable groups (<c>screen.link</c>, <see cref="WorldMachineCable"/>); this channel names a federation
+    /// seam.</para>
     /// <para>Both this value and the <c>linkEstablished</c>/<c>linkDropped</c> event family derive from the taped
     /// per-tick delivery-refresh observations, so a replay reproduces a rule gated on it — see
     /// <c>Server.WorldEventFeed</c>'s own remarks for the exact taped boundary.</para></summary>

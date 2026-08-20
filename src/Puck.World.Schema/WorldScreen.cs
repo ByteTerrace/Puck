@@ -40,7 +40,17 @@ public abstract record WorldScreenSource {
     /// <param name="ContentPath">The content file (a cartridge ROM) the machine boots, or empty when the screen is
     /// unconfigured — the binder faults the slot gracefully (no crash, no-signal card) rather than booting.</param>
     /// <param name="Options">The engine-specific options string, or <see langword="null"/> for the engine's defaults.</param>
-    public sealed record Machine(string Engine, string ContentPath, string? Options) : WorldScreenSource;
+    /// <param name="Cable">This machine's cable port (see <see cref="WorldMachineCable"/>), or <see langword="null"/>
+    /// for an unlinked machine. Legal only on a declared <c>screens</c> row's own source — a magazine entry or a
+    /// placement face's source is refused one (validated), because a cable is a standing physical connection of the
+    /// machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when
+    /// null, so every machine source authored before cables existed round-trips unchanged.</param>
+    public sealed record Machine(
+        string Engine,
+        string ContentPath,
+        string? Options,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null
+    ) : WorldScreenSource;
     /// <summary>The platform's default live camera feed, with an explicit preferred capture profile. The platform may
     /// negotiate a nearby extent; every screen sampling the same physical default device shares one session.</summary>
     /// <param name="Profile">The preferred capture extent and maximum upload cadence.</param>
@@ -169,14 +179,24 @@ public abstract record WorldScreenSource {
 /// <param name="Wrap">Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle);
 /// when false the selector clamps at both ends.</param>
 public sealed record WorldScreenMagazine(IReadOnlyList<WorldScreenSource> Entries, int Selected = 0, bool Wrap = true);
-/// <summary>A cable-linked group of screens whose machines advance as one interleaved unit. The binder steps the link,
+/// <summary>One machine's cable-port declaration — the machine-tier home of cable linking. A cable is the SET of
+/// declared machine sources naming the same cable name, derived by <see cref="WorldDefinition.MachineCableGroups"/>;
+/// no port ever points at another port, so reciprocity holds by construction and a one-port cable is a validation
+/// refusal rather than a dangling half-pair.</summary>
+/// <param name="Name">The cable's stable kebab-case name, shared by every plugged port.</param>
+/// <param name="Position">This machine's 0-based place in cable order — contiguous across the cable's ports
+/// (validated), and what decides the linking engine's deterministic player order.</param>
+public sealed record WorldMachineCable(string Name, int Position);
+/// <summary>A cable-linked group of screens whose machines advance as one interleaved unit — derived from the
+/// declared machine sources' cable ports (<see cref="WorldDefinition.MachineCableGroups"/>), never authored as a row
+/// of its own. The binder steps the group,
 /// never its members individually, so the engine's deterministic interleave — not the host's frame order — decides who
 /// runs when. Every member must resolve to a machine from the same engine, and that engine must implement
-/// <c>IMachineLinkingEngine</c>; a link whose members do not currently satisfy that is reported dormant, never silently
+/// <c>IMachineLinkingEngine</c>; a group whose members do not currently satisfy that is reported dormant, never silently
 /// dropped.</summary>
-/// <param name="Name">The link's stable kebab-case name (its mutation address).</param>
+/// <param name="Name">The cable's stable kebab-case name.</param>
 /// <param name="Screens">The engine screen indices in cable order (2 or more, no duplicates).</param>
-public sealed record WorldScreenLink(string Name, IReadOnlyList<int> Screens);
+public sealed record WorldMachineCableGroup(string Name, IReadOnlyList<int> Screens);
 /// <summary>A live screen feed's requested output policy. It belongs to the source declaration rather than the binder,
 /// so two window captures can choose different extents and cadences. Camera extents are preferences because a physical
 /// device remains authoritative for its negotiated format.</summary>
@@ -275,7 +295,10 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// this slab declares — the key the source/light providers bind under.</param>
 /// <param name="Origin">The front face's world-space center (the sampled surface origin); the geometry center sits one
 /// <see cref="HalfDepth"/> behind it along the face normal.</param>
-/// <param name="Right">The unit world axis the sampled U increases along (the slab's local +X in world space).</param>
+/// <param name="Right">The unit world axis the sampled U increases along (the slab's local +X in world space). Must be
+/// orthogonal to <paramref name="Up"/>: the client derives the slab's orientation and UV frame from the pair while the
+/// server's collider projects the half-extents onto it, so a skewed pair would render and collide as different
+/// solids.</param>
 /// <param name="Up">The unit world axis the sampled V increases against — V = 0 at the top (the slab's local +Y in
 /// world space).</param>
 /// <param name="HalfWidth">The face half-width (the slab's local X half-extent).</param>

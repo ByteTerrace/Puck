@@ -24,11 +24,14 @@ public interface IFieldEvaluator {
     FieldEvaluatorCapabilities Capabilities { get; }
 
     /// <summary>Evaluates the field at <paramref name="position"/>.</summary>
-    /// <param name="position">The world-space point to evaluate.</param>
+    /// <param name="position">The world-space point to evaluate. An implementation reads the WHOLE hierarchical
+    /// position; one that can only answer within a single <see cref="FixedPosition"/> cell must say so on its own type
+    /// and refuse or rebase a cross-cell query rather than silently answering for the wrong cell.</param>
     /// <param name="distance">The signed nearest-surface distance, when the method returns <see langword="true"/>.</param>
     /// <param name="material">The material id of the nearest surface, when the method returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when the wrapped representation declares anything to answer against; an empty
-    /// one returns <see langword="false"/> rather than a sentinel distance.</returns>
+    /// <returns><see langword="true"/> when the wrapped representation declares anything to answer against AND
+    /// <paramref name="position"/> is expressible in its frame; otherwise <see langword="false"/> rather than a
+    /// sentinel distance.</returns>
     bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material);
     /// <summary>Evaluates the field's gradient at <paramref name="position"/> — the unit-length direction of steepest
     /// distance increase.</summary>

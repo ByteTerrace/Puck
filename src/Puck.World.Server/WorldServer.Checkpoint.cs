@@ -404,6 +404,28 @@ public sealed partial class WorldServer {
             tick: m_lastCompletedTick
         );
         m_grants.Restore(checkpoint: checkpoint.Grants);
+
+        // A restored parked PEER generation is released right here, not at its grace deadline: the connection that
+        // occupied it did not survive the restore and peer body-resume does not exist, so — exactly as the
+        // PeerDisconnected arm argues — its rows and exclusive reservations would only refuse live acquirers while
+        // nothing could ever exercise them (forever, at rate 0). The body's own park-with-grace is untouched, and a
+        // local seat's rows are untouched (a seat can be resumed onto). Same ordinary Revoke door, same loud lines.
+        for (var index = 0; (index < m_population.Capacity); index++) {
+            if (
+                !m_population.IsParked(index: index) ||
+                !m_population.IsAdmittedPeer(bodyIndex: index)
+            ) {
+                continue;
+            }
+
+            foreach (var row in m_grants.Rows(principal: m_population.PeerPrincipal(index: index))) {
+                Revoke(
+                    grant: row,
+                    actor: WorldPrincipal.Console
+                );
+            }
+        }
+
         m_transferEscrow.Restore(checkpoint: checkpoint.Escrow);
         m_inputHold.Restore(checkpoint: checkpoint.InputHold);
         m_events.Restore(checkpoint: checkpoint.EventFeed);

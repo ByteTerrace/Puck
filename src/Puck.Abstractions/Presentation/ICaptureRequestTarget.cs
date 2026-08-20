@@ -11,14 +11,16 @@ namespace Puck.Abstractions.Presentation;
 /// through untouched; when that happens with a capture pending, the node forwards the request to its own inner
 /// node instead of reading back a target it never wrote to — so the request cascades down to whichever node
 /// actually produced the frame that will be shown (down to the bare frame producer at the bottom of the chain).
+/// A node whose inner is not a capture target keeps the request armed rather than dropping it, so no request can
+/// disappear without either a file or a report.
 /// </remarks>
 public interface ICaptureRequestTarget {
     /// <summary>The path of an armed request this node has not served yet, or <see langword="null"/> when nothing is
     /// pending here. A request is WORK THAT HAS ONLY BEEN ASKED FOR: it becomes a file when a frame composes, and a
     /// run that ends first writes nothing. This makes that distinction observable, so a caller can report an
-    /// unserved request instead of leaving the requester to believe a file exists. A node that has forwarded its
-    /// request down the chain (see the remarks above) reports <see langword="null"/> — the node it forwarded to
-    /// reports the path.</summary>
+    /// unserved request instead of leaving the requester to believe a file exists. A decorator reports its own
+    /// request or, when it has forwarded one down (see the remarks above), its inner node's — so the OUTERMOST
+    /// node's answer covers the whole chain.</summary>
     string? PendingCapturePath { get; }
 
     /// <summary>Arms a one-shot readback of the next frame this node produces (or, if it draws nothing before the

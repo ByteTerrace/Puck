@@ -17,7 +17,7 @@ public sealed class ShaderVmThroughput {
     public void Measures() {
         var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
 
-        Assert.False(condition: string.IsNullOrEmpty(value: directory), userMessage: "Set PUCK_SKY_PREVIEW_DIR to the directory the report is written to.");
+        Assert.SkipWhen(condition: string.IsNullOrEmpty(value: directory), reason: "Opt-in harness: set PUCK_SKY_PREVIEW_DIR to the directory the report is written to.");
 
         var report = new StringBuilder();
 

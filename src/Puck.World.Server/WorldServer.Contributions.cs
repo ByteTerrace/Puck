@@ -281,17 +281,13 @@ public sealed partial class WorldServer {
             );
         }
     }
-    /// <summary>Returns one authored <c>adjacencies</c> row's live liveness, as the world event feed's link pass
-    /// counts it.</summary>
-    /// <remarks>KEEP IN SYNC with <c>WorldEventFeed.CollectLinks</c>'s drop rule: <paramref name="dropped"/> is that
-    /// pass's own comparison of <see cref="WorldEventFeed.LinkStalenessTicks"/> against the row's compiled
-    /// <see cref="WorldAdjacency.LivenessGraceSeconds"/>, re-spelled here from the two published numbers rather than
-    /// counted a second time. An unauthored (zero) liveness grace disables sensing, so the row never reads dropped;
-    /// a positive grace at simulation rate 0 has no tick mapping and never drops either.</remarks>
+    /// <summary>Returns one authored <c>adjacencies</c> row's live liveness — the event feed's own staleness count
+    /// and its own latched drop verdict (<see cref="WorldEventFeed.LinkDropped"/>), never a second spelling of the
+    /// grace comparison that pass owns.</summary>
     /// <param name="adjacencyName">The document's stable adjacency row name.</param>
     /// <param name="staleTicks">Simulation ticks since that row last took a delivered neighbour refresh; 0 on the
     /// tick one landed, and 0 for a row whose liveness sensing is disabled.</param>
-    /// <param name="dropped">Whether the staleness has reached the row's authored liveness grace.</param>
+    /// <param name="dropped">Whether the link pass currently calls the row dropped.</param>
     /// <returns><see langword="true"/> when <paramref name="adjacencyName"/> names an authored adjacency row.</returns>
     public bool TryLinkLiveness(string adjacencyName, out long staleTicks, out bool dropped) {
         staleTicks = 0L;
@@ -300,15 +296,12 @@ public sealed partial class WorldServer {
         if (WorldDefinitionRows.FindAdjacency(
             adjacencies: m_definition.Adjacencies,
             name: adjacencyName
-        ) is not { } row) {
+        ) is null) {
             return false;
         }
 
         staleTicks = m_events.LinkStalenessTicks(adjacencyName: adjacencyName);
-
-        var liveness = m_definition.AdjacencyLivenessGraceTicks(adjacency: row);
-
-        dropped = (!liveness.IsZero && !liveness.IsNever && (staleTicks >= liveness.Ticks));
+        dropped = m_events.LinkDropped(adjacencyName: adjacencyName);
 
         return true;
     }

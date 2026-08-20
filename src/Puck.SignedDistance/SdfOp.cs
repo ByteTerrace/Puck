@@ -143,8 +143,9 @@ public enum SdfOp : uint {
     /// intersection-family compose composes the scope globally (unmaskable, exactly like an unscoped intersection). The
     /// scope's candidate is already in world units (its shapes were distance-scaled as they blended in) and must not be
     /// re-scaled or take the point material delta (the fusion trap). Its material tie-break matches shape's (strict
-    /// compare — the parent keeps its material on a tie). A chamfer compose is the one non-1-Lipschitz case: it folds a
-    /// conservative √2 into <see cref="SdfProgram.StepScale"/>. KEEP IN SYNC with SDF_OP_POP_FIELD in
+    /// compare — the parent keeps its material on a tie). A chamfer compose is the one non-1-Lipschitz case: it enters
+    /// <see cref="SdfProgram.StepScale"/> through the same per-composition recurrence a chamfer
+    /// <see cref="ShapeBlend"/> does, so repeated pops accumulate. KEEP IN SYNC with SDF_OP_POP_FIELD in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     PopField = 28,
 }

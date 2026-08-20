@@ -670,26 +670,10 @@ public sealed partial class WorldServer {
         // went unreachable past its authored grace.
         SweepContributionTenure(tick: tick);
         // Reconnect-park recovery — the same tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's. A
-        // reclaimed peer generation's remaining rows are revoked right here, through the ordinary door: a live
-        // disconnect released its own at the event, so this reaches a park whose rows arrived with a checkpoint
-        // restore (WorldPopulation.Restore parks every captured remote human).
-        m_reclaimedParks.Clear();
-        m_population.ReclaimExpiredParks(
-            reclaimed: m_reclaimedParks,
-            tick: tick
-        );
-
-        foreach (var stale in m_reclaimedParks) {
-            foreach (var row in m_grants.Rows(principal: stale)) {
-                Revoke(
-                    grant: row,
-                    actor: WorldPrincipal.Console
-                );
-            }
-        }
-
-        m_reclaimedParks.Clear();
+        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's. The
+        // body half only: a peer generation's grant rows go at its PeerDisconnected event, and a restored parked
+        // generation's go at RestoreCheckpoint, so an expiring park holds nothing to release here.
+        m_population.ReclaimExpiredParks(tick: tick);
         m_addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         m_engagement.FoldTick();
@@ -890,13 +874,14 @@ public sealed partial class WorldServer {
             case WorldServerEvent.PeerDisconnected disconnected:
                 // The body parks with grace; the authority does not. Park serves body continuity (pose, durable
                 // state, collidability, targetability) and ApplyPeerDisconnected still defers that half to
-                // ReclaimExpiredParks. A peer GENERATION, though, is dead the moment its connection drops: the Hello
-                // handshake carries no persistent identity, so no reconnect can ever resume onto it —
-                // TryAdmitRemotePeer skips the still-parked slot and mints a fresh generation. Retaining its rows
-                // therefore holds authority nothing can exercise but that still blocks: an Exclusive subject reserved
-                // by a dead generation refuses every live acquirer, and at rate 0 the compiled grace is Never, so no
-                // sweep ever releases it. Release is unconditional here, the same path a non-parking disconnect (an
-                // authored-zero grace, or no live match) takes. It rides this event, so replay re-drives the identical
+                // ReclaimExpiredParks. Authority follows the CONNECTION: while disconnected, nothing can exercise
+                // the generation's rows, yet an Exclusive subject it reserved would refuse every live acquirer —
+                // for the whole grace window, and forever at rate 0, where the compiled grace is Never and no sweep
+                // ever runs. Release is therefore unconditional here, the same path a non-parking disconnect (an
+                // authored-zero grace, or no live match) takes; a verified-identity reconnect that resumes the
+                // parked BODY re-mints its admission templates through the ordinary PeerAdmitted event
+                // (WorldServer.TryAdmitVerifiedParticipant's resume arm), so only live acquisitions beyond the
+                // templates fail to survive the gap. It rides this event, so replay re-drives the identical
                 // revocations through the identical door at the identical tick, with no separate tape entry.
                 foreach (var peer in disconnected.Entries) {
                     m_population.ApplyPeerDisconnected(

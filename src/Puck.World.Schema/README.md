@@ -77,7 +77,7 @@ renaming the type everywhere it is used.
 the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
 screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
-collision, host, views, looks, links, grants, hud, state, input hold, rules,
+collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, market). Worlds live as data
 under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
 game roster: `nexus` (the overworld hub — a floating island above a field of
@@ -704,8 +704,8 @@ token, so it composes with `$distance:`/`$argmax:` directly; see
 `$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and
-this is a federation seam — unrelated to the `links` section, which is screen
-cables) —
+this is a federation seam — unrelated to machine cable linking, which is the
+`Machine` source's own `cable` port) —
 folding time, population, occupancy, machine memory, aggregates,
 reconnect-park state, and federation liveness into the string channel `State`
 already carries rather than a fact enum or a scheduler. `Mode` is `Level`

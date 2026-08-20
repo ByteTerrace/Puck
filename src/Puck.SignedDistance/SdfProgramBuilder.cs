@@ -22,6 +22,9 @@ public sealed partial class SdfProgramBuilder {
     /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then bumping the
     /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const int MaxFieldScopeDepth = 1;
+    // The largest |dot(unitRight, unitUp)| RequireOrthogonalBasis accepts: a cosine, so it reads as ~0.057 degrees.
+    private const float BasisSkewTolerance = 1.0e-3f;
+
     /// <summary>The instance ceiling — the most instances one program may declare. The world renderer's per-tile
     /// mask is a derived ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
     /// it at 512 words per tile (16384/32). Everything downstream derives from the live program's instance count — the
@@ -35,6 +38,17 @@ public sealed partial class SdfProgramBuilder {
     /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
     /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
     public const int MaxSampledRegionDim = 1023;
+    /// <summary>The shortest slant vector <c>(topHalfWidth − bottomHalfWidth, 2·halfHeight)</c> a
+    /// <see cref="Trapezoid"/> profile may carry: shorter than this the deterministic fixed-point evaluator divides by
+    /// its own squared length and the shader returns NaN, so the shape is refused rather than evaluated.</summary>
+    /// <remarks>Sized to the Q48.16 representation. <c>FixedVector2.Dot</c> accumulates both products exactly and
+    /// rounds once to nearest, so the squared slant reads zero exactly when
+    /// <c>round(2^16·Δr)² + round(2^17·halfHeight)² &lt;= 2^15</c>. Each raw component can sit up to half a quantum
+    /// above the real value it came from, so the widest real slant inside that set is
+    /// <c>sqrt(2^15 + 2·181 + 0.5)/2^16 ≈ 0.002778</c>; this bound clears it. A slant this short spans well under one
+    /// fixed-point quantum of profile, so nothing authorable is lost — a trapezoid with equal half-widths and real
+    /// height is a rectangle, whose slant is <c>2·halfHeight</c> and never degenerate.</remarks>
+    public const float MinTrapezoidProfileSlant = 0.003f;
     /// <summary>The most screen surfaces one program may declare (matches <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract separate from the
     /// viewport capacity <c>Puck.SdfVm.SdfWorldEngine.MaxViewports</c>). Capped at 32 by the single-<c>uint</c>
@@ -487,6 +501,46 @@ public sealed partial class SdfProgramBuilder {
             );
         }
     }
+    private bool DeclaresScreenIndex(int screenIndex) {
+        foreach (var surface in m_screenSurfaces) {
+            if (surface.ScreenIndex == screenIndex) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private string DescribeScreenIndices() => ((m_screenSurfaces.Count == 0)
+        ? "none"
+        : string.Join(
+            separator: ", ",
+            values: m_screenSurfaces.Select(selector: static surface => surface.ScreenIndex)
+        )
+    );
+    // The one basis door, shared by Text and the screen-surface ScreenSlab overload. Both pack the raw axes (a text
+    // run's layout offsets; a screen surface's UV projection) beside an orthonormal quaternion built from the same
+    // pair (each glyph's geometry; the slab's placement), so the pair must be orthogonal or the two halves describe
+    // different solids. Spanning a plane is not sufficient: the skew is unbounded up to parallel.
+    // The tolerance is a cosine and reads as an angle: 1e-3 admits ~0.057 degrees, above the rounding a
+    // quaternion-derived pair (Vector3.Transform of UnitX/UnitY) or a fixed-point-derived world frame carries.
+    private static void RequireOrthogonalBasis(Vector3 right, Vector3 up, string paramName, string subject) {
+        var unitRight = Vector3.Normalize(value: right);
+        var unitUp = Vector3.Normalize(value: up);
+        var skew = Vector3.Dot(
+            vector1: unitRight,
+            vector2: unitUp
+        );
+
+        // NaN fails this comparison too (every comparison against NaN is false, so `!(|skew| <= tolerance)` is true),
+        // which is the wanted answer: RequireDirection has already refused a non-finite axis, so a NaN here can only
+        // come from an underflowing normalize the caller slipped past.
+        if (!(MathF.Abs(x: skew) <= BasisSkewTolerance)) {
+            throw new ArgumentOutOfRangeException(
+                message: $"{subject} must be orthogonal: the unit axes' dot product is {skew}, and at most {BasisSkewTolerance} is accepted. A skewed pair packs a frame whose UV/layout follows the authored axes while the geometry rides the orthonormal rotation derived from them, so the two describe different solids.",
+                paramName: paramName
+            );
+        }
+    }
     /// <summary>Owns the defined-range check for every contiguous enum packed into the SDF instruction stream.</summary>
     private static void RequirePackedEnumValue(uint value, uint maximum, object actualValue, string enumName, string paramName) {
         if (value > maximum) {
@@ -664,6 +718,12 @@ public sealed partial class SdfProgramBuilder {
         // distinguishable by that same threshold, so every id BELOW it is a palette row and is checked. Read off the
         // packed instructions rather than a parallel list: SdfOp.ShapeBlend is written at exactly one site (Shape),
         // so this covers every emitted shape by construction and cannot drift from one.
+        //
+        // The sentinel BAND is bounded on both sides, for the same reason the palette is. sampleScreenSurface
+        // (sdf-world.hlsli) turns any id above ScreenMaterialId into a direct screenSurfaces[]/sdfDecalCells[] index
+        // with no search, so an id naming no declared surface reads a slot the program never packed. The band's top is
+        // judged HERE for the palette's reason: the screen list is still growing while shapes are emitted.
+        // (AddMaterial owns the palette's own ceiling: it refuses the row that would collide with the sentinel.)
         for (var index = 0; (index < m_instructions.Count); index++) {
             var instruction = m_instructions[index];
 
@@ -673,10 +733,21 @@ public sealed partial class SdfProgramBuilder {
 
             var shapeMaterial = ((int)instruction.Material);   // Shape refuses a negative id at emission, so this cast round-trips.
 
-            if (
-                (shapeMaterial >= ScreenMaterialId) ||
-                (shapeMaterial < m_materials.Count)
-            ) {
+            if (shapeMaterial >= ScreenMaterialId) {
+                if (shapeMaterial == ScreenMaterialId) {
+                    continue;   // The plain sentinel: procedural screen shading, and the one screen id that reads no side table at all.
+                }
+
+                var screenIndex = ((shapeMaterial - ScreenMaterialId) - 1);
+
+                if (DeclaresScreenIndex(screenIndex: screenIndex)) {
+                    continue;
+                }
+
+                throw new InvalidOperationException(message: $"A shape names screen material {shapeMaterial}, which decodes to screen index {screenIndex}, but the program declares no screen surface at that index (declared: {DescribeScreenIndices()}). The shader indexes the screen-surface and decal tables directly with it, so this would read a slot the program never packed. Declare the surface (ScreenSlab's screen overload emits both halves together), or use {ScreenMaterialId} for the plain procedural screen material.");
+            }
+
+            if (shapeMaterial < m_materials.Count) {
                 continue;
             }
 

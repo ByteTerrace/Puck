@@ -100,7 +100,24 @@ public static class SdfDomainExpansion {
 
         return true;
     }
-    private static bool TryBranches(SdfDomainOp op, List<SdfRigidFrame> branches, out string refusal) {
+    // The budget is judged against the count a branch set would have, in closed form, before one frame exists: the
+    // authored values reaching here are hostile-document scale — a repeat limit of 120 is 14 million frames and any
+    // limit at or past 645 exceeds Array.MaxLength — so a refusal that costs what it refuses is not a refusal.
+    // Both generators know their count exactly: (2l_x+1)(2l_y+1)(2l_z+1) cells, count·(mirror ? 2 : 1) sectors.
+    // The arithmetic is bounded by construction — TryCellLimit caps each axis at 1024, so the repeat product is at
+    // most 2049^3, and a polar's doubled int count is at most 2^32; both sit far inside long.
+    private static bool WithinBudget(long accumulated, long branchCount, int copyBudget, string opName, out string refusal) {
+        if ((accumulated * branchCount) > copyBudget) {
+            refusal = $"a domain chain whose {opName} op expands it to {(accumulated * branchCount)} copies, past the {copyBudget}-copy budget";
+
+            return false;
+        }
+
+        refusal = string.Empty;
+
+        return true;
+    }
+    private static bool TryBranches(SdfDomainOp op, long accumulated, int copyBudget, List<SdfRigidFrame> branches, out string refusal) {
         refusal = string.Empty;
 
         branches.Clear();
@@ -112,6 +129,16 @@ public static class SdfDomainExpansion {
                     if (normal == FixedVector3.Zero) {
                         refusal = "a symmetry domain op whose plane normal is zero";
 
+                        return false;
+                    }
+
+                    if (!WithinBudget(
+                        accumulated: accumulated,
+                        branchCount: 2L,
+                        copyBudget: copyBudget,
+                        opName: "symmetry",
+                        refusal: out refusal
+                    )) {
                         return false;
                     }
 
@@ -161,6 +188,16 @@ public static class SdfDomainExpansion {
                         )
                     );
 
+                    if (!WithinBudget(
+                        accumulated: accumulated,
+                        branchCount: ((((2L * limitX) + 1L) * ((2L * limitY) + 1L)) * ((2L * limitZ) + 1L)),
+                        copyBudget: copyBudget,
+                        opName: "repeat",
+                        refusal: out refusal
+                    )) {
+                        return false;
+                    }
+
                     for (var cellX = -limitX; (cellX <= limitX); cellX++) {
                         for (var cellY = -limitY; (cellY <= limitY); cellY++) {
                             for (var cellZ = -limitZ; (cellZ <= limitZ); cellZ++) {
@@ -186,6 +223,18 @@ public static class SdfDomainExpansion {
                     );
                     // The sector fold rotates a point by -angle·sector, so its branches are the +angle·sector rotations.
                     var mirrorRemainder = MirrorRemainder(unitNormal: UnitAxis(index: v));
+
+                    if (!WithinBudget(
+                        accumulated: accumulated,
+                        branchCount: (((long)count) * (polar.Mirror
+                        ? 2L
+                        : 1L)),
+                        copyBudget: copyBudget,
+                        opName: "polar",
+                        refusal: out refusal
+                    )) {
+                        return false;
+                    }
 
                     for (var sector = 0; (sector < count); sector++) {
                         var rotation = FixedQuaternion.FromAxisAngle(
@@ -244,6 +293,9 @@ public static class SdfDomainExpansion {
     /// <param name="frames">The copies; a single identity frame when there are no ops, and empty on refusal.</param>
     /// <param name="refusal">Empty on success; otherwise a noun phrase naming what could not expand.</param>
     /// <returns><see langword="true"/> when the chain expanded.</returns>
+    /// <remarks>A chain past <paramref name="copyBudget"/> is refused from its branch counts alone, so refusing costs
+    /// O(1) time and memory however many copies the authored values name — the contract an authored, and so possibly
+    /// hostile, domain list is read under.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="copyBudget"/> is not positive.</exception>
     public static bool TryExpand(IReadOnlyList<SdfDomainOp>? domain, int copyBudget, out SdfRigidFrame[] frames, out string refusal) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: copyBudget);
@@ -263,18 +315,13 @@ public static class SdfDomainExpansion {
 
         foreach (var op in ops) {
             if (!TryBranches(
+                accumulated: accumulated.Count,
                 branches: branches,
+                copyBudget: copyBudget,
                 op: op,
                 refusal: out refusal
             )) {
                 frames = [];
-
-                return false;
-            }
-
-            if ((((long)accumulated.Count) * branches.Count) > copyBudget) {
-                frames = [];
-                refusal = $"a domain chain expanding past the {copyBudget}-copy budget";
 
                 return false;
             }

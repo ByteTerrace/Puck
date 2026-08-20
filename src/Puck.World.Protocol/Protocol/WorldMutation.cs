@@ -265,19 +265,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Assignment">The look assignment policy.</param>
     [MutationKind(ordinal: 36, section: WorldSection.Looks)]
     public sealed record SetLookAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
-    /// <summary>Upserts a cable-link row (whole-row, keyed by name) into the <see cref="WorldSection.Links"/> section —
-    /// the durable twin of the <c>screen.link</c> verb. Applies live: the binder reconciles the declared links to the
-    /// new definition, establishing (or reporting dormant) the group. Rejected by full-document revalidation when a
-    /// named screen is undeclared, a screen is in two links, or fewer than two screens are named.</summary>
-    /// <param name="Principal">The acting identity.</param>
-    /// <param name="Link">The whole cable-link row.</param>
-    [MutationKind(ordinal: 37, section: WorldSection.Links)]
-    public sealed record UpsertScreenLink(WorldPrincipal Principal, WorldScreenLink Link) : WorldMutation(Principal);
-    /// <summary>Removes a cable-link row by name. Rejected loudly when no row declares that name.</summary>
-    /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The link name to remove.</param>
-    [MutationKind(ordinal: 38, section: WorldSection.Links)]
-    public sealed record RemoveScreenLink(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    // Ordinals 37/38 (UpsertScreenLink/RemoveScreenLink) are retired: machine cable linking is authored on the
+    // Machine source itself (WorldMachineCable), so cable edits ride UpsertScreen. Never reassign them.
     /// <summary>Upserts a document-authored grant row (see <see cref="WorldDefinition.Grants"/>) — replaces the row
     /// matching the same (<see cref="WorldGrant.Principal"/>, <see cref="WorldGrant.Capability"/>,
     /// <see cref="WorldGrant.Subject"/>) triple, or appends a new one; a bare re-set of an existing triple changes

@@ -13,6 +13,10 @@ namespace Puck.SignedDistance;
 /// (1,1,1); RoundCone lower r=1, upper r=0.5, height 1; Torus major 1, minor 0.4. Changing a value here changes the
 /// meaning of every persisted document that names the vocabulary.</remarks>
 public static class SdfSolidGeometry {
+    /// <summary>The smallest magnitude any per-axis scale component emits at: a component nearer zero than this is
+    /// raised to it, so a shape authored flat still has a field.</summary>
+    public const float MinimumScale = 0.0001f;
+
     private const float BoxRound = 0.04f;
     private const float CapsuleRadius = 1f;
     private const float ConeHalfHeight = 1f;
@@ -41,6 +45,14 @@ public static class SdfSolidGeometry {
         y: 1f,
         z: 1f
     );
+
+    private static Vector3 EffectiveScale(Vector3 scale) =>
+        Vector3.Max(
+            value1: Vector3.Abs(value: scale),
+            value2: new Vector3(value: MinimumScale)
+        );
+    private static bool IsUniform(Vector3 scale) =>
+        ((scale.X == scale.Y) && (scale.Y == scale.Z));
 
     /// <summary>Emits ONE primitive's shape instruction onto an already-transformed builder chain, using the canonical
     /// dimensions. The blend op and smooth radius ride the shape instruction itself (zero extra words).</summary>
@@ -142,15 +154,9 @@ public static class SdfSolidGeometry {
         int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         ArgumentNullException.ThrowIfNull(chain);
 
-        var effectiveScale = Vector3.Max(
-            value1: Vector3.Abs(value: scale),
-            value2: new Vector3(value: 0.0001f)
-        );
+        var effectiveScale = EffectiveScale(scale: scale);
 
-        if (
-            (effectiveScale.X == effectiveScale.Y) &&
-            (effectiveScale.Y == effectiveScale.Z)
-        ) {
+        if (IsUniform(scale: effectiveScale)) {
             return AppendPrimitive(
                 chain: chain.Scale(scale: effectiveScale),
                 type: type,
@@ -235,6 +241,47 @@ public static class SdfSolidGeometry {
         ),
         };
     }
+    /// <summary>Returns whether <see cref="AppendScaledPrimitive"/> can emit <paramref name="type"/> at
+    /// <paramref name="scale"/>, and names what it cannot when it cannot.</summary>
+    /// <param name="type">The primitive.</param>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <param name="refusal">Empty when the scale emits; otherwise a noun phrase naming what the scale asks for.</param>
+    /// <returns><see langword="true"/> when the scale emits.</returns>
+    /// <remarks>The document-side door: an authoring path validates here so an authored scale is refused where it is
+    /// read rather than throwing out of an emission the caller cannot recover from. KEEP IN SYNC with
+    /// <see cref="AppendScaledPrimitive"/>'s branch structure — every arm that bakes an authored dimension into a
+    /// shape rather than riding a <c>Scale</c> transform needs its shape's own admission rule answered here.</remarks>
+    public static bool TryValidateScaledPrimitive(SdfSolidPrimitive type, Vector3 scale, out string refusal) {
+        refusal = string.Empty;
+
+        var effectiveScale = EffectiveScale(scale: scale);
+
+        // A uniform scale rides one Scale transform over the unit primitive, so no authored dimension reaches a
+        // shape's own admission rule; only the baked arms below can author a degenerate shape.
+        if (IsUniform(scale: effectiveScale)) {
+            return true;
+        }
+
+        if (
+            (type != SdfSolidPrimitive.Cone) ||
+            (effectiveScale.X != effectiveScale.Z)
+        ) {
+            return true;
+        }
+
+        var slant = new Vector2(
+            x: (ConeRadius * effectiveScale.X),
+            y: ((2f * ConeHalfHeight) * effectiveScale.Y)
+        );
+
+        if (slant.LengthSquared() < (SdfProgramBuilder.MinTrapezoidProfileSlant * SdfProgramBuilder.MinTrapezoidProfileSlant)) {
+            refusal = $"a cone whose radial scale {effectiveScale.X} and axial scale {effectiveScale.Y} give it a {slant.Length()}-unit profile slant, under the {SdfProgramBuilder.MinTrapezoidProfileSlant} the deterministic fixed-point field evaluator can distinguish from a point";
+
+            return false;
+        }
+
+        return true;
+    }
     /// <summary>Reads a primitive's local extent from the canonical dimension table.</summary>
     /// <param name="type">The primitive.</param>
     /// <returns>The finite local bounds, or the unbounded marker for <see cref="SdfSolidPrimitive.Plane"/>.</returns>
@@ -310,17 +357,22 @@ public static class SdfSolidGeometry {
         ),
         };
     }
-    /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component
-    /// times the primitive's farthest surface point.</summary>
+    /// <summary>A primitive's worst-case reach from its local origin at a given scale — the largest scale component's
+    /// magnitude times the primitive's farthest surface point.</summary>
     /// <param name="type">The primitive.</param>
     /// <param name="scale">The shape's per-axis scale.</param>
     /// <returns>The reach in local units.</returns>
+    /// <remarks>Reads each component's magnitude, because <see cref="AppendScaledPrimitive"/> emits at
+    /// <see cref="Vector3.Abs(Vector3)"/> of the same vector: a signed maximum reports a reach the emitted geometry
+    /// does not have, and every consumer folds it into a running <c>Max</c> seeded at zero, so the cull bound
+    /// collapses to its margin around geometry that is still there.</remarks>
     public static float Reach(SdfSolidPrimitive type, Vector3 scale) {
+        var magnitude = Vector3.Abs(value: scale);
         var maxScale = MathF.Max(
-            x: scale.X,
+            x: magnitude.X,
             y: MathF.Max(
-                x: scale.Y,
-                y: scale.Z
+                x: magnitude.Y,
+                y: magnitude.Z
             )
         );
         var reach = type switch {

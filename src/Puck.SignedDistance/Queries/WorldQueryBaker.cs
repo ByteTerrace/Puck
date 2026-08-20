@@ -16,6 +16,56 @@ public static class WorldQueryBaker {
     /// (no rounding), like the walk grid's cell size.</summary>
     public const float CellSize = 0.25f;
 
+    // A rectangle edge that is not finite has no cell span: NaN compares false against every bound and quantizes to
+    // 0, and an infinity quantizes to the Q48.16 carrier's extreme. Either one bakes as authored geometry
+    // indistinguishable from a real edge, so both are refused here rather than at the cell loop.
+    private static void CheckRectangle(string kind, int index, float minX, float minZ, float maxX, float maxZ) {
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MinX",
+            value: minX
+        );
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MinZ",
+            value: minZ
+        );
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MaxX",
+            value: maxX
+        );
+        CheckFinite(
+            index: index,
+            kind: kind,
+            name: "MaxZ",
+            value: maxZ
+        );
+
+        if (maxX < minX) {
+            throw new ArgumentException(message: $"{kind} rectangle {index} has MaxX {maxX} below MinX {minX}.");
+        }
+
+        if (maxZ < minZ) {
+            throw new ArgumentException(message: $"{kind} rectangle {index} has MaxZ {maxZ} below MinZ {minZ}.");
+        }
+    }
+    private static void CheckFinite(string kind, int index, string name, float value) {
+        if (!float.IsFinite(f: value)) {
+            throw new ArgumentException(message: $"{kind} rectangle {index} has a non-finite {name} ({value}).");
+        }
+    }
+    private static void CheckFiniteBound(string paramName, float value) {
+        if (!float.IsFinite(f: value)) {
+            throw new ArgumentException(
+                message: $"The grid bound is not finite ({value}).",
+                paramName: paramName
+            );
+        }
+    }
     private static long CeilDiv(long dividend, long divisor) {
         var quotient = (dividend / divisor);
         var remainder = (dividend % divisor);
@@ -127,9 +177,43 @@ public static class WorldQueryBaker {
     /// height where they overlap — "last authored wins," matching the walk grid's override-application order).</param>
     /// <param name="blockers">Blocker rectangles — any covered cell is marked blocked (OR, not overwrite).</param>
     /// <returns>The baked artifact.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="terrain"/> or <paramref name="blockers"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A grid bound, a rectangle edge, or a terrain height is not finite, or a
+    /// maximum edge lies below its minimum.</exception>
     public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers) {
         ArgumentNullException.ThrowIfNull(argument: terrain);
         ArgumentNullException.ThrowIfNull(argument: blockers);
+        CheckFiniteBound(
+            paramName: nameof(minX),
+            value: minX
+        );
+        CheckFiniteBound(
+            paramName: nameof(minZ),
+            value: minZ
+        );
+        CheckFiniteBound(
+            paramName: nameof(maxX),
+            value: maxX
+        );
+        CheckFiniteBound(
+            paramName: nameof(maxZ),
+            value: maxZ
+        );
+
+        if (maxX < minX) {
+            throw new ArgumentException(
+                message: $"The grid's maximum X ({maxX}) lies below its minimum ({minX}).",
+                paramName: nameof(maxX)
+            );
+        }
+
+        if (maxZ < minZ) {
+            throw new ArgumentException(
+                message: $"The grid's maximum Z ({maxZ}) lies below its minimum ({minZ}).",
+                paramName: nameof(maxZ)
+            );
+        }
 
         var originXRaw = FixedQ4816.FromDouble(value: minX).Value;
         var originZRaw = FixedQ4816.FromDouble(value: minZ).Value;
@@ -151,10 +235,9 @@ public static class WorldQueryBaker {
         ));
         var cellCount = (width * height);
         var heightRaw = new long[cellCount];
-        var blocked = new ulong[Math.Max(
-            val1: 1,
-            val2: ((cellCount + 63) / 64)
-        )];
+        var blocked = new ulong[WorldQueryArtifact.BlockedWordCount(cellCount: cellCount)];
+        var patchIndex = 0;
+        var blockerIndex = 0;
 
         Array.Fill(
             array: heightRaw,
@@ -162,6 +245,20 @@ public static class WorldQueryBaker {
         );
 
         foreach (var patch in terrain) {
+            CheckRectangle(
+                index: patchIndex,
+                kind: "Terrain",
+                maxX: patch.MaxX,
+                maxZ: patch.MaxZ,
+                minX: patch.MinX,
+                minZ: patch.MinZ
+            );
+            CheckFinite(
+                index: patchIndex,
+                kind: "Terrain",
+                name: "TopY",
+                value: patch.TopY
+            );
             MarkTerrain(
                 height: height,
                 heightRaw: heightRaw,
@@ -170,9 +267,19 @@ public static class WorldQueryBaker {
                 patch: patch,
                 width: width
             );
+
+            patchIndex++;
         }
 
         foreach (var blocker in blockers) {
+            CheckRectangle(
+                index: blockerIndex,
+                kind: "Blocker",
+                maxX: blocker.MaxX,
+                maxZ: blocker.MaxZ,
+                minX: blocker.MinX,
+                minZ: blocker.MinZ
+            );
             MarkBlocked(
                 blocked: blocked,
                 blocker: blocker,
@@ -181,16 +288,18 @@ public static class WorldQueryBaker {
                 originZRaw: originZRaw,
                 width: width
             );
+
+            blockerIndex++;
         }
 
         return new WorldQueryArtifact(
-            Blocked: blocked,
-            CellSizeRaw: CellSizeRaw,
-            Height: height,
-            HeightRaw: heightRaw,
-            OriginXRaw: originXRaw,
-            OriginZRaw: originZRaw,
-            Width: width
+            blocked: blocked,
+            cellSizeRaw: CellSizeRaw,
+            height: height,
+            heightRaw: heightRaw,
+            originXRaw: originXRaw,
+            originZRaw: originZRaw,
+            width: width
         );
     }
 }

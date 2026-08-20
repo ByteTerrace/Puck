@@ -155,8 +155,6 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
         WorldMutation.SetLookAssignment m => $"SetLookAssignment '{m.Assignment.Sequence.Name}'",
-        WorldMutation.UpsertScreenLink m => $"UpsertScreenLink '{m.Link.Name}'",
-        WorldMutation.RemoveScreenLink m => $"RemoveScreenLink '{m.Name}'",
         WorldMutation.UpsertGrant m => $"UpsertGrant {m.Row.Principal.Describe()} {m.Row.Capability.ToString().ToLowerInvariant()} {m.Row.Subject.Describe()}",
         WorldMutation.RemoveGrant m => $"RemoveGrant {m.Target.Principal.Describe()} {m.Target.Capability.ToString().ToLowerInvariant()} {m.Target.Subject.Describe()}",
         WorldMutation.UpsertHudPanel m => $"UpsertHudPanel '{m.Panel.Id}'",

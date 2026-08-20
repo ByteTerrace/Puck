@@ -7,6 +7,9 @@ It intentionally omits implementation chronology and review provenance.
 |---|---|---|
 | Auto-relaxed sphere tracing | Shipped default with strict reference path | [Marching acceleration](marching-acceleration.md) |
 | Fold-safe step bounds | Required for discontinuous domain folds | [Lipschitz correctness](lipschitz-and-field-correctness.md) |
+| Per-composition chamfer bound | Required; a per-program or per-chain chamfer factor is unsound | [Lipschitz correctness](lipschitz-and-field-correctness.md) |
+| Conservative non-convergence on CPU query verbs | Required; a Boolean that folds "gave up" into "clear" is unsound for simulation | [March scheduling](march-loop-scheduling.md) |
+| Cell-local field evaluation behind a hierarchical position | Not applicable; a world-space seam must rebase or refuse | [Lipschitz correctness](lipschitz-and-field-correctness.md) |
 | Uniform-grid instance culling | Shipped default | [Hierarchy and instances](hierarchical-and-instance-acceleration.md) |
 | Per-region tape pruning | Not useful for ordinary flat room programs; reconsider inside large multi-segment instances | [Tape pruning](tape-pruning-and-inclusion.md) |
 | Per-segment bounds | Open priority for placed creations | [LOD and bounds](lod-and-bounds.md) |
@@ -17,6 +20,11 @@ It intentionally omits implementation chronology and review provenance.
 | Cone AO and bent normals | Optional quality tier; open | [Shading, AO, shadows](shading-ao-shadows.md) |
 | Penumbra soft shadows | Shipped with per-pixel grid gather | [Shading, AO, shadows](shading-ao-shadows.md) |
 | Material blending at smooth seams | Shipped hit-only shading path | [Materials and primitives](materials-and-primitives.md) |
+| Non-orthogonal screen and text frames | Not supported; refused at every door that accepts a frame | [Materials and primitives](materials-and-primitives.md) |
+| Host bounds on the screen material sentinel band | Required on both ends, with the shader bounding the decoded index | [Materials and primitives](materials-and-primitives.md) |
+| Degenerate profile bounds sized to the fixed-point representation | Required wherever an exact core divides by its own dimensions; refused at the builder and the document validator | [Materials and primitives](materials-and-primitives.md) |
+| Negative authored scale as a mirror | Not supported; refused at the creation document validator in favour of the symmetry domain op | [Conditional techniques](negative-results-and-rejections.md) |
+| Closed-form copy counts before a domain fold expands | Required; an authored chain past the copy budget is refused in O(1) memory | [LOD and bounds](lod-and-bounds.md) |
 | Coverage AA | Shipped footprint-aware path | [Antialiasing](antialiasing-and-filtering.md) |
 | Ray-differential CRT filtering | Open when minification is visible | [Antialiasing](antialiasing-and-filtering.md) |
 | Bound-preserving procedural noise | Open; requires integer hash and derivative bound | [Lipschitz correctness](lipschitz-and-field-correctness.md) |

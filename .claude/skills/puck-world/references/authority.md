@@ -79,7 +79,7 @@ ONE server-side table authorizes every write: `WorldGrants`
   index), `screen:<n>`, `section:<name>`, `state:<name>` (string-keyed,
   naming a state row — there is no `profile:<id>` kind; `GrantSubjectKind`
   declares All/Body/Screen/Section/Composition/State/Region/Seat/Creation/
-  Placement and nothing else), `creation:<id>`/`placement:<id>` (one
+  Placement/Adjacency and nothing else), `creation:<id>`/`placement:<id>` (one
   creations/placements row apiece — the ROW-SCOPED `Mutate` subjects, an
   ALTERNATIVE to the section hold rather than a narrowing beneath it; the id
   is shape-checked, never bound-checked, because authoring a row that does
@@ -87,10 +87,14 @@ ONE server-side table authorizes every write: `WorldGrants`
   refused one by name since its mutation seam designates a section handle),
   `region:<name>`
   (a placement's `WorldPlacementRegion` facet, Observe-only), `seat:<n>`
-  (0-based local seat, Observe-only), plus
+  (0-based local seat, Observe-only), `adjacency:<name>` (an authored
+  `adjacencies` row — Region's federation-seam twin, Observe-only, the
+  `linkEstablished`/`linkDropped` event family's gate; like `region:` it is
+  never bound-checked — an unknown name simply never fires), plus
   `Composition` — write-only (echoed by `world.grants`, no parse token; only
   the boot seed constructs it). `section:` must be alphabetic and
-  `Enum.IsDefined` — a numeric `section:5` is refused. `region:`/`seat:` are
+  `Enum.IsDefined` — a numeric `section:5` is refused. `region:`/`seat:`/
+  `adjacency:` are
   legitimate for UNTRUSTED principals only (see references/addons.md's
   "World events" section) — no trusted principal reads the Observation
   cells they gate.
@@ -220,7 +224,8 @@ future client-hosted addon) stay pooled under `Reach ∧ Consent`, unaffected.
 `IsLegitimateSubject` is a POSITIVE per-capability rule — a new subject
 shape is refused by default: Drive takes `body:<n>` (bounded by the
 population) or `all` (trusted only); Observe takes `body:<n>`, plus
-`screen:<n>`/`region:<name>`/`seat:<n>` for untrusted event consumers, or
+`screen:<n>`/`region:<name>`/`seat:<n>`/`adjacency:<name>` for untrusted event
+consumers, or
 `all` for trusted principals; Control takes `screen:<n>` (any),
 `body:<n>` (any, bounded by the population — a control-application possession
 target, [engagement.md](engagement.md)), `composition` (trusted), `all` (trusted
@@ -249,7 +254,8 @@ predicate reads an ABSENT mask as FULL REACH (Console's boot seed holds
 maskless Mutate rows, so refuse-all there would deny every trusted mutation),
 so the strictness lives at the grant door and a maskless untrusted row is
 refused before it can exist. `events:<n>` is Observe-only, required for
-untrusted `screen:`/`region:`/`seat:` rows, optional for an untrusted
+untrusted `screen:`/`region:`/`seat:`/`adjacency:` rows, optional for an
+untrusted
 `body:` row, and refused everywhere else; every such untrusted Observe row
 still also requires `budget:<n>`. Co-drive payloads (`Reach`/`Consent`/
 `Ceiling`) are Drive-only — a `Ceiling` must ride the seat's OWN body row,
@@ -313,7 +319,17 @@ domain seed (`Observe/all`, `Control/all`, `Edit/all`,
 plus the table's only `Drive/all`; addons get NOTHING. Peers are not seeded by
 index: each `PeerAdmitted` event mints the admission verdict's own authored
 templates for that exact generation, and disconnect/reactivation revokes
-stale-generation rows before re-minting. A census/inhabitant activation, which
+stale-generation rows before re-minting. **A generation's rows die with its
+connection**, at the `PeerDisconnected` event itself — never at the reconnect
+grace deadline, which governs only the parked BODY. A verified-identity
+reconnect that resumes the parked body re-mints its admission templates
+through the ordinary `PeerAdmitted` event, so only live acquisitions beyond
+the templates fail to survive the gap (see
+[session-lifecycle.md](session-lifecycle.md)); a checkpoint restore releases a
+restored park's rows the same way, at `RestoreCheckpoint` itself. An
+`Exclusive` subject a peer reserved is therefore acquirable by another
+principal immediately after it drops, with no tick in between — and stays
+with whoever took it (the template's re-mint refuses loudly). A census/inhabitant activation, which
 verifies no identity at all, still mints the `Control/all` seed
 (`BuildDefaultPeerControlGrants`) — population housekeeping, not an admission.
 A world document's `grants` section applies in the `WorldServer`

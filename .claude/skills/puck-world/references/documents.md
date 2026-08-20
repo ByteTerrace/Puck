@@ -800,14 +800,17 @@ current model.
 ## Identity conventions
 
 - Screens are POSITION-ADDRESSED by `WorldScreen.Index` (an engine
-  screen-surface index); `WorldScreenLink.Screens` and
+  screen-surface index); the derived `WorldMachineCableGroup.Screens` and
   `WorldSpeakerSource.Machine` key off the same int — screen index IS machine
-  identity for screen-hosted machines.
+  identity for screen-hosted machines. Cable linking itself is authored
+  per-machine: a `Machine` source's `cable` port (`WorldMachineCable` — name +
+  position), never a row of its own; `WorldDefinition.MachineCableGroups()`
+  derives the groups.
 - Everything else is string-addressed: stable ids (`WorldSceneRow`,
   `WorldCreation`, `WorldPlacement`, `WorldSpawnPoint`,
   `WorldBindingOverlay`, HUD panels/elements, profiles) or names
   (`WorldCamera`, `WorldKit`, `WorldLook`, `WorldChannel`, `WorldSpeaker`,
-  `WorldScreenLink`, `WorldAddonRow`, `WorldViewLayout`, `WorldStateRow`).
+  `WorldAddonRow`, `WorldViewLayout`, `WorldStateRow`).
 - Spawn points carry both modes deliberately: `Id` is the mutation address,
   but LIST ORDER is seat identity (seat n spawns at `SpawnPoints[n]`).
 - Grant rows are keyed by their `(principal, capability, subject)` triple —

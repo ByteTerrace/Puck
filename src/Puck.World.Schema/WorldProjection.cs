@@ -85,7 +85,6 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// when the document authors none — a seatless world composes no seat view.</param>
 /// <param name="Looks">The look rows.</param>
 /// <param name="LookAssignment">The body-to-look assignment.</param>
-/// <param name="Links">The screen links.</param>
 /// <param name="Hud">The HUD section.</param>
 /// <param name="Water">The standing-water medium, when the world authors one.</param>
 /// <param name="Simulation">The authored simulation rate, when the world authors one.</param>
@@ -119,7 +118,6 @@ public sealed record WorldProjectionDocument(
     WorldViewDefaults? Views,
     IReadOnlyList<WorldLook> Looks,
     WorldRowAssignment LookAssignment,
-    IReadOnlyList<WorldScreenLink> Links,
     WorldHudSection Hud,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldWaterSection? Water = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
@@ -221,7 +219,6 @@ public static class WorldProjection {
             Views: definition.ViewsRaw,
             Looks: definition.Looks,
             LookAssignment: definition.LookAssignment,
-            Links: definition.Links,
             Hud: definition.Hud,
             Water: definition.Water,
             Simulation: definition.Simulation,
@@ -348,7 +345,6 @@ public static class WorldProjection {
             ViewsRaw: projection.Views,
             LooksRaw: projection.Looks,
             LookAssignmentRaw: projection.LookAssignment,
-            LinksRaw: projection.Links,
             GrantsRaw: [],
             HudRaw: projection.Hud,
             StateRaw: new WorldStateSection(World: []),

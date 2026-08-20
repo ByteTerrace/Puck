@@ -110,7 +110,7 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="ArgumentNullException"><paramref name="atlas"/> or <paramref name="text"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="worldEmHeight"/> is not finite and greater than
     /// zero, <paramref name="origin"/> or <paramref name="extrudeHalfDepth"/> is not finite, <paramref name="right"/>
-    /// and <paramref name="up"/> do not span a plane, or <paramref name="blend"/> is not a defined
+    /// and <paramref name="up"/> are not orthogonal, or <paramref name="blend"/> is not a defined
     /// <see cref="SdfBlendOp"/>.</exception>
     public SdfProgramBuilder Text(FontAtlas atlas, string text, Vector3 origin, Vector3 right, Vector3 up, float worldEmHeight, int material, SdfBlendOp blend = SdfBlendOp.Union, float extrudeHalfDepth = 0.1f, float smooth = 0f, TextLayoutOptions? layout = null, int? dynamicSlot = null) {
         ArgumentNullException.ThrowIfNull(atlas);
@@ -153,24 +153,20 @@ public sealed partial class SdfProgramBuilder {
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
 
-        // Two individually valid axes can still be parallel, and their cross product is then zero — normalizing it
-        // would put NaN into the orientation quaternion every glyph rides.
+        // Orthogonality subsumes the parallel case (a parallel pair has |dot| = 1, and its cross product normalizes to
+        // NaN) and is what the two halves below need to agree: the pen places each glyph along unitRight/unitUp while
+        // the glyph's own geometry rides the orthonormal quaternion built from them.
+        RequireOrthogonalBasis(
+            paramName: nameof(up),
+            right: unitRight,
+            subject: "A text right and up axis",
+            up: unitUp
+        );
+
         var forward = Vector3.Normalize(value: Vector3.Cross(
             vector1: unitRight,
             vector2: unitUp
         ));
-
-        if (
-            !float.IsFinite(f: forward.X) ||
-            !float.IsFinite(f: forward.Y) ||
-            !float.IsFinite(f: forward.Z)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(up),
-                message: "A text right and up axis must not be parallel — they span the plane the glyphs are laid out on."
-            );
-        }
-
         var orientation = Quaternion.CreateFromRotationMatrix(matrix: new Matrix4x4(
             m11: unitRight.X,
             m12: unitRight.Y,

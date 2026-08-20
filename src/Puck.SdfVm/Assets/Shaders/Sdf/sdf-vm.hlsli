@@ -523,8 +523,12 @@ static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8
 // Chamfered (45° beveled) seams — the mechanical/CAD counterpart to the smooth (round) blends; bevel size = Data1.x.
 // For unit outward gradients meeting at angle φ, |∇((a + b - r)·√½)| = √2·cos(φ/2): the bevel plane's gradient reaches
 // √2 at a FLAT / near-parallel seam (two tangent surfaces, φ → 0), is exactly 1 at a perpendicular seam, and falls to 0
-// at an acute knife edge. The √2 ceiling is real and attained, so a chamfer blend carries a conservative √2 step clamp
-// via SdfProgram.AnalyzeLipschitz — the one blend family that is not 1-Lipschitz (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp).
+// at an acute knife edge. The √2 ceiling is real and attained. Generally, for operands bounded by La and Lb the bevel
+// arm's gradient is (∇a ± ∇b)/√2, so the composed bound is max(La, Lb, (La + Lb)/√2) — the one blend family that is not
+// 1-Lipschitz, and the only arm that can exceed BOTH operands, so SdfProgram.AnalyzeLipschitz folds it once per
+// COMPOSITION in this switch's own order rather than once per program. The recurrence's fixed point is 1 + √2, and the
+// accumulator starts at the SDF_FAR_DISTANCE constant, which is what makes the first chamfer composition the identity.
+// (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp.)
 #define SDF_BLEND_CHAMFER_UNION        7u
 #define SDF_BLEND_CHAMFER_INTERSECTION 8u
 #define SDF_BLEND_CHAMFER_SUBTRACTION  9u
@@ -1388,7 +1392,8 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
         // Chamfered (45-degree bevel) seams (hg_sdf fOp*Chamfer): the bevel plane is (a +- r + b) * sqrt(1/2). Union
         // bevels the near corner, intersection/subtraction the far one; SUBTRACTION is the intersection of `current`
         // with -candidate. The bevel plane's gradient reaches sqrt(2) at a FLAT/near-parallel seam (1 at a perpendicular
-        // one, 0 at an acute one), hence the chamfer step clamp in SdfProgram.AnalyzeLipschitz.
+        // one, 0 at an acute one), hence the per-composition chamfer step clamp in SdfProgram.AnalyzeLipschitz — see the
+        // SDF_BLEND_CHAMFER_* banner for the max(La, Lb, (La + Lb)/sqrt(2)) recurrence it folds.
         case SDF_BLEND_CHAMFER_UNION:        result = min(min(current, candidate), ((current + candidate - chamfer) * SDF_SQRT_HALF)); break;
         case SDF_BLEND_CHAMFER_INTERSECTION: result = max(max(current, candidate), ((current + candidate + chamfer) * SDF_SQRT_HALF)); break;
         case SDF_BLEND_CHAMFER_SUBTRACTION:  result = max(max(current, -candidate), ((current - candidate + chamfer) * SDF_SQRT_HALF)); break;

@@ -3,7 +3,8 @@ using Xunit;
 namespace Puck.World.Protocol.Tests;
 
 /// <summary>
-/// The wire law for the row-scoped grant subjects: <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c> survive the
+/// The wire law for the name-keyed grant subjects: <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c>/
+/// <c>adjacency:&lt;name&gt;</c> survive the
 /// SAME grant leaf the live submission path and the replay tape both ride, id lane intact — a subject whose id was
 /// dropped in transit would seat a hold over the empty row nothing can ever match. The paired refusal is the
 /// retirement convention: wire value 8 (the former <c>Table</c> kind) must stay undecodable rather than aliasing a
@@ -20,6 +21,7 @@ public sealed class RowScopedSubjectCodecLawTests {
     public void RowScopedSubjectsRoundTripWithTheirId(string id) {
         Assert.Equal(actual: RoundTrip(subject: GrantSubject.Creation(id: id)), expected: GrantSubject.Creation(id: id));
         Assert.Equal(actual: RoundTrip(subject: GrantSubject.Placement(id: id)), expected: GrantSubject.Placement(id: id));
+        Assert.Equal(actual: RoundTrip(subject: GrantSubject.Adjacency(name: id)), expected: GrantSubject.Adjacency(name: id));
     }
 
     [Fact]

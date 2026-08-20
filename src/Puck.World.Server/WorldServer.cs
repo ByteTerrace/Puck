@@ -220,9 +220,6 @@ public sealed partial class WorldServer : IWorldServerHost {
     // Reused scratch for the despawn-ownership guard (FireWorldRuleEffect's RemovePlacement arm) — rule-fire cadence
     // only, cleared and refilled on every check rather than allocated per firing.
     private readonly List<int> m_ruleInhabitantScratch = [];
-    // The peer generations this tick's park sweep reclaimed — drained immediately after the sweep so their grant
-    // rows are revoked on the same deadline as their body teardown.
-    private readonly List<WorldPrincipal> m_reclaimedParks = [];
 
     // The contributor rows that reached the last write, per seat, capped at MaxReadContributorsPerSeat — a
     // find-or-add slice (RecordContributor) tagging each contributing principal trusted/untrusted plus a bitmask of
@@ -704,11 +701,11 @@ public sealed partial class WorldServer : IWorldServerHost {
             );
         }
 
-        // Establish the boot document's OWN declared cable links: Install (which ALSO calls this on every later
-        // mutation/rebuild) never runs at construction, so a links row authored in the boot document itself needs
+        // Establish the boot document's OWN declared cable groups: Install (which ALSO calls this on every later
+        // mutation/rebuild) never runs at construction, so a cable port authored in the boot document itself needs
         // this one extra call here, or it would never establish until the first live edit touched ANY section —
         // headless included, since nothing presentation-side ever called it either.
-        m_machines.ReconcileLinks(links: definition.Links);
+        m_machines.ReconcileLinks(links: definition.MachineCableGroups());
 
         // Same reasoning as the cable links above: a rules row authored in the BOOT document needs its own compile
         // call here, since Install never runs at construction.

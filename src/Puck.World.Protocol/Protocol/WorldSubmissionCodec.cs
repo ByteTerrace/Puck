@@ -632,6 +632,7 @@ public static class WorldSubmissionCodec {
             7 => GrantSubjectKind.Seat,
             9 => GrantSubjectKind.Creation,
             10 => GrantSubjectKind.Placement,
+            11 => GrantSubjectKind.Adjacency,
             var wire => throw new LeafCodecException(failure: Fail(
             WorldCodecRefusal.EnumValueUnknown,
             $"{nameof(GrantSubjectKind)} wire value {wire} is not declared"
@@ -1420,6 +1421,7 @@ public static class WorldSubmissionCodec {
             GrantSubjectKind.Seat => ((byte)7),
             GrantSubjectKind.Creation => ((byte)9),
             GrantSubjectKind.Placement => ((byte)10),
+            GrantSubjectKind.Adjacency => ((byte)11),
             _ => throw new LeafCodecException(failure: Fail(
             WorldCodecRefusal.EnumValueUnknown,
             $"{nameof(GrantSubjectKind)}.{subject.Kind} has no wire value"

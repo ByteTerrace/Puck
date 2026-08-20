@@ -1,5 +1,6 @@
 using Xunit;
 
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World.Tests;
@@ -35,6 +36,28 @@ namespace Puck.World.Tests;
 /// rather than a genuine round-trip proof, which is the second reason row-a keeps an occupant.
 /// </remarks>
 public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
+    // Sorts the grant capture's per-row dictionary-derived lists by row key, so a revoke-then-re-grant of the same
+    // row (the restore-release/reconnect-re-mint pair) compares equal to a table that never moved. The Principals
+    // list and its per-capability sets are left untouched — their order survives a same-row release/re-mint.
+    private static WorldAuthorityCheckpoint NormalizeGrantRowOrder(WorldAuthorityCheckpoint checkpoint) {
+        static string KeyOf(WorldPrincipal principal, WorldCapability capability, GrantSubject subject) =>
+            $"{principal.Describe()}|{capability}|{subject.Describe()}";
+
+        var grants = checkpoint.Grants;
+
+        return (checkpoint with {
+            Grants = (grants with {
+                Budgets = [.. grants.Budgets.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+                EventBudgets = [.. grants.EventBudgets.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+                HoldCeilings = [.. grants.HoldCeilings.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+                ChannelReach = [.. grants.ChannelReach.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+                KindMasks = [.. grants.KindMasks.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+                WriteMasks = [.. grants.WriteMasks.OrderBy(keySelector: static row => KeyOf(row.Principal, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+                Exclusive = [.. grants.Exclusive.OrderBy(keySelector: static row => KeyOf(row.Holder, row.Capability, row.Subject), comparer: StringComparer.Ordinal)],
+            }),
+        });
+    }
+
     [Fact]
     public void Host_roundtrip_identity_committed_transfer() {
         var (host, rowA, rowB, machineId) = HostRoundtripFixture.BuildCommittedScenario();
@@ -142,12 +165,42 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         using var disposeRestoredB = restoredB;
 
         Assert.True(condition: restoredB.Server.Population.IsParked(index: peerSlot));
+
+        // The restore released the parked generation's rows (a parked peer's authority never survives the
+        // connection it belonged to), so model the genuine reconnect the way the admission door's resume arm now
+        // does: resume the body, then re-mint the entry's own admission templates through the ordinary grant door.
+        var restoredPeerHeld = restoredB.Server.Grants.Held(principal: WorldPrincipal.Peer(
+            index: peerSlot,
+            generation: destinationEntry.Generation
+        ));
+
+        Assert.Empty(collection: restoredPeerHeld);
         Assert.True(condition: restoredB.Server.Population.TryResumeParkedPeer(
             identityDomain: destinationEntry.IdentityDomain,
             identitySubject: destinationEntry.IdentitySubject,
-            admitted: out _
+            admitted: out var resumedEntry
         ));
         Assert.False(condition: restoredB.Server.Population.IsParked(index: peerSlot));
+
+        var remintedRows = 0;
+
+        foreach (var template in destinationEntry.AdmissionInstalledGrantTemplates) {
+            restoredB.Server.Grant(
+                actor: WorldPrincipal.Console,
+                grant: new WorldGrant(
+                    Principal: resumedEntry.Identity,
+                    Capability: template.Capability,
+                    Subject: template.SubjectFor(bodyIndex: peerSlot),
+                    Exclusive: template.Exclusive,
+                    Budget: template.Budget,
+                    EventBudget: template.EventBudget,
+                    KindMask: template.KindMask
+                )
+            );
+            remintedRows++;
+        }
+
+        Assert.True(condition: (remintedRows > 0), userMessage: "the scenario's arrival verdict must carry at least one template, or the release/re-mint half of this law asserts nothing");
 
         HostRoundtripFixture.RunIdenticalTail(
             restoredA: restoredA,
@@ -168,10 +221,24 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
             actual: finalRestoredB.Population.Revision,
             expected: (finalUninterruptedB.Population.Revision + 1)
         );
-        var revisionNormalizedRestoredB = finalRestoredB with {
+        // The grant table's delta is likewise exact: the restore released each of the parked generation's rows and
+        // the modeled reconnect re-minted each, two revision moves per row, on row B alone. Asserted rather than
+        // silently normalized, so an unrelated grant-table divergence still fails this law.
+        Assert.Equal(
+            actual: finalRestoredB.Grants.Revision,
+            expected: (finalUninterruptedB.Grants.Revision + (2 * remintedRows))
+        );
+        // The release/re-mint pair moves the re-minted rows to the tail of the capture's dictionary-derived lists,
+        // so those lists compare as sets (sorted by row key on both sides); everything else stays order-sensitive.
+        var normalizedUninterruptedB = NormalizeGrantRowOrder(checkpoint: finalUninterruptedB);
+        var normalizedRestoredB = NormalizeGrantRowOrder(checkpoint: finalRestoredB) with {
             Population = finalRestoredB.Population with { Revision = finalUninterruptedB.Population.Revision },
         };
 
-        Assert.True(condition: DeepEqual.Compare(a: finalUninterruptedB, b: revisionNormalizedRestoredB), userMessage: DeepEqual.LastMismatchPath);
+        normalizedRestoredB = normalizedRestoredB with {
+            Grants = (normalizedRestoredB.Grants with { Revision = normalizedUninterruptedB.Grants.Revision }),
+        };
+
+        Assert.True(condition: DeepEqual.Compare(a: normalizedUninterruptedB, b: normalizedRestoredB), userMessage: DeepEqual.LastMismatchPath);
     }
 }

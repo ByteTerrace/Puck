@@ -175,9 +175,12 @@ public sealed partial class WorldServer {
         // BODY-RESUME (peer range): an ordinary connect (never a transfer commit — that always reserves a specific
         // slot) whose verified identity matches a body still parked from an earlier disconnect resumes that SAME
         // retained body in place, mirroring the local-seat Join resume (WorldPopulation.TryResumeParkedSeat's own
-        // caller). A resumed body mints NOTHING through the ordinary lifecycle door below: the grant table survives
-        // a park untouched (WorldGrants has no checkpoint-excluded half), so re-running BuildAdmissionGrants here
-        // would double-grant a principal whose rows already stand.
+        // caller). The resumed generation's rows died with its previous connection (the PeerDisconnected event
+        // releases them, and a checkpoint restore releases a restored park's the same way), so the fresh
+        // connection's verdict re-mints its admission templates through the SAME PeerAdmitted event a new admission
+        // rides — idempotent over the already-resumed entry, and what unparks and re-mints a replayed resume at the
+        // identical tick. A live acquisition beyond the templates does not survive the gap: an exclusive subject
+        // freed at the disconnect stays with whoever acquired it since (the template's re-mint refuses loudly).
         if (
             (reservedSlot is null) &&
             m_population.TryResumeParkedPeer(
@@ -186,6 +189,16 @@ public sealed partial class WorldServer {
                 admitted: out admitted
             )
         ) {
+            ApplyLifecycleEvents(
+                admitted: [admitted],
+                disconnected: [],
+                ordered: true,
+                mintedGrants: BuildAdmissionGrants(
+                    principal: admitted.Identity,
+                    bodyIndex: admitted.BodyIndex,
+                    templates: decision.Templates
+                )
+            );
             refusal = string.Empty;
 
             return true;

@@ -83,6 +83,9 @@ internal static class WorldBootComposition {
         // identity.
         services.AddSingleton<ICommandPrincipalResolver>(implementationFactory: static sp => sp.GetRequiredService<PlayerRoster>());
         services.AddSingleton<ICommandModule, PlayerCommandModule>();
+        // The seat-routed document-write twins (player.row.set / player.state.cell.set) — a crossed traveler's
+        // console door onto the forwarded-submission path.
+        services.AddSingleton<ICommandModule, WorldRoutedRowCommandModule>();
         services.AddSingleton<ICommandModule, WorldSeatCameraCommandModule>();
         services.AddSingleton<ICommandModule, IdentityCommandModule>();
         services.AddSingleton<ICommandModule, ChatCommandModule>();

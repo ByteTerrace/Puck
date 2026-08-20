@@ -15,8 +15,10 @@ namespace Puck.World;
 /// <remarks><c>world.screenshot</c> arms work; it does not do it. The file appears when a frame composes, which is
 /// after this handler has returned and may be never — the run can end first, and a second request armed inside the
 /// same frame replaces the first. The echo therefore says pending and names the path as a request, never as a file
-/// that exists; the render chain prints the resolved path when the frame lands (<c>[capture] unified overlay -&gt;
-/// …</c> from the overlay decorator, <c>[debug] captured frame N -&gt; …</c> from the engine node beneath it); a
+/// that exists; the render chain prints the resolved path when the frame lands, named by whichever node served it
+/// (<c>[capture] unified overlay -&gt; …</c> from the overlay decorator, <c>[capture] &lt;shader-set id&gt; -&gt;
+/// …</c> from a composed <c>render.extensions</c> pass, <c>[debug] captured frame N -&gt; …</c> from the engine node
+/// at the bottom); a
 /// request replaced before it was served is refused out loud, naming the path that will never be written; and
 /// <see cref="WorldPostBuildWiring"/> reports anything still outstanding when the run ends. A caller reading either
 /// stream can always tell "written" from "never happened" — which is the whole point, since a scripted caller that
@@ -135,7 +137,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.screenshot",
-            description: "Arms a one-shot PNG capture of the next composed frame (world + overlay, via the outermost render decorator): world.screenshot <path.png>. This REQUESTS a capture, it does not take one — the echo reads 'pending <path>' because no file exists yet, and the render chain prints the resolved path ('[capture] unified overlay -> <path>', or '[debug] captured frame N -> <path>' when the overlay drew nothing and forwarded the request down) on stderr the moment the frame lands. Fence a frame (world.wait) before reading the file. Arming a second capture while one is still pending REFUSES rather than silently replacing it — the earlier path would never be written — and a request still outstanding when the run ends is reported on stderr instead of leaving the caller believing a file exists. The parent directory is created here.",
+            description: "Arms a one-shot PNG capture of the next composed frame (world + overlay, via the outermost render decorator): world.screenshot <path.png>. This REQUESTS a capture, it does not take one — the echo reads 'pending <path>' because no file exists yet, and the render chain prints the resolved path on stderr the moment the frame lands, named by whichever node served it ('[capture] unified overlay -> <path>', '[capture] <shader-set id> -> <path>' from a composed render.extensions pass, or '[debug] captured frame N -> <path>' from the engine node when the nodes above drew nothing and forwarded the request down). Fence a frame (world.wait) before reading the file. Arming a second capture while one is still pending REFUSES rather than silently replacing it — the earlier path would never be written — and a request still outstanding when the run ends is reported on stderr instead of leaving the caller believing a file exists. The parent directory is created here.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return CommandResult.Error(output: "[world.screenshot: a target path is required — world.screenshot <path.png>]");

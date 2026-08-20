@@ -92,7 +92,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.link",
-            description: "Cable-links two or more declared screens' machines into one deterministically stepped group: screen.link <name> <index> <index> [index…] — the runtime twin of a Links row. Submits a WorldScreenOp.Link through the ordered submission domain; Server.WorldMachineHost applies it authoritatively and the server's own loud line prints the live/dormant outcome. A group whose members cannot currently be linked (a member with no machine, mixed engines, an engine with no linking capability) is recorded DORMANT with a reason. Errors on an undeclared screen, a duplicate member, or a member already in another link.",
+            description: "Cable-links two or more declared screens' machines into one deterministically stepped group: screen.link <name> <index> <index> [index…] — the runtime twin of the machine sources' authored cable ports (world.save folds the live set back onto them). Submits a WorldScreenOp.Link through the ordered submission domain; Server.WorldMachineHost applies it authoritatively and the server's own loud line prints the live/dormant outcome. A group whose members cannot currently be linked (a member with no machine, mixed engines, an engine with no linking capability) is recorded DORMANT with a reason. Errors on an undeclared screen, a duplicate member, or a member already in another link.",
             handler: LinkHandler
         );
         yield return CommandDefinition.WithWireArgs(

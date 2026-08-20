@@ -16,6 +16,51 @@ Consumers must distinguish scaled field distance from world-space length.
 Hit thresholds, AO probes, shadow steps, and bound comparisons must apply the
 conversion documented by the shader contract.
 
+## Composition bounds
+
+A blend's bound is a property of the composition, not of the operands' authored
+chains, and the two differ whenever a blend can exceed both of its inputs.
+
+Every min, max, and lerp arm carries `max(La, Lb)`. That is idempotent and
+order-free, so folding it once per chain and taking a maximum computes it.
+
+The chamfer family does not fit that shape. Its bevel arm is `(a ± b ± r)·√½`,
+whose gradient is `(∇a ± ∇b)/√2`, so the composed bound is
+
+    L = max(La, Lb, (La + Lb)/√2)
+
+which grows with each chamfer composition and has fixed point `1 + √2`. A
+factor applied once per chain or once per program therefore understates by up
+to `(1 + √2)/√2 = 1.70711×`, which is enough to march through thin geometry:
+three chamfer-unioned slabs carved to a plate a few hundredths of a unit thick
+are a hole at the one-`√2` scale and a hit at `1/1.70711`.
+
+Two properties follow from the accumulator rule and must be preserved by any
+implementation of the recurrence:
+
+- the running accumulator seeds at a constant, whose bound is zero, so the
+  first chamfer composition is the identity and two chamfers reach exactly
+  `√2`; growth begins at the third; and
+- one accumulator crosses every point reset, so splitting the stream into
+  segments is not a bound on how many chamfer compositions can nest. A scope
+  pop composing with a chamfer is the same composition as a chamfer shape
+  blend, not a separate program-wide factor.
+
+## Query seams
+
+A field evaluator behind a hierarchical world position evaluates the whole
+position. Reading only the cell-local offset aliases the field with the cell
+period and answers for the wrong copy, and a position constructor that
+re-anchors past half a cell reaches that state without any caller asking for
+it. A seam that cannot rebase must refuse the query; it may not answer.
+
+A CPU march that exhausts its iteration budget has proved nothing. Its verbs
+must resolve toward the answer their consumer can survive being wrong about —
+an obstruction for a cast, blocked for a visibility test — and mark the result
+as bounded rather than exact. Folding non-convergence into "clear" is a false
+negative that reaches authoritative simulation: contact resolution reads it as
+"no contact" and visibility reads it as a line through solid geometry.
+
 ## Discontinuous folds
 
 Repeat, polar repetition, wallpaper folds, and cell jitter can cross a domain

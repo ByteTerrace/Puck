@@ -440,6 +440,11 @@ public static partial class WorldDefinitionValidator {
 
             if (source.Source is null) {
                 errors.Add(item: $"{facePath}.source is required.");
+            } else if (source.Source is WorldScreenSource.Machine { Cable: not null }) {
+                // The same rule ValidateScreenSource applies to magazine entries: a cable port rides a declared
+                // screens row's own source, never a face's — a face-hosted machine has no stable screen identity
+                // for a cable group to fold back onto.
+                errors.Add(item: $"{facePath}.source.machine.cable is only legal on a declared screens row's own source — a face source cannot plug a cable.");
             } else if (source.Source is WorldScreenSource.Session session) {
                 ValidateSessionSource(
                     session: session,
@@ -935,22 +940,16 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
 
-                if (
-                    !requiresField &&
-                    (WorldDefinitionRows.FindCreation(
+                if (WorldDefinitionRows.FindCreation(
                     creations: creations,
                     id: placement.CreationId
-                ) is { } solidCreation)
-                ) {
-                    var copies = CreationStampLattice.MaterializedCopyCount(
-                        pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                        mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-                        ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L)
-                    );
+                ) is { } solidCreation) {
                     // A shape carrying domain ops compiles one collider PER EXPANDED COPY, so the ceiling counts the
-                    // expansion, not the authored shape count. A fold with no rigid-copy expansion has no analytic
-                    // contact geometry at all — refuse it here rather than let the row collide against one copy of
-                    // geometry the renderer draws several times.
+                    // expansion, not the authored shape count. A fold with no rigid-copy expansion has no contact
+                    // geometry at all under EITHER provider — the analytic one would collide against one copy of
+                    // geometry the renderer draws several times, and the field one throws out of
+                    // CreationStampEmitter.EmitFixed at boot — so the expansion refusal is ungated while the
+                    // analytic collider ceiling below is not.
                     var shapeColliders = 0L;
 
                     foreach (var solidShape in (solidCreation.Document.Shapes ?? [])) {
@@ -967,25 +966,33 @@ public static partial class WorldDefinitionValidator {
                         shapeColliders += solidFrames.Length;
                     }
 
-                    var contribution = CreationStampLattice.MultiplySaturated(
-                        ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
-                        left: copies,
-                        right: shapeColliders
-                    );
-                    var previousColliderCount = solidPlacementColliderCount;
+                    // The field provider compiles every solid row into ONE program instead of one collider per copy,
+                    // so the analytic ceiling does not describe what it costs.
+                    if (!requiresField) {
+                        var copies = CreationStampLattice.MaterializedCopyCount(
+                            pattern: WorldPlacementStamp.PatternFor(placement: placement),
+                            mirror: WorldPlacementStamp.MirrorFor(placement: placement),
+                            ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L)
+                        );
+                        var contribution = CreationStampLattice.MultiplySaturated(
+                            ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
+                            left: copies,
+                            right: shapeColliders
+                        );
+                        var previousColliderCount = solidPlacementColliderCount;
 
-                    solidPlacementColliderCount = Math.Min(
-                        val1: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
-                        val2: (solidPlacementColliderCount + contribution)
-                    );
+                        solidPlacementColliderCount = Math.Min(
+                            val1: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
+                            val2: (solidPlacementColliderCount + contribution)
+                        );
 
-                    if (
-                        (previousColliderCount <= WorldPlacementPolicy.MaxSolidPlacementColliders) &&
-                        (solidPlacementColliderCount > WorldPlacementPolicy.MaxSolidPlacementColliders)
-                    ) {
-                        errors.Add(item: $"{path}.solid expands the document past the {WorldPlacementPolicy.MaxSolidPlacementColliders}-collider analytic-placement ceiling; reduce lattice counts, mirror copies, or creation shapes.");
+                        if (
+                            (previousColliderCount <= WorldPlacementPolicy.MaxSolidPlacementColliders) &&
+                            (solidPlacementColliderCount > WorldPlacementPolicy.MaxSolidPlacementColliders)
+                        ) {
+                            errors.Add(item: $"{path}.solid expands the document past the {WorldPlacementPolicy.MaxSolidPlacementColliders}-collider analytic-placement ceiling; reduce lattice counts, mirror copies, or creation shapes.");
+                        }
                     }
-
                 }
             }
 

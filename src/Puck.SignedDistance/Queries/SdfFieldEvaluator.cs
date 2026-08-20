@@ -66,8 +66,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // there a clear line to that wall" query) never reads as self-obstructing.
     private static readonly FixedQ4816 LineOfSightSkin = FixedQ4816.FromDouble(value: 0.05);
 
-    // A generous ceiling for a well-conditioned field (see MinMarchStep): the loop always terminates and reports "no
-    // hit" rather than spin — the standard non-convergence contract every sphere tracer carries, never a hang.
+    // A generous ceiling for a well-conditioned field (see MinMarchStep): the loop always terminates rather than spin.
+    // A non-accepted step is always > HitEpsilon, and HitEpsilon >= MinMarchStep, so 512 iterations always cover more
+    // than 512 * HitEpsilon = 0.512 world units: a cast with maxDist <= 0.512 CANNOT exhaust, and only a longer cast
+    // through a grazing band can. What exhaustion means to a caller is MarchOutcome's contract, not this constant's.
     private const int MaxMarchIterations = 512;
 
     // TryFieldGradient probes by 6-tap CENTRAL DIFFERENCE — one +/- pair per world axis. Central differences are
@@ -77,6 +79,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // independent (a yaw-90 quaternion quantizes to |q|^2 = 1 + 2.1e-6), leaving a systematic tangential residual of
     // order 1e-3 in the normalized gradient — sub-perceptual at feel scale, and zero on unrotated geometry.
     private readonly CompiledInstruction[] m_instructions;
+    // Whether the compiled stream declares any shape at all. A program with none has nothing to answer against, which
+    // is a DIFFERENT answer from "this point cannot be expressed against the program's frame" — March must be able to
+    // tell the two apart, since only the second is a non-convergence.
+    private readonly bool m_hasShape;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>
     /// <param name="program">The program to wrap. Its <see cref="SdfProgram.Instructions"/> are walked ONCE here —
@@ -93,6 +99,14 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         ArgumentNullException.ThrowIfNull(argument: program);
 
         m_instructions = Compile(instructions: program.Instructions);
+
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            if (m_instructions[index].Op == SdfOp.ShapeBlend) {
+                m_hasShape = true;
+
+                break;
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -422,7 +436,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // field's own clearance (see MinMarchStep's remarks on why no extra Lipschitz clamp is needed), testing against
     // HitEpsilon each iteration. Mirrors BakedWorldQuery.March's shape so the two providers read as the same family
     // of verb despite one walking a baked grid and the other a live field.
-    private bool March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
+    //
+    // Returns THREE outcomes, not a Boolean, because the third is not a miss: see MarchOutcome. On Exhausted the hit is
+    // filled at the last marched point, so a caller that treats non-convergence as an obstruction has the position and
+    // travel it needs without re-marching.
+    private MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
         hit = default;
 
         var unit = direction.Normalize();
@@ -431,11 +449,12 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             (unit == FixedVector3.Zero) ||
             (maxDistance <= FixedQ4816.Zero)
         ) {
-            return false;
+            return MarchOutcome.Miss;
         }
 
         var position = origin;
         var traveled = FixedQ4816.Zero;
+        var lastMaterial = 0;
 
         for (var iteration = 0; (iteration < MaxMarchIterations); iteration++) {
             if (!TryDistance(
@@ -443,8 +462,20 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 material: out var material,
                 position: position
             )) {
-                return false;
+                // A shape-free program genuinely has nothing on the ray; anything else is a point the program's frame
+                // cannot express, which proves neither hit nor miss.
+                return (m_hasShape
+                    ? Exhaust(
+                    hit: out hit,
+                    material: lastMaterial,
+                    position: position,
+                    traveled: traveled
+                )
+                    : MarchOutcome.Miss
+                );
             }
+
+            lastMaterial = material;
 
             var clearance = (fieldDistance - radius);
 
@@ -459,11 +490,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                     Point: position
                 );
 
-                return true;
+                return MarchOutcome.Hit;
             }
 
             if (traveled >= maxDistance) {
-                return false;
+                return MarchOutcome.Miss;
             }
 
             var step = FixedQ4816.Min(
@@ -478,7 +509,25 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             position += (unit * step);
         }
 
-        return false;
+        return Exhaust(
+            hit: out hit,
+            material: lastMaterial,
+            position: position,
+            traveled: traveled
+        );
+    }
+    // Fills the non-convergence hit: the last point the march reached, carrying WorldQueryConfidence.Bounded because
+    // the answer is a conservative stand-in for a surface never proven, not a measured one.
+    private static MarchOutcome Exhaust(FixedPosition position, FixedQ4816 traveled, int material, out RayHit hit) {
+        hit = new RayHit(
+            Confidence: WorldQueryConfidence.Bounded,
+            Distance: traveled,
+            Material: material,
+            Normal: FixedVector3.Zero,
+            Point: position
+        );
+
+        return MarchOutcome.Exhausted;
     }
     private static FixedQ4816 MaxComponent(FixedVector3 value) =>
         FixedQ4816.Max(
@@ -768,17 +817,24 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             )),
             Y: (FixedQ4816.Abs(value: p.Y) - halfHeight)
         );
-        var projection = FixedQ4816.Clamp(
+        // k2 is the slanted side; the projection divides by its squared length. SdfProgramBuilder.MinTrapezoidProfileSlant
+        // keeps every admitted profile clear of the rounding window where that length reads zero, so the zero arm is
+        // unreachable through the builder — it is here because an integer divide has no NaN to propagate, and a
+        // total function is the only shape this may take on a query path the authoritative server calls per tick.
+        var slantLengthSquared = FixedVector2.Dot(
+            left: k2,
+            right: k2
+        );
+        var projection = ((slantLengthSquared == FixedQ4816.Zero)
+            ? FixedQ4816.Zero
+            : FixedQ4816.Clamp(
             value: (FixedVector2.Dot(
                 left: (k1 - p),
                 right: k2
-            ) / FixedVector2.Dot(
-                left: k2,
-                right: k2
-            )),
+            ) / slantLengthSquared),
             minimum: FixedQ4816.Zero,
             maximum: FixedQ4816.One
-        );
+        ));
         var cb = ((p - k1) + (k2 * projection));
         var sign = (((cb.X < FixedQ4816.Zero) && (ca.Y < FixedQ4816.Zero))
             ? -FixedQ4816.One
@@ -892,6 +948,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
 
     /// <inheritdoc/>
+    /// <remarks>A probe that cannot converge reports BLOCKED, because it rides
+    /// <see cref="Raycast(FixedPosition, FixedVector3, FixedQ4816, out RayHit)"/>'s conservative non-convergence
+    /// contract: "clear" is the assertion this verb makes, so it is the one an unfinished march may not make.</remarks>
     public bool LineOfSight(FixedPosition from, FixedPosition to) {
         var delta = (to - from);
         var distance = delta.Length;
@@ -921,36 +980,60 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             position: center
         ) && (distance <= radius));
     /// <inheritdoc/>
+    /// <remarks>A march that neither hits nor clears within its iteration budget reports a HIT at the last marched
+    /// point, carrying <see cref="WorldQueryConfidence.Bounded"/>. Reporting the miss instead would let a grazing ray
+    /// that never reached its obstruction claim the line was clear — the one answer a contact, visibility, or sweep
+    /// consumer cannot recover from. Only a cast with <c>maxDist</c> past 0.512 world units can reach that state (see
+    /// <c>MaxMarchIterations</c>).</remarks>
     public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
-        March(
+        (March(
             origin: origin,
             direction: dir,
             maxDistance: maxDist,
             radius: FixedQ4816.Zero,
             hit: out hit
-        );
+        ) != MarchOutcome.Miss);
     /// <inheritdoc/>
+    /// <remarks>Non-convergence resolves as a hit, exactly as in
+    /// <see cref="Raycast(FixedPosition, FixedVector3, FixedQ4816, out RayHit)"/>.</remarks>
     public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
-        March(
+        (March(
             direction: dir,
             hit: out hit,
             maxDistance: maxDist,
             origin: origin,
             radius: radius
-        );
+        ) != MarchOutcome.Miss);
     /// <inheritdoc/>
+    /// <remarks>The evaluated point is the exact world-space displacement from the world origin — <c>position</c>
+    /// REBASED against <see cref="FixedPosition.Zero"/>, not its raw <see cref="FixedPosition.Local"/> offset. The
+    /// wrapped <see cref="SdfProgram"/> bakes its geometry in world space around that origin, so reading <c>.Local</c>
+    /// alone would alias the whole field with the 2^<see cref="FixedPosition.CellSizeLog2"/>-unit cell period and
+    /// answer for the wrong copy; <see cref="FixedPosition.FromLocal"/> creates a nonzero cell on its own past half a
+    /// cell, so no caller has to opt in to reach that. Rebasing is exact integer arithmetic and is the identity for a
+    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, or
+    /// when the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), which no authored program
+    /// can hold geometry at.</remarks>
     public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         distance = FixedQ4816.Zero;
         material = 0;
 
-        var worldPosition = position.Local;
+        if (
+            !m_hasShape ||
+            !position.TryDelta(
+            delta: out var worldPosition,
+            origin: FixedPosition.Zero
+        )
+        ) {
+            return false;
+        }
+
         var localPosition = worldPosition;
         var distanceScale = FixedQ4816.One;
         var resultDistance = FarDistance;
         var resultMaterial = 0;
         var savedFieldDistance = FarDistance;
         var savedFieldMaterial = 0;
-        var sawShape = false;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
             var instruction = m_instructions[index];
@@ -1080,17 +1163,12 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                             blend: instruction.Blend,
                             smooth: instruction.Data1X
                         );
-                        sawShape = true;
                         break;
                     }
                 default: {
                         throw new UnreachableException(message: $"The constructor validated every instruction's op is supported; op {instruction.Op} reached the interpreter unvalidated.");
                     }
             }
-        }
-
-        if (!sawShape) {
-            return false;
         }
 
         distance = resultDistance;
@@ -1184,7 +1262,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             Z: FixedQ4816.Zero
         ));
 
-        if (!March(
+        if (March(
             origin: top,
             direction: new FixedVector3(
                 X: FixedQ4816.Zero,
@@ -1194,16 +1272,32 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             maxDistance: probeRange,
             radius: FixedQ4816.Zero,
             hit: out var hit
+        ) == MarchOutcome.Miss) {
+            return false;
+        }
+
+        // World Y, rebased against the world origin exactly as TryDistance rebases its query point — never the hit's
+        // raw .Local, which is relative to whichever cell the descending march re-anchored into.
+        if (!hit.Point.TryDelta(
+            delta: out var world,
+            origin: FixedPosition.Zero
         )) {
             return false;
         }
 
-        // Same single-cell assumption BakedWorldQuery documents: the probe stays within the room/arena-scale span a
-        // vertical ground search covers, so the hit's .Local (relative to its own, possibly re-anchored cell) reads
-        // correctly against `position`'s own Y.
-        groundY = hit.Point.Local.Y;
+        groundY = world.Y;
 
         return true;
+    }
+
+    // What a March call proved. Miss and Hit are assertions about the ray; Exhausted is the absence of one — the march
+    // ran out of iterations with the field neither accepted nor cleared, so it proves NEITHER. Every consumer folds it
+    // into whichever of the two its own contract can survive being wrong about, which for an obstruction/contact
+    // question is always Hit.
+    private enum MarchOutcome {
+        Miss = 0,
+        Hit = 1,
+        Exhausted = 2,
     }
 
     // The compiled, fixed-point form of one SdfInstruction: every Data0/Data1 float lane converted to FixedQ4816

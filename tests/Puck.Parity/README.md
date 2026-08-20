@@ -22,7 +22,10 @@ moved:
 | `parity-film-grain.world.json` | The `sdf-film-grain` post-render extension authored over the gradient pattern — proves `sdfPcg3d` (pixel/tick/seed) produces the same noise field on SPIR-V and DXIL. |
 
 The shipped default world rides along as the one integration entry — the
-composed game frame with a live avatar body.
+composed game frame with a live avatar body. Window extent is a per-entry
+fact (each document's authored `host`), so extents are required to match
+WITHIN a pair, never across the corpus: the pattern worlds author their own
+extent and the shipped entry inherits the standard one.
 
 ## Editing a pattern
 

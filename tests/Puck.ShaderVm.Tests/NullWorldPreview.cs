@@ -19,7 +19,7 @@ public sealed class NullWorldPreview {
     public void RendersTheDocument(bool overview) {
         var directory = Environment.GetEnvironmentVariable(variable: "PUCK_SKY_PREVIEW_DIR");
 
-        Assert.False(condition: string.IsNullOrEmpty(value: directory), userMessage: "Set PUCK_SKY_PREVIEW_DIR to the directory the preview is written to.");
+        Assert.SkipWhen(condition: string.IsNullOrEmpty(value: directory), reason: "Opt-in harness: set PUCK_SKY_PREVIEW_DIR to the directory the preview is written to.");
 
         var field = ShaderExpressionCompiler.Compile(root: NullWorldScene.Build(point: ShaderExpression.Input(input: ShaderInput.Coordinate)));
         var sky = SkyProgram.Compile();

@@ -309,7 +309,6 @@ internal static class Fixtures {
             ViewsRaw: StandardViews,
             LooksRaw: [],
             LookAssignmentRaw: new WorldRowAssignment(Sequence: new WorldSequence(Name: WorldSequence.R1, Offset: 129, Step: 0f), Rows: []),
-            LinksRaw: [],
             GrantsRaw: [],
             HudRaw: new WorldHudSection(
                 Defaults: new WorldHudDefaults(Enabled: true),

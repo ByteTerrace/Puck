@@ -17,9 +17,10 @@ public sealed record SdfWorldRender(
     internal ICaptureRequestTarget? CaptureTarget { get; init; }
 
     /// <summary>The path of a capture armed through <see cref="RequestCapture"/> that no frame has served yet, or
-    /// <see langword="null"/> when nothing is outstanding. Checked BOTH halves of the chain because a decorator that
-    /// drew nothing forwards its request down to <see cref="Producer"/>, which then owns it. A caller reports an
-    /// outstanding path rather than letting a run end with a requester believing a file exists.</summary>
+    /// <see langword="null"/> when nothing is outstanding. The outermost decorator reports its whole chain (each one
+    /// falls through to its inner), so this covers every node between it and <see cref="Producer"/>, which is asked
+    /// directly when the chain carries no decorator at all. A caller reports an outstanding path rather than letting
+    /// a run end with a requester believing a file exists.</summary>
     public string? PendingCapturePath => (CaptureTarget?.PendingCapturePath ?? Producer.PendingCapturePath);
 
     /// <summary>Arms a one-shot capture of the NEXT produced frame on the OUTERMOST decorator (the console overlay,

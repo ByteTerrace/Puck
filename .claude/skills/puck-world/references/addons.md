@@ -254,17 +254,15 @@ every other capability here uses: `WorldAddonRuntime.IsEventGated` checks
 `IsRequested ∧ Allows ∧ TryGetEventBudget`. The gating subject IS the
 family — `Observe/body:<n>` (collision + route), `Observe/region:<name>`
 (enter/exit), `Observe/seat:<n>` (join/leave), `Observe/screen:<n>`
-(machine-memory), `Observe/all` (link established/dropped) — legitimate for
-UNTRUSTED principals only (no trusted
+(machine-memory), `Observe/adjacency:<name>` (link established/dropped —
+the authored `adjacencies` row's own name, Region's federation-seam twin) —
+legitimate for UNTRUSTED principals only (no trusted
 principal reads Observation cells). `WorldGrant.EventBudget` is a SIBLING of
 `Budget` on the same row. Its numeric value is a nonzero admission gate, not
 a consumed meter; it is REQUIRED (with `events:<n>` on `world.grant`) for
-`screen:`/`region:`/`seat:` subjects — which still ALSO need the
+`screen:`/`region:`/`seat:`/`adjacency:` subjects — which still ALSO need the
 pre-existing `budget:<n>` untrusted-Observe requirement, since that door
 does not know a subject carries no query verb — and OPTIONAL on `body:<n>`.
-The link family gates on the wildcard because no adjacency-row `GrantSubject`
-kind exists; `events:<n>` is still what the gate reads, so a wildcard row
-without one delivers no link cells.
 
 **Overflow behavior: ordered prefix, drop-newest, per-mount
 gap counter.** `EmitEvents` writes edges into whatever ring room remains

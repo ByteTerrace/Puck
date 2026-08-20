@@ -571,17 +571,18 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             ? audio
             : null
         );
-    /// <summary>Returns the live cable-link set as document rows — the <c>world.save</c> fold of every established/runtime
-    /// link back into the <c>Links</c> section (cable order preserved).</summary>
-    public IReadOnlyList<WorldScreenLink> CaptureLinks() {
+    /// <summary>Returns the live cable-link set as derived groups (cable order preserved) — the <c>world.save</c>
+    /// fold source: each group folds back into its member screens rows' machine-source cable ports (see
+    /// <c>Puck.World.WorldSessionCapture</c>).</summary>
+    public IReadOnlyList<WorldMachineCableGroup> CaptureLinks() {
         if (m_links.Count == 0) {
             return [];
         }
 
-        var captured = new List<WorldScreenLink>(capacity: m_links.Count);
+        var captured = new List<WorldMachineCableGroup>(capacity: m_links.Count);
 
         foreach (var entry in m_links.Values) {
-            captured.Add(item: new WorldScreenLink(
+            captured.Add(item: new WorldMachineCableGroup(
                 Name: entry.Name,
                 Screens: [.. entry.Members]
             ));
@@ -673,8 +674,9 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// non-conflicting move) always succeeds; two declared links that genuinely both claim the same screen within
     /// the same reconcile is a real document error and fails loudly (see below) rather than resolving unpredictably
     /// by document order.</summary>
-    /// <param name="links">The mutated declared link rows (the live definition's links).</param>
-    public void ReconcileLinks(IReadOnlyList<WorldScreenLink> links) {
+    /// <param name="links">The declared cable groups, derived from the live definition's machine sources
+    /// (<c>WorldDefinition.MachineCableGroups()</c>).</param>
+    public void ReconcileLinks(IReadOnlyList<WorldMachineCableGroup> links) {
         if (m_disposed) {
             return;
         }
