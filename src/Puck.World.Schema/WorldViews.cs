@@ -1,5 +1,3 @@
-using System.Numerics;
-
 namespace Puck.World;
 
 /// <summary>One slot of a <see cref="WorldViewLayout"/> — a normalized rect (origin top-left, Y down) plus what fills it.
@@ -62,30 +60,30 @@ public enum WorldSeatYawReference : byte {
 /// <param name="SeatRig">The chase framing every seat's view resolves through by default.</param>
 /// <param name="SeatControl">The structural constraints/reference for live seat camera input.</param>
 /// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
-/// <param name="CameraRig">The rig a seat's view resolves through while its published mode state targets
+/// <param name="CameraRig">The program a seat's view resolves through while its published mode state targets
 /// <see cref="WorldSeatModeState.CameraTarget"/> — <see langword="null"/> for a world that authors no
 /// camera-targeting mode state. Resolved through the ordinary <c>Puck.World.WorldCameraRigCompiler</c> pipeline
 /// against whichever body the seat currently perceives from (the possessed camera body — see
 /// <c>Puck.World.Server.WorldEngagement</c>), exactly like <see cref="SeatRig"/> resolves against the seat's own
 /// avatar; no bespoke per-frame integrator reads this field.</param>
-public sealed record WorldViewDefaults(WorldCameraRig SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraRig? CameraRig = null) {
+public sealed record WorldViewDefaults(WorldCameraProgram SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? CameraRig = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
-    /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — a rig with no motion, no
-    /// framing and no lens, holding the property non-null between parse and validation. The engine carries no camera
-    /// policy of its own: the standard chase framing is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a
-    /// world inherits it by naming that document as its basis. A document whose census implies a body is refused for
-    /// authoring no <c>views</c> (<c>WorldDefinitionValidator</c>), so nothing ever composes a seat view from this.
-    /// Control feel is not here either: it is per-seat, on <see cref="WorldPlayerDefaults.SeatLook"/>.</summary>
+    /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — an empty program, holding the
+    /// property non-null between parse and validation. The engine carries no camera policy of its own: the standard
+    /// chase framing is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that
+    /// document as its basis. A document whose census implies a body is refused for authoring no <c>views</c>
+    /// (<c>WorldDefinitionValidator</c>), so nothing ever composes a seat view from this. Control feel is not here
+    /// either: it is per-seat, on <see cref="WorldPlayerDefaults.SeatLook"/>.</summary>
     public static WorldViewDefaults Absent { get; } = new(
-        SeatRig: new WorldCameraRig(
-            Motion: new WorldCameraMotion.Static(
-                Position: Vector3.Zero,
-                WorldAxes: false
-            ),
-            Aim: new WorldCameraAim.Forward(FocusDistance: 0f),
-            Lens: new WorldCameraLens(FieldOfViewRadians: 0f)
+        SeatRig: new WorldCameraProgram(
+            Name: "absent",
+            Version: WorldCameraProgram.CurrentVersion,
+            Operations: [
+                new WorldCameraProgramOp.Orbit(Distance: 0.01f, Yaw: 0f, Pitch: 0f),
+                new WorldCameraProgramOp.Fov(new BindableScalar(literal: 0f)),
+            ]
         ),
         SeatControl: new WorldSeatViewControl(
             MaxPitch: 0f,

@@ -1,14 +1,13 @@
 using System.Numerics;
-using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
 /// <summary>Pure camera math shared by the seat-owned local and traveling view paths.</summary>
 internal static class WorldSeatCameraResolver {
     internal sealed class LiveOrbitCache {
-        public WorldCameraMotion.Orbit? Authored;
+        public WorldCameraProgramOp.Orbit? Authored;
         public float Pitch;
-        public ISdfCameraRig? Rig;
+        public IWorldCameraProgramRig? Rig;
         public float Yaw;
     }
     internal sealed class SmoothingState {
@@ -108,10 +107,10 @@ internal static class WorldSeatCameraResolver {
             y: behind.X
         );
     }
-    public static ISdfCameraRig ResolveChase(WorldCameraRig authoredRig, ISdfCameraRig compiledChase,
-        WorldSeatYawReference yawReference, Quaternion bodyOrientation, float liveYaw, float livePitch,
+    public static IWorldCameraProgramRig ResolveChase(WorldCameraProgram authoredRig, IWorldCameraProgramRig compiledChase,
+        WorldSeatYawReference yawReference, Quaternion bodyOrientation, WorldDefinition definition, float liveYaw, float livePitch,
         LiveOrbitCache cache) {
-        if (authoredRig.Motion is not WorldCameraMotion.Orbit orbit) {
+        if (authoredRig.OrbitOp is not { } orbit) {
             return compiledChase;
         }
 
@@ -135,9 +134,24 @@ internal static class WorldSeatCameraResolver {
         cache.Authored = orbit;
         cache.Yaw = yaw;
         cache.Pitch = pitch;
-        cache.Rig = WorldCameraRigCompiler.Compile(rig: authoredRig with {
-            Motion = orbit with { Yaw = yaw, Pitch = pitch },
-        });
+
+        var bakedOrbit = (orbit with { Yaw = yaw, Pitch = pitch });
+        var operations = new List<WorldCameraProgramOp>(capacity: authoredRig.Operations.Count);
+
+        foreach (var op in authoredRig.Operations) {
+            operations.Add(item: (ReferenceEquals(
+                objA: op,
+                objB: orbit
+            )
+                ? bakedOrbit
+                : op));
+        }
+
+        cache.Rig = WorldCameraRigCompiler.Compile(
+            definition: definition,
+            program: (authoredRig with { Operations = operations })
+        );
+
         return cache.Rig;
     }
     public static void Smooth(SmoothingState state, float smoothRate, bool isPlainChase, float deltaSeconds,

@@ -351,7 +351,7 @@ public sealed class HudWriter {
         band: OverlayHudBand.Replace,
         builder: builder
     );
-    /// <summary>Emits every player-scope (per-seat) panel — the EditorHud per-seat precedent: each panel is confined
+    /// <summary>Emits every player-scope (per-seat) panel: each panel is confined
     /// to its owning seat's viewport via one <see cref="OverlayFrameBuilder.BeginClip"/> scope (clip scopes do not
     /// nest, so this does not also open the world-scope panel's own per-panel clip), with the panel positioned
     /// local to that viewport rather than the whole screen. Bands are not meaningful for a seat panel (it has no

@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
@@ -27,8 +26,8 @@ public sealed class WorldSeatViewState {
     private Quaternion m_upAlignment = Quaternion.Identity;
     private Vector3 m_alignedUp = Vector3.UnitY;
 
-    private WorldCameraRig? m_authoredRig;
-    private ISdfCameraRig? m_compiledRig;
+    private WorldCameraProgram? m_authoredRig;
+    private IWorldCameraProgramRig? m_compiledRig;
     private float m_pitch;
     private float m_yaw;
     // The rate the swap in flight closes its boom at, overriding the rig's own until the boom lands; null when no
@@ -45,7 +44,7 @@ public sealed class WorldSeatViewState {
         min: (control.MinPitch - authoredPitch),
         max: (control.MaxPitch - authoredPitch)
     );
-    private static float AuthoredPitch(WorldViewDefaults views) => ((views.SeatRig.Motion as WorldCameraMotion.Orbit)?.Pitch ?? 0f);
+    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch ?? 0f);
     private static float Wrap(float radians) => (radians - (MathF.Tau * MathF.Round(x: (radians / MathF.Tau))));
 
     /// <summary>The rotation carrying world up to the seat's own up, CARRIED across updates rather than rebuilt.
@@ -114,7 +113,7 @@ public sealed class WorldSeatViewState {
         }
     }
     public float LogicalYaw(WorldViewDefaults views, Quaternion bodyOrientation) {
-        var authoredYaw = ((views.SeatRig.Motion as WorldCameraMotion.Orbit)?.Yaw ?? 0f);
+        var authoredYaw = (views.SeatRig.OrbitOp?.Yaw ?? 0f);
         var bodyYaw = ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
             ? WorldSeatCameraResolver.BodyYaw(orientation: bodyOrientation)
             : 0f
@@ -157,7 +156,7 @@ public sealed class WorldSeatViewState {
     public void Follow(float targetYaw, float rate, float deltaSeconds, WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
-        var authoredYaw = ((views.SeatRig.Motion as WorldCameraMotion.Orbit)?.Yaw ?? 0f);
+        var authoredYaw = (views.SeatRig.OrbitOp?.Yaw ?? 0f);
         var fraction = (1f - MathF.Exp(x: (-rate * deltaSeconds)));
 
         lock (m_gate) {
@@ -185,7 +184,7 @@ public sealed class WorldSeatViewState {
     public void RecenterLook(float targetYaw, float? rate, WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
-        var authoredYaw = ((views.SeatRig.Motion as WorldCameraMotion.Orbit)?.Yaw ?? 0f);
+        var authoredYaw = (views.SeatRig.OrbitOp?.Yaw ?? 0f);
 
         lock (m_gate) {
             m_yaw = Wrap(radians: (targetYaw - authoredYaw));
@@ -229,13 +228,18 @@ public sealed class WorldSeatViewState {
             );
         }
     }
-    public ISdfCameraRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation) {
+    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition) {
         if (!ReferenceEquals(
             objA: m_authoredRig,
             objB: views.SeatRig
         )) {
             m_authoredRig = views.SeatRig;
-            m_compiledRig = WorldCameraRigCompiler.Compile(rig: views.SeatRig);
+            m_compiledRig = WorldCameraRigCompiler.Compile(
+                definition: definition,
+                program: views.SeatRig
+            );
+        } else {
+            m_compiledRig!.Retarget(definition: definition);
         }
 
         float yaw;
@@ -251,15 +255,20 @@ public sealed class WorldSeatViewState {
             pitch = m_pitch;
         }
 
-        return WorldSeatCameraResolver.ResolveChase(
+        var rig = WorldSeatCameraResolver.ResolveChase(
             authoredRig: views.SeatRig,
-            compiledChase: m_compiledRig!,
-            yawReference: views.SeatControl.YawReference,
             bodyOrientation: bodyOrientation,
+            cache: m_orbit,
+            compiledChase: m_compiledRig!,
+            definition: definition,
             liveYaw: yaw,
             livePitch: pitch,
-            cache: m_orbit
+            yawReference: views.SeatControl.YawReference
         );
+
+        rig.Retarget(definition: definition);
+
+        return rig;
     }
     public void Smooth(float rate, bool enabled, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
         lock (m_gate) {

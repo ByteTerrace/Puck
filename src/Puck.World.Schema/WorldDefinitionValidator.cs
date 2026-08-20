@@ -1105,10 +1105,12 @@ public static partial class WorldDefinitionValidator {
                     );
                 }
 
-                ValidateRig(
-                    rig: camera.Rig,
+                ValidateProgram(
+                    definition: definition,
+                    errors: errors,
                     path: $"{path}.rig",
-                    errors: errors
+                    placementIds: placementIds,
+                    program: camera.Rig
                 );
 
                 if (
@@ -1127,10 +1129,47 @@ public static partial class WorldDefinitionValidator {
         // composes no seat view and may author none. Named cameras a layout slot references must resolve against the
         // camera set just built.
         ValidateViews(
-            views: definition.ViewsRaw,
             capacity: definition.Population.Capacity,
             cameras: cameras,
-            errors: errors
+            definition: definition,
+            errors: errors,
+            placementIds: placementIds,
+            views: definition.ViewsRaw
+        );
+
+        // The whole document's camera-program name table (every cameras[].rig, plus views.seatRig/cameraRig) — the
+        // namespace a blend op resolves against. Assembled once here so dangling names and blend cycles are checked
+        // exactly once, over the whole graph, never per-program.
+        var cameraPrograms = new Dictionary<string, WorldCameraProgram>(comparer: StringComparer.Ordinal);
+
+        foreach (var camera in authoredCameras) {
+            if (
+                (camera?.Rig is { Name: { Length: > 0 } } rig) &&
+                !cameraPrograms.ContainsKey(key: rig.Name)
+            ) {
+                cameraPrograms[rig.Name] = rig;
+            }
+        }
+
+        if (definition.ViewsRaw is { } viewsForBlend) {
+            if (
+                (viewsForBlend.SeatRig is { Name: { Length: > 0 } } seatRig) &&
+                !cameraPrograms.ContainsKey(key: seatRig.Name)
+            ) {
+                cameraPrograms[seatRig.Name] = seatRig;
+            }
+
+            if (
+                (viewsForBlend.CameraRig is { Name: { Length: > 0 } } cameraRigForBlend) &&
+                !cameraPrograms.ContainsKey(key: cameraRigForBlend.Name)
+            ) {
+                cameraPrograms[cameraRigForBlend.Name] = cameraRigForBlend;
+            }
+        }
+
+        ValidateCameraPrograms(
+            errors: errors,
+            programs: cameraPrograms
         );
 
         ValidateSeatModes(

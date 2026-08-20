@@ -57,13 +57,13 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // One rig slot per local seat, chase (OrientedFollowRig) by default: its defaults (eye up-and-back along the
     // anchor's +Z, target lifted a touch) frame that seat's avatar from behind, tracking its heading. The editor
     // session swaps its own rig in per frame while a seat edits. Only local seats get cameras/views.
-    // The seat-chase smoothing gap: the authored WorldCameraRig.SmoothRate the current seat rig carries (0 = off,
-    // the unsmoothed snap every shipped world used before this field existed) and, per slot, the previously resolved
-    // eye/target the exponential ease lags toward — see WorldSeatCameraResolver.Smooth (the same shared ease
-    // every traveling seat reuses, which mirrors the "seed un-smoothed on first resolve, alpha
-    // = 1 - e^(-rate * dt) after" shape WorldGroupAnchors already establishes for the establishing-shot centroid.
-    // Presentation-only: never read by anything that feeds back into the sim. Rig-level (not motion-level): every
-    // motion kind shares one smoothing knob, so Orbit/Static/Track ease too.
+    // The seat-chase smoothing gap: the authored camera program's smooth op rate (absent = off, the unsmoothed snap
+    // every shipped world used before this op existed) and, per slot, the previously resolved eye/target the
+    // exponential ease lags toward — see WorldSeatCameraResolver.Smooth (the same shared ease every traveling seat
+    // reuses, which mirrors the "seed un-smoothed on first resolve, alpha = 1 - e^(-rate * dt) after" shape
+    // WorldGroupAnchors already establishes for the establishing-shot centroid.
+    // Presentation-only: never read by anything that feeds back into the sim. Program-level (not per-op): every op
+    // in the rig shares one smoothing knob.
     // The window composer (layout selection + eased transitions; a shared singleton the world.view.state read also
     // observes), the group-anchor resolver (smoothed centroids for establishing shots), and the shared live
     // composition-override store (view.override layout/view.override camera). All presentation-only.
@@ -106,8 +106,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
     // Each local seat's live control feel — the preference half WorldSeatCameraResolver.ResolveSeatLook merges with
     // the boot document's own structure each frame; only the merged WorldAxes is consumed here. Per seat, so two
     // seats can differ in the same frame.
-    // Each local seat's live-orbit rig cache (the seat rig must author an Orbit motion — the ONLY live camera
-    // mechanism this type carries; any other authored motion renders untouched, with no live composition at all):
+    // Each local seat's live-orbit rig cache (the seat rig must author an 'orbit' op — the ONLY live camera
+    // mechanism this type carries; a program with no orbit op renders untouched, with no live composition at all):
     // rebuilt only when the authored orbit motion instance or that seat's composed yaw/pitch actually changed since
     // the last frame, so an unmoved drag on a stationary body costs no per-frame rig recompile — see
     // WorldSeatCameraResolver.ResolveChase, the single shared path every traveling seat uses.
@@ -824,9 +824,11 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // joined profile's — see WorldSeatCameraResolver.ResolveSeatLook). Any other authored motion renders through the plain
         // compiled chase untouched. m_client.Orientation (the sim body orientation) is never written — everything
         // here is a local presentation-only derivation.
+        var definition = route.Endpoint.Definition;
         var view = (m_roster.Seat(slot: slot)?.View ?? throw new InvalidOperationException(message: "joined view has no seat controller"));
         var chase = view.ResolveChase(
             bodyOrientation: bodyOrientation,
+            definition: definition,
             views: views
         );
 
@@ -840,7 +842,10 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // PERCEIVED body, which possession has already retargeted onto the camera body by the time this runs, so no
         // second anchor resolve is needed here.
         var rig = ((m_seatBindings.IsCameraModeActive(slot: slot) && (views.CameraRig is { } cameraRig))
-            ? WorldCameraRigCompiler.Compile(rig: cameraRig)
+            ? WorldCameraRigCompiler.Compile(
+                definition: definition,
+                program: cameraRig
+            )
             : chase
         );
         var fieldOfView = 0f;
@@ -893,7 +898,7 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // WorldSeatCameraResolver.Smooth: a zero rate (the default, and every world/camera authored before this
         // field existed) skips the ease entirely — eye/target pass through raw, byte-for-byte.
         view.Smooth(
-            rate: views.SeatRig.SmoothRate,
+            rate: (views.SeatRig.SmoothOp?.Rate ?? 0f),
             enabled: ReferenceEquals(
                 objA: rig,
                 objB: chase
@@ -998,7 +1003,8 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             row: cameraRow
         );
         var rig = WorldCameraRigCompiler.Compile(
-            rig: cameraRow.Rig,
+            definition: m_client.Definition,
+            program: cameraRow.Rig,
             spread: spread
         );
         var anchor = new SdfAnchor(

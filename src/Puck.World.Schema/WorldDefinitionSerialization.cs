@@ -53,10 +53,10 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldScreen))]
 [JsonSerializable(typeof(WorldScreenLink))]
 [JsonSerializable(typeof(WorldCamera))]
-// Camera motion and aim are independent closed unions inside one compositional rig.
-[JsonSerializable(typeof(WorldCameraRig))]
-[JsonSerializable(typeof(WorldCameraMotion))]
-[JsonSerializable(typeof(WorldCameraAim))]
+// An authored camera rig is an ordered op-list program (the bodyMotionPrograms pattern promoted to cameras).
+[JsonSerializable(typeof(WorldCameraProgram))]
+[JsonSerializable(typeof(WorldCameraProgramOp))]
+[JsonSerializable(typeof(WorldCameraSubject))]
 // The seat rig's input-policy sibling; this entry exposes the typed accessor world.view.look deserializes through.
 [JsonSerializable(typeof(WorldSeatLook))]
 [JsonSerializable(typeof(WorldSeatViewControl))]

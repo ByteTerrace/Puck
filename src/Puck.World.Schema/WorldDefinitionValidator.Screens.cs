@@ -192,105 +192,301 @@ public static partial class WorldDefinitionValidator {
     /// can never be handed to the local file resolver in place of a signature-checked one.</summary>
     private const string OwnerNeighbourKeyPrefix = "owner/";
 
-    // Camera motion, aim, lens, and tracks are presentation-only authoring state.
-    private static void ValidateRig(WorldCameraRig rig, string path, List<string> errors) {
-        if (rig is null) {
+    // One authored camera subject: a placement id must resolve, a world point must be finite; a reference needs no
+    // check of its own (it names the program's externally supplied reference pose).
+    private static void ValidateSubject(WorldCameraSubject? subject, string path, ISet<string> placementIds, List<string> errors) {
+        switch (subject) {
+            case null:
+            case WorldCameraSubject.Reference:
+                break;
+            case WorldCameraSubject.Placement placement:
+                if (
+                    string.IsNullOrWhiteSpace(value: placement.PlacementId) ||
+                    !placementIds.Contains(item: placement.PlacementId)
+                ) {
+                    errors.Add(item: $"{path} references undeclared placement '{placement.PlacementId}'.");
+                }
+
+                break;
+            case WorldCameraSubject.WorldPoint worldPoint:
+                if (!IsFinite(value: worldPoint.Point)) {
+                    errors.Add(item: $"{path}.point must contain finite coordinates.");
+                }
+
+                break;
+            default:
+                errors.Add(item: $"{path} is an unknown camera subject kind.");
+
+                break;
+        }
+    }
+    // An authored camera program: name/version/operation-count, per-op finiteness and subject references, and the
+    // op-ordering rules an evaluator relies on (an anchor op — if any — leads, and a clampPitch op — if any —
+    // precedes the orbit op it governs). Blend's cross-program name/cycle check runs once over the whole document's
+    // program table (ValidateCameraPrograms), not here — no single program's own validation can see its siblings.
+    private static void ValidateProgram(WorldCameraProgram program, WorldDefinition definition, string path, ISet<string> placementIds, List<string> errors) {
+        if (program is null) {
             errors.Add(item: $"{path} is required.");
 
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(value: program.Name)) {
+            errors.Add(item: $"{path}.name is required.");
+        }
+
+        if (!string.Equals(
+            a: program.Version,
+            b: WorldCameraProgram.CurrentVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            errors.Add(item: $"{path}.version '{program.Version}' must be '{WorldCameraProgram.CurrentVersion}'.");
+        }
+
+        var operations = program.Operations;
+
         if (
-            (rig.Lens is null) ||
-            !float.IsFinite(f: rig.Lens.FieldOfViewRadians) ||
-            (rig.Lens.FieldOfViewRadians <= 0f) ||
-            (rig.Lens.FieldOfViewRadians >= MathF.PI)
+            (operations is null) ||
+            (operations.Count == 0) ||
+            (operations.Count > WorldCameraProgram.MaxOperations)
         ) {
-            errors.Add(item: $"{path}.lens.fieldOfViewRadians must be finite and between 0 and pi.");
+            errors.Add(item: $"{path}.operations count must be within 1..{WorldCameraProgram.MaxOperations}.");
+
+            return;
+        }
+
+        var seenAnchor = false;
+        var seenClampPitch = false;
+        var seenFov = false;
+        var seenOrbit = false;
+        var seenSmooth = false;
+        var seenBlend = false;
+
+        for (var index = 0; (index < operations.Count); index++) {
+            var opPath = $"{path}.operations[{index}]";
+
+            switch (operations[index]) {
+                case null:
+                    errors.Add(item: $"{opPath} is required.");
+
+                    break;
+                case WorldCameraProgramOp.Anchor anchorOp:
+                    if (seenAnchor) {
+                        errors.Add(item: $"{opPath} is a second 'anchor' op — at most one is admitted.");
+                    } else if (index != 0) {
+                        errors.Add(item: $"{opPath} 'anchor' must be the first operation.");
+                    }
+
+                    seenAnchor = true;
+
+                    ValidateSubject(
+                        errors: errors,
+                        path: $"{opPath}.subject",
+                        placementIds: placementIds,
+                        subject: anchorOp.Subject
+                    );
+
+                    break;
+                case WorldCameraProgramOp.Offset offset:
+                    if (
+                        !IsFinite(value: offset.Value) ||
+                        !float.IsFinite(f: offset.SpreadPullback)
+                    ) {
+                        errors.Add(item: $"{opPath} needs a finite value and spreadPullback.");
+                    }
+
+                    break;
+                case WorldCameraProgramOp.LookAt lookAt:
+                    if (lookAt.Subject is null) {
+                        if (
+                            !float.IsFinite(f: lookAt.FocusDistance) ||
+                            (lookAt.FocusDistance < 0f)
+                        ) {
+                            errors.Add(item: $"{opPath}.focusDistance must be finite and non-negative.");
+                        }
+                    } else {
+                        if (
+                            (lookAt.Offset is { } lookAtOffset) &&
+                            !IsFinite(value: lookAtOffset)
+                        ) {
+                            errors.Add(item: $"{opPath}.offset must contain finite coordinates.");
+                        }
+
+                        ValidateSubject(
+                            errors: errors,
+                            path: $"{opPath}.subject",
+                            placementIds: placementIds,
+                            subject: lookAt.Subject
+                        );
+                    }
+
+                    break;
+                case WorldCameraProgramOp.Orbit orbit:
+                    if (seenOrbit) {
+                        errors.Add(item: $"{opPath} is a second 'orbit' op — at most one is admitted.");
+                    }
+
+                    seenOrbit = true;
+
+                    if (
+                        !float.IsFinite(f: orbit.Distance) ||
+                        (orbit.Distance <= 0f)
+                    ) {
+                        errors.Add(item: $"{opPath}.distance must be positive and finite.");
+                    }
+
+                    if (
+                        !float.IsFinite(f: orbit.Yaw) ||
+                        !float.IsFinite(f: orbit.Pitch) ||
+                        ((orbit.PivotOffset is { } pivotOffset) && !IsFinite(value: pivotOffset))
+                    ) {
+                        errors.Add(item: $"{opPath} needs a finite yaw, pitch, and pivotOffset.");
+                    }
+
+                    break;
+                case WorldCameraProgramOp.Smooth smooth:
+                    if (seenSmooth) {
+                        errors.Add(item: $"{opPath} is a second 'smooth' op — at most one is admitted.");
+                    }
+
+                    seenSmooth = true;
+
+                    if (
+                        !float.IsFinite(f: smooth.Rate) ||
+                        (smooth.Rate < 0f)
+                    ) {
+                        errors.Add(item: $"{opPath}.rate must be finite and non-negative.");
+                    }
+
+                    break;
+                case WorldCameraProgramOp.ClampPitch clampPitch:
+                    if (seenClampPitch) {
+                        errors.Add(item: $"{opPath} is a second 'clampPitch' op — at most one is admitted.");
+                    } else if (seenOrbit) {
+                        errors.Add(item: $"{opPath} 'clampPitch' must precede the 'orbit' op it governs.");
+                    }
+
+                    seenClampPitch = true;
+
+                    if (
+                        !float.IsFinite(f: clampPitch.MinPitch) ||
+                        !float.IsFinite(f: clampPitch.MaxPitch) ||
+                        (clampPitch.MinPitch >= clampPitch.MaxPitch)
+                    ) {
+                        errors.Add(item: $"{opPath} needs a finite minPitch strictly less than maxPitch.");
+                    }
+
+                    break;
+                case WorldCameraProgramOp.Fov fov:
+                    if (seenFov) {
+                        errors.Add(item: $"{opPath} is a second 'fov' op — at most one is admitted.");
+                    }
+
+                    seenFov = true;
+
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.fieldOfViewRadians",
+                        scalar: fov.FieldOfViewRadians
+                    );
+
+                    break;
+                case WorldCameraProgramOp.Blend blend:
+                    if (seenBlend) {
+                        errors.Add(item: $"{opPath} is a second 'blend' op — at most one is admitted.");
+                    }
+
+                    seenBlend = true;
+
+                    if (
+                        string.IsNullOrWhiteSpace(value: blend.A) ||
+                        string.IsNullOrWhiteSpace(value: blend.B)
+                    ) {
+                        errors.Add(item: $"{opPath} needs non-empty program names 'a' and 'b'.");
+                    }
+
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.weight",
+                        scalar: blend.Weight
+                    );
+
+                    break;
+                default:
+                    errors.Add(item: $"{opPath} is an unknown camera program op kind.");
+
+                    break;
+            }
         }
 
         if (
-            !float.IsFinite(f: rig.SmoothRate) ||
-            (rig.SmoothRate < 0f)
+            !seenFov &&
+            !seenBlend
         ) {
-            errors.Add(item: $"{path}.smoothRate must be finite and non-negative.");
+            errors.Add(item: $"{path}.operations must include a 'fov' op (or a 'blend' op resolving to programs that do) — every rig needs a rendered field of view.");
+        }
+    }
+    // Cross-program blend references: every cameras[].rig, views.seatRig, and views.cameraRig shares ONE name
+    // namespace (a blend op resolves any of them), so dangling names and cycles can only be checked once the whole
+    // table is assembled — never inside one program's own validation.
+    private static void ValidateCameraPrograms(IReadOnlyDictionary<string, WorldCameraProgram> programs, List<string> errors) {
+        var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var settled = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        void Walk(string name, string path) {
+            if (
+                settled.Contains(item: name) ||
+                !programs.TryGetValue(
+                    key: name,
+                    value: out var program
+                )
+            ) {
+                return;
+            }
+
+            if (!visiting.Add(item: name)) {
+                errors.Add(item: $"{path} names '{name}', which cycles back to a program already being blended.");
+
+                return;
+            }
+
+            if (program.BlendOp is { } blend) {
+                if (
+                    !string.IsNullOrWhiteSpace(value: blend.A) &&
+                    !programs.ContainsKey(key: blend.A)
+                ) {
+                    errors.Add(item: $"{path} blend.a names undeclared camera program '{blend.A}'.");
+                } else if (!string.IsNullOrWhiteSpace(value: blend.A)) {
+                    Walk(
+                        name: blend.A,
+                        path: $"{path} -> '{blend.A}'"
+                    );
+                }
+
+                if (
+                    !string.IsNullOrWhiteSpace(value: blend.B) &&
+                    !programs.ContainsKey(key: blend.B)
+                ) {
+                    errors.Add(item: $"{path} blend.b names undeclared camera program '{blend.B}'.");
+                } else if (!string.IsNullOrWhiteSpace(value: blend.B)) {
+                    Walk(
+                        name: blend.B,
+                        path: $"{path} -> '{blend.B}'"
+                    );
+                }
+            }
+
+            _ = visiting.Remove(item: name);
+            _ = settled.Add(item: name);
         }
 
-        switch (rig.Motion) {
-            case WorldCameraMotion.FirstPerson:
-                break;
-            case WorldCameraMotion.Follow follow:
-                if (!IsFinite(value: follow.Offset)) {
-                    errors.Add(item: $"{path}.motion.offset must contain finite coordinates.");
-                }
-
-                if (!float.IsFinite(f: follow.SpreadPullback)) {
-                    errors.Add(item: $"{path}.motion.spreadPullback must be finite.");
-                }
-
-                break;
-            case WorldCameraMotion.Orbit orbit:
-                if (
-                    !float.IsFinite(f: orbit.Distance) ||
-                    (orbit.Distance <= 0f)
-                ) {
-                    errors.Add(item: $"{path}.motion.distance must be positive and finite.");
-                }
-
-                if (
-                    !float.IsFinite(f: orbit.Yaw) ||
-                    !float.IsFinite(f: orbit.Pitch) ||
-                    !IsFinite(value: orbit.PivotOffset)
-                ) {
-                    errors.Add(item: $"{path}.motion needs a finite yaw, pitch, and pivot offset.");
-                }
-
-                break;
-            case WorldCameraMotion.Static value:
-                if (!IsFinite(value: value.Position)) {
-                    errors.Add(item: $"{path}.motion.position must contain finite coordinates.");
-                }
-
-                break;
-            case WorldCameraMotion.Track track:
-                ValidateTrack(
-                    errors: errors,
-                    path: $"{path}.motion",
-                    track: track
-                );
-                break;
-            default:
-                errors.Add(item: $"{path}.motion is an unknown camera motion kind.");
-
-                break;
-        }
-
-        switch (rig.Aim) {
-            case WorldCameraAim.Anchor anchor:
-                if (!IsFinite(value: anchor.Offset)) {
-                    errors.Add(item: $"{path}.aim.offset must contain finite coordinates.");
-                }
-
-                break;
-            case WorldCameraAim.Forward forward:
-                if (
-                    !float.IsFinite(f: forward.FocusDistance) ||
-                    (forward.FocusDistance < 0f)
-                ) {
-                    errors.Add(item: $"{path}.aim.focusDistance must be finite and non-negative.");
-                }
-
-                break;
-            case WorldCameraAim.WorldPoint worldPoint:
-                if (!IsFinite(value: worldPoint.Target)) {
-                    errors.Add(item: $"{path}.aim.target must contain finite coordinates.");
-                }
-
-                break;
-            default:
-                errors.Add(item: $"{path}.aim is an unknown camera aim kind.");
-
-                break;
+        foreach (var name in programs.Keys) {
+            Walk(
+                name: name,
+                path: $"cameras program '{name}'"
+            );
         }
     }
     // The engage-route policy: a finite non-negative radius, plus authored channel names (kebab-case, non-empty),
@@ -698,56 +894,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.text.background {WorldColor.Grammar}.");
         }
     }
-    private static void ValidateTrack(WorldCameraMotion.Track track, string path, List<string> errors) {
-        if (
-            (track.Definition is null) ||
-            (track.Playback is null)
-        ) {
-            errors.Add(item: $"{path} requires definition and playback state.");
-
-            return;
-        }
-        if (
-            !Enum.IsDefined(value: track.Definition.ClockDomain) ||
-            !Enum.IsDefined(value: track.Definition.Interpolation) ||
-            !Enum.IsDefined(value: track.Playback.LoopMode)
-        ) {
-            errors.Add(item: $"{path} contains an unknown clock, interpolation, or loop mode.");
-        }
-        var keyframes = track.Definition.Keyframes;
-
-        if (
-            (keyframes is null) ||
-            (keyframes.Count < 2)
-        ) {
-            errors.Add(item: $"{path}.definition.keyframes requires at least two rows.");
-
-            return;
-        }
-        for (var index = 0; (index < keyframes.Count); index++) {
-            var keyframe = keyframes[index];
-
-            if (keyframe is null) {
-                errors.Add(item: $"{path}.definition.keyframes[{index}] requires a finite position.");
-
-                continue;
-            }
-            if (!IsFinite(value: keyframe.Position)) {
-                errors.Add(item: $"{path}.definition.keyframes[{index}] requires a finite position.");
-            }
-            if (
-                (index > 0) &&
-                (keyframes[(index - 1)] is { } previous) &&
-                (keyframe.Tick <= previous.Tick)
-            ) {
-                errors.Add(item: $"{path}.definition.keyframes[{index}].tick must be greater than the preceding tick.");
-            }
-        }
-    }
     // The window composition (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
     // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set. ABSENT is a
     // seatless document's right — the engine ships no rig, so a census implying a body must author one.
-    private static void ValidateViews(WorldViewDefaults? views, int capacity, HashSet<string> cameras, List<string> errors) {
+    private static void ValidateViews(WorldViewDefaults? views, WorldDefinition definition, int capacity, HashSet<string> cameras, ISet<string> placementIds, List<string> errors) {
         if (views is null) {
             if (capacity > 0) {
                 errors.Add(item: $"views is required when population.capacity ({capacity}) is nonzero; the engine declares no seat rig (author one, or name a basis document that does).");
@@ -756,29 +906,36 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        ValidateRig(
-            rig: views.SeatRig,
+        ValidateProgram(
+            definition: definition,
+            errors: errors,
             path: "views.seatRig",
-            errors: errors
+            placementIds: placementIds,
+            program: views.SeatRig
         );
         ValidateSeatControl(
             control: views.SeatControl,
             path: "views.seatControl",
             errors: errors
         );
-        if (views.SeatRig?.Motion is not WorldCameraMotion.Orbit) {
-            errors.Add(item: "views.seatRig.motion must be orbit because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+        if (views.SeatRig?.OrbitOp is null) {
+            errors.Add(item: "views.seatRig must contain an 'orbit' op because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
         }
 
         if (views.CameraRig is { } cameraRig) {
-            ValidateRig(
-                rig: cameraRig,
+            ValidateProgram(
+                definition: definition,
+                errors: errors,
                 path: "views.cameraRig",
-                errors: errors
+                placementIds: placementIds,
+                program: cameraRig
             );
 
-            if (cameraRig.Motion is not WorldCameraMotion.FirstPerson) {
-                errors.Add(item: "views.cameraRig.motion must be firstPerson — it is the rig a camera-targeting mode state resolves through.");
+            if (
+                (cameraRig.OrbitOp is not null) ||
+                (cameraRig.OffsetOp is not null)
+            ) {
+                errors.Add(item: "views.cameraRig must author no 'orbit' or 'offset' op — it is the first-person rig a camera-targeting mode state resolves through, sitting exactly at the possessed body's own pose.");
             }
         }
 

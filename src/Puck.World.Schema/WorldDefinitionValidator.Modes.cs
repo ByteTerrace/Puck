@@ -93,11 +93,33 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (
-            needsCameraRig &&
-            (definition.Views.CameraRig is null)
-        ) {
-            errors.Add(item: "seatModes declares a state targeting 'camera' but views.cameraRig is not authored.");
+        if (needsCameraRig) {
+            if (definition.Views.CameraRig is null) {
+                errors.Add(item: "seatModes declares a state targeting 'camera' but views.cameraRig is not authored.");
+            }
+
+            // The camera control application possesses an inhabited "camera-seat-<n>" placement (see
+            // PlayerCommandModule.Mode.cs) — a camera-targeting state means nothing without at least one authored.
+            var hasCameraBody = false;
+
+            foreach (var placement in definition.Placements) {
+                if (
+                    (placement?.Inhabit is not null) &&
+                    (placement.Id is { } id) &&
+                    id.StartsWith(
+                        value: WorldSeatModeState.CameraPlacementIdPrefix,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    hasCameraBody = true;
+
+                    break;
+                }
+            }
+
+            if (!hasCameraBody) {
+                errors.Add(item: $"seatModes declares a state targeting 'camera' but no inhabited placement id starts with '{WorldSeatModeState.CameraPlacementIdPrefix}' — author one (see PlayerCommandModule.Mode.cs's CameraPlacementId) for the possession to have a body.");
+            }
         }
     }
 }

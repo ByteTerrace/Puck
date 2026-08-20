@@ -10,7 +10,7 @@ namespace Puck.World;
 /// <param name="Rig">The independent local motion, aim, and lens axes.</param>
 /// <param name="RenderWidth">The offscreen render width in pixels.</param>
 /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-public sealed record WorldCamera(string Name, WorldAnchor? Anchor, WorldCameraRig Rig, uint RenderWidth, uint RenderHeight);
+public sealed record WorldCamera(string Name, WorldAnchor? Anchor, WorldCameraProgram Rig, uint RenderWidth, uint RenderHeight);
 public static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file

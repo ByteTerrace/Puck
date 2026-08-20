@@ -605,8 +605,8 @@ public sealed partial class WorldServer {
         );
 
         // The music clock/director step HERE — immediately after Collect() so this tick's own edges (never a stale
-        // tick's) drive this tick's transition arming, and before anything else reads m_events.Edges (Finding 3: one
-        // call site, one reader, no second-consumer ordering to pin).
+        // tick's) drive this tick's transition arming, and before anything else reads m_events.Edges (one call site,
+        // one reader, no second-consumer ordering to pin).
         if ((m_musicClock is { } musicClock) && (m_musicDirector is { } musicDirector)) {
             var boundary = musicClock.Advance(stepTicks: context.StepTicks);
 

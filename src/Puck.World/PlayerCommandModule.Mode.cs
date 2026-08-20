@@ -10,7 +10,7 @@ internal sealed partial class PlayerCommandModule {
     // "camera-seat-<n>" rows); WorldClient.TryInhabitantBody resolves the placement's CURRENT entity index rather
     // than a baked constant, since an inhabited body's table slot is not authored — it is wherever
     // ReconcileInhabitants placed it this boot.
-    private static string CameraPlacementId(int slot) => $"camera-seat-{slot}";
+    private static string CameraPlacementId(int slot) => $"{WorldSeatModeState.CameraPlacementIdPrefix}{slot}";
     // Composes the camera control application: possesses the seat's designated camera body through the SAME
     // Engage/Control(+per-tick Drive) gated path any other possession target uses (Server.WorldEngagement) — never a
     // bespoke authority check. Capture:true idles the seat's own avatar for the duration, exactly like an ordinary
