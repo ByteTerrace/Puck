@@ -78,8 +78,14 @@ ONE server-side table authorizes every write: `WorldGrants`
 - `GrantSubject` (`GrantSubjectKind`): `all`, `body:<n>` (0-based entity
   index), `screen:<n>`, `section:<name>`, `state:<name>` (string-keyed,
   naming a state row — there is no `profile:<id>` kind; `GrantSubjectKind`
-  declares All/Body/Screen/Section/Composition/State/Region/Seat and nothing
-  else), `region:<name>`
+  declares All/Body/Screen/Section/Composition/State/Region/Seat/Creation/
+  Placement and nothing else), `creation:<id>`/`placement:<id>` (one
+  creations/placements row apiece — the ROW-SCOPED `Mutate` subjects, an
+  ALTERNATIVE to the section hold rather than a narrowing beneath it; the id
+  is shape-checked, never bound-checked, because authoring a row that does
+  not exist yet is what the grant confers, and an `Addon` principal is
+  refused one by name since its mutation seam designates a section handle),
+  `region:<name>`
   (a placement's `WorldPlacementRegion` facet, Observe-only), `seat:<n>`
   (0-based local seat, Observe-only), plus
   `Composition` — write-only (echoed by `world.grants`, no parse token; only
@@ -137,8 +143,15 @@ for a document write. ONE structural exemption runs first — a `World` principa
 is admitted (`WorldMutationAdmissionRule.Structural`) without any lookup; there
 is no bypass parameter and nothing else may exempt. Then four gates, in order:
 
-1. `Allows(Mutate, section:<name>)` — the coarse section hold.
-2. The DECIDING Mutate row's `MutationKindMask`.
+1. `Allows(Mutate, section:<name>)` — the coarse section hold — OR, when
+   the mutation names one concrete creations/placements row and the section
+   check missed, `Allows(Mutate, creation:<id>|placement:<id>)`. A
+   DISJUNCTION, unlike gate 3: a section grant admits every row, a row grant
+   admits only its own. That scoping is also the whole cure for the compose
+   arms' replace-by-key — a row grantee cannot name another row to collide
+   with, so no ownership check belongs on the compose arm.
+2. The DECIDING Mutate row's `MutationKindMask` (the row's own when a row
+   hold decided, the section's when the section did).
 3. For a `State` mutation only: `Allows(Edit, state:<name>)`, then THAT
    deciding row's own kind mask.
 4. For an UNTRUSTED principal: the per-tick dispatch budget, charged through
@@ -211,7 +224,7 @@ population) or `all` (trusted only); Observe takes `body:<n>`, plus
 `all` for trusted principals; Control takes `screen:<n>` (any),
 `body:<n>` (any, bounded by the population — a control-application possession
 target, [engagement.md](engagement.md)), `composition` (trusted), `all` (trusted
-or Peer); Mutate takes `section:<name>` (the DISPATCH lane) or `state:<name>`
+or Peer); Mutate takes `section:<name>`/`creation:<id>`/`placement:<id>` (the DISPATCH lane) or `state:<name>`
 (the CROSS-DOCUMENT write-back lane) or `all` (trusted); Edit takes
 `state:<name>` or `all` (trusted). The four State mutation kinds
 (`UpsertStateRow`/`RemoveStateRow`, `UpsertStateCell`/`RemoveStateCell`, plus
@@ -227,11 +240,11 @@ meters, so one gated authoring act launders every budget and verb mask the row
 carries, and a verb mask cannot bound what the row does not dispatch; trusted
 principals are unaffected); exclusive-over-`all` refused outright;
 `budget:<n>` is REQUIRED on an untrusted principal's Drive/Observe row and on
-its `Mutate`/`section:<name>` row, and refused everywhere else — including an
+its `Mutate` dispatch row (`section:`/`creation:`/`placement:`), and refused everywhere else — including an
 untrusted `Mutate`/`state:<name>` row, which is the cross-document write-back
 channel and has no dispatch door to meter (`budget:0` refused — omit the token
 instead; a re-grant IS the budget update). `verbs:<name,...>` is likewise
-REQUIRED on an untrusted `Mutate`/`section:<name>` row: the admission
+REQUIRED on an untrusted `Mutate` dispatch row: the admission
 predicate reads an ABSENT mask as FULL REACH (Console's boot seed holds
 maskless Mutate rows, so refuse-all there would deny every trusted mutation),
 so the strictness lives at the grant door and a maskless untrusted row is
@@ -429,6 +442,12 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   ceiling prints only when this tick's contribution set actually reached
   that ordinal through the untrusted path — proof the fold RAN, not that a
   grant exists; honest refusals for inactive or non-occupied bodies).
+- `world.why` answers a row-scoped `mutate creation:<id>`/`placement:<id>`
+  query in the door's OWN order — the owning section first, the row only when
+  that misses — and says which carried it (`via mutate section:…` vs `via the
+  row hold alone`). `world.why document:<id> …` answers `not-in-this-table`
+  with where the capability actually lives, the sibling of the `world`
+  principal's `allowed (structural)` branch.
 - `world.grant` grammar: `<principal> <capability> <subject> [exclusive]
   [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>]
   [verbs:<name,...>]`; trailing tokens may appear in any

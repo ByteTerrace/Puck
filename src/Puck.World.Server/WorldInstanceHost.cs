@@ -662,6 +662,50 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         key: name,
         value: out instance
     );
+    /// <summary>Looks up the transport-side view of a REMOTE authority already opened under
+    /// <paramref name="name"/> — its dialled endpoint and its wall-clock lane health
+    /// (<see cref="WorldRemoteAuthority.LanesAvailable"/>). Read-back garnish only; neither value is ever a
+    /// simulation input. A same-process neighbour, or one nothing has dialled yet, has no row here.</summary>
+    /// <param name="name">The console-facing authority name the remote row was opened under.</param>
+    /// <param name="endpoint">The dialled endpoint.</param>
+    /// <param name="laneAvailable">Whether every opened lane is outside its backoff window.</param>
+    /// <returns>Whether a remote authority row exists under <paramref name="name"/>.</returns>
+    public bool TryDescribeRemoteAuthority(string name, out string endpoint, out bool laneAvailable) {
+        if (!m_remoteAuthorities.TryGetValue(
+            key: name,
+            value: out var authority
+        )) {
+            // The table's key is whichever name the dial resolved under — a destinations row for a transfer route,
+            // an instance name for an observation. A caller holding only the delivered identity still deserves the
+            // true answer, so fall back to matching that against each row's own stamped authority/endpoint.
+            foreach (var candidate in m_remoteAuthorities.Values) {
+                if (string.Equals(
+                    a: candidate.Authority,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                ) || string.Equals(
+                    a: candidate.Endpoint,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    authority = candidate;
+
+                    break;
+                }
+            }
+        }
+        if (authority is null) {
+            endpoint = string.Empty;
+            laneAvailable = false;
+
+            return false;
+        }
+
+        endpoint = authority.Endpoint;
+        laneAvailable = authority.LanesAvailable;
+
+        return true;
+    }
     /// <summary>Looks up a running authority's submission transport. Every local instance and remote traveler route
     /// carries the same transport capability; consumers do not branch on where that authority is hosted.</summary>
     /// <param name="name">The console-facing instance name.</param>

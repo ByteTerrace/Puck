@@ -16,6 +16,11 @@ public enum WorldMutationAdmissionRule : byte {
     Structural,
     /// <summary>Denied — the principal holds no Mutate over the mutation's own document section.</summary>
     SectionDenied,
+    /// <summary>Denied — the principal holds no Mutate over the mutation's own document section AND none over the
+    /// concrete row the mutation names (<c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c>). Distinct from
+    /// <see cref="SectionDenied"/> so the refusal can name the row the caller reached for, which is the whole
+    /// diagnostic for a row-scoped grantee that addressed someone else's row.</summary>
+    RowScopedDenied,
     /// <summary>Denied — the deciding Mutate/section row carries a kind mask that does not admit this mutation kind.</summary>
     MaskedKind,
     /// <summary>Denied — a row-scoped (state) mutation whose principal holds no Edit over the concrete row.</summary>
@@ -36,9 +41,12 @@ public enum WorldMutationAdmissionRule : byte {
 /// <param name="Rule">Which gate decided.</param>
 /// <param name="Verdict">The capability verdict the deciding gate produced (the Mutate hold, or the Edit hold for the
 /// two row-scoped rules).</param>
-/// <param name="Subject">The subject the deciding gate checked — the mutation's section, or the concrete state row.</param>
-/// <param name="DecidingSubject">The subject of the row that actually decided a mask gate (<c>ConcreteHold</c> beats
-/// <c>WildcardHold</c>), which is the queried subject except when a wildcard row decided.</param>
+/// <param name="Subject">The subject the deciding gate checked — the mutation's section, its concrete state row, or,
+/// for <see cref="WorldMutationAdmissionRule.RowScopedDenied"/>, the concrete creations/placements row it names.</param>
+/// <param name="DecidingSubject">The subject of the row that actually decided a mask or budget gate
+/// (<c>ConcreteHold</c> beats <c>WildcardHold</c>, and a row-scoped hold decides in place of the section), which is
+/// the queried subject except when a wildcard row decided; for
+/// <see cref="WorldMutationAdmissionRule.RowScopedDenied"/> it is the section hold that was also missing.</param>
 /// <param name="Mask">The deciding row's kind mask, meaningful only for the two mask rules.</param>
 /// <param name="Budget">The row's recorded per-tick dispatch budget, meaningful only for
 /// <see cref="WorldMutationAdmissionRule.BudgetExhausted"/>.</param>
@@ -61,6 +69,7 @@ public readonly record struct WorldMutationAdmission(
         WorldMutationAdmissionRule.Admitted => "admitted",
         WorldMutationAdmissionRule.Structural => "admitted structurally — the world's own authored program is not an actor, so the grant table is never consulted for it (see WorldPrincipal.World)",
         WorldMutationAdmissionRule.SectionDenied => $"cannot mutate {Subject.Describe()} ({Verdict.DescribeDenial()})",
+        WorldMutationAdmissionRule.RowScopedDenied => $"cannot mutate {Subject.Describe()} ({Verdict.DescribeDenial()}) — it holds neither that row nor {DecidingSubject.Describe()}; a section grant admits every row, a row grant admits only its own",
         WorldMutationAdmissionRule.MaskedKind => $"cannot mutate {Subject.Describe()} (mask on mutate {DecidingSubject.Describe()} admits {Mask.Describe()})",
         WorldMutationAdmissionRule.RowDenied => $"cannot edit {Subject.Describe()} ({Verdict.DescribeDenial()})",
         WorldMutationAdmissionRule.RowMaskedKind => $"cannot edit {Subject.Describe()} (mask on edit {DecidingSubject.Describe()} admits {Mask.Describe()})",

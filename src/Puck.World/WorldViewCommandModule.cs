@@ -26,8 +26,13 @@ namespace Puck.World;
 /// <see cref="WorldCapability.Control"/> over <see cref="GrantSubject.All"/>, which the check short-circuits on. Treat
 /// the composition check as real for a principal that could hold it and inert for Console until the grammar can name
 /// the subject.
-/// <para><c>world.view.state</c> carries no principal — it is a direct read of live presentation state.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed cursorFeed) : ICommandModule {
+/// <para><c>world.view.state</c> carries no principal — it is a direct read of live presentation state.</para>
+/// <para>Core-registered for command-vocabulary parity: shipped worlds commit <c>view.override</c> on wheel rings,
+/// and a boot shape that does not register the verb name refuses the document at vocabulary composition.
+/// <see cref="IServerLink"/> and <see cref="WorldViewComposer"/> are core, so <c>view.override</c> and
+/// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
+/// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent.</para></remarks>
+internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed? cursorFeed = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -43,8 +48,12 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             ? null
             : token
         );
-    private string DescribePointer() {
-        var status = cursorFeed.Status;
+    private CommandResult DescribePointer() {
+        if (cursorFeed is not { } feed) {
+            return CommandResult.Error(output: "[world.view.pointer: requires a windowed boot — headless registers this verb for vocabulary parity only]");
+        }
+
+        var status = feed.Status;
         var region = status.Viewport;
         // frame=/local= exist only once a view resolved and the client→frame mapping ran — before that (no
         // position yet, or no view this frame) printing them would pass raw client pixels off under the frame
@@ -58,12 +67,12 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             )
         );
 
-        return string.Create(
+        return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"[world.view.pointer: player={PlayerRoster.DisplayNumber(slot: status.Slot)} position={status.Position.X:0.#},{status.Position.Y:0.#}{mapped} viewport={region.X:0.##},{region.Y:0.##},{region.Width:0.##},{region.Height:0.##} visible={status.Visible.ToString().ToLowerInvariant()} reason={status.Reason} buttons={status.Buttons} hover={((status.Hover.Length > 0)
             ? status.Hover
             : "none")} syscount={status.SystemReleaseCount}]"
-        );
+        ));
     }
     private string DescribeState() {
         var builder = new StringBuilder(value: "[world.view.state: ");
@@ -177,7 +186,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
             name: "world.view.pointer",
             description: "Echoes the drawn cursor's last composed frame: world.view.pointer — the seat the pointer rides (1-based; the keyboard's seat, the one WorldPointerSink resolves the mouse onto), the cursor position in CLIENT pixels (position=), the same position mapped into the fixed FRAME extent the overlay draws in (frame= — the two diverge when the OS window is resized; WorldCursorFeed.Decide owns the mapping) and normalized within the seat's viewport (local=), the viewport rect, the visibility verdict (visible | no-position | no-view | outside-viewport | orbit-drag — WorldCursorFeed's one visibility rule), the held pointer buttons (buttons=, L/R/M in that order or '-' — the live store state, so an injected press is assertable before anything acts on it), the live hover target (hover=none, or the hovered panel/world row's label), and the seat's SYSTEM-RELEASE generation (syscount= — WorldPointer.SystemReleaseCount: how many times the store has force-cleared this seat's held buttons without a genuine release event; an edge-deriving consumer compares this against the value it captured at press time to tell a synthetic release from a real one). A query (always echoes) — the pipe-assertable pointer read, the world.view.camera sibling: live per-seat presentation state nothing else can echo.",
             handler: (context, args) => ((args.Count == 0)
-            ? new CommandResult(Output: DescribePointer())
+            ? DescribePointer()
             : CommandResult.Error(output: $"[world.view.pointer: unrecognized '{args[0]}' — expected no arguments]")),
             routing: CommandRouting.Immediate
         );

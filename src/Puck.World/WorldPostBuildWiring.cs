@@ -337,6 +337,25 @@ internal static class WorldPostBuildWiring {
             });
         }
 
+        // THE RENDER-CAPACITY PRE-FLIGHT. The composed scene's construction-time probe is the first and only point
+        // where the WHOLE worst case exists — the boot document's own rows, the avatar catalog, and one reservation
+        // per adjacency band — and it is pure CPU, so it runs here, before any hosted service starts. A world whose
+        // composed scene cannot fit an engine ceiling refuses BY NAME with the same shape every other refused boot
+        // document takes, instead of tearing the host down from inside a service factory mid-startup. Presentation-
+        // only: a headless boot composes no frame source and this resolves to null.
+        try {
+            if (services.GetService<WorldFrameSource>() is { } composed) {
+                // The probed envelope's own read-back: the frozen ceilings every live rebuild fits inside, stated
+                // once at boot beside the other origin lines, so the headroom a world is running on is observable
+                // rather than inferred from whether it crashed.
+                Console.Error.WriteLine(value: $"[world.render] envelope: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
+            }
+        } catch (WorldRenderCapacityRefusedException refusal) {
+            Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
+
+            return false;
+        }
+
         return true;
     }
 }

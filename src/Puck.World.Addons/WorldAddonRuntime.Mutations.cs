@@ -121,6 +121,10 @@ public sealed partial class WorldAddonRuntime {
                     section: section,
                     kindOrdinal: kindOrdinal,
                     rowScopedEditSubject: null,
+                    // Likewise null, for a stronger reason than the Edit subject's: the grant door refuses a
+                    // row-scoped mutate row to an addon outright (this seam's handle designates a section and
+                    // nothing else), so an addon never holds one to check.
+                    rowScopedMutateSubject: null,
                     meter: true,
                     admission: out var admission
                 )) {
@@ -287,9 +291,9 @@ public sealed partial class WorldAddonRuntime {
     }
     // The one-directional map from the shared admission predicate's decided rule onto this door's own cataloged
     // refusal, and from there onto the wire verdict staged into the guest's reserved answer cell. Total over the
-    // rules this pre-flight can actually reach — the two ROW-scoped rules cannot fire here (it passes no row-scoped
-    // Edit subject; that gate runs at apply), so a rule arriving from them is a wiring change to make deliberately
-    // rather than a value to map by default.
+    // rules this pre-flight can actually reach — the three ROW-scoped rules cannot fire here (it passes neither
+    // row-scoped subject; the Edit gate runs at apply, and an addon holds no row-scoped Mutate row at all), so a
+    // rule arriving from them is a wiring change to make deliberately rather than a value to map by default.
     private static AddonVerdict ToWireVerdict(in WorldMutationAdmission admission) => admission.Rule switch {
         WorldMutationAdmissionRule.SectionDenied => WorldAddonWire.FromRule(rule: admission.Verdict.Rule),
         // A hold whose mask does not cover this kind answers as attenuation — "requested more than the mask admits"

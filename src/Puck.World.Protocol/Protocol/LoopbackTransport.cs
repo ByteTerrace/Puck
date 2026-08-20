@@ -17,8 +17,9 @@ namespace Puck.World.Protocol;
 /// is called), so the tape captures the submission stream in the exact order the server saw it — including the
 /// interleaving between a driving command and a grant change, which is the coordinate an authority verdict is pinned
 /// against. Every ordered-domain payload kind a client can submit has a tap here or an apply-time twin on the server
-/// (<c>WorldServer.RebuildTap</c>/<c>ScreenOpTap</c>), so the tape's capture scope is the whole submission surface
-/// rather than a chosen subset.
+/// (<c>WorldServer.MutationTap</c>/<c>RebuildTap</c>/<c>ScreenOpTap</c>), so the tape's capture scope is the whole
+/// submission surface rather than a chosen subset. A kind whose submissions can also arrive from a socket peer or a
+/// federation forwarder belongs on the SERVER twin, never here — this transport sees only the local connection.
 /// </para>
 /// </remarks>
 public sealed class LoopbackTransport : IServerLink {
@@ -60,11 +61,6 @@ public sealed class LoopbackTransport : IServerLink {
     /// hardest on the addon path, where the re-run guest is checked against the replayed world's own table.
     /// <see langword="null"/> (the default) is a free pass-through.</summary>
     public Action<WorldGrant, WorldPrincipal>? GrantTap { get; set; }
-    /// <summary>Gets an optional record tap invoked with every document mutation before it reaches the server,
-    /// carrying the mutation and its acting principal. A mutation the apply pipeline goes on to refuse is still
-    /// taped, so the refusal reproduces identically on replay — the same reasoning <see cref="GrantTap"/> carries.
-    /// <see langword="null"/> (the default) is a free pass-through.</summary>
-    public Action<WorldMutation, WorldPrincipal>? MutationTap { get; set; }
     /// <summary>Gets an optional record tap invoked with every read-back query before it reaches the server, carrying
     /// the query and the identity the envelope stamped. Captured because a query crosses the same Observe gate a
     /// grant change moves, so a replay that skipped it would exercise a different admission history.
@@ -310,11 +306,12 @@ public sealed class LoopbackTransport : IServerLink {
             tap: UndoTap
         );
     /// <inheritdoc/>
+    /// <remarks>Untapped here deliberately: a mutation is taped at the server's own envelope dispatch
+    /// (<c>WorldServer.MutationTap</c>), the one ingress the loopback, an admitted socket peer, and a forwarded
+    /// traveller's submission all share.</remarks>
     public void SubmitWorldMutation(WorldMutation mutation) =>
-        SubmitTapped(
+        Submit(
             payload: new WorldSubmissionPayload.Mutation(Value: mutation),
-            principal: mutation.Principal,
-            selectValue: static payload => payload.Value,
-            tap: MutationTap
+            principal: mutation.Principal
         );
 }

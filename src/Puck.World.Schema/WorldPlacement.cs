@@ -177,6 +177,10 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <param name="Attach">The placement's attach facet (see <see cref="WorldPlacementAttach"/>) — binds the row's
 /// resolved world pose to a live population body, or <see langword="null"/> for a static/authored transform (the
 /// default, unchanged behavior). Omitted from the wire when null.</param>
+/// <param name="Contribution">The placement's contribution facet (see <see cref="WorldPlacementContribution"/>) —
+/// marks the row a host-authored slot a federation partner fills, or <see langword="null"/> for an ordinary
+/// placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the
+/// row shows and for how long, never its transform.</param>
 public sealed record WorldPlacement(
     string Id,
     string CreationId,
@@ -190,7 +194,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementInhabit? Inhabit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementFace>? FaceSources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementRegion? Region = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementAttach? Attach = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementAttach? Attach = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementContribution? Contribution = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {

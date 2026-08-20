@@ -21,7 +21,7 @@ public sealed class DocumentVector2 : IDocumentSpatialValue, IEquatable<Document
     internal DocumentVector2(string reference) => Reference = reference;
 
     /// <inheritdoc/>
-    public string? Reference { get; }
+    public string? Reference { get; private set; }
     /// <inheritdoc/>
     public string ExpectedValue => "a Vector2 array [x, y]";
     /// <summary>The resolved value.</summary>
@@ -33,6 +33,11 @@ public sealed class DocumentVector2 : IDocumentSpatialValue, IEquatable<Document
     /// <summary>The resolved Y component.</summary>
     public float Y => Value.Y;
 
+    /// <inheritdoc/>
+    public void Detach() {
+        _ = Value;
+        Reference = null;
+    }
     /// <inheritdoc/>
     public bool TryResolve(string text, out string reason) {
         try {
@@ -80,7 +85,7 @@ public sealed class DocumentVector3 : IDocumentSpatialValue, IEquatable<Document
     internal DocumentVector3(string reference) => Reference = reference;
 
     /// <inheritdoc/>
-    public string? Reference { get; }
+    public string? Reference { get; private set; }
     /// <inheritdoc/>
     public string ExpectedValue => "a Vector3 array [x, y, z]";
     /// <summary>The resolved value.</summary>
@@ -98,6 +103,11 @@ public sealed class DocumentVector3 : IDocumentSpatialValue, IEquatable<Document
     public float Length() => Value.Length();
     /// <summary>Returns the resolved vector's squared length.</summary>
     public float LengthSquared() => Value.LengthSquared();
+    /// <inheritdoc/>
+    public void Detach() {
+        _ = Value;
+        Reference = null;
+    }
     /// <inheritdoc/>
     public bool TryResolve(string text, out string reason) {
         try {
@@ -147,7 +157,7 @@ public sealed class DocumentQuaternion : IDocumentSpatialValue, IEquatable<Docum
     internal DocumentQuaternion(string reference) => Reference = reference;
 
     /// <inheritdoc/>
-    public string? Reference { get; }
+    public string? Reference { get; private set; }
     /// <inheritdoc/>
     public string ExpectedValue => "a Quaternion array [x, y, z, w]";
     /// <summary>The resolved value.</summary>
@@ -165,6 +175,11 @@ public sealed class DocumentQuaternion : IDocumentSpatialValue, IEquatable<Docum
 
     /// <summary>Returns the resolved quaternion's squared length.</summary>
     public float LengthSquared() => Value.LengthSquared();
+    /// <inheritdoc/>
+    public void Detach() {
+        _ = Value;
+        Reference = null;
+    }
     /// <inheritdoc/>
     public bool TryResolve(string text, out string reason) {
         try {

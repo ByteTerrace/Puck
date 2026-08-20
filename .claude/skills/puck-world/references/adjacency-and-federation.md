@@ -32,6 +32,18 @@ carries, echoed with the unavailable treatment by `world.adjacencies`. Portals
 remain intentional authored travel and are not used to represent seamless
 topology.
 
+A row may also author `livenessGraceSeconds`: how long that edge may go without
+a delivered neighbour refresh before the world calls the link dropped. `0` (the
+default) disables sensing for the row entirely — no event, and `$link:` reads 0
+— so a world authoring none is unchanged. Compiled per document through
+`WorldDefinition.AdjacencyLivenessGraceTicks`, the
+`population.reconnectGraceSeconds` idiom; validated `0..600`. This is what the
+`linkEstablished`/`linkDropped` world event family and the `$link:<name>` rule
+channel threshold against, and `world.links` is its read-back — one line per
+authored row naming the destination, the neighbour authority, the tick-derived
+staleness and grace, and (clearly marked presentation-only, never a simulation
+input) the transport lane's wall-clock backoff state.
+
 One traversal mints one crossing. The adjacency scan skips a seat already named
 by a queued or in-flight transfer (announced once per transfer id on stderr),
 because the sweep keeps answering `Crossed` while the traveler waits for its own
@@ -199,14 +211,59 @@ geometry. Do not replace this with endpoint-only sampling: a capsule endpoint
 inside a thin slab has an ambiguous nearest gradient and can be extracted
 through an edge or the underside.
 
+`WorldAdjacencySceneEmitter` renders the same projection set under two per-band
+budgets, both `WorldAdjacencyGeometry` constants: `MaximumPlacementsPerBand`
+solids and `MaximumEntitiesPerBand` delivered bodies, each selected in document
+or delivered-slot order from what falls inside the band, each truncation named
+on stderr. The construction-time probe reserves exactly those two budgets for
+every band `WorldAdjacencyBands.ProjectionCapacity` admits — direct edges plus
+derivable corner pairs, so the reservation is quadratic in authored edges. A
+world whose composed scene cannot fit the engine's instance ceiling refuses at
+boot by name (`[world] definition refused: the composed render scene exceeds …`,
+from `WorldPostBuildWiring`'s pre-flight) rather than throwing out of the
+presentation service graph.
+
 Remote dynamic poses currently enter `WorldAdjacencyContactField` from
 delivered floating-point snapshots. Until Track 3 tapes fixed, tick-aligned
 neighbour records and installs the field at delivery time, do not claim replay
 determinism for cross-authority dynamic contact.
 
-The boot replay tape also does not reproduce federated arrival/forwarding. Do
-not cite `replay.verify` MATCH as federation evidence; the five-authority runner
-and focused laws below are the current executable proof.
+## What the tape does and does not carry about federation
+
+Exactly one federation fact rides the tape: `WorldReplayEntry.LinkDelivery`,
+one entry per authored `adjacencies` row per tick on which that row's delivered
+neighbour snapshot tick advanced. It is what makes the `linkEstablished`/
+`linkDropped` event family and the `$link:<adjacencyName>` rule channel
+replay-faithful — a rule gated on link staleness fires on the same tick in a
+re-drive as it did live, because the staleness count and the grace comparison
+both derive from that boolean plus the local tick.
+
+Everything else about federation is still absent, and a `replay.verify` MATCH
+says nothing about it:
+
+- The delivered CONTENT is not taped — neighbour poses, definition revisions,
+  and geometry. Cross-authority contact against remote dynamic bodies is
+  therefore still outside what a MATCH proves (see the paragraph above).
+- Federated ARRIVAL is not reproduced. A traveller entering this authority from
+  elsewhere has no source population in the shadow world to arrive from; only
+  the DEPARTURE half replays, through `WorldReplayEntry.Transfer`'s
+  `DepartedBootSlots`.
+- Transfer reserve/commit/abort/acknowledge traffic is not taped as protocol —
+  `Transfer` records the decided outcome as narration, not a re-executed
+  handshake.
+
+What IS now taped on the submission side: every document mutation, whatever
+ingress it arrived through. `WorldServer.MutationTap` fires at the envelope
+dispatch every submission shares, so a local console write, an admitted socket
+peer's, and a traveller's submission forwarded by its source authority
+(`WorldForwardedAuthority.TryApplySubmission`) all tape identically, each with
+the acting principal its own envelope stamped. The two internal producers that
+reach `EnqueueMutation` directly — a mounted guest's decoded act and a world
+rule's `generate` effect — are deliberately untaped and re-derive during the
+drive.
+
+Do not cite `replay.verify` MATCH as evidence that federated transfer works;
+the five-authority runner and focused laws below remain that proof.
 
 ## Federation transport
 

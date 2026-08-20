@@ -198,12 +198,19 @@ public sealed partial class WorldServer {
     /// acting on itself (a rule's effects, a kit's generate effect), never an actor — is admitted outright as
     /// <c>WorldMutationAdmissionRule.Structural</c>, before any authority is consulted. The gates below decide every
     /// other principal.</para>
-    /// <para>Four gates, in order: (1) the coarse Mutate hold over the mutation's own document section; (2) the
+    /// <para>Four gates, in order: (1) the coarse Mutate hold over the mutation's own document section, OR — when
+    /// the mutation names one concrete creations/placements row — a Mutate hold over that row alone; (2) the
     /// deciding Mutate row's <see cref="MutationKindMask"/>; (3) for a state-row or state-cell write, the row-scoped
     /// Edit hold over the concrete <c>state:&lt;name&gt;</c> subject and, beneath it, that deciding row's own kind
     /// mask; (4) for an untrusted principal, the per-tick dispatch budget. "Deciding row" always means the rule the
-    /// verdict itself reports — <c>ConcreteHold</c> beats <c>WildcardHold</c> — never a union of a concrete and a
-    /// wildcard row's masks.</para>
+    /// verdict itself reports — <c>ConcreteHold</c> beats <c>WildcardHold</c>, and a row-scoped hold decides in
+    /// place of the section it stands in for — never a union of a concrete and a wildcard row's masks.</para>
+    /// <para><b>Gate 1 is a disjunction, not a second narrowing.</b> Unlike gate 3, which requires the section hold
+    /// AND the concrete Edit hold, a <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c> row stands in for the
+    /// section hold the holder does not have. A section grant keeps admitting every row (the boot seed's shape), a
+    /// row grant admits its own row and nothing else — which is also what keeps the compose arms' replace-by-key
+    /// behavior safe for a row-scoped grantee: it can never name another holder's row to collide with, so no
+    /// ownership check belongs on the compose arm.</para>
     /// <para><b>An absent kind mask is full reach.</b> A mask is opt-in narrowing beneath an already deny-by-default
     /// capability, never a second authority check: Console legitimately holds maskless <c>Mutate/section:*</c> rows
     /// from the boot seed, so refuse-all-on-unmasked here would deny every trusted mutation in the engine. Untrusted
@@ -223,11 +230,15 @@ public sealed partial class WorldServer {
     /// <param name="rowScopedEditSubject">The concrete <c>state:&lt;name&gt;</c> subject a state write names, or
     /// <see langword="null"/> when the mutation is not row-scoped — or when the caller cannot yet know it (the addon
     /// pre-flight runs before decode, so its state writes take gate (3) later, at apply).</param>
+    /// <param name="rowScopedMutateSubject">The concrete <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c>
+    /// subject the mutation's target row addresses, or <see langword="null"/> when the mutation targets no such row
+    /// or the caller cannot yet know it (the addon pre-flight runs before decode; it holds no row-scoped rows to
+    /// begin with — the grant door refuses one to an addon as inert).</param>
     /// <param name="meter">Whether this call is the metering point for the dispatch. False only where the ingress
     /// already charged it (an addon act charged at its pre-flight, re-entering at apply).</param>
     /// <param name="admission">The decided outcome — which gate fired and the row-level evidence behind it.</param>
     /// <returns><see langword="true"/> when every gate cleared (and the dispatch was charged, when metered).</returns>
-    public bool TryAdmitMutation(WorldPrincipal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, bool meter, out WorldMutationAdmission admission) {
+    public bool TryAdmitMutation(WorldPrincipal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) {
         var sectionSubject = GrantSubject.Section(section: section);
 
         // THE ONE STRUCTURAL EXEMPTION, keyed on the principal KIND and decided HERE so nothing else has to know
@@ -254,24 +265,57 @@ public sealed partial class WorldServer {
             principal: principal,
             subject: sectionSubject
         );
-
-        if (!mutateVerdict.IsAllowed) {
-            admission = new WorldMutationAdmission(
-                Rule: WorldMutationAdmissionRule.SectionDenied,
-                Verdict: mutateVerdict,
-                Subject: sectionSubject,
-                DecidingSubject: sectionSubject,
-                Mask: MutationKindMask.Empty,
-                Budget: 0
-            );
-
-            return false;
-        }
-
+        // GATE 1 IS A DISJUNCTION: the coarse section hold, OR — when the mutation names one concrete row of a
+        // row-scoped section — a Mutate hold over that row alone. A section grant therefore keeps admitting every
+        // row (the boot seed's own shape), while a row grant admits its own row and nothing else, which is what
+        // makes a contribution slot expressible and what closes the replace-by-key hazard for its holder: it cannot
+        // name another row to collide with. The row subject is derived from the mutation itself, so the two can
+        // never address different sections.
         var decidingMutateSubject = ((mutateVerdict.Rule == GrantRule.WildcardHold)
             ? GrantSubject.All
             : sectionSubject
         );
+        var checkedSubject = sectionSubject;
+
+        if (!mutateVerdict.IsAllowed) {
+            if (rowScopedMutateSubject is not { } rowSubject) {
+                admission = new WorldMutationAdmission(
+                    Rule: WorldMutationAdmissionRule.SectionDenied,
+                    Verdict: mutateVerdict,
+                    Subject: sectionSubject,
+                    DecidingSubject: sectionSubject,
+                    Mask: MutationKindMask.Empty,
+                    Budget: 0
+                );
+
+                return false;
+            }
+
+            var rowVerdict = m_grants.Allows(
+                capability: WorldCapability.Mutate,
+                principal: principal,
+                subject: rowSubject
+            );
+
+            if (!rowVerdict.IsAllowed) {
+                admission = new WorldMutationAdmission(
+                    Rule: WorldMutationAdmissionRule.RowScopedDenied,
+                    Verdict: rowVerdict,
+                    Subject: rowSubject,
+                    DecidingSubject: sectionSubject,
+                    Mask: MutationKindMask.Empty,
+                    Budget: 0
+                );
+
+                return false;
+            }
+
+            // The row hold decided, so the row's own mask and budget govern from here. A WildcardHold cannot reach
+            // this branch: Mutate/all would already have carried the section check above.
+            mutateVerdict = rowVerdict;
+            decidingMutateSubject = rowSubject;
+            checkedSubject = rowSubject;
+        }
 
         if (
             m_grants.TryGetKindMask(
@@ -287,7 +331,7 @@ public sealed partial class WorldServer {
                 DecidingSubject: decidingMutateSubject,
                 Mask: mutateMask,
                 Rule: WorldMutationAdmissionRule.MaskedKind,
-                Subject: sectionSubject,
+                Subject: checkedSubject,
                 Verdict: mutateVerdict
             );
 
@@ -366,7 +410,7 @@ public sealed partial class WorldServer {
                 admission = new WorldMutationAdmission(
                     Rule: WorldMutationAdmissionRule.MissingBudget,
                     Verdict: mutateVerdict,
-                    Subject: sectionSubject,
+                    Subject: checkedSubject,
                     DecidingSubject: decidingMutateSubject,
                     Mask: MutationKindMask.Empty,
                     Budget: 0
@@ -383,7 +427,7 @@ public sealed partial class WorldServer {
                 admission = new WorldMutationAdmission(
                     Rule: WorldMutationAdmissionRule.BudgetExhausted,
                     Verdict: mutateVerdict,
-                    Subject: sectionSubject,
+                    Subject: checkedSubject,
                     DecidingSubject: decidingMutateSubject,
                     Mask: MutationKindMask.Empty,
                     Budget: budget
@@ -396,7 +440,7 @@ public sealed partial class WorldServer {
         admission = new WorldMutationAdmission(
             Rule: WorldMutationAdmissionRule.Admitted,
             Verdict: mutateVerdict,
-            Subject: sectionSubject,
+            Subject: checkedSubject,
             DecidingSubject: decidingMutateSubject,
             Mask: MutationKindMask.Empty,
             Budget: 0

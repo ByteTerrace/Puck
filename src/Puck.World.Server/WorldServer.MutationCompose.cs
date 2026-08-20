@@ -364,6 +364,16 @@ public sealed partial class WorldServer {
         WorldMutation.Generate m => GrantSubject.State(name: m.Row),
         _ => null,
     };
+    // The row-scoped Mutate subject a creations/placements mutation names, for gate 1's disjunction — null for every
+    // other mutation kind (the section hold is then the only way through). The id is the mutation's own target key,
+    // the same key the compose arm upserts/removes by, so a row grant admits exactly the row it names.
+    private static GrantSubject? RowScopedMutateSubjectOf(WorldMutation mutation) => mutation switch {
+        WorldMutation.UpsertCreation m => GrantSubject.Creation(id: m.Creation.Id.Value),
+        WorldMutation.RemoveCreation m => GrantSubject.Creation(id: m.Id),
+        WorldMutation.UpsertPlacement m => GrantSubject.Placement(id: m.Placement.Id),
+        WorldMutation.RemovePlacement m => GrantSubject.Placement(id: m.Id),
+        _ => null,
+    };
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
     // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
     private static WorldSection SectionOf(WorldMutation mutation) => mutation switch {
@@ -689,15 +699,12 @@ public sealed partial class WorldServer {
                     return true;
                 }
             case WorldMutation.UpsertPlacement m:
-                candidate = (current with {
-                    PlacementsRaw = Upsert(
-                    list: current.Placements,
-                    item: m.Placement,
-                    keyOf: static placement => placement.Id
-                ),
-                });
-
-                return true;
+                return TryComposeUpsertPlacement(
+                    candidate: out candidate,
+                    current: current,
+                    mutation: m,
+                    reason: out reason
+                );
             case WorldMutation.RemovePlacement m: {
                     // The no-cascade guard: a placement a speaker anchors to rejects loudly naming the dependents, never
                     // silently unanchoring the speaker (full-document revalidation would also catch the dangling anchor,

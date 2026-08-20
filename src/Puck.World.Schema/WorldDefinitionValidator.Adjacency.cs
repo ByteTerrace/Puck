@@ -76,6 +76,15 @@ public static partial class WorldDefinitionValidator {
                     value: borderCapacity
                 );
             }
+            // The same 0..600 band population.reconnectGraceSeconds carries: 0 disables, and a window past ten
+            // minutes has stopped being a liveness signal.
+            if (
+                !float.IsFinite(f: adjacency.LivenessGraceSeconds) ||
+                (adjacency.LivenessGraceSeconds < 0f) ||
+                (adjacency.LivenessGraceSeconds > 600f)
+            ) {
+                errors.Add(item: $"{path}.livenessGraceSeconds {adjacency.LivenessGraceSeconds} is outside 0..600.");
+            }
             if (!proveNeighbours) {
                 continue;
             }

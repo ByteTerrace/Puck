@@ -331,6 +331,26 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.subject body:{subject.Value} is outside 0..{(populationCapacity - 1)} for the authored population capacity.");
         }
+        // A row-scoped Mutate subject is deliberately NOT bound-checked against the live creations/placements rows:
+        // authoring a row that does not exist yet is the act a contribution slot grants. Its shape is still checked,
+        // by the same rule the live grant door applies (Server.WorldGrants.Conflicts) — WorldCreation.Id is a
+        // DocumentIdentifier, so a `state.` token there names a reference whose resolved value is some other string;
+        // WorldPlacement.Id is a plain literal, which is why the reference rule is creation-only.
+        if (subject.Kind is GrantSubjectKind.Creation or GrantSubjectKind.Placement) {
+            var id = (subject.Id ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(value: id)) {
+                errors.Add(item: $"{path}.subject {subject.Describe()} names a blank row id.");
+            } else if (
+                (subject.Kind == GrantSubjectKind.Creation) &&
+                id.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix
+            )
+            ) {
+                errors.Add(item: $"{path}.subject {subject.Describe()} names a state reference rather than a row id — a '{Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix}' token resolves to some other string at load, so the row it addresses can never equal the granted subject; name the resolved id.");
+            }
+        }
     }
     private static void ValidateGrants(IReadOnlyList<WorldGrant> grants, HashSet<string> addonNames, HashSet<string> groupIds, int populationCapacity, int localSeats, List<string> errors) {
         var seen = new HashSet<(WorldPrincipal, WorldCapability, GrantSubject)>();

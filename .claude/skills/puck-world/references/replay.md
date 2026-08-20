@@ -24,6 +24,7 @@ reports MATCH or MISMATCH naming the first divergent tick. Files (all in
 - `Magic = 0x504B_4341` ("PKCA") + `ShapeToken = 1` (pinned permanently).
   The current key covers the re-shaped control-application commands and the
   mutation/undo/composition/query entry kinds.
+  The current key also covers the `LinkDelivery` leaf.
   A tape with any retired magic refuses by name (`ShapeMismatch`, no tolerant
   reader; re-record it). The full retirement
   chain (each value opaque, never a sequence) lives in the comment above
@@ -74,7 +75,8 @@ Per tick: ONE ordered authority/server-event list plus the intent list
 `ScreenOp(op, contentSignature, actor)` (7), `Session(request)` (8),
 `Designation(designation, actor)` (9), `RateLever(paused)` (10),
 `Transfer` (11), `Mutation(mutation, actor)` (12), `Undo(count, actor)` (13),
-`Composition(composition, actor)` (14), and `Query(query, actor)` (15). The
+`Composition(composition, actor)` (14), `Query(query, actor)` (15), and
+`LinkDelivery(adjacencyName)` (16). The
 peer events
 carry generation-bearing identities and
 the grants minted/revoked through the ordinary server doors. The
@@ -82,7 +84,16 @@ the grants minted/revoked through the ordinary server doors. The
 `SessionTap`/
 `AddonLifecycleTap`) fire BEFORE the server sees the write, so a grant (or a
 mount/unmount) the door refuses is still taped and reproduces as the
-identical refusal. `WorldServer.ServerEventTap` records each lifecycle event
+identical refusal. **`MutationTap` lives on `WorldServer`, not the loopback**,
+firing in `ApplyEnvelope`'s `Mutation` arm — the one ingress a local write, an
+admitted socket peer's write, and a traveller's submission forwarded by its
+source authority (`WorldForwardedAuthority.TryApplySubmission`) all share, each
+carrying the acting principal its own envelope stamped. The two internal
+producers that reach `EnqueueMutation` directly (a guest's decoded act, a rule's
+`generate` effect) are deliberately outside it: both re-derive during the drive,
+so taping them would apply each twice. A tap that captured only the loopback
+would silently drop every forwarded mutation — the rule is that any kind
+reachable from a socket or a forwarder belongs on the server twin. `WorldServer.ServerEventTap` records each lifecycle event
 after it takes effect, in drain order; `WorldServer.RebuildTap` is the same
 apply-time shape, fired from inside `ApplyRebuild` once it has RESOLVED its
 candidate and computed the CAS content hash but BEFORE any refusal gate
@@ -124,6 +135,17 @@ player document to construct a detached profile catalog, so a replayed
 so the whole apply pipeline re-executes and a refusal reproduces as the
 identical refusal; `Composition` applies synchronously; a `Query` is
 re-executed and its answer discarded, since a query moves no simulation state.
+Plus one non-envelope ingress: `LinkDelivery`, one entry per authored
+`adjacencies` row per tick whose delivered neighbour snapshot tick advanced
+(`WorldServer.LinkDeliveryTap`, fired right after the adjacency source freezes
+the tick's projection graph). It is the ONLY transport-derived input on the
+tape, and it exists because the `linkEstablished`/`linkDropped` event family and
+the `$link:` rule channel cannot be re-derived from sim state. Re-drive feeds it
+through the same `WorldEventFeed.ObserveLinkDelivery` entry point at the same
+pre-step position, so staleness counts, edges, and rule firings reproduce. The
+delivered CONTENT (neighbour poses, definition revisions) is still absent: a
+replay reproduces WHEN a seam went dark, never what the neighbour showed.
+
 Structural exclusions: a mounted guest's DRIVING is never recorded — it is RE-DERIVED
 by re-running the pinned guests during the drive (the stronger property);
 only the LIFECYCLE ACT of mounting/unmounting a guest is captured, not its

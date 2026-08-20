@@ -26,7 +26,10 @@ public enum WorldCapability : byte {
     Control,
 
     /// <summary>The right to mutate a world-document section — apply a <c>WorldMutation</c> targeting it.
-    /// Checked at mutation apply (and, over every section, at a whole-document swap or journal undo).</summary>
+    /// Checked at mutation apply (and, over every section, at a whole-document swap or journal undo). A
+    /// <see cref="GrantSubject.Section"/> subject admits every row the section carries; the row-scoped
+    /// <see cref="GrantSubjectKind.Creation"/>/<see cref="GrantSubjectKind.Placement"/> subjects admit one row apiece
+    /// and are checked as an alternative to the section hold, never beneath it.</summary>
     Mutate,
 
     /// <summary>The right to edit a concrete <c>state</c> row — slot-shaped or table-shaped alike (a slot is a table
@@ -228,15 +231,34 @@ public enum GrantSubjectKind : byte {
     /// Distinct from <see cref="Body"/>: a seat index and its body index are numerically identical for a local seat,
     /// but this kind names the occupancy edge, never the body's pose or drive authority.</summary>
     Seat,
+
+    /// <summary>A single <c>creations</c> row, by its stable id (<see cref="GrantSubject.Id"/>) — a row-scoped
+    /// <see cref="WorldCapability.Mutate"/> subject admitting <c>WorldMutation.UpsertCreation</c>/
+    /// <c>WorldMutation.RemoveCreation</c> naming exactly this id.
+    /// <remarks>An alternative to a <see cref="Section"/> hold over <see cref="WorldSection.Creations"/>, never a
+    /// narrowing beneath one: <c>Server.WorldServer.TryAdmitMutation</c>'s section gate is a disjunction, so a
+    /// section holder still reaches every row and a row holder reaches no other. The id may name a row that does not
+    /// exist yet (creating it is the granted act), so it is shape-checked — non-blank, and not a
+    /// <c>state.&lt;row&gt;</c> reference, since <see cref="WorldCreation.Id"/> resolves one to a different string —
+    /// never bound-checked against the live document.</remarks></summary>
+    Creation,
+
+    /// <summary>A single <c>placements</c> row, by its stable <see cref="WorldPlacement.Id"/> value
+    /// (<see cref="GrantSubject.Id"/>) — <see cref="Creation"/>'s peer over <see cref="WorldSection.Placements"/>,
+    /// admitting <c>WorldMutation.UpsertPlacement</c>/<c>WorldMutation.RemovePlacement</c> naming exactly this id.
+    /// <remarks>Distinct from <see cref="Region"/>, which addresses the same placement's volume facet for
+    /// <see cref="WorldCapability.Observe"/> and confers no write authority.</remarks></summary>
+    Placement,
 }
 /// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, a document section,
-/// or a state row. A zero-alloc value key into the grant table's per-capability subject sets: state names are strings,
-/// so the subject matches <see cref="WorldPrincipal"/>'s shape (an index lane plus a nullable string lane;
+/// or one named row of a section. A zero-alloc value key into the grant table's per-capability subject sets: row names
+/// are strings, so the subject matches <see cref="WorldPrincipal"/>'s shape (an index lane plus a nullable string lane;
 /// record-struct equality covers both).</summary>
 /// <param name="Kind">The subject flavor.</param>
-/// <param name="Value">The 0-based body/screen index, or the <see cref="WorldSection"/> ordinal for a section; zero for
-/// <see cref="GrantSubjectKind.All"/>.</param>
-/// <param name="Id">The state or region id for named subject kinds; <see langword="null"/> otherwise.</param>
+/// <param name="Value">The 0-based body/screen/seat index, or the <see cref="WorldSection"/> ordinal for a section;
+/// zero for every named and wildcard kind.</param>
+/// <param name="Id">The state, region, creation, or placement id for named subject kinds; <see langword="null"/>
+/// otherwise.</param>
 public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, string? Id = null) {
     /// <summary>Gets the wildcard subject — the capability over its whole domain.</summary>
     public static GrantSubject All { get; } = new(
@@ -258,9 +280,16 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Kind: GrantSubjectKind.Body,
         Value: index
     );
+    /// <summary>Creates a single <c>creations</c> row by its stable id.</summary>
+    /// <param name="id">The creation row id.</param>
+    public static GrantSubject Creation(string id) => new(
+        Id: id,
+        Kind: GrantSubjectKind.Creation,
+        Value: 0
+    );
     /// <summary>Describes a short stable label for console echoes — <c>all</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>,
-    /// <c>section:&lt;name&gt;</c>, <c>profile:&lt;id&gt;</c>, <c>state:&lt;name&gt;</c>,
-    /// <c>composition</c>, <c>region:&lt;name&gt;</c>, <c>seat:&lt;n&gt;</c>.</summary>
+    /// <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>, <c>composition</c>, <c>region:&lt;name&gt;</c>,
+    /// <c>seat:&lt;n&gt;</c>, <c>creation:&lt;id&gt;</c>, <c>placement:&lt;id&gt;</c>.</summary>
     /// <returns>The label.</returns>
     public string Describe() => Kind switch {
         GrantSubjectKind.All => "all",
@@ -271,8 +300,17 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         GrantSubjectKind.Composition => "composition",
         GrantSubjectKind.Region => $"region:{Id}",
         GrantSubjectKind.Seat => $"seat:{Value}",
+        GrantSubjectKind.Creation => $"creation:{Id}",
+        GrantSubjectKind.Placement => $"placement:{Id}",
         _ => "?",
     };
+    /// <summary>Creates a single <c>placements</c> row by its stable id.</summary>
+    /// <param name="id">The placement row id.</param>
+    public static GrantSubject Placement(string id) => new(
+        Id: id,
+        Kind: GrantSubjectKind.Placement,
+        Value: 0
+    );
     /// <summary>Creates a single named region by its carrying placement's stable id.</summary>
     /// <param name="name">The region name (the carrying <see cref="WorldPlacement.Id"/>).</param>
     public static GrantSubject Region(string name) => new(
@@ -307,7 +345,8 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Value: 0
     );
     /// <summary>Parses a subject token (<c>all</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
-    /// <c>section:&lt;name&gt;</c> | <c>profile:&lt;id&gt;</c> | <c>state:&lt;name&gt;</c>) — shared by
+    /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c> | <c>seat:&lt;n&gt;</c> |
+    /// <c>creation:&lt;id&gt;</c> | <c>placement:&lt;id&gt;</c>) — shared by
     /// <c>Puck.World.GrantSubjectJsonConverter</c>
     /// and <c>Puck.World.WorldGrantCommandModule</c>'s <c>world.grant</c>/<c>world.revoke</c> console verbs, so a
     /// document-sourced subject (a <c>WorldCapabilityRequest.Subject</c>, a <see cref="WorldGrant.Subject"/> row)
@@ -418,6 +457,30 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
             (seat >= 0)
         ) {
             subject = Seat(index: seat);
+
+            return true;
+        }
+
+        if (
+            token.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "creation:"
+        ) &&
+            (token.Length > 9)
+        ) {
+            subject = Creation(id: token[9..].ToString());
+
+            return true;
+        }
+
+        if (
+            token.StartsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "placement:"
+        ) &&
+            (token.Length > 10)
+        ) {
+            subject = Placement(id: token[10..].ToString());
 
             return true;
         }
@@ -599,11 +662,13 @@ public readonly record struct GrantVerdict(GrantRule Rule, WorldPrincipal? Reser
 /// document is withheld at boot (the row itself still applies) — see <c>Server.WorldServer</c>'s constructor:
 /// the document may pre-wire a contributor's reach, but consent is a thing only a seated human grants live.</param>
 /// <param name="KindMask">The <see cref="MutationKindMask"/> a row admits — legal only on a
-/// <see cref="WorldCapability.Mutate"/> row over a concrete <see cref="GrantSubjectKind.Section"/> subject, or an
+/// <see cref="WorldCapability.Mutate"/> row over a concrete <see cref="GrantSubjectKind.Section"/>,
+/// <see cref="GrantSubjectKind.Creation"/>, or <see cref="GrantSubjectKind.Placement"/> subject, or an
 /// <see cref="WorldCapability.Edit"/> row over a concrete <see cref="GrantSubjectKind.State"/> subject (never the
 /// wildcard — "which kinds" presupposes one bounded target — and never any other capability). The grant door refuses
-/// a bit outside the target's own declared kind set (<c>WorldMutationKindCatalog.KindsOf(section)</c>, or
-/// <c>KindsOf(WorldSection.State)</c> for an Edit row) and refuses an effective mask of zero (an admitted-but-inert
+/// a bit outside the target's own declared kind set (<c>WorldMutationKindCatalog.KindsOf(section)</c>, where a
+/// row-scoped subject resolves to the section that owns it, or <c>KindsOf(WorldSection.State)</c> for an Edit row)
+/// and refuses an effective mask of zero (an admitted-but-inert
 /// bit set is a grant that lies — the identical "grant nothing instead" rule <see cref="Budget"/>'s <c>0</c> and
 /// <see cref="Ceiling"/>'s <c>0</c> already enforce). On an Edit row this is what separates bumping a state row from
 /// redefining it: <c>verbs:UpsertStateCell,RemoveStateCell</c> admits the per-cell writes while denying the

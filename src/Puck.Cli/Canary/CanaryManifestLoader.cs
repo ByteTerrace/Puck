@@ -401,7 +401,8 @@ internal static class CanaryManifestLoader {
                 "sequence" => ReadSequenceAssertion(authorityIds: authorityIds, context: $"{context} expect[{index}]", element: row),
                 "relation" => ReadRelationAssertion(context: $"{context} expect[{index}]", element: row, values: values),
                 "filesDiffer" => ReadFileDifferenceAssertion(context: $"{context} expect[{index}]", element: row),
-                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'response', 'sequence', 'relation', or 'filesDiffer' (casing is significant)."),
+                "framesAgree" => ReadFrameAgreementAssertion(context: $"{context} expect[{index}]", element: row),
+                _ => throw new CanaryManifestRefusal(message: $"{context} expect[{index}] type '{type}' is invalid; use exactly 'line', 'response', 'sequence', 'relation', 'filesDiffer', or 'framesAgree' (casing is significant)."),
             };
 
             if (!names.Add(item: assertion.Name)) {
@@ -446,6 +447,31 @@ internal static class CanaryManifestLoader {
         }
 
         return new CanaryFileDifferenceAssertion(After: after, Before: before, Different: different, Name: name);
+    }
+    private static CanaryFrameAgreementAssertion ReadFrameAgreementAssertion(JsonElement element, string context) {
+        RequireOnlyMembers(element: element, context: context, "after", "agree", "before", "name", "type");
+
+        var name = ReadRequiredString(context: context, element: element, member: "name");
+        var before = ReadRunRelativePath(context: context, element: element, member: "before");
+        var after = ReadRunRelativePath(context: context, element: element, member: "after");
+
+        // Stated, never defaulted: the two directions are opposite proofs, and a silently-defaulted one would read as
+        // the assertion the author did not write.
+        if (!element.TryGetProperty(propertyName: "agree", value: out var agreeElement)) {
+            throw new CanaryManifestRefusal(message: $"{context} framesAgree must state agree explicitly as true or false.");
+        }
+
+        var agree = agreeElement.ValueKind switch {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new CanaryManifestRefusal(message: $"{context} agree must be true or false."),
+        };
+
+        if (string.Equals(a: before, b: after, comparisonType: StringComparison.Ordinal)) {
+            throw new CanaryManifestRefusal(message: $"{context} before and after must name two distinct files.");
+        }
+
+        return new CanaryFrameAgreementAssertion(After: after, Agree: agree, Before: before, Name: name);
     }
     private static string ReadRunRelativePath(JsonElement element, string member, string context) {
         var value = ReadRequiredString(context: context, element: element, member: member);

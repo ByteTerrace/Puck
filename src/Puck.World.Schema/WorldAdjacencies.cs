@@ -148,6 +148,18 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
 /// border at once, or <see langword="null"/> to use the destination population's remaining capacity — the same
 /// policy <see cref="WorldPlacementPortal.Capacity"/> gives portal furniture. A full border refuses the current
 /// attempt immediately; it never queues.</param>
+/// <param name="LivenessGraceSeconds">How long this edge may go without a delivered neighbour refresh before the
+/// world calls the link dropped — the authored threshold behind the <c>linkEstablished</c>/<c>linkDropped</c> world
+/// event family and the <c>$link:&lt;name&gt;</c> reserved rule channel (<see cref="WorldRuleFacts.LinkPrefix"/>).
+/// Authored in seconds — a physical unit, so a world's <see cref="WorldDefinition.SimulationRateHz"/> can change
+/// without silently retuning the window — and compiled per document through
+/// <see cref="WorldDefinition.AdjacencyLivenessGraceTicks"/>, exactly the
+/// <c>population.reconnectGraceSeconds</c> idiom.
+/// <para><c>0</c> (the default) disables liveness sensing for this edge outright: no link edge is emitted for it
+/// and <c>$link:</c> reads <c>0</c> forever, so a world authoring none is unchanged. Per row, not per world: each
+/// seam carries its own tolerance.</para>
+/// <para>A world whose rate is 0 has no tick mapping for a positive value (see <see cref="CompiledTickDuration"/>),
+/// which reads as never dropped.</para></param>
 public sealed record WorldAdjacency(
     WorldSafeName Name,
     string Destination,
@@ -155,7 +167,8 @@ public sealed record WorldAdjacency(
     WorldAdjacencyBoundary Boundary,
     WorldAdjacencyUnavailable Unavailable = WorldAdjacencyUnavailable.Closed,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnUnavailable = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null,
+    float LivenessGraceSeconds = 0f
 );
 /// <summary>One body's deterministic sweep through an invisible ownership boundary.</summary>
 /// <param name="Crossed">Whether the segment left the boundary's owned (non-positive) half-space through the

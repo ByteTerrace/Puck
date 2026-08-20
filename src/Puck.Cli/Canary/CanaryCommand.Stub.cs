@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -23,11 +22,11 @@ internal static partial class CanaryCommand {
     private const string StubReleaseChannel = "stable";
     private const string StubAppId = "puck.world";
 
-    private static CanaryLegRun RunStubLeg(CanaryManifest manifest, bool discriminating, string worldArtifact, string stubArtifact, Stopwatch suiteClock) {
+    private static CanaryLegRun RunStubLeg(CanaryManifest manifest, bool discriminating, string worldArtifact, string stubArtifact, CanaryBudget budget) {
         try {
             return (discriminating
-                ? RunStubDiscriminatingLegCore(manifest: manifest, stubArtifact: stubArtifact, suiteClock: suiteClock, worldArtifact: worldArtifact)
-                : RunStubPositiveLegCore(manifest: manifest, stubArtifact: stubArtifact, suiteClock: suiteClock, worldArtifact: worldArtifact)
+                ? RunStubDiscriminatingLegCore(budget: budget, manifest: manifest, stubArtifact: stubArtifact, worldArtifact: worldArtifact)
+                : RunStubPositiveLegCore(budget: budget, manifest: manifest, stubArtifact: stubArtifact, worldArtifact: worldArtifact)
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
             var leg = (discriminating ? manifest.Discriminating : manifest.Positive);
@@ -35,7 +34,7 @@ internal static partial class CanaryCommand {
             return CanaryLegRun.InfrastructureFailure(leg: leg, runDirectory: "not-created", reason: exception.Message.ReplaceLineEndings(replacementText: " "));
         }
     }
-    private static CanaryLegRun RunStubPositiveLegCore(CanaryManifest manifest, string worldArtifact, string stubArtifact, Stopwatch suiteClock) {
+    private static CanaryLegRun RunStubPositiveLegCore(CanaryManifest manifest, string worldArtifact, string stubArtifact, CanaryBudget budget) {
         var leg = manifest.Positive;
         var runDirectory = CreateRunDirectory(id: manifest.Id, leg: leg.Name);
         var installDirectory = Path.Combine(path1: runDirectory, path2: "install");
@@ -63,11 +62,11 @@ internal static partial class CanaryCommand {
 
         WriteSelfUpdateConfigFile(cacheRoot: installDirectory, path: updateConfigPath, releaseDirectory: releaseDirectory, trustAnchor: trustAnchor);
 
-        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
-        var bootTimeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
+        // Both boots below get the whole declared timeout, so this leg's share of the budget is two of them.
+        var bootTimeout = TimeSpan.FromSeconds(value: manifest.TimeoutSeconds);
 
-        if (bootTimeout <= TimeSpan.Zero) {
-            return CanaryLegRun.BudgetExpired(leg: leg, runDirectory: runDirectory);
+        if (budget.Remaining < (2 * bootTimeout)) {
+            return CanaryLegRun.BudgetExpired(budget: budget, leg: leg, runDirectory: runDirectory);
         }
 
         var boot1 = LaunchStub(
@@ -91,7 +90,7 @@ internal static partial class CanaryCommand {
             ],
             input: string.Empty,
             installDirectory: installDirectory,
-            timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
+            timeout: bootTimeout
         );
 
         WriteLegConfirmationFixtures(installDirectory: installDirectory, runDirectory: runDirectory);
@@ -109,7 +108,7 @@ internal static partial class CanaryCommand {
             runDirectory: runDirectory
         );
     }
-    private static CanaryLegRun RunStubDiscriminatingLegCore(CanaryManifest manifest, string worldArtifact, string stubArtifact, Stopwatch suiteClock) {
+    private static CanaryLegRun RunStubDiscriminatingLegCore(CanaryManifest manifest, string worldArtifact, string stubArtifact, CanaryBudget budget) {
         var leg = manifest.Discriminating;
         var runDirectory = CreateRunDirectory(id: manifest.Id, leg: leg.Name);
         var installDirectory = Path.Combine(path1: runDirectory, path2: "install");
@@ -128,11 +127,11 @@ internal static partial class CanaryCommand {
         StubInstallFiles.WritePointer(fileName: "current", installDirectory: installDirectory, value: StubReleaseVersion);
         StubInstallFiles.WritePointer(fileName: "last-good", installDirectory: installDirectory, value: StubBaselineVersion);
 
-        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
-        var bootTimeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
+        // Both boots below get the whole declared timeout, so this leg's share of the budget is two of them.
+        var bootTimeout = TimeSpan.FromSeconds(value: manifest.TimeoutSeconds);
 
-        if (bootTimeout <= TimeSpan.Zero) {
-            return CanaryLegRun.BudgetExpired(leg: leg, runDirectory: runDirectory);
+        if (budget.Remaining < (2 * bootTimeout)) {
+            return CanaryLegRun.BudgetExpired(budget: budget, leg: leg, runDirectory: runDirectory);
         }
 
         var boot1 = LaunchStub(
@@ -155,7 +154,7 @@ internal static partial class CanaryCommand {
             ],
             input: string.Empty,
             installDirectory: installDirectory,
-            timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
+            timeout: bootTimeout
         );
 
         WriteLegConfirmationFixtures(installDirectory: installDirectory, runDirectory: runDirectory);
@@ -187,6 +186,7 @@ internal static partial class CanaryCommand {
 
         return new CanaryLegRun(
             Assertions: CanaryAssertions.Evaluate(leg: leg, primaryTranscript: transcript),
+            AuthorityEndpoint: string.Empty,
             AuthorityTranscripts: ImmutableEmptyAuthorityTranscripts,
             ExitCode: boot2.ExitCode,
             InfrastructureError: null,

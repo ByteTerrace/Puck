@@ -69,6 +69,19 @@ plus every admitted peer connection's re-minted admission grant; every other
 live `world.grant` acquisition drops). The `dirty` count in `world.status` IS
 the journal length.
 
+**Lifetime sweeps.** Four per-tick passes run side by side at the end of
+`WorldServer.StepCore`, each firing ORDINARY mutations under
+`WorldPrincipal.World`'s structural exemption so recovery is journalled and
+undoable rather than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted
+ownership offer), `SettleExpiredMarketListings`/`PruneExpiredMarketListings` (a
+listing past its deadline, a terminal row past `market.retentionSeconds`), and
+`SweepContributionTenure` (`WorldServer.Contributions.cs` — a presence-tenure
+contribution slot whose watched `adjacencies` row has read dropped past the
+slot's own `graceSeconds`). The last reads link liveness through
+`WorldServer.TryLinkLiveness`, which pairs `WorldEventFeed.LinkStalenessTicks`
+with the row's compiled `livenessGraceSeconds`; its retraction defers, rather
+than proceeding, while the slot's inhabitant is drive-possessed.
+
 **Steady-state performance contract.** The per-tick pipeline — intent fold,
 sim step, snapshot emission, binding resolution — allocates nothing; document
 and JSON work is confined to the boundaries (load, save, and mutation
@@ -178,6 +191,12 @@ admitted by transfer and the authority its verdict was decided against;
 `Puck.World`'s `WorldMutationCommandModule`'s
 `world.admission` echoes the document's own authored `admission` entries —
 the runtime and document halves of the admission decision, respectively.
+`world.links`, in the same module, is the seam-liveness read-back: one line per
+authored `adjacencies` row naming its destination, neighbour authority, the
+tick-derived staleness/grace the `$link:` rule channel and the
+`linkEstablished`/`linkDropped` event family both read, and — clearly marked
+presentation-only, never a simulation input — the transport lane's wall-clock
+backoff state.
 
 Each connection's whole lifetime runs under `WorldNarrationScope.Current` set
 to this row's `AuthorityIdentity` (an `AsyncLocal<string?>`, flows across every
@@ -278,8 +297,12 @@ is minted; a namespace no `admission` row names gets `presentation`.
 replica, the definition verbatim at replica — and `TryDecodeDocument` hydrates
 the projection back into a `WorldDefinition` so the route answer, the
 reservation reply, and the observation lane's `Definition` frame all keep their
-existing shapes. The reservation leaf carries a `WorldIdentityProjection`
-instead of the traveler's owned document.
+existing shapes. Both arms hand back a document whose `state.<row>[.<key>]`
+values are resolved, so a delivered definition is indistinguishable from a
+file-loaded one and an arriving seat's binding recompose cannot fault on an
+unresolved identifier; a projection leaf that still names a state cell is
+refused as `PayloadMalformed`. The reservation leaf carries a
+`WorldIdentityProjection` instead of the traveler's owned document.
 
 `StreamProjectionAsync` attaches its sink with the world's authored
 `population.disclosure` and no observer body index, so a narrowed policy
@@ -302,8 +325,10 @@ Capabilities are `Drive`, `Observe`, `Control`, `Mutate`, and `Edit`
 (`Present` was deleted 2026-08-02 — "contribute to what is drawn" is
 `Mutate` over presentation-shaped sections); subjects are the `all`
 wildcard, `body:<n>`, `screen:<n>`, `section:<name>`,
-`state:<name>`, `composition` (the shared window-composition authority), or
-the two world-events-feed subjects `region:<name>`/`seat:<n>` (legitimate
+`state:<name>`, `composition` (the shared window-composition authority),
+`creation:<id>`/`placement:<id>` (one creations/placements row apiece,
+`Mutate`-only), or the two world-events-feed subjects
+`region:<name>`/`seat:<n>` (legitimate
 only for `Observe`), with a positive per-capability legitimacy rule
 (`WorldGrants.IsLegitimateSubject`) so a new subject shape is refused by
 default. `state:<name>` is the one subject that
@@ -316,8 +341,9 @@ SECOND time at apply — rather than replacing it.
 
 **Two mask payloads, two types, never one lane with two readings.** A grant
 row may carry a `MutationKindMask` (`WorldGrant.KindMask`, ordinals from
-`WorldMutationKindCatalog`) on a `Mutate`/`section:<name>` row — the addon
-mutation seam's dispatch door — or on an `Edit`/`state:<name>` row, where it
+`WorldMutationKindCatalog`) on a `Mutate` row over `section:<name>`,
+`creation:<id>`, or `placement:<id>` — the dispatch door — or on an
+`Edit`/`state:<name>` row, where it
 separates the per-cell writes from the whole-row re-authoring beneath one
 subject (`verbs:UpsertStateCell,RemoveStateCell` grants "bump the score"
 without "redefine the score"). It may instead carry a `DocumentWriteMask`

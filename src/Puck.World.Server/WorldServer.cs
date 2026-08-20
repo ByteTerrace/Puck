@@ -439,6 +439,21 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// checkpoint upload's own fire-and-forget shape). <see langword="null"/> (the default) journals nothing — a
     /// desktop row has no durable store to append to.</summary>
     public Action<ulong, WorldMutation>? MutationJournalTap { get; set; }
+    /// <summary>Observes every SUBMITTED document mutation as <see cref="ApplyEnvelope"/> dispatches it, carrying the
+    /// mutation and the envelope's own acting principal. The one ingress every submission kind shares — a local
+    /// console/client write over the loopback, an admitted socket peer's, and a traveller's submission forwarded by
+    /// its source authority all reach the tape here, with the true actor the envelope stamped. Deliberately NOT the
+    /// two internal producers that reach <see cref="EnqueueMutation"/> directly (a mounted guest's decoded act, a
+    /// world rule's <c>generate</c> effect): both re-derive during a replay drive, so taping them would apply each
+    /// one twice. A mutation the apply pipeline goes on to refuse is still observed, so the refusal reproduces
+    /// identically. The replay tape attaches only while armed; clients never receive this submission-only
+    /// seam.</summary>
+    public Action<WorldMutation, WorldPrincipal>? MutationTap { get; set; }
+    /// <summary>Observes each authored <c>adjacencies</c> row that received a delivered neighbour refresh this tick,
+    /// by row name, at the pinned point in <see cref="Step"/> where the adjacency source has just frozen the tick's
+    /// projection graph. The one taped link-liveness input — see <see cref="WorldEventFeed"/>'s own remarks. The
+    /// replay tape attaches only while armed.</summary>
+    public Action<string>? LinkDeliveryTap { get; set; }
     /// <summary>Gets or sets the injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/> reads
     /// for a cross-document adjacency proof
     /// — the same "the server calls out, the composition root supplies the capability" shape as <see cref="EchoTap"/>/

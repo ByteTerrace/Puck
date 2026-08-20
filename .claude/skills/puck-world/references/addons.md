@@ -224,16 +224,21 @@ armed, because they ride the tape through their own leaf codec and
 ## World events
 
 The host delivers world events as host-written `Observation` cells (verbs
-1-10 on `AddonAbi.ObservationVerbs`, prefix growth beside `GrantedBody` —
-the ABI pin never bumps). Four families are WORLD-scoped, collected once per
+1-12 on `AddonAbi.ObservationVerbs`, prefix growth beside `GrantedBody` —
+the ABI pin never bumps). Five families are WORLD-scoped, collected once per
 tick by `Server/WorldEventFeed.cs` after the population settles: seat
 join/leave, region enter/exit (a placement's `WorldPlacementRegion` facet —
 a named sphere, addressed by the carrying placement's own `Id`), collision
 pairs (a flat proximity test — NOT the physical contact resolver, which has
-no body-vs-body form here), and control-application engaged/disengaged.
+no body-vs-body form here), control-application engaged/disengaged, and
+federation link established/dropped.
 Application edges are queued from `WorldGrants`' own set writes, so every
 member added or removed fires one — including the context-button auto-engage
-and a revoke-driven dissolution. The fifth,
+and a revoke-driven dissolution. Link edges compare a per-adjacency staleness
+count against that row's authored `livenessGraceSeconds` (`0`, the default,
+disables the row's sensing entirely, so an unauthored world emits none); `A`
+is the adjacency row's 0-based document ordinal, `B` the staleness in
+simulation ticks on a drop and `0` on an establish. The sixth,
 machine-memory watches, is ADDON-scoped (`WorldAddonRow.MemoryWatches`, each
 a `(screen, address, length)` row) and reads `Server.WorldMachineHost`
 DIRECTLY (`WorldMachineHost` implements `IWorldMachineMemoryPeek` itself,
@@ -249,13 +254,17 @@ every other capability here uses: `WorldAddonRuntime.IsEventGated` checks
 `IsRequested ∧ Allows ∧ TryGetEventBudget`. The gating subject IS the
 family — `Observe/body:<n>` (collision + route), `Observe/region:<name>`
 (enter/exit), `Observe/seat:<n>` (join/leave), `Observe/screen:<n>`
-(machine-memory) — legitimate for UNTRUSTED principals only (no trusted
+(machine-memory), `Observe/all` (link established/dropped) — legitimate for
+UNTRUSTED principals only (no trusted
 principal reads Observation cells). `WorldGrant.EventBudget` is a SIBLING of
 `Budget` on the same row. Its numeric value is a nonzero admission gate, not
 a consumed meter; it is REQUIRED (with `events:<n>` on `world.grant`) for
 `screen:`/`region:`/`seat:` subjects — which still ALSO need the
 pre-existing `budget:<n>` untrusted-Observe requirement, since that door
 does not know a subject carries no query verb — and OPTIONAL on `body:<n>`.
+The link family gates on the wildcard because no adjacency-row `GrantSubject`
+kind exists; `events:<n>` is still what the gate reads, so a wildcard row
+without one delivers no link cells.
 
 **Overflow behavior: ordered prefix, drop-newest, per-mount
 gap counter.** `EmitEvents` writes edges into whatever ring room remains
@@ -268,7 +277,13 @@ reported by the next batch with room. No numeric per-subject throttle exists bey
 ring — `EventBudget`'s value is an admission gate (nonzero), not a rate
 limiter of its own.
 
-Events are never taped. They re-derive from sim state during replay.
+Four of the five families are never taped — they re-derive from sim state
+during replay. The link family is the exception: whether a neighbour
+delivered is transport ingress no sim state determines, so the tape carries a
+`LinkDelivery(adjacencyName)` entry per refreshed row per tick and the
+re-drive feeds it through the same `WorldEventFeed.ObserveLinkDelivery`
+entry point the live poll uses. The delivered CONTENT is still absent, so a
+replay reproduces WHEN a seam went dark and never what the neighbour showed.
 `world.grant`/`world.revoke`, which do ride the tape, carry
 `GrantSubjectKind.Region`/`Seat` and `WorldGrant.EventBudget` through the
 shared grant leaf.

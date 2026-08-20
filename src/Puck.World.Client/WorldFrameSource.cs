@@ -258,14 +258,31 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         // Composing the emitter runs the ONE capacity probe (its worst-case branch: all 128 avatars, the reserved
         // placement instances, the worst-case animated pool, and the authoring headroom), freezing the word, instance,
         // and dynamic-transform envelopes every live rebuild fits inside by construction.
-        m_composed = new SdfCompositionFrameSource(
-            dresser: this,
-            emitters: [m_emitter, m_sdfDocuments, m_adjacencies]
-        ) {
-            // Park unused slots exactly where a hidden avatar and an unused pool slot already sit — below the floor,
-            // outside the camera and tile-cull reach.
-            ParkPosition = WorldSceneEmitter.HiddenAvatar,
-        };
+        try {
+            m_composed = new SdfCompositionFrameSource(
+                dresser: this,
+                emitters: [m_emitter, m_sdfDocuments, m_adjacencies]
+            ) {
+                // Park unused slots exactly where a hidden avatar and an unused pool slot already sit — below the floor,
+                // outside the camera and tile-cull reach.
+                ParkPosition = WorldSceneEmitter.HiddenAvatar,
+            };
+        } catch (SdfProgramCapacityException capacity) {
+            // The probe is the only place the WHOLE composed worst case exists, so it is the only place that can name
+            // what did not fit. Re-raise it as this world's own refusal so the composition root reports it the way it
+            // reports every other refused boot document, rather than letting an engine ceiling surface as an
+            // unhandled exception out of a service factory.
+            throw new WorldRenderCapacityRefusedException(
+                innerException: capacity,
+                message: $"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — "
+                    + $"{definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), "
+                    + $"population {WorldAvatarCatalog.Capacity} rigs, and "
+                    + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at "
+                    + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} "
+                    + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct "
+                    + $"edge plus every derivable corner pair)."
+            );
+        }
         ProgramWordCapacity = m_composed.WorstCaseProgramWordCapacity;
         InstanceCapacity = m_composed.WorstCaseInstanceCapacity;
         DynamicTransformCapacity = m_composed.WorstCaseDynamicTransformCapacity;
@@ -412,9 +429,13 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             }
         }
 
-        WorldPlacementStamper.EmitProbe(
+        // The SAME reservation the construction probe froze the envelope with, taken over the CANDIDATE's own
+        // adjacency rows — measuring only the static half would let a mutation spend the room a border's bodies hold,
+        // and the next rebuild would then overflow the frozen buffers.
+        WorldAdjacencySceneEmitter.EmitReservation(
+            bandCount: WorldAdjacencyBands.ProjectionCapacity(definition: worldDefinition),
             builder: builder,
-            reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: worldDefinition) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
+            slotBase: m_emitter.DynamicSlotCount
         );
 
         var measured = builder.Build();

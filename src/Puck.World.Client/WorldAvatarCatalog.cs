@@ -24,6 +24,9 @@ public static class WorldAvatarCatalog {
 
     private static readonly ulong[] IdentityHashes;
     private static readonly AvatarLeaf[] Leaves;
+    // Avatar indices ordered by descending leaf count, so the first N of them are the largest N rigs the catalog can
+    // produce — the supremum a bounded probe must reserve for ANY N-avatar subset.
+    private static readonly int[] ProbeOrder;
     // The procedural humanoid's authored content. These identifiers are not an engine vocabulary: another look
     // publishes any part ids its own geometry needs against its own transform slots.
     private static readonly AuthoredPartTable Parts = new(slots: [
@@ -112,6 +115,22 @@ public static class WorldAvatarCatalog {
         }
 
         Leaves = leaves.ToArray();
+        ProbeOrder = [.. Enumerable.Range(
+            count: Capacity,
+            start: 0
+        )
+            .OrderByDescending(keySelector: avatar => Ranges[avatar].Count)
+            .ThenBy(keySelector: avatar => avatar)];
+        var reach = 0f;
+
+        foreach (var leaf in Leaves) {
+            reach = MathF.Max(
+                x: reach,
+                y: ((leaf.Anchor + leaf.AuthoredOffset).Length() + (LeafBoundRadius * leaf.Scale))
+            );
+        }
+
+        Reach = reach;
     }
 
     /// <summary>The all-128 rig's frozen dynamic-transform capacity (and leaf-instance count).</summary>
@@ -119,8 +138,13 @@ public static class WorldAvatarCatalog {
     /// <summary>The all-128 authored VM instruction total, excluding the static world.</summary>
     public static int InstructionCapacity => (Leaves.Length * InstructionsPerLeaf);
     public static int MaxInstructionCount => (MaxLeafCount * InstructionsPerLeaf);
+    /// <summary>Gets the largest leaf — and therefore cull-instance — count any catalog rig emits.</summary>
+    public static int MaxInstancesPerAvatar => MaxLeafCount;
     /// <summary>The minimum and maximum authored instruction counts of any catalog avatar.</summary>
     public static int MinInstructionCount => (MinLeafCount * InstructionsPerLeaf);
+    /// <summary>Gets the avatar-local radius, in world units at unit render scale, enclosing every catalog rig's
+    /// leaves — the proximity reach a band-relevance test scales by a look's own render scale.</summary>
+    public static float Reach { get; }
 
     private static AvatarLeaf BuildLeaf(int avatar, int bone) {
         var sampleIndex = ((ulong)(((avatar * MaxLeafCount) + bone) + 1));
@@ -330,6 +354,9 @@ public static class WorldAvatarCatalog {
     /// when the absolute slot lane is baked into an instruction.</param>
     /// <param name="rigFor">The catalog rig each avatar sources its leaves from, or <see langword="null"/> for its own.</param>
     /// <param name="scaleFor">Each avatar's uniform render scale, or <see langword="null"/> for 1.</param>
+    /// <param name="probeAvatarLimit">Bounds a worst-case probe to that many avatars — the largest rigs the catalog
+    /// carries, so the reservation covers any subset of that size a live emission may select. <see langword="null"/>
+    /// reserves the whole catalog.</param>
     public static void Emit(
         SdfProgramBuilder builder,
         Func<int, bool> isActive,
@@ -338,12 +365,28 @@ public static class WorldAvatarCatalog {
         bool probeWorstCase,
         int slotBase,
         Func<int, int>? rigFor = null,
-        Func<int, float>? scaleFor = null
+        Func<int, float>? scaleFor = null,
+        int? probeAvatarLimit = null
     ) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(isActive);
 
-        for (var avatar = 0; (avatar < Capacity); avatar++) {
+        var bounded = (probeWorstCase && (probeAvatarLimit is not null));
+        var count = (bounded
+            ? Math.Clamp(
+                max: Capacity,
+                min: 0,
+                value: probeAvatarLimit!.Value
+            )
+            : Capacity
+        );
+
+        for (var position = 0; (position < count); position++) {
+            var avatar = (bounded
+                ? ProbeOrder[position]
+                : position
+            );
+
             if (
                 !probeWorstCase &&
                 !isActive(arg: avatar)

@@ -177,6 +177,22 @@ public sealed class WorldRemoteAuthority : IDisposable {
     }
 
     public string Authority => Volatile.Read(location: ref m_authority);
+    /// <summary>Gets a value indicating whether every established lane is outside its unreachable-peer backoff
+    /// window. WALL-CLOCK transport lifecycle state (<see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/>),
+    /// legitimate for a read-back to print and never for simulation to read — link liveness the sim acts on is
+    /// tick-derived (<c>WorldEventFeed</c>'s link family). <see langword="true"/> when no lane has been opened yet:
+    /// nothing has failed.</summary>
+    public bool LanesAvailable {
+        get {
+            foreach (var lane in m_requestLanes) {
+                if (!lane.Value.IsAvailable) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
     public WorldDefinition Definition => Volatile.Read(location: ref m_definition);
     public string Endpoint => Volatile.Read(location: ref m_endpoint).ToString();
     public IServerLink Link => m_link;

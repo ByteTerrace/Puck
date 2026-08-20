@@ -1139,6 +1139,18 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} ATTACHES — a row cannot both INHABIT (spawn its own driven bodies) and ATTACH (ride another body's pose).");
                 }
             }
+
+            // The CONTRIBUTION facet: a host-authored slot a federation partner fills (see WorldPlacementContribution).
+            if (placement.Contribution is { } slotContribution) {
+                ValidateContribution(
+                    contribution: slotContribution,
+                    creationIds: creationIds,
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}.contribution",
+                    placement: placement
+                );
+            }
         }
 
         if (stampRegistrationCount > WorldPlacementPolicy.MaxStampRegistrations) {

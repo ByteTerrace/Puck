@@ -31,7 +31,7 @@
       { "type": "response", "name": "remote pose before move", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
       { "type": "response", "name": "remote pose after move", "stream": "stdout", "verb": "player.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
       { "type": "relation", "name": "remote authority moved the body", "left": { "value": "beforeZ" }, "operator": "minimumMargin", "right": { "value": "afterZ" }, "margin": 1 },
-      { "type": "filesDiffer", "name": "moving the remote boot body changes the composed frame", "before": "before.png", "after": "after.png" },
+      { "type": "framesAgree", "name": "moving the remote boot body changes the composed frame", "before": "before.png", "after": "after.png", "agree": false },
       { "type": "line", "name": "both captures resolved", "stream": "stderr", "match": "contains", "text": "after.png", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]

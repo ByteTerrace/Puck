@@ -138,6 +138,18 @@ facet contribute/sense/sound nothing rather than at a stale point.
 spawn its own bodies and ride another's) stay refused, and `Solid` stays
 refused under the FIELD contact provider (it compiles every solid row's
 geometry once into one SDF program, never rebuilt per tick).
+`Contribution` (`WorldPlacementContribution`) makes the row a SLOT: the host
+authors the frame (`Tenure` — `Presence`/`Endowed` — plus `SlotCreationId`, the
+watched `Link` adjacency row name, and `GraceSeconds`), and a federation partner
+fills it with a creation of their own through an ordinary `UpsertPlacement`.
+`Contributor` and `RetractDeadlineTick` are SERVER-STAMPED: the compose arm
+(`Server/WorldServer.Contributions.cs`) reads the contributor off the submitting
+principal and refuses a payload that names either, and the per-tick presence
+sweep owns the deadline. An unfilled slot shows its own `SlotCreationId`, so
+there is no creationless placement to represent — the validator pins the pair
+(`WorldDefinitionValidator.Contribution.cs`): unfilled requires
+`creationId == slotCreationId`, filled requires them to differ. Read back with
+`world.contributions`.
 `Solid` compiles the same creation-shape transform chain the renderer emits.
 The field provider evaluates that SDF geometry directly; the analytic provider
 materializes exact isotropically scaled spheres and conservative world-axis
@@ -623,12 +635,22 @@ creation through record-sharing.
 row, or wheel may name its group literally or with the same
 `state.<row>[.<key>]` grammar. The referenced Text cell holds the group name
 directly, so all linked rows can share one value—for example,
-`"group": "state.groups.action"`. Changing that cell
+`"group": "state.bindingGroups.defaultActionGroup"`, which is what
+`standard.world.json` authors. Changing that cell
 renames every consumer together, then recomposes and validates the complete
-binding profile before the mutation is accepted. `standard.world.json` names
-its group literally: a reference is not resolved on a definition delivered
-across a transfer, so a state-backed group faults a seat's recompose on
-arrival.
+binding profile before the mutation is accepted.
+
+**Every door that turns bytes into a live document resolves.**
+`WorldStateDocumentValues.TryResolve` runs inside `WorldJsonPayload.TryParse`,
+`WorldDefinitionSerialization.Deserialize`, and `WorldProjection.TryToDefinition`,
+so a definition delivered across an authority transfer reads exactly like a
+file-loaded one and an arriving seat's binding recompose sees resolved
+identifiers. A projection carries no `state` section, so `WorldProjection.Compose`
+flattens its egress — every reference answered from the composing authority's own
+state and dropped (`WorldStateDocumentValues.TryFlatten`, run on a rehydrated copy
+so the live document keeps its authored reference) — and a peer whose projection
+still names a cell is refused by name at the decode door. Law suite:
+`tests/Puck.World.Tests/DeliveredDocumentIdentifierLawTests.cs`.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** A `$`-prefixed ROW name is refused
 outright (nothing mints a row), and a `$`-prefixed CELL key is refused unless it
@@ -674,14 +696,19 @@ active-entry count), `$region:<placementId>` (that region's live occupant count)
 0-based entity index, or -1 for none — the entity-addressable primitive),
 `$distance:<bodyRefA>:<bodyRefB>`/`$los:<bodyRefA>:<bodyRefB>` (live distance, or
 1/0 line-of-sight, between two bodies named `body:<n>` or
-`argmax:<row>`/`argmin:<row>`), and `$parked:<bodyRef>` (one named body's
+`argmax:<row>`/`argmin:<row>`), `$parked:<bodyRef>` (one named body's
 remaining reconnect-grace ticks, 0 when not parked or the reference resolves to
 no live body — the SAME single-body-reference grammar as an argmax/argmin
 token, so it composes with `$distance:`/`$argmax:` directly; see
-`Server.WorldPopulation`'s park-with-grace remarks) —
-folding time, population, occupancy, machine memory, aggregates, and
-reconnect-park state into the string channel `State` already carries rather
-than a fact enum or a scheduler. `Mode` is `Level`
+`Server.WorldPopulation`'s park-with-grace remarks), and
+`$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last
+received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
+authors no `livenessGraceSeconds`; the row name is proven at compile time, and
+this is a federation seam — unrelated to the `links` section, which is screen
+cables) —
+folding time, population, occupancy, machine memory, aggregates,
+reconnect-park state, and federation liveness into the string channel `State`
+already carries rather than a fact enum or a scheduler. `Mode` is `Level`
 (fires every tick the gate holds) or `Edge` (fires once per crossing, re-arming
 when the gate closes); a rule that writes a row almost always wants `Edge`.
 
@@ -769,8 +796,12 @@ record, and its member list IS the disclosure decision. It has no member for
 `WorldProjectedKit` has none for a kit's `producers`/`actions`. `metadata`
 crosses in reduced form — `WorldProjectedMetadata` carries `title`/
 `description` only; `authors`, `tags`, and `custom` never cross.
-`ToDefinition` hydrates one back into a `WorldDefinition` with neutral defaults
-for what was withheld, so no receiving consumer changed type.
+`TryToDefinition` hydrates one back into a `WorldDefinition` with neutral defaults
+for what was withheld, so no receiving consumer changed type. Because `state` is
+one of the withheld sections, `Compose` sends a FLAT document — every
+`state.<row>[.<key>]` value answered from the composing authority's own state and
+the reference dropped — and `TryToDefinition` refuses a peer that still names a
+cell.
 
 `WorldCounterpartAttestation` is a neighbour's statement of its seam edges plus
 the five `WorldOverlapTerms` the overlap derivation reads from its side.

@@ -23,7 +23,7 @@ use crate::fixed::{FRACTION_BITS, ONE, ZERO};
 const FRACTION_MASK: u64 = (1u64 << FRACTION_BITS) - 1;
 const HALF_ULP: u64 = 1u64 << (FRACTION_BITS - 1);
 
-// Atan2 constants (FixedQ4816.Atan2HalfPiQ61 / Atan2PiQ61).
+// Atan2 constants (FixedQ4816.Atan2HalfPiQ61 / PiQ61).
 const ATAN2_HALF_PI_Q61: i64 = 3622009729038561421;
 const ATAN2_PI_Q61: i64 = 7244019458077122842;
 

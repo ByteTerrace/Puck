@@ -2907,6 +2907,56 @@
       ],
       "additionalProperties": false
     },
+    "WorldPlacementContribution": {
+      "description": "A placement\u0027s contribution facet: the row is a slot whose frame (id, pose, scale, and these lifecycle terms) is host-authored and whose creation a federation partner supplies through ordinary mutations. Null is an ordinary placement.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "tenure": {
+          "description": "The authored lifecycle.",
+          "enum": [
+            "Presence",
+            "Endowed"
+          ]
+        },
+        "slotCreationId": {
+          "description": "The host-owned Id the slot shows while unfilled and returns to on retraction. Must resolve to a declared creation row.",
+          "type": "string"
+        },
+        "link": {
+          "description": "The authored adjacencies row name the presence check watches \u2014 the same key the $link:\u003CadjacencyName\u003E reserved rule channel reads. Required for Presence, refused beside Endowed.",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "graceSeconds": {
+          "description": "Seconds the watched link may stay unreachable before the piece retracts, compiled to simulation ticks through CompiledGrace at each sweep observation and stamped once into RetractDeadlineTick. Zero disables the grace (retract on the first observed outage); a rate-0 world compiles to Never, so nothing retracts. Refused beside Endowed unless zero.",
+          "type": "number",
+          "default": 0
+        },
+        "contributor": {
+          "description": "Server-stamped. The acting principal that filled the slot; null while unfilled. Never accepted from a submitted payload or an authored document.",
+          "default": null
+        },
+        "retractDeadlineTick": {
+          "description": "Server-stamped. The simulation tick at or after which the presence sweep retracts this slot; null while the link is reachable.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "tenure",
+        "slotCreationId"
+      ],
+      "additionalProperties": false
+    },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
       "type": "object",
@@ -2968,6 +3018,11 @@
         "attach": {
           "$ref": "#/$defs/WorldPlacementAttach",
           "description": "The placement\u0027s attach facet (see WorldPlacementAttach) \u2014 binds the row\u0027s resolved world pose to a live population body, or null for a static/authored transform (the default, unchanged behavior). Omitted from the wire when null.",
+          "default": null
+        },
+        "contribution": {
+          "$ref": "#/$defs/WorldPlacementContribution",
+          "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
           "default": null
         }
       },

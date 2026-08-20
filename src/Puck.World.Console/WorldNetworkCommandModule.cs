@@ -9,7 +9,7 @@ namespace Puck.World;
 /// the door admitted, whether it crossed as a TCP connection (<see cref="WorldTcpHost"/>'s connection table) or as a
 /// traveller an authenticated federation authority handed over. <c>world.admission</c> echoes the document half.
 /// </summary>
-public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, WorldInstanceHost? instances = null) : ICommandModule {
     private static string Describe(WorldServer server, WorldTcpHost? tcpHost) {
         var arrivals = DescribeArrivals(server: server);
 
@@ -60,6 +60,93 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority) 
                 separator: " | ",
                 values: rows
             )}"
+        );
+    }
+    // One line per authored adjacency row. Everything left of 'lane=' is tick-derived simulation state — the same
+    // staleness the $link: rule channel reads and the link event family thresholds against, so a read-back and a rule
+    // can never disagree. 'lane=' is the transport's own wall-clock backoff view (PersistentRequestLane.IsAvailable),
+    // marked presentation-only because it must never re-enter the sim: it bounds transport lifecycle, never
+    // simulation state.
+    private static string DescribeLinks(WorldServer server, WorldInstanceHost? instances) {
+        var definition = server.Definition;
+        var rows = (definition.Adjacencies ?? []);
+        var adjacencies = server.Adjacencies;
+        var lines = new List<string>();
+
+        foreach (var row in rows) {
+            if (row is null) {
+                continue;
+            }
+
+            var name = row.Name.Value;
+            var grace = definition.AdjacencyLivenessGraceTicks(adjacency: row);
+            var stale = server.Events.LinkStalenessTicks(adjacencyName: name);
+            var neighbour = ((IWorldAdjacencyNeighbour?)null);
+            var resolved = ((adjacencies is not null) && adjacencies.TryResolve(
+                adjacencyName: name,
+                neighbour: out neighbour
+            ) && (neighbour is not null));
+            var destination = WorldDefinitionRows.FindDestination(
+                destinations: definition.Destinations,
+                name: row.Destination
+            );
+            var reference = ((destination is null)
+                ? null
+                : WorldDefinitionRows.FindReference(
+                    references: definition.References,
+                    name: destination.Reference
+                )
+            );
+            // The delivered identity when the seam resolves and has been stamped; the reference's own neighbour key
+            // otherwise — a resolved-but-unstamped mirror is not yet naming anyone.
+            var authority = ((resolved && !string.IsNullOrEmpty(value: neighbour!.Authority))
+                ? neighbour.Authority
+                : (reference?.NeighbourKey ?? "unresolved")
+            );
+            var graceEcho = (grace.IsNever
+                ? "never"
+                : (grace.IsZero
+                    ? "off"
+                    : $"{grace.Ticks}t")
+            );
+            var state = (grace.IsZero
+                ? "unsensed"
+                : ((!grace.IsNever && (stale >= grace.Ticks))
+                    ? "dropped"
+                    : "live")
+            );
+            var endpoint = string.Empty;
+            var laneAvailable = false;
+            // The remote table is keyed by whatever name the dial resolved under — the destinations row for a
+            // transfer route, the delivered authority identity for an observation. Try both rather than reporting a
+            // live lane as absent.
+            var dialled = ((instances is not null) && (instances.TryDescribeRemoteAuthority(
+                name: row.Destination,
+                endpoint: out endpoint,
+                laneAvailable: out laneAvailable
+            ) || instances.TryDescribeRemoteAuthority(
+                name: authority,
+                endpoint: out endpoint,
+                laneAvailable: out laneAvailable
+            )));
+            var lane = (dialled
+                ? (laneAvailable
+                    ? "available"
+                    : "backoff")
+                : "none"
+            );
+
+            lines.Add(item: $"{name} -> destination:{row.Destination} authority:{authority} endpoint:{(dialled
+                ? endpoint
+                : "unknown")} stale={stale}t grace={graceEcho} {state} | lane={lane} (presentation-only)");
+        }
+
+        return ((lines.Count == 0)
+            ? "[world.links: this world authors no adjacencies]"
+            : $"[world.links: {string.Join(
+                separator: " | ",
+                values: lines
+            )}]"
         );
     }
     private static string DescribeProjection(WorldServer server, in WireArgs arguments) {
@@ -172,6 +259,28 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority) 
                 }
 
                 return new CommandResult(Output: Describe(server: instance.Server, tcpHost: instance.Door));
+            }
+        );
+
+        yield return CommandDefinition.Verb(
+            bindability: CommandBindability.Unbindable,
+            name: "world.links",
+            description: "Lists every authored adjacency row's federation link: the row name, the destinations row it names, the neighbour authority identity (the delivered one when the seam currently resolves, else the reference's own neighbour key), the reference endpoint, the tick-derived staleness (stale=<n>t — simulation ticks since the last delivered neighbour refresh, the same number the '$link:<name>' rule channel reads), the compiled grace (grace=<n>t, 'off' for an unauthored livenessGraceSeconds, 'never' at simulation rate 0), and the derived live/dropped/unsensed state. The trailing 'lane=' column is the transport's own wall-clock backoff view and is PRESENTATION-ONLY — it never enters the simulation; 'none' means no remote lane has been opened for that destination (a same-process neighbour never has one). This is the read-back for the linkEstablished/linkDropped world event family. Unrelated to screen.links, which lists screen cable links.",
+            valueKind: CommandValueKind.Digital,
+            handler: context => {
+                if (!authority.TryResolveServer(
+                    context: context,
+                    error: out var error,
+                    server: out var server,
+                    verb: "world.links"
+                )) {
+                    return error;
+                }
+
+                return new CommandResult(Output: DescribeLinks(
+                    instances: instances,
+                    server: server
+                ));
             }
         );
 

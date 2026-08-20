@@ -26,7 +26,7 @@
         "name": "commit names the separate authority",
         "stream": "stdout",
         "match": "contains",
-        "text": "remote authority 127.0.0.1:38473",
+        "text": "remote authority {authority}",
         "present": true
       },
       {
@@ -83,7 +83,7 @@
         "name": "local control does not claim a remote authority",
         "stream": "stdout",
         "match": "contains",
-        "text": "remote authority 127.0.0.1:38473",
+        "text": "remote authority {authority}",
         "present": false
       },
       {

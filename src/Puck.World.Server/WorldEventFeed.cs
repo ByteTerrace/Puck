@@ -4,7 +4,7 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>The closed world-events vocabulary — four event families; the fifth, machine-memory watches, is
+/// <summary>The closed world-events vocabulary — five event families; the sixth, machine-memory watches, is
 /// addon-scoped — each mounted guest declares its own watch rows, so it is computed inside
 /// <see cref="IWorldAddonHost"/>'s implementation directly rather than here; see <c>Addons.WorldAddonRuntime</c>'s
 /// remarks. Mirrors <c>Puck.Scripting.AddonAbi.ObservationVerbs</c>'s event verbs one-for-one.</summary>
@@ -26,6 +26,12 @@ public enum WorldEventFamily : byte {
     RouteEngaged,
     /// <summary>A route was dissolved.</summary>
     RouteDisengaged,
+    /// <summary>An authored <c>adjacencies</c> row received a delivered neighbour refresh after having been dropped
+    /// — the federation seam is live again.</summary>
+    LinkEstablished,
+    /// <summary>An authored <c>adjacencies</c> row went <see cref="WorldAdjacency.LivenessGraceSeconds"/> without a
+    /// delivered neighbour refresh — the federation seam is dark.</summary>
+    LinkDropped,
 }
 /// <summary>One world-scoped event edge for this tick, in pinned iteration order. <see cref="GateA"/> (and,
 /// for the two-body families, <see cref="GateB"/>) name the <see cref="GrantSubject"/>(s) an addon must hold an
@@ -39,11 +45,12 @@ public enum WorldEventFamily : byte {
 /// <param name="B">The wire payload's second lane (a region ordinal, or an encoded route target); zero when unused.</param>
 public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubject GateA, GrantSubject? GateB, long A, long B);
 /// <summary>
-/// Computes the four world-scoped event families once per tick — collision pairs, region enter/exit, seat
-/// join/leave, and route/engagement transitions — as a flat, pinned-order edge list every mounted addon's host
-/// filters by its own grants. Deterministic by construction: every input (body
-/// positions, seat occupancy, the document's region rows, route commands) is already sim-lane state, so replay
-/// covers this feed by re-execution — nothing here is taped.
+/// Computes the five world-scoped event families once per tick — collision pairs, region enter/exit, seat
+/// join/leave, route/engagement transitions, and federation link established/dropped — as a flat, pinned-order edge
+/// list every mounted addon's host filters by its own grants. Four of the five are deterministic by construction:
+/// body positions, seat occupancy, the document's region rows, and route commands are already sim-lane state, so
+/// replay covers them by re-execution and nothing about them is taped. The link family is the one exception — see
+/// its own paragraph below.
 /// </summary>
 /// <remarks>
 /// <para><b>Collision pairs are a proximity test, not the physical contact resolver.</b>
@@ -61,10 +68,26 @@ public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubje
 /// a Seat/Peer principal to its body index and queues the corresponding edge; principals that drive no body produce no
 /// fabricated source. <see cref="Collect"/> drains the queue at the pinned collection point so a route transition and
 /// this tick's other edges arrive in the same batch.</para>
+/// <para><b>Link edges are the one taped family.</b> Whether a federation neighbour delivered a refreshed projection
+/// on a given tick is transport ingress, not sim state: nothing in the document or the population determines it, so
+/// it cannot be re-derived. <see cref="ObserveLinkDelivery(string)"/> is the one input, called once per authored
+/// adjacency row whose delivered snapshot tick advanced; the live path calls it from <c>WorldServer.Step</c> right
+/// after the adjacency source freezes the tick's projection graph, and <c>WorldReplaySnapshot.Drive</c> calls it from
+/// the tape's own <c>LinkDelivery</c> entries. Everything downstream — the per-tick count
+/// <see cref="LinkStalenessTicks"/> reports, the grace comparison, and both edges — derives from that boolean plus
+/// the local tick, so a taped run reproduces the identical edge sequence and the identical <c>$link:</c> values. The
+/// tape does not carry the delivered CONTENT (poses, definition revisions): a replay reproduces WHEN a seam went
+/// dark, never what the neighbour was showing.</para>
+/// <para>Link edges gate on <see cref="GrantSubject.All"/>. Today's <c>GrantSubjectKind</c> vocabulary carries no
+/// adjacency-row subject — the tight analogue would be a <c>Region</c> twin keyed by adjacency name — so the gate is
+/// the wildcard plus a nonzero event budget rather than a narrower subject that does not exist.</para>
 /// </remarks>
 public sealed class WorldEventFeed {
     private readonly List<WorldEventEdge> m_edges = [];
     private readonly List<WorldEventEdge> m_pendingRoutes = [];
+    // Per-adjacency link liveness, keyed by the authored adjacency row name (the same "identity is the name, never a
+    // reorderable ordinal" rule m_regionOccupancy follows).
+    private readonly Dictionary<string, LinkState> m_links = new(comparer: StringComparer.Ordinal);
     private readonly bool[] m_seatOccupied = new bool[WorldPopulationLimits.LocalSeatCount];
     // Pairwise overlap state, keyed by the ascending (a, b) body-index pair. A HashSet rather than a dense bitset —
     // the active population is small in practice and this is human/gameplay-cadence data, not a hot allocation path
@@ -75,20 +98,29 @@ public sealed class WorldEventFeed {
     // under a reused ordinal — a region's identity is its name, exactly as GrantSubject.Region already keys it.
     private readonly Dictionary<string, bool[]> m_regionOccupancy = new(comparer: StringComparer.Ordinal);
 
-    /// <summary>Gets this tick's collected edges, in pinned order (seats, then regions, then collisions, then routes).
-    /// Valid only between one <see cref="Collect"/> call and the next.</summary>
+    /// <summary>Gets this tick's collected edges, in pinned order (seats, then regions, then collisions, then links,
+    /// then routes). Valid only between one <see cref="Collect"/> call and the next.</summary>
     public IReadOnlyList<WorldEventEdge> Edges => m_edges;
 
+    /// <summary>One authored adjacency row's checkpointed link-liveness state.</summary>
+    /// <param name="Adjacency">The authored <c>adjacencies</c> row name.</param>
+    /// <param name="DeliveredTick">The highest neighbour snapshot tick observed on this edge; <c>0</c> when nothing
+    /// has ever been delivered.</param>
+    /// <param name="StaleTicks">Simulation ticks since the last delivered refresh.</param>
+    /// <param name="PendingRefresh">Whether a refresh has been observed since the last <see cref="Collect"/>.</param>
+    /// <param name="Dropped">Whether the last edge emitted for this row was <see cref="WorldEventFamily.LinkDropped"/>.</param>
+    public readonly record struct WorldEventLinkState(string Adjacency, ulong DeliveredTick, long StaleTicks, bool PendingRefresh, bool Dropped);
     /// <summary>One <see cref="WorldEventFeed"/>'s checkpointed state — the edge-detection tables
-    /// (<see cref="m_overlapping"/>/<see cref="m_regionOccupancy"/>/<see cref="m_seatOccupied"/>) a later tick's
-    /// enter/exit comparison reads, plus the two buffers that must reproduce exactly for a checkpoint taken
-    /// mid-episode to resume the same edges.</summary>
+    /// (<see cref="m_overlapping"/>/<see cref="m_regionOccupancy"/>/<see cref="m_seatOccupied"/>/
+    /// <see cref="m_links"/>) a later tick's enter/exit comparison reads, plus the two buffers that must reproduce
+    /// exactly for a checkpoint taken mid-episode to resume the same edges.</summary>
     public sealed record WorldEventFeedCheckpoint(
         IReadOnlyList<WorldEventEdge> Edges,
         IReadOnlyList<WorldEventEdge> PendingRoutes,
         bool[] SeatOccupied,
         IReadOnlyList<(int A, int B)> Overlapping,
-        IReadOnlyList<(string Region, bool[] Occupancy)> RegionOccupancy
+        IReadOnlyList<(string Region, bool[] Occupancy)> RegionOccupancy,
+        IReadOnlyList<WorldEventLinkState> Links
     );
 
     /// <summary>Captures this feed's live state.</summary>
@@ -97,7 +129,14 @@ public sealed class WorldEventFeed {
         PendingRoutes: [.. m_pendingRoutes],
         SeatOccupied: [.. m_seatOccupied],
         Overlapping: [.. m_overlapping],
-        RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Clone())))]
+        RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Clone())))],
+        Links: [.. m_links.Select(selector: static pair => new WorldEventLinkState(
+                Adjacency: pair.Key,
+                DeliveredTick: pair.Value.DeliveredTick,
+                Dropped: pair.Value.Dropped,
+                PendingRefresh: pair.Value.PendingRefresh,
+                StaleTicks: pair.Value.StaleTicks
+            ))]
     );
     /// <summary>Restores this feed's live state from a previously captured checkpoint.</summary>
     public void Restore(WorldEventFeedCheckpoint checkpoint) {
@@ -107,6 +146,15 @@ public sealed class WorldEventFeed {
         m_edges.AddRange(collection: checkpoint.Edges);
         m_pendingRoutes.Clear();
         m_pendingRoutes.AddRange(collection: checkpoint.PendingRoutes);
+        m_links.Clear();
+        foreach (var link in checkpoint.Links) {
+            m_links[link.Adjacency] = new LinkState {
+                DeliveredTick = link.DeliveredTick,
+                Dropped = link.Dropped,
+                PendingRefresh = link.PendingRefresh,
+                StaleTicks = link.StaleTicks,
+            };
+        }
         Array.Copy(
             sourceArray: checkpoint.SeatOccupied,
             destinationArray: m_seatOccupied,
@@ -230,6 +278,86 @@ public sealed class WorldEventFeed {
                     B: b
                 ));
             }
+        }
+    }
+
+    // One authored adjacency row's liveness. Reference type deliberately: the collection pass mutates in place, and a
+    // struct in a Dictionary would need a re-store per field write.
+    private sealed class LinkState {
+        public ulong DeliveredTick;
+        public bool Dropped;
+        public bool PendingRefresh;
+        public long StaleTicks;
+    }
+
+    // The link pass. Sign/unit: StaleTicks counts SIMULATION ticks since the last delivered refresh, 0 on the tick a
+    // refresh landed. A row whose compiled grace is zero (unauthored) is held at 0 and emits nothing, so an
+    // unauthored world is unchanged; a grace with no tick mapping (a positive value at rate 0) accumulates staleness
+    // but never drops.
+    private void CollectLinks(WorldDefinition definition) {
+        var ordinal = 0;
+
+        foreach (var row in (definition.Adjacencies ?? [])) {
+            if (row is null) {
+                continue;
+            }
+
+            var thisOrdinal = ordinal++;
+            var name = row.Name.Value;
+
+            if (!m_links.TryGetValue(
+                key: name,
+                value: out var state
+            )) {
+                state = new LinkState();
+                m_links[name] = state;
+            }
+
+            var grace = definition.AdjacencyLivenessGraceTicks(adjacency: row);
+
+            if (grace.IsZero) {
+                state.Dropped = false;
+                state.PendingRefresh = false;
+                state.StaleTicks = 0L;
+
+                continue;
+            }
+            if (state.PendingRefresh) {
+                state.PendingRefresh = false;
+                state.StaleTicks = 0L;
+
+                if (state.Dropped) {
+                    state.Dropped = false;
+                    m_edges.Add(item: new WorldEventEdge(
+                        Family: WorldEventFamily.LinkEstablished,
+                        GateA: GrantSubject.All,
+                        GateB: null,
+                        A: thisOrdinal,
+                        B: 0L
+                    ));
+                }
+
+                continue;
+            }
+            if (state.StaleTicks < long.MaxValue) {
+                state.StaleTicks++;
+            }
+            if (
+                grace.IsNever ||
+                state.Dropped ||
+                (state.StaleTicks < grace.Ticks)
+            ) {
+                continue;
+            }
+
+            state.Dropped = true;
+            m_edges.Add(item: new WorldEventEdge(
+                Family: WorldEventFamily.LinkDropped,
+                GateA: GrantSubject.All,
+                GateB: null,
+                A: thisOrdinal,
+                B: state.StaleTicks
+            ));
         }
     }
     private void CollectRegions(WorldDefinition definition, WorldPopulation population) {
@@ -542,9 +670,67 @@ public sealed class WorldEventFeed {
             population: population
         );
         CollectCollisions(population: population);
+        CollectLinks(definition: definition);
 
         m_edges.AddRange(collection: m_pendingRoutes);
         m_pendingRoutes.Clear();
+    }
+    /// <summary>Returns the simulation ticks since the adjacency row named <paramref name="adjacencyName"/> last
+    /// received a delivered neighbour refresh, as of the most recent <see cref="Collect"/> — the live quantity a
+    /// world rule's <c>$link:&lt;adjacencyName&gt;</c> reserved channel reads (see <c>WorldRuleFacts.LinkPrefix</c>).
+    /// </summary>
+    /// <param name="adjacencyName">The authored <c>adjacencies</c> row name.</param>
+    /// <returns>The staleness in simulation ticks; <c>0</c> for a fresh edge, for an edge whose
+    /// <c>livenessGraceSeconds</c> is unauthored, and for a row this feed has never seen.</returns>
+    public long LinkStalenessTicks(string adjacencyName) => (m_links.TryGetValue(
+        key: adjacencyName,
+        value: out var state
+    )
+        ? state.StaleTicks
+        : 0L
+    );
+    /// <summary>Records that the adjacency row named <paramref name="adjacencyName"/> received a delivered neighbour
+    /// refresh, to be consumed by the next <see cref="Collect"/>. The one link-liveness input — see this type's own
+    /// remarks for why it is taped rather than re-derived.</summary>
+    /// <param name="adjacencyName">The authored <c>adjacencies</c> row name.</param>
+    public void ObserveLinkDelivery(string adjacencyName) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: adjacencyName);
+
+        if (!m_links.TryGetValue(
+            key: adjacencyName,
+            value: out var state
+        )) {
+            state = new LinkState();
+            m_links[adjacencyName] = state;
+        }
+
+        state.PendingRefresh = true;
+    }
+    /// <summary>Records a delivered neighbour image for <paramref name="adjacencyName"/> and reports whether it is a
+    /// REFRESH — a strictly higher neighbour snapshot tick than any previously observed on this edge. The live
+    /// path's entry point: a repeated or reordered delivery of the same neighbour tick is not a refresh and must not
+    /// re-arm the link (nor reach the tape).</summary>
+    /// <param name="adjacencyName">The authored <c>adjacencies</c> row name.</param>
+    /// <param name="deliveredTick">The neighbour's own simulation tick on the delivered image.</param>
+    /// <returns><see langword="true"/> when this delivery advanced the edge.</returns>
+    public bool ObserveLinkDelivery(string adjacencyName, ulong deliveredTick) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: adjacencyName);
+
+        if (!m_links.TryGetValue(
+            key: adjacencyName,
+            value: out var state
+        )) {
+            state = new LinkState();
+            m_links[adjacencyName] = state;
+        }
+        if (deliveredTick <= state.DeliveredTick) {
+            return false;
+        }
+
+        state.DeliveredTick = deliveredTick;
+        state.PendingRefresh = true;
+
+        return true;
     }
     /// <summary>Returns the live occupant count of the placement region named <paramref name="placementId"/> as of the most
     /// recent <see cref="Collect"/> — the same per-(region, body) occupancy the region pass already tracks for the

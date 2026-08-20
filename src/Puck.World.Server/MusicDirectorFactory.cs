@@ -55,16 +55,23 @@ internal static class MusicDirectorFactory {
     }
     /// <summary>Projects one tick's world-scoped event edges into the audio-owned sense-edge shape, dropping the
     /// grant-gating fields (music state is never addon-observation-filtered).</summary>
+    /// <remarks><see cref="MusicSenseFamily"/> covers a SUBSET of <see cref="WorldEventFamily"/>: an edge family the
+    /// music vocabulary does not name is skipped, never thrown on. A world-event family added without a music
+    /// counterpart must not be able to kill the tick that emits it.</remarks>
     /// <param name="edges">This tick's <see cref="WorldEventFeed.Edges"/>.</param>
-    /// <returns>The projected edges, in the same pinned order.</returns>
+    /// <returns>The projected edges the music vocabulary names, in the same pinned order.</returns>
     public static List<MusicSenseEdge> ProjectSenseEdges(IReadOnlyList<WorldEventEdge> edges) {
         var projected = new List<MusicSenseEdge>(capacity: edges.Count);
 
         foreach (var edge in edges) {
+            if (CompileFamily(family: edge.Family) is not { } family) {
+                continue;
+            }
+
             projected.Add(item: new MusicSenseEdge(
                 A: edge.A,
                 B: edge.B,
-                Family: CompileFamily(family: edge.Family)
+                Family: family
             ));
         }
 
@@ -76,7 +83,9 @@ internal static class MusicDirectorFactory {
         Puck.Forge.Authoring.MusicTransitionBoundary.BeatEnd => MusicTransitionBoundary.BeatEnd,
         _ => MusicTransitionBoundary.BarEnd,
     });
-    private static MusicSenseFamily CompileFamily(WorldEventFamily family) => (family switch {
+    // Null for a world-event family the music sense vocabulary does not name — the same open-set posture ParseFamily
+    // takes for a cue token with no edge behind it.
+    private static MusicSenseFamily? CompileFamily(WorldEventFamily family) => (family switch {
         WorldEventFamily.RegionEnter => MusicSenseFamily.RegionEnter,
         WorldEventFamily.RegionExit => MusicSenseFamily.RegionExit,
         WorldEventFamily.SeatJoin => MusicSenseFamily.SeatJoin,
@@ -85,7 +94,7 @@ internal static class MusicDirectorFactory {
         WorldEventFamily.CollisionEnd => MusicSenseFamily.CollisionEnd,
         WorldEventFamily.RouteEngaged => MusicSenseFamily.RouteEngaged,
         WorldEventFamily.RouteDisengaged => MusicSenseFamily.RouteDisengaged,
-        _ => throw new ArgumentOutOfRangeException(paramName: nameof(family), actualValue: family, message: $"no sense-family mapping for '{family}'."),
+        _ => null,
     });
     // Only the sense-mappable subset of WorldAudioCue.EventTokens names a MusicSenseFamily; the rest (mutation.*,
     // grant.denied, screen.*, player.*, music.transition) are cue-only tokens with no corresponding event edge.

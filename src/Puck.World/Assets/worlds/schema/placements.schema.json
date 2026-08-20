@@ -68,6 +68,11 @@
         "$ref": "./common.schema.json#/$defs/WorldPlacementAttach",
         "description": "The placement\u0027s attach facet (see WorldPlacementAttach) \u2014 binds the row\u0027s resolved world pose to a live population body, or null for a static/authored transform (the default, unchanged behavior). Omitted from the wire when null.",
         "default": null
+      },
+      "contribution": {
+        "$ref": "./common.schema.json#/$defs/WorldPlacementContribution",
+        "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
+        "default": null
       }
     },
     "required": [

@@ -171,6 +171,21 @@ public static class WorldRuleFacts {
     /// <see cref="DistancePrefix"/>'s deliberately-inverted sentinel (a boolean has no "too far" failure mode to
     /// guard against).</summary>
     public const string LineOfSightPrefix = "$los:";
+    /// <summary>The prefix; <c>$link:&lt;adjacencyName&gt;</c> reads how many simulation ticks have passed since the
+    /// named <c>adjacencies</c> row last received a delivered neighbour refresh — <c>0</c> the tick a refresh landed,
+    /// rising by one per tick while nothing arrives. The neutral-falsy convention
+    /// <see cref="MachinePrefix"/>/<see cref="RegionPrefix"/>/<see cref="ParkedPrefix"/> already set: an edge whose
+    /// <see cref="WorldAdjacency.LivenessGraceSeconds"/> is unauthored (liveness sensing disabled) reads <c>0</c>
+    /// forever, so a staleness gate (<c>compareState($link:north, greaterOrEqual, 240)</c>) stays closed rather than
+    /// spuriously opening.
+    /// <para>The argument is an <c>adjacencies</c> row name, refused at compile time
+    /// (<see cref="WorldRuleRefusal.LinkChannelMalformed"/>) when no such row is declared. Unrelated to
+    /// <see cref="WorldSection.Links"/>, which is the screen cable-link section (<c>screen.link</c>); this channel
+    /// names a federation seam.</para>
+    /// <para>Both this value and the <c>linkEstablished</c>/<c>linkDropped</c> event family derive from the taped
+    /// per-tick delivery-refresh observations, so a replay reproduces a rule gated on it — see
+    /// <c>Server.WorldEventFeed</c>'s own remarks for the exact taped boundary.</para></summary>
+    public const string LinkPrefix = "$link:";
     /// <summary>The prefix; <c>$machine:&lt;screen&gt;:&lt;address&gt;</c> compares one byte (0..255) read live off a
     /// declared <see cref="WorldScreen"/>'s booted machine — the same <c>IWorldMachineMemoryPeek.TryPeek</c> primitive
     /// <see cref="WorldAddonMemoryWatch"/> already rides, called directly instead of accumulated as a change event. A
@@ -295,6 +310,10 @@ public enum WorldRuleFactKind : byte {
 
     /// <summary>One named body's remaining reconnect-park ticks (<see cref="WorldRuleFacts.ParkedPrefix"/>).</summary>
     Parked,
+
+    /// <summary>Simulation ticks since one named adjacency row last received a delivered neighbour refresh
+    /// (<see cref="WorldRuleFacts.LinkPrefix"/>).</summary>
+    LinkStaleness,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -304,7 +323,8 @@ public enum WorldRuleFactKind : byte {
 /// one name.</summary>
 /// <param name="Kind">Which live quantity this operand reads.</param>
 /// <param name="Row">The state row name for <see cref="WorldRuleFactKind.StateCell"/>, the placement id for
-/// <see cref="WorldRuleFactKind.RegionOccupancy"/>, or <see langword="null"/> otherwise.</param>
+/// <see cref="WorldRuleFactKind.RegionOccupancy"/>, the adjacency row name for
+/// <see cref="WorldRuleFactKind.LinkStaleness"/>, or <see langword="null"/> otherwise.</param>
 /// <param name="Key">The cell key inside <paramref name="Row"/> for <see cref="WorldRuleFactKind.StateCell"/>,
 /// <see langword="null"/> otherwise.</param>
 /// <param name="Screen">The declared screen index for <see cref="WorldRuleFactKind.MachineMemory"/>; unused otherwise.</param>
@@ -550,6 +570,11 @@ public enum WorldRuleRefusal : byte {
     /// <c>argmax:&lt;row&gt;</c>/<c>argmin:&lt;row&gt;</c>).</summary>
     [Refusal(door: "world.rule.compile", condition: "a '$parked:' channel does not spell exactly one body-reference token ('body:<n>' or 'argmax:<row>'/'argmin:<row>')", kind: RefusalKind.Verdict)]
     ParkedChannelMalformed,
+
+    /// <summary>A <c>$link:</c> channel does not spell exactly one adjacency row name, or names a row the
+    /// <c>adjacencies</c> section does not declare.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a '$link:' channel does not name exactly one declared 'adjacencies' row", kind: RefusalKind.Verdict)]
+    LinkChannelMalformed,
 
     /// <summary>A <c>body:&lt;n&gt;</c> reference names an index outside the document's declared entity-table
     /// capacity.</summary>
@@ -1443,6 +1468,47 @@ public static class WorldRuleCompiler {
             );
         }
 
+        // $link: — one adjacency row name, proven against the document's own adjacencies section at compile time so
+        // a typo'd seam refuses instead of reading 0 (fresh) forever.
+        if (name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldRuleFacts.LinkPrefix
+        )) {
+            RefuseKeyOnReservedChannel(
+                key: key,
+                keyFieldLabel: keyFieldLabel,
+                name: name,
+                ruleName: ruleName
+            );
+
+            var adjacencyName = name[WorldRuleFacts.LinkPrefix.Length..];
+
+            if (
+                string.IsNullOrEmpty(value: adjacencyName) ||
+                adjacencyName.Contains(value: ':') ||
+                (WorldDefinitionRows.FindAdjacency(
+                adjacencies: definition.Adjacencies,
+                name: adjacencyName
+            ) is null)
+            ) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.LinkChannelMalformed,
+                    ruleName: ruleName,
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.LinkPrefix}<adjacencyName>' naming a declared 'adjacencies' row"
+                );
+            }
+
+            return new ResolvedOperand(
+                Operand: new CompiledWorldOperand(
+                    Kind: WorldRuleFactKind.LinkStaleness,
+                    Row: adjacencyName,
+                    Key: null
+                ),
+                ValueKind: CellKind.Int,
+                Describe: describe
+            );
+        }
+
         if (name.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: WorldStateRow.ReservedNamePrefix
@@ -1450,7 +1516,7 @@ public static class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.StateRowUnknown,
                 ruleName: ruleName,
-                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>')"
+                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>')"
             );
         }
 
@@ -1472,7 +1538,7 @@ public static class WorldRuleCompiler {
             ?? throw new WorldRuleException(
             refusal: WorldRuleRefusal.StateRowUnknown,
             ruleName: ruleName,
-            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>')"
+            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>')"
         ));
 
         if (row.Kind == CellKind.Text) {

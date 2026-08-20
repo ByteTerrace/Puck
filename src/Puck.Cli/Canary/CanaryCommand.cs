@@ -7,7 +7,9 @@ namespace Puck.Cli.Canary;
 
 /// <summary><c>puck canary</c> — bounded, two-leg behavioral proofs against the real Puck.World executable.</summary>
 internal static partial class CanaryCommand {
-    private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 420);
+    // The one-time Release builds run against their own allowance on their own clock, so build time can never be
+    // spent out of a proof's. Leg time is a separate budget derived from the selection itself; see LegBudget.
+    private static readonly TimeSpan BuildBudget = TimeSpan.FromSeconds(value: 600);
 
     private const string ScratchPrefix = "puck-canary-";
 
@@ -46,7 +48,7 @@ internal static partial class CanaryCommand {
     }
 
     private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, string repositoryRoot, bool explicitAll) {
-        var suiteClock = Stopwatch.StartNew();
+        var buildClock = Stopwatch.StartNew();
 
         CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
 
@@ -68,7 +70,7 @@ internal static partial class CanaryCommand {
                 fileName: "dotnet",
                 arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
-                timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
+                timeout: CliProcess.RemainingBudget(budget: BuildBudget, clock: buildClock)
             );
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
             Console.Error.WriteLine(value: $"ERROR: could not start the one Puck.World build: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -78,7 +80,7 @@ internal static partial class CanaryCommand {
 
         if (build.TimedOut || (build.ExitCode != 0)) {
             Console.Error.WriteLine(value: (build.TimedOut
-                ? $"ERROR: the one Puck.World build exceeded the {SuiteBudget.TotalSeconds:0}-second whole-suite budget."
+                ? $"ERROR: the one Puck.World build exceeded the {BuildBudget.TotalSeconds:0}-second build budget."
                 : $"ERROR: the one Puck.World build exited {build.ExitCode}."));
             PrintCaptured(result: build);
 
@@ -107,12 +109,12 @@ internal static partial class CanaryCommand {
                 fileName: "dotnet",
                 arguments: ["build", stubProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
                 input: string.Empty,
-                timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
+                timeout: CliProcess.RemainingBudget(budget: BuildBudget, clock: buildClock)
             );
 
             if (stubBuild.TimedOut || (stubBuild.ExitCode != 0)) {
                 Console.Error.WriteLine(value: (stubBuild.TimedOut
-                    ? $"ERROR: the one Puck.Launcher.Stub build exceeded the {SuiteBudget.TotalSeconds:0}-second whole-suite budget."
+                    ? $"ERROR: the one Puck.Launcher.Stub build exceeded the {BuildBudget.TotalSeconds:0}-second build budget."
                     : $"ERROR: the one Puck.Launcher.Stub build exited {stubBuild.ExitCode}."));
                 PrintCaptured(result: stubBuild);
 
@@ -129,17 +131,20 @@ internal static partial class CanaryCommand {
 
         var failed = false;
         var infrastructureFailed = false;
+        var budget = new CanaryBudget(Clock: Stopwatch.StartNew(), Total: LegBudget(manifests: manifests));
+
+        Console.WriteLine(value: $"canary: leg budget {budget.Total.TotalSeconds:0}s, derived from the selected manifests' own declared per-leg timeouts.");
 
         foreach (var manifest in manifests) {
             CanaryLegRun positive;
             CanaryLegRun discriminating;
 
             if (manifest.BootShape == CanaryBootShape.Stub) {
-                positive = RunStubLeg(discriminating: false, manifest: manifest, stubArtifact: stubArtifact!, suiteClock: suiteClock, worldArtifact: artifact);
-                discriminating = RunStubLeg(discriminating: true, manifest: manifest, stubArtifact: stubArtifact!, suiteClock: suiteClock, worldArtifact: artifact);
+                positive = RunStubLeg(budget: budget, discriminating: false, manifest: manifest, stubArtifact: stubArtifact!, worldArtifact: artifact);
+                discriminating = RunStubLeg(budget: budget, discriminating: true, manifest: manifest, stubArtifact: stubArtifact!, worldArtifact: artifact);
             } else {
-                positive = RunEitherLeg(artifact: artifact, leg: manifest.Positive, manifest: manifest, suiteClock: suiteClock);
-                discriminating = RunEitherLeg(artifact: artifact, leg: manifest.Discriminating, manifest: manifest, suiteClock: suiteClock);
+                positive = RunEitherLeg(artifact: artifact, budget: budget, leg: manifest.Positive, manifest: manifest);
+                discriminating = RunEitherLeg(artifact: artifact, budget: budget, leg: manifest.Discriminating, manifest: manifest);
             }
 
             ReportLeg(id: manifest.Id, result: positive);
@@ -149,7 +154,7 @@ internal static partial class CanaryCommand {
             var discriminatingPassed = discriminating.Passed;
 
             infrastructureFailed |= ((positive.InfrastructureError is not null) || (discriminating.InfrastructureError is not null));
-            var positiveOnDiscriminating = CanaryAssertions.Evaluate(authorityTranscripts: discriminating.AuthorityTranscripts, leg: manifest.Positive, primaryTranscript: discriminating.Transcript);
+            var positiveOnDiscriminating = CanaryAssertions.Evaluate(authorityEndpoint: discriminating.AuthorityEndpoint, authorityTranscripts: discriminating.AuthorityTranscripts, leg: manifest.Positive, primaryTranscript: discriminating.Transcript);
             var turnedRed = !positiveOnDiscriminating.Passed;
 
             if (turnedRed) {
@@ -180,17 +185,31 @@ internal static partial class CanaryCommand {
             return 1;
         }
 
-        Console.WriteLine(value: $"PASS: all {manifests.Count} selected canary proof(s) held within the {SuiteBudget.TotalSeconds:0}-second suite budget.");
+        Console.WriteLine(value: $"PASS: all {manifests.Count} selected canary proof(s) held within the {budget.Total.TotalSeconds:0}-second leg budget.");
 
         return 0;
     }
-    private static CanaryLegRun RunEitherLeg(string artifact, CanaryLeg leg, CanaryManifest manifest, Stopwatch suiteClock) =>
+
+    /// <summary>The suite's leg clock and the ceiling it is measured against.</summary>
+    private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total) {
+        public TimeSpan Remaining => CliProcess.RemainingBudget(budget: Total, clock: Clock);
+    }
+
+    // A leg may run only under the whole timeout its manifest declares, never a clamped remainder: a child killed by
+    // a short timeout reports exit -1 with empty streams, which reads as a failure to launch rather than as the
+    // budget refusal it is. The total below is therefore the exact sum of what every selected leg may spend, so a
+    // leg is refused only when an earlier one overran its own declared ceiling.
+    private static TimeSpan LegBudget(IReadOnlyList<CanaryManifest> manifests) =>
+        TimeSpan.FromSeconds(value: manifests.Sum(selector: static manifest => (BootsPerLeg(shape: manifest.BootShape) * 2 * manifest.TimeoutSeconds)));
+    // A stub-shaped leg observes two successive launches against one declared timeout each; every other shape is one.
+    private static int BootsPerLeg(CanaryBootShape shape) => ((shape == CanaryBootShape.Stub) ? 2 : 1);
+    private static CanaryLegRun RunEitherLeg(string artifact, CanaryBudget budget, CanaryLeg leg, CanaryManifest manifest) =>
         ((leg.Authorities.Count != 0)
-            ? RunFederatedMeshLeg(artifact: artifact, leg: leg, manifest: manifest, suiteClock: suiteClock)
-            : RunLeg(artifact: artifact, leg: leg, manifest: manifest, suiteClock: suiteClock));
-    private static CanaryLegRun RunLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, Stopwatch suiteClock) {
+            ? RunFederatedMeshLeg(artifact: artifact, budget: budget, leg: leg, manifest: manifest)
+            : RunLeg(artifact: artifact, budget: budget, leg: leg, manifest: manifest));
+    private static CanaryLegRun RunLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, CanaryBudget budget) {
         try {
-            return RunLegCore(artifact: artifact, leg: leg, manifest: manifest, suiteClock: suiteClock);
+            return RunLegCore(artifact: artifact, budget: budget, leg: leg, manifest: manifest);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
             return CanaryLegRun.InfrastructureFailure(
                 leg: leg,
@@ -199,7 +218,7 @@ internal static partial class CanaryCommand {
             );
         }
     }
-    private static CanaryLegRun RunLegCore(CanaryManifest manifest, CanaryLeg leg, string artifact, Stopwatch suiteClock) {
+    private static CanaryLegRun RunLegCore(CanaryManifest manifest, CanaryLeg leg, string artifact, CanaryBudget budget) {
         var runDirectory = CreateRunDirectory(id: manifest.Id, leg: leg.Name);
         var stateDirectory = Path.Combine(path1: runDirectory, path2: "state");
         var stdoutPath = Path.Combine(path1: runDirectory, path2: "stdout.log");
@@ -215,6 +234,11 @@ internal static partial class CanaryCommand {
         var authorityExecutionWorld = leg.AuthorityWorldPath;
         string? clientFederationKeyPath = null;
         string? authorityFederationKeyPath = null;
+        // Bound to a free loopback port per leg, exactly as a mesh leg's authorities are: several manifests carry a
+        // companion authority, and a fixed port shared between them cannot be rebound while the previous leg's
+        // sockets are still draining through TIME_WAIT — the companion then never reports a listener and the leg
+        // fails as infrastructure, later in a run than the identical leg selected on its own.
+        var federationEndpoint = string.Empty;
 
         if (leg.AuthorityWorldPath is not null) {
             // Each side gets its OWN ECDSA identity, pinned into the OTHER side's admission rows —
@@ -223,7 +247,8 @@ internal static partial class CanaryCommand {
             var clientIdentity = GenerateFederationIdentity();
             var authorityIdentity = GenerateFederationIdentity();
 
-            (executionWorld, authorityExecutionWorld) = PrepareFederatedWorlds(authorityIdentity: authorityIdentity, clientIdentity: clientIdentity, leg: leg, runDirectory: runDirectory);
+            federationEndpoint = $"127.0.0.1:{GetFreeLoopbackPort()}";
+            (executionWorld, authorityExecutionWorld) = PrepareFederatedWorlds(authorityIdentity: authorityIdentity, clientIdentity: clientIdentity, endpoint: federationEndpoint, leg: leg, runDirectory: runDirectory);
             clientFederationKeyPath = Path.Combine(path1: runDirectory, path2: "client-federation.key");
             authorityFederationKeyPath = Path.Combine(path1: runDirectory, path2: "authority-federation.key");
             File.WriteAllBytes(path: clientFederationKeyPath, bytes: clientIdentity.Pkcs8);
@@ -238,11 +263,10 @@ internal static partial class CanaryCommand {
         // the exact response count is checked. A process that merely lived until --exit-after-seconds cannot satisfy it.
         input += $"wire.errors{Environment.NewLine}";
 
-        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
-        var timeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
+        var timeout = TimeSpan.FromSeconds(value: manifest.TimeoutSeconds);
 
-        if (timeout <= TimeSpan.Zero) {
-            return CanaryLegRun.BudgetExpired(leg: leg, runDirectory: runDirectory);
+        if (budget.Remaining < timeout) {
+            return CanaryLegRun.BudgetExpired(budget: budget, leg: leg, runDirectory: runDirectory);
         }
 
         CliProcessResult process;
@@ -261,7 +285,7 @@ internal static partial class CanaryCommand {
                 arguments: [
                     artifact,
                     "--world", executionWorld,
-                    .. (leg.Connect ? new[] { "--connect", "127.0.0.1:38473" } : []),
+                            .. (leg.Connect ? new[] { "--connect", federationEndpoint } : []),
                     .. ((clientFederationKeyPath is null) ? [] : new[] { "--federation-key-file", clientFederationKeyPath }),
                     "--exit-after-seconds", manifest.Seconds.ToString(provider: CultureInfo.InvariantCulture),
                     "--state-dir", stateDirectory,
@@ -286,11 +310,12 @@ internal static partial class CanaryCommand {
         File.WriteAllText(path: stderrPath, contents: process.Stderr, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
         var transcript = new CanaryTranscript(RunDirectory: runDirectory, Stderr: SplitLines(text: process.Stderr), Stdout: SplitLines(text: process.Stdout));
-        var assertions = CanaryAssertions.Evaluate(leg: leg, primaryTranscript: transcript);
+        var assertions = CanaryAssertions.Evaluate(authorityEndpoint: federationEndpoint, leg: leg, primaryTranscript: transcript);
         var invariants = EvaluateRunnerInvariants(executionWorld: executionWorld, leg: leg, manifest: manifest, process: process, transcript: transcript);
 
         return new CanaryLegRun(
             Assertions: assertions,
+            AuthorityEndpoint: federationEndpoint,
             AuthorityTranscripts: ImmutableEmptyAuthorityTranscripts,
             ExitCode: process.ExitCode,
             InfrastructureError: null,
@@ -332,8 +357,7 @@ internal static partial class CanaryCommand {
         ["publicKey"] = peer.PublicKeyBase64,
         ["grants"] = new JsonArray(),
     };
-    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
-        const string Endpoint = "127.0.0.1:38473";
+    private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
         var sourceDirectory = Path.GetDirectoryName(path: leg.WorldPath)!;
         var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
 
@@ -380,8 +404,8 @@ internal static partial class CanaryCommand {
             root["host"] = host;
         }
 
-        host["listen"] = Endpoint;
-        host["authority"] = Endpoint;
+        host["listen"] = endpoint;
+        host["authority"] = endpoint;
 
         if (root["population"] is not JsonObject population) {
             population = new JsonObject();
@@ -409,7 +433,7 @@ internal static partial class CanaryCommand {
     // a sibling document's own host.authority — the same adjacency/references mechanism a two-authority leg already
     // relies on, generalized from one companion to N. All N processes launch concurrently and run to completion
     // before any assertion reads a transcript.
-    private static CanaryLegRun RunFederatedMeshLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, Stopwatch suiteClock) {
+    private static CanaryLegRun RunFederatedMeshLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, CanaryBudget budget) {
         var runDirectory = CreateRunDirectory(id: manifest.Id, leg: leg.Name);
         var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
 
@@ -467,11 +491,10 @@ internal static partial class CanaryCommand {
             scriptTexts[role.Id] = input;
         }
 
-        var remaining = CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock);
-        var timeout = TimeSpan.FromSeconds(value: Math.Min(val1: manifest.TimeoutSeconds, val2: remaining.TotalSeconds));
+        var timeout = TimeSpan.FromSeconds(value: manifest.TimeoutSeconds);
 
-        if (timeout <= TimeSpan.Zero) {
-            return CanaryLegRun.BudgetExpired(leg: leg, runDirectory: runDirectory);
+        if (budget.Remaining < timeout) {
+            return CanaryLegRun.BudgetExpired(budget: budget, leg: leg, runDirectory: runDirectory);
         }
 
         var tasks = new Dictionary<string, Task<CliProcessResult>>(comparer: StringComparer.Ordinal);
@@ -516,6 +539,7 @@ internal static partial class CanaryCommand {
 
         return new CanaryLegRun(
             Assertions: assertions,
+            AuthorityEndpoint: string.Empty,
             AuthorityTranscripts: transcripts,
             ExitCode: (anyNonZeroExit ? tasks.Values.First(predicate: static task => (task.Result.ExitCode != 0)).Result.ExitCode : 0),
             InfrastructureError: null,
@@ -951,6 +975,7 @@ internal static partial class CanaryCommand {
     private sealed record CanarySelection(string? Capability, IReadOnlyList<string> Ids, CanarySelectionKind Kind);
     private sealed record CanaryLegRun(
         CanaryEvaluation Assertions,
+        string AuthorityEndpoint,
         IReadOnlyDictionary<string, CanaryTranscript> AuthorityTranscripts,
         int ExitCode,
         string? InfrastructureError,
@@ -962,10 +987,14 @@ internal static partial class CanaryCommand {
     ) {
         public bool Passed => ((InfrastructureError is null) && !TimedOut && (ExitCode == 0) && Invariants.All(predicate: static result => result.Passed) && Assertions.Passed);
 
-        public static CanaryLegRun BudgetExpired(CanaryLeg leg, string runDirectory) =>
-            InfrastructureFailure(leg: leg, runDirectory: runDirectory, reason: $"the {SuiteBudget.TotalSeconds:0}-second whole-suite budget was exhausted before this leg started");
+        public static CanaryLegRun BudgetExpired(CanaryBudget budget, CanaryLeg leg, string runDirectory) => InfrastructureFailure(
+            leg: leg,
+            runDirectory: runDirectory,
+            reason: $"only {budget.Remaining.TotalSeconds:0.0}s of the {budget.Total.TotalSeconds:0}-second leg budget remained, too little to run this leg under the whole timeout its manifest declares"
+        );
         public static CanaryLegRun InfrastructureFailure(CanaryLeg leg, string runDirectory, string reason) => new(
             Assertions: new CanaryEvaluation(Results: []),
+            AuthorityEndpoint: string.Empty,
             AuthorityTranscripts: ImmutableEmptyAuthorityTranscripts,
             ExitCode: -1,
             InfrastructureError: reason,

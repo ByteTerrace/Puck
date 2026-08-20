@@ -236,6 +236,24 @@ public sealed record WorldDefinition(
         seconds: Population.ReconnectGraceSeconds,
         ratePerSecond: ((uint)SimulationRateHz)
     );
+
+    /// <summary>Returns the compiled form of one adjacency row's
+    /// <see cref="WorldAdjacency.LivenessGraceSeconds"/> — a <see cref="CompiledTickDuration"/> in simulation ticks,
+    /// the unit <c>Server.WorldEventFeed</c>'s link-liveness pass consumes. Lives here rather than on
+    /// <see cref="WorldAdjacency"/> itself because compiling a duration needs <see cref="SimulationRateHz"/>, which
+    /// only the whole document supplies — the same reason <see cref="PopulationReconnectGraceTicks"/> does.</summary>
+    /// <param name="adjacency">The adjacency row.</param>
+    /// <returns><see cref="CompiledTickDuration.IsZero"/> for an unauthored (disabled) edge,
+    /// <see cref="CompiledTickDuration.Never"/> for a positive grace at rate 0, a finite tick count otherwise.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="adjacency"/> is <see langword="null"/>.</exception>
+    public CompiledTickDuration AdjacencyLivenessGraceTicks(WorldAdjacency adjacency) {
+        ArgumentNullException.ThrowIfNull(argument: adjacency);
+
+        return WorldSimulationTickConversion.CompiledDuration(
+            seconds: adjacency.LivenessGraceSeconds,
+            ratePerSecond: ((uint)SimulationRateHz)
+        );
+    }
     /// <summary>Gets the render-lever boot defaults and quality-preset table — ABSENT resolves to
     /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the standard posture is authored in
     /// <c>standard.world.json</c>.</summary>

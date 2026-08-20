@@ -195,6 +195,17 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   The terminal console starts hidden; if a script opens its seat session
   (`console [on|off] <player>` from stdin), it may cover the frame — close it
   before judging pixels.
+- **Two windowed captures are never byte-identical, even of identical
+  simulation state.** Silhouette shading carries ±1-LSB variance across a
+  boot-time transition, so a byte comparison of two fenced captures reports a
+  difference about one run in three. The unified overlay also composites the OS
+  pointer's cursor (`WorldCursorFeed`) whenever the pointer sits inside the
+  window, and window placement varies per launch. Compare frames by
+  CHANGED-PIXEL COUNT (`CanaryFrameNoise`, the `framesAgree` canary assertion:
+  pixels moving ≥2 LSB, budget 64), never by bytes. Do NOT reach for
+  `ParityEnvelope` here — its whole-frame mean guard is for diffuse
+  cross-backend noise, and a body relocation covering 0.06% of the frame
+  measures ~0.03 LSB mean and slips under it.
 - **Use the repository's content search.** Run `puck search`, never `grep`;
   the published project tool is the repository's supported search surface.
 - **A verification that cannot fail is a lie.** Pair every denial case with
@@ -258,7 +269,7 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | `SubmissionEnvelope`, the one queue, completions, echo routing, the intent buffer | [references/ordered-domain.md](references/ordered-domain.md) |
 | HUD schema caps, overlay reservation arithmetic, bands/`replace`, bindings, HUD verbs | [references/hud.md](references/hud.md) |
 | Camera rigs, world-owned `views.seatControl`, portable `playerDefaults.seatLook`, the seat-owned movement/render/read-back state, pointer/cursor stack, radial action menu, layouts, and `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
-| Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
+| Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, seam liveness (`livenessGraceSeconds`, the `$link:` reserved rule channel, `world.links`), and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
 | `player.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
 | The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |

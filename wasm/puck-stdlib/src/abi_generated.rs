@@ -250,6 +250,10 @@ pub const OBSERVATION_VERB_EVENT_COLLISION_BEGIN: usize = 5;
 pub const OBSERVATION_VERB_EVENT_COLLISION_END: usize = 6;
 /// `AddonAbi.ObservationVerbs.EventGap` (`10`).
 pub const OBSERVATION_VERB_EVENT_GAP: usize = 10;
+/// `AddonAbi.ObservationVerbs.EventLinkDropped` (`12`).
+pub const OBSERVATION_VERB_EVENT_LINK_DROPPED: usize = 12;
+/// `AddonAbi.ObservationVerbs.EventLinkEstablished` (`11`).
+pub const OBSERVATION_VERB_EVENT_LINK_ESTABLISHED: usize = 11;
 /// `AddonAbi.ObservationVerbs.EventMachineMemoryChanged` (`9`).
 pub const OBSERVATION_VERB_EVENT_MACHINE_MEMORY_CHANGED: usize = 9;
 /// `AddonAbi.ObservationVerbs.EventRegionEnter` (`1`).

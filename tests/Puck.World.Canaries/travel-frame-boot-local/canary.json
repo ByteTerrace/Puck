@@ -5,7 +5,7 @@
   "requirements": ["gpu"],
   "seconds": 20,
   "timeoutSeconds": 45,
-  "binding": "The positive leg captures quilt-nw, moves its body, and captures again; the control omits the body move so the same pixel observation turns red.",
+  "binding": "The positive leg captures quilt-nw, moves its body, and captures again; the control omits the body move so the same pixel observation turns red. The pixel observation is a changed-pixel count against the live-capture noise budget, not byte-identity: +/-1-LSB silhouette shading makes two fenced captures of an unmoved body differ in a handful of bytes about one run in three, while this body move changes ~990000 pixels by up to 239 LSB.",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/quilt-nw.world.json",
@@ -22,7 +22,7 @@
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "filesDiffer", "name": "moving the boot body changes the composed frame", "before": "before.png", "after": "after.png" },
+      { "type": "framesAgree", "name": "moving the boot body changes the composed frame", "before": "before.png", "after": "after.png", "agree": false },
       { "type": "line", "name": "both captures resolved", "stream": "stderr", "match": "contains", "text": "after.png", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
@@ -41,7 +41,7 @@
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "filesDiffer", "name": "without a body move the two frames stay identical", "before": "before.png", "after": "after.png", "different": false },
+      { "type": "framesAgree", "name": "without a body move the two frames stay the same frame", "before": "before.png", "after": "after.png", "agree": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

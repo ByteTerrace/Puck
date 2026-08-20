@@ -7,8 +7,13 @@ namespace Puck.World.Server;
 
 /// <summary>Chooses the bounded, deterministic solid-placement subset shared by adjacency contact and rendering.</summary>
 public static class WorldAdjacencyGeometry {
-    /// <summary>The one per-band budget both authoritative contact and presentation apply.</summary>
+    /// <summary>The one per-band budget on neighbour SOLIDS both authoritative contact and presentation apply.</summary>
     public const int MaximumPlacementsPerBand = 8;
+    /// <summary>The per-band budget on the neighbour BODIES a border renders — the moving half of the same
+    /// reservation <see cref="MaximumPlacementsPerBand"/> bounds for the static half. A capacity constant, not a
+    /// world-tunable: it sizes the per-band instance reservation the render composition freezes at construction, and
+    /// every world wants the same one.</summary>
+    public const int MaximumEntitiesPerBand = 8;
 
     /// <summary>One deterministic selection result.</summary>
     public readonly record struct Selection(IReadOnlyList<WorldPlacement> Placements, bool Truncated);
@@ -20,8 +25,22 @@ public static class WorldAdjacencyGeometry {
             }
         }
 
-        var reach = (CreationGeometry.Reach(document: creation.Document) * placement.Scale);
-        var delta = (placement.Position - frame.Origin.ToVector3());
+        return IsWithinBand(
+            frame: frame,
+            overlapDepth: overlapDepth,
+            position: placement.Position,
+            reach: (CreationGeometry.Reach(document: creation.Document) * placement.Scale)
+        );
+    }
+
+    /// <summary>Returns whether a point of the given reach falls inside one counterpart band's own extents.</summary>
+    /// <param name="position">The point, in the frame's own local coordinates.</param>
+    /// <param name="reach">The point's own enclosing radius, world units.</param>
+    /// <param name="frame">The counterpart face's derived frame.</param>
+    /// <param name="overlapDepth">The compiler-derived overlap depth.</param>
+    /// <returns><see langword="true"/> when the point's reach touches the band.</returns>
+    public static bool IsWithinBand(Vector3 position, float reach, WorldFaceFrame frame, float overlapDepth) {
+        var delta = (position - frame.Origin.ToVector3());
         var alongNormal = Vector3.Dot(
             vector1: delta,
             vector2: frame.Normal.ToVector3()

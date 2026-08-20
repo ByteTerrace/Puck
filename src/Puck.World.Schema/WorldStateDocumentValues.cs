@@ -12,10 +12,25 @@ namespace Puck.World;
 /// its own right and cannot know the world state that contains it while it is being deserialized. Literal values are
 /// untouched. Bound values retain their reference token, so serialization writes the reference back and a later
 /// mutation of that state row can re-resolve a fresh candidate without mutating the live document's value objects.
+/// <para>Every door that turns bytes into a live document runs <see cref="TryResolve"/>, so a delivered document is
+/// indistinguishable from a file-loaded one. A document leaving for a boundary that does not carry the state table
+/// itself runs <see cref="TryFlatten"/> instead, since a reference the receiver cannot answer is a dangling
+/// pointer.</para>
 /// </remarks>
 public static class WorldStateDocumentValues {
     private static readonly Dictionary<Type, PropertyInfo[]> PropertyCache = [];
     private static readonly Lock PropertyCacheLock = new();
+
+    // What the one walk does when it reaches a bound value.
+    private enum Walk {
+        // Read the referenced cell and fill the value, leaving the reference attached for canonical write-back.
+        Resolve,
+        // Report whether a reference is present (any reference, or one naming a sought row), touching nothing.
+        Find,
+        // Resolve, then drop the reference: the flattening an egress document performs so a receiver that was never
+        // handed the state table holds a literal rather than a dangling pointer.
+        Flatten,
+    }
 
     // Whether a property is DERIVED rather than document data, and so no part of what a document-value reference can
     // be retained in.
@@ -58,7 +73,7 @@ public static class WorldStateDocumentValues {
             return properties;
         }
     }
-    private static bool TryVisit(object? value, string path, WorldDefinition definition, string? soughtRow, HashSet<object> seen, out bool found, out string reason) {
+    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, HashSet<object> seen, out bool found, out string reason) {
         found = false;
         reason = string.Empty;
 
@@ -80,12 +95,12 @@ public static class WorldStateDocumentValues {
                 return false;
             }
 
-            if (soughtRow is not null) {
-                found = string.Equals(
+            if (walk == Walk.Find) {
+                found = ((soughtRow is null) || string.Equals(
                     a: row,
                     b: soughtRow,
                     comparisonType: StringComparison.Ordinal
-                );
+                ));
                 return true;
             }
 
@@ -112,6 +127,10 @@ public static class WorldStateDocumentValues {
             )) {
                 reason = $"{path} reference '{reference}' must hold {stateValue.ExpectedValue}: {parseReason}";
                 return false;
+            }
+
+            if (walk == Walk.Flatten) {
+                stateValue.Detach();
             }
 
             return true;
@@ -141,7 +160,8 @@ public static class WorldStateDocumentValues {
                     reason: out reason,
                     seen: seen,
                     soughtRow: soughtRow,
-                    value: item
+                    value: item,
+                    walk: walk
                 )) {
                     return false;
                 }
@@ -163,7 +183,8 @@ public static class WorldStateDocumentValues {
                 soughtRow: soughtRow,
                 seen: seen,
                 found: out var propertyFound,
-                reason: out reason
+                reason: out reason,
+                walk: walk
             )) {
                 return false;
             }
@@ -177,6 +198,25 @@ public static class WorldStateDocumentValues {
         return true;
     }
 
+    /// <summary>Reports whether <paramref name="graph"/> retains any document-value reference at all.</summary>
+    /// <param name="graph">The object graph to walk — a definition, or an egress document composed over one.</param>
+    /// <returns><see langword="true"/> when at least one bound value is present.</returns>
+    public static bool HasReference(object graph) {
+        ArgumentNullException.ThrowIfNull(argument: graph);
+        return (
+            TryVisit(
+            value: graph,
+            path: "document",
+            definition: null!,
+            walk: Walk.Find,
+            soughtRow: null,
+            seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
+            found: out var found,
+            reason: out _
+        ) &&
+            found
+        );
+    }
     /// <summary>Reports whether any retained document-value reference reads <paramref name="rowName"/>.</summary>
     public static bool ReferencesRow(WorldDefinition definition, string rowName) {
         ArgumentNullException.ThrowIfNull(argument: definition);
@@ -186,12 +226,40 @@ public static class WorldStateDocumentValues {
             value: definition,
             path: "definition",
             definition: definition,
+            walk: Walk.Find,
             soughtRow: rowName,
             seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
             found: out var found,
             reason: out _
         ) &&
             found
+        );
+    }
+    /// <summary>
+    /// Resolves every document-value reference in <paramref name="graph"/> against <paramref name="source"/>'s Text
+    /// state cells and then drops the reference, so the result carries literals only.
+    /// </summary>
+    /// <remarks>
+    /// The caller owns <paramref name="graph"/> exclusively: flattening mutates the value holders it reaches, and
+    /// the authored reference a live document keeps for canonical write-back would be lost. An egress composer
+    /// rehydrates a private copy first.
+    /// </remarks>
+    /// <param name="source">The document whose state answers the references.</param>
+    /// <param name="graph">The exclusively-owned graph to flatten.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when every reference resolved and detached.</returns>
+    public static bool TryFlatten(WorldDefinition source, object graph, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: graph);
+        ArgumentNullException.ThrowIfNull(argument: source);
+        return TryVisit(
+            value: graph,
+            path: "document",
+            definition: source,
+            walk: Walk.Flatten,
+            soughtRow: null,
+            seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
+            found: out _,
+            reason: out reason
         );
     }
     /// <summary>
@@ -241,6 +309,7 @@ public static class WorldStateDocumentValues {
             value: definition,
             path: "definition",
             definition: definition,
+            walk: Walk.Resolve,
             soughtRow: null,
             seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
             found: out _,

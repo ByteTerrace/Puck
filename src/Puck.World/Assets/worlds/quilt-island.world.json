@@ -64,7 +64,7 @@
             "type": "Box",
             "position": [0, 0, 0],
             "rotation": [0, 0, 0, 1],
-            "scale": [27.631578, 0.5, 27.631578],
+            "scale": [24, 0.5, 24],
             "material": 0,
             "blend": "Union",
             "smooth": 0,

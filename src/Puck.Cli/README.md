@@ -128,8 +128,19 @@ its confirmation there instead of stdout — the shape server narration
 accept/refuse, unlike an ordinary accepted command's stdout read-back.
 Assertions cover stream-specific exact/contained lines, verb/occurrence/
 exact-cardinality responses, ordered sequences, named response field
-extraction, equality/inequality, inclusive bounds, minimum margins, and
-byte-level file equality/inequality. A manifest may start a companion authority
+extraction, equality/inequality, inclusive bounds, minimum margins,
+byte-level file equality/inequality (`filesDiffer`), and image agreement
+between two captured frames (`framesAgree`, stating `agree` explicitly —
+`CanaryFrameNoise` counts the pixels that moved by at least 2 LSB and compares
+that against a 64-pixel noise budget). Two live windowed captures of identical
+simulation state are never bit-equal: silhouette shading carries ±1-LSB
+variance, so a byte comparison of two live frames reports a difference on
+roughly one run in three. A frame proof therefore states `framesAgree`, never
+`filesDiffer`, over a `.png` pair; `filesDiffer` remains the right shape for a
+file whose bytes really are the claim. Note this is NOT the relaxed parity
+envelope `puck parity` uses: that guards a whole-frame mean, which a body
+relocation covering a fraction of a percent of the frame slips under.
+A manifest may start a companion authority
 world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
 and assertions for per-leg capture paths. There are no regex programs, loops,
 callbacks, conditionals, shell, or embedded scripts.

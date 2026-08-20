@@ -21,11 +21,11 @@
       { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" }, { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "arrival names remote authority", "stream": "stdout", "match": "contains", "text": "remote authority 127.0.0.1:38473", "present": true },
+      { "type": "line", "name": "arrival names remote authority", "stream": "stdout", "match": "contains", "text": "remote authority {authority}", "present": true },
       { "type": "response", "name": "remote portal pose before move", "stream": "stdout", "verb": "player.where", "occurrence": 1, "count": 2, "extract": [{ "name": "beforeZ", "field": "pos", "component": 2 }] },
       { "type": "response", "name": "remote portal pose after move", "stream": "stdout", "verb": "player.where", "occurrence": 2, "count": 2, "extract": [{ "name": "afterZ", "field": "pos", "component": 2 }] },
       { "type": "relation", "name": "remote arrived body moved", "left": { "value": "beforeZ" }, "operator": "minimumMargin", "right": { "value": "afterZ" }, "margin": 1 },
-      { "type": "filesDiffer", "name": "moving the remote portal body changes the composed frame", "before": "before.png", "after": "after.png" },
+      { "type": "framesAgree", "name": "moving the remote portal body changes the composed frame", "before": "before.png", "after": "after.png", "agree": false },
       { "type": "line", "name": "both captures resolved", "stream": "stderr", "match": "contains", "text": "after.png", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]

@@ -204,11 +204,25 @@ public sealed class WorldGrants : IWorldGrantsView {
     // Which row shapes carry which mask, stated positively in one place so Conflicts, TryGrant, and any future
     // consumer never drift into disagreeing about it. A pair outside these two predicates carries no mask.
     //
-    // The KIND mask (MutationKindMask): a Mutate hold over a concrete section, or an Edit hold over a concrete
-    // state row, where it separates per-cell writes from whole-row re-authoring.
+    // The KIND mask (MutationKindMask): a Mutate hold over a concrete section or one of its row-scoped subjects, or
+    // an Edit hold over a concrete state row, where it separates per-cell writes from whole-row re-authoring.
     private static bool CarriesKindMask(WorldCapability capability, GrantSubject subject) =>
-        (((capability == WorldCapability.Mutate) && (subject.Kind == GrantSubjectKind.Section)) ||
+        (((capability == WorldCapability.Mutate) && IsMutateDispatchSubject(subject: subject)) ||
         ((capability == WorldCapability.Edit) && (subject.Kind == GrantSubjectKind.State)));
+    // The Mutate subjects that pass through a DISPATCH door — a whole section, or one row of one. They are the rows
+    // that carry a verb mask and a dispatch budget, and the ones TryAdmitMutation's first gate consults. A
+    // Mutate/state:<name> row is deliberately absent: that is the cross-document write-back channel, which speaks
+    // DocumentWriteMask and has no dispatch door to meter.
+    private static bool IsMutateDispatchSubject(GrantSubject subject) =>
+        (subject.Kind is GrantSubjectKind.Section or GrantSubjectKind.Creation or GrantSubjectKind.Placement);
+    // The section whose declared mutation-kind set bounds a maskable subject's verb mask — the subject's own section
+    // for a Section hold, the owning section for a row-scoped one, and WorldSection.State for an Edit/state row.
+    private static WorldSection MaskSectionOf(GrantSubject subject) => subject.Kind switch {
+        GrantSubjectKind.Creation => WorldSection.Creations,
+        GrantSubjectKind.Placement => WorldSection.Placements,
+        GrantSubjectKind.State => WorldSection.State,
+        _ => ((WorldSection)subject.Value),
+    };
     // The WRITE mask (DocumentWriteMask, WorldDocumentWriteKind operations): a Mutate hold over a concrete STATE
     // row — the cross-document durable-state write-back channel Server.WorldOwnedWorlds.Decide gates, the one door
     // whose vocabulary is Set/Add rather than mutation kinds.
@@ -311,7 +325,7 @@ public sealed class WorldGrants : IWorldGrantsView {
         // different lane entirely (the cross-document durable-state write-back channel), gated by a write mask
         // rather than a budget, so a budget there is refused by name.
         var untrustedPrincipal = !IsTrusted(principal: grant.Principal);
-        var meteredMutate = ((grant.Capability == WorldCapability.Mutate) && (grant.Subject.Kind == GrantSubjectKind.Section));
+        var meteredMutate = ((grant.Capability == WorldCapability.Mutate) && IsMutateDispatchSubject(subject: grant.Subject));
         var metered = ((grant.Capability is WorldCapability.Observe or WorldCapability.Drive) || meteredMutate);
 
         if (grant.Budget == 0) {
@@ -332,7 +346,7 @@ public sealed class WorldGrants : IWorldGrantsView {
 
         if (grant.Budget is not null) {
             if (!metered) {
-                reason = $"budget is refused on {Label(capability: grant.Capability)} {grant.Subject.Describe()} — only observe, drive, and mutate over a concrete section:<name> pass through a dispatch door there is anything to meter (a mutate state:<name> row is the cross-document write-back channel, gated by writes:<name,...> rather than by an allowance)";
+                reason = $"budget is refused on {Label(capability: grant.Capability)} {grant.Subject.Describe()} — only observe, drive, and mutate over a concrete section:<name>/creation:<id>/placement:<id> pass through a dispatch door there is anything to meter (a mutate state:<name> row is the cross-document write-back channel, gated by writes:<name,...> rather than by an allowance)";
 
                 return true;
             }
@@ -370,12 +384,52 @@ public sealed class WorldGrants : IWorldGrantsView {
         if (
             untrustedPrincipal &&
             (grant.Capability == WorldCapability.Mutate) &&
-            (grant.Subject.Kind == GrantSubjectKind.Section) &&
+            IsMutateDispatchSubject(subject: grant.Subject) &&
             (grant.KindMask is null)
         ) {
             reason = $"an untrusted mutate grant to {grant.Principal.Describe()} over {grant.Subject.Describe()} requires an explicit verbs:<name,...> — an absent kind mask means FULL REACH at the admission door (a trusted principal's maskless row is the seeded default), so a maskless untrusted row would silently admit every kind {grant.Subject.Describe()} declares";
 
             return true;
+        }
+
+        // A row-scoped Mutate row reaches the ordered domain's apply door only (console, loopback, and the peer door
+        // all converge on WorldServer.TryApplyMutation, which knows the mutation's target row). The addon mutation
+        // seam designates a SECTION handle at its pre-flight and refuses any other subject as a stale handle, so a
+        // row-scoped row granted to an addon could never dispatch: accepted-and-inert.
+        if (
+            (grant.Principal.Kind == PrincipalKind.Addon) &&
+            (grant.Capability == WorldCapability.Mutate) &&
+            (grant.Subject.Kind is GrantSubjectKind.Creation or GrantSubjectKind.Placement)
+        ) {
+            reason = $"a row-scoped mutate grant to {grant.Principal.Describe()} over {grant.Subject.Describe()} is refused — the addon mutation seam designates a section handle and refuses every other subject before decode, so this row would be accepted and inert; grant mutate section:{MaskSectionOf(subject: grant.Subject).ToString().ToLowerInvariant()} with budget:<n> verbs:<name,...> instead";
+
+            return true;
+        }
+
+        // A row-scoped subject's id is never bound-checked against the live document (authoring a row that does not
+        // exist yet is what a contribution slot grants), but its SHAPE still has to be able to match a row key.
+        if (grant.Subject.Kind is GrantSubjectKind.Creation or GrantSubjectKind.Placement) {
+            var rowId = (grant.Subject.Id ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(value: rowId)) {
+                reason = $"{grant.Subject.Describe()} names a blank row id — no row can ever match it";
+
+                return true;
+            }
+
+            // WorldCreation.Id is a DocumentIdentifier, so a `state.` token there is a REFERENCE whose resolved
+            // value is some other string. WorldPlacement.Id is a plain literal, which is why this is creation-only.
+            if (
+                (grant.Subject.Kind == GrantSubjectKind.Creation) &&
+                rowId.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix
+            )
+            ) {
+                reason = $"{grant.Subject.Describe()} names a state reference rather than a row id — a '{Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix}' token resolves to some other string at load, so the row it addresses can never equal this subject; name the resolved id";
+
+                return true;
+            }
         }
 
         // The event budget meters event-push volume (a sibling of Budget, over the same row). Legal only on
@@ -519,14 +573,12 @@ public sealed class WorldGrants : IWorldGrantsView {
                 capability: grant.Capability,
                 subject: grant.Subject
             )) {
-                reason = $"a verb mask is refused on {Label(capability: grant.Capability)} {grant.Subject.Describe()} — only a mutate grant over a concrete section:<name>, or an edit grant over a concrete state:<name>, carries one";
+                reason = $"a verb mask is refused on {Label(capability: grant.Capability)} {grant.Subject.Describe()} — only a mutate grant over a concrete section:<name>/creation:<id>/placement:<id>, or an edit grant over a concrete state:<name>, carries one";
 
                 return true;
             }
 
-            var admissible = WorldMutationKindCatalog.KindsOf(section: ((grant.Subject.Kind == GrantSubjectKind.State)
-                ? WorldSection.State
-                : (WorldSection)grant.Subject.Value));
+            var admissible = WorldMutationKindCatalog.KindsOf(section: MaskSectionOf(subject: grant.Subject));
             var effective = kindMask.Meet(other: admissible);
 
             if (effective.Bits != kindMask.Bits) {
@@ -675,7 +727,11 @@ public sealed class WorldGrants : IWorldGrantsView {
                 ((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 ((subject.Kind == GrantSubjectKind.Composition) && trustedWildcard) ||
                 ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.Peer)))),
-            WorldCapability.Mutate => ((subject.Kind is GrantSubjectKind.Section or GrantSubjectKind.State) ||
+            // Mutate additionally admits the two ROW-SCOPED dispatch subjects — one creations row, one placements
+            // row — for any principal. They are an alternative to the section hold, never a narrowing beneath it,
+            // and the id is shape-checked rather than bound-checked (a contribution slot grants the right to author
+            // a row that does not exist yet).
+            WorldCapability.Mutate => ((subject.Kind is GrantSubjectKind.Section or GrantSubjectKind.State or GrantSubjectKind.Creation or GrantSubjectKind.Placement) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
             WorldCapability.Edit => ((subject.Kind == GrantSubjectKind.State) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
@@ -898,8 +954,8 @@ public sealed class WorldGrants : IWorldGrantsView {
             WorldCapability.Control => $"control must name a concrete screen or body (control screen:<n> | control body:<n>){((trusted || (principal.Kind == PrincipalKind.Peer))
             ? " or the wildcard 'all'"
             : "")}",
-            WorldCapability.Mutate => $"mutate must name a document section (mutate section:<name>){(trusted
-            ? " or the wildcard 'all'"
+            WorldCapability.Mutate => $"mutate must name a document section (mutate section:<name>), one creations or placements row (mutate creation:<id> | mutate placement:<id>), or a concrete state row for the cross-document write-back channel (mutate state:<name>){(trusted
+            ? ", or the wildcard 'all'"
             : "")}",
             WorldCapability.Edit => $"edit must name a concrete state row (edit state:<name>){(trusted
             ? " or the wildcard 'all'"

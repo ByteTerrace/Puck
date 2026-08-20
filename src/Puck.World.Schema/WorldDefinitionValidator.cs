@@ -818,8 +818,15 @@ public static partial class WorldDefinitionValidator {
             errors: errors,
             programs: programs
         );
-        if ((definition.Channels.Count + definition.TargetRegisters.Count) > ChannelLimits.MaxChannels) {
-            errors.Add(item: $"channels and targetRegisters declare {(definition.Channels.Count + definition.TargetRegisters.Count)} shared Drive-reach ordinals; the maximum is {ChannelLimits.MaxChannels}.");
+        // Channels and target registers share one Drive-reach ordinal space, and every per-ordinal table below is
+        // sized by ChannelLimits.MaxChannels. An over-budget count cannot be collected and walked past: the first
+        // compile that indexes one of those tables by an authored count faults out of its own array before the
+        // collected refusals are raised. This is a gate, not another collected error.
+        var declaredOrdinals = (definition.Channels.Count + definition.TargetRegisters.Count);
+
+        if (declaredOrdinals > ChannelLimits.MaxChannels) {
+            errors.Add(item: $"channels and targetRegisters declare {declaredOrdinals} shared Drive-reach ordinals; the maximum is {ChannelLimits.MaxChannels}.");
+            RefuseCollected(errors: errors);
         }
         var kitNames = ValidateKits(
             allChannelNames: allChannelNames,
@@ -1386,6 +1393,9 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        RefuseCollected(errors: errors);
+    }
+    private static void RefuseCollected(List<string> errors) {
         if (errors.Count > 0) {
             throw new InvalidOperationException(message: $"Invalid WorldDefinition:{Environment.NewLine} - {string.Join(
                 separator: $"{Environment.NewLine} - ",

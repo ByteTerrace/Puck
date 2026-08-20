@@ -24,15 +24,14 @@ internal static class CliProcess {
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
         RunCapturedAsync(arguments: arguments, fileName: fileName, input: input, timeout: timeout).GetAwaiter().GetResult();
 
-    /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time, floored at one
-    /// millisecond so a caller never passes a zero or negative timeout to <see cref="RunCaptured"/>.</summary>
+    /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time. The result is
+    /// zero or negative once the budget is spent.</summary>
     /// <param name="clock">The running suite clock.</param>
     /// <param name="budget">The suite-wide time budget.</param>
-    public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) {
-        var remaining = (budget - clock.Elapsed);
-
-        return ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromMilliseconds(value: 1));
-    }
+    /// <remarks>A caller must refuse its work outright once this is too small to hold it, and never clamp a child's
+    /// timeout down to the remainder: <see cref="RunCaptured"/> kills a child whose timeout elapses, and on Windows a
+    /// killed child reports exit code -1 with both streams empty — indistinguishable from a failure to launch.</remarks>
+    public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) => (budget - clock.Elapsed);
 
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) {
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);

@@ -436,6 +436,34 @@ public sealed partial class WorldServer {
 
         return true;
     }
+    // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
+    // advanced is one refresh. An authored row the source could not resolve contributes no projection at all, which
+    // is exactly "nothing was delivered" — the staleness count rises and the grace comparison decides. Replay drives
+    // this from taped LinkDelivery entries instead; a shadow server holds no adjacency source, so the two never
+    // double-count.
+    private void ObserveAdjacencyDeliveries() {
+        if (m_population.Adjacencies is not { } adjacencies) {
+            return;
+        }
+
+        var projections = adjacencies.Visuals();
+
+        for (var index = 0; (index < projections.Count); index++) {
+            var projection = projections[index];
+
+            if (
+                !projection.Direct ||
+                !m_events.ObserveLinkDelivery(
+                adjacencyName: projection.Name,
+                deliveredTick: projection.Neighbour.SnapshotTick
+            )
+            ) {
+                continue;
+            }
+
+            LinkDeliveryTap?.Invoke(obj: projection.Name);
+        }
+    }
     private void StepCore(in FixedStepContext context) {
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
@@ -488,6 +516,10 @@ public sealed partial class WorldServer {
         var tick = (context.Tick + 1UL);
 
         m_population.Adjacencies?.BeginTick(tick: tick);
+        // Immediately after the projection graph freezes, so "did this seam refresh" is read off the SAME pinned
+        // image contact and rendering will read for this tick, never a delivery that lands mid-step.
+        ObserveAdjacencyDeliveries();
+
         var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
 
         m_population.AdvanceSimulated(
@@ -634,10 +666,14 @@ public sealed partial class WorldServer {
         // Market retention sweep — runs right beside deadline recovery, archiving terminal rows once they have aged
         // past market.retentionSeconds so the section's lifetime listing count stays bounded.
         PruneExpiredMarketListings(tick: tick);
-        // Reconnect-park recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's. Each
-        // reclaimed peer generation's grant rows are revoked right here, through the ordinary door, so the grant
-        // release and the body teardown share one deadline.
+        // Contribution tenure recovery — the same shape again, for a presence-tenure slot whose contributor's link
+        // went unreachable past its authored grace.
+        SweepContributionTenure(tick: tick);
+        // Reconnect-park recovery — the same tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
+        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's. A
+        // reclaimed peer generation's remaining rows are revoked right here, through the ordinary door: a live
+        // disconnect released its own at the event, so this reaches a park whose rows arrived with a checkpoint
+        // restore (WorldPopulation.Restore parks every captured remote human).
         m_reclaimedParks.Clear();
         m_population.ReclaimExpiredParks(
             reclaimed: m_reclaimedParks,
@@ -852,31 +888,28 @@ public sealed partial class WorldServer {
 
                 break;
             case WorldServerEvent.PeerDisconnected disconnected:
-                // Grant release rides the SAME ParkedUntilTick deadline the body teardown does: a generation that
-                // PARKED keeps its rows through the grace window (a reconnect inside it resumes onto live authority
-                // rather than a re-mint), and ReclaimExpiredParks revokes them at the deadline. A generation that
-                // did not park (an authored-zero grace, or no live match) releases here, immediately, unchanged.
-                var parkedGenerations = new HashSet<WorldPrincipal>();
-
+                // The body parks with grace; the authority does not. Park serves body continuity (pose, durable
+                // state, collidability, targetability) and ApplyPeerDisconnected still defers that half to
+                // ReclaimExpiredParks. A peer GENERATION, though, is dead the moment its connection drops: the Hello
+                // handshake carries no persistent identity, so no reconnect can ever resume onto it —
+                // TryAdmitRemotePeer skips the still-parked slot and mints a fresh generation. Retaining its rows
+                // therefore holds authority nothing can exercise but that still blocks: an Exclusive subject reserved
+                // by a dead generation refuses every live acquirer, and at rate 0 the compiled grace is Never, so no
+                // sweep ever releases it. Release is unconditional here, the same path a non-parking disconnect (an
+                // authored-zero grace, or no live match) takes. It rides this event, so replay re-drives the identical
+                // revocations through the identical door at the identical tick, with no separate tape entry.
                 foreach (var peer in disconnected.Entries) {
-                    if (m_population.ApplyPeerDisconnected(
+                    m_population.ApplyPeerDisconnected(
                         peer: in peer,
                         tick: NextInputTick
-                    )) {
-                        _ = parkedGenerations.Add(item: WorldPrincipal.Peer(
-                            index: peer.BodyIndex,
-                            generation: peer.Generation
-                        ));
-                    }
+                    );
                 }
 
                 foreach (var grant in disconnected.RevokedGrants) {
-                    if (!parkedGenerations.Contains(item: grant.Principal)) {
-                        Revoke(
-                            grant: grant,
-                            actor: WorldPrincipal.Console
-                        );
-                    }
+                    Revoke(
+                        grant: grant,
+                        actor: WorldPrincipal.Console
+                    );
                 }
 
                 break;

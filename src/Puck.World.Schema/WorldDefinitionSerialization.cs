@@ -1229,7 +1229,8 @@ internal sealed class WorldDestinationScopeJsonConverter : JsonConverter<WorldDe
 }
 /// <summary>
 /// Reads and writes a <see cref="GrantSubject"/> as the same compact token <c>world.grant</c> takes — <c>all</c>,
-/// <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>, <c>section:&lt;name&gt;</c>, <c>profile:&lt;id&gt;</c> — rather than
+/// <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>, <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>,
+/// <c>creation:&lt;id&gt;</c>, <c>placement:&lt;id&gt;</c> — rather than
 /// this context's member policies, which would emit a raw <c>{"kind":0,"value":5,"id":null}</c> object and a bare
 /// numeric <see cref="WorldSection"/> ordinal for a section subject (opaque without the enum's declaration order open
 /// beside it). Parsing rides <see cref="GrantSubject.TryParse"/> — the identical grammar the console
@@ -1253,7 +1254,7 @@ internal sealed class GrantSubjectJsonConverter : JsonConverter<GrantSubject> {
             token: token
         )
         ) {
-            throw new JsonException(message: $"grant subject '{token}' must be 'all', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', or 'seat:<n>'.");
+            throw new JsonException(message: $"grant subject '{token}' must be 'all', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'.");
         }
 
         return subject;

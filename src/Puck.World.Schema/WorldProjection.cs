@@ -45,8 +45,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <summary>
 /// <c>puck.world.projection.v1</c> — what an authority hands a peer holding the
 /// <see cref="WorldDisclosureTier.Presentation"/> tier. A separate versioned document rather than a
-/// <see cref="WorldDefinition"/> with sections nulled out, because <see cref="WorldDefinition"/> requires 33 sections
-/// and a partial one either refuses at <c>RequireSections</c> or misreports what it carries. This type's member list
+/// <see cref="WorldDefinition"/> with sections nulled out: a partial definition either refuses at
+/// <see cref="WorldDefinitionValidator"/> or misreports what it carries. This type's member list
 /// is the disclosure decision: a section that must not leave an authority below the replica tier has no member here.
 /// <para>Absent by construction: <c>rules</c>, <c>grants</c>, <c>state</c>, <c>market</c>, <c>admission</c>,
 /// <c>generation</c>, <c>generators</c>, <c>groups</c>, <c>properties</c>, <c>addons</c>, <c>storage</c>,
@@ -148,10 +148,13 @@ public sealed record WorldProjectionDocument(
 /// read the definition directly — colocated trust is home trust.
 /// </summary>
 /// <remarks>
-/// <para><see cref="ToDefinition"/> rebuilds a <see cref="WorldDefinition"/> from a projection so a receiving
+/// <para><see cref="TryToDefinition"/> rebuilds a <see cref="WorldDefinition"/> from a projection so a receiving
 /// consumer keeps its existing type. The wire carries the projection; the receiver constructs a locally-valid
 /// document whose undisclosed sections carry their neutral built-in defaults. A hydrated document is never saved,
 /// journaled, or treated as a source of authority.</para>
+/// <para>A projection is flat: <see cref="Compose"/> answers every <c>state.&lt;row&gt;[.&lt;key&gt;]</c> document
+/// value from the composing authority's own state and sends the literal, because the projection discloses no state
+/// section for a receiver to answer one against.</para>
 /// <para>At <see cref="WorldDisclosureTier.Replica"/> <see cref="Compose"/> answers <see langword="null"/> and the
 /// caller serializes the definition verbatim. For a flat document that download is hash-identical to the authored
 /// file; for a document loaded from a <c>basis</c> delta it is the flattened composition — self-contained by
@@ -189,7 +192,7 @@ public static class WorldProjection {
             );
         }
 
-        return new WorldProjectionDocument(
+        var projection = new WorldProjectionDocument(
             Provenance: new WorldProjectionProvenance(
                 Authority: authority,
                 DocumentId: definition.DocumentId,
@@ -233,7 +236,42 @@ public static class WorldProjection {
                 )
             : null)
         );
+
+        return Flatten(
+            definition: definition,
+            projection: projection
+        );
     }
+    // A projection discloses no `state` section, so a retained `state.<row>[.<key>]` reference would reach the peer
+    // as a pointer into a table it was never handed — read as one, it faults; resolved as one, it refuses. The egress
+    // is therefore flat: every reference is answered from this authority's own state and dropped.
+    //
+    // The rows above are the LIVE document's own objects, and their value holders carry the authored reference
+    // canonical write-back preserves, so the flattening runs on a rehydrated private copy.
+    private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition) {
+        if (!WorldStateDocumentValues.HasReference(graph: projection)) {
+            return projection;
+        }
+
+        if (!TryDeserialize(
+            utf8Json: Serialize(projection: projection),
+            projection: out var copy,
+            reason: out var reason
+        ) || (copy is null)) {
+            throw new InvalidOperationException(message: $"the composed projection did not round-trip: {reason}");
+        }
+
+        if (!WorldStateDocumentValues.TryFlatten(
+            source: definition,
+            graph: copy,
+            reason: out var flattenReason
+        )) {
+            throw new InvalidOperationException(message: $"the composed projection could not be flattened: {flattenReason}");
+        }
+
+        return copy;
+    }
+
     /// <summary>Serializes a projection to its canonical UTF-8 bytes.</summary>
     /// <param name="projection">The projection.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
@@ -249,11 +287,21 @@ public static class WorldProjection {
     /// <summary>Rebuilds a locally-valid <see cref="WorldDefinition"/> from a projection — see the class remarks. Every
     /// undisclosed section arrives as its neutral built-in default, never as a fabricated stand-in for what the
     /// composing authority actually authored.</summary>
+    /// <remarks>
+    /// The hydration runs the same document-value resolution pass a file load runs, so a delivered definition is
+    /// indistinguishable from a loaded one. <see cref="Compose"/> flattens what it sends, so a peer that still names a
+    /// state cell is naming one this projection carries no section for: that refuses here rather than faulting later
+    /// at the first read of the value.
+    /// </remarks>
     /// <param name="projection">The projection.</param>
-    /// <returns>The hydrated definition.</returns>
+    /// <param name="definition">The hydrated definition on success.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when the projection hydrated and every document value resolved.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
-    public static WorldDefinition ToDefinition(WorldProjectionDocument projection) {
+    public static bool TryToDefinition(WorldProjectionDocument projection, out WorldDefinition? definition, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: projection);
+
+        definition = null;
 
         var kits = new WorldKit[projection.Kits.Count];
 
@@ -271,7 +319,7 @@ public static class WorldProjection {
             );
         }
 
-        return new WorldDefinition(
+        var hydrated = new WorldDefinition(
             MotionRaw: projection.Motion,
             SpawnPointsRaw: projection.SpawnPoints,
             RenderRaw: projection.Render,
@@ -326,6 +374,17 @@ public static class WorldProjection {
         ) {
             DocumentId = projection.Provenance.DocumentId,
         };
+
+        if (!WorldStateDocumentValues.TryResolve(
+            definition: hydrated,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        definition = hydrated;
+
+        return true;
     }
     /// <summary>Parses a projection from untrusted bytes, refusing by name — the same Try-shaped, never-throwing
     /// discipline every other wire leaf follows.</summary>

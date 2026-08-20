@@ -236,6 +236,13 @@ public sealed partial class WorldServer {
 
                 return WorldSubmissionResult.Ack.Instance;
             case WorldSubmissionPayload.Mutation mutation:
+                // The tape's one mutation ingress: fires here rather than at the loopback so a forwarded traveller's
+                // submission and an admitted peer's are captured on the same terms as a local one, each with the
+                // actor its own envelope stamped. See WorldServer.MutationTap.
+                MutationTap?.Invoke(
+                    arg1: mutation.Value,
+                    arg2: envelope.Principal
+                );
                 EnqueueMutation(
                     mutation: mutation.Value,
                     connectionId: envelope.ConnectionId,
@@ -901,6 +908,7 @@ public sealed partial class WorldServer {
             section: SectionOf(mutation: mutation),
             kindOrdinal: WorldMutationKindCatalog.OrdinalOf(mutation: mutation),
             rowScopedEditSubject: RowScopedEditSubjectOf(mutation: mutation),
+            rowScopedMutateSubject: RowScopedMutateSubjectOf(mutation: mutation),
             meter: !preMetered,
             admission: out var admission
         )) {

@@ -12,6 +12,9 @@ namespace Puck.Assets.Documents;
 /// </remarks>
 [JsonConverter(typeof(DocumentIdentifierJsonConverter))]
 public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<DocumentIdentifier> {
+    /// <summary>The JSON string prefix that marks a value as a state reference rather than a literal identifier.</summary>
+    public const string ReferencePrefix = "state.";
+
     private bool m_isResolved;
     private string? m_value;
 
@@ -24,7 +27,7 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
     private DocumentIdentifier(string reference, bool _) => Reference = reference;
 
     /// <inheritdoc/>
-    public string? Reference { get; }
+    public string? Reference { get; private set; }
     /// <inheritdoc/>
     public string ExpectedValue => "a non-empty identifier";
     /// <summary>The resolved identifier.</summary>
@@ -32,6 +35,11 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
         ? m_value!
         : throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has not been resolved by its containing document."));
 
+    /// <inheritdoc/>
+    public void Detach() {
+        _ = Value;
+        Reference = null;
+    }
     /// <inheritdoc/>
     public bool TryResolve(string text, out string reason) {
         if (string.IsNullOrEmpty(value: text)) {
@@ -80,7 +88,7 @@ public sealed class DocumentIdentifierJsonConverter : JsonConverter<DocumentIden
             throw new JsonException(message: "a document identifier must be a non-null string.");
         }
 
-        return (value.StartsWith(comparisonType: StringComparison.Ordinal, value: "state.")
+        return (value.StartsWith(comparisonType: StringComparison.Ordinal, value: DocumentIdentifier.ReferencePrefix)
             ? DocumentIdentifier.FromReference(reference: value)
             : new DocumentIdentifier(value: value));
     }

@@ -184,10 +184,11 @@ public sealed class WorldReplayTape {
         m_transport.RevokeTap = null;
         m_transport.SessionTap = null;
         m_transport.AddonLifecycleTap = null;
-        m_transport.MutationTap = null;
         m_transport.UndoTap = null;
         m_transport.CompositionTap = null;
         m_transport.QueryTap = null;
+        m_liveServer.LinkDeliveryTap = null;
+        m_liveServer.MutationTap = null;
         m_liveServer.RebuildTap = null;
         m_liveServer.ScreenOpTap = null;
         m_liveServer.ServerEventTap = null;
@@ -607,10 +608,14 @@ public sealed class WorldReplayTape {
             Actor: actor,
             Value: lifecycle
         ));
-        m_transport.MutationTap = (mutation, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Mutation(
+        // Apply-time on the SERVER, not at the loopback: the loopback is only one of three mutation ingresses (a
+        // local console/client write, an admitted socket peer, and a traveller's submission forwarded by its source
+        // authority), and only the envelope dispatch sees all three with the actor each one stamped.
+        m_liveServer.MutationTap = (mutation, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Mutation(
             Actor: actor,
             Value: mutation
         ));
+        m_liveServer.LinkDeliveryTap = adjacency => m_currentAuthority.Add(item: new WorldReplayEntry.LinkDelivery(Adjacency: adjacency));
         m_transport.UndoTap = (count, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(
             Actor: actor,
             Count: count

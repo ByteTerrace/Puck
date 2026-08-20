@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "puck.world.projection.v1",
   "title": "Puck world projection (puck.world.projection.v1)",
-  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out, because WorldDefinition requires 33 sections and a partial one either refuses at RequireSections or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, market, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, and every kit\u0027s producers/actions (see WorldProjectedKit). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently. Metadata crosses in reduced form: WorldProjectedMetadata carries title/description only \u2014 a world\u0027s authored name and blurb are harmless to a presentation-tier peer. authors, tags, and custom never cross; custom in particular is an unbounded author scratch bag that may hold notes never meant to leave the authority.",
+  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out: a partial definition either refuses at WorldDefinitionValidator or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, market, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, and every kit\u0027s producers/actions (see WorldProjectedKit). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently. Metadata crosses in reduced form: WorldProjectedMetadata carries title/description only \u2014 a world\u0027s authored name and blurb are harmless to a presentation-tier peer. authors, tags, and custom never cross; custom in particular is an unbounded author scratch bag that may hold notes never meant to leave the authority.",
   "type": [
     "object",
     "null"
@@ -5726,6 +5726,57 @@
             ],
             "additionalProperties": false,
             "default": null
+          },
+          "contribution": {
+            "description": "The placement\u0027s contribution facet (see WorldPlacementContribution) \u2014 marks the row a host-authored slot a federation partner fills, or null for an ordinary placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the row shows and for how long, never its transform.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "tenure": {
+                "description": "The authored lifecycle.",
+                "enum": [
+                  "Presence",
+                  "Endowed"
+                ]
+              },
+              "slotCreationId": {
+                "description": "The host-owned Id the slot shows while unfilled and returns to on retraction. Must resolve to a declared creation row.",
+                "type": "string"
+              },
+              "link": {
+                "description": "The authored adjacencies row name the presence check watches \u2014 the same key the $link:\u003CadjacencyName\u003E reserved rule channel reads. Required for Presence, refused beside Endowed.",
+                "default": null,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "graceSeconds": {
+                "description": "Seconds the watched link may stay unreachable before the piece retracts, compiled to simulation ticks through CompiledGrace at each sweep observation and stamped once into RetractDeadlineTick. Zero disables the grace (retract on the first observed outage); a rate-0 world compiles to Never, so nothing retracts. Refused beside Endowed unless zero.",
+                "type": "number",
+                "default": 0
+              },
+              "contributor": {
+                "description": "Server-stamped. The acting principal that filled the slot; null while unfilled. Never accepted from a submitted payload or an authored document.",
+                "default": null
+              },
+              "retractDeadlineTick": {
+                "description": "Server-stamped. The simulation tick at or after which the presence sweep retracts this slot; null while the link is reachable.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "tenure",
+              "slotCreationId"
+            ],
+            "additionalProperties": false,
+            "default": null
           }
         },
         "required": [
@@ -7747,6 +7798,10 @@
                             "attach": {
                               "$ref": "#/properties/placements/items/properties/attach",
                               "default": null
+                            },
+                            "contribution": {
+                              "$ref": "#/properties/placements/items/properties/contribution",
+                              "default": null
                             }
                           },
                           "required": [
@@ -8043,6 +8098,11 @@
               "null"
             ],
             "default": null
+          },
+          "livenessGraceSeconds": {
+            "description": "How long this edge may go without a delivered neighbour refresh before the world calls the link dropped \u2014 the authored threshold behind the linkEstablished/linkDropped world event family and the $link:\u003Cname\u003E reserved rule channel (LinkPrefix). Authored in seconds \u2014 a physical unit, so a world\u0027s SimulationRateHz can change without silently retuning the window \u2014 and compiled per document through AdjacencyLivenessGraceTicks, exactly the population.reconnectGraceSeconds idiom. 0 (the default) disables liveness sensing for this edge outright: no link edge is emitted for it and $link: reads 0 forever, so a world authoring none is unchanged. Per row, not per world: each seam carries its own tolerance. A world whose rate is 0 has no tick mapping for a positive value (see CompiledTickDuration), which reads as never dropped.",
+            "type": "number",
+            "default": 0
           }
         },
         "required": [

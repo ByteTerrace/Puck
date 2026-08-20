@@ -35,10 +35,15 @@ both sides of a seam and must derive the same depth on each. `metadata` crosses
 in reduced form — `WorldProjectedMetadata` carries `title`/`description` only;
 `authors`, `tags`, and `custom` never cross (`custom` is an unbounded author
 scratch bag that may hold notes never meant to leave the authority).
-`WorldProjection.ToDefinition` hydrates a received projection back into a
+`WorldProjection.TryToDefinition` hydrates a received projection back into a
 `WorldDefinition` (undisclosed sections take their neutral built-in defaults) so
 no downstream consumer changed type; a hydrated document is never saved,
-journaled, or an authority.
+journaled, or an authority. A projection is FLAT: because it discloses no
+`state` section, `Compose` answers every `state.<row>[.<key>]` document
+identifier or spatial value from the composing authority's own state and sends
+the literal (`WorldStateDocumentValues.TryFlatten`, on a rehydrated copy so the
+live document keeps the authored reference canonical write-back preserves), and
+`TryToDefinition` refuses BY NAME a peer that still names a cell.
 
 On the wire a document leaf is `[tier byte][document bytes]`
 (`WorldFederationCodec.EncodeDocument`/`TryDecodeDocument`), so a receiver names
@@ -710,11 +715,12 @@ every live mutation, on whole-document swap, and on every undo-replay entry —
 so builders and appliers never repeat semantic checks. Refusals are an
 aggregated STRING list (`"Invalid WorldDefinition: …"`); the one
 enum-reasoned section is HUD (`HudValidationException` carrying `HudRefusal`,
-folded in as `hud.<Reason>: …`). A null required section fails earlier with
-`"Incomplete WorldDefinition: <name> is required."` (`RequireSections` checks
-31 nullable REQUIRED members — every OPTIONAL trailing member above, `Metadata`
-included, gets no `Require` call; the struct sections `motion`/`wander`/
-`population` cannot be absent-null).
+folded in as `hud.<Reason>: …`). There is no separate incomplete-document
+refusal: an absent required section resolves through its accessor to the
+section's own `Absent`/empty placeholder (`Hud`, `Views`, `Kits`, …), and the
+validator refuses it BY NAME from whatever derived rule that placeholder
+violates — `views` and `kits` refuse for any document whose
+`population.capacity` is nonzero, so a seatless document may author neither.
 
 Notable validator constants: `cameras` count ≤ `OffscreenRenderBudget.RegisteredViews` (64),
 `MaxSurfaceDimension = 4096`, `MaxLookScale = 16f`. Screen indices are
@@ -753,6 +759,15 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   behind one cell when they must rename atomically. Resolution precedes
   validation and binding composition, and a live cell write rehydrates,
   re-resolves, recompiles, and validates the complete candidate.
+  `WorldStateDocumentValues.TryResolve` is the ONE resolution door and every
+  path that turns bytes into a live document runs it — `WorldJsonPayload.
+  TryParse` (file loads, both neighbour resolvers, console inline JSON),
+  `WorldDefinitionSerialization.Deserialize` (replay embeds, checkpoints,
+  the federation replica leaf, a delivered identity document), and
+  `WorldProjection.TryToDefinition` (the presentation leaf) — so a DELIVERED
+  definition is indistinguishable from a file-loaded one. A new delivery path
+  that decodes a document without it is the defect this door exists to
+  prevent.
 - **`$type`-discriminated unions:** `ActionPredicate`, `ActionEffect`,
   `WorldScreenSource`
   (`none`/`testPattern`/`machine`/`camera`/`view`/`capture`/`console`/`qr`),
@@ -774,8 +789,9 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   carries exactly the vocabulary its canonicalizer hashes.
 
 **Adding a schema field — the sweep direction.** Adding a top-level SECTION
-refuses at boot until every shipped world carries it (`RequireSections`).
-Adding a NESTED member does not refuse at parse — it silently defaults, and
+refuses at boot until every shipped world carries it (through its own
+`Absent`/empty placeholder's derived validator rule — see "The validator"
+above). Adding a NESTED member does not refuse at parse — it silently defaults, and
 usually (not always) refuses at validation — so sweep the shipped worlds
 either way. Adding a JSON key with no model member always refuses. Renaming a
 member is doubly fatal. One `world.save` re-canonicalizes a file to the
@@ -799,7 +815,8 @@ current model.
   not key). `GrantSubject` and `WorldPrincipal` serialize as the console
   grammar tokens through their own converters (`all`, `body:<n>`,
   `screen:<n>`, `section:<name>`, `state:<name>`,
-  `region:<name>`, `seat:<n>`; `seat1..seat4`, `console`, `addon:<name>`,
+  `region:<name>`, `seat:<n>`, `creation:<id>`, `placement:<id>`;
+  `seat1..seat4`, `console`, `addon:<name>`,
   `peer:<index>:<generation>`, `document:<id>`). A member-wise serialization would permit denormalized
   "phantom grant" keys no table lookup could match. Two asymmetries to know:
   `composition` is a write-only subject token (echoed by `world.grants`,
@@ -840,7 +857,23 @@ current model.
   out-of-range `BodyIndex` refuses at author time; a valid but
   inactive/despawned target body makes the row contribute nothing at
   RUNTIME — no refusal, `world.attachments` names the reason and the stamp
-  parks below the floor.
+  parks below the floor. `WorldPlacement.Contribution`
+  (`WorldPlacementContribution`) is the CONTRIBUTION SLOT facet — a host world
+  authors the frame and a federation partner fills it. Its two halves never
+  mix: `tenure` (`Presence`/`Endowed`), `slotCreationId`, `link` (an
+  `adjacencies` row name, required for `Presence` and refused for `Endowed`)
+  and `graceSeconds` are AUTHORED; `contributor` and `retractDeadlineTick` are
+  SERVER-STAMPED and a submission naming either is refused BY NAME
+  (`Server/WorldServer.Contributions.cs`'s `TryComposeUpsertPlacement` reads the
+  contributor off the acting principal — accepting an authored one would be the
+  laundering the acting-principal rule forbids). An UNFILLED slot shows its own
+  `slotCreationId`, so no creationless placement has to be representable, and
+  the validator pins the pair. Retraction — the per-tick
+  `SweepContributionTenure` pass, once the watched link has read dropped past
+  `graceSeconds` — re-points `creationId` back and clears the stamp through
+  ordinary journalled mutations, so the host's FRAME stands, only the piece
+  goes, and `world.undo` puts it back. It defers (never orphans) while the
+  slot's inhabitant is drive-possessed. Read back with `world.contributions`.
 
 ## Owned-world identities
 
@@ -947,11 +980,9 @@ A chord row's, context row's, and wheel row's `group` may be a literal or a
 `state.<row>[.<key>]` reference to a Text cell. All references to one cell
 resolve together before the profile is composed, so changing that single cell
 renames the relationship consistently instead of requiring a document-wide
-search/replace. **A reference is NOT resolved on a definition delivered across
-a transfer** — `WorldBindingComposer.RowKey` throws "has not been resolved by
-its containing document" when the arriving seat recomposes — so a world whose
-bodies cross an authority boundary names its groups literally, as
-`standard.world.json` does.
+search/replace. `standard.world.json` is the worked example — its
+`state.world.bindingGroups` row holds `defaultActionGroup`, and every chord and
+wheel row names it through the reference.
 
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
@@ -994,7 +1025,8 @@ so a retheme re-pitches the stack without re-authoring a bank) — `offsetX`/
 `offsetY` are optional per-axis overrides for a world that wants one bank placed
 by hand. Each draws at its authored `alpha` — or `activeAlpha`
 (default 1.0) when that bank's page is the seat's CURRENTLY active one. A
-player's own `identity.bindings`-stored `BindingProfileDocument.BindingBar`
+player's own `BindingProfileDocument.BindingBar` (stored in the identity
+document's `bindingOverlays` section)
 (`Puck.Commands.BindingBarPreferences`: `hideUnbound`/`stacked`/`scale`, all
 nullable, LOOK only — never a binding) overrides the world's `hideUnbound` and
 adds a `stacked` toggle (render every bank vs. only the seat's active one — falling

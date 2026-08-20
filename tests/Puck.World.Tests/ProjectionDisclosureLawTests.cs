@@ -90,9 +90,9 @@ public sealed class ProjectionDisclosureLawTests {
         Assert.Equal(expected: "127.0.0.1:5000", actual: decoded.Provenance.Authority);
         Assert.Equal(expected: 3, actual: decoded.Provenance.Revision);
 
-        var hydrated = WorldProjection.ToDefinition(projection: decoded);
-
-        Assert.Equal(expected: definition.Kits.Count, actual: hydrated.Kits.Count);
+        Assert.True(WorldProjection.TryToDefinition(projection: decoded, definition: out var hydrated, reason: out var hydrationReason), hydrationReason);
+        Assert.NotNull(hydrated);
+        Assert.Equal(expected: definition.Kits.Count, actual: hydrated!.Kits.Count);
         Assert.Equal(expected: definition.Kits[0].Name, actual: hydrated.Kits[0].Name);
         Assert.Equal(expected: definition.DefaultSeatKit, actual: hydrated.DefaultSeatKit);
         Assert.Equal(expected: definition.Placements.Count, actual: hydrated.Placements.Count);

@@ -1059,7 +1059,19 @@ public static class WorldFederationCodec {
             return false;
         }
 
-        definition = WorldProjection.ToDefinition(projection: projection);
+        if (!WorldProjection.TryToDefinition(
+            projection: projection,
+            definition: out definition,
+            reason: out var hydrationReason
+        )) {
+            failure = new WireFailure(
+                Detail: hydrationReason,
+                Refusal: WireRefusal.PayloadMalformed
+            );
+
+            return false;
+        }
+
         failure = default;
 
         return true;

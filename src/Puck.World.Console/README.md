@@ -3,7 +3,10 @@
 This project owns `IWorldConsoleAuthority` (resolves the `WorldInstance` a
 console invocation addresses) and the server-only command modules moved out
 of [`Puck.World`](../Puck.World/README.md): `world.grant`/`.revoke`/`.grants`/
-`.why` (`WorldGrantCommandModule`), `world.group.*`/`world.ownership.*`/
+`.why` (`WorldGrantCommandModule`), `world.contributions`
+(`WorldContributionCommandModule` — the contribution-slot read-back; slots are
+authored and filled through `world.row.set placements`, so it carries no
+mutating verb), `world.group.*`/`world.ownership.*`/
 `world.groups` (`WorldGroupCommandModule`), `world.population.spawn`/
 `world.looks` (`WorldLookCommandModule`), `market.*`/`world.market`
 (`WorldMarketCommandModule`), `world.peers`/`world.projection`

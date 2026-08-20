@@ -264,6 +264,10 @@ public sealed partial class WorldServer {
         WorldRuleFactKind.Tick => Finite(value: FixedQ4816.FromInteger(value: unchecked((long)tick))),
         WorldRuleFactKind.Population => Finite(value: FixedQ4816.FromInteger(value: m_population.ActiveCount())),
         WorldRuleFactKind.RegionOccupancy => Finite(value: FixedQ4816.FromInteger(value: m_events.OccupantCount(placementId: operand.Row!))),
+        // $link: — the SAME per-tick staleness the link event family's own threshold comparison reads, in SIMULATION
+        // ticks. An edge whose livenessGraceSeconds is unauthored is held at 0 by the feed itself, so a staleness
+        // gate stays closed rather than opening on a world that never asked for liveness sensing.
+        WorldRuleFactKind.LinkStaleness => Finite(value: FixedQ4816.FromInteger(value: m_events.LinkStalenessTicks(adjacencyName: operand.Row!))),
         // The SAME IWorldMachineMemoryPeek.TryPeek primitive WorldAddonRuntime's memory-watch family already rides,
         // called directly instead of accumulated as a change event. No machine booted (or no peek capability) reads
         // as 0 — never a hard refusal, since the machine can boot on a later tick.

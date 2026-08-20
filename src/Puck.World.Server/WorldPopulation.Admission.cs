@@ -318,22 +318,18 @@ public sealed partial class WorldPopulation {
     /// simulation rate 0 — see <see cref="DeactivateSeat"/>'s own remarks) — the entry marks
     /// <see cref="Entry.Parked"/> instead, and <see cref="IsAdmittedPeer"/> (hence <see cref="IsHumanOccupied"/>)
     /// keeps reading <see langword="true"/> through the grace window since <see cref="Entry.IsRemoteHuman"/> is
-    /// untouched. The GRANT half rides the same deadline: this reports whether the entry parked, and the caller
-    /// (<c>Server.WorldServer.ApplyServerEvent</c>) revokes the disconnected generation's rows immediately only when
-    /// it did not — otherwise <see cref="ReclaimExpiredParks"/> reports the generation at the deadline and the
-    /// revocation happens there, so one connection-loss event has one timing rule.</summary>
+    /// untouched. Only the BODY half is deferred: the disconnected generation's grant rows are released
+    /// unconditionally by the caller (<c>Server.WorldServer.ApplyServerEvent</c>), because a reconnect mints a fresh
+    /// generation rather than resuming onto this one — see that arm for the argument.</summary>
     /// <param name="peer">The recorded peer entry.</param>
     /// <param name="tick">The current tick — the basis a finite <see cref="Entry.ParkedUntilTick"/> is stamped
     /// from.</param>
-    /// <returns><see langword="true"/> when the entry parked (its teardown, grants included, is deferred to the
-    /// grace deadline); <see langword="false"/> when it tore down immediately or matched no live generation.</returns>
-    public bool ApplyPeerDisconnected(in WorldPeerEventEntry peer, ulong tick) {
+    public void ApplyPeerDisconnected(in WorldPeerEventEntry peer, ulong tick) {
         if (((uint)(peer.BodyIndex - LocalSeatCount)) >= PeerCapacity) {
-            return false;
+            return;
         }
 
         var entry = m_entries[peer.BodyIndex];
-        var parked = false;
 
         if (
             entry.Active &&
@@ -342,7 +338,6 @@ public sealed partial class WorldPopulation {
             if (m_reconnectGraceTicks.IsNever) {
                 entry.Parked = true;
                 entry.ParkedUntilTick = null;
-                parked = true;
             } else if (m_reconnectGraceTicks.IsZero) {
                 entry.Body = null;
                 entry.Active = false;
@@ -358,14 +353,11 @@ public sealed partial class WorldPopulation {
             } else {
                 entry.Parked = true;
                 entry.ParkedUntilTick = unchecked((((long)tick) + m_reconnectGraceTicks.Ticks));
-                parked = true;
             }
 
             m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
-
-        return parked;
     }
     /// <summary>Deactivates a local seat — the session leave's server half. A no-op if the seat is not active.
     /// Park-with-grace: when the compiled grace (<see cref="m_reconnectGraceTicks"/>) is positive or
@@ -536,8 +528,10 @@ public sealed partial class WorldPopulation {
     /// exactly as an immediate disconnect already did before park-with-grace existed. Covers both local seats and
     /// peers in one pass — the same <c>Active &amp;&amp; Parked</c> gate discriminates a park regardless of
     /// <see cref="PopulationKind"/>, so there is no separate seat/peer sweep. A reclaimed PEER generation is reported
-    /// through <paramref name="reclaimed"/> so its grant rows are revoked on this same deadline — one connection-loss
-    /// event, one timing rule; a local seat never held generation-scoped grants, so it reports nothing. Driven purely
+    /// through <paramref name="reclaimed"/> so any rows it still holds are revoked here; a live disconnect leaves
+    /// none (<c>Server.WorldServer.ApplyServerEvent</c> releases them at the event), so the one producer this sink
+    /// still serves is <see cref="Restore"/>, which parks a captured remote human alongside a grant table restored
+    /// with its rows. A local seat never held generation-scoped grants, so it reports nothing. Driven purely
     /// by <paramref name="tick"/> — no wall clock, no
     /// randomness — so it is exactly as replay-deterministic as <c>Server.WorldServer.ReclaimExpiredEscrows</c>,
     /// which this mirrors and is swept beside every tick.
@@ -592,9 +586,9 @@ public sealed partial class WorldPopulation {
                 entry.PlacementId = null;
 
                 if (entry.IsRemoteHuman) {
-                    // The peer's generation-scoped grants ride the SAME deadline: the caller drains this and revokes
-                    // each identity's rows through the ordinary door, so one connection-loss event has one timing
-                    // rule rather than an immediate grant release beside a deferred body teardown.
+                    // Reported so the caller can revoke whatever rows this generation still holds. A live disconnect
+                    // already released its own at the event, so what this reaches is a park the grant table outlived:
+                    // Restore parks a captured remote human beside a grant table restored with its rows.
                     reclaimed?.Add(item: WorldPrincipal.Peer(
                         index: index,
                         generation: entry.Generation

@@ -153,6 +153,18 @@ public abstract record WorldReplayEntry {
     /// own population (empty for a refused or aborted transfer, or one whose source is not boot) — replayed against
     /// the shadow world's own population at re-drive, see this entry's own remarks.</param>
     internal sealed record Transfer(ulong TransferId, string DestinationName, string ScopeKey, ulong GenerationId, string Outcome, IReadOnlyList<int> DepartedBootSlots) : WorldReplayEntry;
+    /// <summary>One authored <c>adjacencies</c> row's delivered neighbour refresh, observed on this tick. The one
+    /// piece of federation ingress the tape carries: whether a neighbour delivered is decided by the transport, not
+    /// by the document or the population, so <c>Server.WorldEventFeed</c>'s link family and the
+    /// <c>$link:&lt;name&gt;</c> rule channel could not otherwise be re-derived. Re-drive replays it through the SAME
+    /// <c>WorldEventFeed.ObserveLinkDelivery</c> entry point the live poll uses, at the same pre-step position, so
+    /// the staleness counts and both link edges reproduce exactly.
+    /// <para>Deliberately carries the row name only: the delivered CONTENT (the neighbour's poses, its definition
+    /// revision, its own overlap geometry) is not on the tape, so a replay reproduces WHEN a seam went dark and
+    /// never what the neighbour was showing — cross-authority contact against delivered remote poses stays outside
+    /// what a MATCH proves.</para></summary>
+    /// <param name="Adjacency">The authored <c>adjacencies</c> row name that refreshed.</param>
+    internal sealed record LinkDelivery(string Adjacency) : WorldReplayEntry;
 }
 /// <summary>One recorded tick's server-facing input — the exact <see cref="IServerLink"/> traffic the live session
 /// applied that tick, captured at the loopback: the synchronous <see cref="Authority"/> stream (commands, grants, and
@@ -247,7 +259,7 @@ public sealed class WorldReplaySnapshot {
     // artifact pins (Puck.Scripting.AddonAbi). A tape-shape change does not re-key the ABI, and an ABI break does
     // not re-key this constant — MountedAddons below records what actually mounted, so an ABI break invalidates an
     // existing tape through receipt mismatch without a byte-offset change here.
-    private const uint Magic = 0x504B_4341u; // "PKCA" — puck replay tape; re-keyed for control applications and the four ordered-domain leaves.
+    private const uint Magic = 0x504B_4C4Bu; // "PKLK" — puck replay tape; re-keyed for the link-delivery leaf. Retired: 0x504B_4341 ("PKCA").
     // A shape-identity token, not a version sequence, pinned at 1 permanently: this build writes and reads exactly
     // one tape shape, so there is no older shape to be newer than. A token that disagrees refuses the file by name
     // (found vs. expected) instead of decoding it as nonsense.
@@ -561,6 +573,7 @@ public sealed class WorldReplaySnapshot {
             Value: ReadQueryLeaf(reader: reader),
             Actor: ReadPrincipal(reader: reader)
         ),
+            16 => new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString()),
             _ => throw new InvalidDataException(message: $"unknown .puckreplay authority entry discriminant {kind}."),
         };
     }
@@ -1253,6 +1266,11 @@ public sealed class WorldReplaySnapshot {
                 );
 
                 break;
+            case WorldReplayEntry.LinkDelivery linkDelivery:
+                writer.Write(value: ((byte)16));
+                writer.Write(value: linkDelivery.Adjacency);
+
+                break;
             default:
                 throw new WorldReplayCodecException(message: $"no .puckreplay encoding for authority entry kind '{entry.GetType().Name}'.");
         }
@@ -1722,6 +1740,13 @@ public sealed class WorldReplaySnapshot {
                         // position it was live; the answer itself is discarded, since the tape's verdict is the pose
                         // trace and a query moves no simulation state.
                         _ = server.Answer(query: query.Value);
+
+                        break;
+                    case WorldReplayEntry.LinkDelivery linkDelivery:
+                        // The same entry point the live poll calls, at the same pre-step position, so this tick's
+                        // Collect sees the identical pending-refresh set. This shadow world holds no adjacency
+                        // source, so the live poll contributes nothing here and cannot double-count.
+                        server.Events.ObserveLinkDelivery(adjacencyName: linkDelivery.Adjacency);
 
                         break;
                     case WorldReplayEntry.RateLever:

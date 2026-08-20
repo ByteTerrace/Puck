@@ -316,6 +316,9 @@ internal static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldAddonCommandModule>();
         // The local auction house verb surface — market.list/.bid/.buyout/.cancel + world.market.
         services.AddSingleton<ICommandModule, WorldMarketCommandModule>();
+        // The contribution-slot read-back verb — world.contributions. Slots themselves are authored and filled
+        // through world.row.set placements.
+        services.AddSingleton<ICommandModule, WorldContributionCommandModule>();
         // The refusal-catalog read-back verb — world.refusals. No constructor dependency: compiled-in data.
         services.AddSingleton<ICommandModule, WorldRefusalsCommandModule>();
         // The storage verb surface — storage.status/push/pull/credential over the owned-world catalog.
@@ -505,15 +508,25 @@ internal static class WorldBootComposition {
         // OPTIONAL (default null) and every handler refuses BY NAME at use when it is absent.
         services.AddSingleton<ICommandModule, WorldWheelCommandModule>();
 
+        // The window-composition verb surface — view.override camera|layout (the live overrides) and the
+        // world.view.state/.pointer reads. The authored rows live under world.row.set/world.row.remove over
+        // views.seatRig/views.layouts. CORE-registered for the same command-vocabulary-parity reason as the two
+        // modules above: shipped worlds commit view.override on their wheel rings, so a headless boot must carry the
+        // same verb name or the document refuses once its vocabulary composes. Composition submission and the
+        // composer are both core, so view.override and world.view.state genuinely work headless; WorldCursorFeed is
+        // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
+        services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+
         return services;
     }
     /// <summary>
     /// Layers the GPU host, render root, overlays, audio device, and screens/machines/gamepads over the
     /// authoritative core (the editor verb surface lives in <see cref="AddWorldAuthoritativeCore"/> now — see
     /// its class remarks). Registered only when <c>WorldHostSettings.Headless</c> is
-    /// <see langword="false"/> — every genuinely presentation-only console module (graphics options, host/view/audio
-    /// levers, recording) refuses as unknown over stdin when this method never ran; <see cref="WorldUiCommandModule"/>
-    /// and <see cref="WorldWheelCommandModule"/> stay registered either way and refuse by name at use instead.
+    /// <see langword="false"/> — every genuinely presentation-only console module (graphics options, host/audio
+    /// levers, recording) refuses as unknown over stdin when this method never ran; <see cref="WorldUiCommandModule"/>,
+    /// <see cref="WorldWheelCommandModule"/>, and <see cref="WorldViewCommandModule"/> stay registered either way and
+    /// refuse by name at use instead.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="hostsOnDirectX">Whether the resolved backend is Direct3D 12 (else Vulkan) — needed eagerly (not
@@ -560,10 +573,6 @@ internal static class WorldBootComposition {
         // written through world.row.set host <json>. Presentation-only: window/backend/present/pacing/GPU-timing
         // knobs.
         services.AddSingleton<ICommandModule, WorldHostCommandModule>();
-        // The window-composition verb surface — view.override camera|layout (the live overrides) and the
-        // world.view.state/.orbit/.pointer reads. The authored rows live under world.row.set/world.row.remove over
-        // views.seatRig/views.layouts.
-        services.AddSingleton<ICommandModule, WorldViewCommandModule>();
         // The audio READ-BACK + lever surface — world.speakers/audio.state/speaker.state/world.volume/
         // audio.emitters. The rows are written through world.row.set/world.row.remove over
         // speakers/tunes/patches/audio. Presentation-only: injects the audio device render service directly.
@@ -755,11 +764,37 @@ internal static class WorldBootComposition {
             ? "directx"
             : "vulkan"));
 
+        // The composed frame source, registered on its own rather than built inside the render-root factory below:
+        // it touches no GPU, and its constructor runs the ONE capacity probe, so the boot can resolve it before any
+        // hosted service starts (WorldPostBuildWiring) and report an over-envelope world as an ordinary named boot
+        // refusal instead of an unhandled service-factory exception mid-startup.
+        services.AddSingleton(implementationFactory: sp => new WorldFrameSource(
+            frameRate: sp.GetRequiredService<FrameRateMonitor>(),
+            client: sp.GetRequiredService<WorldClient>(),
+            simulation: sp.GetRequiredService<WorldSimulation>(),
+            settings: sp.GetRequiredService<WorldRenderSettings>(),
+            binder: sp.GetRequiredService<WorldScreenBinder>(),
+            envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
+            animator: sp.GetRequiredService<WorldStampPool>(),
+            audio: sp.GetRequiredService<WorldAudioDirector>(),
+            anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
+            composition: sp.GetRequiredService<WorldCompositionState>(),
+            composer: sp.GetRequiredService<WorldViewComposer>(),
+            sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
+            viewports: sp.GetRequiredService<WorldSeatViewports>(),
+            continuum: sp.GetRequiredService<WorldContinuum>(),
+            text: sp.GetRequiredService<WorldTextCatalog>(),
+            adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
+            markers: sp.GetRequiredService<MarkerStore>(),
+            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
+        ));
+
         // The render root: the shared SDF world assembly over the grass-and-boulders scene. The built Producer (the
         // live SdfEngineNode) is stashed on the WorldRenderProbe so the world.gpu verb can read its per-pass GPU
         // times. The frame source emits active avatars only (declared-but-parked instances widen the per-pixel
-        // shadow mask walk), so the 128-avatar worst case is held by the capacity floors a construction-time probe
-        // measured, plus the viewport floor for the join-later split screen. The affordance install, EchoTap,
+        // shadow mask walk), so the local 128-avatar worst case is held by the capacity floors a construction-time
+        // probe measured, plus the viewport floor for the join-later split screen. The affordance install, EchoTap,
         // MachineLifecycleTap, and lever-sink attachment live in the shared post-build wiring step
         // (WorldPostBuildWiring) — this factory only builds the render tree.
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
@@ -778,27 +813,7 @@ internal static class WorldBootComposition {
                 TimingRecorder: (sp.GetService(serviceType: typeof(IGpuTimingRecorder)) as IGpuTimingRecorder)
             );
 
-            var frameSource = new WorldFrameSource(
-                frameRate: sp.GetRequiredService<FrameRateMonitor>(),
-                client: sp.GetRequiredService<WorldClient>(),
-                simulation: sp.GetRequiredService<WorldSimulation>(),
-                settings: sp.GetRequiredService<WorldRenderSettings>(),
-                binder: binder,
-                envelope: sp.GetRequiredService<WorldRenderEnvelope>(),
-                seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
-                animator: sp.GetRequiredService<WorldStampPool>(),
-                audio: sp.GetRequiredService<WorldAudioDirector>(),
-                anchor: sp.GetRequiredService<WorldPerceptionAnchor>(),
-                composition: sp.GetRequiredService<WorldCompositionState>(),
-                composer: sp.GetRequiredService<WorldViewComposer>(),
-                sdfDocuments: sp.GetRequiredService<WorldSdfDocumentEmitter>(),
-                viewports: sp.GetRequiredService<WorldSeatViewports>(),
-                continuum: sp.GetRequiredService<WorldContinuum>(),
-                text: sp.GetRequiredService<WorldTextCatalog>(),
-                adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
-                markers: sp.GetRequiredService<MarkerStore>(),
-                resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
-            );
+            var frameSource = sp.GetRequiredService<WorldFrameSource>();
 
             // Stand up the jumbotron view pool now the frame source has probed the render envelope: each View screen
             // registers a persistent offscreen camera render sized to these worst-case capacities, using the

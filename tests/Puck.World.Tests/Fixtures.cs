@@ -50,7 +50,7 @@ internal static class Fixtures {
             new WorldAdmissionGrant(Capability: WorldCapability.Observe, Budget: 64),
         ]);
     /// <summary>Builds a minimal, valid <see cref="WorldDefinition"/> entirely in code — one row per REQUIRED
-    /// section (see <c>WorldDefinitionValidator.RequireSections</c>), each populated with the smallest value shape
+    /// section, each populated with the smallest value shape
     /// its own validation pass accepts. Carries exactly the extra furniture the laws in this suite need beyond the
     /// bare-minimum skeleton:
     /// <list type="bullet">

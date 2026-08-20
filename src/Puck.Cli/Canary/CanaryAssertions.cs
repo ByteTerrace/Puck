@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Assets;
 
 namespace Puck.Cli.Canary;
 
@@ -7,11 +8,35 @@ internal sealed record CanaryAssertionResult(string Detail, bool Passed);
 internal sealed record CanaryEvaluation(IReadOnlyList<CanaryAssertionResult> Results) {
     public bool Passed => Results.All(predicate: static result => result.Passed);
 }
+/// <summary>The live-capture noise floor a <c>framesAgree</c> assertion measures against.</summary>
+/// <remarks>
+/// <para>Two windowed captures of identical simulation state are never bit-equal: composed silhouette shading
+/// carries ±1-LSB variance across a boot-time transition, so a byte comparison of two live frames reports a
+/// difference on roughly one run in three.</para>
+/// <para>Deliberately NOT <see cref="Parity.ParityEnvelope"/>: that envelope guards a whole-frame MEAN, which fits
+/// diffuse cross-backend codegen noise but not a frame proof, where the change is one object's worth of pixels. A
+/// body relocation covering 0.06% of the frame measures ~0.03 LSB mean — inside the envelope, though every changed
+/// pixel moved by up to 209 LSB.</para>
+/// <para>Measured against the real World: the ±1-LSB shading yields 0 pixels at or above
+/// <see cref="MinChangedDelta"/>; the weakest true body relocation in the travel canaries yields 551.</para>
+/// </remarks>
+internal static class CanaryFrameNoise {
+    /// <summary>The per-pixel channel delta, in LSB, at or above which a pixel counts as changed.</summary>
+    public const int MinChangedDelta = 2;
+    /// <summary>The largest changed-pixel count two captures may carry and still count as the same frame.</summary>
+    public const long MaxChangedPixels = 64;
+}
 internal static class CanaryAssertions {
+    /// <summary>The token a manifest writes where the runner's per-leg companion-authority endpoint belongs.</summary>
+    public const string AuthorityToken = "{authority}";
+
     // authorityTranscripts resolves an assertion's optional authority id to that authority's own transcript; a null
-    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer always reads
-    // primaryTranscript.RunDirectory regardless of authority, since capture paths are leg-scoped, not per-process.
-    public static CanaryEvaluation Evaluate(CanaryLeg leg, CanaryTranscript primaryTranscript, IReadOnlyDictionary<string, CanaryTranscript>? authorityTranscripts = null) {
+    // authority (the ordinary, non-federated shape) always reads primaryTranscript. filesDiffer and framesAgree always
+    // read primaryTranscript.RunDirectory regardless of authority, since capture paths are leg-scoped, not per-process.
+    // authorityEndpoint substitutes {authority} in a line assertion's text: the runner binds a companion authority to
+    // a free loopback port per leg, so a manifest names the endpoint by token rather than pinning a port the runner
+    // owns. An empty value leaves the token unsubstituted, which fails a "present" check rather than matching.
+    public static CanaryEvaluation Evaluate(CanaryLeg leg, CanaryTranscript primaryTranscript, IReadOnlyDictionary<string, CanaryTranscript>? authorityTranscripts = null, string authorityEndpoint = "") {
         var results = new List<CanaryAssertionResult>(capacity: leg.Assertions.Count);
         var values = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -33,7 +58,7 @@ internal static class CanaryAssertions {
                 case CanaryResponseAssertion:
                     break;
                 case CanaryLineAssertion line:
-                    results.Add(item: EvaluateLine(assertion: line, transcript: Resolve(authority: line.Authority)));
+                    results.Add(item: EvaluateLine(assertion: line, authorityEndpoint: authorityEndpoint, transcript: Resolve(authority: line.Authority)));
                     break;
                 case CanarySequenceAssertion sequence:
                     results.Add(item: EvaluateSequence(assertion: sequence, transcript: Resolve(authority: sequence.Authority)));
@@ -43,6 +68,9 @@ internal static class CanaryAssertions {
                     break;
                 case CanaryFileDifferenceAssertion files:
                     results.Add(item: EvaluateFileDifference(assertion: files, transcript: primaryTranscript));
+                    break;
+                case CanaryFrameAgreementAssertion frames:
+                    results.Add(item: EvaluateFrameAgreement(assertion: frames, transcript: primaryTranscript));
                     break;
             }
         }
@@ -69,6 +97,68 @@ internal static class CanaryAssertions {
         );
     }
 
+    private static CanaryAssertionResult EvaluateFrameAgreement(CanaryFrameAgreementAssertion assertion, CanaryTranscript transcript) {
+        var beforePath = Path.Combine(path1: transcript.RunDirectory, path2: assertion.Before);
+        var afterPath = Path.Combine(path1: transcript.RunDirectory, path2: assertion.After);
+
+        if (!File.Exists(path: beforePath) || !File.Exists(path: afterPath)) {
+            var missing = new[] { beforePath, afterPath }.Where(predicate: static path => !File.Exists(path: path)).Select(selector: Path.GetFileName);
+
+            return new CanaryAssertionResult(Detail: $"{assertion.Name}: missing capture(s) {string.Join(separator: ", ", values: missing)}", Passed: false);
+        }
+
+        PngImage before;
+        PngImage after;
+
+        try {
+            before = PngDecoder.Decode(pngBytes: File.ReadAllBytes(path: beforePath));
+            after = PngDecoder.Decode(pngBytes: File.ReadAllBytes(path: afterPath));
+        } catch (Exception exception) when ((exception is IOException or InvalidDataException or UnauthorizedAccessException)) {
+            return new CanaryAssertionResult(Detail: $"{assertion.Name}: a capture could not be decoded ({exception.Message.ReplaceLineEndings(replacementText: " ")})", Passed: false);
+        }
+
+        // Mismatched extents are a broken capture pair, not a measurable divergence — neither direction can be
+        // honestly decided from them, so both fail here rather than one of them passing by accident.
+        if ((before.Width != after.Width) || (before.Height != after.Height)) {
+            return new CanaryAssertionResult(
+                Detail: $"{assertion.Name}: capture extents disagree ({before.Width}x{before.Height} vs {after.Width}x{after.Height})",
+                Passed: false
+            );
+        }
+
+        var (changedPixels, maxDelta) = MeasureChange(after: after, before: before);
+        var agree = (changedPixels <= CanaryFrameNoise.MaxChangedPixels);
+
+        return new CanaryAssertionResult(
+            Detail: $"{assertion.Name}: {changedPixels} pixel(s) changed by >= {CanaryFrameNoise.MinChangedDelta} LSB (max {maxDelta}), budget {CanaryFrameNoise.MaxChangedPixels} — the frames {(agree ? "agree" : "diverge")}",
+            Passed: (agree == assertion.Agree)
+        );
+    }
+    // Counts the pixels a reader would call changed: max |dR|,|dG|,|dB| at or above the noise delta. Alpha is ignored
+    // — a composed screenshot is opaque and the channel carries no scene content.
+    private static (long ChangedPixels, int MaxDelta) MeasureChange(PngImage before, PngImage after) {
+        var beforePixels = before.RgbaPixels;
+        var afterPixels = after.RgbaPixels;
+        var changedPixels = 0L;
+        var maxDelta = 0;
+
+        for (var index = 0; (index < beforePixels.Length); index += 4) {
+            var deltaR = Math.Abs(value: (beforePixels[(index + 0)] - afterPixels[(index + 0)]));
+            var deltaG = Math.Abs(value: (beforePixels[(index + 1)] - afterPixels[(index + 1)]));
+            var deltaB = Math.Abs(value: (beforePixels[(index + 2)] - afterPixels[(index + 2)]));
+            var pixelDelta = Math.Max(val1: deltaR, val2: Math.Max(val1: deltaG, val2: deltaB));
+
+            if (pixelDelta >= CanaryFrameNoise.MinChangedDelta) {
+                changedPixels++;
+            }
+            if (pixelDelta > maxDelta) {
+                maxDelta = pixelDelta;
+            }
+        }
+
+        return (changedPixels, maxDelta);
+    }
+
     public static IReadOnlyList<string> ResponseLines(CanaryTranscript transcript, CanaryStream stream, string verb) {
         var prefix = $"[{verb}:";
 
@@ -77,10 +167,11 @@ internal static class CanaryAssertions {
             .ToArray();
     }
 
-    private static CanaryAssertionResult EvaluateLine(CanaryLineAssertion assertion, CanaryTranscript transcript) {
+    private static CanaryAssertionResult EvaluateLine(CanaryLineAssertion assertion, CanaryTranscript transcript, string authorityEndpoint) {
+        var text = assertion.Text.Replace(oldValue: AuthorityToken, newValue: authorityEndpoint, comparisonType: StringComparison.Ordinal);
         var matched = Lines(transcript: transcript, stream: assertion.Stream).Any(predicate: line => assertion.Match switch {
-            CanaryLineMatch.Exact => string.Equals(a: line, b: assertion.Text, comparisonType: StringComparison.Ordinal),
-            CanaryLineMatch.Contains => line.Contains(value: assertion.Text, comparisonType: StringComparison.Ordinal),
+            CanaryLineMatch.Exact => string.Equals(a: line, b: text, comparisonType: StringComparison.Ordinal),
+            CanaryLineMatch.Contains => line.Contains(value: text, comparisonType: StringComparison.Ordinal),
             _ => false,
         });
         var passed = (matched == assertion.Present);
