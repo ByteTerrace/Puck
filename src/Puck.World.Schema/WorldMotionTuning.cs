@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Puck.Abstractions.Documents;
 using Puck.Maths;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
@@ -250,19 +250,6 @@ public abstract record WorldMotionModel {
         _ => 0f,
     };
 }
-/// <summary>Which frame a grounded body's <c>MoveAdvance</c>/<c>MoveStrafe</c> channels resolve in — a per-kit choice
-/// (<see cref="WorldMotionModel.Grounded.MoveFrame"/>), never a global switch.</summary>
-[JsonConverter(typeof(StrictEnumConverter<MotionMoveFrame>))]
-public enum MotionMoveFrame : byte {
-    /// <summary>Body-relative: the commanded planar target rotates by the body's own integrated heading (tank
-    /// controls) — the world's historical, and default, behavior.</summary>
-    Heading,
-
-    /// <summary>World-relative: the two channels are read as already-resolved world axes. The seat composes its
-    /// camera yaw into the submitted intent client-side, before submission — the sim itself never sees a camera pose,
-    /// preserving determinism (see <see cref="WorldMotionModel.Grounded.MoveFrame"/>'s remarks).</summary>
-    World,
-}
 /// <summary>
 /// The world's motion defaults — the profileless locomotion speeds a stand-in with no seated profile advances on.
 /// This is the whole top-level motion section: gravity and the velocity-response table are per-kit
@@ -288,16 +275,6 @@ public readonly record struct WorldMotionDefaults(
         MaxSmoothError: 0.01f,
         MoveSpeed: 0.01f,
         TurnSpeed: 0.01f
-    );
-}
-/// <summary>The one-time fixed-point compilation of the world's motion defaults. Runtime simulation reads only this
-/// form.</summary>
-public readonly record struct FixedMotionDefaults(FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed, FixedQ4816 MaxSmoothError) {
-    /// <summary>Compiles the authored floating-point motion defaults to their fixed-point form.</summary>
-    public static FixedMotionDefaults Compile(in WorldMotionDefaults motion) => new(
-        MoveSpeed: FixedQ4816.FromDouble(value: motion.MoveSpeed),
-        TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
-        MaxSmoothError: FixedQ4816.FromDouble(value: motion.MaxSmoothError)
     );
 }
 /// <summary>One row of a kit's velocity-response table: how fast planar velocity converges on the commanded
@@ -329,49 +306,9 @@ public sealed record MotionResponse(
 /// <paramref name="Max"/> &lt; <paramref name="Min"/> by name. Equal to <paramref name="Min"/> pins the scalar
 /// outright regardless of what a profile requests.</param>
 public readonly record struct MotionScalarEnvelope(float Min, float Max);
-/// <summary>The flattened, fixed-point form of one velocity-response row: the conjunction gate (body-fact predicates
-/// only), and the engage/release convergence rates the ramp integrates through the shared rate accumulator.</summary>
-public readonly record struct FixedMotionResponse(CompiledPredicate[] Gate, FixedQ4816 EngageRate, FixedQ4816 ReleaseRate);
-/// <summary>The compiled fixed-point form of an authored <see cref="MotionScalarEnvelope"/> — the reusable
-/// seat-time clamp bound every overridable motion-arm scalar shares. <see cref="WorldDefinitionValidator"/> has
-/// already refused <see cref="Max"/> &lt; <see cref="Min"/> by the time this compiles, so <see cref="Clamp"/> never
-/// faults.</summary>
-public readonly record struct FixedMotionScalarEnvelope(FixedQ4816 Min, FixedQ4816 Max) {
-    /// <summary>Restricts <paramref name="value"/> to this envelope's inclusive bound.</summary>
-    public FixedQ4816 Clamp(FixedQ4816 value) => FixedQ4816.Clamp(
-        value: value,
-        minimum: Min,
-        maximum: Max
-    );
-    /// <summary>Compiles an authored scalar envelope to its fixed-point form.</summary>
-    public static FixedMotionScalarEnvelope Compile(in MotionScalarEnvelope envelope) => new(
-        Min: FixedQ4816.FromDouble(value: envelope.Min),
-        Max: FixedQ4816.FromDouble(value: envelope.Max)
-    );
-}
-/// <summary>The one-time fixed-point compilation of an authored <see cref="WorldMotionModel.Grounded"/> row. Runtime
-/// simulation reads only this form.</summary>
-/// <remarks>A simulation-affecting extension: <see cref="Response"/> promotes a slice of the tuning that the shaping stage of
-/// <c>WorldBody</c>'s grounded operations reads. <see cref="ResponseRecencyFacts"/>/<see cref="ResponseRecencyWindows"/>
-/// are the shared recency-clock table across every row's <see cref="ActionPredicate.Recently"/> gate (the per-tick clock
-/// updater walks it), slotted by the same <see cref="CompiledActionSpec.FlattenPredicate"/> the lane bindings use.</remarks>
-public readonly record struct FixedMotionTuning(
-    FixedQ4816 MoveSpeed,
-    FixedQ4816 TurnSpeed,
-    FixedQ4816 RiseGravity,
-    FixedQ4816 FallGravity,
-    FixedQ4816 MaxFallSpeed,
-    FixedMotionResponse[] Response,
-    ActionFact[] ResponseRecencyFacts,
-    ulong[] ResponseRecencyWindows,
-    FixedQ4816 SprintMultiplier,
-    MotionMoveFrame MoveFrame,
-    bool FacingSnap,
-    FixedMotionScalarEnvelope? MoveSpeedEnvelope
-) {
-    /// <summary>Gets the number of recency clocks the response table's Recently gates share.</summary>
-    public int RecencySlots => ResponseRecencyFacts.Length;
-
+/// <summary>The document intake for the engine's compiled motion tunings — the one place an authored
+/// <see cref="WorldMotionModel"/> arm becomes the fixed-point form simulation reads.</summary>
+public static class WorldMotionTuningFactory {
     private static FixedMotionTuning Compile(float moveSpeed, float turnSpeed, float riseGravity, float fallGravity, float maxFallSpeed, IReadOnlyList<MotionResponse> response, float sprintMultiplier, MotionMoveFrame moveFrame, bool facingSnap, MotionScalarEnvelope? moveSpeedEnvelope) {
         var rows = response;
         var compiled = new FixedMotionResponse[rows.Count];
@@ -383,7 +320,7 @@ public readonly record struct FixedMotionTuning(
 
             // The response table shares ONE recency-clock table across all rows (as one lane's press/release channels
             // share one), slotted by the same predicate flattener the action lanes use.
-            CompiledActionSpec.FlattenPredicate(
+            BodyActionSpecFactory.FlattenPredicate(
                 predicate: rows[index].Gate,
                 gate: gate,
                 recencyFacts: recencyFacts,
@@ -410,12 +347,29 @@ public readonly record struct FixedMotionTuning(
             MoveFrame: moveFrame,
             FacingSnap: facingSnap,
             MoveSpeedEnvelope: ((moveSpeedEnvelope is { } envelope)
-            ? FixedMotionScalarEnvelope.Compile(envelope: envelope)
+            ? Compile(envelope: envelope)
             : null)
         );
     }
 
+    /// <summary>Compiles an authored scalar envelope to its fixed-point form.</summary>
+    /// <param name="envelope">The authored inclusive bound.</param>
+    /// <returns>The compiled bound.</returns>
+    public static FixedMotionScalarEnvelope Compile(in MotionScalarEnvelope envelope) => new(
+        Min: FixedQ4816.FromDouble(value: envelope.Min),
+        Max: FixedQ4816.FromDouble(value: envelope.Max)
+    );
+    /// <summary>Compiles the authored floating-point motion defaults to their fixed-point form.</summary>
+    /// <param name="motion">The authored world motion defaults.</param>
+    /// <returns>The compiled defaults.</returns>
+    public static FixedMotionDefaults Compile(in WorldMotionDefaults motion) => new(
+        MoveSpeed: FixedQ4816.FromDouble(value: motion.MoveSpeed),
+        TurnSpeed: FixedQ4816.FromDouble(value: motion.TurnSpeed),
+        MaxSmoothError: FixedQ4816.FromDouble(value: motion.MaxSmoothError)
+    );
     /// <summary>Compiles an authored grounded motion row to its fixed-point form.</summary>
+    /// <param name="tuning">The authored grounded arm.</param>
+    /// <returns>The compiled tuning.</returns>
     public static FixedMotionTuning Compile(WorldMotionModel.Grounded tuning) => Compile(
         moveSpeed: tuning.MoveSpeed,
         turnSpeed: tuning.TurnSpeed,
@@ -431,7 +385,9 @@ public readonly record struct FixedMotionTuning(
     /// <summary>Compiles an authored swim motion row's shared half — speeds, response table, sprint, frame — to the
     /// same fixed-point form every model rides (the gravity fields compile to zero; the swim program's facet
     /// coherence already refused any op that would read them). The swim-specific half is
-    /// <see cref="FixedSwimTuning.Compile"/>.</summary>
+    /// <see cref="CompileSwim"/>.</summary>
+    /// <param name="tuning">The authored swim arm.</param>
+    /// <returns>The compiled shared tuning.</returns>
     public static FixedMotionTuning Compile(WorldMotionModel.Swim tuning) => Compile(
         moveSpeed: tuning.ThrustSpeed,
         turnSpeed: tuning.TurnSpeed,
@@ -444,27 +400,10 @@ public readonly record struct FixedMotionTuning(
         facingSnap: tuning.FacingSnap,
         moveSpeedEnvelope: tuning.ThrustSpeedEnvelope
     );
-}
-/// <summary>The one-time fixed-point compilation of an authored <see cref="WorldMotionModel.Vehicle"/> row. Runtime
-/// simulation reads only this form; the held drift/boost channel names resolve to ordinals separately, through
-/// <see cref="FixedWorldKit.Compile"/>'s channel table.</summary>
-public readonly record struct FixedVehicleTuning(
-    FixedQ4816 TopSpeed,
-    FixedQ4816 ReverseTopSpeed,
-    FixedQ4816 Accel,
-    FixedQ4816 Brake,
-    FixedQ4816 CoastDrag,
-    FixedQ4816 Grip,
-    FixedQ4816 SteerRate,
-    FixedQ4816 SteerReferenceSpeed,
-    FixedQ4816 SteerFalloff,
-    FixedQ4816 PitchRate,
-    FixedQ4816 DriftGrip,
-    FixedQ4816 DriftSteerScale,
-    FixedQ4816 BoostMultiplier,
-    FixedMotionScalarEnvelope? TopSpeedEnvelope
-) {
-    /// <summary>Compiles an authored vehicle motion row to its fixed-point form.</summary>
+    /// <summary>Compiles an authored vehicle motion row to its fixed-point form. The held drift/boost channel names
+    /// resolve to ordinals separately, through the world's channel table.</summary>
+    /// <param name="tuning">The authored vehicle arm.</param>
+    /// <returns>The compiled tuning.</returns>
     public static FixedVehicleTuning Compile(WorldMotionModel.Vehicle tuning) => new(
         TopSpeed: FixedQ4816.FromDouble(value: tuning.TopSpeed),
         ReverseTopSpeed: FixedQ4816.FromDouble(value: tuning.ReverseTopSpeed),
@@ -480,30 +419,13 @@ public readonly record struct FixedVehicleTuning(
         DriftSteerScale: FixedQ4816.FromDouble(value: tuning.DriftSteerScale),
         BoostMultiplier: FixedQ4816.FromDouble(value: tuning.BoostMultiplier),
         TopSpeedEnvelope: ((tuning.TopSpeedEnvelope is { } envelope)
-        ? FixedMotionScalarEnvelope.Compile(envelope: envelope)
+        ? Compile(envelope: envelope)
         : null)
     );
-}
-/// <summary>The one-time fixed-point compilation of an authored <see cref="WorldMotionModel.Swim"/> row's
-/// swim-specific half. The shared half (speeds, response table, sprint, frame) compiles into the same
-/// <see cref="FixedMotionTuning"/> every model rides, so the generic stages (speed resolution, the response-table
-/// shape machinery) never dispatch on the model; only the swim operations read this record.</summary>
-/// <param name="VerticalThrustFraction">The vertical channel's fraction of the thrust speed.</param>
-/// <param name="Buoyancy">The medium's idle vertical drift velocity below the bob band, signed (u/s).</param>
-/// <param name="MaxRiseSpeed">The terminal ascent speed (u/s).</param>
-/// <param name="MaxSinkSpeed">The terminal descent speed (u/s).</param>
-/// <param name="SurfaceSettleRate">The surface interface's proportional settle gain toward the float line (1/s).</param>
-/// <param name="FloatDepth">The float line's depth below the waterline, and the bob band's half-width (u).</param>
-public readonly record struct FixedSwimTuning(
-    FixedQ4816 VerticalThrustFraction,
-    FixedQ4816 Buoyancy,
-    FixedQ4816 MaxRiseSpeed,
-    FixedQ4816 MaxSinkSpeed,
-    FixedQ4816 SurfaceSettleRate,
-    FixedQ4816 FloatDepth
-) {
     /// <summary>Compiles an authored swim motion row's swim-specific fields to fixed point.</summary>
-    public static FixedSwimTuning Compile(WorldMotionModel.Swim tuning) => new(
+    /// <param name="tuning">The authored swim arm.</param>
+    /// <returns>The compiled swim-specific tuning.</returns>
+    public static FixedSwimTuning CompileSwim(WorldMotionModel.Swim tuning) => new(
         VerticalThrustFraction: FixedQ4816.FromDouble(value: tuning.VerticalThrustFraction),
         Buoyancy: FixedQ4816.FromDouble(value: tuning.Buoyancy),
         MaxRiseSpeed: FixedQ4816.FromDouble(value: tuning.MaxRiseSpeed),

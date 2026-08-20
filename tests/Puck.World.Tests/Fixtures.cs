@@ -4,11 +4,13 @@ using System.Text.Json.Nodes;
 
 using Xunit;
 
+using Puck.Assets.Documents;
 using Puck.Forge.Authoring;
 using Puck.Hosting;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Tests;
 
@@ -120,13 +122,16 @@ internal static class Fixtures {
         Channels: new Dictionary<string, string>()
     );
 
+    /// <summary>The one locomotion kit name every fixture document declares.</summary>
+    public const string SeatKitName = "traveler";
+
     /// <summary>The one locomotion kit every fixture document declares — <see cref="BuildDocument"/> passes
     /// <see langword="null"/> (no law here needs a body collider); <see cref="BuildGradientUpDocument"/> is the
     /// ONE caller that supplies one, so every other law's compiled kit table is untouched byte-for-byte.</summary>
     /// <param name="seatCollider">The seat kit's body collider, or <see langword="null"/> for none.</param>
     private static WorldKit[] BuildKits(WorldCollider? seatCollider) => [
         new(
-            Name: "traveler",
+            Name: SeatKitName,
             BodyMotionProgram: "grounded",
             Motion: new WorldMotionModel.Grounded(
                 MoveSpeed: 4f,
@@ -359,25 +364,32 @@ internal static class Fixtures {
     /// <summary>The standard chase framing, mirroring what <c>src/Puck.World/Assets/worlds/standard.world.json</c>
     /// authors. The engine holds no rig of its own, and a document whose census implies a body is refused for
     /// authoring no <c>views</c>, so a C#-built fixture states the numbers the way a document would.</summary>
-    private static WorldViewDefaults StandardViews { get; } = new(
-        SeatRig: new WorldCameraRig(
-            Motion: new WorldCameraMotion.Orbit(
+    public static WorldCameraProgram StandardSeatRig { get; } = new(
+        Name: "seatChase",
+        Version: WorldCameraProgram.CurrentVersion,
+        Operations: [
+            new WorldCameraProgramOp.Orbit(
                 Distance: 5.4626001f,
                 Yaw: 0f,
                 Pitch: 0.4145069f,
-                PivotOffset: Vector3.Zero
+                PivotOffset: new DocumentVector3(value: Vector3.Zero)
             ),
-            Aim: new WorldCameraAim.Anchor(
-                Offset: new(
+            new WorldCameraProgramOp.LookAt(
+                Subject: new WorldCameraSubject.Reference(),
+                TargetOffset: new DocumentVector3(
                     x: 0f,
                     y: 1f,
                     z: 0f
                 ),
                 WorldAxes: false
             ),
-            Lens: new WorldCameraLens(FieldOfViewRadians: 0.9599311f),
-            SmoothRate: 6f
-        ),
+            new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9599311f)),
+            new WorldCameraProgramOp.Smooth(Rate: 6f),
+        ]
+    );
+
+    private static WorldViewDefaults StandardViews { get; } = new(
+        SeatRig: StandardSeatRig,
         SeatControl: new WorldSeatViewControl(
             MaxPitch: 1.2f,
             MinPitch: -0.35f,
@@ -477,6 +489,39 @@ internal static class Fixtures {
                 new WorldPlacement(Id: "ball", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f)),
             ]
         );
+    }
+    /// <summary>Extends <see cref="BuildDocument"/> with the inhabited <c>camera-seat-0</c> placement a
+    /// camera-targeting <c>seatModes</c> state needs a body from — the coupling
+    /// <c>WorldDefinitionValidator.ValidateSeatModes</c> refuses a document for missing.</summary>
+    public static WorldDefinition BuildCameraBodyDocument() {
+        var creation = BuildBallCreation();
+        var document = BuildDocumentCore(
+            spawnPoints: BuildSpawnPoints(),
+            collision: new WorldCollision(ContactSkin: 0.02f, GradientProbe: 0f, MaxIterations: 4, MaxSlopeDegrees: 60f, Requirements: []),
+            seatCollider: null,
+            creations: [creation],
+            placements: [
+                new WorldPlacement(
+                    Id: $"{WorldSeatModeState.CameraPlacementIdPrefix}0",
+                    CreationId: creation.Id,
+                    Position: new DocumentVector3(value: Vector3.Zero),
+                    YawDegrees: 0f,
+                    Scale: 1f,
+                    Inhabit: new WorldPlacementInhabit(
+                        Kit: SeatKitName,
+                        Look: null,
+                        Source: IntentSource.Idle,
+                        Distribution: WorldDistribution.Default
+                    )
+                ),
+            ]
+        );
+
+        // One body of headroom past the seats: an inhabited placement draws from the census, and the shared core
+        // pins capacity to the seat count.
+        return (document with {
+            PopulationRaw = (document.Population with { CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1) }),
+        });
     }
     /// <summary>The code-built document's canonical UTF-8 bytes — <see cref="WorldDefinitionSerialization.Serialize"/>
     /// over <see cref="BuildDocument"/>, freshly built and serialized on every call (cheap, and it keeps a caller

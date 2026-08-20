@@ -242,8 +242,8 @@ can open a fourth. All four charge the one Hud reservation.
   reach the render path — into a preallocated array, then both halves publish
   together in one `HudStore.Publish` call so neither can lag the other.
   `HudWriter.EmitSeatPanels` draws them, one `BeginClip` per seat viewport
-  (the `EditorHudWriter` per-seat precedent; a seat panel's own rect is LOCAL
-  to that viewport, not the whole screen), as a fourth `OverlayChannel.Hud`
+  (a seat panel's own rect is LOCAL to that viewport, not the whole screen),
+  as a fourth `OverlayChannel.Hud`
   pass after the world-scope under/base/over sequence — unbanded, since a
   panel confined to one seat has no base slot to take over
   (`WorldHudLayer.Replace` refuses there).

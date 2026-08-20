@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.Physics;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -11,7 +12,7 @@ public sealed partial class WorldPopulation {
         LocalSeatCount = definition.Population.LocalSeats;
         var authoredMotion = definition.Motion;
 
-        m_fixedMotion = FixedMotionDefaults.Compile(motion: in authoredMotion);
+        m_fixedMotion = WorldMotionTuningFactory.Compile(motion: in authoredMotion);
         m_playerDefaults = definition.PlayerDefaults;
         m_peerVariation = definition.Population.PeerVariation;
         m_seatVariation = definition.Population.SeatVariation;
@@ -19,11 +20,16 @@ public sealed partial class WorldPopulation {
         m_reconnectGraceTicks = definition.PopulationReconnectGraceTicks;
         m_kitRows = definition.Kits;
         var programs = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
+        var programRows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);
 
         foreach (var program in definition.BodyMotionPrograms) {
             programs.Add(
                 key: program.Name,
-                value: CompiledBodyMotionProgram.Compile(program: program)
+                value: BodyMotionProgramFactory.Compile(program: program)
+            );
+            programRows.Add(
+                key: program.Name,
+                value: program
             );
         }
         m_bodyMotionPrograms = programs;
@@ -41,6 +47,7 @@ public sealed partial class WorldPopulation {
                 channels: m_channels,
                 targets: m_targets,
                 programs: m_bodyMotionPrograms,
+                programRows: programRows,
                 creations: definition.Creations,
                 bodyState: definition.BodyState,
                 identityState: definition.IdentityState

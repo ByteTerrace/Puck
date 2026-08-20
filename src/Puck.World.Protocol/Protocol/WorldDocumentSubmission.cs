@@ -1,3 +1,5 @@
+using Puck.Physics.Motion;
+
 namespace Puck.World.Protocol;
 
 /// <summary>One tick-stamped foreign durable-state submission — the one door both a numeric operand and a text

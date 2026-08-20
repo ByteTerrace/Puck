@@ -1,39 +1,10 @@
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
-using Puck.Abstractions.Documents;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World;
 
-/// <summary>An engine-published per-body sim fact the action predicates gate on. Facts are engine code.</summary>
-/// <remarks>Admission rule: a new fact is privileged sim state the effects/predicates cannot derive from existing
-/// facts; add one only then.</remarks>
-[JsonConverter(typeof(StrictEnumConverter<ActionFact>))]
-public enum ActionFact : byte {
-    /// <summary>The body rests on a walkable contact surface.</summary>
-    Grounded,
-
-    /// <summary>The body is off every walkable contact surface.</summary>
-    Airborne,
-
-    /// <summary>The body's vertical velocity is positive.</summary>
-    Rising,
-
-    /// <summary>The body's vertical velocity is negative.</summary>
-    Falling,
-
-    /// <summary>A targeted effect was applied by another body on the preceding completed tick.</summary>
-    AffectedBy,
-
-    /// <summary>The body's origin is below the waterline. Written by the swim model's surface stage
-    /// (<see cref="BodyMotionOp.ApplyBuoyancyAndSurface"/>); holds one tick behind that stage's evaluation, the same
-    /// one-tick-behind discipline <see cref="Grounded"/> reads under.</summary>
-    Submerged,
-
-    /// <summary>The body's origin is inside the swim model's surface bob band (within its float depth of the float
-    /// line). Written by the same surface stage as <see cref="Submerged"/>, on the same one-tick-behind terms.</summary>
-    AtSurface,
-}
 /// <summary>A data-composable gate over body facts and named action state. A trigger fires only while its gate holds.
 /// The <c>$type</c> string is
 /// the JSON discriminator, the same convention every polymorphic row family uses; a new predicate kind is a new
@@ -277,33 +248,6 @@ public abstract record ActionEffect {
     /// </para>
     /// </remarks>
     public sealed record Save : ActionEffect;
-}
-/// <summary>The entity an action effect addresses.</summary>
-[JsonConverter(typeof(StrictEnumConverter<ActionTarget>))]
-public enum ActionTarget : byte {
-    /// <summary>The body whose trigger fired.</summary>
-    Self,
-
-    /// <summary>The target selected by the body's active producer.</summary>
-    ProducerTarget,
-
-    /// <summary>The body that applied the recipient's most recent targeted effect.</summary>
-    AffectingSubject,
-}
-/// <summary>One engine edge/latch vocabulary, shared by every gated trigger the engine evaluates — a per-body fact
-/// trigger (<see cref="ActionFactTrigger"/>) and a world rule (<see cref="WorldRule"/>) alike. It is deliberately not
-/// two concepts with two spellings: "fires while the condition holds" and "fires once when the condition becomes
-/// true" is the same distinction at both scopes, so it is the same enum.</summary>
-[JsonConverter(typeof(StrictEnumConverter<ActionTriggerMode>))]
-public enum ActionTriggerMode : byte {
-    /// <summary>Fires every evaluation the condition holds — the default, and the right shape for a continuous effect
-    /// (a per-tick drain, a standing impulse).</summary>
-    Level,
-
-    /// <summary>Fires once on the condition crossing from not-holding to holding, and re-arms only when it crosses
-    /// back — the right shape for anything that writes a document row, since a level-triggered write fires once per
-    /// tick the condition holds rather than once per crossing.</summary>
-    Edge,
 }
 /// <summary>One trigger channel of a lane binding: a gate, a press latch (the buffer — a press stays pending until the
 /// gate opens or the latch expires; the release channel latches nothing), and the effects a fire applies in order.</summary>

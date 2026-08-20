@@ -306,10 +306,10 @@ public static partial class WorldDefinitionValidator {
                         }
                     } else {
                         if (
-                            (lookAt.Offset is { } lookAtOffset) &&
+                            (lookAt.TargetOffset is { } lookAtOffset) &&
                             !IsFinite(value: lookAtOffset)
                         ) {
-                            errors.Add(item: $"{opPath}.offset must contain finite coordinates.");
+                            errors.Add(item: $"{opPath}.targetOffset must contain finite coordinates.");
                         }
 
                         ValidateSubject(

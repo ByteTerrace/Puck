@@ -162,6 +162,19 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[{ModeCommand}: family '{family}' has no state '{state}' — {admissible}]");
         }
 
+        return ApplyMode(
+            context: context,
+            modeFamily: modeFamily,
+            slot: slot,
+            targetState: targetState,
+            verb: ModeCommand
+        );
+    }
+    // The one mode flip: it publishes the seat's new state and, on a camera-target edge, composes or dissolves the
+    // camera control application under the actor's own Drive over the target body. player.mode reaches it by name;
+    // player.camera reaches it by resolving the family/state pair itself, so both compose the identical application.
+    private CommandResult ApplyMode(CommandContext context, WorldSeatModeFamily modeFamily, WorldSeatModeState targetState, int slot, string verb) {
+        var family = modeFamily.Name;
         var previousStateName = m_seatBindings.ModeState(
             family: family,
             slot: slot
@@ -198,7 +211,7 @@ internal sealed partial class PlayerCommandModule {
                 capability: WorldCapability.Drive,
                 subject: GrantSubject.Body(index: slot)
             ).IsAllowed) {
-                return CommandResult.Error(output: $"[{ModeCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} — {actingPrincipal.Describe()} cannot drive body:{slot} to compose the camera control application]");
+                return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} — {actingPrincipal.Describe()} cannot drive body:{slot} to compose the camera control application]");
             }
 
             if (wasCamera) {
@@ -210,23 +223,90 @@ internal sealed partial class PlayerCommandModule {
                 actingPrincipal: actingPrincipal,
                 slot: slot
             )) {
-                return CommandResult.Error(output: $"[{ModeCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)} — no camera body available (declare a '{CameraPlacementId(slot: slot)}' inhabited placement, or {actingPrincipal.Describe()} lacks Control over it — see world.why)]");
+                return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} — no camera body available (declare a '{CameraPlacementId(slot: slot)}' inhabited placement, or {actingPrincipal.Describe()} lacks Control over it — see world.why)]");
             }
         }
 
         m_seatBindings.SetContextState(
             family: family,
             slot: slot,
-            state: state
+            state: targetState.Name
         );
 
         return SeatCommandArgs.Echo(
-            detail: $"'{family}' = '{state}'",
+            detail: $"'{family}' = '{targetState.Name}'",
             slot: slot,
-            verb: ModeCommand
+            verb: verb
+        );
+    }
+    // The no-token Free Cam toggle a wheel sector or a pad chord fires. It resolves the seat's own camera-targeting
+    // family/state from the routed document (never a hard-coded family name) and flips between that state and the
+    // family's authored default, then runs the SAME ApplyMode path player.mode does.
+    private CommandResult CameraHandler(CommandContext context, WireArgs args) {
+        if (args.Count > 1) {
+            return CommandResult.Error(output: $"[{CameraCommand}: expected [seat]]");
+        }
+
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: 0,
+            context: context,
+            verb: CameraCommand
+        );
+
+        if (error is { } resolveError) {
+            return resolveError;
+        }
+
+        if (m_seatBindings.TryResolveCameraMode(slot: slot) is not { } camera) {
+            return CommandResult.Error(output: $"[{CameraCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)}'s document declares no seatModes state targeting '{WorldSeatModeState.CameraTarget}']");
+        }
+
+        var published = m_seatBindings.ModeState(
+            family: camera.Family.Name,
+            slot: slot
+        );
+        var leaving = string.Equals(
+            a: published,
+            b: camera.State.Name,
+            comparisonType: StringComparison.Ordinal
+        );
+        WorldSeatModeState? targetState = null;
+
+        foreach (var candidate in camera.Family.States) {
+            if (string.Equals(
+                a: candidate.Name,
+                b: (leaving
+                ? camera.Family.DefaultState
+                : camera.State.Name),
+                comparisonType: StringComparison.Ordinal
+            )) {
+                targetState = candidate;
+
+                break;
+            }
+        }
+
+        if (targetState is null) {
+            return CommandResult.Error(output: $"[{CameraCommand}: family '{camera.Family.Name}' has no state '{camera.Family.DefaultState}' to fall back to]");
+        }
+
+        return ApplyMode(
+            context: context,
+            modeFamily: camera.Family,
+            slot: slot,
+            targetState: targetState,
+            verb: CameraCommand
         );
     }
     private IEnumerable<CommandDefinition> ModeVerbs() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: CameraCommand,
+            description: $"Toggles a seat's Free Cam: player.camera [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary Engage door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
+            handler: CameraHandler,
+            routing: CommandRouting.Simulation
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: ModeCommand,

@@ -11,6 +11,7 @@ using Puck.World.Protocol;
 using Puck.World.Server;
 
 using Xunit;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Tests;
 

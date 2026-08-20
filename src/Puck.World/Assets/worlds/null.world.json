@@ -117,9 +117,9 @@
                     "sources": null
                   },
                   {
-                    "command": "player.channels",
-                    "icon": "edit.link",
-                    "label": "Channels",
+                    "command": "player.camera",
+                    "icon": "view.freeCam",
+                    "label": "Free Cam",
                     "sources": null
                   },
                   {
@@ -237,9 +237,9 @@
                     "sources": null
                   },
                   {
-                    "command": "player.channels",
-                    "icon": "edit.link",
-                    "label": "Channels",
+                    "command": "player.camera",
+                    "icon": "view.freeCam",
+                    "label": "Free Cam",
                     "sources": null
                   },
                   {
@@ -336,27 +336,34 @@
       "name": "rts",
       "anchor": null,
       "rig": {
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            0,
-            0,
-            0
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.6
-        },
-        "motion": {
-          "$type": "static",
-          "position": [
-            0,
-            45,
-            18
-          ],
-          "worldAxes": true
-        },
-        "smoothRate": 0
+        "name": "rtsOverview",
+        "operations": [
+          {
+            "$type": "offset",
+            "value": [
+              0,
+              45,
+              18
+            ],
+            "worldAxes": true
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.6
+          }
+        ],
+        "version": "puck.camera.v1"
       },
       "renderWidth": 1280,
       "renderHeight": 720
@@ -1161,6 +1168,34 @@
         "margin": 0
       },
       "yawDegrees": 0
+    },
+    {
+      "creationId": "pillar",
+      "id": "camera-seat-0",
+      "inhabit": {
+        "count": 1,
+        "distribution": {
+          "fill": {
+            "name": "additive",
+            "offset": 0,
+            "step": 0.618034
+          },
+          "region": {
+            "$type": "disc",
+            "radius": 0.01
+          }
+        },
+        "kit": "defaultKit",
+        "look": null,
+        "source": "Idle"
+      },
+      "position": [
+        0,
+        3,
+        0
+      ],
+      "scale": 1,
+      "yawDegrees": 0
     }
   ],
   "playerDefaults": {
@@ -1194,6 +1229,7 @@
     }
   },
   "population": {
+    "capacity": 2,
     "localSeats": 1
   },
   "render": {
@@ -1694,6 +1730,7 @@
       "center": [0, 1, -4],
       "radius": 3,
       "innerRadius": 1,
+      "fadeSeconds": null,
       "feed": {
         "source": { "$type": "none" },
         "channel": "mix",

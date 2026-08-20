@@ -25,6 +25,9 @@ public static class PlayerCommandNames {
     public const string SwapLookCommand = "player.look.swap";
     /// <summary>The look-recenter command: turns the seat camera round behind the body.</summary>
     public const string RecenterLookCommand = "player.look.recenter";
+    /// <summary>The no-token Free Cam toggle: <c>player.camera [seat]</c>, the bindable door onto the same
+    /// camera-targeting <see cref="WorldSeatModeFamily"/> state <see cref="ModeCommand"/> names explicitly.</summary>
+    public const string CameraCommand = "player.camera";
     /// <summary>The generic per-seat mode-family flip: <c>player.mode &lt;family&gt; &lt;state&gt; [seat]</c> — see
     /// <see cref="WorldSeatModeFamily"/>.</summary>
     public const string ModeCommand = "player.mode";

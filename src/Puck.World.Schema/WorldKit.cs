@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World;
@@ -167,10 +168,13 @@ public readonly record struct FixedWorldKit(
     /// <param name="channels">The world's compiled channel table.</param>
     /// <param name="targets">The world's compiled target-register table.</param>
     /// <param name="programs">The world's compiled body motion programs keyed by stable name.</param>
+    /// <param name="programRows">The world's authored body motion program rows keyed by the same names — the target
+    /// source a producer senses is authored vocabulary, so it is read here rather than carried on the compiled
+    /// instruction form.</param>
     /// <param name="creations">The creation rows a <see cref="WorldCollider.FromCreation"/> may reference.</param>
     /// <param name="bodyState">The world's body-owned ephemeral state declarations.</param>
     /// <param name="identityState">The world's identity-owned durable state declarations.</param>
-    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyList<WorldCreation> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
+    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldCreation> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var actions = new CompiledActionSpec?[ChannelLimits.MaxChannels];
         var thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
         // Every ordinal, not just bound ones — a composition channel's shape is a WORLD property, not a per-kit one,
@@ -197,7 +201,7 @@ public readonly record struct FixedWorldKit(
                 continue;
             }
 
-            actions[ordinal] = CompiledActionSpec.Compile(
+            actions[ordinal] = BodyActionSpecFactory.Compile(
                 spec: spec,
                 stateSlots: stateSlots,
                 program: program,
@@ -237,6 +241,7 @@ public readonly record struct FixedWorldKit(
                 key: name,
                 value: CompiledBodyProducer.Compile(
                     program: programs[name],
+                    source: programRows[name].Target,
                     parameters: parameters,
                     channels: channels,
                     targets: targets

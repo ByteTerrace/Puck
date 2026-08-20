@@ -4,34 +4,44 @@ using Puck.SdfVm.Views;
 
 namespace Puck.World;
 
-/// <summary>Lets a compiled camera rig be retargeted onto the current live document every frame — an authored
-/// <see cref="WorldCameraProgramOp.Fov"/>/<see cref="WorldCameraProgramOp.Blend"/> op's state binding must read the
-/// LIVE document, never the one a cached rig happened to compile against; every camera-rig caller that reuses a
-/// compiled rig across frames (a seat's chase rig — see <c>WorldSeatCameraResolver.ResolveChase</c>) calls this once
-/// per frame before <see cref="ISdfCameraRig.Resolve"/>. A caller that recompiles fresh every frame (a named camera,
-/// a possessed camera body) has no stale state to refresh and may skip it.</summary>
+/// <summary>A compiled camera program bound to a live document — the seam between the authored
+/// <see cref="WorldCameraProgram"/> vocabulary and the document-blind evaluator in <c>Puck.SdfVm.Views</c>.</summary>
 public interface IWorldCameraProgramRig : ISdfCameraRig {
-    /// <summary>Repoints this rig's state-binding reads at the current live document.</summary>
+    /// <summary>Gets or sets the live look sample folded into an interactive program's orbit, in radians. Inert on a
+    /// program compiled non-interactive (a named camera renders its authored angles unchanged).</summary>
+    SdfCameraLook Look { get; set; }
+    /// <summary>Gets or sets the group spread an authored <see cref="WorldCameraProgramOp.Offset.SpreadPullback"/>
+    /// widens by. Inert for a program authoring no pullback.</summary>
+    float Spread { get; set; }
+    /// <summary>Gets the response rate the last resolve reported (the program's
+    /// <see cref="WorldCameraProgramOp.Smooth"/> rate, or zero).</summary>
+    float SmoothRate { get; }
+
+    /// <summary>Repoints this rig's document reads at the current live document.</summary>
     /// <param name="definition">The current document.</param>
+    /// <remarks>A cached rig must be retargeted whenever a delivery replaces the document: a state binding and a
+    /// placement subject both read the LIVE document, never the one this rig compiled against.</remarks>
     void Retarget(WorldDefinition definition);
 }
-/// <summary>Compiles an authored camera program into one presentation rig — the evaluator for the ordered op-list
-/// vocabulary <c>bodyMotionPrograms</c> established for sim-side movement, promoted to cameras
-/// (<see cref="WorldCameraProgram"/>). Replaces the old closed <c>WorldCameraMotion</c>/<c>WorldCameraAim</c> union's
-/// per-kind resolvers with one op-walking evaluator.</summary>
+/// <summary>Compiles an authored camera program into one presentation rig: authored ops become
+/// <see cref="SdfCameraOp"/>s, authored subjects and state bindings become per-frame slots this rig refills from the
+/// live document, and the walk itself belongs to <see cref="SdfCameraProgramEvaluator"/>, which parses no
+/// document.</summary>
 public static class WorldCameraRigCompiler {
-    private const int MaxBlendDepth = 8;
-
-    /// <summary>Gets the motion's authored eye or pivot position for editor/narration purposes — the orbit's resolved
-    /// offset from its pivot, the offset op's raw value, or the origin for a program authoring neither.</summary>
+    /// <summary>Returns the program's authored eye or pivot position, for a caller that narrates or places a camera
+    /// row rather than framing one — the orbit's resolved offset from its pivot, the offset op's raw value, or the
+    /// origin for a program authoring neither.</summary>
+    /// <param name="program">The authored program.</param>
+    /// <returns>The authored position.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     public static Vector3 AuthoredPosition(WorldCameraProgram program) {
         ArgumentNullException.ThrowIfNull(argument: program);
 
         if (program.OrbitOp is { } orbit) {
-            return (orbit.PivotOffset.Value + OrbitRig.Offset(
-                yaw: orbit.Yaw,
+            return ((orbit.PivotOffset?.Value ?? Vector3.Zero) + OrbitRig.Offset(
+                distance: orbit.Distance,
                 pitch: orbit.Pitch,
-                distance: orbit.Distance
+                yaw: orbit.Yaw
             ));
         }
 
@@ -39,241 +49,218 @@ public static class WorldCameraRigCompiler {
     }
     /// <summary>Compiles an authored camera program.</summary>
     /// <param name="program">The authored op list.</param>
-    /// <param name="definition">The document to resolve this program's state bindings against — refreshed every
-    /// frame via <see cref="IWorldCameraProgramRig.Retarget"/> for a caller that caches the returned rig.</param>
-    /// <param name="referenceOffset">An additional reference-local offset, such as an entity-leaf rest offset.</param>
-    /// <param name="spread">The resolved group spread.</param>
+    /// <param name="definition">The document this program's state bindings, placement subjects, and blend names
+    /// resolve against.</param>
+    /// <param name="interactive">Whether the program's orbit op folds in <see cref="IWorldCameraProgramRig.Look"/> —
+    /// true for the seat rig a joined seat steers, false for an authored camera that renders its own angles.</param>
     /// <returns>A fresh presentation rig.</returns>
-    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, Vector3 referenceOffset = default, float spread = 0f) {
-        ArgumentNullException.ThrowIfNull(argument: program);
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, bool interactive = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: program);
 
-        return new ComposedWorldCameraProgramRig(
+        var translation = new Translation(
             definition: definition,
-            program: program,
-            referenceOffset: referenceOffset,
-            spread: spread
+            interactive: interactive
+        );
+
+        _ = translation.Translate(program: program);
+
+        return new CompiledRig(
+            definition: definition,
+            scalarSources: translation.ScalarSources,
+            set: new SdfCameraProgramSet(Programs: translation.Programs),
+            subjectSources: translation.SubjectSources
         );
     }
 
-    private readonly record struct Subject(Vector3 Position, Quaternion Orientation);
+    // One per-frame scalar slot's source: an authored state binding read at the frame's tick, or the group-spread
+    // widening an offset op's pullback applies. Exactly one arm is live per slot.
+    private readonly record struct ScalarSource(BindableScalar? Binding, float Fallback, float SpreadPullback);
+    // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
+    private readonly record struct SubjectSource(WorldCameraSubject Subject);
 
-    private sealed class ComposedWorldCameraProgramRig(WorldCameraProgram program, WorldDefinition definition, Vector3 referenceOffset, float spread) : IWorldCameraProgramRig {
-        private WorldDefinition m_definition = definition;
+    // The authored-to-IR walk. Programs are keyed by authored NAME so a blend that reaches the same program twice
+    // (and a cycle the validator would have refused) compiles to one entry rather than recursing forever.
+    private sealed class Translation(WorldDefinition definition, bool interactive) {
+        private readonly Dictionary<string, int> m_indexByName = new(comparer: StringComparer.Ordinal);
 
-        public void Retarget(WorldDefinition definition) {
-            ArgumentNullException.ThrowIfNull(argument: definition);
+        public List<SdfCameraProgram> Programs { get; } = [];
+        public List<ScalarSource> ScalarSources { get; } = [];
+        public List<SubjectSource> SubjectSources { get; } = [];
 
-            m_definition = definition;
-        }
+        public int Translate(WorldCameraProgram program) {
+            var name = (program.Name ?? string.Empty);
 
-        private Subject ResolveSubject(WorldCameraSubject? subject, in SdfAnchor reference) => subject switch {
-            null or WorldCameraSubject.Reference => new Subject(
-                Orientation: reference.Orientation,
-                Position: (reference.Position + Vector3.Transform(
-                    value: referenceOffset,
-                    rotation: reference.Orientation
-                ))
-            ),
-            WorldCameraSubject.Placement placement => new Subject(
-                Orientation: Quaternion.Identity,
-                Position: WorldAnchorGeometry.StaticPlacementPosition(
-                    definition: m_definition,
-                    placementId: placement.PlacementId,
-                    shapeId: placement.ShapeId
-                )
-            ),
-            WorldCameraSubject.WorldPoint worldPoint => new Subject(
-                Orientation: Quaternion.Identity,
-                Position: worldPoint.Point.Value
-            ),
-            var other => throw new ArgumentOutOfRangeException(
-                paramName: nameof(subject),
-                actualValue: other,
-                message: $"unknown camera subject kind '{(other?.GetType().Name ?? "<null>")}'."
-            ),
-        };
-        private static Vector3 ResolveOffset(in Subject subject, DocumentVector3 value, bool worldAxes, float spreadPullback) {
-            var scaled = (value.Value * (1f + (spreadPullback * MathF.Max(
-                x: spread,
-                y: 0f
-            ))));
+            if (m_indexByName.TryGetValue(
+                key: name,
+                value: out var existing
+            )) {
+                return existing;
+            }
 
-            return (subject.Position + (worldAxes
-                ? scaled
-                : Vector3.Transform(
-                    rotation: subject.Orientation,
-                    value: scaled
-                )
+            var index = Programs.Count;
+
+            m_indexByName[name] = index;
+            // Reserve the slot BEFORE walking, so a blend reaching back into this program resolves to it.
+            Programs.Add(item: new SdfCameraProgram(
+                Name: name,
+                Operations: []
             ));
+            Programs[index] = new SdfCameraProgram(
+                Name: name,
+                Operations: TranslateOperations(program: program)
+            );
+
+            return index;
         }
 
-        public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) => Evaluate(
-            anchor: in anchor,
-            clock: in clock,
-            depth: 0,
-            program: program
-        );
-        private (Vector3 Eye, Vector3 Target, float FovRadians) Evaluate(WorldCameraProgram program, in SdfAnchor anchor, in SdfCameraClock clock, int depth) {
-            var subject = ResolveSubject(
-                reference: in anchor,
-                subject: null
-            );
-            var eye = subject.Position;
-            var target = eye;
-            var haveTarget = false;
-            var fov = OrbitRig.DefaultFieldOfViewRadians;
-            var pitchMin = (-MathF.PI / 2f);
-            var pitchMax = (MathF.PI / 2f);
-            var operations = program.Operations;
+        private SdfCameraScalar Scalar(BindableScalar scalar, float fallback) {
+            if (scalar.Binding is null) {
+                return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
+                    ? literal
+                    : fallback));
+            }
 
-            for (var index = 0; ((operations is not null) && (index < operations.Count)); index++) {
-                switch (operations[index]) {
-                    case WorldCameraProgramOp.Anchor anchorOp:
-                        subject = ResolveSubject(
-                            reference: in anchor,
-                            subject: anchorOp.Subject
-                        );
-                        eye = subject.Position;
+            var slot = ScalarSources.Count;
+
+            ScalarSources.Add(item: new ScalarSource(
+                Binding: scalar,
+                Fallback: fallback,
+                SpreadPullback: 0f
+            ));
+
+            return SdfCameraScalar.FromSlot(
+                fallback: fallback,
+                slot: slot
+            );
+        }
+        private SdfCameraScalar SpreadScale(float pullback) {
+            if (pullback == 0f) {
+                return SdfCameraScalar.FromLiteral(value: 1f);
+            }
+
+            var slot = ScalarSources.Count;
+
+            ScalarSources.Add(item: new ScalarSource(
+                Binding: null,
+                Fallback: 1f,
+                SpreadPullback: pullback
+            ));
+
+            return SdfCameraScalar.FromSlot(
+                fallback: 1f,
+                slot: slot
+            );
+        }
+        private int Subject(WorldCameraSubject? subject) {
+            if (subject is null or WorldCameraSubject.Reference) {
+                return SdfCameraProgram.ReferenceSubject;
+            }
+
+            var slot = SubjectSources.Count;
+
+            SubjectSources.Add(item: new SubjectSource(Subject: subject));
+
+            return slot;
+        }
+        private List<SdfCameraOp> TranslateOperations(WorldCameraProgram program) {
+            var authored = program.Operations;
+            var operations = new List<SdfCameraOp>(capacity: authored.Count);
+
+            for (var index = 0; (index < authored.Count); index++) {
+                switch (authored[index]) {
+                    case WorldCameraProgramOp.Anchor anchor:
+                        operations.Add(item: new SdfCameraOp.Anchor(SubjectSlot: Subject(subject: anchor.Subject)));
 
                         break;
                     case WorldCameraProgramOp.Offset offset:
-                        eye = ResolveOffset(
-                            spreadPullback: offset.SpreadPullback,
-                            subject: in subject,
-                            value: offset.Value,
-                            worldAxes: offset.WorldAxes
-                        );
-
-                        break;
-                    case WorldCameraProgramOp.Orbit orbit:
-                        var clampedPitch = Math.Clamp(
-                            value: orbit.Pitch,
-                            min: pitchMin,
-                            max: pitchMax
-                        );
-                        var pivot = (subject.Position + orbit.PivotOffset.Value);
-
-                        eye = (pivot + OrbitRig.Offset(
-                            yaw: orbit.Yaw,
-                            pitch: clampedPitch,
-                            distance: orbit.Distance
+                        operations.Add(item: new SdfCameraOp.Offset(
+                            Scale: SpreadScale(pullback: offset.SpreadPullback),
+                            Value: offset.Value.Value,
+                            WorldAxes: offset.WorldAxes
                         ));
 
                         break;
                     case WorldCameraProgramOp.LookAt lookAt:
-                        target = ((lookAt.Subject is { } lookSubject)
-                            ? ResolveOffset(
-                                spreadPullback: 0f,
-                                subject: ResolveSubject(
-                                    reference: in anchor,
-                                    subject: lookSubject
-                                ),
-                                value: lookAt.Offset,
-                                worldAxes: lookAt.WorldAxes
-                            )
-                            : (eye + (Vector3.Transform(
-                                value: -Vector3.UnitZ,
-                                rotation: subject.Orientation
-                            ) * MathF.Max(
-                                x: lookAt.FocusDistance,
-                                y: 0.01f
-                            ))));
-                        haveTarget = true;
+                        operations.Add(item: new SdfCameraOp.LookAt(
+                            FocusDistance: SdfCameraScalar.FromLiteral(value: lookAt.FocusDistance),
+                            SubjectSlot: ((lookAt.Subject is { } lookSubject)
+                            ? Subject(subject: lookSubject)
+                            : SdfCameraProgram.FacingSubject),
+                            TargetOffset: (lookAt.TargetOffset?.Value ?? Vector3.Zero),
+                            WorldAxes: lookAt.WorldAxes
+                        ));
 
                         break;
-                    case WorldCameraProgramOp.Smooth:
-                        // Read externally (WorldCameraProgram.SmoothOp) — never affects the resolved pose.
+                    case WorldCameraProgramOp.Orbit orbit:
+                        operations.Add(item: new SdfCameraOp.Orbit(
+                            AppliesLook: interactive,
+                            Distance: SdfCameraScalar.FromLiteral(value: orbit.Distance),
+                            Pitch: SdfCameraScalar.FromLiteral(value: orbit.Pitch),
+                            PivotOffset: (orbit.PivotOffset?.Value ?? Vector3.Zero),
+                            Yaw: SdfCameraScalar.FromLiteral(value: orbit.Yaw)
+                        ));
+
+                        break;
+                    case WorldCameraProgramOp.Smooth smooth:
+                        operations.Add(item: new SdfCameraOp.Smooth(Rate: SdfCameraScalar.FromLiteral(value: smooth.Rate)));
+
                         break;
                     case WorldCameraProgramOp.ClampPitch clampPitch:
-                        pitchMin = clampPitch.MinPitch;
-                        pitchMax = clampPitch.MaxPitch;
+                        operations.Add(item: new SdfCameraOp.ClampPitch(
+                            MaxPitch: SdfCameraScalar.FromLiteral(value: clampPitch.MaxPitch),
+                            MinPitch: SdfCameraScalar.FromLiteral(value: clampPitch.MinPitch)
+                        ));
 
                         break;
-                    case WorldCameraProgramOp.Fov fovOp:
-                        fov = fovOp.FieldOfViewRadians.Resolve(
-                            definition: m_definition,
-                            fallback: fov,
-                            tick: clock.AuthoritativeTick
-                        );
+                    case WorldCameraProgramOp.Fov fov:
+                        operations.Add(item: new SdfCameraOp.Fov(FieldOfViewRadians: Scalar(
+                            fallback: OrbitRig.DefaultFieldOfViewRadians,
+                            scalar: fov.FieldOfViewRadians
+                        )));
 
                         break;
                     case WorldCameraProgramOp.Blend blend:
-                        if (depth >= MaxBlendDepth) {
-                            break;
-                        }
-
+                        // A name the live document no longer declares emits no op: the validator refuses a dangling
+                        // blend at author time, so this can only be a mid-mutation document, and rendering the
+                        // program's own framing beats blending against a pose nothing authored.
                         if (
-                            ResolveProgram(name: blend.A) is { } programA &&
-                            ResolveProgram(name: blend.B) is { } programB
+                            (ResolveProgram(name: blend.A) is { } programA) &&
+                            (ResolveProgram(name: blend.B) is { } programB)
                         ) {
-                            var resolvedA = Evaluate(
-                                anchor: in anchor,
-                                clock: in clock,
-                                depth: (depth + 1),
-                                program: programA
-                            );
-                            var resolvedB = Evaluate(
-                                anchor: in anchor,
-                                clock: in clock,
-                                depth: (depth + 1),
-                                program: programB
-                            );
-                            var weight = Math.Clamp(
-                                value: blend.Weight.Resolve(
-                                    definition: m_definition,
+                            operations.Add(item: new SdfCameraOp.Blend(
+                                ProgramA: Translate(program: programA),
+                                ProgramB: Translate(program: programB),
+                                Weight: Scalar(
                                     fallback: 0f,
-                                    tick: clock.AuthoritativeTick
-                                ),
-                                min: 0f,
-                                max: 1f
-                            );
-
-                            eye = Vector3.Lerp(
-                                amount: weight,
-                                value1: resolvedA.Eye,
-                                value2: resolvedB.Eye
-                            );
-                            target = Vector3.Lerp(
-                                amount: weight,
-                                value1: resolvedA.Target,
-                                value2: resolvedB.Target
-                            );
-                            fov = float.Lerp(
-                                value1: resolvedA.FovRadians,
-                                value2: resolvedB.FovRadians,
-                                amount: weight
-                            );
-                            haveTarget = true;
+                                    scalar: blend.Weight
+                                )
+                            ));
                         }
 
                         break;
                 }
             }
 
-            if (!haveTarget) {
-                target = (eye + (Vector3.Transform(
-                    value: -Vector3.UnitZ,
-                    rotation: subject.Orientation
-                ) * 6f));
-            }
-
-            return (eye, target, fov);
+            return operations;
         }
+        // The document-wide camera-program name table a blend op resolves against: views.seatRig, views.cameraRig,
+        // and every cameras[].rig — the same namespace WorldDefinitionValidator walks for dangling names and cycles.
         private WorldCameraProgram? ResolveProgram(string name) {
             if (string.IsNullOrEmpty(value: name)) {
                 return null;
             }
 
-            var views = m_definition.ViewsRaw;
+            var views = definition.ViewsRaw;
 
             if (
                 (views?.SeatRig is { } seatRig) &&
                 string.Equals(
-                a: seatRig.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
+                    a: seatRig.Name,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )
             ) {
                 return seatRig;
             }
@@ -281,15 +268,15 @@ public static class WorldCameraRigCompiler {
             if (
                 (views?.CameraRig is { } cameraRig) &&
                 string.Equals(
-                a: cameraRig.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
+                    a: cameraRig.Name,
+                    b: name,
+                    comparisonType: StringComparison.Ordinal
+                )
             ) {
                 return cameraRig;
             }
 
-            foreach (var camera in m_definition.Cameras) {
+            foreach (var camera in definition.Cameras) {
                 if (string.Equals(
                     a: camera.Rig.Name,
                     b: name,
@@ -300,6 +287,88 @@ public static class WorldCameraRigCompiler {
             }
 
             return null;
+        }
+    }
+
+    private sealed class CompiledRig : IWorldCameraProgramRig {
+        private readonly SdfCameraProgramRig m_rig;
+        private readonly IReadOnlyList<ScalarSource> m_scalarSources;
+        private readonly IReadOnlyList<SubjectSource> m_subjectSources;
+
+        private WorldDefinition m_definition;
+
+        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources) {
+            m_definition = definition;
+            m_rig = new SdfCameraProgramRig(
+                programs: set,
+                scalarCount: scalarSources.Count,
+                subjectCount: subjectSources.Count
+            );
+            m_scalarSources = scalarSources;
+            m_subjectSources = subjectSources;
+        }
+
+        public SdfCameraLook Look {
+            get => m_rig.Look;
+            set => m_rig.Look = value;
+        }
+        public float SmoothRate => m_rig.SmoothRate;
+        public float Spread { get; set; }
+
+        public void Retarget(WorldDefinition definition) {
+            ArgumentNullException.ThrowIfNull(argument: definition);
+
+            m_definition = definition;
+        }
+        public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
+            Refresh(tick: clock.AuthoritativeTick);
+
+            return m_rig.Resolve(
+                anchor: in anchor,
+                clock: in clock
+            );
+        }
+
+        // Refills the evaluator's per-frame slots from the live document. Runs inside Resolve so no caller can
+        // evaluate against a stale binding by forgetting an ordering step.
+        private void Refresh(ulong tick) {
+            var scalars = m_rig.Scalars;
+
+            for (var index = 0; (index < m_scalarSources.Count); index++) {
+                var source = m_scalarSources[index];
+
+                scalars[index] = ((source.Binding is { } binding)
+                    ? binding.Resolve(
+                        definition: m_definition,
+                        fallback: source.Fallback,
+                        tick: tick
+                    )
+                    : (1f + (source.SpreadPullback * MathF.Max(
+                        x: Spread,
+                        y: 0f
+                    )))
+                );
+            }
+
+            var subjects = m_rig.Subjects;
+
+            for (var index = 0; (index < m_subjectSources.Count); index++) {
+                subjects[index] = (m_subjectSources[index].Subject switch {
+                    WorldCameraSubject.Placement placement => new SdfAnchor(
+                        Orientation: Quaternion.Identity,
+                        Position: WorldAnchorGeometry.StaticPlacementPosition(
+                            definition: m_definition,
+                            placementId: placement.PlacementId,
+                            shapeId: placement.ShapeId
+                        )
+                    ),
+                    WorldCameraSubject.WorldPoint worldPoint => new SdfAnchor(
+                        Orientation: Quaternion.Identity,
+                        Position: worldPoint.Point.Value
+                    ),
+                    _ => default,
+                });
+            }
         }
     }
 }

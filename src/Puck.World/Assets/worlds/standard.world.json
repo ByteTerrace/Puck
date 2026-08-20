@@ -414,9 +414,9 @@
                     "sources": null
                   },
                   {
-                    "command": "player.channels",
-                    "icon": "edit.link",
-                    "label": "Channels",
+                    "command": "player.camera",
+                    "icon": "view.freeCam",
+                    "label": "Free Cam",
                     "sources": null
                   },
                   {
@@ -637,7 +637,8 @@
       { "name": "edit.undo", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+21A9" } },
       { "name": "edit.redo", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+21AA" } },
       { "name": "edit.speaker", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25A0" } },
-      { "name": "edit.bed", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25EF" } }
+      { "name": "edit.bed", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25EF" } },
+      { "name": "view.freeCam", "glyph": { "font": "jetbrains-mono-regular", "glyph": "U+25A1" } }
     ],
     "badges": [
       { "button": "DpadUp", "icon": "dpad.up" },
@@ -885,23 +886,20 @@
     ]
   },
   "views": {
-    "flyRig": {
-      "aim": {
-        "$type": "forward",
-        "focusDistance": 6
-      },
-      "lens": {
-        "fieldOfViewRadians": 0.9599311
-      },
-      "motion": {
-        "$type": "fly",
-        "defaultSpeed": 8,
-        "lookRateRadiansPerSecond": 2.6,
-        "maxPitchRadians": 1.45,
-        "maxSpeed": 64,
-        "minSpeed": 0.5
-      },
-      "smoothRate": 0
+    "cameraRig": {
+      "name": "seatFreeCam",
+      "operations": [
+        {
+          "$type": "lookAt",
+          "focusDistance": 1,
+          "subject": null
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        }
+      ],
+      "version": "puck.camera.v1"
     },
     "layouts": [],
     "seatControl": {
@@ -910,39 +908,50 @@
       "yawReference": "World"
     },
     "seatRig": {
-      "aim": {
-        "$type": "anchor",
-        "offset": [
-          0,
-          1,
-          0
-        ],
-        "worldAxes": false
-      },
-      "lens": {
-        "fieldOfViewRadians": 0.9599311
-      },
-      "motion": {
-        "$type": "orbit",
-        "distance": 5.4626001,
-        "pitch": 0.4145069,
-        "pivotOffset": [
-          0,
-          0,
-          0
-        ],
-        "yaw": 0
-      },
-      "smoothRate": 6
+      "name": "seatChase",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ],
+          "yaw": 0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        },
+        {
+          "$type": "smooth",
+          "rate": 6
+        }
+      ],
+      "version": "puck.camera.v1"
     }
   },
   "seatModes": [
     {
-      "defaultState": "off",
-      "name": "editing",
+      "defaultState": "seat",
+      "name": "camera",
       "states": [
-        { "name": "off" },
-        { "name": "on", "target": "camera" }
+        { "name": "seat" },
+        { "name": "free", "target": "camera" }
       ]
     }
   ],

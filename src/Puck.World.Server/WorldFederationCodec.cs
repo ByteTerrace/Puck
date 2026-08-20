@@ -3,6 +3,7 @@ using System.Text.Json;
 using Puck.Attestation;
 using Puck.Networking;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 

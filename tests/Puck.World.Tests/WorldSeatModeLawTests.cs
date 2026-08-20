@@ -14,26 +14,33 @@ namespace Puck.World.Tests;
 /// one-value-different passing control.
 /// </summary>
 public sealed class WorldSeatModeLawTests {
-    private const string FamilyName = "editing";
-    private const string OffState = "off";
-    private const string OnState = "on";
+    private const string FamilyName = "camera";
+    private const string OffState = "seat";
+    private const string OnState = "free";
     private const string RestingGroup = "resting";
-    private const string FlyingGroup = "flying";
+    private const string FlyingGroup = "freeCam";
 
     private static WorldSeatModeFamily Family(string defaultState = OffState) => new(
         Name: FamilyName,
         States: [new WorldSeatModeState(Name: OffState), new WorldSeatModeState(Name: OnState, Target: "camera")],
         DefaultState: defaultState
     );
-    // A document authoring the family plus a views.cameraRig (required whenever any state targets "camera") and a
-    // contexts row mapping (editing, on) -> the flying group, with a resting-group chord page too.
-    private static WorldDefinition DocumentWithFamily(WorldSeatModeFamily family) => Fixtures.BuildDocument() with {
+    // A document authoring the family plus the two things a camera-targeting state couples to — a views.cameraRig
+    // program and an inhabited camera-seat-0 body — and a contexts row mapping (camera, free) -> the free-cam group,
+    // with a resting-group chord page too.
+    private static WorldDefinition DocumentWithFamily(WorldSeatModeFamily family) => Fixtures.BuildCameraBodyDocument() with {
         SeatModesRaw = [family],
         ViewsRaw = (Fixtures.BuildDocument().Views with {
-            CameraRig = new WorldCameraRig(
-                Motion: new WorldCameraMotion.FirstPerson(),
-                Aim: new WorldCameraAim.Forward(FocusDistance: 1f),
-                Lens: new WorldCameraLens(FieldOfViewRadians: 0.9f)
+            CameraRig = new WorldCameraProgram(
+                Name: "seatFreeCam",
+                Version: WorldCameraProgram.CurrentVersion,
+                Operations: [
+                    new WorldCameraProgramOp.LookAt(
+                        Subject: null,
+                        FocusDistance: 1f
+                    ),
+                    new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9f)),
+                ]
             ),
         }),
         BindingOverlaysRaw = [
@@ -167,6 +174,41 @@ public sealed class WorldSeatModeLawTests {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var reason));
         Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "views.cameraRig is not authored");
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: control, reason: out var controlReason), userMessage: controlReason);
+    }
+    [Fact]
+    public void CameraTargetingState_WithoutAnInhabitedCameraBody_RefusesByName() {
+        var denied = (Fixtures.BuildDocument() with {
+            SeatModesRaw = [Family()],
+            ViewsRaw = DocumentWithFamily(family: Family()).Views,
+        });
+        var control = DocumentWithFamily(family: Family());
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: WorldSeatModeState.CameraPlacementIdPrefix);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: control, reason: out var controlReason), userMessage: controlReason);
+    }
+    // The one lookup a no-token Free Cam binding (player.camera) resolves through: the seat's own routed document
+    // decides which family and state compose the application, so a wheel sector needs no hard-coded family name.
+    [Fact]
+    public void TryResolveCameraMode_ResolvesTheCameraTargetingFamilyAndState() {
+        var bindings = new WorldSeatBindings(definition: DocumentWithFamily(family: Family()));
+        var resolved = bindings.TryResolveCameraMode(slot: 0);
+
+        Assert.NotNull(@object: resolved);
+        Assert.Equal(expected: FamilyName, actual: resolved!.Value.Family.Name);
+        Assert.Equal(expected: OnState, actual: resolved.Value.State.Name);
+    }
+    [Fact]
+    public void TryResolveCameraMode_WithNoCameraTargetingState_ResolvesNothing() {
+        var bindings = new WorldSeatBindings(definition: (Fixtures.BuildDocument() with {
+            SeatModesRaw = [new WorldSeatModeFamily(
+                Name: FamilyName,
+                States: [new WorldSeatModeState(Name: OffState)],
+                DefaultState: OffState
+            )],
+        }));
+
+        Assert.Null(@object: bindings.TryResolveCameraMode(slot: 0));
     }
     [Fact]
     public void UnknownTarget_RefusesByName() {

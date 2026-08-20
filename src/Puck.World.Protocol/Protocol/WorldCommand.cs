@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Maths;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Protocol;
 

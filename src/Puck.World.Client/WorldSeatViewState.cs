@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
@@ -12,8 +13,7 @@ public sealed class WorldSeatViewState {
     private const float SwapLandedDistance = 0.01f;
 
     private readonly Lock m_gate = new();
-    private readonly WorldSeatCameraResolver.LiveOrbitCache m_orbit = new();
-    private readonly WorldSeatCameraResolver.SmoothingState m_smoothing = new();
+    private readonly SdfCameraBoomSmoother m_smoothing = new();
 
     // How much of the world-derived alignment is taken back per update once it is trustworthy again. Small enough
     // that the carried frame is what the seat feels moment to moment, large enough that a lap's accumulated drift is
@@ -199,7 +199,7 @@ public sealed class WorldSeatViewState {
             return;
         }
         if (turnRate <= 0f) {
-            m_smoothing.Seeded = false;
+            m_smoothing.Reseed();
 
             return;
         }
@@ -211,7 +211,7 @@ public sealed class WorldSeatViewState {
         lock (m_gate) {
             m_yaw = 0f;
             m_pitch = 0f;
-            m_smoothing.Seeded = false;
+            m_smoothing.Reseed();
         }
     }
     public void Reclamp(WorldViewDefaults views) {
@@ -228,7 +228,17 @@ public sealed class WorldSeatViewState {
             );
         }
     }
+    /// <summary>The seat's compiled chase rig for this frame, with the live look sample already folded in.</summary>
+    /// <param name="views">The routed world's views section.</param>
+    /// <param name="bodyOrientation">The perceived body's orientation.</param>
+    /// <param name="definition">The routed world's live document.</param>
+    /// <returns>The rig.</returns>
+    /// <remarks>The compiled rig is cached against the AUTHORED program instance, so a delivery that only advances
+    /// the document retargets in place — the seat's live orbit is an evaluator input, never a recompile.</remarks>
     public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: views);
+
         if (!ReferenceEquals(
             objA: m_authoredRig,
             objB: views.SeatRig
@@ -236,6 +246,7 @@ public sealed class WorldSeatViewState {
             m_authoredRig = views.SeatRig;
             m_compiledRig = WorldCameraRigCompiler.Compile(
                 definition: definition,
+                interactive: true,
                 program: views.SeatRig
             );
         } else {
@@ -255,18 +266,14 @@ public sealed class WorldSeatViewState {
             pitch = m_pitch;
         }
 
-        var rig = WorldSeatCameraResolver.ResolveChase(
-            authoredRig: views.SeatRig,
+        var rig = m_compiledRig!;
+
+        rig.Look = WorldSeatCameraResolver.Look(
             bodyOrientation: bodyOrientation,
-            cache: m_orbit,
-            compiledChase: m_compiledRig!,
-            definition: definition,
-            liveYaw: yaw,
             livePitch: pitch,
+            liveYaw: yaw,
             yawReference: views.SeatControl.YawReference
         );
-
-        rig.Retarget(definition: definition);
 
         return rig;
     }
@@ -276,14 +283,16 @@ public sealed class WorldSeatViewState {
             // pose (within SwapLandedDistance, the same scale as an unnoticeable camera offset).
             var boomTarget = (eye - target);
 
-            WorldSeatCameraResolver.Smooth(
-                deltaSeconds: deltaSeconds,
-                eye: ref eye,
-                isPlainChase: enabled,
-                smoothRate: (m_swapRate ?? rate),
-                state: m_smoothing,
-                target: ref target
-            );
+            if (enabled) {
+                m_smoothing.Apply(
+                    deltaSeconds: deltaSeconds,
+                    eye: ref eye,
+                    rate: (m_swapRate ?? rate),
+                    target: ref target
+                );
+            } else {
+                m_smoothing.Reseed();
+            }
 
             if (
                 (m_swapRate is not null) &&

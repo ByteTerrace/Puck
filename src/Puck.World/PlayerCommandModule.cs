@@ -65,6 +65,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     /// <summary>The movement-facing Axis2D command (+Y forward, +X strafe right). The handler routes the dispatch to
     /// the owning device's player; standard binds its left stick to <see cref="MoveStrafeCommand"/> instead.</summary>
     public const string MoveCommand = Puck.World.Client.PlayerCommandNames.MoveCommand;
+    /// <summary>The no-token Free Cam toggle: <c>player.camera [seat]</c>.</summary>
+    public const string CameraCommand = Puck.World.Client.PlayerCommandNames.CameraCommand;
     /// <summary>The generic per-seat mode-family flip: <c>player.mode &lt;family&gt; &lt;state&gt; [seat]</c>, or
     /// <c>player.mode &lt;family&gt; [seat]</c> to read back the seat's current state.</summary>
     public const string ModeCommand = Puck.World.Client.PlayerCommandNames.ModeCommand;

@@ -48,21 +48,20 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             _ => "anchor=none",
         };
     }
-    // Camera motion and aim are independent closed vocabularies.
-    private static string CameraRigKind(WorldCameraRig rig) {
-        var motion = rig.Motion switch {
-            WorldCameraMotion.Follow => "follow",
-            WorldCameraMotion.Orbit => "orbit",
-            WorldCameraMotion.Static => "static",
-            _ => "track",
-        };
-        var aim = rig.Aim switch {
-            WorldCameraAim.Anchor => "anchor",
-            WorldCameraAim.Forward => "forward",
-            _ => "worldPoint",
-        };
+    // A camera rig is an authored op-list program: the listing names it and its ops in evaluation order, which is the
+    // whole framing — there is no separate motion/aim kind left to report.
+    private static string CameraRigKind(WorldCameraProgram rig) {
+        var operations = rig.Operations;
+        var opcodes = new string[operations.Count];
 
-        return $"motion={motion} aim={aim}";
+        for (var index = 0; (index < operations.Count); index++) {
+            opcodes[index] = operations[index].Opcode;
+        }
+
+        return $"program={rig.Name} ops={string.Join(
+            separator: ',',
+            values: opcodes
+        )}";
     }
     // The world.cameras listing: one segment per declared camera — name, the anchor it rides, the rig it frames with,
     // and its offscreen render dimensions. Reads the LIVE definition (never the boot snapshot), so a camera mutation's

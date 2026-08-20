@@ -760,22 +760,28 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                 continue;
             }
 
-            // An unanchored static world-point framing has a directly resolvable listener pose.
+            // Only a program that stays on its own reference pose has a listener pose this derivation can resolve: an
+            // anchor op re-seats the eye on a subject only the render path resolves.
+            if (camera.Rig.AnchorOp is not null) {
+                return null;
+            }
+
+            // An unanchored world-axis offset aimed at a world point has a directly resolvable listener pose.
             if (camera.Anchor is null) {
-                return (((camera.Rig.Motion is WorldCameraMotion.Static { WorldAxes: true } motion) && (camera.Rig.Aim is WorldCameraAim.WorldPoint aim))
-                    ? (Eye: motion.Position.Value, Forward: (aim.Target.Value - motion.Position.Value))
+                return (((camera.Rig.OffsetOp is { WorldAxes: true } fixedOffset) && (camera.Rig.LookAtOp is { Subject: WorldCameraSubject.WorldPoint aim }))
+                    ? (Eye: fixedOffset.Value.Value, Forward: (aim.Point.Value - fixedOffset.Value.Value))
                     : ((Vector3 Eye, Vector3 Forward)?)null
                 );
             }
 
-            if (camera.Rig.Motion is not WorldCameraMotion.Follow { WorldAxes: false } follow) {
+            if (camera.Rig.OffsetOp is not { WorldAxes: false } follow) {
                 return null;
             }
 
             var plan = new EmitterPlan {
                 Anchor = AnchorOf(
                 anchor: camera.Anchor,
-                offset: follow.Offset
+                offset: follow.Value
             ),
             };
 
@@ -1312,7 +1318,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         WorldMutation.UpsertPlacement upsert => upsert.Placement.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Fixed fixedSpeaker } => fixedSpeaker.Position,
         WorldMutation.UpsertSpeaker { Speaker: WorldSpeaker.Bed bed } => bed.Center,
-        WorldMutation.UpsertCamera upsert when (upsert.Camera.Anchor is null) => WorldCameraRigCompiler.AuthoredPosition(motion: upsert.Camera.Rig.Motion),
+        WorldMutation.UpsertCamera upsert when (upsert.Camera.Anchor is null) => WorldCameraRigCompiler.AuthoredPosition(program: upsert.Camera.Rig),
         _ => null,
     };
     /// <summary>Resolves this frame's listener and emitter poses and publishes one snapshot from the slab rotation.

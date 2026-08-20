@@ -3,6 +3,7 @@ using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.Physics;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -126,21 +127,21 @@ public sealed partial class WorldBody {
     // m_tuning's Rise/Fall/MaxFall whichever model authored them (the validator's GravityArc/GravityBleed facets
     // guarantee the vehicle row carries all three), and MoveSpeed/TurnSpeed mirror TopSpeed/SteerRate so the
     // pre-dispatch Speed resolve stays well-formed — the vehicle ops themselves read only m_vehicleTuning. The swim
-    // arm compiles STRAIGHT into the shared m_tuning slots (FixedMotionTuning.Compile(WorldMotionModel.Swim) maps
+    // arm compiles STRAIGHT into the shared m_tuning slots (WorldMotionTuningFactory.Compile(WorldMotionModel.Swim) maps
     // ThrustSpeed/ThrustSpeedEnvelope onto MoveSpeed/MoveSpeedEnvelope) — no fork, so the grounded-shaped resolve is
     // already arm-correct for swim; only the swim-specific half (buoyancy, float depth, ...) needs its own record.
     private void SetTuning(WorldMotionModel motion) {
         switch (motion) {
             case WorldMotionModel.Grounded grounded:
                 m_motionArm = CompiledMotionArm.Grounded;
-                m_tuning = FixedMotionTuning.Compile(tuning: grounded);
+                m_tuning = WorldMotionTuningFactory.Compile(tuning: grounded);
                 m_vehicleTuning = default;
                 m_swimTuning = null;
                 break;
             case WorldMotionModel.Vehicle vehicle:
                 m_motionArm = CompiledMotionArm.Vehicle;
-                m_vehicleTuning = FixedVehicleTuning.Compile(tuning: vehicle);
-                m_tuning = FixedMotionTuning.Compile(tuning: new WorldMotionModel.Grounded(
+                m_vehicleTuning = WorldMotionTuningFactory.Compile(tuning: vehicle);
+                m_tuning = WorldMotionTuningFactory.Compile(tuning: new WorldMotionModel.Grounded(
                     MoveSpeed: vehicle.TopSpeed,
                     TurnSpeed: vehicle.SteerRate,
                     RiseGravity: vehicle.RiseGravity,
@@ -153,9 +154,9 @@ public sealed partial class WorldBody {
                 break;
             case WorldMotionModel.Swim swim:
                 m_motionArm = CompiledMotionArm.Swim;
-                m_tuning = FixedMotionTuning.Compile(tuning: swim);
+                m_tuning = WorldMotionTuningFactory.Compile(tuning: swim);
                 m_vehicleTuning = default;
-                m_swimTuning = FixedSwimTuning.Compile(tuning: swim);
+                m_swimTuning = WorldMotionTuningFactory.CompileSwim(tuning: swim);
                 break;
             default:
                 throw new NotSupportedException(message: $"Motion model '{motion.GetType().Name}' has no compiled WorldBody integrator.");

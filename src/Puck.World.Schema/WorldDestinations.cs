@@ -44,7 +44,7 @@ public enum WorldDestinationScope {
 /// <c>$type</c>-discriminated union docs/vision.md's "Durability, scope and generation" names. Required exactly
 /// when <see cref="WorldDestination.Scope"/> is <see cref="WorldDestinationScope.Group"/>; admitted nowhere else. A
 /// future selection form widens this union with another <c>$type</c> arm rather than adding parallel optional fields
-/// to <see cref="WorldDestination"/> itself (the same closed-union discipline <see cref="WorldCameraMotion"/>/
+/// to <see cref="WorldDestination"/> itself (the same closed-union discipline <see cref="WorldCameraSubject"/>/
 /// <see cref="WorldAnchor"/> already follow).</summary>
 [JsonDerivedType(typeof(WorldGroupSelector.Named), typeDiscriminator: "named")]
 [JsonDerivedType(typeof(WorldGroupSelector.Tagged), typeDiscriminator: "tagged")]

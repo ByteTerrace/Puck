@@ -48,7 +48,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         );
 
         if (seatBindings.IsCameraModeActive(slot: slot)) {
-            _ = builder.Append(value: " flying=true");
+            _ = builder.Append(value: " cameraApplication=true");
         }
 
         return builder.Append(value: ']').ToString();

@@ -2,6 +2,7 @@ using Puck.World.Protocol;
 using Puck.World.Server;
 using System.Numerics;
 using Xunit;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Tests;
 

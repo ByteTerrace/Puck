@@ -5,6 +5,7 @@ using Puck.Forge.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
@@ -1142,7 +1143,7 @@ public static partial class WorldDefinitionValidator {
         // exactly once, over the whole graph, never per-program.
         var cameraPrograms = new Dictionary<string, WorldCameraProgram>(comparer: StringComparer.Ordinal);
 
-        foreach (var camera in authoredCameras) {
+        foreach (var camera in definition.Cameras) {
             if (
                 (camera?.Rig is { Name: { Length: > 0 } } rig) &&
                 !cameraPrograms.ContainsKey(key: rig.Name)

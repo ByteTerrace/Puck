@@ -2,15 +2,37 @@
 
 Puck.Physics owns the engine's deterministic fixed-point simulation kernels:
 exact and scalable gravitational fields, compound dynamic-body overlap, analytic
-static contact geometry, and a substepping rigid-contact solver. Everything here
-is built on Puck.Maths, so identical ordered inputs return identical results —
-bit for bit — on every machine and backend, and a run can be recorded and
-replayed exactly.
+static contact geometry, a substepping rigid-contact solver, and — under
+`Motion/` — the body motion-program core. Everything here is built on Puck.Maths,
+so identical ordered inputs return identical results — bit for bit — on every
+machine and backend, and a run can be recorded and replayed exactly.
 
 The library computes; it does not govern. Callers keep world-document
 compilation, authority, gameplay classifications such as walkability, and the
 final application of contact results. A kernel returns a correction or an
 acceleration and leaves the decision of what to do with it to its caller.
+
+## 🧭 The motion-program core (`Motion/`)
+
+`Motion/` holds the instruction vocabulary a body advances under and nothing that
+reads a document: `BodyMotionOp` (the closed opcode set), `CompiledBodyMotionProgram`
+(the compiler that validates a declared name/version/kind/opcode set and groups the
+selection into its intrinsic host phases), the per-body trigger and action-state IR
+(`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `CompiledPredicate`,
+`CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
+and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,
+`FixedVehicleTuning`, `FixedSwimTuning`, `FixedMotionDefaults`,
+`FixedMotionScalarEnvelope`).
+
+The translation from an authored world row into these shapes lives with the
+authoring vocabulary, in `Puck.World.Schema` (`BodyMotionProgramFactory`,
+`BodyActionSpecFactory`, `WorldMotionTuningFactory`). Execution — the per-phase
+stages that read and write a body's pose, velocity, and action state — belongs to
+the host that owns that state (`Puck.World.Server.WorldBody`); this project supplies
+the program it executes, not the body it executes on.
+
+Both `Puck.Abstractions` (the strict by-name enum converter every authored enum in
+this vocabulary declares) and `Puck.Maths` are referenced.
 
 ## ✨ Key features
 

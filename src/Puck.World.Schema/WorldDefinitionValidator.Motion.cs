@@ -1,3 +1,5 @@
+using Puck.Physics.Motion;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
@@ -82,6 +84,23 @@ public static partial class WorldDefinitionValidator {
         key: name,
         value: out value
     );
+    // The authored rows keyed the same way the compiled table is (first row of a duplicated name wins, matching
+    // ValidateBodyMotionPrograms). The target source a producer senses is authored vocabulary rather than compiled
+    // instruction state, so the checks over it read the row rather than the compiled program.
+    private static Dictionary<string, BodyMotionProgram> BodyMotionProgramRows(IReadOnlyList<BodyMotionProgram> programs) {
+        var rows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);
+
+        foreach (var program in programs) {
+            if (program is { Name: not null }) {
+                _ = rows.TryAdd(
+                    key: program.Name,
+                    value: program
+                );
+            }
+        }
+
+        return rows;
+    }
     private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, List<string> errors) {
         var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
 
@@ -99,7 +118,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             try {
-                var compiledProgram = CompiledBodyMotionProgram.Compile(program: program);
+                var compiledProgram = BodyMotionProgramFactory.Compile(program: program);
 
                 compiled.Add(
                     key: program.Name,
@@ -123,16 +142,16 @@ public static partial class WorldDefinitionValidator {
                     }
                     if (
                         senses &&
-                        (compiledProgram.Target is null)
+                        (program.Target is null)
                     ) {
                         errors.Add(item: $"{path}.target is required by '{BodyMotionOp.SenseNearestInCone}'.");
                     } else if (
                         !senses &&
-                        (compiledProgram.Target is not null)
+                        (program.Target is not null)
                     ) {
                         errors.Add(item: $"{path}.target requires '{BodyMotionOp.SenseNearestInCone}'.");
                     }
-                    switch (compiledProgram.Target) {
+                    switch (program.Target) {
                         case BodyTargetSource.Sensed sensed:
                             if (!Enum.IsDefined(value: sensed.Scope)) {
                                 errors.Add(item: $"{path}.target.scope '{sensed.Scope}' is not a defined BodyTargetScope.");
@@ -152,7 +171,7 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{path}.target.register '{designated.Register}' names no target register.");
                             break;
                     }
-                } else if (compiledProgram.Target is not null) {
+                } else if (program.Target is not null) {
                     errors.Add(item: $"{path}.target is only admitted on a Producer program.");
                 }
             } catch (BodyMotionProgramException exception) {
@@ -338,7 +357,7 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
     }
-    private static void ValidateProducerParameters(IReadOnlyDictionary<string, BodyProgramParameters> producers, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> channelNames, string path, List<string> errors) {
+    private static void ValidateProducerParameters(IReadOnlyDictionary<string, BodyProgramParameters> producers, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, ISet<string> channelNames, string path, List<string> errors) {
         if (producers is null) {
             errors.Add(item: $"{path} is required.");
             return;
@@ -378,9 +397,17 @@ public static partial class WorldDefinitionValidator {
             if (program.Contains(operation: BodyMotionOp.ProduceWanderIntent)) {
                 required.UnionWith(other: WanderScalars);
             }
+            var target = (programRows.TryGetValue(
+                key: name,
+                value: out var programRow
+            )
+                ? programRow.Target
+                : null
+            );
+
             if (program.Contains(operation: BodyMotionOp.ProduceAttendIntent)) {
                 required.UnionWith(other: AttendScalars);
-                if (program.Target is BodyTargetSource.Sensed) {
+                if (target is BodyTargetSource.Sensed) {
                     required.Add(item: "releaseRadius");
                 }
             }
@@ -477,7 +504,7 @@ public static partial class WorldDefinitionValidator {
                 );
             }
             if (
-                (program.Target is BodyTargetSource.Sensed sensed) &&
+                (target is BodyTargetSource.Sensed sensed) &&
                 TryScalar(
                 name: "releaseRadius",
                 parameters: parameters,

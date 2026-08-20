@@ -37,9 +37,10 @@ public abstract record WorldCameraSubject {
 /// One instruction in an authored camera program's ordered op list — the presentation-side pose algebra
 /// <c>bodyMotionPrograms</c> established for sim-side movement, promoted to cameras: an authored rig is an ordered
 /// list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data,
-/// never new engine code. Evaluated in authored order by <c>Puck.World.WorldCameraRigCompiler</c> against the
-/// program's externally supplied reference pose (see <see cref="WorldCameraSubject.Reference"/>); floats throughout —
-/// presentation carries no fixed-point burden.
+/// never new engine code. This is the AUTHORING vocabulary only: <c>Puck.World.Client.WorldCameraRigCompiler</c>
+/// translates it to <c>Puck.SdfVm.Views.SdfCameraOp</c> and resolves each frame's bindings and subject poses, and
+/// <c>Puck.SdfVm.Views.SdfCameraProgramEvaluator</c> — which parses no document — walks the result. Floats
+/// throughout; presentation carries no fixed-point burden.
 /// </summary>
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Anchor), typeDiscriminator: "anchor")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Offset), typeDiscriminator: "offset")]
@@ -53,6 +54,20 @@ public abstract record WorldCameraSubject {
 public abstract record WorldCameraProgramOp {
     private WorldCameraProgramOp() {
     }
+
+    /// <summary>Gets this op's authored <c>$type</c> token — the one spelling a refusal, a read-back, and the
+    /// document all use.</summary>
+    public string Opcode => (this switch {
+        Anchor => "anchor",
+        Blend => "blend",
+        ClampPitch => "clampPitch",
+        Fov => "fov",
+        LookAt => "lookAt",
+        Offset => "offset",
+        Orbit => "orbit",
+        Smooth => "smooth",
+        _ => "unknown",
+    });
 
     /// <summary>Establishes the CURRENT subject — the pose <see cref="Offset"/>/<see cref="Orbit"/> place the eye
     /// relative to, and <see cref="LookAt"/> aims along the facing of when it names no subject of its own. Also
@@ -71,12 +86,13 @@ public abstract record WorldCameraProgramOp {
     /// <summary>Sets the aim target.</summary>
     /// <param name="Subject">The subject to look at, or <see langword="null"/> to look along the current subject's
     /// own forward axis from the eye, at <paramref name="FocusDistance"/>.</param>
-    /// <param name="Offset">An offset from the resolved <paramref name="Subject"/>'s pose; ignored when
+    /// <param name="TargetOffset">An offset from the resolved <paramref name="Subject"/>'s pose; ignored when
     /// <paramref name="Subject"/> is <see langword="null"/>.</param>
-    /// <param name="WorldAxes">Whether <paramref name="Offset"/> uses world axes rather than the subject's own.</param>
+    /// <param name="WorldAxes">Whether <paramref name="TargetOffset"/> uses world axes rather than the subject's
+    /// own.</param>
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, used only
     /// when <paramref name="Subject"/> is <see langword="null"/>.</param>
-    public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? Offset = null, bool WorldAxes = false, float FocusDistance = 6f) : WorldCameraProgramOp;
+    public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? TargetOffset = null, bool WorldAxes = false, float FocusDistance = 6f) : WorldCameraProgramOp;
     /// <summary>Places the eye by orbiting the current subject's pose. The seat-view pipeline adds a joined seat's
     /// live look input to <paramref name="Yaw"/>/<paramref name="Pitch"/> for an interactive program (see
     /// <c>Puck.World.Client.WorldSeatCameraResolver</c>); a non-interactive program (a named camera) renders the

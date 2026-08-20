@@ -202,9 +202,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return null;
     }
-    // Whether the seat's currently published state for any of these families targets the fly control application —
-    // the rig's own activation condition, read against a family list so the caller can ask it either side of a
-    // reseed (the "was flying / is no longer" edge CameraApplicationDropped reports).
+    // Whether the seat's currently published state for any of these families targets the camera control application —
+    // its own activation condition, read against a family list so the caller can ask it either side of a reseed (the
+    // "was on / is no longer" edge CameraApplicationDropped reports).
     private bool PublishesCameraTarget(int slot, IReadOnlyList<WorldSeatModeFamily> families) {
         foreach (var family in families) {
             if (
@@ -325,6 +325,33 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         families: m_definitions[slot].SeatModes,
         slot: slot
     ));
+    /// <summary>Resolves the AUTHORED family and state that compose seat <paramref name="slot"/>'s camera control
+    /// application — the first state, in document order, whose <see cref="WorldSeatModeState.Target"/> is
+    /// <see cref="WorldSeatModeState.CameraTarget"/>. <see langword="null"/> when the seat's routed document declares
+    /// no such state.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <returns>The family and its camera-targeting state.</returns>
+    /// <remarks>The one lookup a no-token Free Cam binding resolves through, so a wheel sector and an explicit
+    /// <c>player.mode</c> line compose the identical application.</remarks>
+    public (WorldSeatModeFamily Family, WorldSeatModeState State)? TryResolveCameraMode(int slot) {
+        if (((uint)slot) >= SeatCount) {
+            return null;
+        }
+
+        foreach (var family in m_definitions[slot].SeatModes) {
+            foreach (var state in family.States) {
+                if (string.Equals(
+                    a: state.Target,
+                    b: WorldSeatModeState.CameraTarget,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return (Family: family, State: state);
+                }
+            }
+        }
+
+        return null;
+    }
     /// <summary>Resolves an AUTHORED (world-declared) seat-mode family by name for seat <paramref name="slot"/>'s
     /// currently routed document — the lookup <c>player.mode</c> validates a family/state token through. Built-in
     /// families (roster, engagement, layout) are never resolved here; they are not player-settable.</summary>

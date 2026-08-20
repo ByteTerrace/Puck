@@ -892,13 +892,11 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
             }
         }
 
-        // The seat-chase smoothing gap: applied only to the plain (non-editing) chase rig — ReferenceEquals catches
-        // exactly that, since ResolveRig above returns the same chase instance unchanged while the seat is not
-        // editing (see its own remarks) and a different rig (drag/orbit) otherwise. See
-        // WorldSeatCameraResolver.Smooth: a zero rate (the default, and every world/camera authored before this
-        // field existed) skips the ease entirely — eye/target pass through raw, byte-for-byte.
+        // The chase boom eases only while the seat frames through its own chase rig — a camera control application
+        // resolves through views.cameraRig, whose framing is the possessed body's own pose and must not lag it. The
+        // rate is the one the program's smooth op just reported; zero passes eye/target through bit for bit.
         view.Smooth(
-            rate: (views.SeatRig.SmoothOp?.Rate ?? 0f),
+            rate: chase.SmoothRate,
             enabled: ReferenceEquals(
                 objA: rig,
                 objB: chase
@@ -1004,9 +1002,11 @@ public sealed class WorldFrameSource : ISdfFrameSource, ISdfFrameDresser {
         );
         var rig = WorldCameraRigCompiler.Compile(
             definition: m_client.Definition,
-            program: cameraRow.Rig,
-            spread: spread
+            program: cameraRow.Rig
         );
+
+        rig.Spread = spread;
+
         var anchor = new SdfAnchor(
             Orientation: baseOrientation,
             Position: basePosition

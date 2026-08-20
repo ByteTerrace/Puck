@@ -1,20 +1,10 @@
 using System.Numerics;
+using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
 /// <summary>Pure camera math shared by the seat-owned local and traveling view paths.</summary>
 internal static class WorldSeatCameraResolver {
-    internal sealed class LiveOrbitCache {
-        public WorldCameraProgramOp.Orbit? Authored;
-        public float Pitch;
-        public IWorldCameraProgramRig? Rig;
-        public float Yaw;
-    }
-    internal sealed class SmoothingState {
-        public Vector3 Boom;
-        public bool Seeded;
-    }
-
     /// <summary>The shortest arc carrying <paramref name="from"/> to <paramref name="to"/>, both unit vectors.</summary>
     /// <remarks>Used to TRANSPORT a held rotation by a small step, where the two are near each other and the arc is
     /// always well conditioned — never to rebuild one from a fixed reference, which is exactly the case that has no
@@ -107,84 +97,17 @@ internal static class WorldSeatCameraResolver {
             y: behind.X
         );
     }
-    public static IWorldCameraProgramRig ResolveChase(WorldCameraProgram authoredRig, IWorldCameraProgramRig compiledChase,
-        WorldSeatYawReference yawReference, Quaternion bodyOrientation, WorldDefinition definition, float liveYaw, float livePitch,
-        LiveOrbitCache cache) {
-        if (authoredRig.OrbitOp is not { } orbit) {
-            return compiledChase;
-        }
-
-        var yaw = ((orbit.Yaw + liveYaw) + ((yawReference == WorldSeatYawReference.World)
+    /// <summary>The look sample a joined seat's compiled chase rig folds into its authored orbit: the seat's own live
+    /// yaw/pitch offset, plus the body's heading when the world declares a body-relative yaw reference.</summary>
+    /// <param name="yawReference">The world's authored yaw reference.</param>
+    /// <param name="bodyOrientation">The perceived body's orientation.</param>
+    /// <param name="liveYaw">The seat's live yaw offset, radians.</param>
+    /// <param name="livePitch">The seat's live pitch offset, radians.</param>
+    /// <returns>The composed look sample.</returns>
+    public static SdfCameraLook Look(WorldSeatYawReference yawReference, Quaternion bodyOrientation, float liveYaw, float livePitch) => new(
+        Pitch: livePitch,
+        Yaw: (liveYaw + ((yawReference == WorldSeatYawReference.World)
             ? 0f
-            : BodyYaw(orientation: bodyOrientation)));
-        var pitch = (orbit.Pitch + livePitch);
-
-        if (
-            (cache.Rig is { } cached) &&
-            ReferenceEquals(
-            objA: cache.Authored,
-            objB: orbit
-        ) &&
-            (cache.Yaw == yaw) &&
-            (cache.Pitch == pitch)
-        ) {
-            return cached;
-        }
-
-        cache.Authored = orbit;
-        cache.Yaw = yaw;
-        cache.Pitch = pitch;
-
-        var bakedOrbit = (orbit with { Yaw = yaw, Pitch = pitch });
-        var operations = new List<WorldCameraProgramOp>(capacity: authoredRig.Operations.Count);
-
-        foreach (var op in authoredRig.Operations) {
-            operations.Add(item: (ReferenceEquals(
-                objA: op,
-                objB: orbit
-            )
-                ? bakedOrbit
-                : op));
-        }
-
-        cache.Rig = WorldCameraRigCompiler.Compile(
-            definition: definition,
-            program: (authoredRig with { Operations = operations })
-        );
-
-        return cache.Rig;
-    }
-    public static void Smooth(SmoothingState state, float smoothRate, bool isPlainChase, float deltaSeconds,
-        ref Vector3 eye, ref Vector3 target) {
-        if (
-            !isPlainChase ||
-            (smoothRate <= 0f)
-        ) {
-            state.Seeded = false;
-            return;
-        }
-
-        if (!state.Seeded) {
-            state.Boom = (eye - target);
-            state.Seeded = true;
-        } else {
-            var alpha = (1f - MathF.Exp(x: (-smoothRate * MathF.Max(
-                x: deltaSeconds,
-                y: 0f
-            ))));
-
-            state.Boom = Vector3.Lerp(
-                amount: alpha,
-                value1: state.Boom,
-                value2: (eye - target)
-            );
-        }
-
-        // Smooth only the authored orbit boom. The subject's translation is already the continuous render pose and
-        // must remain exact: smoothing absolute eye/target coordinates made a fast-rising player leave the camera
-        // physically below them (and made every authority handoff look like camera lag despite a continuous anchor).
-        // Keeping target live while easing its relative boom preserves authored orbit smoothing without inventing
-        // a second, delayed player trajectory in presentation.
-        eye = (target + state.Boom);
-    }
+            : BodyYaw(orientation: bodyOrientation)))
+    );
 }

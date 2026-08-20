@@ -57,6 +57,9 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldCameraProgram))]
 [JsonSerializable(typeof(WorldCameraProgramOp))]
 [JsonSerializable(typeof(WorldCameraSubject))]
+// WorldAnchor.Placement and WorldCameraSubject.Placement share a simple name, which the source generator would
+// otherwise resolve to one generated accessor for both (SYSLIB1031). Naming this arm explicitly keeps both.
+[JsonSerializable(typeof(WorldCameraSubject.Placement), TypeInfoPropertyName = "WorldCameraSubjectPlacement")]
 // The seat rig's input-policy sibling; this entry exposes the typed accessor world.view.look deserializes through.
 [JsonSerializable(typeof(WorldSeatLook))]
 [JsonSerializable(typeof(WorldSeatViewControl))]

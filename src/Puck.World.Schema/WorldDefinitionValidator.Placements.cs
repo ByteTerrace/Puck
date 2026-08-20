@@ -3,6 +3,7 @@ using Puck.Abstractions.Presentation;
 using Puck.Forge.Authoring;
 using Puck.SignedDistance;
 using Puck.Text;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
@@ -577,6 +578,7 @@ public static partial class WorldDefinitionValidator {
     // The kit rows (SIM-AFFECTING): name presence/uniqueness, one motion program, producer parameters, and actions.
     private static HashSet<string> ValidateKits(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, ISet<string> allChannelNames, ISet<string> compositionChannelNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, List<string> errors) {
         var kitNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var programRows = BodyMotionProgramRows(programs: definition.BodyMotionPrograms);
         var targetRegisterNames = definition.TargetRegisters.Select(selector: register => register.Name).ToHashSet(comparer: StringComparer.Ordinal);
         var judgeRowNames = (definition.Judges ?? []).Select(selector: row => row.Name).ToHashSet(comparer: StringComparer.Ordinal);
 
@@ -639,6 +641,7 @@ public static partial class WorldDefinitionValidator {
             ValidateProducerParameters(
                 producers: kit.Producers,
                 programs: programs,
+                programRows: programRows,
                 channelNames: allChannelNames,
                 path: $"{path}.producers",
                 errors: errors

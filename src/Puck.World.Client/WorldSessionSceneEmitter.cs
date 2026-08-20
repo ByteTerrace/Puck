@@ -160,7 +160,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 definition: definition,
                 anchor: cameraRow.Anchor
             );
-            var rig = WorldCameraRigCompiler.Compile(rig: cameraRow.Rig);
+            var rig = WorldCameraRigCompiler.Compile(
+                definition: definition,
+                program: cameraRow.Rig
+            );
             var anchor = new SdfAnchor(
                 Orientation: orientation,
                 Position: position

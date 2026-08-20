@@ -5,7 +5,7 @@ namespace Puck.World;
 /// <summary>
 /// WHERE a placeable thing rides — the one shared pose-target vocabulary a placeable <see cref="WorldCamera"/> and a
 /// placeable <see cref="WorldSpeaker"/> both consume through the SAME resolver, distinct from HOW the thing looks at or
-/// emits from that pose (a <see cref="WorldCameraRig"/>, a feed). The <c>$type</c> string is the JSON discriminator; a new
+/// emits from that pose (a <see cref="WorldCameraProgram"/>, a feed). The <c>$type</c> string is the JSON discriminator; a new
 /// anchor kind is a new derived record plus its <see cref="JsonDerivedTypeAttribute"/> line.
 /// </summary>
 [JsonDerivedType(typeof(WorldAnchor.Entity), typeDiscriminator: "entity")]
@@ -33,8 +33,10 @@ public abstract record WorldAnchor {
     /// the placement's own stamped root transform.</param>
     public sealed record Placement(string PlacementId, int? ShapeId) : WorldAnchor;
     /// <summary>Rides the smoothed CENTROID of a set of population entities — the establishing-shot anchor. Also
-    /// publishes the set's SPREAD (mean distance from the centroid), which <see cref="WorldCameraMotion.Follow"/> consumes
-    /// through its <c>SpreadPullback</c>. A group has no facing, so its orientation resolves to identity.</summary>
+    /// publishes the set's SPREAD (mean distance from the centroid), which a camera program's
+    /// <see cref="WorldCameraProgramOp.Offset"/> consumes through its
+    /// <see cref="WorldCameraProgramOp.Offset.SpreadPullback"/>. A group has no facing, so its orientation resolves to
+    /// identity.</summary>
     /// <param name="Indices">The 0-based entity indices in the set, or <see langword="null"/> for the whole live
     /// population (every active entity). Each index is validated 0..127.</param>
     /// <param name="SmoothRate">The exponential smoothing rate (per second) the centroid/spread ease at (validated

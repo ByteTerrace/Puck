@@ -3,6 +3,7 @@ using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 

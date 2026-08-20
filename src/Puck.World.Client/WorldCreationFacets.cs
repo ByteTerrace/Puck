@@ -115,14 +115,20 @@ public static class WorldCreationFacets {
                         PlacementId: placement.Id,
                         ShapeId: eye.ShapeId
                     ),
-                    Rig: new WorldCameraRig(
-                        Motion: new WorldCameraMotion.Follow(
-                            Offset: eye.Position,
-                            WorldAxes: false,
-                            SpreadPullback: 0f
+                    Rig: new WorldCameraProgram(
+                        Name: WorldFaceCatalog.DerivedCameraName(
+                            placementId: placement.Id,
+                            feed: (eye.Feed ?? eye.Id.ToString(provider: CultureInfo.InvariantCulture))
                         ),
-                        Aim: new WorldCameraAim.Forward(FocusDistance: (eye.Focus ?? 1f)),
-                        Lens: new WorldCameraLens(FieldOfViewRadians: ((eye.Fov ?? 60f) * (MathF.PI / 180f)))
+                        Version: WorldCameraProgram.CurrentVersion,
+                        Operations: [
+                            new WorldCameraProgramOp.Offset(Value: eye.Position),
+                            new WorldCameraProgramOp.LookAt(
+                                FocusDistance: (eye.Focus ?? 1f),
+                                Subject: null
+                            ),
+                            new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: ((eye.Fov ?? 60f) * (MathF.PI / 180f)))),
+                        ]
                     ),
                     RenderWidth: FaceRenderWidth,
                     RenderHeight: FaceRenderHeight

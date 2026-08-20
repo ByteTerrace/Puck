@@ -666,7 +666,7 @@ profile's raw request) — the two diverge only when an envelope is
 narrower than what the profile asked for. `MotionScalarEnvelope` is the
 reusable shape every arm's own overridable scalar adopts, never a bespoke
 bound — both arms compile into the SAME shared `FixedMotionTuning.MoveSpeedEnvelope`
-slot (`FixedMotionTuning.Compile(WorldMotionModel.Swim)` passes
+slot (`WorldMotionTuningFactory.Compile(WorldMotionModel.Swim)` passes
 `ThrustSpeedEnvelope` into it), so `WorldBody.ResolveMoveSpeed`/
 `EffectiveMoveSpeed` are arm-correct by construction with no per-arm resolve.
 

@@ -587,9 +587,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         // The two views sub-rows RMW the CURRENT Views row (SetViewDefaults carries the whole section) — the same
         // read-modify-write world.row.set views.seatRig/world.view.look performed before folding into this table.
         ["views.seatRig"] = new RowSection(
-        RowType: typeof(WorldCameraRig),
+        RowType: typeof(WorldCameraProgram),
         Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldCameraRig,
+            info: WorldJsonContext.Default.WorldCameraProgram,
             toMutation: static (server, principal, rig) => new WorldMutation.SetViewDefaults(
                 Principal: principal,
                 Views: (server.Definition.Views with { SeatRig = rig })
@@ -597,7 +597,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         ),
         Remove: null,
         Read: ReadRow(
-            info: WorldJsonContext.Default.WorldCameraRig,
+            info: WorldJsonContext.Default.WorldCameraProgram,
             select: static server => server.Definition.Views.SeatRig
         )
     ),

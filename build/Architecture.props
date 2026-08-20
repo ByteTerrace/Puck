@@ -148,7 +148,8 @@
              Puck.Attestation: the admission handshake's identity door (WorldAdmissionDoor.cs) verifies a
              connecting peer's signed-attestation claim through it — Leaf contracts and data, same row as
              Puck.Maths/Puck.Storage, so no layer boundary moves. Puck.Physics is the production owner of
-             deterministic collider vocabulary and contact geometry previously embedded in World. What this profile
+             deterministic collider vocabulary, contact geometry, and the body motion-program core; this project
+             keeps the authoring vocabulary and its translation into that core. What this profile
              actually enforces is the ABSENCE that matters: no Backends row, no Presentation row, no Puck.SdfVm
              (the GPU renderer — this row reaches only Puck.SignedDistance, its field-as-data half), no
              Puck.Overlays, no Puck.Input, no Puck.World.Protocol, no Puck.World.Server. A member that would need

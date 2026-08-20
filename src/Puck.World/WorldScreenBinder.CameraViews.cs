@@ -35,8 +35,6 @@ internal sealed partial class WorldScreenBinder {
     }
     // Compiles the camera axes and wires their reference-frame source.
     private void ConfigureCameraView(SdfCameraView view, WorldCamera camera) {
-        var referenceOffset = Vector3.Zero;
-
         switch (camera.Anchor) {
             case null:
                 view.AnchorSource = null;
@@ -74,10 +72,15 @@ internal sealed partial class WorldScreenBinder {
                 break;
         }
 
-        view.Rig = WorldCameraRigCompiler.Compile(
-            rig: camera.Rig,
-            referenceOffset: referenceOffset
-        );
+        // A camera program's state bindings, placement subjects, and blend names all resolve against the live
+        // document, which only the client anchor source carries (the same seam StaticAnchorPosition/GroupCentroid
+        // read). Without one there is no document to compile against and the view resolves no signal.
+        if (m_anchors is WorldClient client) {
+            view.Rig = WorldCameraRigCompiler.Compile(
+                definition: client.Definition,
+                program: camera.Rig
+            );
+        }
     }
     // The one-shot centroid of a group anchor. A filmed/offscreen view bakes only this raw centroid: it DROPS the group
     // Chase.SpreadPullback widening entirely (not merely its per-frame smoothing), so an establishing shot filmed onto a

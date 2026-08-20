@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
@@ -601,7 +602,7 @@ public sealed class WorldRuleException : ArgumentException {
     public WorldRuleRefusal Refusal { get; }
 }
 /// <summary>Compiles authored <see cref="WorldRule"/> rows against a candidate <see cref="WorldDefinition"/> —
-/// construction at the document/mutation boundary, exactly where <c>CompiledActionSpec.Compile</c> sits for a kit's
+/// construction at the document/mutation boundary, exactly where <c>BodyActionSpecFactory.Compile</c> sits for a kit's
 /// per-body actions. Called twice by design: once (wrapped, per rule) inside <c>WorldDefinitionValidator</c> so a
 /// malformed rule refuses the mutation or the boot by name instead of throwing later, and once more (unwrapped —
 /// validation already proved success) inside the server's install path to obtain the live array the tick
