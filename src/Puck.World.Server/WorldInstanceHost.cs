@@ -142,7 +142,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // (the boot path needs the fallback only for its own default document; a named instance is always
     // explicit, so it needs both). A third probe under the shipped worlds directory itself is what lets a
     // portal facet's destination resolve a `references` row authored as a bare shipped-world filename
-    // ("dive.world.json", exactly how play.world.json's own references section spells it). A rooted or
+    // ("dive.world.json", exactly how nexus.world.json's own references section spells it). A rooted or
     // already-relative-enough path resolves at the first two probes; this one only fires for a bare
     // filename neither of those found.
     //

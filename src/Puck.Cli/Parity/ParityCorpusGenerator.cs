@@ -7,20 +7,19 @@ using System.Text.Json.Nodes;
 namespace Puck.Cli.Parity;
 
 /// <summary><c>puck parity --generate</c> — regenerates the pattern-world corpus under <c>tests/Puck.Parity/</c>.
-/// Ports <c>generate.py</c> (the tool's former shape) member for member: same skeleton (<c>dive.world.json</c> with
-/// water removed and the grounded kit stack from <c>play.world.json</c>), same four patterns, same per-pattern
-/// creation/placement shape. A creation's canonical hash cannot be derived here (the validator's canonicalizer is
-/// out of reach from this project) so it is supplied the same way the retired tool needed it: via
-/// <c>--hashes id=hex64,...</c>, defaulting an unlisted id to the all-zero placeholder the validator's own refusal
-/// then names the real value for.</summary>
+/// Each world is <c>dive.world.json</c>'s skeleton with water removed and the grounded stack from
+/// <c>jump.world.json</c> layered over it, one pattern creation/placement per world, and the shipped
+/// <c>standard.world.json</c> as its basis (re-spelled relative to the corpus directory). A creation's canonical
+/// hash cannot be derived here (the validator's canonicalizer is out of reach from this project) so it is supplied
+/// via <c>--hashes id=hex64,...</c>, defaulting an unlisted id to the all-zero placeholder the validator's own
+/// refusal then names the real value for.</summary>
 internal static class ParityCorpusGenerator {
     private const string FontSource = "fonts/JetBrainsMono-Regular.ttf";
-    private const string ZeroHash = "0000000000000000000000000000000000000000000000000000000000000";
 
     public static IReadOnlyList<string> Generate(string repositoryRoot, IReadOnlyDictionary<string, string> hashes) {
         var target = Path.Combine(path1: repositoryRoot, path2: "tests", path3: "Puck.Parity");
         var sourcePath = Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds", "dive.world.json"]);
-        var playPath = Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds", "play.world.json"]);
+        var groundedPath = Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds", "jump.world.json"]);
         var patterns = new (string Name, PatternData Data)[] {
             ("parity-gradient", Gradient()),
             ("parity-edges", Edges()),
@@ -34,8 +33,8 @@ internal static class ParityCorpusGenerator {
 
         foreach (var (name, data) in patterns) {
             var sourceWorld = JsonNode.Parse(json: File.ReadAllText(path: sourcePath, encoding: Encoding.UTF8))!.AsObject();
-            var play = JsonNode.Parse(json: File.ReadAllText(path: playPath, encoding: Encoding.UTF8))!.AsObject();
-            var world = Build(hashes: hashes, name: name, pattern: data, play: play, target: target, world: sourceWorld);
+            var grounded = JsonNode.Parse(json: File.ReadAllText(path: groundedPath, encoding: Encoding.UTF8))!.AsObject();
+            var world = Build(hashes: hashes, name: name, pattern: data, grounded: grounded, target: target, world: sourceWorld);
             var path = Path.Combine(path1: target, path2: $"{name}.world.json");
 
             File.WriteAllText(path: path, contents: (world.ToJsonString(options: WriteOptions) + "\n"), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -53,14 +52,18 @@ internal static class ParityCorpusGenerator {
         WriteIndented = true,
     };
 
-    private static JsonObject Build(string name, PatternData pattern, IReadOnlyDictionary<string, string> hashes, JsonObject world, JsonObject play, string target) {
+    private static JsonObject Build(string name, PatternData pattern, IReadOnlyDictionary<string, string> hashes, JsonObject world, JsonObject grounded, string target) {
         world.Remove(propertyName: "water");
 
-        foreach (var section in new[] { "channels", "bodyMotionPrograms", "kits", "defaultSeatKit", "bindingOverlays" }) {
-            world[section] = play[section]!.DeepClone();
+        // The whole grounded stack travels together: the programs' target register and the kits' action state rows
+        // are as much part of it as the kits themselves.
+        foreach (var section in new[] { "channels", "bodyMotionPrograms", "kits", "defaultSeatKit", "targetRegisters", "state" }) {
+            world[section] = grounded[section]!.DeepClone();
         }
 
-        world["$schema"] = "../../../src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
+        // Both path members are spelled relative to the corpus directory, two levels under the repository root.
+        world["basis"] = "../../src/Puck.World/Assets/worlds/standard.world.json";
+        world["$schema"] = "../../src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
         world["documentId"] = name;
 
         var spawnPoints = new JsonArray();
@@ -75,19 +78,14 @@ internal static class ParityCorpusGenerator {
 
         var population = world["population"]!.AsObject();
 
-        population["capacity"] = 4;
+        // Four seats plus the camera body seatModes' camera state possesses.
+        population["capacity"] = 5;
         population["networkPlayers"] = 0;
         ((JsonObject)population["distribution"]!["region"]!)["sampleCount"] = 1;
 
         world["cameras"] = new JsonArray();
         world["references"] = new JsonArray();
         world["destinations"] = new JsonArray();
-
-        var views = world["views"]!.AsObject();
-        var playViews = play["views"]!.AsObject();
-
-        views["seatRig"] = playViews["seatRig"]!.DeepClone();
-        views["seatControl"] = playViews["seatControl"]!.DeepClone();
 
         var document = new JsonObject {
             ["schema"] = "puck.creation.v1",
@@ -123,30 +121,89 @@ internal static class ParityCorpusGenerator {
         }
 
         if (pattern.RenderExtensions is { } renderExtensions) {
-            world["render"]!.AsObject()["extensions"] = renderExtensions;
+            // The skeleton inherits its render section from the basis, so a pattern that authors an extension is
+            // the row that has to introduce one.
+            var render = ((world["render"] as JsonObject) ?? new JsonObject());
+
+            render["extensions"] = renderExtensions;
+            world["render"] = render;
         }
 
-        var hash = (hashes.TryGetValue(key: name, value: out var pinned) ? pinned : ZeroHash);
-
-        world["creations"] = new JsonArray(new JsonObject {
+        var seatKit = ((string)world["defaultSeatKit"]!)!;
+        var creation = new JsonObject {
             ["id"] = name,
             ["document"] = document,
-            ["hash"] = hash,
-        });
-        world["placements"] = new JsonArray(new JsonObject {
-            ["id"] = name,
-            ["creationId"] = name,
-            ["position"] = new JsonArray(((JsonNode)0), ((JsonNode)0), ((JsonNode)3)),
-            ["yawDegrees"] = 0,
-            ["scale"] = 1.25,
-            ["distribution"] = null,
-            ["mirror"] = null,
-            ["solid"] = new JsonObject { ["margin"] = 0 },
-        });
+        };
+
+        // A pattern is pinned only when --hashes names it; an unpinned creation carries no hash member at all.
+        if (hashes.TryGetValue(key: name, value: out var pinned)) {
+            creation["hash"] = pinned;
+        }
+
+        world["creations"] = new JsonArray(creation, CameraBodyCreation());
+        world["placements"] = new JsonArray(
+            new JsonObject {
+                ["id"] = name,
+                ["creationId"] = name,
+                ["position"] = new JsonArray(((JsonNode)0), ((JsonNode)0), ((JsonNode)3)),
+                ["yawDegrees"] = 0,
+                ["scale"] = 1.25,
+                ["distribution"] = null,
+                ["mirror"] = null,
+                ["solid"] = new JsonObject { ["margin"] = 0 },
+            },
+            // Behind the seat spawns at z = 10, so the pattern the two backends compare stays the only geometry in
+            // frame. The basis authors a camera-targeting seat mode, which owes a "camera-seat-" inhabited row.
+            CameraSeatPlacement(kit: seatKit, z: 14)
+        );
 
         return world;
     }
     // AssetContentHash: sha256-64/{16 lowercase hex} = the digest's first 8 bytes read little-endian.
+    // The camera body the basis's camera-targeting seat mode possesses: one small sphere, hash-free (an unhashed
+    // creation is not pinned, so it needs no --hashes entry).
+    private static JsonObject CameraBodyCreation() => new() {
+        ["id"] = "camera-body",
+        ["document"] = new JsonObject {
+            ["schema"] = "puck.creation.v1",
+            ["name"] = "camera-body",
+            ["palette"] = new JsonArray(new JsonObject {
+                ["color"] = "#5EEBE0",
+                ["emissive"] = 0.25,
+                ["specular"] = 0.2,
+                ["shininess"] = 12,
+            }),
+            ["shapes"] = new JsonArray(Shape(
+                id: 0,
+                material: 0,
+                name: "lens",
+                position: (0, 0, 0),
+                scale: (0.18, 0.18, 0.18),
+                type: "Sphere"
+            )),
+            ["frames"] = null,
+            ["chains"] = null,
+            ["cameras"] = null,
+            ["behavior"] = null,
+        },
+    };
+    private static JsonObject CameraSeatPlacement(string kit, double z) => new() {
+        ["id"] = "camera-seat-0",
+        ["creationId"] = "camera-body",
+        ["position"] = new JsonArray(((JsonNode)0), ((JsonNode)1.5), ((JsonNode)z)),
+        ["yawDegrees"] = 0,
+        ["scale"] = 1,
+        ["inhabit"] = new JsonObject {
+            ["count"] = 1,
+            ["kit"] = kit,
+            ["source"] = "Live",
+            ["look"] = null,
+            ["distribution"] = new JsonObject {
+                ["region"] = new JsonObject { ["$type"] = "disc", ["radius"] = 0.01 },
+                ["fill"] = new JsonObject { ["name"] = "additive", ["offset"] = 0, ["step"] = 0.618034 },
+            },
+        },
+    };
     private static string FontHash(string target) {
         var bytes = File.ReadAllBytes(path: Path.Combine(path1: target, path2: FontSource));
         var digest = SHA256.HashData(source: bytes);
@@ -290,12 +347,19 @@ internal static class ParityCorpusGenerator {
             },
         ]
     );
-    private static JsonObject Material((PyNum X, PyNum Y, PyNum Z) albedo, PyNum emissive, PyNum specular, PyNum shininess) => new() {
-        ["albedo"] = Vec3(x: albedo.X, y: albedo.Y, z: albedo.Z),
+    // A palette entry's colour is authored as a #RRGGBB string; the pattern definitions keep stating linear
+    // components, quantized here by round-half-to-even on component * 255.
+    private static JsonObject Material((double X, double Y, double Z) albedo, PyNum emissive, PyNum specular, PyNum shininess) => new() {
+        ["color"] = Hex(blue: albedo.Z, green: albedo.Y, red: albedo.X),
         ["emissive"] = emissive.ToJson(),
         ["specular"] = specular.ToJson(),
         ["shininess"] = shininess.ToJson(),
     };
+    private static string Hex(double red, double green, double blue) {
+        static int Channel(double value) => ((int)Math.Round(mode: MidpointRounding.ToEven, value: (Math.Clamp(max: 1.0, min: 0.0, value: value) * 255.0)));
+
+        return $"#{Channel(value: red):X2}{Channel(value: green):X2}{Channel(value: blue):X2}";
+    }
 
     // The shape's ordered ShapeDomainOp list — "mirror: true"'s exact fold is one symmetry op across the
     // Vector3.UnitX plane (see CreationDocument.cs's ShapeDocument.Domain remarks).
@@ -316,23 +380,32 @@ internal static class ParityCorpusGenerator {
         PyNum onion = default,
         PyNum bend = default,
         PyNum dilate = default
-    ) => new() {
-        ["id"] = id,
-        ["name"] = name,
-        ["type"] = type,
-        ["position"] = Vec3(x: position.X, y: position.Y, z: position.Z),
-        ["rotation"] = (rotation ?? IdentityRotation()),
-        ["scale"] = Vec3(x: scale.X, y: scale.Y, z: scale.Z),
-        ["material"] = material,
-        ["blend"] = (blend ?? "Union"),
-        ["smooth"] = smooth.ToJson(),
-        ["group"] = 0,
-        ["domain"] = (mirror ? s_mirrorDomain.DeepClone() : null),
-        ["twist"] = twist.ToJson(),
-        ["onion"] = onion.ToJson(),
-        ["bend"] = bend.ToJson(),
-        ["dilate"] = dilate.ToJson(),
-    };
+    ) {
+        var shape = new JsonObject {
+            ["id"] = id,
+            ["name"] = name,
+            ["type"] = type,
+            ["position"] = Vec3(x: position.X, y: position.Y, z: position.Z),
+            ["rotation"] = (rotation ?? IdentityRotation()),
+            ["scale"] = Vec3(x: scale.X, y: scale.Y, z: scale.Z),
+            ["material"] = material,
+            ["blend"] = (blend ?? "Union"),
+            ["smooth"] = smooth.ToJson(),
+            ["group"] = 0,
+        };
+
+        // Omitted rather than written null: an unmodified shape carries no domain member at all.
+        if (mirror) {
+            shape["domain"] = s_mirrorDomain.DeepClone();
+        }
+
+        shape["twist"] = twist.ToJson();
+        shape["onion"] = onion.ToJson();
+        shape["bend"] = bend.ToJson();
+        shape["dilate"] = dilate.ToJson();
+
+        return shape;
+    }
     private static JsonArray IdentityRotation() => new() { 0, 0, 0, 1 };
     private static JsonArray YawRotation(double degrees) {
         var half = (((degrees * Math.PI) / 180.0) / 2.0);

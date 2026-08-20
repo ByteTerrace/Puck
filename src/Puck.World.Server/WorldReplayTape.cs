@@ -443,15 +443,17 @@ public sealed class WorldReplayTape {
             // (WorldReplaySnapshot) carries no header/trailer slot outside the per-tick Ticks list a lever fact
             // could attach to without one, so a zero-tick tape drops a pending lever BY DESIGN rather than minting a
             // phantom extra tick (which would make Drive take one more Step than the live session ever did). Stated
-            // loudly here rather than silently, since silent was the ORIGINAL defect this whole method is fixing.
-            Console.Error.WriteLine(value: $"[replay.stop: '{name}' recorded zero ticks — {pendingLevers.Count} pending rate-lever event(s) have no closed tick to attach to and are dropped by design (a zero-tick tape cannot carry one)]");
+            // loudly here rather than silently. Both side-channel notes carry the [replay.tape: prefix, never
+            // [replay.stop: — the canary runner accounts exactly one "[<verb>:" line per submitted command, so a
+            // second line under the verb's own prefix makes a leg unaccountable.
+            Console.Error.WriteLine(value: $"[replay.tape: '{name}' recorded zero ticks — {pendingLevers.Count} pending rate-lever event(s) have no closed tick to attach to and are dropped by design (a zero-tick tape cannot carry one)]");
         }
 
         if (
             (discardedAuthorityCount > 0) ||
             (discardedIntentCount > 0)
         ) {
-            Console.Error.WriteLine(value: $"[replay.stop: '{name}' discarded {discardedAuthorityCount} pending authority entr{((discardedAuthorityCount == 1)
+            Console.Error.WriteLine(value: $"[replay.tape: '{name}' discarded {discardedAuthorityCount} pending authority entr{((discardedAuthorityCount == 1)
                 ? "y"
                 : "ies")} and {discardedIntentCount} pending intent submission(s) that never closed onto a tick — recording them would have claimed they ran on a tick they did not]");
         }

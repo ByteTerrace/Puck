@@ -437,7 +437,7 @@ faulting the instance.
 A resolved name lands on one of two ordinal spans: a fixed `ChannelRole` slot (`0..5` — the motion
 model reads these directly) when the world document's row claims a role, or the next free
 composition ordinal (`6` up, in declaration order) when it does not — a kit's own `Actions` binding
-decides what a composition channel does. The shipped default world (`Assets/worlds/play.world.json`)
+decides what a composition channel does. The shipped default world (`Assets/worlds/nexus.world.json`)
 declares:
 
 | Channel | Shape | Intent effect, host-side (play world) |

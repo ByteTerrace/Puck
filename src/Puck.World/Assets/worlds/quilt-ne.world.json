@@ -45,49 +45,80 @@
   ],
   "cameras": [
     {
+      "$replace": true
+    },
+    {
+      "name": "overview",
+      "anchor": null,
       "rig": {
-        "motion": {
-          "position": [
-            12,
-            22,
-            12
-          ]
-        },
-        "aim": {
-          "target": [
-            12,
-            2,
-            -12
-          ]
-        }
+        "name": "overview",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                12,
+                22,
+                12
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                12,
+                2,
+                -12
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.9
+          }
+        ]
       },
-      "name": "overview"
+      "renderWidth": 320,
+      "renderHeight": 240
     },
     {
       "name": "verify-seam-nw",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            10,
-            8,
-            -7.5
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            -0.5,
-            1,
-            -7.5
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 1
-        },
-        "smoothRate": 0
+        "name": "verify-seam-nw",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                10,
+                8,
+                -7.5
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -0.5,
+                1,
+                -7.5
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1.0
+          }
+        ]
       },
       "renderWidth": 1280,
       "renderHeight": 720
@@ -96,27 +127,36 @@
       "name": "verify-seam-se",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            7.5,
-            8,
-            -10
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            7.5,
-            1,
-            0.5
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 1
-        },
-        "smoothRate": 0
+        "name": "verify-seam-se",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                7.5,
+                8,
+                -10
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                7.5,
+                1,
+                0.5
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1.0
+          }
+        ]
       },
       "renderWidth": 1280,
       "renderHeight": 720
@@ -125,42 +165,39 @@
       "name": "verify-seam-se-low",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            7.5,
-            1.3,
-            -4
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            7.5,
-            1.1,
-            6
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 1
-        },
-        "smoothRate": 0
+        "name": "verify-seam-se-low",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                7.5,
+                1.3,
+                -4
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                7.5,
+                1.1,
+                6
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1.0
+          }
+        ]
       },
       "renderWidth": 1280,
       "renderHeight": 720
-    },
-    {
-      "name": "verify-seam-ne",
-      "$drop": true
-    },
-    {
-      "name": "verify-seam-sw",
-      "$drop": true
-    },
-    {
-      "name": "verify-seam-sw-low",
-      "$drop": true
     }
   ],
   "creations": [
@@ -228,6 +265,34 @@
       "mirror": null,
       "solid": {
         "margin": 0
+      }
+    },
+    {
+      "id": "camera-seat-0",
+      "creationId": "camera-body",
+      "position": [
+        17,
+        1.2,
+        -17
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "inhabit": {
+        "count": 1,
+        "kit": "vaulter",
+        "source": "Live",
+        "look": null,
+        "distribution": {
+          "region": {
+            "$type": "disc",
+            "radius": 0.01
+          },
+          "fill": {
+            "name": "additive",
+            "offset": 0,
+            "step": 0.618034
+          }
+        }
       }
     }
   ],

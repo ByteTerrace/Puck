@@ -8,7 +8,7 @@
   "binding": "Both legs cross Play's mapped archway into a runner-owned remote Studio authority and capture twice; only the positive leg moves the arrived body.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
     "authorityWorld": "src/Puck.World/Assets/worlds/studio.world.json",
     "script": "positive.script.txt",
     "commands": [
@@ -31,7 +31,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
     "authorityWorld": "src/Puck.World/Assets/worlds/studio.world.json",
     "script": "discriminating.script.txt",
     "commands": [

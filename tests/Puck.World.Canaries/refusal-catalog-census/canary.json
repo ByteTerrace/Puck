@@ -8,7 +8,7 @@
   "binding": "world.refusals scans five assemblies; Client/Sdf/SdfRefusal.cs living in Puck.World.Client rather than this composition root must not drop the sdf.decode door. The positive leg calls world.refusals and asserts the current census (97 across 8 doors) plus a known SdfRefusal member; the discriminating leg never calls world.refusals, so the census text is absent there and the runner's cross-check proves the positive assertions are sensitive to it.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -22,7 +22,7 @@
     ]
   },
   "discriminating": {
-    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },

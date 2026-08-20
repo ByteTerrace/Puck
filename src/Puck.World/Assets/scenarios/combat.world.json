@@ -1,4 +1,5 @@
 {
+  "basis": "../worlds/standard.world.json",
   "$schema": "../worlds/puck.world.def.v1.schema.json",
   "motion": {
     "moveSpeed": 4,
@@ -39,32 +40,10 @@
       ]
     }
   ],
-  "render": {
-    "shadows": "Off",
-    "shadowCrowdRadius": 15,
-    "ambientOcclusion": false,
-    "renderScale": "Half",
-    "upscaleSharpness": 0,
-    "low": {
-      "shadows": "Off",
-      "ambientOcclusion": false,
-      "renderScale": "Half"
-    },
-    "medium": {
-      "shadows": "Medium",
-      "ambientOcclusion": true,
-      "renderScale": "ThreeQuarter"
-    },
-    "high": {
-      "shadows": "High",
-      "ambientOcclusion": true,
-      "renderScale": "Native"
-    }
-  },
   "screens": [],
   "cameras": [],
   "population": {
-    "capacity": 4,
+    "capacity": 5,
     "reconnectGraceSeconds": 3.0,
     "seatActivation": [
       "Eager",
@@ -153,47 +132,14 @@
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveAdvance"
+      "role": "MoveAdvance",
+      "frame": "World"
     },
     {
       "name": "strafe",
       "shape": "Bipolar",
-      "role": "MoveStrafe"
-    },
-    {
-      "name": "turn",
-      "shape": "Bipolar",
-      "role": "Turn"
-    },
-    {
-      "name": "up",
-      "shape": "Bipolar",
-      "role": "MoveUp"
-    },
-    {
-      "name": "pitch",
-      "shape": "Bipolar",
-      "role": "Pitch"
-    },
-    {
-      "name": "roll",
-      "shape": "Bipolar",
-      "role": "Roll"
-    },
-    {
-      "name": "jump",
-      "shape": "Binary",
-      "composition": true
-    },
-    {
-      "name": "dash",
-      "shape": "Binary",
-      "composition": true
-    },
-    {
-      "name": "run",
-      "shape": "Binary",
-      "composition": true
+      "role": "MoveStrafe",
+      "frame": "World"
     }
   ],
   "bodyMotionPrograms": [
@@ -209,19 +155,6 @@
         "RunActionTriggers",
         "ApplyVerticalGravity",
         "IntegratePlanarAndVerticalVelocity",
-        "CommitPose"
-      ]
-    },
-    {
-      "name": "free",
-      "version": "puck.body-motion.v1",
-      "kind": "Motion",
-      "operations": [
-        "IntegrateLocalAttitude",
-        "ComputeLocalTargetVelocity",
-        "RunActionTriggers",
-        "ApplyVerticalDecay",
-        "IntegrateScratchVelocity",
         "CommitPose"
       ]
     },
@@ -268,6 +201,10 @@
   ],
   "kits": [
     {
+      "name": "defaultKit",
+      "$drop": true
+    },
+    {
       "name": "traveler",
       "bodyMotionProgram": "grounded",
       "motion": {
@@ -277,7 +214,7 @@
         "riseGravity": 14,
         "fallGravity": 23,
         "maxFallSpeed": 20,
-        "sprintMultiplier": 1,
+        "sprintMultiplier": 1.6,
         "response": [
           {
             "gate": {
@@ -301,7 +238,6 @@
             "releaseRate": 17
           }
         ],
-        "sprintMultiplier": 1.6,
         "sprintChannel": "run",
         "moveFrame": "World",
         "facingSnap": true
@@ -328,8 +264,7 @@
             "altitudeBase": 0,
             "altitudeRange": 0
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -400,131 +335,6 @@
     "rows": []
   },
   "addons": [],
-  "bindingOverlays": [
-    {
-      "bindingBar": {
-        "enabled": true,
-        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
-        "layout": {
-          "buttonSize": 0.075,
-          "centerGap": 0.1,
-          "anchorOffsetY": 0.14,
-          "glyphOffsetRatio": 0.4375,
-          "glyphSizeRatio": 0.53333336,
-          "scale": 0.72
-        }
-      },
-      "id": "combat-sprint",
-      "document": {
-        "version": "puck.bindings.v1",
-        "modifiers": [],
-        "chords": [
-          {
-            "group": "default",
-            "chord": [],
-            "page": {
-              "id": "base",
-              "entries": [
-                {
-                  "sources": [
-                    "keyboard.space"
-                  ],
-                  "channel": "jump",
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.space"
-                  ],
-                  "channel": "jump",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonSouth"
-                  ],
-                  "channel": "jump",
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonSouth"
-                  ],
-                  "channel": "jump",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "channel": "dash",
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "channel": "dash",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "channel": "run",
-                  "activateOn": null,
-                  "label": "Sprint",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "channel": "run",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "channel": "run",
-                  "activateOn": null,
-                  "label": "Sprint",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "channel": "run",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                }
-              ],
-              "label": null,
-              "icon": null
-            },
-            "command": null
-          }
-        ]
-      }
-    }
-  ],
   "storage": {
     "endpoint": null,
     "userId": null,
@@ -549,9 +359,72 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [1, 1, 1],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      }
+    },
+    {
+      "id": "camera-body",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "camera-body",
+        "palette": [
+          {
+            "color": "#5EEBE0",
+            "emissive": 0.25,
+            "specular": 0.2,
+            "shininess": 12
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "lens",
+            "type": "Sphere",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.18,
+              0.18,
+              0.18
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -585,85 +458,46 @@
       "solid": {
         "margin": 0
       }
+    },
+    {
+      "id": "camera-seat-0",
+      "creationId": "camera-body",
+      "position": [
+        0,
+        1.5,
+        4
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "inhabit": {
+        "count": 1,
+        "kit": "traveler",
+        "source": "Live",
+        "look": null,
+        "distribution": {
+          "region": {
+            "$type": "disc",
+            "radius": 0.01
+          },
+          "fill": {
+            "name": "additive",
+            "offset": 0,
+            "step": 0.618034
+          }
+        }
+      }
     }
   ],
   "authoring": {
-    "authoringHeadroomScreens": 4,
-    "authoringHeadroomPlacements": 8,
-    "minPlacementScale": 0.2,
-    "maxPlacementScale": 5,
-    "candidateRadius": 32,
-    "candidateCap": 16,
-    "workbenchFraction": 0.7,
-    "previewDeadlineFrames": 12,
-    "derivedFaceScreens": 4
+    "maxPlacementScale": 5
   },
   "speakers": [],
   "tunes": [],
   "patches": [],
-  "audio": {
-    "masterGain": 1,
-    "defaultSpeakerRadius": 8,
-    "defaultCurve": "smoothstep",
-    "defaultBedFadeSeconds": 0.5,
-    "listener": "focus",
-    "cues": []
-  },
-  "collision": {
-    "requirements": [],
-    "contactSkin": 0.02,
-    "maxIterations": 4,
-    "maxSlopeDegrees": 60,
-    "gradientProbe": 0
-  },
   "host": {
-    "presentation": "Windowed",
-    "backend": "auto",
     "width": 1920,
     "height": 1080,
-    "surfaceFormat": "r8g8b8a8",
-    "fullscreen": true,
-    "presentMode": "Immediate",
-    "targetHertz": 0,
-    "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
-    "genlock": null,
-    "listen": null
-  },
-  "views": {
-    "seatControl": {
-      "yawReference": "World",
-      "minPitch": -0.35,
-      "maxPitch": 1.2
-    },
-    "seatRig": {
-      "motion": {
-        "$type": "orbit",
-        "distance": 5.4626,
-        "yaw": 0,
-        "pitch": 0.4145069,
-        "pivotOffset": [
-          0,
-          0,
-          0
-        ]
-      },
-      "aim": {
-        "$type": "anchor",
-        "offset": [
-          0,
-          1,
-          0
-        ],
-        "worldAxes": false
-      },
-      "lens": {
-        "fieldOfViewRadians": 0.9599311
-      },
-      "smoothRate": 6
-    },
-    "layouts": []
+    "fullscreen": true
   },
   "looks": [],
   "lookAssignment": {
@@ -676,129 +510,123 @@
   },
   "links": [],
   "grants": [],
-  "hud": {
-    "defaults": {
-      "enabled": true
-    },
-    "panels": []
-  },
   "state": {
     "world": [
-    {
-      "name": "hp",
-      "kind": "int",
-      "capacity": 8,
-      "cells": [
-        {
-          "key": "0",
-          "value": 70,
-          "advance": {
-            "rateNumerator": 1,
-            "rateDenominator": 24,
-            "epochTick": 0
+      {
+        "name": "hp",
+        "kind": "int",
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 70,
+            "advance": {
+              "rateNumerator": 1,
+              "rateDenominator": 24,
+              "epochTick": 0
+            }
+          },
+          {
+            "key": "1",
+            "value": 100
+          },
+          {
+            "key": "2",
+            "value": 30
           }
-        },
-        {
-          "key": "1",
-          "value": 100
-        },
-        {
-          "key": "2",
-          "value": 30
-        }
-      ]
-    },
-    {
-      "name": "threat",
-      "kind": "int",
-      "capacity": 8,
-      "cells": [
-        {
-          "key": "0",
-          "value": 10
-        },
-        {
-          "key": "1",
-          "value": 5
-        }
-      ]
-    },
-    {
-      "name": "dead",
-      "kind": "bool",
-      "capacity": 8,
-      "gatesDrive": true,
-      "cells": [
-        {
-          "key": "2",
-          "value": false
-        }
-      ]
-    },
-    {
-      "name": "stunRemaining",
-      "kind": "int",
-      "capacity": 8,
-      "nonNegative": true,
-      "gatesDrive": true,
-      "cells": [
-        {
-          "key": "2",
-          "value": 0
-        }
-      ]
-    },
-    {
-      "name": "strikeCooldown",
-      "kind": "int",
-      "capacity": 8,
-      "nonNegative": true,
-      "cells": [
-        {
-          "key": "0",
-          "value": 0
-        }
-      ]
-    },
-    {
-      "name": "ccCooldown",
-      "kind": "int",
-      "capacity": 8,
-      "nonNegative": true,
-      "cells": [
-        {
-          "key": "0",
-          "value": 0
-        }
-      ]
-    },
-    {
-      "name": "mobAttackCooldown",
-      "kind": "int",
-      "capacity": 8,
-      "nonNegative": true,
-      "cells": [
-        {
-          "key": "2",
-          "value": 0
-        }
-      ]
-    },
-    {
-      "name": "castStrike",
-      "kind": "bool",
-      "value": false
-    },
-    {
-      "name": "castCC",
-      "kind": "bool",
-      "value": false
-    },
-    {
-      "name": "mobTarget",
-      "kind": "int",
-      "value": -1
-    }
+        ]
+      },
+      {
+        "name": "threat",
+        "kind": "int",
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 10
+          },
+          {
+            "key": "1",
+            "value": 5
+          }
+        ]
+      },
+      {
+        "name": "dead",
+        "kind": "bool",
+        "capacity": 8,
+        "gatesDrive": true,
+        "cells": [
+          {
+            "key": "2",
+            "value": false
+          }
+        ]
+      },
+      {
+        "name": "stunRemaining",
+        "kind": "int",
+        "capacity": 8,
+        "nonNegative": true,
+        "gatesDrive": true,
+        "cells": [
+          {
+            "key": "2",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "strikeCooldown",
+        "kind": "int",
+        "capacity": 8,
+        "nonNegative": true,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "ccCooldown",
+        "kind": "int",
+        "capacity": 8,
+        "nonNegative": true,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "mobAttackCooldown",
+        "kind": "int",
+        "capacity": 8,
+        "nonNegative": true,
+        "cells": [
+          {
+            "key": "2",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "castStrike",
+        "kind": "bool",
+        "value": false
+      },
+      {
+        "name": "castCC",
+        "kind": "bool",
+        "value": false
+      },
+      {
+        "name": "mobTarget",
+        "kind": "int",
+        "value": -1
+      }
     ],
     "body": [
       {

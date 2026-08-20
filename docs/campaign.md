@@ -11,25 +11,25 @@ place to start.
 
 ## The charter (owner-ratified 2026-08-06, binding)
 
-**Four game worlds, no others.** **Play** — the overworld hub, the game's first main city, a plaza
-that local multiplayer shares — and three instanced "dungeons" reached from it: **Dive**
-(underwater), **Kart** (racing), **Jump** (platformer).
+**Four game worlds, no others.** **Nexus** — the overworld hub, a floating island above a field of
+planetoids, a plaza that local multiplayer shares — and three instanced "dungeons" reached from it:
+**Dive** (underwater), **Kart** (racing), **Jump** (platformer).
 
-Each dungeon is entered through a wall-mounted picture-frame portal standing in Play. Walk to a
+Each dungeon is entered through a picture-frame portal standing on the island. Walk to a
 frame and the world underneath changes with no restart, never a loading menu and never a `--flag`
 mode swap. Design is **feel-first**: a dungeon earns its place by how it feels to move through,
-before any scoring, unlock or progression is layered on it. Play's own feel is gentler than any
+before any scoring, unlock or progression is layered on it. The nexus's own feel is gentler than any
 dungeon's — a promenading pace fit for a shared plaza.
 
 `studio` ships beside them as a non-game **dev canvas** for character work, and as Puck's first
-formal border crossing (owner amendment 2026-08-09): play and studio meet at a mapped border, so
-studio is reachable by walking out of the plaza as well as by `--world`. It is not a game world and
-not a destination in the reveal graph. A doc counting "four worlds" is counting the charter's
-roster; the directory holds five documents.
+formal border crossing (owner amendment 2026-08-09): the nexus and studio meet at a mapped border, so
+studio is reachable by walking through the island's fourth arch as well as by `--world`. It is not a
+game world and not a destination in the reveal graph. A doc counting "four worlds" is counting the
+charter's roster; the directory holds five documents.
 
 **Reveals are a core world mechanic** — attunement-like achievement facts carried on the identity,
 general enough for cross-game unlocks between trusted servers. Every world is a starting point; all
-starting points converge on the hub. An arcade cabinet stands dark in Play's plaza as the first of
+starting points converge on the hub. An arcade cabinet stands dark on the island as the first of
 them.
 
 ## Project-shape rulings
@@ -62,10 +62,10 @@ come back.
 
 | Claim | The check |
 |---|---|
-| Five world documents boot | `dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/<name>.world.json --exit-after-seconds 2`, audit STDERR — exit code 0 is NOT success (the only bracketed lines are the by-design `world.screen … recursion refused` notices for session mirrors) |
-| Play authors ground, four walls, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/play.world.json`'s `placements` — `arcade-cabinet` plus `dive-portal`/`kart-portal`/`jump-portal`/`studio-portal` |
+| Every shipped world document boots | `dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/<name>.world.json --exit-after-seconds 2`, audit STDERR — exit code 0 is NOT success (the only bracketed lines are the by-design `world.screen … recursion refused` notices for session mirrors) |
+| The nexus authors a floating island, five planetoids, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/nexus.world.json`'s `placements` — `island` and `planetoid-*` plus `arcade-cabinet` and `dive-portal`/`kart-portal`/`jump-portal`/`studio-portal` |
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
-| **No world authors WORLD-SCOPE rules** — 0 of 11 documents carry a `rules` or `interactions` section | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
+| **No shipped world authors WORLD-SCOPE rules** — none carries a `rules` or `interactions` section; the two scenario documents under `Assets/scenarios/` do | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
 | Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
 
 **The foundation is complete and overshot.** Three motion arms (grounded, vehicle, swim); the portal
@@ -78,7 +78,7 @@ durations authored in seconds with ticks derived at compile; per-world clocks; t
 
 **The charter's back half has not started**: the owner feel sitting (the gate declared 2026-08-08,
 never held — and now well behind the motion work, so its recordings want redoing), win conditions,
-achievement facts and the meta-achievement, the cabinet quest, the Konami easter egg, Play's social
+achievement facts and the meta-achievement, the cabinet quest, the Konami easter egg, the nexus's social
 pass, and the first reveal edge.
 
 **Win conditions split, and half needs no engine work.** A touch-triggered individual condition
@@ -219,19 +219,26 @@ ruled, not built:
 - `Puck.Audio` parses no document (the `Puck.Physics` boundary); document families live in world
   projects.
 
-**Quilt-as-nexus.** The shipped quilt IS the hub, and **Play IS the nexus**: the four ground corner
-authorities (`quilt-base`, `quilt-ne`, `quilt-se`, `quilt-sw`) plus the floating island together are the
-Dalaran-type place, and `play.world.json` retires, so the roster stays five documents (nexus, Dive, Kart,
-Jump, studio). Play's plaza furniture — the four dungeon/studio portals, the arcade cabinet, the market —
-and its crowd port onto the **island**; the ground corners stay ground. Other identities' worlds attach
-wherever a corner document declares a reciprocal adjacency; no face is reserved. The nexus runs at 30 Hz
-simulation with a 60 Hz render target; its one kit is `default` (the quilt's own tuning, renamed from
-`vaulter`); the `promenader` kit is dropped rather than ported. Studio keeps its archway portal
-(`arrival: "mapped"`) and never becomes a seam. The whole hub is silo-hosted — one silo, one grain per
-authority — and **owned by the platform's public-content identity** — the principal whose container the
-front door already serves anonymously and cached under `/public/*` — never by a person's container; the
-hub's documents and projections publish the way everything under that identity does. Orleans hosting is
-therefore a prerequisite of this landing; the identity is not. Not started.
+**Nexus-as-island.** `play.world.json` retires and `nexus.world.json` is the hub and the boot default: a
+floating island above a field of planetoids, carrying the four dungeon/studio portal arches, the arcade
+cabinet, the market, the crowd and the quilt's own `vaulter` tuning at 30 Hz. The `promenader` kit is
+dropped rather than ported. Studio keeps its archway portal (`arrival: "mapped"`) and never becomes a
+seam.
+
+The nexus is a single authority with no adjacencies — it is not stitched into the quilt. Two facts
+decided that against the earlier quilt-as-nexus shape: `WorldAdjacencyBands.ProjectionCapacity` times
+`WorldAvatarCatalog.Capacity` overruns `SdfProgramBuilder.MaxInstances` at the island's four vertical
+seams plus their derived corners, so `quilt-island` cannot compose a window at all; and the corner
+worlds' `up` boundaries sit at y = 2, so anything standing above a corner's own ground transfers off it
+immediately. The four ground corner authorities plus `quilt-island` stay what they were — adjacency and
+federation stress content, exercised headless by `four-corners-sharded`, `seamless-adjacency`,
+`seamless-four-corners-circuit` and `quilt-nw-gap-corner-strip`. Attaching other identities' worlds to
+the hub is still open, and now needs a mechanism other than a reciprocal corner adjacency.
+
+The whole hub being silo-hosted — one silo, one grain per authority — and **owned by the platform's
+public-content identity** (the principal whose container the front door already serves anonymously and
+cached under `/public/*`, never a person's container) is unchanged and not started; Orleans hosting is
+its prerequisite, the identity is not.
 
 **Client seam.** `PlayerRoster`'s loopback-only reads of the live server become a link query that works
 identically in-process and over the wire; no direct-object interface is minted for the shortcut, and

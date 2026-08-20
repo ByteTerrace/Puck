@@ -5,10 +5,10 @@
   "requirements": [],
   "seconds": 3,
   "timeoutSeconds": 20,
-  "binding": "The positive leg boots play (which authors title/description/authors/tags) and reads world.metadata back; the discriminating leg boots dive (no metadata authored) and gets the 'none' line instead.",
+  "binding": "The positive leg boots the nexus (which authors title/description/authors/tags) and reads world.metadata back; the discriminating leg boots dive (no metadata authored) and gets the 'none' line instead.",
   "fixtures": [],
   "positive": {
-    "world": "src/Puck.World/Assets/worlds/play.world.json",
+    "world": "src/Puck.World/Assets/worlds/nexus.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -16,8 +16,8 @@
       { "verb": "wire.errors", "occurrence": 2, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "authored title/description echo back", "stream": "stdout", "match": "contains", "text": "[world.metadata: title Play description The overworld hub", "present": true },
-      { "type": "line", "name": "authored authors/tags echo back", "stream": "stdout", "match": "contains", "text": "authors Puck(oid:11111111-1111-1111-1111-111111111111) tags overworld,hub", "present": true },
+      { "type": "line", "name": "authored title/description echo back", "stream": "stdout", "match": "contains", "text": "[world.metadata: title Nexus description The floating island above the planetoids", "present": true },
+      { "type": "line", "name": "authored authors/tags echo back", "stream": "stdout", "match": "contains", "text": "authors Puck(oid:11111111-1111-1111-1111-111111111111) tags nexus,hub", "present": true },
       { "type": "line", "name": "unauthored custom bag reads none", "stream": "stdout", "match": "contains", "text": "custom none]", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]

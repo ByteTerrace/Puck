@@ -28,7 +28,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
 
 `--exit-after-seconds 0` (or omitting the flag) runs until the window closes.
 Boot prints one line naming the world-definition file it loaded (an explicit
-`--world <path>` or the shipped `Assets/worlds/play.world.json`), one naming
+`--world <path>` or the shipped `Assets/worlds/nexus.world.json`), one naming
 the recording document, and one capability-disclosure line per mounted addon. The full CLI
 flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
@@ -103,7 +103,7 @@ in EVERY shape, `AddWorldPresentation` only when a window is composed.
 
 ## Seat controls and camera authoring
 
-Play seats use standard third-person action semantics: left stick moves in the
+Nexus seats use standard third-person action semantics: left stick moves in the
 live logical camera plane while preserving heading (lateral input strafes, and
 holding forward while turning bends the trajectory with the view); right
 stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes

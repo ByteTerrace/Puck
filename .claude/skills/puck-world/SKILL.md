@@ -21,7 +21,7 @@ experience — no sibling `--flag` modes; durable configuration is document
 fields, live operation is console verbs, and there is no `PUCK_*`
 configuration surface for this game. **A baked C# constant is the same
 violation as a flag, and the commonest one** (owner ruling, 2026-08-03,
-re-issued 2026-08-07): the discriminator is whether Play, Dive, Kart, and Jump
+re-issued 2026-08-07): the discriminator is whether Nexus, Dive, Kart, and Jump
 would each want the value different — sensitivities, clamps, radii, timings,
 speeds, which button arms a mode. If yes, it is a document field in its FIRST
 commit, never a constant to migrate later. Before writing any feature carrying

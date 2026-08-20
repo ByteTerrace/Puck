@@ -1,4 +1,7 @@
 {
+  "simulation": {
+    "rateHz": 60
+  },
   "motion": {
     "moveSpeed": 4,
     "turnSpeed": 2.5,
@@ -238,20 +241,7 @@
         "engageable": false,
         "engageRadius": 0,
         "autoInsert": false,
-        "translation": [
-          {
-            "channel": "forward",
-            "element": "LeftStickY"
-          },
-          {
-            "channel": "strafe",
-            "element": "LeftStickX"
-          },
-          {
-            "channel": "jump",
-            "element": "South"
-          }
-        ]
+        "kit": "runner"
       },
       "solid": {
         "margin": 0
@@ -302,23 +292,26 @@
         "index": 0
       },
       "rig": {
-        "motion": {
-          "$type": "follow",
-          "offset": [
-            -0.012012234,
-            1.4752654,
-            -0.15992874
-          ],
-          "worldAxes": false,
-          "spreadPullback": 0
-        },
-        "aim": {
-          "$type": "forward",
-          "focusDistance": 0
-        },
-        "lens": {
-          "fieldOfViewRadians": 1.1868238
-        }
+        "name": "first-person",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "offset",
+            "value": [
+              -0.012012234,
+              1.4752654,
+              -0.15992874
+            ]
+          },
+          {
+            "$type": "lookAt",
+            "subject": null
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1.1868238
+          }
+        ]
       },
       "renderWidth": 256,
       "renderHeight": 144
@@ -327,26 +320,36 @@
       "name": "overhead",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            0,
-            15,
-            7
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            0,
-            0.5,
-            -2.5
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.9599311
-        }
+        "name": "overhead",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                15,
+                7
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0.5,
+                -2.5
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.9599311
+          }
+        ]
       },
       "renderWidth": 256,
       "renderHeight": 144
@@ -586,8 +589,7 @@
             "altitudeBase": 4.5,
             "altitudeRange": 3
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -649,8 +651,7 @@
             "altitudeBase": 0.8,
             "altitudeRange": 1.2
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -889,8 +890,7 @@
             "altitudeBase": 0,
             "altitudeRange": 0
           },
-          "channels": {
-          }
+          "channels": {}
         },
         "designated": {
           "scalars": {
@@ -901,8 +901,7 @@
             "inwardGain": 1.6,
             "turnScale": 2.5
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -996,6 +995,11 @@
           0
         ],
         "radius": 0.35
+      },
+      "pad": {
+        "forward": "LeftStickY",
+        "strafe": "LeftStickX",
+        "jump": "South"
       }
     },
     {
@@ -1055,8 +1059,7 @@
             "altitudeBase": 0,
             "altitudeRange": 0
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -1300,9 +1303,22 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [1, 1, 1],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1340,9 +1356,22 @@
             "id": 0,
             "name": "boulder-1",
             "type": "Sphere",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [2.368421, 2.368421, 2.368421],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.368421,
+              2.368421,
+              2.368421
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.5,
@@ -1380,9 +1409,22 @@
             "id": 0,
             "name": "boulder-2",
             "type": "Sphere",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [2.894737, 2.894737, 2.894737],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.894737,
+              2.894737,
+              2.894737
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.5,
@@ -1420,9 +1462,22 @@
             "id": 0,
             "name": "boulder-3",
             "type": "Sphere",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [1.5789474, 1.5789474, 1.5789474],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5789474,
+              1.5789474,
+              1.5789474
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.4,
@@ -1460,9 +1515,22 @@
             "id": 0,
             "name": "boulder-4",
             "type": "Sphere",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [1.1842105, 1.1842105, 1.1842105],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.1842105,
+              1.1842105,
+              1.1842105
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.35,
@@ -1500,9 +1568,22 @@
             "id": 0,
             "name": "boulder-5",
             "type": "Sphere",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [1.9736842, 1.9736842, 1.9736842],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.9736842,
+              1.9736842,
+              1.9736842
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.4,
@@ -1626,7 +1707,6 @@
     "maxPlacementScale": 5,
     "candidateRadius": 32,
     "candidateCap": 16,
-    "workbenchFraction": 0.7,
     "previewDeadlineFrames": 12,
     "derivedFaceScreens": 4
   },
@@ -1670,30 +1750,40 @@
       "maxPitch": 1.2
     },
     "seatRig": {
-      "motion": {
-        "$type": "orbit",
-        "distance": 5.4589844,
-        "yaw": 0,
-        "pitch": 0.4182243,
-        "pivotOffset": [
-          0,
-          0,
-          0
-        ]
-      },
-      "aim": {
-        "$type": "anchor",
-        "offset": [
-          0,
-          1,
-          0
-        ],
-        "worldAxes": false
-      },
-      "lens": {
-        "fieldOfViewRadians": 0.9599311
-      },
-      "smoothRate": 4
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4589844,
+          "yaw": 0,
+          "pitch": 0.4182243,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        },
+        {
+          "$type": "smooth",
+          "rate": 4
+        }
+      ]
     },
     "layouts": []
   },
@@ -1773,7 +1863,6 @@
       "pitchSensitivity": 0.001,
       "invertYaw": false,
       "invertPitch": false,
-
       "stickLookRate": 2.6
     }
   }

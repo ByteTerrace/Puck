@@ -1,5 +1,5 @@
 {
-  "basis": "default.world.json",
+  "basis": "standard.world.json",
   "$schema": "./puck.world.def.v1.schema.json",
   "simulation": {
     "rateHz": 60
@@ -52,55 +52,42 @@
       "yawDegrees": -90
     }
   ],
-  "render": {
-    "shadows": "Off",
-    "shadowCrowdRadius": 15,
-    "ambientOcclusion": false,
-    "renderScale": "Half",
-    "upscaleSharpness": 0,
-    "low": {
-      "shadows": "Off",
-      "ambientOcclusion": false,
-      "renderScale": "Half"
-    },
-    "medium": {
-      "shadows": "Medium",
-      "ambientOcclusion": true,
-      "renderScale": "ThreeQuarter"
-    },
-    "high": {
-      "shadows": "High",
-      "ambientOcclusion": true,
-      "renderScale": "Native"
-    }
-  },
   "screens": [],
   "cameras": [
     {
       "name": "overview",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            -12,
-            22,
-            12
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            -12,
-            2,
-            -12
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.9
-        },
-        "smoothRate": 0
+        "name": "overview",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -12,
+                22,
+                12
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -12,
+                2,
+                -12
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.9
+          }
+        ]
       },
       "renderWidth": 320,
       "renderHeight": 240
@@ -109,27 +96,36 @@
       "name": "verify-seam-ne",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            -10,
-            8,
-            -7.5
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            0.5,
-            1,
-            -7.5
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 1
-        },
-        "smoothRate": 0
+        "name": "verify-seam-ne",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -10,
+                8,
+                -7.5
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0.5,
+                1,
+                -7.5
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1
+          }
+        ]
       },
       "renderWidth": 1280,
       "renderHeight": 720
@@ -138,27 +134,36 @@
       "name": "verify-seam-sw",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            -7.5,
-            8,
-            -10
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            -7.5,
-            1,
-            0.5
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 1
-        },
-        "smoothRate": 0
+        "name": "verify-seam-sw",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -7.5,
+                8,
+                -10
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -7.5,
+                1,
+                0.5
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1
+          }
+        ]
       },
       "renderWidth": 1280,
       "renderHeight": 720
@@ -167,34 +172,43 @@
       "name": "verify-seam-sw-low",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            -7.5,
-            1.3,
-            -4
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            -7.5,
-            1.1,
-            6
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 1
-        },
-        "smoothRate": 0
+        "name": "verify-seam-sw-low",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -7.5,
+                1.3,
+                -4
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -7.5,
+                1.1,
+                6
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1
+          }
+        ]
       },
       "renderWidth": 1280,
       "renderHeight": 720
     }
   ],
   "population": {
-    "capacity": 4,
+    "capacity": 5,
     "reconnectGraceSeconds": 3,
     "seatActivation": [
       "Eager",
@@ -286,47 +300,14 @@
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveAdvance"
+      "role": "MoveAdvance",
+      "frame": "World"
     },
     {
       "name": "strafe",
       "shape": "Bipolar",
-      "role": "MoveStrafe"
-    },
-    {
-      "name": "turn",
-      "shape": "Bipolar",
-      "role": "Turn"
-    },
-    {
-      "name": "up",
-      "shape": "Bipolar",
-      "role": "MoveUp"
-    },
-    {
-      "name": "pitch",
-      "shape": "Bipolar",
-      "role": "Pitch"
-    },
-    {
-      "name": "roll",
-      "shape": "Bipolar",
-      "role": "Roll"
-    },
-    {
-      "name": "jump",
-      "shape": "Binary",
-      "composition": true
-    },
-    {
-      "name": "dash",
-      "shape": "Binary",
-      "composition": true
-    },
-    {
-      "name": "run",
-      "shape": "Binary",
-      "composition": true
+      "role": "MoveStrafe",
+      "frame": "World"
     }
   ],
   "bodyMotionPrograms": [
@@ -388,6 +369,10 @@
     }
   ],
   "kits": [
+    {
+      "name": "defaultKit",
+      "$drop": true
+    },
     {
       "name": "vaulter",
       "bodyMotionProgram": "traverse",
@@ -523,318 +508,6 @@
     "rows": []
   },
   "addons": [],
-  "bindingOverlays": [
-    {
-      "bindingBar": {
-        "enabled": true,
-        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
-        "layout": {
-          "buttonSize": 0.075,
-          "centerGap": 0.1,
-          "anchorOffsetY": 0.14,
-          "glyphOffsetRatio": 0.4375,
-          "glyphSizeRatio": 0.53333336,
-          "scale": 0.72
-        }
-      },
-      "id": "quilt-sprint",
-      "document": {
-        "version": "puck.bindings.v1",
-        "modifiers": [],
-        "chords": [
-          {
-            "group": "default",
-            "chord": [],
-            "page": {
-              "id": "base",
-              "entries": [
-                {
-                  "sources": [
-                    "gamepad.rightTrigger"
-                  ],
-                  "channel": "up",
-                  "scale": 1,
-                  "activateOn": null,
-                  "label": "Ascend",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftTrigger"
-                  ],
-                  "channel": "up",
-                  "scale": -1,
-                  "activateOn": null,
-                  "label": "Descend",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.rightStick.x"
-                  ],
-                  "channel": "turn",
-                  "scale": -1,
-                  "activateOn": null,
-                  "label": "Face camera",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.space"
-                  ],
-                  "channel": "jump",
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.space"
-                  ],
-                  "channel": "jump",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonSouth"
-                  ],
-                  "channel": "jump",
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonSouth"
-                  ],
-                  "channel": "jump",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "channel": "dash",
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "channel": "dash",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "channel": "run",
-                  "activateOn": null,
-                  "label": "Sprint",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "channel": "run",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "channel": "run",
-                  "activateOn": null,
-                  "label": "Sprint",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "channel": "run",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                }
-              ],
-              "label": null,
-              "icon": null
-            },
-            "command": null
-          },
-          {
-            "group": "default",
-            "chord": [
-              "tab"
-            ],
-            "page": {
-              "id": "play-wheel",
-              "entries": [
-                {
-                  "sources": [
-                    "gamepad.leftStick"
-                  ],
-                  "command": "player.move"
-                },
-                {
-                  "sources": [
-                    "gamepad.rightStick"
-                  ],
-                  "command": "player.wheel.select"
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowUp"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring+",
-                  "icon": "edit.next",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowDown"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring-",
-                  "icon": "edit.prev",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      -1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "gamepad.dpadUp"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring+",
-                  "icon": "edit.next",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "gamepad.dpadDown"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring-",
-                  "icon": "edit.prev",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      -1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "keyboard.tab"
-                  ],
-                  "command": "player.wheel.commit",
-                  "activateOn": "Completed"
-                }
-              ],
-              "label": "Wheel"
-            }
-          }
-        ],
-        "wheels": [
-          {
-            "id": "play-primary",
-            "group": "default",
-            "holdPages": [
-              "play-wheel"
-            ],
-            "rings": [
-              {
-                "id": "play-wheel-act",
-                "entries": [
-                  {
-                    "sources": null,
-                    "command": "editor.enter",
-                    "label": "Editor",
-                    "icon": "edit.place"
-                  },
-                  {
-                    "sources": null,
-                    "command": "editor.status",
-                    "label": "Status",
-                    "icon": "action.target"
-                  },
-                  {
-                    "sources": null,
-                    "command": "console",
-                    "label": "Console",
-                    "icon": "edit.op"
-                  },
-                  {
-                    "sources": null,
-                    "command": "player.channels",
-                    "label": "Channels",
-                    "icon": "edit.link"
-                  },
-                  {
-                    "sources": null,
-                    "command": "player.where",
-                    "label": "Where",
-                    "icon": "action.target"
-                  },
-                  {
-                    "sources": null,
-                    "command": "player.disengage",
-                    "label": "Disengage",
-                    "icon": "edit.exit"
-                  }
-                ],
-                "label": "Act",
-                "icon": null
-              }
-            ]
-          }
-        ]
-      }
-    }
-  ],
   "storage": {
     "endpoint": null,
     "userId": null,
@@ -859,9 +532,22 @@
             "id": 0,
             "name": "ground",
             "type": "Box",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [31.578947, 0.1, 31.578947],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              12,
+              0.1,
+              12
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -896,9 +582,72 @@
             "id": 0,
             "name": "slab",
             "type": "Box",
-            "position": [0, 2.1143, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [73.4, 5.4639, 1.3529],
+            "position": [
+              0,
+              2.1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              12,
+              2.1,
+              0.5
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
+      }
+    },
+    {
+      "id": "camera-body",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "camera-body",
+        "palette": [
+          {
+            "color": "#3A4046",
+            "emissive": 0,
+            "specular": 0.15,
+            "shininess": 8
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "lens",
+            "type": "Sphere",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -964,88 +713,49 @@
       "solid": {
         "margin": 0
       }
+    },
+    {
+      "id": "camera-seat-0",
+      "creationId": "camera-body",
+      "position": [
+        -17,
+        1.2,
+        -17
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "inhabit": {
+        "count": 1,
+        "kit": "vaulter",
+        "source": "Live",
+        "look": null,
+        "distribution": {
+          "region": {
+            "$type": "disc",
+            "radius": 0.01
+          },
+          "fill": {
+            "name": "additive",
+            "offset": 0,
+            "step": 0.618034
+          }
+        }
+      }
     }
   ],
-  "authoring": {
-    "authoringHeadroomScreens": 4,
-    "authoringHeadroomPlacements": 8,
-    "minPlacementScale": 0.2,
-    "maxPlacementScale": 5,
-    "candidateRadius": 32,
-    "candidateCap": 16,
-    "workbenchFraction": 0.7,
-    "previewDeadlineFrames": 12,
-    "derivedFaceScreens": 4
-  },
   "speakers": [],
   "tunes": [],
   "patches": [],
-  "audio": {
-    "masterGain": 1,
-    "defaultSpeakerRadius": 8,
-    "defaultCurve": "smoothstep",
-    "defaultBedFadeSeconds": 0.5,
-    "listener": "focus",
-    "cues": []
-  },
   "collision": {
     "requirements": [
       "SmoothUnionContact"
-    ],
-    "contactSkin": 0.02,
-    "maxIterations": 4,
-    "maxSlopeDegrees": 60,
-    "gradientProbe": 0
+    ]
   },
   "host": {
-    "presentation": "Windowed",
-    "backend": "auto",
     "width": 1920,
     "height": 1080,
-    "surfaceFormat": "r8g8b8a8",
     "fullscreen": true,
-    "presentMode": "Immediate",
-    "targetHertz": 0,
-    "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
-    "genlock": null,
-    "listen": null,
     "authority": null
-  },
-  "views": {
-    "seatControl": {
-      "yawReference": "World",
-      "minPitch": -0.35,
-      "maxPitch": 1.2
-    },
-    "seatRig": {
-      "motion": {
-        "$type": "orbit",
-        "distance": 5.4626001,
-        "yaw": 0,
-        "pitch": 0.4145069,
-        "pivotOffset": [
-          0,
-          0,
-          0
-        ]
-      },
-      "aim": {
-        "$type": "anchor",
-        "offset": [
-          0,
-          1,
-          0
-        ],
-        "worldAxes": false
-      },
-      "lens": {
-        "fieldOfViewRadians": 0.9599311
-      },
-      "smoothRate": 6
-    },
-    "layouts": []
   },
   "looks": [],
   "lookAssignment": {
@@ -1060,17 +770,12 @@
   "grants": [],
   "hud": {
     "defaults": {
-      "enabled": true,
       "cursor": {
-        "hoverRadius": 32,
-        "sizePx": 7,
-        "role": "TextPrimary"
+        "hoverRadius": 32
       }
-    },
-    "panels": []
+    }
   },
   "state": {
-    "world": [],
     "body": [
       {
         "name": "jumpUses",
@@ -1210,7 +915,11 @@
       "destination": "island",
       "counterpart": "down-nw",
       "boundary": {
-        "center": [-12, 2, -12],
+        "center": [
+          -12,
+          2,
+          -12
+        ],
         "outwardYawDegrees": 0,
         "outwardPitchDegrees": 90,
         "width": 24,
@@ -1227,9 +936,19 @@
       "algorithm": "",
       "publicKey": "",
       "grants": [
-        { "capability": "Control", "subject": "all" },
-        { "capability": "Drive", "exclusive": true, "budget": 64 },
-        { "capability": "Observe", "budget": 64 }
+        {
+          "capability": "Control",
+          "subject": "all"
+        },
+        {
+          "capability": "Drive",
+          "exclusive": true,
+          "budget": 64
+        },
+        {
+          "capability": "Observe",
+          "budget": 64
+        }
       ]
     }
   ]

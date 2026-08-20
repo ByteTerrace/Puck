@@ -79,18 +79,18 @@ screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, links, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, market). Worlds live as data
-under `../Puck.World/Assets/worlds/` — eleven checked-in documents. Four are the
-four-world charter's whole game roster: `play` (the overworld hub —
-the game's first main city, and the shipped boot default; carries the
-optional `references` section naming the other three by document path, and a
-wall-mounted picture-frame portal placement per named world), `dive`
-(underwater), `kart` (racing), `jump` (platformer). The fifth, `studio`, is a
-non-game dev canvas for character work (neutral floor, no scenery or crowd,
-four anchored camera eyes and a `sheet` layout) reached only with `--world`.
-Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and
-`quilt-island`) are non-game adjacency/federation stress content — each a
-`basis` delta over the eleventh document, the `quilt-base` template (see
-"Document composition" below). The movement platform
+under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
+game roster: `nexus` (the overworld hub — a floating island above a field of
+planetoids, and the shipped boot default; carries the `references` section
+naming the other three plus `studio` by document path, and one portal-arch
+placement per named world), `dive` (underwater), `kart` (racing), `jump`
+(platformer). `studio` is a non-game dev canvas for character work (neutral
+floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout)
+reached with `--world` or through the nexus's mapped archway. Five quilt
+documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and `quilt-island`)
+are non-game adjacency/federation stress content — each a `basis` delta over
+the `quilt-base` template (see "Document composition" below). Every one of
+them layers over `standard.world.json`, the standard library document. The movement platform
 every grounded kit rides is documented on its kit's `WorldMotionModel.Grounded`
 row (`SprintMultiplier`/`SprintChannel`, `MoveFrame`/`FacingSnap`), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
@@ -225,8 +225,8 @@ directory.
 
 **Bindings compose in layers.** A seat's effective binding document is the
 world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
-— the shipped `Assets/worlds/default.world.json` template carries the standard
-movement and roster document; the engine itself ships none,
+— the shipped `Assets/worlds/standard.world.json` template carries the standard
+movement and action-wheel document; the engine itself ships none,
 and a world authoring none binds nothing), then the seat's owned identity
 world's `bindingOverlays`, then live session rebinds — merged by
 `WorldBindingComposer.cs` with explicit keys (chord rows on the group plus
@@ -623,9 +623,12 @@ creation through record-sharing.
 row, or wheel may name its group literally or with the same
 `state.<row>[.<key>]` grammar. The referenced Text cell holds the group name
 directly, so all linked rows can share one value—for example,
-`"group": "state.bindingGroups.defaultActionGroup"`. Changing that cell
+`"group": "state.groups.action"`. Changing that cell
 renames every consumer together, then recomposes and validates the complete
-binding profile before the mutation is accepted.
+binding profile before the mutation is accepted. `standard.world.json` names
+its group literally: a reference is not resolved on a definition delivered
+across a transfer, so a state-backed group faults a seat's recompose on
+arrival.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** A `$`-prefixed ROW name is refused
 outright (nothing mints a row), and a `$`-prefixed CELL key is refused unless it

@@ -1,5 +1,5 @@
 {
-  "basis": "default.world.json",
+  "basis": "standard.world.json",
   "motion": {
     "moveSpeed": 5,
     "turnSpeed": 2.5,
@@ -45,25 +45,8 @@
   ],
   "render": {
     "shadows": "High",
-    "shadowCrowdRadius": 15,
     "ambientOcclusion": true,
-    "renderScale": "Native",
-    "upscaleSharpness": 0,
-    "low": {
-      "shadows": "Off",
-      "ambientOcclusion": false,
-      "renderScale": "Half"
-    },
-    "medium": {
-      "shadows": "Medium",
-      "ambientOcclusion": true,
-      "renderScale": "ThreeQuarter"
-    },
-    "high": {
-      "shadows": "High",
-      "ambientOcclusion": true,
-      "renderScale": "Native"
-    }
+    "renderScale": "Native"
   },
   "screens": [],
   "cameras": [
@@ -74,30 +57,40 @@
         "index": 0
       },
       "rig": {
-        "motion": {
-          "$type": "orbit",
-          "distance": 3,
-          "yaw": 3.1415927,
-          "pitch": 0.06,
-          "pivotOffset": [
-            0,
-            0.95,
-            0
-          ]
-        },
-        "aim": {
-          "$type": "anchor",
-          "offset": [
-            0,
-            0.95,
-            0
-          ],
-          "worldAxes": false
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.7
-        },
-        "smoothRate": 12
+        "name": "portrait",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "orbit",
+            "distance": 3,
+            "yaw": 3.1415927,
+            "pitch": 0.06,
+            "pivotOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "reference"
+            },
+            "targetOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.7
+          },
+          {
+            "$type": "smooth",
+            "rate": 12
+          }
+        ]
       },
       "renderWidth": 1280,
       "renderHeight": 1280
@@ -109,30 +102,40 @@
         "index": 0
       },
       "rig": {
-        "motion": {
-          "$type": "orbit",
-          "distance": 3.1,
-          "yaw": 2.3561945,
-          "pitch": 0.05,
-          "pivotOffset": [
-            0,
-            0.95,
-            0
-          ]
-        },
-        "aim": {
-          "$type": "anchor",
-          "offset": [
-            0,
-            0.95,
-            0
-          ],
-          "worldAxes": false
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.62
-        },
-        "smoothRate": 14
+        "name": "quarter",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "orbit",
+            "distance": 3.1,
+            "yaw": 2.3561945,
+            "pitch": 0.05,
+            "pivotOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "reference"
+            },
+            "targetOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.62
+          },
+          {
+            "$type": "smooth",
+            "rate": 14
+          }
+        ]
       },
       "renderWidth": 720,
       "renderHeight": 720
@@ -144,30 +147,40 @@
         "index": 0
       },
       "rig": {
-        "motion": {
-          "$type": "orbit",
-          "distance": 3.1,
-          "yaw": 1.5707963,
-          "pitch": 0.05,
-          "pivotOffset": [
-            0,
-            0.95,
-            0
-          ]
-        },
-        "aim": {
-          "$type": "anchor",
-          "offset": [
-            0,
-            0.95,
-            0
-          ],
-          "worldAxes": false
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.62
-        },
-        "smoothRate": 14
+        "name": "side",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "orbit",
+            "distance": 3.1,
+            "yaw": 1.5707963,
+            "pitch": 0.05,
+            "pivotOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "reference"
+            },
+            "targetOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.62
+          },
+          {
+            "$type": "smooth",
+            "rate": 14
+          }
+        ]
       },
       "renderWidth": 720,
       "renderHeight": 720
@@ -179,30 +192,40 @@
         "index": 0
       },
       "rig": {
-        "motion": {
-          "$type": "orbit",
-          "distance": 3.1,
-          "yaw": 0,
-          "pitch": 0.05,
-          "pivotOffset": [
-            0,
-            0.95,
-            0
-          ]
-        },
-        "aim": {
-          "$type": "anchor",
-          "offset": [
-            0,
-            0.95,
-            0
-          ],
-          "worldAxes": false
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.62
-        },
-        "smoothRate": 14
+        "name": "back",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "orbit",
+            "distance": 3.1,
+            "yaw": 0,
+            "pitch": 0.05,
+            "pivotOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "reference"
+            },
+            "targetOffset": [
+              0,
+              0.95,
+              0
+            ]
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.62
+          },
+          {
+            "$type": "smooth",
+            "rate": 14
+          }
+        ]
       },
       "renderWidth": 720,
       "renderHeight": 720
@@ -329,13 +352,15 @@
       "name": "forward",
       "shape": "Bipolar",
       "role": "MoveAdvance",
-      "composition": false
+      "composition": false,
+      "frame": "World"
     },
     {
       "name": "strafe",
       "shape": "Bipolar",
       "role": "MoveStrafe",
-      "composition": false
+      "composition": false,
+      "frame": "World"
     },
     {
       "name": "turn",
@@ -348,33 +373,6 @@
       "shape": "Bipolar",
       "role": "MoveUp",
       "composition": false
-    },
-    {
-      "name": "pitch",
-      "shape": "Bipolar",
-      "role": "Pitch",
-      "composition": false
-    },
-    {
-      "name": "roll",
-      "shape": "Bipolar",
-      "role": "Roll",
-      "composition": false
-    },
-    {
-      "name": "jump",
-      "shape": "Binary",
-      "composition": true
-    },
-    {
-      "name": "dash",
-      "shape": "Binary",
-      "composition": true
-    },
-    {
-      "name": "run",
-      "shape": "Binary",
-      "composition": true
     }
   ],
   "targetRegisters": [
@@ -398,19 +396,6 @@
         "RunActionTriggers",
         "ApplyVerticalGravity",
         "IntegratePlanarAndVerticalVelocity",
-        "CommitPose"
-      ]
-    },
-    {
-      "name": "free",
-      "version": "puck.body-motion.v1",
-      "kind": "Motion",
-      "operations": [
-        "IntegrateLocalAttitude",
-        "ComputeLocalTargetVelocity",
-        "RunActionTriggers",
-        "ApplyVerticalDecay",
-        "IntegrateScratchVelocity",
         "CommitPose"
       ]
     },
@@ -456,6 +441,10 @@
     }
   ],
   "kits": [
+    {
+      "name": "defaultKit",
+      "$drop": true
+    },
     {
       "name": "promenader",
       "bodyMotionProgram": "grounded",
@@ -592,344 +581,6 @@
     "rows": []
   },
   "addons": [],
-  "bindingOverlays": [
-    {
-      "bindingBar": {
-        "enabled": true,
-        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
-        "layout": {
-          "buttonSize": 0.075,
-          "centerGap": 0.1,
-          "anchorOffsetY": 0.14,
-          "glyphOffsetRatio": 0.4375,
-          "glyphSizeRatio": 0.53333336,
-          "scale": 0.72
-        }
-      },
-      "id": "play-sprint",
-      "document": {
-        "version": "puck.bindings.v1",
-        "modifiers": [],
-        "chords": [
-          {
-            "group": "default",
-            "chord": [],
-            "page": {
-              "id": "base",
-              "entries": [
-                {
-                  "sources": [
-                    "keyboard.space"
-                  ],
-                  "command": null,
-                  "channel": "jump",
-                  "scale": null,
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "keyboard.space"
-                  ],
-                  "command": null,
-                  "channel": "jump",
-                  "scale": null,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonSouth"
-                  ],
-                  "command": null,
-                  "channel": "jump",
-                  "scale": null,
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonSouth"
-                  ],
-                  "command": null,
-                  "channel": "jump",
-                  "scale": null,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "command": null,
-                  "channel": "dash",
-                  "scale": null,
-                  "activateOn": null,
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "command": null,
-                  "channel": "dash",
-                  "scale": null,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "command": null,
-                  "channel": "run",
-                  "scale": null,
-                  "activateOn": null,
-                  "label": "Sprint",
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "command": null,
-                  "channel": "run",
-                  "scale": null,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "command": null,
-                  "channel": "run",
-                  "scale": null,
-                  "activateOn": null,
-                  "label": "Sprint",
-                  "icon": null,
-                  "value": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "command": null,
-                  "channel": "run",
-                  "scale": null,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null,
-                  "value": null
-                }
-              ],
-              "label": null,
-              "icon": null
-            },
-            "command": null
-          },
-          {
-            "group": "default",
-            "chord": [
-              "tab"
-            ],
-            "page": {
-              "id": "play-wheel",
-              "entries": [
-                {
-                  "sources": [
-                    "gamepad.leftStick"
-                  ],
-                  "command": "player.move"
-                },
-                {
-                  "sources": [
-                    "gamepad.rightStick"
-                  ],
-                  "command": "player.wheel.select"
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowUp"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring+",
-                  "icon": "edit.next",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowDown"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring-",
-                  "icon": "edit.prev",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      -1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "gamepad.dpadUp"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring+",
-                  "icon": "edit.next",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "gamepad.dpadDown"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring-",
-                  "icon": "edit.prev",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      -1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "keyboard.tab"
-                  ],
-                  "command": "player.wheel.commit",
-                  "activateOn": "Completed"
-                }
-              ],
-              "label": "Wheel"
-            }
-          }
-        ],
-        "contexts": null,
-        "wheels": [
-          {
-            "id": "play-primary",
-            "group": "default",
-            "holdPages": [
-              "play-wheel"
-            ],
-            "rings": [
-              {
-                "id": "play-wheel-act",
-                "entries": [
-                  {
-                    "sources": null,
-                    "command": "editor.enter",
-                    "channel": null,
-                    "scale": null,
-                    "activateOn": null,
-                    "label": "Editor",
-                    "icon": "edit.place",
-                    "value": null
-                  },
-                  {
-                    "sources": null,
-                    "command": "editor.status",
-                    "channel": null,
-                    "scale": null,
-                    "activateOn": null,
-                    "label": "Status",
-                    "icon": "action.target",
-                    "value": null
-                  },
-                  {
-                    "sources": null,
-                    "command": "console",
-                    "channel": null,
-                    "scale": null,
-                    "activateOn": null,
-                    "label": "Console",
-                    "icon": "edit.op",
-                    "value": null
-                  },
-                  {
-                    "sources": null,
-                    "command": "player.channels",
-                    "channel": null,
-                    "scale": null,
-                    "activateOn": null,
-                    "label": "Channels",
-                    "icon": "edit.link",
-                    "value": null
-                  },
-                  {
-                    "sources": null,
-                    "command": "player.where",
-                    "channel": null,
-                    "scale": null,
-                    "activateOn": null,
-                    "label": "Where",
-                    "icon": "action.target",
-                    "value": null
-                  },
-                  {
-                    "sources": null,
-                    "command": "player.disengage",
-                    "channel": null,
-                    "scale": null,
-                    "activateOn": null,
-                    "label": "Disengage",
-                    "icon": "edit.exit",
-                    "value": null
-                  }
-                ],
-                "label": "Act",
-                "icon": null
-              }
-            ],
-            "style": null
-          }
-        ]
-      }
-    }
-  ],
   "storage": {
     "endpoint": null,
     "userId": null,
@@ -954,9 +605,22 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [1, 1, 1],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1027,9 +691,22 @@
             "id": 0,
             "name": "hips",
             "type": "Ellipsoid",
-            "position": [0, 0.93, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.36, 0.34, 0.34],
+            "position": [
+              0,
+              0.93,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.36,
+              0.34,
+              0.34
+            ],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.05,
@@ -1043,9 +720,22 @@
             "id": 1,
             "name": "waist",
             "type": "Ellipsoid",
-            "position": [0, 1.06, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.32, 0.32, 0.31],
+            "position": [
+              0,
+              1.06,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.32,
+              0.32,
+              0.31
+            ],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.06,
@@ -1059,9 +749,22 @@
             "id": 2,
             "name": "chest",
             "type": "Ellipsoid",
-            "position": [0, 1.2, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.44, 0.46, 0.38],
+            "position": [
+              0,
+              1.2,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.44,
+              0.46,
+              0.38
+            ],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.06,
@@ -1075,9 +778,22 @@
             "id": 3,
             "name": "shoulders",
             "type": "Ellipsoid",
-            "position": [0, 1.275, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.52, 0.2, 0.36],
+            "position": [
+              0,
+              1.275,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.52,
+              0.2,
+              0.36
+            ],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.05,
@@ -1091,9 +807,22 @@
             "id": 4,
             "name": "neck",
             "type": "Cylinder",
-            "position": [0, 1.35, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.16, 0.2, 0.16],
+            "position": [
+              0,
+              1.35,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.16,
+              0.2,
+              0.16
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.03,
@@ -1107,9 +836,22 @@
             "id": 5,
             "name": "head",
             "type": "Ellipsoid",
-            "position": [0, 1.575, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.41, 0.72, 0.52],
+            "position": [
+              0,
+              1.575,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.41,
+              0.72,
+              0.52
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.035,
@@ -1123,9 +865,22 @@
             "id": 6,
             "name": "hair",
             "type": "Ellipsoid",
-            "position": [0, 1.63, 0.03],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.435, 0.64, 0.545],
+            "position": [
+              0,
+              1.63,
+              0.03
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.435,
+              0.64,
+              0.545
+            ],
             "material": 3,
             "blend": "Union",
             "smooth": 0,
@@ -1139,9 +894,22 @@
             "id": 7,
             "name": "fringe",
             "type": "Ellipsoid",
-            "position": [0, 1.715, -0.07],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.38, 0.24, 0.28],
+            "position": [
+              0,
+              1.715,
+              -0.07
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.38,
+              0.24,
+              0.28
+            ],
             "material": 3,
             "blend": "Union",
             "smooth": 0,
@@ -1155,9 +923,22 @@
             "id": 8,
             "name": "eye-left",
             "type": "Ellipsoid",
-            "position": [-0.062, 1.585, -0.152],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.072, 0.115, 0.072],
+            "position": [
+              -0.062,
+              1.585,
+              -0.152
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.072,
+              0.115,
+              0.072
+            ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
@@ -1171,9 +952,22 @@
             "id": 9,
             "name": "eye-right",
             "type": "Ellipsoid",
-            "position": [0.062, 1.585, -0.152],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.072, 0.115, 0.072],
+            "position": [
+              0.062,
+              1.585,
+              -0.152
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.072,
+              0.115,
+              0.072
+            ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
@@ -1187,9 +981,22 @@
             "id": 10,
             "name": "tunic",
             "type": "Cone",
-            "position": [0, 0.99, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.76, 0.54, 0.76],
+            "position": [
+              0,
+              0.99,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.76,
+              0.54,
+              0.76
+            ],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.04,
@@ -1203,9 +1010,22 @@
             "id": 11,
             "name": "belt",
             "type": "Torus",
-            "position": [0, 1.04, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.41, 0.22, 0.4],
+            "position": [
+              0,
+              1.04,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.41,
+              0.22,
+              0.4
+            ],
             "material": 2,
             "blend": "Union",
             "smooth": 0,
@@ -1219,9 +1039,22 @@
             "id": 12,
             "name": "collar",
             "type": "Torus",
-            "position": [0, 1.312, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.3, 0.18, 0.3],
+            "position": [
+              0,
+              1.312,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.3,
+              0.18,
+              0.3
+            ],
             "material": 2,
             "blend": "Union",
             "smooth": 0,
@@ -1235,9 +1068,22 @@
             "id": 13,
             "name": "thigh-left",
             "type": "Ellipsoid",
-            "position": [-0.128, 0.71, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.235, 0.72, 0.27],
+            "position": [
+              -0.128,
+              0.71,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.235,
+              0.72,
+              0.27
+            ],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.04,
@@ -1251,9 +1097,22 @@
             "id": 14,
             "name": "thigh-right",
             "type": "Ellipsoid",
-            "position": [0.128, 0.71, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.235, 0.72, 0.27],
+            "position": [
+              0.128,
+              0.71,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.235,
+              0.72,
+              0.27
+            ],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.04,
@@ -1267,9 +1126,22 @@
             "id": 15,
             "name": "shin-left",
             "type": "Ellipsoid",
-            "position": [-0.132, 0.335, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.2, 0.62, 0.23],
+            "position": [
+              -0.132,
+              0.335,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.2,
+              0.62,
+              0.23
+            ],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.035,
@@ -1283,9 +1155,22 @@
             "id": 16,
             "name": "shin-right",
             "type": "Ellipsoid",
-            "position": [0.132, 0.335, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.2, 0.62, 0.23],
+            "position": [
+              0.132,
+              0.335,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.2,
+              0.62,
+              0.23
+            ],
             "material": 6,
             "blend": "SmoothUnion",
             "smooth": 0.035,
@@ -1299,9 +1184,22 @@
             "id": 17,
             "name": "boot-left",
             "type": "Box",
-            "position": [-0.134, 0.072, -0.05],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.19, 0.16, 0.4],
+            "position": [
+              -0.134,
+              0.072,
+              -0.05
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.19,
+              0.16,
+              0.4
+            ],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
@@ -1315,9 +1213,22 @@
             "id": 18,
             "name": "boot-right",
             "type": "Box",
-            "position": [0.134, 0.072, -0.05],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.19, 0.16, 0.4],
+            "position": [
+              0.134,
+              0.072,
+              -0.05
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.19,
+              0.16,
+              0.4
+            ],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
@@ -1331,9 +1242,22 @@
             "id": 19,
             "name": "upper-arm-left",
             "type": "Ellipsoid",
-            "position": [-0.262, 1.15, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.2, 0.56, 0.22],
+            "position": [
+              -0.262,
+              1.15,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.2,
+              0.56,
+              0.22
+            ],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.035,
@@ -1347,9 +1271,22 @@
             "id": 20,
             "name": "upper-arm-right",
             "type": "Ellipsoid",
-            "position": [0.262, 1.15, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.2, 0.56, 0.22],
+            "position": [
+              0.262,
+              1.15,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.2,
+              0.56,
+              0.22
+            ],
             "material": 1,
             "blend": "SmoothUnion",
             "smooth": 0.035,
@@ -1363,9 +1300,22 @@
             "id": 21,
             "name": "forearm-left",
             "type": "Ellipsoid",
-            "position": [-0.283, 0.875, -0.01],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.175, 0.5, 0.19],
+            "position": [
+              -0.283,
+              0.875,
+              -0.01
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.175,
+              0.5,
+              0.19
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.03,
@@ -1379,9 +1329,22 @@
             "id": 22,
             "name": "forearm-right",
             "type": "Ellipsoid",
-            "position": [0.283, 0.875, -0.01],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.175, 0.5, 0.19],
+            "position": [
+              0.283,
+              0.875,
+              -0.01
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.175,
+              0.5,
+              0.19
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.03,
@@ -1395,9 +1358,22 @@
             "id": 23,
             "name": "hand-left",
             "type": "Sphere",
-            "position": [-0.292, 0.705, -0.015],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.2, 0.22, 0.2],
+            "position": [
+              -0.292,
+              0.705,
+              -0.015
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.2,
+              0.22,
+              0.2
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.02,
@@ -1411,9 +1387,22 @@
             "id": 24,
             "name": "hand-right",
             "type": "Sphere",
-            "position": [0.292, 0.705, -0.015],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.2, 0.22, 0.2],
+            "position": [
+              0.292,
+              0.705,
+              -0.015
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.2,
+              0.22,
+              0.2
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.02,
@@ -1427,9 +1416,22 @@
             "id": 25,
             "name": "hair-sweep",
             "type": "RoundCone",
-            "position": [0, 1.675, 0.055],
-            "rotation": [0.6087614, 0, 0, 0.7933533],
-            "scale": [0.44, 0.4, 0.44],
+            "position": [
+              0,
+              1.675,
+              0.055
+            ],
+            "rotation": [
+              0.6087614,
+              0,
+              0,
+              0.7933533
+            ],
+            "scale": [
+              0.44,
+              0.4,
+              0.44
+            ],
             "material": 3,
             "blend": "SmoothUnion",
             "smooth": 0.05,
@@ -1443,9 +1445,22 @@
             "id": 26,
             "name": "nose",
             "type": "Sphere",
-            "position": [0, 1.545, -0.168],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.055, 0.055, 0.055],
+            "position": [
+              0,
+              1.545,
+              -0.168
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
             "material": 0,
             "blend": "SmoothUnion",
             "smooth": 0.02,
@@ -1508,9 +1523,22 @@
             "id": 0,
             "name": "screen",
             "type": "Box",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [3.6765, 4.4118, 0.1471],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              3.6765,
+              4.4118,
+              0.1471
+            ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
@@ -1524,9 +1552,22 @@
             "id": 1,
             "name": "pillar-left",
             "type": "Box",
-            "position": [-1.5, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.7353, 4.4118, 0.8824],
+            "position": [
+              -1.5,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.7353,
+              4.4118,
+              0.8824
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1540,9 +1581,22 @@
             "id": 2,
             "name": "pillar-right",
             "type": "Box",
-            "position": [1.5, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.7353, 4.4118, 0.8824],
+            "position": [
+              1.5,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.7353,
+              4.4118,
+              0.8824
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1556,9 +1610,22 @@
             "id": 3,
             "name": "lintel",
             "type": "Box",
-            "position": [0, 1.75, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [5.1471, 0.7353, 0.8824],
+            "position": [
+              0,
+              1.75,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              5.1471,
+              0.7353,
+              0.8824
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1582,6 +1649,56 @@
             }
           ]
         }
+      }
+    },
+    {
+      "id": "camera-body",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "camera-body",
+        "palette": [
+          {
+            "color": "#3A4046",
+            "emissive": 0,
+            "specular": 0.15,
+            "shininess": 8
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "lens",
+            "type": "Sphere",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
       }
     }
   ],
@@ -1628,87 +1745,54 @@
           }
         }
       ]
+    },
+    {
+      "id": "camera-seat-0",
+      "creationId": "camera-body",
+      "position": [
+        6,
+        1.2,
+        -4
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "inhabit": {
+        "count": 1,
+        "kit": "promenader",
+        "source": "Live",
+        "look": null,
+        "distribution": {
+          "region": {
+            "$type": "disc",
+            "radius": 0.01
+          },
+          "fill": {
+            "name": "additive",
+            "offset": 0,
+            "step": 0.618034
+          }
+        }
+      }
     }
   ],
   "authoring": {
-    "authoringHeadroomScreens": 4,
-    "authoringHeadroomPlacements": 8,
-    "minPlacementScale": 0.2,
-    "maxPlacementScale": 5,
-    "candidateRadius": 32,
-    "candidateCap": 16,
-    "workbenchFraction": 0.7,
-    "previewDeadlineFrames": 12,
-    "derivedFaceScreens": 4
+    "maxPlacementScale": 5
   },
   "speakers": [],
   "tunes": [],
   "patches": [],
-  "audio": {
-    "masterGain": 1,
-    "defaultSpeakerRadius": 8,
-    "defaultCurve": "smoothstep",
-    "defaultBedFadeSeconds": 0.5,
-    "listener": "focus",
-    "cues": []
-  },
   "collision": {
     "requirements": [
       "SmoothUnionContact"
-    ],
-    "contactSkin": 0.02,
-    "maxIterations": 4,
-    "maxSlopeDegrees": 60,
-    "gradientProbe": 0
+    ]
   },
   "host": {
-    "presentation": "Windowed",
-    "backend": "auto",
     "width": 1920,
     "height": 1080,
-    "surfaceFormat": "r8g8b8a8",
     "fullscreen": true,
-    "presentMode": "Immediate",
-    "targetHertz": 0,
-    "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
-    "genlock": null,
-    "listen": null,
     "authority": null
   },
   "views": {
-    "seatControl": {
-      "yawReference": "World",
-      "minPitch": -0.35,
-      "maxPitch": 1.2
-    },
-    "seatRig": {
-      "motion": {
-        "$type": "orbit",
-        "distance": 5.4626,
-        "yaw": 0,
-        "pitch": 0.4145069,
-        "pivotOffset": [
-          0,
-          0,
-          0
-        ]
-      },
-      "aim": {
-        "$type": "anchor",
-        "offset": [
-          0,
-          1,
-          0
-        ],
-        "worldAxes": false
-      },
-      "lens": {
-        "fieldOfViewRadians": 0.9599311
-      },
-      "smoothRate": 6
-    },
     "layouts": [
       {
         "name": "portrait",
@@ -1792,17 +1876,12 @@
   "grants": [],
   "hud": {
     "defaults": {
-      "enabled": true,
       "cursor": {
-        "hoverRadius": 48,
-        "sizePx": 7,
-        "role": "TextPrimary"
+        "hoverRadius": 48
       }
-    },
-    "panels": []
+    }
   },
   "state": {
-    "world": [],
     "body": [
       {
         "name": "jumpUses",
@@ -1835,7 +1914,7 @@
     },
     {
       "name": "home",
-      "document": "play.world.json"
+      "document": "nexus.world.json"
     }
   ],
   "portals": {
@@ -1845,9 +1924,6 @@
       "full": "Retry",
       "partyAllOrNothing": true
     }
-  },
-  "simulation": {
-    "rateHz": 240
   },
   "destinations": [
     {
@@ -1868,9 +1944,19 @@
       "algorithm": "",
       "publicKey": "",
       "grants": [
-        { "capability": "Control", "subject": "all" },
-        { "capability": "Drive", "exclusive": true, "budget": 64 },
-        { "capability": "Observe", "budget": 64 }
+        {
+          "capability": "Control",
+          "subject": "all"
+        },
+        {
+          "capability": "Drive",
+          "exclusive": true,
+          "budget": 64
+        },
+        {
+          "capability": "Observe",
+          "budget": 64
+        }
       ]
     }
   ]

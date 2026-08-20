@@ -68,7 +68,7 @@
         "chords": [
           {
             "chord": [],
-            "group": "state.bindingGroups.defaultActionGroup",
+            "group": "defaultActionGroup",
             "page": {
               "entries": [
                 {
@@ -217,7 +217,7 @@
               "command": "player.look.swap",
               "label": "Look behind"
             },
-            "group": "state.bindingGroups.defaultActionGroup"
+            "group": "defaultActionGroup"
           },
           {
             "chord": [
@@ -229,7 +229,7 @@
               "holdRelease": true,
               "label": "Free look"
             },
-            "group": "state.bindingGroups.defaultActionGroup"
+            "group": "defaultActionGroup"
           },
           {
             "chord": [
@@ -241,7 +241,7 @@
               "holdRelease": true,
               "label": "Recenter"
             },
-            "group": "state.bindingGroups.defaultActionGroup"
+            "group": "defaultActionGroup"
           },
           {
             "chord": [
@@ -252,7 +252,7 @@
               "command": "player.motion.controls",
               "label": "Toggle motion controls"
             },
-            "group": "state.bindingGroups.defaultActionGroup"
+            "group": "defaultActionGroup"
           },
           {
             "chord": [
@@ -264,7 +264,7 @@
               "mode": "Toggle",
               "scale": 1
             },
-            "group": "state.bindingGroups.defaultActionGroup",
+            "group": "defaultActionGroup",
             "held": [
               "look"
             ]
@@ -279,7 +279,7 @@
               "mode": "Toggle",
               "scale": 1
             },
-            "group": "state.bindingGroups.defaultActionGroup",
+            "group": "defaultActionGroup",
             "held": [
               "look"
             ]
@@ -294,13 +294,13 @@
               "command": "player.look.swap",
               "label": "Look behind"
             },
-            "group": "state.bindingGroups.defaultActionGroup"
+            "group": "defaultActionGroup"
           },
           {
             "chord": [
               "actionWheel"
             ],
-            "group": "state.bindingGroups.defaultActionGroup",
+            "group": "defaultActionGroup",
             "page": {
               "entries": [
                 {
@@ -329,7 +329,7 @@
               "holdRelease": true,
               "label": "Run"
             },
-            "group": "state.bindingGroups.defaultActionGroup",
+            "group": "defaultActionGroup",
             "held": [
               "mouse.button1",
               "mouse.button2"
@@ -403,7 +403,7 @@
         "version": "puck.bindings.v1",
         "wheels": [
           {
-            "group": "state.bindingGroups.defaultActionGroup",
+            "group": "defaultActionGroup",
             "holdPages": [
               "actionWheel"
             ],
@@ -874,18 +874,6 @@
         "kind": "Counter",
         "name": "jumpCounter",
         "resetFact": "Grounded"
-      }
-    ],
-    "world": [
-      {
-        "cells": [
-          {
-            "key": "defaultActionGroup",
-            "value": "defaultActionGroup"
-          }
-        ],
-        "kind": "text",
-        "name": "bindingGroups"
       }
     ]
   },

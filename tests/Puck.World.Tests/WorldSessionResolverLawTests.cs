@@ -383,8 +383,8 @@ public sealed class WorldSessionResolverLawTests {
     // TryGetActive's own remarks) meant whichever document resolved first silently claimed the name for good — a
     // SECOND document's own row could never mint its own generation; it would keep reusing the FIRST document's
     // instance forever. Live confirmation (independent verification, 2026-08-09): booting a MODIFIED COPY of
-    // play.world.json from a different path, with a dungeon whose 'home' destination references the SHIPPED
-    // play.world.json, the return crossing correctly minted a NEW instance rather than adopting boot — proving the
+    // nexus.world.json from a different path, with a dungeon whose 'home' destination references the SHIPPED
+    // nexus.world.json, the return crossing correctly minted a NEW instance rather than adopting boot — proving the
     // fix must hold BOTH directions: identical resolved document -> adopt/reuse (the shipped boot case, verified
     // landing in instance=boot); different resolved document under the SAME destination name and scope -> mint
     // fresh, never adopt (the modified-copy case just observed live). This law proves the fresh-mint direction at
@@ -398,7 +398,7 @@ public sealed class WorldSessionResolverLawTests {
         // old bare (name, scope) key could not tell apart.
         var destinationFromDocumentX = GlobalDestination(name: "home");
         var destinationFromDocumentY = GlobalDestination(name: "home");
-        const string documentX = "worlds/play.world.json";
+        const string documentX = "worlds/nexus.world.json";
         const string documentY = "worlds/play-modified.world.json";
         var cohort = Cohort((1, null));
 
@@ -438,14 +438,14 @@ public sealed class WorldSessionResolverLawTests {
         var resolver = new WorldSessionResolver();
         var definition = Fixtures.BuildDocument();
         var destination = GlobalDestination(name: "home-origin");
-        const string bootDocument = "worlds/play.world.json";
+        const string bootDocument = "worlds/nexus.world.json";
         const string modifiedCopyDocument = "worlds/play-modified.world.json";
 
         // "boot" is adopted for destination 'home-origin' against the SHIPPED document — mirrors WorldInstanceHost's
         // own boot-instance registration (TryAdopt called once, up front, for the boot instance's own document).
         Assert.True(condition: resolver.TryAdopt(destination: destination, instanceName: "boot", reason: out var adoptReason, referencedDocument: bootDocument, resolved: out _, scopeKey: WorldSessionResolver.GlobalScopeKey), userMessage: adoptReason);
 
-        // SAME resolved document (the shipped play.world.json, exactly like a dungeon's own 'home' row naming it) —
+        // SAME resolved document (the shipped nexus.world.json, exactly like a dungeon's own 'home' row naming it) —
         // sees the adoption and would reuse it via the ordinary ResolveAndEnqueueCoalescedTransfers gate.
         Assert.True(condition: resolver.TryGetActive(destinationName: "home-origin", durability: WorldDestinationDurability.Ephemeral, referencedDocument: bootDocument, resolved: out var sameDocActive, scopeKey: WorldSessionResolver.GlobalScopeKey));
         Assert.Equal(expected: "boot", actual: sameDocActive.InstanceName);
@@ -468,7 +468,7 @@ public sealed class WorldSessionResolverLawTests {
     [Fact]
     public void NotifyInstanceRetired_InstanceAdoptedByMultipleDestinations_ClearsEveryKey() {
         var resolver = new WorldSessionResolver();
-        const string sharedDocument = "worlds/play.world.json";
+        const string sharedDocument = "worlds/nexus.world.json";
         var destinationOne = GlobalDestination(name: "home-a");
         var destinationTwo = GlobalDestination(name: "home-b");
 
@@ -488,7 +488,7 @@ public sealed class WorldSessionResolverLawTests {
     // all") — resolving "dive.world.json" and "Assets/worlds/dive.world.json" to the SAME underlying file is
     // necessarily a HOST-side act (Puck.World.WorldInstanceHost.CanonicalDocumentIdentity, which this project
     // cannot reach or unit-test directly — see this file's own class remarks), proven live instead (VERIFY section):
-    // a diver's "home" destination — authored against play.world.json under whatever spelling dive.world.json's own
+    // a diver's "home" destination — authored against nexus.world.json under whatever spelling dive.world.json's own
     // references section uses — correctly adopted the ALREADY-RUNNING boot instance (generation 0, instance=boot)
     // despite boot's own resolved SourcePath almost certainly being a different string. What THIS law proves is the
     // half the resolver DOES own: once the host folds two alias spellings to one canonical string (exactly what

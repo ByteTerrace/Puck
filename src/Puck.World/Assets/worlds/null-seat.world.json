@@ -2,6 +2,26 @@
   "schema": "puck.world.def.v1",
   "documentId": "null-seat",
   "population": { "localSeats": 1 },
+  "channels": [
+    { "name": "forward", "shape": "Bipolar", "role": "MoveAdvance" },
+    { "name": "strafe", "shape": "Bipolar", "role": "MoveStrafe" },
+    { "name": "turn", "shape": "Bipolar", "role": "Turn" }
+  ],
+  "collision": { "requirements": [], "contactSkin": 0.02, "maxIterations": 4, "maxSlopeDegrees": 60, "gradientProbe": 0 },
+  "views": {
+    "layouts": [],
+    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
+        { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
+        { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
+        { "$type": "smooth", "rate": 6 }
+      ]
+    }
+  },
   "bodyMotionPrograms": [
     {
       "name": "traverse",

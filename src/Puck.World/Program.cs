@@ -33,7 +33,7 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.def.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/play.world.json beside the executable loads; failure to load that document also fails the boot.",
+    Description = "The world definition file (puck.world.def.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/nexus.world.json beside the executable loads; failure to load that document also fails the boot.",
 };
 var recordingOption = new Option<string?>(name: "--recording") {
     DefaultValueFactory = static _ => null,
@@ -156,7 +156,7 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
     false => WorldHostPresentation.Windowed,
     null => null,
 });
-// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/play.world.json beside
+// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/nexus.world.json beside
 // the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
 // window/launcher/presentation registrations because those now read their values from the resolved host section. Read
 // by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is
@@ -284,7 +284,7 @@ services.AddSingleton(implementationFactory: static provider => WorldStorageSync
     worlds: provider.GetRequiredService<Puck.World.Server.WorldOwnedWorlds>()
 ));
 // The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
-// Assets/worlds/default.world.json as its basis for the standard movement/roster rows, or authors its
+// Assets/worlds/standard.world.json as its basis for the standard movement rows, or authors its
 // own, or has none), composed per seat with the seat's profile bindings and its live session rebinds. One
 // WorldSeatBindings resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
 // IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal. Constructed here

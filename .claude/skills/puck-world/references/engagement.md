@@ -79,7 +79,7 @@ Button elements compare the RAW `FixedQ4816` value against
 canonicalize to -1..1 and triggers to 0..1 in the fixed-point domain first.
 
 None of the four shipped worlds authors an engaged screen, so there is no worked
-example to cite — Play's three portal placements are inert in ENGAGEMENT scope
+example to cite — the nexus's four portal placements are inert in ENGAGEMENT scope
 only: their faces render their resolved sources, nothing engages them.
 
 ## The command kinds

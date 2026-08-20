@@ -153,9 +153,13 @@ internal static class WorldBootComposition {
         ));
 
         // The shared live composition-override store — written by DeliverComposition (an accepted
-        // view.override layout/camera), read by the (presentation-only) frame source's view composer. Plain
-        // state either way.
+        // view.override layout/camera), read by the frame source's view composer. Plain state either way.
         services.AddSingleton<WorldCompositionState>();
+
+        // The window composer — layout selection + eased transitions. Core, both boot shapes: WorldSimulation's
+        // per-tick context publish and WorldPostBuildWiring's boot-census seed both read ActiveLayoutName, so it must
+        // resolve without presentation. Headless simply has no reader for the frame-driven half.
+        services.AddSingleton<WorldViewComposer>();
 
         // The local seats' live orbit state is harmless headless data and must exist before WorldClient: camera-
         // relative world-frame intent composition reads the same yaw the presentation camera renders. Pointer/stick
@@ -547,10 +551,6 @@ internal static class WorldBootComposition {
             factory: sp.GetService<IAudioRenderDeviceFactory>()
         ));
         services.AddHostedService(implementationFactory: static sp => sp.GetRequiredService<WorldAudioRenderService>());
-
-        // The window composer — layout selection + eased transitions. One shared instance the frame source drives
-        // each produced frame and the world.view.state read observes.
-        services.AddSingleton<WorldViewComposer>();
 
         // The world's own presentation verb surface — world.fps/.gpu, world.screens/.cameras, and the graphics
         // options (shadows, ambient occlusion, render scale, an FPS target, a quality preset). Refuses as unknown

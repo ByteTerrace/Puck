@@ -174,7 +174,7 @@ the grace window (not merely the leave itself) is what the rules above ride.
 - **Player 1 (slot 0) never leaves** (`PlayerRoster.Leave` refuses `slot <= 0`)
   — pick slot 2..4 for any leave/park/resume script.
 - **A shipped world's four identities are exactly its four auto-seated
-  players** (`play.world.json`: amber/cobalt/moss/violet, one per seat — every
+  players** (`nexus.world.json`: amber/cobalt/moss/violet, one per seat — every
   shipped world authors the same four).
   `player.join <profile> <slot>` refuses BY NAME
   ("profile '<x>' is already in use") the instant `<profile>` is active

@@ -122,7 +122,7 @@ public sealed partial class WorldBody {
     // simulation step is 210 of these) an un-refreshed latch survives a solver pass that reports no push at all — a
     // grace window absorbing ordinary
     // query noise near a surface (a gradient/quantization boundary the SDF field provider can land exactly on, or —
-    // measured empirically driving into play.world.json's east wall — a body settled into a wall/ground corner
+    // measured empirically driving a body into a world's boundary wall — a body settled into a wall/ground corner
     // under SmoothUnionContact blending, which can drift in and out of the walkable classification for many
     // consecutive simulation steps while genuinely never clearing) so that noise can never flicker the witness.
     // Reset to the full window every time a fresh push actually lands.

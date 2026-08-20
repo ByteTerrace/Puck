@@ -1,5 +1,5 @@
 {
-  "basis": "default.world.json",
+  "basis": "standard.world.json",
   "$schema": "./puck.world.def.v1.schema.json",
   "simulation": {
     "rateHz": 120
@@ -43,55 +43,42 @@
       ]
     }
   ],
-  "render": {
-    "shadows": "Off",
-    "shadowCrowdRadius": 15,
-    "ambientOcclusion": false,
-    "renderScale": "Half",
-    "upscaleSharpness": 0,
-    "low": {
-      "shadows": "Off",
-      "ambientOcclusion": false,
-      "renderScale": "Half"
-    },
-    "medium": {
-      "shadows": "Medium",
-      "ambientOcclusion": true,
-      "renderScale": "ThreeQuarter"
-    },
-    "high": {
-      "shadows": "High",
-      "ambientOcclusion": true,
-      "renderScale": "Native"
-    }
-  },
   "screens": [],
   "cameras": [
     {
       "name": "overview",
       "anchor": null,
       "rig": {
-        "motion": {
-          "$type": "static",
-          "position": [
-            -15,
-            14,
-            -33
-          ],
-          "worldAxes": true
-        },
-        "aim": {
-          "$type": "worldPoint",
-          "target": [
-            -25,
-            0,
-            -55
-          ]
-        },
-        "lens": {
-          "fieldOfViewRadians": 0.95
-        },
-        "smoothRate": 0
+        "name": "overview",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -15,
+                14,
+                -33
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -25,
+                0,
+                -55
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.95
+          }
+        ]
       },
       "renderWidth": 320,
       "renderHeight": 240
@@ -176,57 +163,21 @@
     "equalizeByDefault": true,
     "participants": []
   },
-  "targetRegisters": [
-    {
-      "name": "target",
-      "maximumRange": 50,
-      "maximumHalfAngleDegrees": 30,
-      "requiresLineOfSight": true
-    }
-  ],
   "channels": [
     {
       "name": "forward",
       "shape": "Bipolar",
-      "role": "MoveAdvance"
+      "role": "MoveAdvance",
+      "frame": "World"
     },
     {
       "name": "strafe",
       "shape": "Bipolar",
-      "role": "MoveStrafe"
-    },
-    {
-      "name": "turn",
-      "shape": "Bipolar",
-      "role": "Turn"
-    },
-    {
-      "name": "up",
-      "shape": "Bipolar",
-      "role": "MoveUp"
-    },
-    {
-      "name": "pitch",
-      "shape": "Bipolar",
-      "role": "Pitch"
-    },
-    {
-      "name": "roll",
-      "shape": "Bipolar",
-      "role": "Roll"
-    },
-    {
-      "name": "boost",
-      "shape": "Binary",
-      "composition": true
+      "role": "MoveStrafe",
+      "frame": "World"
     },
     {
       "name": "drift",
-      "shape": "Binary",
-      "composition": true
-    },
-    {
-      "name": "dash",
       "shape": "Binary",
       "composition": true
     }
@@ -244,19 +195,6 @@
         "RunActionTriggers",
         "ApplyVerticalGravity",
         "IntegratePlanarAndVerticalVelocity",
-        "CommitPose"
-      ]
-    },
-    {
-      "name": "free",
-      "version": "puck.body-motion.v1",
-      "kind": "Motion",
-      "operations": [
-        "IntegrateLocalAttitude",
-        "ComputeLocalTargetVelocity",
-        "RunActionTriggers",
-        "ApplyVerticalDecay",
-        "IntegrateScratchVelocity",
         "CommitPose"
       ]
     },
@@ -297,6 +235,10 @@
   ],
   "kits": [
     {
+      "name": "defaultKit",
+      "$drop": true
+    },
+    {
       "name": "kart",
       "bodyMotionProgram": "vehicle-ground",
       "motion": {
@@ -322,7 +264,7 @@
         "driftSteerScale": 1.35,
         "boostMultiplier": 1.35,
         "driftChannel": "drift",
-        "boostChannel": "boost"
+        "boostChannel": "run"
       },
       "producers": {
         "wander": {
@@ -346,8 +288,7 @@
             "altitudeBase": 0,
             "altitudeRange": 0
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -424,7 +365,7 @@
         "driftSteerScale": 1.25,
         "boostMultiplier": 1.35,
         "driftChannel": "drift",
-        "boostChannel": "boost"
+        "boostChannel": "run"
       },
       "producers": {
         "wander": {
@@ -448,8 +389,7 @@
             "altitudeBase": 0,
             "altitudeRange": 0
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -514,7 +454,7 @@
         "fallGravity": 8,
         "maxFallSpeed": 24,
         "boostMultiplier": 1.4,
-        "boostChannel": "boost"
+        "boostChannel": "run"
       },
       "producers": {
         "wander": {
@@ -538,8 +478,7 @@
             "altitudeBase": 4.5,
             "altitudeRange": 3
           },
-          "channels": {
-          }
+          "channels": {}
         }
       },
       "actions": {
@@ -592,378 +531,6 @@
     "rows": []
   },
   "addons": [],
-  "bindingOverlays": [
-    {
-      "bindingBar": {
-        "enabled": true,
-        "visible": { "$type": "recently", "fact": "SeatInput", "windowSeconds": 6 },
-        "layout": {
-          "buttonSize": 0.075,
-          "centerGap": 0.1,
-          "anchorOffsetY": 0.14,
-          "glyphOffsetRatio": 0.4375,
-          "glyphSizeRatio": 0.53333336,
-          "scale": 0.72
-        }
-      },
-      "id": "vehicle-arena-pads",
-      "document": {
-        "version": "puck.bindings.v1",
-        "modifiers": [],
-        "chords": [
-          {
-            "group": "default",
-            "chord": [],
-            "page": {
-              "id": "base",
-              "entries": [
-                {
-                  "sources": [
-                    "keyboard.arrowUp"
-                  ],
-                  "channel": "pitch",
-                  "scale": 1,
-                  "activateOn": null,
-                  "label": "Climb",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowUp"
-                  ],
-                  "channel": "pitch",
-                  "scale": 1,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowDown"
-                  ],
-                  "channel": "pitch",
-                  "scale": -1,
-                  "activateOn": null,
-                  "label": "Dive",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowDown"
-                  ],
-                  "channel": "pitch",
-                  "scale": -1,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "channel": "boost",
-                  "activateOn": null,
-                  "label": "Boost",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftShoulder"
-                  ],
-                  "channel": "boost",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "channel": "boost",
-                  "activateOn": null,
-                  "label": "Boost",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.shiftLeft"
-                  ],
-                  "channel": "boost",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.rightShoulder"
-                  ],
-                  "channel": "drift",
-                  "activateOn": null,
-                  "label": "Drift",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.rightShoulder"
-                  ],
-                  "channel": "drift",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "channel": "dash",
-                  "activateOn": null,
-                  "label": "Dash",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.buttonEast"
-                  ],
-                  "channel": "dash",
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.rightTrigger"
-                  ],
-                  "channel": "forward",
-                  "scale": 1,
-                  "activateOn": null,
-                  "label": "Throttle",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "gamepad.leftTrigger"
-                  ],
-                  "channel": "forward",
-                  "scale": -1,
-                  "activateOn": null,
-                  "label": "Reverse",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.w"
-                  ],
-                  "channel": "forward",
-                  "scale": 1,
-                  "activateOn": null,
-                  "label": "Forward",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.w"
-                  ],
-                  "channel": "forward",
-                  "scale": 1,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.s"
-                  ],
-                  "channel": "forward",
-                  "scale": -1,
-                  "activateOn": null,
-                  "label": "Reverse",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.s"
-                  ],
-                  "channel": "forward",
-                  "scale": -1,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.a"
-                  ],
-                  "channel": "turn",
-                  "scale": 1,
-                  "activateOn": null,
-                  "label": "Turn Left",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.a"
-                  ],
-                  "channel": "turn",
-                  "scale": 1,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.d"
-                  ],
-                  "channel": "turn",
-                  "scale": -1,
-                  "activateOn": null,
-                  "label": "Turn Right",
-                  "icon": null
-                },
-                {
-                  "sources": [
-                    "keyboard.d"
-                  ],
-                  "channel": "turn",
-                  "scale": -1,
-                  "activateOn": "Completed",
-                  "label": null,
-                  "icon": null
-                }
-              ],
-              "label": null,
-              "icon": null
-            },
-            "command": null
-          },
-          {
-            "group": "default",
-            "chord": [
-              "tab"
-            ],
-            "page": {
-              "id": "play-wheel",
-              "entries": [
-                {
-                  "sources": [
-                    "gamepad.leftStick"
-                  ],
-                  "command": "player.move"
-                },
-                {
-                  "sources": [
-                    "gamepad.rightStick"
-                  ],
-                  "command": "player.wheel.select"
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowUp"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring+",
-                  "icon": "edit.next",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "keyboard.arrowDown"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring-",
-                  "icon": "edit.prev",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      -1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "gamepad.dpadUp"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring+",
-                  "icon": "edit.next",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "gamepad.dpadDown"
-                  ],
-                  "command": "player.wheel.ring",
-                  "activateOn": "Started",
-                  "label": "Ring-",
-                  "icon": "edit.prev",
-                  "value": {
-                    "kind": "Axis1D",
-                    "raw": [
-                      -1,
-                      0,
-                      0,
-                      0
-                    ]
-                  }
-                },
-                {
-                  "sources": [
-                    "keyboard.tab"
-                  ],
-                  "command": "player.wheel.commit",
-                  "activateOn": "Completed"
-                }
-              ],
-              "label": "Wheel"
-            }
-          }
-        ],
-        "wheels": [
-          {
-            "id": "play-primary",
-            "group": "default",
-            "holdPages": ["play-wheel"],
-            "rings": [
-              {
-                "id": "play-wheel-act",
-                "entries": [
-                  { "sources": null, "command": "editor.enter", "label": "Editor", "icon": "edit.place" },
-                  { "sources": null, "command": "editor.status", "label": "Status", "icon": "action.target" },
-                  { "sources": null, "command": "console", "label": "Console", "icon": "edit.op" },
-                  { "sources": null, "command": "player.channels", "label": "Channels", "icon": "edit.link" },
-                  { "sources": null, "command": "player.where", "label": "Where", "icon": "action.target" },
-                  { "sources": null, "command": "player.disengage", "label": "Disengage", "icon": "edit.exit" }
-                ],
-                "label": "Act",
-                "icon": null
-              }
-            ]
-          }
-        ]
-      }
-    }
-  ],
   "storage": {
     "endpoint": null,
     "userId": null,
@@ -988,9 +555,22 @@
             "id": 0,
             "name": "ground",
             "type": "Plane",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [1, 1, 1],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1025,9 +605,22 @@
             "id": 0,
             "name": "wall",
             "type": "Box",
-            "position": [0, 0.6, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [10, 1.2, 0.5],
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              10,
+              1.2,
+              0.5
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1062,9 +655,22 @@
             "id": 0,
             "name": "pylon",
             "type": "Cylinder",
-            "position": [0, 0.8, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.4, 1.6, 0.4],
+            "position": [
+              0,
+              0.8,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.4,
+              1.6,
+              0.4
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1099,9 +705,22 @@
             "id": 0,
             "name": "ramp-shallow",
             "type": "Box",
-            "position": [0, 0.3, 0],
-            "rotation": [0.087156, 0, 0, 0.996195],
-            "scale": [5, 0.5, 8],
+            "position": [
+              0,
+              0.3,
+              0
+            ],
+            "rotation": [
+              0.087156,
+              0,
+              0,
+              0.996195
+            ],
+            "scale": [
+              5,
+              0.5,
+              8
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1136,9 +755,22 @@
             "id": 0,
             "name": "ramp-steep",
             "type": "Box",
-            "position": [0, 0.3, 0],
-            "rotation": [0.21644, 0, 0, 0.976296],
-            "scale": [5, 0.5, 8],
+            "position": [
+              0,
+              0.3,
+              0
+            ],
+            "rotation": [
+              0.21644,
+              0,
+              0,
+              0.976296
+            ],
+            "scale": [
+              5,
+              0.5,
+              8
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1173,9 +805,22 @@
             "id": 0,
             "name": "bank",
             "type": "Box",
-            "position": [0, 0.6, 0],
-            "rotation": [0.21644, 0, 0, 0.976296],
-            "scale": [6, 0.5, 3],
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": [
+              0.21644,
+              0,
+              0,
+              0.976296
+            ],
+            "scale": [
+              6,
+              0.5,
+              3
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1210,9 +855,22 @@
             "id": 0,
             "name": "gate",
             "type": "Torus",
-            "position": [0, 0, 0],
-            "rotation": [0.707107, 0, 0, 0.707107],
-            "scale": [3, 3, 3],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0.707107,
+              0,
+              0,
+              0.707107
+            ],
+            "scale": [
+              3,
+              3,
+              3
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1247,9 +905,22 @@
             "id": 0,
             "name": "water-pad",
             "type": "Box",
-            "position": [0, 0.1, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [14, 0.2, 14],
+            "position": [
+              0,
+              0.1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              14,
+              0.2,
+              14
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1284,9 +955,22 @@
             "id": 0,
             "name": "frame",
             "type": "Box",
-            "position": [0, 0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [3, 2, 0.15],
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              3,
+              2,
+              0.15
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
@@ -1310,6 +994,56 @@
             }
           ]
         }
+      }
+    },
+    {
+      "id": "camera-body",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "camera-body",
+        "palette": [
+          {
+            "color": "#3A4046",
+            "emissive": 0,
+            "specular": 0.15,
+            "shininess": 8
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "lens",
+            "type": "Sphere",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.14,
+              0.14,
+              0.14
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "group": 0,
+            "twist": 0,
+            "onion": 0,
+            "bend": 0,
+            "dilate": 0
+          }
+        ],
+        "frames": null,
+        "chains": null,
+        "cameras": null,
+        "behavior": null
       }
     }
   ],
@@ -1822,86 +1556,45 @@
           }
         }
       ]
+    },
+    {
+      "id": "camera-seat-0",
+      "creationId": "camera-body",
+      "position": [
+        -25,
+        1.2,
+        -60
+      ],
+      "yawDegrees": 0,
+      "scale": 1,
+      "inhabit": {
+        "count": 1,
+        "kit": "kart",
+        "source": "Live",
+        "look": null,
+        "distribution": {
+          "region": {
+            "$type": "disc",
+            "radius": 0.01
+          },
+          "fill": {
+            "name": "additive",
+            "offset": 0,
+            "step": 0.618034
+          }
+        }
+      }
     }
   ],
   "authoring": {
-    "authoringHeadroomScreens": 4,
-    "authoringHeadroomPlacements": 8,
-    "minPlacementScale": 0.2,
     "maxPlacementScale": 5,
-    "candidateRadius": 32,
-    "candidateCap": 16,
-    "workbenchFraction": 0.7,
-    "previewDeadlineFrames": 12,
     "derivedFaceScreens": 1
   },
   "speakers": [],
   "tunes": [],
   "patches": [],
-  "audio": {
-    "masterGain": 1,
-    "defaultSpeakerRadius": 8,
-    "defaultCurve": "smoothstep",
-    "defaultBedFadeSeconds": 0.5,
-    "listener": "focus",
-    "cues": []
-  },
-  "collision": {
-    "requirements": [],
-    "contactSkin": 0.02,
-    "maxIterations": 4,
-    "maxSlopeDegrees": 60,
-    "gradientProbe": 0
-  },
   "host": {
-    "presentation": "Windowed",
-    "backend": "auto",
-    "width": 1280,
-    "height": 800,
-    "surfaceFormat": "r8g8b8a8",
-    "fullscreen": false,
-    "presentMode": "Immediate",
-    "targetHertz": 0,
-    "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
-    "genlock": null,
-    "listen": null,
     "authority": null
-  },
-  "views": {
-    "seatControl": {
-      "yawReference": "World",
-      "minPitch": -0.35,
-      "maxPitch": 1.2
-    },
-    "seatRig": {
-      "motion": {
-        "$type": "orbit",
-        "distance": 6.5,
-        "yaw": 0,
-        "pitch": 0.3947911,
-        "pivotOffset": [
-          0,
-          0,
-          0
-        ]
-      },
-      "aim": {
-        "$type": "anchor",
-        "offset": [
-          0,
-          1,
-          0
-        ],
-        "worldAxes": false
-      },
-      "lens": {
-        "fieldOfViewRadians": 1.0471976
-      },
-      "smoothRate": 6
-    },
-    "layouts": []
   },
   "looks": [],
   "lookAssignment": {
@@ -1916,17 +1609,12 @@
   "grants": [],
   "hud": {
     "defaults": {
-      "enabled": true,
       "cursor": {
-        "hoverRadius": 96,
-        "sizePx": 7,
-        "role": "TextPrimary"
+        "hoverRadius": 96
       }
-    },
-    "panels": []
+    }
   },
   "state": {
-    "world": [],
     "body": [
       {
         "name": "dashCooldown",
@@ -1984,7 +1672,7 @@
   "references": [
     {
       "name": "home",
-      "document": "play.world.json"
+      "document": "nexus.world.json"
     }
   ],
   "portals": {
@@ -2011,9 +1699,19 @@
       "algorithm": "",
       "publicKey": "",
       "grants": [
-        { "capability": "Control", "subject": "all" },
-        { "capability": "Drive", "exclusive": true, "budget": 64 },
-        { "capability": "Observe", "budget": 64 }
+        {
+          "capability": "Control",
+          "subject": "all"
+        },
+        {
+          "capability": "Drive",
+          "exclusive": true,
+          "budget": 64
+        },
+        {
+          "capability": "Observe",
+          "budget": 64
+        }
       ]
     }
   ]

@@ -112,7 +112,7 @@ mutates them in session and no grant subject names them:
   authored, never both, never neither. `NeighbourKey` (computed, never
   serialized) folds whichever arm was authored into the one opaque string
   every `IWorldNeighbourResolver` call site resolves against. This is what a
-  portal facet's `destination` resolves against: Play's own `references`
+  portal facet's `destination` resolves against: the nexus's own `references`
   section names the three dungeons by document path.
 - **`Portals`** (`WorldPortals.cs`) — `WorldPortalsSection(WorldPortalDefaults
   PortalDefaults)`, whose `travel` is `Party` (the traveling seat's whole
@@ -508,18 +508,17 @@ construction), so the collision-with-another-id checks that used to run beside
 the character check are gone — a proof, not a courtesy.
 
 Worlds have no in-code definition. A boot with no `--world` override loads
-`src/Puck.World/Assets/worlds/play.world.json`; an explicit path or the shipped default that cannot be loaded
-refuses the boot by name. Four shipped GAME worlds — the charter's whole roster: `play` (the hub — the
-overworld's first main city, local multiplayer, and the boot default; carries the `references` section naming the
-other three by document path, and a wall-mounted picture-frame placement per named world), `dive` (the underwater
+`src/Puck.World/Assets/worlds/nexus.world.json`; an explicit path or the shipped default that cannot be loaded
+refuses the boot by name. Four shipped GAME worlds — the charter's whole roster: `nexus` (the hub — a floating
+island above a field of planetoids, and the boot default; carries the `references` section naming the other three
+plus `studio` by document path, and one `portal-arch` placement per named world), `dive` (the underwater
 arena scaffold — the one that also authors `water`), `kart` (the racing arena), `jump` (the platformer arena). A
 fifth document, `studio`, ships beside them as a non-game DEV CANVAS for character/creation work — neutral floor,
-no scenery or crowd, four anchored camera eyes and a `sheet` layout composing four angles at once — reached only
-with `--world` and never from Play. Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`,
-`quilt-island`) ship beside them as non-game adjacency/federation stress content — each a `basis` delta over the
-eleventh document, the `quilt-base` template (see "Document composition" below). The six FLAT documents (the four
-game worlds, `studio`, `quilt-base`) carry the full required top-level set, so a change that adds a required
-top-level section sweeps those six; the deltas inherit it. The loader is
+no scenery or crowd, four anchored camera eyes and a `sheet` layout composing four angles at once — reached with
+`--world` or through the nexus's mapped archway. Five quilt documents (`quilt-nw`, `quilt-ne`, `quilt-se`,
+`quilt-sw`, `quilt-island`) ship beside them as non-game adjacency/federation stress content — each a `basis`
+delta over the `quilt-base` template (see "Document composition" below). Every shipped document layers over
+`standard.world.json`, so a change that adds a required top-level section is authored once, there. The loader is
 `src/Puck.World/WorldDefinitionLoader.cs`.
 
 ## Document composition (`basis`)
@@ -554,11 +553,11 @@ owned worlds share a basis. Law suite: `tests/Puck.World.Tests/DocumentBasisLawT
 `StorageCompositionLawTests.cs`.
 
 **`standard.world.json` — the standard library, not a world.** The engine ships
-no content default: `WorldDefaultBindings` went first
-(its content is `default.world.json`), and `WorldChannelDefaults.Standard` and
-`WorldViewDefaults.Default` followed — the standard movement channels and the
-standard chase rig are AUTHORED, in `standard.world.json`, beside the bindings,
-kits, body-motion programs and state rows it already carried. Absent now means
+no content default: the standard bindings, movement channels, chase rig,
+icon/badge table, theme, seat modes and markers are AUTHORED, in
+`standard.world.json`, beside the kits, body-motion programs and state rows it
+carries. Every shipped world names it as its `basis` (directly, or through
+`quilt-base`). Absent now means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the
@@ -948,8 +947,11 @@ A chord row's, context row's, and wheel row's `group` may be a literal or a
 `state.<row>[.<key>]` reference to a Text cell. All references to one cell
 resolve together before the profile is composed, so changing that single cell
 renames the relationship consistently instead of requiring a document-wide
-search/replace. The standard profile demonstrates this with
-`state.bindingGroups.defaultActionGroup`.
+search/replace. **A reference is NOT resolved on a definition delivered across
+a transfer** — `WorldBindingComposer.RowKey` throws "has not been resolved by
+its containing document" when the arriving seat recomposes — so a world whose
+bodies cross an authority boundary names its groups literally, as
+`standard.world.json` does.
 
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
