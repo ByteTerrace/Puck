@@ -38,9 +38,11 @@ namespace Puck.World;
 /// presentation-owned.
 /// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) registers a
 /// provider returning 0, so the engine leaves its surface unbound and lights it with the procedural no-signal
-/// fallback — never black. One webcam session is opened engine-wide and shared by every camera screen (two sessions
-/// on one physical device flicker), so N camera screens sample one feed. Single-threaded: <see cref="Publish"/> and
-/// simulation-routed screen mutations all run on the launcher's window-pump thread, so no lock guards this state.</para>
+/// fallback — never black. One webcam session is opened engine-wide PER SENSOR and shared by every camera screen
+/// naming that sensor (two sessions on one physical device flicker; the color and infrared sensors are separate
+/// devices and stream simultaneously), so N camera screens sample at most two feeds. Single-threaded:
+/// <see cref="Publish"/> and simulation-routed screen mutations all run on the launcher's window-pump thread, so no
+/// lock guards this state.</para>
 /// </remarks>
 internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter {
     // The presentation-only pull-back a window's fitted eye rides above the local seat's SIMULATION body position —
@@ -94,14 +96,17 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private DirectXGpuSurfaceExportFactory? m_cameraExport;
     private DirectXDeviceContext? m_cameraTargetDevice;
 
-    // The ONE webcam feed shared by every camera screen (the flicker rule), opened lazily on first demand and null until
-    // a camera screen exists; a failed open records m_cameraFault and leaves this null.
-    private CameraFeed? m_cameraFeed;
-    // The authored device-control state for the shared camera (the first camera row's `controls`, per
+    // The per-sensor shared webcam feeds — the flicker rule ("two sessions on one device") is PER PHYSICAL DEVICE, and
+    // each WorldCameraSensor names its own capture device, so the color and infrared sensors stream SIMULTANEOUSLY,
+    // each shared by every camera screen naming that sensor. Opened lazily on first demand; a failed open records the
+    // sensor's fault in m_cameraFaults instead (which doubles as the tried-once latch: a sensor in NEITHER dictionary
+    // has not been attempted).
+    private readonly Dictionary<WorldCameraSensor, CameraFeed> m_cameraFeeds = new();
+    private readonly Dictionary<WorldCameraSensor, string> m_cameraFaults = new();
+    // The authored device-control state per sensor (the first camera row OF THAT SENSOR wins, per
     // ResolveSharedCameraControls) — resolved at boot and re-resolved by ReconcileScreens, so an UpsertScreen mutation
     // moves the physical device live. Applied to whichever tier's session is open (ApplyCameraControls).
-    private WorldCameraControls? m_cameraControls;
-    private bool m_cameraTried;
+    private readonly WorldCameraControls?[] m_cameraControlsBySensor = new WorldCameraControls?[2];
     // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
     // mutation delivers, so a runtime screen.source <index> view (and every later resolve) reads the LIVE rows.
     private IReadOnlyList<WorldCamera> m_cameras;
@@ -149,7 +154,6 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // resolved handle when a budgeted view is skipped; this countdown deliberately spends the offscreen SDF render only
     // once every N produced frames. Frame-count cadence is deterministic and avoids introducing a wall clock.
     private int m_viewRefreshDivisor = 4;
-    private string m_cameraFault = "no camera device present";
 
     /// <summary>Initializes the binder over the world's declared screens: a CPU feed for each test-pattern screen, the
     /// shared webcam for each camera screen, and a window-capture session for each capture screen (absent camera /
@@ -201,9 +205,8 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             ? new DirectXGpuSurfaceExportFactory()
             : null
         );
-        var sharedCameraProfile = ResolveSharedCameraProfile(screens: screens);
-
-        m_cameraControls = ResolveSharedCameraControls(screens: screens);
+        m_cameraControlsBySensor[((int)WorldCameraSensor.Color)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Color);
+        m_cameraControlsBySensor[((int)WorldCameraSensor.Infrared)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Infrared);
 
         foreach (var screen in screens) {
             _ = m_bootScreenIndices.Add(item: screen.Index);
@@ -225,14 +228,21 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
                     // WorldMachineHost already booted this index (if it could) at ITS OWN construction — nothing to
                     // do here; Handle()/Light() below read the host directly for a machine-owning index.
                     break;
-                case WorldScreenSource.Camera:
-                    // The declared webcam: bind the ONE shared feed (opened here on first demand; on the D3D12 GPU
-                    // transport it stays pending until the render adapter resolves at first publish). An absent device
-                    // leaves the slot unbound with a visible fault.
-                    if (EnsureCameraFeed(profile: sharedCameraProfile) is { } cameraFeed) {
+                case WorldScreenSource.Camera cameraSource:
+                    // The declared webcam: bind the row's SENSOR's shared feed — color and infrared are separate
+                    // physical devices, so both may stream at once. Opened here on first demand; on the GPU transport
+                    // it stays pending until the render adapter resolves at first publish. An absent device leaves the
+                    // slot unbound with a visible sensor-specific fault.
+                    if (EnsureCameraFeed(
+                        profile: ResolveSharedCameraProfile(screens: screens, sensor: cameraSource.Sensor),
+                        sensor: cameraSource.Sensor
+                    ) is { } cameraFeed) {
                         slot.Camera = cameraFeed;
                     } else {
-                        slot.DeclaredFault = m_cameraFault;
+                        slot.DeclaredFault = m_cameraFaults.GetValueOrDefault(
+                            key: cameraSource.Sensor,
+                            defaultValue: "no camera device present"
+                        );
                     }
 
                     break;
@@ -344,7 +354,10 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             WorldScreenSource.Machine => (slot.HasLive
             ? TryEject(index: index)
             : (Ok: true, Message: $"screen {index} machine (host-owned)")),
-            WorldScreenSource.Camera => TryCamera(index: index),
+            WorldScreenSource.Camera cameraSource => TryCamera(
+            index: index,
+            sensor: cameraSource.Sensor
+        ),
             WorldScreenSource.Capture { MonitorIndex: { } monitorIndex } => TryDesktop(
             index: index,
             monitorIndex: monitorIndex
@@ -510,8 +523,11 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot.Session?.Dispose();
         }
 
-        m_cameraFeed?.Dispose();
-        m_cameraFeed = null;
+        foreach (var cameraFeed in m_cameraFeeds.Values) {
+            cameraFeed.Dispose();
+        }
+
+        m_cameraFeeds.Clear();
 
         // After the feed: the camera's shared targets live on this headless device, so it must outlive them.
         if (
@@ -548,7 +564,9 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             }
         }
 
-        m_cameraFeed?.NotifyDeviceLost();
+        foreach (var cameraFeed in m_cameraFeeds.Values) {
+            cameraFeed.NotifyDeviceLost();
+        }
 
         // The Vulkan camera route's headless D3D12 device and the cached render LUID describe the OLD render adapter.
         // Release the device only after the feed dropped every target allocated on it, then let the next Publish read
@@ -706,14 +724,16 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
             slot.DeclaredSource = screen.Source;
         }
 
-        // The shared camera's authored control state re-resolves from the mutated list and lands on the physical
-        // device live (a no-op when unchanged) — the "changes in-game ride the mutation pipeline" half of the
-        // camera `controls` document member. A pending GPU feed picks the state up when its session opens instead.
-        m_cameraControls = ResolveSharedCameraControls(screens: screens);
+        // Each sensor's authored control state re-resolves from the mutated list and lands on its physical device
+        // immediately when that feed is streaming (a no-op when unchanged) — the "changes in-game ride the mutation
+        // pipeline" half of the camera `controls` document member. A feed not yet live picks the state up from the
+        // per-frame service path once frames flow (ApplyCameraControls' live-stream contract).
+        m_cameraControlsBySensor[((int)WorldCameraSensor.Color)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Color);
+        m_cameraControlsBySensor[((int)WorldCameraSensor.Infrared)] = ResolveSharedCameraControls(screens: screens, sensor: WorldCameraSensor.Infrared);
 
-        if (m_cameraFeed is { } cameraFeed) {
+        foreach (var cameraFeed in m_cameraFeeds.Values) {
             ApplyCameraControls(
-                desired: m_cameraControls,
+                desired: ControlsFor(sensor: cameraFeed.Sensor),
                 feed: cameraFeed
             );
         }

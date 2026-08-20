@@ -3,6 +3,11 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
+    private GpuImageLayout OutputRestingLayout => (m_exportMode
+        ? GpuImageLayout.External
+        : GpuImageLayout.ShaderReadOnly
+    );
+
     // The single-in-flight guard shared by all three submission paths: a pipelined frame's fence is still outstanding,
     // so re-recording the one shared command buffer (any submit path) would corrupt the in-flight work. Drain it with
     // AcquireFramePixels first.
@@ -48,7 +53,7 @@ public sealed partial class SdfWorldEngine {
             format: Format,
             height: m_height,
             sourceImageHandle: m_storageImage.ImageHandle,
-            sourceLayout: GpuImageLayout.ShaderReadOnly,
+            sourceLayout: OutputRestingLayout,
             width: m_width
         );
     }
@@ -159,7 +164,7 @@ public sealed partial class SdfWorldEngine {
             format: Format,
             height: m_height,
             sourceImageHandle: m_storageImage.ImageHandle,
-            sourceLayout: GpuImageLayout.ShaderReadOnly,
+            sourceLayout: OutputRestingLayout,
             width: m_width
         );
         m_pipelinedFrameInFlight = true;
