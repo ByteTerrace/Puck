@@ -10,9 +10,8 @@ namespace Puck.Maths;
 public enum WorldQueryConfidence {
     /// <summary>The answer is conservative rather than measured: a baked, resolution-quantized artifact (see the
     /// <c>Puck.SignedDistance.Queries</c> namespace remarks) — sign-correct and conservatively dilated, but not
-    /// sub-cell-exact — or a live evaluator's march that could not complete a safe surface proof (because its
-    /// representable safe advance vanished or its iteration budget ended) and resolved to the answer its verb can
-    /// survive being wrong about, at the last point it reached.</summary>
+    /// sub-cell-exact — or a live evaluator's march that could not complete a safe surface proof within its iteration
+    /// budget and resolved to the answer its verb can survive being wrong about, at the last point it reached.</summary>
     Bounded = 0,
     /// <summary>The answer came from a fixed-point evaluator against the live SDF program, and the march that produced
     /// it converged.</summary>
@@ -71,8 +70,11 @@ public readonly record struct QueryCapabilities(bool HasHeightfield, bool HasBlo
 /// The cast and visibility verbs are CONSERVATIVE where they cannot decide: a provider that runs out of its own
 /// proof mid-cast — because no representable safe advance remains or because its iteration budget ends — must resolve
 /// toward the answer a contact, sweep, or visibility consumer can survive being wrong about: an obstruction, marked
-/// <see cref="WorldQueryConfidence.Bounded"/>, never "clear". Every verb here is read by authoritative simulation,
-/// where a false "nothing there" changes state.
+/// <see cref="WorldQueryConfidence.Bounded"/>, never "clear". <see cref="Overlap"/> is conservative in the same
+/// direction by a different mechanism: where a provider's field only LOWER-bounds true distance, the test widens the
+/// sphere by the provider's own overestimate factor (a live evaluator's Lipschitz factor, a baked artifact's cell
+/// quantization), so occupancy may over-report by that factor and never under-reports. Every verb here is read by
+/// authoritative simulation, where a false "nothing there" changes state.
 /// </para>
 /// </summary>
 public interface IWorldQuery {
@@ -101,6 +103,10 @@ public interface IWorldQuery {
     /// <param name="center">The sphere's center.</param>
     /// <param name="radius">The sphere's radius.</param>
     /// <returns><see langword="true"/> when the sphere overlaps something blocked.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="center"/> lies outside the range the provider can
+    /// express against the world origin, or <paramref name="radius"/> outside a range the provider supports. A center
+    /// with no world coordinate is REFUSED rather than answered — neither answer is true of it, and both a false
+    /// "occupied" and a false "clear" change authoritative state.</exception>
     bool Overlap(FixedPosition center, FixedQ4816 radius);
     /// <summary>Finds the ground height directly beneath (or above) <paramref name="position"/>, searching from
     /// <paramref name="probeUp"/> above to <paramref name="probeDown"/> below its Y.</summary>

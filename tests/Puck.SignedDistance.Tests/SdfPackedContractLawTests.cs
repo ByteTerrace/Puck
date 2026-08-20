@@ -247,6 +247,39 @@ public sealed class SdfPackedContractLawTests {
         );
     }
 
+    /// <summary>A PushField seeds the accumulator with the far-distance sentinel, so a scope that emits no shape
+    /// composes that sentinel as its candidate — under an intersection-family blend it wins the max() and erases every
+    /// candidate the stream accumulated before it. SdfProgramBuilder.PopField refuses the same scope; the packed
+    /// constructor is the same door and must refuse it too.</summary>
+    [Fact]
+    public void TheConstructorRefusesAnEmptyFieldScope() {
+        var push = Shape() with { Op = SdfOp.PushField };
+        var pop = Shape() with { Op = SdfOp.PopField, Blend = ((uint)SdfBlendOp.Intersection) };
+
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(), push, pop]));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: "must contain at least one shape",
+            comparisonType: StringComparison.Ordinal
+        );
+
+        _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [push, pop]));
+
+        // The builder's own door states the same rule, so a hand-assembled stream and an authored one agree.
+        var authored = new SdfProgramBuilder();
+
+        _ = authored.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        _ = authored.PushField(
+            compose: SdfBlendOp.Intersection,
+            smooth: 0f
+        );
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => authored.PopField());
+
+        // Control: the SAME stream with one shape inside the scope is admitted.
+        _ = Build(instructions: [Shape(), push, Shape(), pop]);
+    }
+
     [Fact]
     public void TheConstructorRefusesAnUndeclaredShapeBlendOrMaterialLane() {
         _ = Assert.Throws<ArgumentException>(testCode: () => Build(instructions: [Shape(shape: 250u)]));

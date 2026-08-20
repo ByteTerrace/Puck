@@ -893,19 +893,37 @@ refused: …`, distinguishing "the file already holding that id" from "a name
 it does not carry") rather than silently renamed or merged — that document
 parses, so it stays where it is and the refusal names the remedy.
 
-A document that fails to PARSE or VALIDATE is DISCARDED instead, once, and
-never a hard boot failure: the file moves into the `unloadable/` subdirectory
-(outside the catalog's `*.world.json` top-directory glob, like `basis/`), so
-the next boot has nothing left to refuse. The whole sweep narrates as ONE
-stderr line — `[identity] discarded N unloadable owned world(s) into '…'` —
-grouping the discarded file names by their shared reason, so one retired
-document shape across a directory reads as one group and a lone corrupt file
-stands in a group of its own. There is no migration and no read-side tolerance
-for a retired shape: an emptied catalog re-seeds from
-`playerDefaults.identities`, and a catalog that still holds documents simply
-lacks the discarded ids. Read back with `WorldOwnedWorlds.Discarded` and
-`identity.list`'s `discarded=` column; the moved bytes stay readable under
-`unloadable/`.
+A document the loader refuses is handled by the CLASS of the refusal, and no
+refusal is ever a hard boot failure. Only a verdict on the BYTES — the
+`{path} is not a valid puck.world.def.v1 document: …` and `cannot decode …`
+classes, which include a document with no `identity` section — is DISCARDED:
+the file moves into the `unloadable/` subdirectory (outside the catalog's
+`*.world.json` top-directory glob, like `basis/`), once, so the next boot has
+nothing left to refuse. Every other class can answer differently on the next
+boot — `cannot read …` (locked or half-written), `no file at …`, `… basis
+composition refused: …` (a chain link not placed yet), `… document validation
+refused: …` (which may rest on an adjacency neighbour the sweep is itself
+moving) — so those files STAY where they are and are only named. Quarantining
+them would cascade: the neighbour resolver reads the same directory the sweep
+empties, and the seeding pass would write defaults over every freed name.
+
+Each half narrates as ONE stderr line — `[identity] discarded N unloadable
+owned world(s) into '…'` and `[identity] refused N owned world(s) this boot
+could not read …` — grouping file names by their shared reason, with the path
+itself stripped out of the reason so one fault across a directory reads as one
+group and a lone corrupt file stands in a group of its own. There is no
+migration and no read-side tolerance for a retired shape: an emptied catalog
+re-seeds from `playerDefaults.identities`, and a catalog that still holds
+documents simply lacks the discarded ids.
+
+Retention is exact on both sides. A quarantine destination that is already
+taken (deterministic file names, and the catalog re-seeds a freed name) takes
+an ordinal suffix rather than overwriting the earlier copy, and the seeding
+pass SKIPS any seed id whose catalog path still holds a file — so a disposal
+whose move failed, or a document left in place, keeps its authored bytes for
+the next boot instead of being replaced by a fresh default. Read back with
+`WorldOwnedWorlds.Discarded` (disposals only) and `identity.list`'s
+`discarded=` column; the moved bytes stay readable under `unloadable/`.
 
 **Seeding.** When the identity directory holds zero admitted documents,
 `WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row

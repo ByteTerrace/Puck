@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 
 using Puck.Maths;
@@ -127,6 +128,68 @@ public sealed class SdfFieldEvaluatorTests {
         Assert.Equal(
             expected: FixedQ4816.Zero,
             actual: distance
+        );
+    }
+
+    /// <summary>The ground-height bake builds one terrain rectangle and runs one ground march per cell before handing
+    /// the region to <see cref="WorldQueryBaker"/>, so the cell budget has to be measured first or the refusal costs
+    /// the whole working set it exists to prevent. The refused region below is 16000x16000 cells: if the per-cell loop
+    /// ran, the refusal would arrive a minute-plus later, after every one of those marches.</summary>
+    [Fact]
+    public void GroundHeightBakeRefusesAnOverBudgetRegionBeforeMarchingIt() {
+        var evaluator = BuildRoundedRectangleEvaluator();
+        var elapsed = Stopwatch.StartNew();
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
+            maxX: 2000f,
+            maxZ: 2000f,
+            minX: -2000f,
+            minZ: -2000f,
+            probeDown: 4f,
+            probeUp: 4f
+        ));
+
+        elapsed.Stop();
+
+        Assert.Equal(
+            expected: "maxCellCount",
+            actual: refusal.ParamName
+        );
+        Assert.True(
+            condition: (elapsed.Elapsed < TimeSpan.FromSeconds(value: 5d)),
+            userMessage: $"The refusal took {elapsed.Elapsed}, long enough that the per-cell working set was built before it fired."
+        );
+
+        // The ceiling is now the caller's to raise, and a region inside it still bakes.
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
+            maxCellCount: 0,
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            probeDown: 4f,
+            probeUp: 4f
+        ));
+
+        var control = WorldQueryDriftInstrument.BakeGroundHeightArtifact(
+            evaluator: evaluator,
+            maxCellCount: 16,
+            maxX: 1f,
+            maxZ: 1f,
+            minX: 0f,
+            minZ: 0f,
+            probeDown: 4f,
+            probeUp: 4f
+        );
+
+        Assert.Equal(
+            expected: 4,
+            actual: control.Width
+        );
+        Assert.Equal(
+            expected: 4,
+            actual: control.Height
         );
     }
 }

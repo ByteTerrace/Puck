@@ -106,6 +106,21 @@ public sealed class WorldOwnedWorlds {
 
         if (m_identities.Count == 0) {
             foreach (var seed in Defaults.Identities) {
+                // A seed never writes over bytes that are still there. A refusal this construction left in place, or
+                // a disposal whose move failed, still occupies the very catalog path this seed's id maps to, and the
+                // save below would replace it with a fresh default — destroying the document the refusal promised
+                // would be read again on the next boot.
+                var occupied = Path.Combine(
+                    path1: directory,
+                    path2: WorldOwnedWorldFileName.For(id: seed.Id)
+                );
+
+                if (File.Exists(path: occupied)) {
+                    Console.Error.WriteLine(value: $"[identity] seed '{seed.Id}' skipped: '{Path.GetFileName(path: occupied)}' is still in the catalog directory after being refused, and a seed never writes over a document this boot could not read");
+
+                    continue;
+                }
+
                 var identity = new WorldIdentity(
                     document: Seed(
                         motion: m_motion,
@@ -124,12 +139,19 @@ public sealed class WorldOwnedWorlds {
     /// <summary>Gets the identities, one per owned world.</summary>
     public IReadOnlyList<WorldIdentity> All => m_identities;
     /// <summary>Gets the first owned identity used before a controller preference applies.</summary>
-    public WorldIdentity BootProfile => m_identities[0];
+    /// <exception cref="InvalidOperationException">The catalog holds no identities — every file was refused and every
+    /// seed name's catalog path is occupied by a file the refusal sweep left in place.</exception>
+    public WorldIdentity BootProfile => ((m_identities.Count > 0)
+        ? m_identities[0]
+        : throw new InvalidOperationException(message: "the owned-world catalog holds no identities — every catalog file was refused and every seed name's path is occupied by a refused file; repair or remove the files named on stderr")
+    );
     /// <summary>Gets the visited world's player presentation defaults.</summary>
     public WorldPlayerDefaults Defaults { get; }
-    /// <summary>Gets the documents this catalog could not admit at construction, in file-name order. Empty on every
-    /// ordinary boot; a non-empty list is a one-time event, since each entry names a file that has been moved out of
-    /// the catalog directory.</summary>
+    /// <summary>Gets the documents this catalog DISPOSED OF at construction, in file-name order — the ones whose
+    /// bytes are not a <c>puck.world.def.v1</c> document at all. Empty on every ordinary boot, and a one-time event
+    /// otherwise, since each entry names a file moved out of the catalog directory. A document refused for a reason
+    /// that can answer differently later (an unreadable file, an unresolved basis link, a validation claim resting
+    /// on a neighbour) is NOT here: it is named on stderr and left where it is for the next boot.</summary>
     public IReadOnlyList<WorldOwnedWorldDisposal> Discarded => m_discarded;
     /// <summary>Gets the owned-world directory.</summary>
     public string FilePath => m_directory;
@@ -145,9 +167,11 @@ public sealed class WorldOwnedWorlds {
     /// <summary>One document this catalog could not admit, and where it was put.</summary>
     /// <param name="FileName">The file name it carried in the catalog directory.</param>
     /// <param name="Reason">Why it could not be admitted.</param>
-    /// <param name="QuarantinePath">Where it now lives.</param>
+    /// <param name="QuarantinePath">Where it now lives — never a path that already held a file, so an earlier
+    /// disposal of the same catalog name keeps its own copy.</param>
     /// <param name="Moved">Whether the move succeeded. A false here means the file is still in the catalog
-    /// directory and will be refused again on the next construction.</param>
+    /// directory with its original bytes: the seeding pass skips any id whose catalog path is occupied, so nothing
+    /// writes over it, and it is refused again on the next construction.</param>
     public sealed record WorldOwnedWorldDisposal(string FileName, string Reason, string QuarantinePath, bool Moved);
 
     /// <summary>The catalog's checkpointed state — the identities as document data plus the mutation counter.
@@ -398,12 +422,13 @@ public sealed class WorldOwnedWorlds {
             Submission: submission
         );
     }
-    // A document this catalog cannot admit leaves the *.world.json glob once, so it is named once rather than on
-    // every construction, and the catalog it leaves empty is what the seeding block fills. Nothing here can tell a
-    // deliberately retired document shape from a corrupt file — both arrive as "this is not a puck.world.def.v1
-    // document" — so no discarded file is silently eaten: every one is named with its own reason, grouped BY that
-    // reason so one retired shape across a whole directory reads as one group while a lone corrupt file stands in
-    // a group of its own.
+    // Disposal is decided by the CLASS of the loader's refusal, never by the mere fact of one. A document-shape
+    // refusal is a verdict on the bytes, so the file leaves the *.world.json glob once, is named once rather than on
+    // every construction, and the catalog it empties is what the seeding block fills; nothing here can tell a
+    // deliberately retired shape from a corrupt file, so neither is silently eaten and neither is migrated. Every
+    // other refusal (see IsTerminalDocumentShape) can answer differently on the next boot, so its file STAYS and is
+    // only named. Both narrations group by reason, so one fault across a whole directory reads as one group while a
+    // lone file stands in a group of its own.
     private void DisposeUnloadable(IReadOnlyList<(string Path, string Reason)> candidates) {
         if (candidates.Count == 0) {
             return;
@@ -412,15 +437,26 @@ public sealed class WorldOwnedWorlds {
             path1: m_directory,
             path2: QuarantineDirectoryName
         );
+        var retained = new List<(string FileName, string Reason)>();
 
         foreach (var (path, reason) in candidates) {
-            var destination = Path.Combine(
-                path1: quarantine,
-                path2: Path.GetFileName(path: path)
-            );
             var detail = Strip(
                 path: path,
                 reason: reason
+            );
+
+            if (!IsTerminalDocumentShape(
+                path: path,
+                reason: reason
+            )) {
+                retained.Add(item: (Path.GetFileName(path: path), detail));
+
+                continue;
+            }
+
+            var destination = QuarantineDestination(
+                fileName: Path.GetFileName(path: path),
+                quarantine: quarantine
             );
             var moved = false;
 
@@ -428,13 +464,13 @@ public sealed class WorldOwnedWorlds {
                 _ = Directory.CreateDirectory(path: quarantine);
                 File.Move(
                     destFileName: destination,
-                    overwrite: true,
+                    overwrite: false,
                     sourceFileName: path
                 );
 
                 moved = true;
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                detail = $"{detail} — and it could not be moved aside ({exception.Message.ReplaceLineEndings(replacementText: " ")}), so it will be named again on the next boot";
+                detail = $"{detail} — and it could not be moved aside ({exception.Message.ReplaceLineEndings(replacementText: " ")}), so its bytes stay where they are and it will be named again on the next boot";
             }
 
             m_discarded.Add(item: new WorldOwnedWorldDisposal(
@@ -445,7 +481,44 @@ public sealed class WorldOwnedWorlds {
             ));
         }
 
-        var groups = m_discarded
+        if (retained.Count > 0) {
+            Console.Error.WriteLine(value: $"[identity] refused {retained.Count} owned world(s) this boot could not read, left where they are for the next one: {Narrate(
+                entries: retained
+            )}");
+        }
+        if (m_discarded.Count > 0) {
+            Console.Error.WriteLine(value: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(
+                entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))]
+            )}");
+        }
+    }
+    // Every shipped world is a full arena, so the booted world's own template is the only base and this always
+    // returns it; kept as its own method (rather than inlining `fallback` at the one call site) so a future
+    // minimal template has one door to return through.
+    private static WorldDefinition IdentityBase(WorldDefinition fallback) => fallback;
+    // The one predicate that decides whether a refusal is a verdict on the file's BYTES or on the moment it was read
+    // in — the loader's own reason classes, matched on the wording WorldDefinitionFileSource.TryLoad documents.
+    // Quarantine is irreversible from the catalog's side (the name it frees is re-seeded), so only the byte verdict
+    // earns it: a document that does not parse as puck.world.def.v1 parses no better on the next boot.
+    //
+    // The rest each answer differently on a later call and would CASCADE if quarantined. "cannot read" is a lock or
+    // a half-written file; "no file at" is a file that vanished between the enumeration and the load; "basis
+    // composition refused" is a link not placed yet; "document validation refused" may rest on an adjacency
+    // neighbour resolved against this very directory — the one the sweep is emptying — so one refusal would take its
+    // neighbours down with it on the following boot, and the seeding pass would write defaults over every freed name.
+    private static bool IsTerminalDocumentShape(string path, string reason) => (
+        reason.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: $"{path} is not a valid {WorldDefinition.SchemaVersion} document:"
+        ) ||
+        reason.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: $"cannot decode {path}:"
+        )
+    );
+    private static string Narrate(IReadOnlyList<(string FileName, string Reason)> entries) => string.Join(
+        separator: "; ",
+        values: entries
             .GroupBy(
                 comparer: StringComparer.Ordinal,
                 keySelector: entry => entry.Reason
@@ -453,17 +526,27 @@ public sealed class WorldOwnedWorlds {
             .Select(selector: group => $"{string.Join(
                 separator: ", ",
                 values: group.Select(selector: entry => entry.FileName)
-            )} — {group.Key}");
+            )} — {group.Key}")
+    );
+    // A quarantine name is DERIVED from the catalog name, and the catalog re-seeds the name a disposal frees, so the
+    // same name reaches this directory again carrying different bytes. Quarantine exists to keep those bytes
+    // readable, so a collision takes the next free ordinal suffix rather than overwriting the earlier copy. The
+    // suffixed name still sits outside the catalog's own top-directory glob, like every other file here.
+    private static string QuarantineDestination(string quarantine, string fileName) {
+        var candidate = Path.Combine(
+            path1: quarantine,
+            path2: fileName
+        );
 
-        Console.Error.WriteLine(value: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {string.Join(
-            separator: "; ",
-            values: groups
-        )}");
+        for (var ordinal = 2; File.Exists(path: candidate); ordinal++) {
+            candidate = Path.Combine(
+                path1: quarantine,
+                path2: $"{fileName}.{ordinal}"
+            );
+        }
+
+        return candidate;
     }
-    // Every shipped world is a full arena, so the booted world's own template is the only base and this always
-    // returns it; kept as its own method (rather than inlining `fallback` at the one call site) so a future
-    // minimal template has one door to return through.
-    private static WorldDefinition IdentityBase(WorldDefinition fallback) => fallback;
     private static WorldDocumentSubmissionReceipt Refuse(WorldDocumentSubmission submission, string reason) => new(
         Accepted: false,
         Reason: reason,
@@ -509,16 +592,26 @@ public sealed class WorldOwnedWorlds {
         Adjacencies = null,
     };
 
-    // The loader opens its reason with the path it was handed; dropping that prefix is what lets one fault across
-    // several files fold into a single group, and the file name is carried beside the reason anyway.
+    // The result is a GROUPING KEY as well as a narration, so it must carry nothing that varies per file: the loader
+    // spells the path at the head of some reasons ("{path} is not a valid …") and mid-sentence in others ("no file
+    // at {path}", "cannot read {path}: …"), and the operating system's own message quotes it again. Every occurrence
+    // becomes one file-independent placeholder so two files failing the same way share a key, a leading placeholder
+    // then drops because the file name is already carried beside the reason, and no absolute path — the player's
+    // state directory — reaches the console.
     private static string Strip(string path, string reason) {
-        var text = (reason ?? string.Empty).Trim();
+        const string Placeholder = "the file";
+
+        var text = (reason ?? string.Empty).Replace(
+            comparisonType: StringComparison.Ordinal,
+            newValue: Placeholder,
+            oldValue: path
+        ).Trim();
 
         return (text.StartsWith(
             comparisonType: StringComparison.Ordinal,
-            value: path
+            value: Placeholder
         )
-            ? text[path.Length..].TrimStart()
+            ? text[Placeholder.Length..].TrimStart()
             : text
         );
     }
@@ -699,10 +792,20 @@ public sealed class WorldOwnedWorlds {
             path1: m_directory,
             path2: WorldOwnedWorldFileName.For(id: identitySection.Id)
         );
-        var before = (File.Exists(path: path)
-            ? File.ReadAllBytes(path: path)
-            : null
-        );
+        // A change detector, never a correctness input: the write below happens either way, and a file this process
+        // cannot read right now is indistinguishable from one whose bytes are about to differ, so an unreadable
+        // "before" takes the same arm an absent one takes and Revision advances. Throwing here would throw out of
+        // the constructor, since seeding saves.
+        byte[]? before;
+
+        try {
+            before = (File.Exists(path: path)
+                ? File.ReadAllBytes(path: path)
+                : null
+            );
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            before = null;
+        }
 
         _ = WorldDefinitionSerialization.SavePreservingBasis(
             basisPath: out _,

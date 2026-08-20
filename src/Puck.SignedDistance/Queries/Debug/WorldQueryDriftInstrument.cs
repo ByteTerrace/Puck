@@ -92,9 +92,26 @@ public static class WorldQueryDriftInstrument {
     /// <param name="maxZ">The grid's maximum Z bound.</param>
     /// <param name="probeUp">How far above Y=0 the ground probe searches.</param>
     /// <param name="probeDown">How far below Y=0 the ground probe searches.</param>
+    /// <param name="maxCellCount">The cell budget the bake runs under; the region is refused against it before any
+    /// ground probe runs, so an over-budget region costs nothing.</param>
     /// <returns>The baked artifact.</returns>
-    public static WorldQueryArtifact BakeGroundHeightArtifact(SdfFieldEvaluator evaluator, float minX, float minZ, float maxX, float maxZ, float probeUp, float probeDown) {
+    /// <exception cref="ArgumentNullException"><paramref name="evaluator"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCellCount"/> is not positive.</exception>
+    /// <exception cref="ArgumentException">A grid bound is invalid, or the region holds more than
+    /// <paramref name="maxCellCount"/> cells.</exception>
+    public static WorldQueryArtifact BakeGroundHeightArtifact(SdfFieldEvaluator evaluator, float minX, float minZ, float maxX, float maxZ, float probeUp, float probeDown, int maxCellCount = WorldQueryBaker.DefaultMaxCellCount) {
         ArgumentNullException.ThrowIfNull(argument: evaluator);
+
+        // The bake's own refusal fires only after this method has already built one WorldQueryTerrainInput and run one
+        // ground march per cell, so the budget is measured here, against the baker's own grid arithmetic, before the
+        // working set exists.
+        _ = WorldQueryBaker.MeasureCellCount(
+            maxCellCount: maxCellCount,
+            maxX: maxX,
+            maxZ: maxZ,
+            minX: minX,
+            minZ: minZ
+        );
 
         var terrain = new List<WorldQueryTerrainInput>();
         var up = FixedQ4816.FromDouble(value: probeUp);
@@ -137,6 +154,7 @@ public static class WorldQueryDriftInstrument {
 
         return WorldQueryBaker.Bake(
             blockers: [],
+            maxCellCount: maxCellCount,
             maxX: maxX,
             maxZ: maxZ,
             minX: minX,

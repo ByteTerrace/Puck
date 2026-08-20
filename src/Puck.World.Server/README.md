@@ -469,14 +469,21 @@ the WASM guest ABI decode, the addon.mutate refusal catalog — is
 `owned-worlds` beneath the state root, plus any hand-placed basis chain link
 under its `owned-worlds/basis/` subdirectory (outside the catalog's own
 directory glob, so a link never enumerates as a second owned world). A document
-the catalog cannot parse or validate is DISCARDED, not tolerated: the file moves
-once into `owned-worlds/unloadable/` (also outside the glob, so it never
-enumerates again), and the whole sweep reports as one stderr line grouping the
-discarded file names by their shared reason. Nothing distinguishes a retired
-document shape from a corrupt file here, so neither is silently eaten and
-neither is migrated — the catalog left empty re-seeds from
-`playerDefaults.identities`, and `identity.list`'s `discarded=` column is the
-read-back. The
+whose BYTES are not a `puck.world.def.v1` document is DISCARDED, not tolerated:
+the file moves once into `owned-worlds/unloadable/` (also outside the glob, so
+it never enumerates again). Nothing distinguishes a retired document shape from
+a corrupt file here, so neither is silently eaten and neither is migrated. A
+refusal that can answer differently on the next boot — unreadable file, absent
+file, unresolved `basis` link, or a validation claim resting on an adjacency
+neighbour — is NOT discarded: those files stay where they are and are only
+named, because the neighbour resolver reads the same directory a sweep would
+empty. Each half reports as one stderr line grouping file names by their shared
+reason, with the path stripped out of the reason. A quarantine destination that
+is already taken takes an ordinal suffix rather than overwriting the earlier
+copy, and the seeding pass that fills an emptied catalog from
+`playerDefaults.identities` skips any id whose catalog path still holds a file,
+so a document left behind keeps its bytes. `WorldOwnedWorlds.Discarded` and
+`identity.list`'s `discarded=` column are the read-back for the disposals. The
 machine-local installation id stays separate in `machine.id`; controller
 recognition is stored through named text state rows in the owned world.
 `--user-id` and `--state-dir` still resolve who is playing and where those

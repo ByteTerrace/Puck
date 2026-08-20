@@ -141,10 +141,15 @@ public sealed partial class SdfProgram {
         }
     }
     // A PushField/PopField pair saves one accumulator slot in every interpreter. A hand-assembled stream must obey
-    // the same one-deep, balanced, single-owner discipline as the builder: crossing an instance boundary would let a
-    // masked segment observe a save or restore emitted by a different mask bit (or by the unmasked world stream).
-    private void RequireBalancedFieldScopes(string paramName) {
-        var instructionOwners = BuildInstructionOwners();
+    // the same one-deep, balanced, single-owner, shape-bearing discipline as the builder: crossing an instance
+    // boundary would let a masked segment observe a save or restore emitted by a different mask bit (or by the
+    // unmasked world stream), and an empty pair composes the FarDistance sentinel the push seeded — under an
+    // intersection-family compose that sentinel wins the max() and erases every candidate accumulated before it.
+    // The shape tally counts ShapeBlend emissions since the scope opened exactly as SdfProgramBuilder's m_shapeCount
+    // does, so a scope whose only content is a non-empty nested scope reads as non-empty at both doors.
+    private void RequireBalancedFieldScopes(int[] instructionOwners, string paramName) {
+        Span<int> shapeCountAtOpen = stackalloc int[SdfProgramBuilder.MaxFieldScopeDepth];
+        var shapeCount = 0;
         var scopeDepth = 0;
         var scopeOwner = -1;
 
@@ -161,6 +166,12 @@ public sealed partial class SdfProgram {
                 );
             }
 
+            if (instruction.Op == SdfOp.ShapeBlend) {
+                shapeCount++;
+
+                continue;
+            }
+
             if (instruction.Op == SdfOp.PushField) {
                 scopeDepth++;
 
@@ -171,6 +182,7 @@ public sealed partial class SdfProgram {
                     );
                 }
 
+                shapeCountAtOpen[(scopeDepth - 1)] = shapeCount;
                 scopeOwner = instructionOwners[index];
 
                 continue;
@@ -183,6 +195,13 @@ public sealed partial class SdfProgram {
             if (scopeDepth == 0) {
                 throw new ArgumentException(
                     message: $"Instruction {index} closes a field scope when no PushField is open.",
+                    paramName: paramName
+                );
+            }
+
+            if (shapeCount == shapeCountAtOpen[(scopeDepth - 1)]) {
+                throw new ArgumentException(
+                    message: $"Instruction {index} closes a field scope that emitted no shape. A field scope (PushField/PopField) must contain at least one shape — an empty scope composes SDF_FAR_DISTANCE and would carve nothing.",
                     paramName: paramName
                 );
             }
@@ -250,7 +269,11 @@ public sealed partial class SdfProgram {
     // ranges claiming one instruction leave the loser packing an empty segment range behind a live cull bound. Each is
     // refused by name here, at the type, rather than surfacing as an incidental IndexOutOfRangeException from a packing
     // loop or as pixels nobody can explain.
-    private void ValidatePackedContract(IReadOnlyList<SdfMaterial> materials, string instancesParamName, string instructionsParamName, string screenSurfacesParamName) {
+    // Returns the dense instruction-owner map the scope walk needs, so the constructor can hand the SAME array to
+    // AnalyzeBounds instead of rebuilding it. It is derived here rather than before this call because the map indexes
+    // by instruction: it is only well-defined once the instance-range sweep below has refused a range reaching past
+    // the stream, and building it earlier would replace that named refusal with an IndexOutOfRangeException.
+    private int[] ValidatePackedContract(IReadOnlyList<SdfMaterial> materials, string instancesParamName, string instructionsParamName, string screenSurfacesParamName) {
         var materialCount = materials.Count;
 
         // Ids from SdfProgramBuilder.ScreenMaterialId up decode as screen shading, so a palette reaching that far
@@ -414,7 +437,15 @@ public sealed partial class SdfProgram {
         }
 
         RequireDisjointInstanceRanges(paramName: instancesParamName);
-        RequireBalancedFieldScopes(paramName: instructionsParamName);
+
+        var instructionOwners = BuildInstructionOwners();
+
+        RequireBalancedFieldScopes(
+            instructionOwners: instructionOwners,
+            paramName: instructionsParamName
+        );
+
+        return instructionOwners;
     }
     public void ValidateIsa() {
         for (var index = 0; (index < m_instructions.Length); index++) {

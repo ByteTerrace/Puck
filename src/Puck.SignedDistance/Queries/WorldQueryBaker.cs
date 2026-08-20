@@ -235,51 +235,11 @@ public static class WorldQueryBaker {
             )
         );
 
-    /// <summary>Bakes an artifact covering <c>[minX,maxX] x [minZ,maxZ]</c>. A maximum edge that is not aligned to
-    /// <see cref="CellSize"/> rounds outward so the final partial cell remains inside the artifact.</summary>
-    /// <param name="minX">The grid's minimum X bound (world units).</param>
-    /// <param name="minZ">The grid's minimum Z bound.</param>
-    /// <param name="maxX">The grid's maximum X bound.</param>
-    /// <param name="maxZ">The grid's maximum Z bound.</param>
-    /// <param name="terrain">Terrain rectangles, applied in order (a later rectangle overwrites an earlier one's
-    /// height where they overlap — "last authored wins," matching the walk grid's override-application order).</param>
-    /// <param name="blockers">Blocker rectangles — any covered cell is marked blocked (OR, not overwrite).</param>
-    /// <returns>The baked artifact.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="terrain"/> or <paramref name="blockers"/> is
-    /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">A grid bound, a rectangle edge, or a terrain height is not finite; a grid
-    /// bound or a terrain height lies outside the Q48.16 range the artifact stores; a maximum edge lies below its
-    /// minimum; the grid spans more cells than a 32-bit cell index addresses; or the grid exceeds
-    /// <see cref="DefaultMaxCellCount"/>.</exception>
-    public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers) =>
-        Bake(
-            blockers: blockers,
-            maxCellCount: DefaultMaxCellCount,
-            maxX: maxX,
-            maxZ: maxZ,
-            minX: minX,
-            minZ: minZ,
-            terrain: terrain
-        );
-
-    /// <summary>Bakes an artifact under an explicit allocation ceiling. The grid is refused before either per-cell
-    /// layer is allocated when its dimensions exceed <paramref name="maxCellCount"/>.</summary>
-    /// <param name="minX">The grid's minimum X bound (world units).</param>
-    /// <param name="minZ">The grid's minimum Z bound.</param>
-    /// <param name="maxX">The grid's maximum X bound.</param>
-    /// <param name="maxZ">The grid's maximum Z bound.</param>
-    /// <param name="terrain">Terrain rectangles, applied in order.</param>
-    /// <param name="blockers">Blocker rectangles; any covered cell is marked blocked.</param>
-    /// <param name="maxCellCount">The maximum number of cells this call may allocate; must be positive.</param>
-    /// <returns>The baked artifact.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="terrain"/> or <paramref name="blockers"/> is
-    /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCellCount"/> is not positive.</exception>
-    /// <exception cref="ArgumentException">An authored value is invalid, the grid exceeds the coordinate/index
-    /// carriers, or its cell count exceeds <paramref name="maxCellCount"/>.</exception>
-    public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers, int maxCellCount) {
-        ArgumentNullException.ThrowIfNull(argument: terrain);
-        ArgumentNullException.ThrowIfNull(argument: blockers);
+    // The whole grid derivation one bake performs before it allocates anything: quantize the four bounds, refuse an
+    // inverted or uncarryable one, count the cells, and refuse a count above the caller's budget. Split out so a
+    // caller that builds a per-cell working set BEFORE calling Bake can run the same refusal first, against the same
+    // arithmetic, instead of duplicating the formula (see MeasureCellCount).
+    private static (long OriginXRaw, long OriginZRaw, int Width, int Height, int CellCount) MeasureGrid(float minX, float minZ, float maxX, float maxZ, int maxCellCount) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(
             paramName: nameof(maxCellCount),
             value: maxCellCount
@@ -342,7 +302,87 @@ public static class WorldQueryBaker {
             );
         }
 
-        var cellCount = ((int)cellCountLong);
+        return (originXRaw, originZRaw, width, height, ((int)cellCountLong));
+    }
+
+    /// <summary>Returns the number of cells a bake over <c>[minX,maxX] x [minZ,maxZ]</c> would allocate, applying the
+    /// same refusals <see cref="Bake(float, float, float, float, IEnumerable{WorldQueryTerrainInput}, IEnumerable{WorldQueryBlockerInput}, int)"/>
+    /// applies and nothing else. A caller that assembles a per-cell working set before baking runs this first, so an
+    /// over-budget region is refused before that set is built rather than after.</summary>
+    /// <param name="minX">The grid's minimum X bound (world units).</param>
+    /// <param name="minZ">The grid's minimum Z bound.</param>
+    /// <param name="maxX">The grid's maximum X bound.</param>
+    /// <param name="maxZ">The grid's maximum Z bound.</param>
+    /// <param name="maxCellCount">The maximum number of cells the bake may allocate; must be positive.</param>
+    /// <returns>The cell count the grid holds.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCellCount"/> is not positive.</exception>
+    /// <exception cref="ArgumentException">A grid bound is not finite or outside the Q48.16 range; a maximum bound
+    /// lies below its minimum; the grid overflows a 32-bit cell index; or its cell count exceeds
+    /// <paramref name="maxCellCount"/>.</exception>
+    public static int MeasureCellCount(float minX, float minZ, float maxX, float maxZ, int maxCellCount) =>
+        MeasureGrid(
+            maxCellCount: maxCellCount,
+            maxX: maxX,
+            maxZ: maxZ,
+            minX: minX,
+            minZ: minZ
+        ).CellCount;
+
+    /// <summary>Bakes an artifact covering <c>[minX,maxX] x [minZ,maxZ]</c>. A maximum edge that is not aligned to
+    /// <see cref="CellSize"/> rounds outward so the final partial cell remains inside the artifact. The grid is
+    /// refused when it holds more than <see cref="DefaultMaxCellCount"/> cells; call the overload taking
+    /// <c>maxCellCount</c> to bake under a different ceiling.</summary>
+    /// <param name="minX">The grid's minimum X bound (world units).</param>
+    /// <param name="minZ">The grid's minimum Z bound.</param>
+    /// <param name="maxX">The grid's maximum X bound.</param>
+    /// <param name="maxZ">The grid's maximum Z bound.</param>
+    /// <param name="terrain">Terrain rectangles, applied in order (a later rectangle overwrites an earlier one's
+    /// height where they overlap — "last authored wins," matching the walk grid's override-application order).</param>
+    /// <param name="blockers">Blocker rectangles — any covered cell is marked blocked (OR, not overwrite).</param>
+    /// <returns>The baked artifact.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="terrain"/> or <paramref name="blockers"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A grid bound, a rectangle edge, or a terrain height is not finite; a grid
+    /// bound or a terrain height lies outside the Q48.16 range the artifact stores; a maximum edge lies below its
+    /// minimum; the grid spans more cells than a 32-bit cell index addresses; or the grid exceeds
+    /// <see cref="DefaultMaxCellCount"/>.</exception>
+    public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers) =>
+        Bake(
+            blockers: blockers,
+            maxCellCount: DefaultMaxCellCount,
+            maxX: maxX,
+            maxZ: maxZ,
+            minX: minX,
+            minZ: minZ,
+            terrain: terrain
+        );
+
+    /// <summary>Bakes an artifact under an explicit allocation ceiling. The grid is refused before either per-cell
+    /// layer is allocated when its dimensions exceed <paramref name="maxCellCount"/>.</summary>
+    /// <param name="minX">The grid's minimum X bound (world units).</param>
+    /// <param name="minZ">The grid's minimum Z bound.</param>
+    /// <param name="maxX">The grid's maximum X bound.</param>
+    /// <param name="maxZ">The grid's maximum Z bound.</param>
+    /// <param name="terrain">Terrain rectangles, applied in order.</param>
+    /// <param name="blockers">Blocker rectangles; any covered cell is marked blocked.</param>
+    /// <param name="maxCellCount">The maximum number of cells this call may allocate; must be positive.</param>
+    /// <returns>The baked artifact.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="terrain"/> or <paramref name="blockers"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCellCount"/> is not positive.</exception>
+    /// <exception cref="ArgumentException">An authored value is invalid, the grid exceeds the coordinate/index
+    /// carriers, or its cell count exceeds <paramref name="maxCellCount"/>.</exception>
+    public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers, int maxCellCount) {
+        ArgumentNullException.ThrowIfNull(argument: terrain);
+        ArgumentNullException.ThrowIfNull(argument: blockers);
+
+        var (originXRaw, originZRaw, width, height, cellCount) = MeasureGrid(
+            maxCellCount: maxCellCount,
+            maxX: maxX,
+            maxZ: maxZ,
+            minX: minX,
+            minZ: minZ
+        );
         var heightRaw = new long[cellCount];
         var blocked = new ulong[WorldQueryArtifact.BlockedWordCount(cellCount: cellCount)];
         var patchIndex = 0;

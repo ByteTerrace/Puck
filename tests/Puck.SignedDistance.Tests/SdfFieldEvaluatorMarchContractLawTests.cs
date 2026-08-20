@@ -198,7 +198,7 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
     }
 
     [Fact]
-    public void OverlapTreatsAnUnrepresentableWorldPointAsObstructed() {
+    public void OverlapRefusesAnUnrepresentableWorldPointRatherThanAnsweringIt() {
         var outsideCarrier = new FixedPosition(
             cellX: long.MaxValue,
             cellY: 0L,
@@ -212,12 +212,22 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             material: out _,
             position: outsideCarrier
         ));
-        Assert.True(condition: evaluator.Overlap(
+
+        // Neither answer is true of a point with no world coordinate, and BOTH change authoritative state: a false
+        // "occupied" refuses a legal spawn, a false "clear" places a body nowhere. The verb refuses instead, on the
+        // same parameter and with the same exception type BakedWorldQuery's own range guard raises.
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => evaluator.Overlap(
             center: outsideCarrier,
             radius: FixedQ4816.Zero
         ));
 
-        // Control: a shape-free program still means an empty world, not an undecidable point in a populated one.
+        Assert.Equal(
+            expected: "center",
+            actual: refusal.ParamName
+        );
+
+        // Control: a shape-free program still means an empty world, not an undecidable point in a populated one — the
+        // two collapsed causes of a failed TryDistance are told apart, not folded together.
         Assert.False(condition: new SdfFieldEvaluator(program: new SdfProgramBuilder().Build()).Overlap(
             center: outsideCarrier,
             radius: FixedQ4816.Zero
@@ -430,6 +440,127 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
                 actual: far.Confidence
             );
         }
+    }
+
+    [Fact]
+    public void SphereCastResolvesFromInsideTheStepScaleClearanceGap() {
+        // The gap: raw clearance (f - r) is well outside HitEpsilon, but the SCALED advance (f*s - r) is NEGATIVE,
+        // because scaling the field shrinks it below the radius it must still clear. Treating an advance that small as
+        // a non-convergence lets the sweep report contact at Distance 0 — a body claiming it is touching a wall a
+        // twentieth of a unit away, at the exact point it started from. The floored advance walks the gap instead.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        // A floor to sweep onto, plus a 2:1 ellipsoid parked far below purely to move the analyzed step scale to 1/2
+        // without putting geometry near the cast.
+        _ = builder
+            .Plane(
+            normal: Vector3.UnitY,
+            offset: 0f,
+            material: material
+        )
+            .ResetPoint()
+            .Translate(offset: new Vector3(
+            x: 0f,
+            y: -100f,
+            z: 0f
+        ))
+            .Ellipsoid(
+            radii: new Vector3(
+                x: 2f,
+                y: 1f,
+                z: 1f
+            ),
+            material: material
+        );
+
+        var program = builder.Build();
+
+        Assert.Equal(
+            expected: 0.5f,
+            actual: program.StepScale
+        );
+
+        var evaluator = new SdfFieldEvaluator(program: program);
+        var radius = FixedQ4816.FromDouble(value: 0.5);
+        var origin = Local(
+            x: 0.0,
+            y: 0.55,
+            z: 0.0
+        );
+
+        // The origin really is inside the gap: 0.55 clears the radius by 0.05 (fifty HitEpsilons), while 0.55*0.5
+        // leaves the scaled advance at -0.225.
+        Assert.Equal(
+            expected: 0.55,
+            actual: ((double)Distance(
+                evaluator: evaluator,
+                position: origin
+            )),
+            tolerance: 1.0e-4
+        );
+
+        Assert.True(condition: evaluator.SphereCast(
+            dir: Down,
+            hit: out var hit,
+            maxDist: FixedQ4816.FromInteger(value: 2L),
+            origin: origin,
+            radius: radius
+        ));
+        Assert.Equal(
+            expected: WorldQueryConfidence.Exact,
+            actual: hit.Confidence
+        );
+
+        // The measured answer: the sweep stops with its centre one radius above the floor, having actually travelled.
+        Assert.Equal(
+            expected: 0.049,
+            actual: ((double)hit.Distance),
+            tolerance: 0.005
+        );
+    }
+
+    [Fact]
+    public void GroundIsFoundThroughALowStepScaleProgram() {
+        // A descending probe's advance shrinks with its own clearance, so at a low step scale the last stretch before
+        // the surface falls under the fixed-point progress floor. Treating that as a non-convergence makes the verb
+        // answer "no ground" over EVERY column of such a program — a whole world nothing can stand on.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        // A 20:1 disc: eccentricity IS the analyzed Lipschitz factor, so this one shape sets the step scale to 1/20.
+        _ = builder.Ellipsoid(
+            radii: new Vector3(
+                x: 20f,
+                y: 1f,
+                z: 20f
+            ),
+            material: material
+        );
+
+        var program = builder.Build();
+
+        Assert.Equal(
+            expected: 0.05f,
+            actual: program.StepScale
+        );
+
+        // On the polar axis the ellipsoid's approximate field is exact, so the top surface sits at Y = 1.
+        Assert.True(condition: new SdfFieldEvaluator(program: program).TryGroundHeight(
+            groundY: out var groundY,
+            position: Local(
+                x: 0.0,
+                y: 2.0,
+                z: 0.0
+            ),
+            probeDown: FixedQ4816.FromInteger(value: 50L),
+            probeUp: FixedQ4816.FromDouble(value: 0.5)
+        ));
+        Assert.Equal(
+            expected: 1.0,
+            actual: ((double)groundY),
+            tolerance: 0.01
+        );
     }
 
     [Fact]

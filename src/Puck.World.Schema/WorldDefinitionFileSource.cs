@@ -78,9 +78,13 @@ public static class WorldDefinitionFileSource {
 
         byte[] bytes;
 
+        // The environmental read class, filtered exactly like every sibling read here (TryResolveChainFiles,
+        // DirectoryDocumentSource.TryRead): a locked, half-written, or permission-refused file, whose verdict is a
+        // property of the moment rather than of the bytes. Callers classify on this wording — WorldOwnedWorlds
+        // quarantines a file only for a document-shape refusal — so nothing but a real I/O refusal may reach it.
         try {
             bytes = File.ReadAllBytes(path: path);
-        } catch (Exception exception) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
@@ -160,16 +164,33 @@ public static class WorldDefinitionFileSource {
 
             parsed = WorldDefinitionMigrations.Apply(definition: parsed);
 
-            if (validateAdjacencyClaims) {
-                WorldDefinitionValidator.Validate(
+            // The validation class answers under its own wording, never the strict parse's. A validation refusal can
+            // rest on facts outside this file — an adjacency claim resolved through `neighbours` against documents
+            // this caller may itself be about to move — so it is retryable in a way "these bytes are not a
+            // puck.world.def.v1 document" never is, and a caller classifying on the reason must be able to tell them
+            // apart.
+            string? refusal = null;
+
+            try {
+                if (validateAdjacencyClaims) {
+                    WorldDefinitionValidator.Validate(
+                        definition: parsed,
+                        neighbours: neighbours
+                    );
+                } else if (!WorldDefinitionValidator.TryValidateLocally(
                     definition: parsed,
-                    neighbours: neighbours
-                );
-            } else if (!WorldDefinitionValidator.TryValidateLocally(
-                definition: parsed,
-                reason: out var localReason
-            )) {
-                throw new InvalidOperationException(message: localReason);
+                    reason: out var localReason
+                )) {
+                    refusal = localReason;
+                }
+            } catch (Exception exception) {
+                refusal = exception.Message;
+            }
+
+            if (refusal is not null) {
+                reason = $"{path} document validation refused: {refusal.ReplaceLineEndings(replacementText: " ")}";
+
+                return false;
             }
             definition = parsed;
             contentHash = ((chain.Count == 1)
@@ -493,9 +514,13 @@ public static class WorldDefinitionFileSource {
     /// what its bytes actually are. A document naming a <c>basis</c> composes its chain first (see
     /// <see cref="WorldDocumentBasis"/>) and pins the whole chain's raw bytes
     /// (<see cref="ComputeChainContentHash"/>), so an edit to a template moves every derived document's pin.
-    /// Mirrors <c>WorldDefinitionLoader.TryLoadFile</c>'s three-class failure
-    /// reporting (absent, unreadable, invalid); a broad catch is deliberate — a load boundary must never throw out
-    /// of this method.</summary>
+    /// A load boundary never throws out of this method: every failure comes back as
+    /// <paramref name="reason"/>, whose opening words name the class — <c>no file at</c>, <c>cannot read</c>,
+    /// <c>cannot decode</c>, <c>&lt;path&gt; basis composition refused</c>, <c>&lt;path&gt; document validation
+    /// refused</c>, or <c>&lt;path&gt; is not a valid puck.world.def.v1 document</c>. Only that last pair is a
+    /// verdict on the bytes themselves; the rest can each answer differently on a later call, so a caller acting
+    /// destructively on a refusal (<c>WorldOwnedWorlds</c> quarantines a file it cannot admit) must classify before
+    /// it acts.</summary>
     /// <param name="path">The file to load.</param>
     /// <param name="definition">The loaded definition on success; <see langword="null"/> on failure.</param>
     /// <param name="contentHash">The canonical content-address pin of the bytes read, on success; empty on failure.</param>

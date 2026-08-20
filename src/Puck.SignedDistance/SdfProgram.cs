@@ -133,7 +133,7 @@ public sealed partial class SdfProgram {
     /// grid-cull and flat-loop results against each other by hand.</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
-    /// are unbalanced, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
+    /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
     /// index; an instance range does not lie within the instruction stream; or two instance ranges claim one instruction.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A screen surface's index is outside
     /// <c>0..<see cref="SdfProgramBuilder.MaxScreenSurfaces"/>-1</c>, its origin is not finite, its right/up axes are
@@ -176,7 +176,7 @@ public sealed partial class SdfProgram {
             );
         }
 
-        ValidatePackedContract(
+        var instructionOwners = ValidatePackedContract(
             materials: materialTable,
             instancesParamName: nameof(instances),
             instructionsParamName: nameof(instructions),
@@ -223,7 +223,7 @@ public sealed partial class SdfProgram {
         }
 
         // The bounds analysis runs FIRST: the segment directory's length is part of the packed layout below.
-        var (shapeBounds, segments) = AnalyzeBounds();
+        var (shapeBounds, segments) = AnalyzeBounds(instructionOwners: instructionOwners);
         var rigidPlan = CompileRigidPlan(segments: segments);
 
         var instructionCount = m_instructions.Length;
@@ -444,16 +444,16 @@ public sealed partial class SdfProgram {
     // before it) stores the chain's pre-dynamic translation as its center and the entity slot: the shader adds the
     // slot's per-frame position — center = offset + dynPos, NO quaternion rotate — with the post-dynamic local
     // geometry folded into the radius, which is the whole win for far-away moving entities.
-    private (List<BoundRecord> ShapeBounds, List<BoundRecord> Segments) AnalyzeBounds() {
+    private (List<BoundRecord> ShapeBounds, List<BoundRecord> Segments) AnalyzeBounds(int[] instructionOwners) {
         var segments = new List<BoundRecord>();
         var shapeBounds = new List<BoundRecord>();
         var segmentStart = 0;
 
         // O(instructions + instances) lookups replacing the per-instruction linear scans of m_instances the segment
         // walk below would otherwise do (a boundary test per instruction, an owner resolve per segment — together
-        // O(instructions x instances)). Built once here; consumed inline in the loop.
+        // O(instructions x instances)). The owner map arrives from ValidatePackedContract, which already built it for
+        // the field-scope walk over the same stream.
         var instanceBoundaries = BuildInstanceBoundaries();
-        var instructionOwners = BuildInstructionOwners();
 
         // Segments split BEFORE each ResetPoint AND at every instance boundary (m_instances' First/End): a segment
         // never straddles two instances (or an instance and the WORLD set), so the instance table below can express
@@ -1048,9 +1048,11 @@ public sealed partial class SdfProgram {
         return boundaries;
     }
     // A dense per-instruction owner map: owners[i] is the instance whose [First, End) range contains instruction i, or
-    // -1 for the WORLD set. Built once, O(instructions + instances) total: the constructor refuses overlapping ranges
-    // (RequireDisjointInstanceRanges), so the spans partition a subset of the instructions. The `< 0` guard is defence
-    // in depth — it keeps the packed words a total, deterministic function of any range set that reaches here.
+    // -1 for the WORLD set. Called once per construction, from ValidatePackedContract, which hands the array on to the
+    // field-scope walk and to AnalyzeBounds; O(instructions + instances) total, because the constructor refuses
+    // overlapping ranges (RequireDisjointInstanceRanges) so the spans partition a subset of the instructions. The
+    // `< 0` guard is defence in depth — it keeps the packed words a total, deterministic function of any range set
+    // that reaches here.
     private int[] BuildInstructionOwners() {
         var owners = new int[m_instructions.Length];
 
