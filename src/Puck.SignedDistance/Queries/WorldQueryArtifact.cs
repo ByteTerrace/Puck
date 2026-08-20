@@ -9,8 +9,9 @@ namespace Puck.SignedDistance.Queries;
 /// responsibility, and a schema token belongs to whatever serializer a caller adds.
 /// <para>
 /// Construction is total: a layer whose length contradicts <see cref="Width"/> and <see cref="Height"/>, a
-/// non-positive cell size, and a negative dimension are each refused by parameter name, so no query can index past a
-/// layer. Both layers are copied in, which is what lets the capability flags be computed once and stay true.
+/// non-positive cell size, a negative dimension, and a blocked layer carrying a bit past the last cell are each
+/// refused by parameter name, so no query can index past a layer and no bit outside the grid can be observed. Both
+/// layers are copied in, which is what lets the capability flags be computed once and stay true.
 /// </para>
 /// <para>
 /// The capability flags describe content, not allocation: <see cref="HasHeightfield"/> is false for an all-sentinel
@@ -25,12 +26,17 @@ public sealed class WorldQueryArtifact {
     public const long NoHeightSentinel = long.MinValue;
 
     private readonly ulong[] m_blocked;
+    private readonly int m_cellCount;
     private readonly long[] m_heightRaw;
 
     /// <summary>Gets the blocked-cell bitmap, 1 bit/cell, row-major, packed little-endian into <see cref="ulong"/>
     /// words (<c>word = cellIndex &gt;&gt; 6; bit = cellIndex &amp; 63</c>) — identical packing to the walk grid's
-    /// <c>Cells</c>. Empty when the layer is omitted; <see cref="IsBlockedCell"/> is the guarded reader.</summary>
+    /// <c>Cells</c>. The final word's bits at or past <see cref="CellCount"/> are padding and are required to be
+    /// zero. Empty when the layer is omitted; <see cref="IsBlockedCell"/> is the guarded reader.</summary>
     public ReadOnlySpan<ulong> Blocked => m_blocked;
+    /// <summary>Gets the grid's cell count, <c><see cref="Width"/> * <see cref="Height"/></c> — the exclusive upper
+    /// bound on every row-major cell index.</summary>
+    public int CellCount => m_cellCount;
     /// <summary>Gets the cell edge length, raw Q48.16 (uniform on X/Z). Always positive.</summary>
     public long CellSizeRaw { get; }
     /// <summary>Gets a value indicating whether the blocked-cell layer carries at least one blocked cell.</summary>
@@ -64,8 +70,8 @@ public sealed class WorldQueryArtifact {
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is
     /// negative, or <paramref name="cellSizeRaw"/> is not positive.</exception>
-    /// <exception cref="ArgumentException">A layer's length contradicts the grid dimensions, or the cell count
-    /// overflows <see cref="int"/>.</exception>
+    /// <exception cref="ArgumentException">A layer's length contradicts the grid dimensions, the blocked layer sets a
+    /// padding bit at or past <see cref="CellCount"/>, or the cell count overflows <see cref="int"/>.</exception>
     public WorldQueryArtifact(long originXRaw, long originZRaw, long cellSizeRaw, int width, int height, long[] heightRaw, ulong[] blocked) {
         ArgumentNullException.ThrowIfNull(argument: blocked);
         ArgumentNullException.ThrowIfNull(argument: heightRaw);
@@ -115,7 +121,23 @@ public sealed class WorldQueryArtifact {
             );
         }
 
+        var paddingBits = (cellCount & 63);
+
+        // The bits above the last cell in the final word address no cell. Left unconstrained they are observable
+        // through IsBlockedCell and HasBlocked, so an artifact could report a blocker outside its own grid.
+        if (
+            (blocked.Length != 0) &&
+            (paddingBits != 0) &&
+            ((blocked[^1] & ~((1UL << paddingBits) - 1UL)) != 0UL)
+        ) {
+            throw new ArgumentException(
+                message: $"The blocked layer's final word sets a bit at or past cell {cellCount}, which lies outside a {width}x{height} grid.",
+                paramName: nameof(blocked)
+            );
+        }
+
         m_blocked = blocked.ToArray();
+        m_cellCount = cellCount;
         m_heightRaw = heightRaw.ToArray();
 
         CellSizeRaw = cellSizeRaw;
@@ -148,13 +170,22 @@ public sealed class WorldQueryArtifact {
 
     /// <summary>Returns how many <see cref="ulong"/> words a blocked bitmap covering <paramref name="cellCount"/>
     /// cells occupies — the length this type requires of a present blocked layer.</summary>
-    /// <param name="cellCount">The grid's cell count.</param>
+    /// <param name="cellCount">The grid's cell count; must not be negative.</param>
     /// <returns>The word count, 0 for an empty grid.</returns>
-    public static int BlockedWordCount(int cellCount) =>
-        ((cellCount + 63) / 64);
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cellCount"/> is negative.</exception>
+    public static int BlockedWordCount(int cellCount) {
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            paramName: nameof(cellCount),
+            value: cellCount
+        );
+
+        // Shift-then-carry rather than (cellCount + 63) / 64: the rounding addend overflows int for the last 63 cell
+        // counts and turns the largest grids into negative word counts.
+        return ((cellCount >> 6) + (((cellCount & 63) == 0) ? 0 : 1));
+    }
     /// <summary>Returns a value indicating whether the cell at <paramref name="cellIndex"/> is blocked. An index
-    /// outside the bitmap reads as not blocked — the "out of bounds reads as clear" contract this artifact inherits
-    /// from the walk grid.</summary>
+    /// outside the grid reads as not blocked — the "out of bounds reads as clear" contract this artifact inherits
+    /// from the walk grid — and the bitmap's trailing padding bits are not addressable.</summary>
     /// <param name="cellIndex">The row-major cell index (<c>(row * Width) + column</c>).</param>
     /// <returns><see langword="true"/> when the cell carries a blocker.</returns>
     public bool IsBlockedCell(int cellIndex) {
@@ -162,6 +193,7 @@ public sealed class WorldQueryArtifact {
 
         return (
             (cellIndex >= 0) &&
+            (cellIndex < m_cellCount) &&
             (word < m_blocked.Length) &&
             ((m_blocked[word] & (1UL << (cellIndex & 63))) != 0UL)
         );

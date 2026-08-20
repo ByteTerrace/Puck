@@ -7,10 +7,15 @@ namespace Puck.SignedDistance.Queries;
 /// generalization of a flat walk grid, adding the heightfield layer and the cast/overlap verbs a walk grid never
 /// needed, and keeping its "out of bounds reads as not blocked" blocked-bitmap contract. Every answer carries
 /// <see cref="WorldQueryConfidence.Bounded"/> — a baked artifact is resolution-quantized by construction, never
-/// sub-cell-exact. Assumes every position lies in a single <see cref="FixedPosition"/> cell (cell 0,0,0 — true for
-/// anything room/arena scale); a caller spanning multiple 2^20-unit cells must normalize positions into the SAME
-/// cell before querying — this provider reads only <c>.Local</c>, unlike <see cref="SdfFieldEvaluator"/>, which
-/// rebases hierarchical cells itself.
+/// sub-cell-exact.
+/// <para>
+/// <b>Positions are world-space.</b> A baked grid's origin is a world coordinate, so every position argument is
+/// rebased against the world origin through <see cref="FixedPosition.TryDelta"/> — exact integer arithmetic, the
+/// identity inside cell <c>(0,0,0)</c> — before it reaches a cell index. Two positions sharing a
+/// <see cref="FixedPosition.Local"/> offset in different hierarchy cells therefore answer differently, as their
+/// world separation demands. A position the world origin is farther than signed Q48.16 from is refused by parameter
+/// name rather than answered against a coordinate the carrier cannot hold.
+/// </para>
 /// <para>
 /// <b>Conservative by construction.</b> No verb samples the segment at discrete points. A cast enumerates every cell
 /// whose column the swept volume can reach and intersects the segment with that cell's box analytically, so an
@@ -22,19 +27,31 @@ namespace Puck.SignedDistance.Queries;
 /// <b>Where the answer is deliberately loose.</b> A swept sphere is tested against each cell box dilated by the
 /// radius on each axis — an axis-aligned dilation that contains the true rounded-rectangle sweep, so contact can be
 /// reported up to <c>radius * (sqrt(2) - 1)</c> early at a box corner. <see cref="Overlap"/> uses the exact
-/// clamp-to-box Euclidean test instead, so it is the tighter of the two; a cast never reports clear where
+/// clamp-to-solid Euclidean test instead, so it is the tighter of the two; a cast never reports clear where
 /// <see cref="Overlap"/> reports blocked.
 /// </para>
 /// <para>
 /// <b>The 2.5D meaning of Y.</b> A blocked cell comes from a footprint with no height
 /// (<see cref="WorldQueryBlockerInput"/>) and therefore blocks at every Y — an infinite vertical column. The height
-/// layer blocks where the swept volume's lowest point reaches at or below the cell's authored ground. Both layers
-/// answer every cast and <see cref="LineOfSight"/>, which is the fallback <see cref="QueryCapabilities"/> describes:
-/// an artifact carrying only one layer still answers with it.
+/// layer is the half-space below a cell's authored ground, and blocks where the query volume's lowest point reaches
+/// at or below it. Both layers answer every verb — casts, <see cref="LineOfSight"/>, and <see cref="Overlap"/> —
+/// which is the fallback <see cref="QueryCapabilities"/> describes: an artifact carrying only one layer still
+/// answers with it.
+/// </para>
+/// <para>
+/// <b>A radius is body-scale, and the bound is enforced.</b> Both radius-taking verbs walk every cell the radius
+/// reaches, which is quadratic in it; a radius spanning more than <see cref="MaxRadiusCells"/> cells
+/// (<see cref="MaxRadius"/> world units for a given artifact) is refused by parameter name rather than silently
+/// clamped or silently paid for. Nothing here indexes occupancy hierarchically, so a consumer that genuinely needs a
+/// wider query is a request for that index, and a named refusal is how it arrives.
 /// </para>
 /// </summary>
 public sealed class BakedWorldQuery : IWorldQuery {
     private readonly WorldQueryArtifact m_artifact;
+
+    /// <summary>The widest query radius the cell walk accepts, in cells — the ceiling
+    /// <see cref="Overlap"/> and <see cref="SphereCast"/> refuse past.</summary>
+    public const int MaxRadiusCells = 64;
 
     /// <summary>Wraps a baked artifact.</summary>
     /// <param name="artifact">The baked artifact to query.</param>
@@ -51,6 +68,9 @@ public sealed class BakedWorldQuery : IWorldQuery {
         HasHeightfield: m_artifact.HasHeightfield,
         HasOccupancy: false
     );
+    /// <summary>Gets the widest radius <see cref="Overlap"/> and <see cref="SphereCast"/> accept against this
+    /// artifact — <see cref="MaxRadiusCells"/> of its own cells, saturating at the scalar carrier.</summary>
+    public FixedQ4816 MaxRadius => FixedQ4816.FromRawBits(value: ClampToLong(value: (((Int128)MaxRadiusCells) * m_artifact.CellSizeRaw)));
 
     // Saturating raw addition: a sum overflows exactly when both addends share a sign the sum does not.
     private static long AddRawSaturating(long left, long right) {
@@ -178,27 +198,46 @@ public sealed class BakedWorldQuery : IWorldQuery {
             : difference
         );
     }
-    private bool AnyBlockedWithinRadius(FixedQ4816 x, FixedQ4816 z, FixedQ4816 radius) {
-        if (!m_artifact.HasBlocked) {
-            return false;
+    // The artifact's grid lives in world space, so a query point is its exact displacement from the world origin —
+    // never its raw .Local, which repeats every cell and would answer for whichever copy of the grid the caller's
+    // cell happens to be. The rebase is exact integer arithmetic and the identity inside cell (0,0,0).
+    private static FixedVector3 WorldOf(FixedPosition position, string paramName) {
+        if (!position.TryDelta(
+            delta: out var world,
+            origin: FixedPosition.Zero
+        )) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: position,
+                message: "The position's displacement from the world origin is outside signed Q48.16, so it has no world coordinate this artifact's grid can be indexed by.",
+                paramName: paramName
+            );
         }
 
-        var radiusRaw = Math.Max(
-            val1: 0L,
-            val2: radius.Value
-        );
+        return world;
+    }
+    // The exact clamp-to-solid Euclidean test, run against both layers in one walk: a blocked cell is the cell box
+    // extruded through every Y, and an authored ground is the same box's half-space at or below its height. Each
+    // squared term is spent against a running budget rather than summed, so no product can exceed the widened
+    // carrier however far the query's Y sits from the terrain.
+    private bool AnySolidWithinRadius(FixedVector3 center, long radiusRaw) {
+        if (
+            !m_artifact.HasBlocked &&
+            !m_artifact.HasHeightfield
+        ) {
+            return false;
+        }
 
         // The disc is clamped to the artifact rather than rejected when its center falls outside: an in-bounds cell
         // the disc provably covers is blocked whether or not the center itself is on the grid.
         if (!TryColumnSpan(
             first: out var firstColumn,
             highRaw: AddRawSaturating(
-                left: x.Value,
+                left: center.X.Value,
                 right: radiusRaw
             ),
             last: out var lastColumn,
             lowRaw: SubtractRawSaturating(
-                left: x.Value,
+                left: center.X.Value,
                 right: radiusRaw
             )
         )) {
@@ -208,12 +247,12 @@ public sealed class BakedWorldQuery : IWorldQuery {
         if (!TryRowSpan(
             first: out var firstRow,
             highRaw: AddRawSaturating(
-                left: z.Value,
+                left: center.Z.Value,
                 right: radiusRaw
             ),
             last: out var lastRow,
             lowRaw: SubtractRawSaturating(
-                left: z.Value,
+                left: center.Z.Value,
                 right: radiusRaw
             )
         )) {
@@ -227,12 +266,31 @@ public sealed class BakedWorldQuery : IWorldQuery {
             var closestZRaw = Math.Clamp(
                 max: (cellMinZRaw + m_artifact.CellSizeRaw),
                 min: cellMinZRaw,
-                value: z.Value
+                value: center.Z.Value
             );
-            var dz = ((((Int128)z.Value)) - closestZRaw);
+            var dz = ((((Int128)center.Z.Value)) - closestZRaw);
+
+            if (
+                (dz > radiusRaw) ||
+                (dz < (-((Int128)radiusRaw)))
+            ) {
+                continue;
+            }
+
+            var afterZ = (radiusSquared - (dz * dz));
 
             for (var column = firstColumn; (column <= lastColumn); column++) {
-                if (!m_artifact.IsBlockedCell(cellIndex: ((row * m_artifact.Width) + column))) {
+                var cellIndex = ((row * m_artifact.Width) + column);
+                var blocked = m_artifact.IsBlockedCell(cellIndex: cellIndex);
+                var grounded = m_artifact.TryHeightRaw(
+                    cellIndex: cellIndex,
+                    heightRaw: out var heightRaw
+                );
+
+                if (
+                    !blocked &&
+                    !grounded
+                ) {
                     continue;
                 }
 
@@ -240,17 +298,60 @@ public sealed class BakedWorldQuery : IWorldQuery {
                 var closestXRaw = Math.Clamp(
                     max: (cellMinXRaw + m_artifact.CellSizeRaw),
                     min: cellMinXRaw,
-                    value: x.Value
+                    value: center.X.Value
                 );
-                var dx = ((((Int128)x.Value)) - closestXRaw);
+                var dx = ((((Int128)center.X.Value)) - closestXRaw);
 
-                if (((dx * dx) + (dz * dz)) <= radiusSquared) {
+                if (
+                    (dx > radiusRaw) ||
+                    (dx < (-((Int128)radiusRaw)))
+                ) {
+                    continue;
+                }
+
+                var afterX = (afterZ - (dx * dx));
+
+                if (afterX < Int128.Zero) {
+                    continue;
+                }
+
+                if (blocked) {
+                    return true;
+                }
+
+                if (!grounded) {
+                    continue;
+                }
+
+                // Above the authored ground the vertical gap counts; at or below it the center is inside the solid
+                // half-space and the planar test alone decides.
+                var dy = ((((Int128)center.Y.Value)) - heightRaw);
+
+                if (dy <= Int128.Zero) {
+                    return true;
+                }
+
+                if (
+                    (dy <= radiusRaw) &&
+                    ((dy * dy) <= afterX)
+                ) {
                     return true;
                 }
             }
         }
 
         return false;
+    }
+    private void CheckRadius(FixedQ4816 radius) {
+        var limit = (((Int128)MaxRadiusCells) * m_artifact.CellSizeRaw);
+
+        if (radius.Value > limit) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: radius,
+                message: $"A query radius may span at most {MaxRadiusCells} cells of this artifact ({MaxRadius} world units); the cell walk it drives is quadratic in the radius and this provider carries no occupancy hierarchy.",
+                paramName: nameof(radius)
+            );
+        }
     }
     private long ColumnMinXRaw(int column) =>
         AddRawSaturating(
@@ -260,7 +361,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
     // Enumerates the cells the swept volume can reach, column by column in sweep order, and keeps the nearest
     // contact. A column contributes nothing beyond the running best once the sweep cannot enter it earlier than that
     // best, which is the whole early-out: no cell is visited twice and no cell outside the swept band is visited.
-    private bool March(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, FixedQ4816 radius, out RayHit hit) {
+    private bool March(FixedVector3 origin, FixedVector3 dir, FixedQ4816 maxDist, FixedQ4816 radius, out RayHit hit) {
         hit = default;
 
         var direction = dir.Normalize();
@@ -282,7 +383,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
         var sweep = new Sweep(
             direction: direction,
             maxDistanceRaw: maxDist.Value,
-            origin: origin.Local,
+            origin: origin,
             radiusRaw: Math.Max(
                 val1: 0L,
                 val2: radius.Value
@@ -613,8 +714,30 @@ public sealed class BakedWorldQuery : IWorldQuery {
         );
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException">An endpoint, or the segment between them, is outside signed
+    /// Q48.16 of the world origin.</exception>
     public bool LineOfSight(FixedPosition from, FixedPosition to) {
-        var delta = (to.Local - from.Local);
+        var fromWorld = WorldOf(
+            paramName: nameof(from),
+            position: from
+        );
+
+        _ = WorldOf(
+            paramName: nameof(to),
+            position: to
+        );
+
+        if (!to.TryDelta(
+            delta: out var delta,
+            origin: from
+        )) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: to,
+                message: "The segment between the two endpoints is longer than signed Q48.16 represents.",
+                paramName: nameof(to)
+            );
+        }
+
         var reach = delta.Length;
 
         if (reach <= FixedQ4816.Zero) {
@@ -628,7 +751,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
                 ),
                 hit: out _,
                 maxDist: FixedQ4816.Epsilon,
-                origin: from,
+                origin: fromWorld,
                 radius: FixedQ4816.Zero
             );
         }
@@ -643,45 +766,78 @@ public sealed class BakedWorldQuery : IWorldQuery {
                 left: reach.Value,
                 right: ((reach.Value >> 14) + 64L)
             )),
-            origin: from,
+            origin: fromWorld,
             radius: FixedQ4816.Zero
         );
     }
     /// <inheritdoc/>
-    public bool Overlap(FixedPosition center, FixedQ4816 radius) =>
-        AnyBlockedWithinRadius(
-            radius: radius,
-            x: center.Local.X,
-            z: center.Local.Z
+    /// <remarks>Consults both layers: a blocked cell overlaps at every Y, and an authored ground overlaps wherever
+    /// the sphere reaches at or below it. The test is the exact Euclidean distance to the solid, so it is never
+    /// looser than the cast verbs' axis-aligned dilation.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="center"/> is outside signed Q48.16 of the world
+    /// origin, or <paramref name="radius"/> spans more than <see cref="MaxRadiusCells"/> cells.</exception>
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) {
+        CheckRadius(radius: radius);
+
+        return AnySolidWithinRadius(
+            center: WorldOf(
+                paramName: nameof(center),
+                position: center
+            ),
+            radiusRaw: Math.Max(
+                val1: 0L,
+                val2: radius.Value
+            )
         );
+    }
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="origin"/> is outside signed Q48.16 of the world
+    /// origin.</exception>
     public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
         March(
             dir: dir,
             hit: out hit,
             maxDist: maxDist,
-            origin: origin,
+            origin: WorldOf(
+                paramName: nameof(origin),
+                position: origin
+            ),
             radius: FixedQ4816.Zero
         );
     /// <inheritdoc/>
-    public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
-        March(
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="origin"/> is outside signed Q48.16 of the world
+    /// origin, or <paramref name="radius"/> spans more than <see cref="MaxRadiusCells"/> cells.</exception>
+    public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) {
+        CheckRadius(radius: radius);
+
+        return March(
             dir: dir,
             hit: out hit,
             maxDist: maxDist,
-            origin: origin,
+            origin: WorldOf(
+                paramName: nameof(origin),
+                position: origin
+            ),
             radius: radius
         );
+    }
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="position"/> is outside signed Q48.16 of the
+    /// world origin.</exception>
     public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
         groundY = FixedQ4816.Zero;
+
+        var world = WorldOf(
+            paramName: nameof(position),
+            position: position
+        );
 
         if (
             !m_artifact.HasHeightfield ||
             !TryCellIndex(
                 cellIndex: out var cellIndex,
-                x: position.Local.X,
-                z: position.Local.Z
+                x: world.X,
+                z: world.Z
             ) ||
             !m_artifact.TryHeightRaw(
                 cellIndex: cellIndex,
@@ -694,8 +850,8 @@ public sealed class BakedWorldQuery : IWorldQuery {
         var candidate = FixedQ4816.FromRawBits(value: raw);
 
         if (
-            (candidate < (position.Local.Y - probeDown)) ||
-            (candidate > (position.Local.Y + probeUp))
+            (candidate < (world.Y - probeDown)) ||
+            (candidate > (world.Y + probeUp))
         ) {
             return false;
         }

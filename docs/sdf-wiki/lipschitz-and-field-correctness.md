@@ -2,7 +2,8 @@
 
 Sphere tracing is safe only when each step is bounded by the field's rate of
 change. Puck computes a program-wide conservative `stepScale` from the authored
-instruction stream and applies it in `map()`.
+instruction stream and applies it in `map()`, and in every other marcher that
+walks the same stream.
 
 ## Contract
 
@@ -54,12 +55,35 @@ period and answers for the wrong copy, and a position constructor that
 re-anchors past half a cell reaches that state without any caller asking for
 it. A seam that cannot rebase must refuse the query; it may not answer.
 
-A CPU march that exhausts its iteration budget has proved nothing. Its verbs
-must resolve toward the answer their consumer can survive being wrong about —
-an obstruction for a cast, blocked for a visibility test — and mark the result
-as bounded rather than exact. Folding non-convergence into "clear" is a false
-negative that reaches authoritative simulation: contact resolution reads it as
-"no contact" and visibility reads it as a line through solid geometry.
+A CPU marcher over the same instruction stream is bound by the same step scale
+as the shader. Restricting the interpreted subset to rigid ops does not make the
+raw field value a safe advance: the chamfer family lives in the blend tail and
+an eccentric ellipsoid in the shape body, so a program every one of whose ops is
+an isometry can still overestimate distance and be tunnelled by a raw step.
+
+The scale shortens every advance, so a fixed iteration budget shortens the
+distance a march covers before it gives up, in proportion. The budget must
+derive from the scale, or adding a chamfer silently converts resolving casts
+into non-convergent ones.
+
+A march that exhausts its iteration budget has proved nothing. Each verb must
+resolve it toward the answer its own consumer can survive being wrong about, and
+that direction is a property of what the verb's true half ASSERTS, not of the
+provider:
+
+- an obstruction verb — cast, sweep, visibility — asserts "something is there",
+  so it folds exhaustion to a hit marked bounded rather than exact. Folding it
+  into "clear" is a false negative that reaches authoritative simulation:
+  contact resolution reads it as "no contact" and visibility reads it as a line
+  through solid geometry.
+- a surface verb — ground height — asserts "the terrain is at this Y". It
+  returns a coordinate with no confidence channel to qualify, and a caller that
+  grounds a body on a fabricated Y moves it somewhere the world does not have.
+  It folds exhaustion to "not found", the same answer an empty column gives.
+
+A grazing probe beside a vertical wall exhausts on the wall's own clearance and
+is the discriminating case: it must read as blocked for a cast and as no-ground
+for a height query, from the same march.
 
 ## Discontinuous folds
 

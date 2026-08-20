@@ -16,6 +16,18 @@ Bounds must include transform reach, smooth-blend radius, and scoped field
 expansion. Operations whose influence cannot be bounded conservatively make the
 affected range ineligible for exact skipping.
 
+## One effective-scale rule
+
+A bound analyzer and the emission it describes must read the same scale. The
+solid-primitive vocabulary raises every authored scale component to
+`SdfSolidGeometry.MinimumScale` so a flat authored shape still has a field, so
+the reach analyzer reads that same clamped magnitude: taking the reach from the
+authored value instead reports zero for geometry the emission still gives
+extent, and every consumer folds reach into a running maximum seeded at zero.
+The clamp lives in one place both paths call, because an analyzer and an
+emitter agreeing by having the same formula typed twice is the state this rule
+exists to prevent.
+
 ## Proxy and distance-dependent detail
 
 Distance-dependent fidelity is safe only when the proxy has a documented

@@ -132,10 +132,13 @@ public sealed partial class SdfProgram {
     /// the beam falls back to the flat per-instance loop over the same instances, letting a caller compare the
     /// grid-cull and flat-loop results against each other by hand.</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
-    /// the packed format carries; two screen surfaces claim one index; or an instance range does not lie within the
-    /// instruction stream.</exception>
+    /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; two screen
+    /// surfaces claim one index; an instance range does not lie within the instruction stream; or two instance ranges
+    /// claim one instruction.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A screen surface's index is outside
-    /// <c>0..<see cref="SdfProgramBuilder.MaxScreenSurfaces"/>-1</c>, or its right/up axes are not orthonormal.</exception>
+    /// <c>0..<see cref="SdfProgramBuilder.MaxScreenSurfaces"/>-1</c>, its right/up axes are not orthonormal, or its
+    /// half-width or half-height is not positive; or a trapezoid's profile slant vanishes in the deterministic field's
+    /// representation.</exception>
     public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
@@ -1044,9 +1047,9 @@ public sealed partial class SdfProgram {
         return boundaries;
     }
     // A dense per-instruction owner map: owners[i] is the instance whose [First, End) range contains instruction i, or
-    // -1 for the WORLD set. Built once, O(instructions + instances) total (instances never overlap, so their spans
-    // partition a subset of the instructions). The `< 0` guard preserves first-match ownership for a hypothetical
-    // overlap, so the packed words remain deterministic.
+    // -1 for the WORLD set. Built once, O(instructions + instances) total: the constructor refuses overlapping ranges
+    // (RequireDisjointInstanceRanges), so the spans partition a subset of the instructions. The `< 0` guard is defence
+    // in depth — it keeps the packed words a total, deterministic function of any range set that reaches here.
     private int[] BuildInstructionOwners() {
         var owners = new int[m_instructions.Length];
 

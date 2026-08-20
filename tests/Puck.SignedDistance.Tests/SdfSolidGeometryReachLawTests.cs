@@ -87,4 +87,82 @@ public sealed class SdfSolidGeometryReachLawTests {
             userMessage: $"reach {reach} does not cover an emitted surface at |z| = 4"
         );
     }
+
+    /// <summary>Emission raises every scale component to <see cref="SdfSolidGeometry.MinimumScale"/>, so the analyzer
+    /// reads the same effective scale: a reach taken from the authored value reports nothing for geometry the emission
+    /// still gives extent.</summary>
+    [Fact]
+    public void ReachReadsTheSameEffectiveScaleEmissionDoes() {
+        var minimum = new Vector3(value: SdfSolidGeometry.MinimumScale);
+
+        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
+            var atMinimum = SdfSolidGeometry.Reach(
+                scale: minimum,
+                type: type
+            );
+
+            foreach (var below in new[] {
+                Vector3.Zero,
+                new Vector3(value: (SdfSolidGeometry.MinimumScale * 0.5f)),
+                new Vector3(value: (-SdfSolidGeometry.MinimumScale * 0.5f)),
+            }) {
+                Assert.Equal(
+                    actual: SdfSolidGeometry.Reach(
+                        scale: below,
+                        type: type
+                    ),
+                    expected: atMinimum
+                );
+            }
+
+            // Control: past the clamp the reach still tracks the authored scale, so the agreement above is not the
+            // clamp swallowing every scale.
+            Assert.Equal(
+                actual: SdfSolidGeometry.Reach(
+                    scale: (minimum * 4f),
+                    type: type
+                ),
+                expected: (atMinimum * 4f)
+            );
+        }
+    }
+
+    /// <summary>A cull bound must contain the geometry it labels: an instance's reach is folded into a running maximum
+    /// that decides which tiles evaluate the instance at all.</summary>
+    [Fact]
+    public void ReachCoversTheSurfaceEmittedAtAZeroScale() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = SdfSolidGeometry.AppendScaledPrimitive(
+            chain: builder.ResetPoint(),
+            material: material,
+            scale: Vector3.Zero,
+            type: SdfSolidPrimitive.Sphere
+        );
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        var probe = (SdfSolidGeometry.MinimumScale * 0.5f);
+
+        Assert.True(condition: evaluator.TryDistance(
+            distance: out var inside,
+            material: out _,
+            position: Position(
+                x: 0d,
+                y: 0d,
+                z: probe
+            )
+        ));
+        Assert.True(
+            condition: (inside < FixedQ4816.Zero),
+            userMessage: $"the emitted surface does not reach z = {probe} (field {inside})"
+        );
+        Assert.True(
+            condition: (SdfSolidGeometry.Reach(
+                scale: Vector3.Zero,
+                type: SdfSolidPrimitive.Sphere
+            ) >= probe),
+            userMessage: "a zero-scale reach does not cover the surface a zero-scale emission produces"
+        );
+    }
 }

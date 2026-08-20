@@ -7,9 +7,11 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 /// <summary>
-/// The composition half of <c>SdfProgram.AnalyzeLipschitz</c>: a chamfer blend's bevel plane is the one
-/// <c>blendShape</c> arm whose Lipschitz bound can exceed BOTH operands, so the bound must fold per COMPOSITION —
-/// <c>L = max(La, Lb, (La + Lb)/√2)</c> — not once per chain.
+/// The composition half of <c>SdfProgram.AnalyzeLipschitz</c>, and the CPU marcher that has to consume it. A chamfer
+/// blend's bevel plane is the one <c>blendShape</c> arm whose Lipschitz bound can exceed BOTH operands, so the bound
+/// must fold per COMPOSITION — <c>L = max(La, Lb, (La + Lb)/√2)</c> — not once per chain; and
+/// <see cref="SdfFieldEvaluator"/>'s casts must advance by the analyzed <c>StepScale</c>, since a chamfer rides the
+/// blend tail where the interpreted op subset's 1-Lipschitz guarantee does not reach.
 /// </summary>
 public sealed class SdfLipschitzCompositionLawTests {
     // Three parallel slabs, chamfer-unioned and then carved by a plane, leaving a thin top plate. Distinct (not
@@ -20,6 +22,12 @@ public sealed class SdfLipschitzCompositionLawTests {
         new(x: 0f, y: -0.06f, z: 0f),
     ];
     private static readonly Vector3 SlabHalfExtents = new(x: 10f, y: 1f, z: 10f);
+
+    private static readonly FixedVector3 Down = new(
+        X: FixedQ4816.Zero,
+        Y: -FixedQ4816.One,
+        Z: FixedQ4816.Zero
+    );
 
     private const float PlateBevel = 0.4f;
     // The step scale AnalyzeLipschitz produced while the chamfer factor was a per-chain latch: one √2 however many
@@ -64,8 +72,9 @@ public sealed class SdfLipschitzCompositionLawTests {
 
         return distance;
     }
-    // The shipped marcher's contract, on the CPU: step by the field's own value scaled by the program's baked
-    // stepScale, accept inside the hit epsilon. Returns the y it accepted at, or null when the ray ran past the plate.
+    // A reference march OUTSIDE the evaluator, parameterized by the step scale the shipped marcher is not free to
+    // choose: it exists to show what the same field does when advanced by its RAW value. Returns the y it accepted at,
+    // or null when the ray ran past the plate.
     private static double? MarchDown(SdfFieldEvaluator evaluator, float stepScale, double startY, double stopY) {
         var y = startY;
 
@@ -209,27 +218,85 @@ public sealed class SdfLipschitzCompositionLawTests {
             y: (plateBottom - 0.002)
         ) > FixedQ4816.Zero));
 
-        var hit = MarchDown(
-            evaluator: evaluator,
-            stepScale: program.StepScale,
-            startY: 6.0,
-            stopY: -6.0
+        // The PUBLIC verb, which is what a contact/ground/visibility consumer actually calls: the cast lands ON the
+        // plate and reports a MEASURED hit, not the conservative non-convergence branch.
+        Assert.True(condition: evaluator.Raycast(
+            dir: Down,
+            hit: out var hit,
+            maxDist: FixedQ4816.FromInteger(value: 12L),
+            origin: Position(y: 6.0)
+        ));
+        Assert.Equal(
+            expected: WorldQueryConfidence.Exact,
+            actual: hit.Confidence
         );
-
-        Assert.NotNull(@object: hit);
+        Assert.True(condition: hit.Point.TryDelta(
+            delta: out var world,
+            origin: FixedPosition.Zero
+        ));
         Assert.Equal(
             expected: top,
-            actual: hit!.Value,
+            actual: ((double)world.Y),
             tolerance: 0.01
         );
-        // The falsifier: the same march at the latched step scale steps straight THROUGH the plate. Without this the
-        // law would pass against the defect it exists to refuse.
+
+        // The falsifiers, each an advance the evaluator must NOT take. Raw: the field's own value, which the WHOLE
+        // interpreted op subset being 1-Lipschitz does not license, because the chamfer lives in the blend tail. Latch:
+        // one √2 for the whole chain, the per-chain fold this recurrence replaced. Both step through the plate.
+        Assert.Null(@object: MarchDown(
+            evaluator: evaluator,
+            stepScale: 1.0f,
+            startY: 6.0,
+            stopY: -6.0
+        ));
         Assert.Null(@object: MarchDown(
             evaluator: evaluator,
             stepScale: LatchedStepScale,
             startY: 6.0,
             stopY: -6.0
         ));
+        // The control: the reference march is not simply broken — at the analyzed scale it finds the same plate the
+        // public cast did.
+        Assert.Equal(
+            expected: top,
+            actual: MarchDown(
+                evaluator: evaluator,
+                stepScale: program.StepScale,
+                startY: 6.0,
+                stopY: -6.0
+            )!.Value,
+            tolerance: 0.01
+        );
+    }
+
+    [Fact]
+    public void ChamferFreeCastIsUnchangedByTheStepClamp() {
+        // The other control: a warp-free program bakes stepScale 1.0f, so its cast advances by the raw field exactly as
+        // it did before the clamp existed — a downward ray from y = 6 onto a box whose top is y = 1 travels 5.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Box(
+            halfExtents: SlabHalfExtents,
+            round: 0f,
+            material: material
+        );
+
+        Assert.True(condition: new SdfFieldEvaluator(program: builder.Build()).Raycast(
+            dir: Down,
+            hit: out var hit,
+            maxDist: FixedQ4816.FromInteger(value: 12L),
+            origin: Position(y: 6.0)
+        ));
+        Assert.Equal(
+            expected: WorldQueryConfidence.Exact,
+            actual: hit.Confidence
+        );
+        Assert.Equal(
+            expected: 5.0,
+            actual: ((double)hit.Distance),
+            tolerance: 0.002
+        );
     }
 
     [Fact]

@@ -52,6 +52,15 @@ numeric id and instruction index; `SdfProgram.AnalyzeLipschitz` bakes a
 per-program step-scale bound so a march can never overstep a non-1-Lipschitz
 warp.
 
+The `SdfProgram` constructor is the packed format's own door, and accepts an
+instruction stream the builder never authored, so it re-checks what the packing
+writes straight into GPU words: shape/blend/material lane domains, finiteness
+of every operand lane except the reinterpreted integer fields (`Glyph`'s packed
+UV rect, `SampledRegion`'s packed dimensions and pool offset), the divisors an
+exact core projects by (a trapezoid's profile slant, a screen surface's two
+half-extents), the screen frame's orthonormality, and instance ranges that
+partition the instructions they claim rather than overlapping.
+
 ## 🔍 The CPU query layer (`Puck.SignedDistance.Queries`)
 
 `SdfFieldEvaluator` wraps a live `SdfProgram` and interprets its rigid,
@@ -64,7 +73,11 @@ Puck.Maths) a gravity, contact, or wind consumer binds instead of the
 five-verb query surface. `BakedWorldQuery`
 is the sibling `Bounded`-confidence provider over a pre-baked, quantized
 artifact (`WorldQueryArtifact`/`WorldQueryBaker`) for callers that do not need
-per-tick exactness.
+per-tick exactness. Both providers rebase every position against the world
+origin, so a `FixedPosition`'s hierarchy cell is part of the query; the baked
+provider additionally refuses by name a radius spanning more than
+`BakedWorldQuery.MaxRadiusCells` of its artifact's cells, its cell walk being
+quadratic in the radius with no occupancy hierarchy behind it.
 
 The evaluator's constructor walks the instruction stream once, asserting
 every op/shape is in the supported rigid subset — it throws naming the first

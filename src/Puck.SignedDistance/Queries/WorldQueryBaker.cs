@@ -58,20 +58,77 @@ public static class WorldQueryBaker {
             throw new ArgumentException(message: $"{kind} rectangle {index} has a non-finite {name} ({value}).");
         }
     }
-    private static void CheckFiniteBound(string paramName, float value) {
+    // The grid's own corner and far edge are the only quantized coordinates the artifact stores verbatim, so a value
+    // the Q48.16 carrier can only saturate to would place the grid somewhere the caller never authored.
+    private static long QuantizeBound(string paramName, float value) {
         if (!float.IsFinite(f: value)) {
             throw new ArgumentException(
                 message: $"The grid bound is not finite ({value}).",
                 paramName: paramName
             );
         }
+
+        var raw = FixedQ4816.FromDouble(value: value).Value;
+
+        if (
+            (raw == long.MinValue) ||
+            (raw == long.MaxValue)
+        ) {
+            throw new ArgumentException(
+                message: $"The grid bound ({value}) is outside the Q48.16 coordinate range and would saturate to {raw}.",
+                paramName: paramName
+            );
+        }
+
+        return raw;
     }
-    private static long CeilDiv(long dividend, long divisor) {
+    // A terrain height quantizing to NoHeightSentinel would erase the very cells the caller authored, and one
+    // quantizing to the opposite extreme would store a height nowhere near the authored one.
+    private static long QuantizeTopY(int index, float value) {
+        CheckFinite(
+            index: index,
+            kind: "Terrain",
+            name: "TopY",
+            value: value
+        );
+
+        var raw = FixedQ4816.FromDouble(value: value).Value;
+
+        if (
+            (raw == WorldQueryArtifact.NoHeightSentinel) ||
+            (raw == long.MaxValue)
+        ) {
+            throw new ArgumentException(message: $"Terrain rectangle {index} has a TopY ({value}) outside the Q48.16 height range, which would saturate to {raw}.");
+        }
+
+        return raw;
+    }
+    // The number of cells covering [originRaw, maxRaw], refusing a span no 32-bit cell index can address rather than
+    // narrowing it: the unchecked narrowing turns a grid wider than 2^31 cells into a silently empty artifact.
+    private static int AxisCells(string paramName, long originRaw, long maxRaw) {
+        var cells = CeilDiv(
+            dividend: ((((Int128)maxRaw)) - originRaw),
+            divisor: CellSizeRaw
+        );
+
+        if (cells > int.MaxValue) {
+            throw new ArgumentException(
+                message: $"The grid spans {cells} cells of {CellSize} along one axis, which overflows a 32-bit cell index.",
+                paramName: paramName
+            );
+        }
+
+        return ((cells < Int128.Zero)
+            ? 0
+            : ((int)cells)
+        );
+    }
+    private static Int128 CeilDiv(Int128 dividend, Int128 divisor) {
         var quotient = (dividend / divisor);
         var remainder = (dividend % divisor);
 
-        return (((remainder != 0L) && ((remainder < 0L) == (divisor < 0L)))
-            ? (quotient + 1L)
+        return (((remainder != Int128.Zero) && ((remainder < Int128.Zero) == (divisor < Int128.Zero)))
+            ? (quotient + Int128.One)
             : quotient
         );
     }
@@ -108,7 +165,7 @@ public static class WorldQueryBaker {
             }
         }
     }
-    private static void MarkTerrain(long[] heightRaw, int width, int height, long originXRaw, long originZRaw, WorldQueryTerrainInput patch) {
+    private static void MarkTerrain(long[] heightRaw, int width, int height, long originXRaw, long originZRaw, WorldQueryTerrainInput patch, long topYRaw) {
         if (!TryCellSpan(
             originRaw: originXRaw,
             minValue: patch.MinX,
@@ -131,8 +188,6 @@ public static class WorldQueryBaker {
             return;
         }
 
-        var topYRaw = FixedQ4816.FromDouble(value: patch.TopY).Value;
-
         for (var row = minRow; (row < maxRow); row++) {
             var rowBase = (row * width);
 
@@ -147,25 +202,33 @@ public static class WorldQueryBaker {
     private static bool TryCellSpan(long originRaw, float minValue, float maxValue, int axisCells, out int minCell, out int maxCellExclusive) {
         var minRaw = FixedQ4816.FromDouble(value: minValue).Value;
         var maxRaw = FixedQ4816.FromDouble(value: maxValue).Value;
-        var minIndex = ((int)Math.Clamp(
-            value: (minRaw - originRaw).FloorDivide(divisor: CellSizeRaw),
-            min: 0L,
-            max: axisCells
-        ));
-        var maxIndex = ((int)Math.Clamp(
+        // Widened before the subtraction: an edge saturated at the carrier and an origin of the opposite sign differ
+        // by more than a long holds, and the clamp that follows only makes sense on the true difference.
+        var minIndex = ClampIndex(
+            axisCells: axisCells,
+            value: ((((Int128)minRaw)) - originRaw).FloorDivide(divisor: ((Int128)CellSizeRaw))
+        );
+        var maxIndex = ClampIndex(
+            axisCells: axisCells,
             value: CeilDiv(
-                dividend: (maxRaw - originRaw),
+                dividend: ((((Int128)maxRaw)) - originRaw),
                 divisor: CellSizeRaw
-            ),
-            min: 0L,
-            max: axisCells
-        ));
+            )
+        );
 
         minCell = minIndex;
         maxCellExclusive = maxIndex;
 
         return (maxIndex > minIndex);
     }
+    private static int ClampIndex(Int128 value, int axisCells) =>
+        ((value < Int128.Zero)
+            ? 0
+            : ((value > axisCells)
+                ? axisCells
+                : ((int)value)
+            )
+        );
 
     /// <summary>Bakes an artifact covering <c>[minX,maxX] x [minZ,maxZ]</c>. A maximum edge that is not aligned to
     /// <see cref="CellSize"/> rounds outward so the final partial cell remains inside the artifact.</summary>
@@ -179,24 +242,26 @@ public static class WorldQueryBaker {
     /// <returns>The baked artifact.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="terrain"/> or <paramref name="blockers"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">A grid bound, a rectangle edge, or a terrain height is not finite, or a
-    /// maximum edge lies below its minimum.</exception>
+    /// <exception cref="ArgumentException">A grid bound, a rectangle edge, or a terrain height is not finite; a grid
+    /// bound or a terrain height lies outside the Q48.16 range the artifact stores; a maximum edge lies below its
+    /// minimum; or the grid spans more cells than a 32-bit cell index addresses.</exception>
     public static WorldQueryArtifact Bake(float minX, float minZ, float maxX, float maxZ, IEnumerable<WorldQueryTerrainInput> terrain, IEnumerable<WorldQueryBlockerInput> blockers) {
         ArgumentNullException.ThrowIfNull(argument: terrain);
         ArgumentNullException.ThrowIfNull(argument: blockers);
-        CheckFiniteBound(
+
+        var originXRaw = QuantizeBound(
             paramName: nameof(minX),
             value: minX
         );
-        CheckFiniteBound(
+        var originZRaw = QuantizeBound(
             paramName: nameof(minZ),
             value: minZ
         );
-        CheckFiniteBound(
+        var maxXRaw = QuantizeBound(
             paramName: nameof(maxX),
             value: maxX
         );
-        CheckFiniteBound(
+        var maxZRaw = QuantizeBound(
             paramName: nameof(maxZ),
             value: maxZ
         );
@@ -215,25 +280,26 @@ public static class WorldQueryBaker {
             );
         }
 
-        var originXRaw = FixedQ4816.FromDouble(value: minX).Value;
-        var originZRaw = FixedQ4816.FromDouble(value: minZ).Value;
-        var maxXRaw = FixedQ4816.FromDouble(value: maxX).Value;
-        var maxZRaw = FixedQ4816.FromDouble(value: maxZ).Value;
-        var width = ((int)Math.Max(
-            val1: 0L,
-            val2: CeilDiv(
-                dividend: (maxXRaw - originXRaw),
-                divisor: CellSizeRaw
-            )
-        ));
-        var height = ((int)Math.Max(
-            val1: 0L,
-            val2: CeilDiv(
-                dividend: (maxZRaw - originZRaw),
-                divisor: CellSizeRaw
-            )
-        ));
-        var cellCount = (width * height);
+        var width = AxisCells(
+            maxRaw: maxXRaw,
+            originRaw: originXRaw,
+            paramName: nameof(maxX)
+        );
+        var height = AxisCells(
+            maxRaw: maxZRaw,
+            originRaw: originZRaw,
+            paramName: nameof(maxZ)
+        );
+        var cellCountLong = ((((long)width)) * height);
+
+        if (cellCountLong > int.MaxValue) {
+            throw new ArgumentException(
+                message: $"A {width}x{height} grid holds {cellCountLong} cells, which overflows a 32-bit cell index.",
+                paramName: nameof(maxX)
+            );
+        }
+
+        var cellCount = ((int)cellCountLong);
         var heightRaw = new long[cellCount];
         var blocked = new ulong[WorldQueryArtifact.BlockedWordCount(cellCount: cellCount)];
         var patchIndex = 0;
@@ -253,18 +319,16 @@ public static class WorldQueryBaker {
                 minX: patch.MinX,
                 minZ: patch.MinZ
             );
-            CheckFinite(
-                index: patchIndex,
-                kind: "Terrain",
-                name: "TopY",
-                value: patch.TopY
-            );
             MarkTerrain(
                 height: height,
                 heightRaw: heightRaw,
                 originXRaw: originXRaw,
                 originZRaw: originZRaw,
                 patch: patch,
+                topYRaw: QuantizeTopY(
+                    index: patchIndex,
+                    value: patch.TopY
+                ),
                 width: width
             );
 

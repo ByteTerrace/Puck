@@ -7,10 +7,22 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 /// <summary>
-/// The two contracts <see cref="SdfFieldEvaluator"/>'s march entry points carry beyond "walk the field": what a
-/// non-converged march may assert, and which point a query actually evaluates.
+/// The contracts <see cref="SdfFieldEvaluator"/>'s march entry points carry beyond "walk the field": what a
+/// non-converged march may assert — which differs per verb, because the verbs assert different things — how far a
+/// march always reaches before it may report non-convergence, and which point a query actually evaluates.
 /// </summary>
 public sealed class SdfFieldEvaluatorMarchContractLawTests {
+    private static readonly FixedVector3 Down = new(
+        X: FixedQ4816.Zero,
+        Y: -FixedQ4816.One,
+        Z: FixedQ4816.Zero
+    );
+    private static readonly FixedVector3 East = new(
+        X: FixedQ4816.One,
+        Y: FixedQ4816.Zero,
+        Z: FixedQ4816.Zero
+    );
+
     // A ground plane plus one sphere. The plane throttles every march step to the ray's own height above it, so a ray
     // grazing just above the plane spends its whole iteration budget before reaching anything.
     private static SdfFieldEvaluator BuildGrazingScene(float sphereX) {
@@ -246,6 +258,151 @@ public sealed class SdfFieldEvaluatorMarchContractLawTests {
             )),
             tolerance: 0.01
         );
+    }
+
+    [Fact]
+    public void GroundHeightRefusesAnUnconvergedProbeRatherThanFabricatingTerrain() {
+        // A single VERTICAL plane: there is no downward intersection anywhere in the column, at any depth. A probe
+        // hugging it is throttled to its own distance from the wall, so the descent exhausts.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(
+            normal: Vector3.UnitX,
+            offset: 0f,
+            material: material
+        );
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+        var probe = Local(
+            x: 0.0011,
+            y: 9.0,
+            z: 0.0
+        );
+
+        // The march really does exhaust rather than miss — the cast verb, whose true half asserts an OBSTRUCTION, takes
+        // the conservative branch on the same descent. Without this the refusal below would be indistinguishable from
+        // an ordinary miss and would prove nothing.
+        Assert.True(condition: evaluator.Raycast(
+            dir: Down,
+            hit: out var hit,
+            maxDist: FixedQ4816.FromInteger(value: 50L),
+            origin: probe
+        ));
+        Assert.Equal(
+            expected: WorldQueryConfidence.Bounded,
+            actual: hit.Confidence
+        );
+
+        // The denial: the same descent read as GROUND — whose true half asserts a SURFACE — must refuse. Folding
+        // exhaustion to "hit" here would hand a caller a Y from the middle of open air and ground a body on it.
+        Assert.False(condition: evaluator.TryGroundHeight(
+            groundY: out _,
+            position: probe,
+            probeDown: FixedQ4816.FromInteger(value: 50L),
+            probeUp: FixedQ4816.FromDouble(value: 0.5)
+        ));
+
+        // The control: a real floor is still found, so the verb has not simply been turned off.
+        var floorBuilder = new SdfProgramBuilder();
+        var floorMaterial = floorBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = floorBuilder.Plane(
+            normal: Vector3.UnitY,
+            offset: 0f,
+            material: floorMaterial
+        );
+
+        Assert.True(condition: new SdfFieldEvaluator(program: floorBuilder.Build()).TryGroundHeight(
+            groundY: out var groundY,
+            position: Local(
+                x: 0.0,
+                y: 2.0,
+                z: 0.0
+            ),
+            probeDown: FixedQ4816.FromInteger(value: 50L),
+            probeUp: FixedQ4816.FromDouble(value: 0.5)
+        ));
+        Assert.Equal(
+            expected: 0.0,
+            actual: ((double)groundY),
+            tolerance: 0.002
+        );
+    }
+
+    [Fact]
+    public void ExhaustionReachIsInvariantUnderTheStepScale() {
+        // The step clamp shortens every advance, so a fixed iteration budget would shorten the distance a march covers
+        // in proportion — turning casts that resolved into conservative obstructions purely because the program grew a
+        // chamfer. The budget derives from the clamp so the reach stays put.
+        foreach (var chamferCount in (int[])[0, 3,]) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.Plane(
+                normal: Vector3.UnitY,
+                offset: 0f,
+                material: material
+            );
+
+            // Chamfer-unioned slabs far below the grazing line: they move the analyzed step scale without putting any
+            // geometry on the ray, so the two legs differ ONLY in the clamp.
+            for (var index = 0; (index < chamferCount); index++) {
+                _ = builder
+                    .ResetPoint()
+                    .Translate(offset: new Vector3(
+                    x: 0f,
+                    y: (-20f - (index * 0.03f)),
+                    z: 0f
+                ))
+                    .Box(
+                    halfExtents: new Vector3(
+                        x: 10f,
+                        y: 1f,
+                        z: 10f
+                    ),
+                    round: 0f,
+                    material: material,
+                    blend: SdfBlendOp.ChamferUnion,
+                    smooth: 0.4f
+                );
+            }
+
+            var program = builder.Build();
+            var evaluator = new SdfFieldEvaluator(program: program);
+            var origin = Local(
+                x: 0.0,
+                y: 0.0011,
+                z: 0.0
+            );
+
+            Assert.Equal(
+                expected: (chamferCount == 0),
+                actual: (program.StepScale == 1.0f)
+            );
+
+            // A half-unit grazing cast through open space resolves CLEAR on both legs. At a flat budget the clamped leg
+            // covers only ~0.29 units and would answer "obstructed" here.
+            Assert.False(condition: evaluator.Raycast(
+                dir: East,
+                hit: out _,
+                maxDist: FixedQ4816.FromDouble(value: 0.5),
+                origin: origin
+            ));
+
+            // The control that the reach is a BUDGET and not a scene with nothing to exhaust on: a long enough cast on
+            // the same ray still runs out and takes the conservative branch.
+            Assert.True(condition: evaluator.Raycast(
+                dir: East,
+                hit: out var far,
+                maxDist: FixedQ4816.FromInteger(value: 50L),
+                origin: origin
+            ));
+            Assert.Equal(
+                expected: WorldQueryConfidence.Bounded,
+                actual: far.Confidence
+            );
+        }
     }
 
     [Fact]

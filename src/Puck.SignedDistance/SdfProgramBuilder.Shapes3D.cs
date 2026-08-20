@@ -428,7 +428,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="smooth">The smooth-blend radius (meaningful only for a smooth <paramref name="blend"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside the supported range, this
     /// program has already declared <see cref="MaxScreenSurfaces"/> screen surfaces, a slab dimension is not finite and
-    /// non-negative, <paramref name="worldOrigin"/> is not finite, <paramref name="worldRight"/>/
+    /// non-negative, the sampled face's X or Y half-extent is not positive, <paramref name="worldOrigin"/> is not
+    /// finite, <paramref name="worldRight"/>/
     /// <paramref name="worldUp"/> is not finite or has zero length, <paramref name="worldRight"/> and
     /// <paramref name="worldUp"/> are not orthogonal, or <paramref name="blend"/> is not a defined
     /// <see cref="SdfBlendOp"/>.</exception>
@@ -440,6 +441,21 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(halfExtents),
             subject: "A screen-slab half-extent"
         );
+
+        // The face's X/Y half-extents become the surface frame's half-width/half-height, and sampleScreenSurface
+        // resolves the UV by DIVIDING the hit's projection by each: a zero face maps every hit to a non-finite UV. The
+        // slab's Z (depth) half-extent is unconstrained — nothing divides by it. KEEP IN SYNC with the SdfProgram
+        // constructor's screen-extent refusal, which names the packed surface.
+        if (
+            !(halfExtents.X > 0f) ||
+            !(halfExtents.Y > 0f)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(halfExtents),
+                message: $"An indexed screen slab's X and Y half-extents must be positive; got {halfExtents.X} and {halfExtents.Y}. They are the sampled face's half-width and half-height, which the shader divides the hit's projection by."
+            );
+        }
+
         RequireNonNegative(
             value: round,
             paramName: nameof(round),

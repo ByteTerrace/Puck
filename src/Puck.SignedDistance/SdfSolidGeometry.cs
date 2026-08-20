@@ -362,12 +362,12 @@ public static class SdfSolidGeometry {
     /// <param name="type">The primitive.</param>
     /// <param name="scale">The shape's per-axis scale.</param>
     /// <returns>The reach in local units.</returns>
-    /// <remarks>Reads each component's magnitude, because <see cref="AppendScaledPrimitive"/> emits at
-    /// <see cref="Vector3.Abs(Vector3)"/> of the same vector: a signed maximum reports a reach the emitted geometry
-    /// does not have, and every consumer folds it into a running <c>Max</c> seeded at zero, so the cull bound
-    /// collapses to its margin around geometry that is still there.</remarks>
+    /// <remarks>Reads the same effective scale <see cref="AppendScaledPrimitive"/> emits at — each component's
+    /// magnitude, raised to <see cref="MinimumScale"/>. A reach taken from the authored value instead disagrees with
+    /// the emitted program wherever a component is signed or vanishing: every consumer folds reach into a running
+    /// <c>Max</c> seeded at zero, so the cull bound collapses to its margin around geometry that is still there.</remarks>
     public static float Reach(SdfSolidPrimitive type, Vector3 scale) {
-        var magnitude = Vector3.Abs(value: scale);
+        var magnitude = EffectiveScale(scale: scale);
         var maxScale = MathF.Max(
             x: magnitude.X,
             y: MathF.Max(

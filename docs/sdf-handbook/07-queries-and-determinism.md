@@ -98,12 +98,24 @@ land on one. Where the answer is deliberately loose it is loose in the safe
 direction: a swept sphere is tested against each cell box dilated by the
 radius on each axis, which contains the true rounded-rectangle sweep, so
 contact can be reported slightly early at a box corner but never late.
-`Overlap` uses the exact clamp-to-box test and is the tighter of the two.
+`Overlap` uses the exact clamp-to-solid test and is the tighter of the two.
 The two layers also resolve Y differently, because they carry different
 information: a blocked cell is authored as a footprint with no height and
-so blocks at every Y, while the heightfield blocks where the swept volume's
-lowest point reaches its authored ground. Both answer `LineOfSight`, which
-is why an artifact carrying only one layer still answers it.
+so blocks at every Y, while the heightfield blocks where the query volume's
+lowest point reaches its authored ground. Both layers answer every verb,
+which is why an artifact carrying only one layer still answers all five.
+
+Two contracts sit at this provider's edges rather than inside its math. The
+grid's origin is a world coordinate, so every position argument is rebased
+against the world origin before it reaches a cell index — the same rebase
+the evaluator applies, and for the same reason: a position's raw local
+offset repeats once per hierarchy cell, so reading it would answer for
+whichever copy of the grid the caller happened to be standing in. And a
+radius is body-scale by contract: both radius-taking verbs walk every cell
+the radius reaches, so a radius wider than `MaxRadiusCells` of the
+artifact's own cells is refused by name rather than paid for quietly.
+Nothing here indexes occupancy hierarchically, and the refusal is how a
+consumer that genuinely needs one says so.
 
 **`SdfFieldEvaluator`** is a second, independent interpreter of the *same*
 instruction stream the GPU's `mapCore` walks — not a codegen of the shader,

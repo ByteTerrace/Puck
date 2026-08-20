@@ -52,9 +52,12 @@ is a cylinder and admissible, a flat profile with unequal half-widths is a disc
 and admissible — so only a sliver vanishing in both directions at once is
 refused.
 
-The refusal sits at the doors that admit a shape: the builder, and the creation
-document validator by way of `SdfSolidGeometry.TryValidateScaledPrimitive`,
-because a cone is spelled as a revolved trapezoid and an authored per-axis
+The refusal sits at the doors that admit a shape: the builder, the packed
+`SdfProgram` constructor — which reads the slant from the lanes exactly as
+`sdfTrapezoid2D` reads them, since a caller may hand it an instruction stream
+the builder never authored — and the creation document validator by way of
+`SdfSolidGeometry.TryValidateScaledPrimitive`, because a cone is spelled as a
+revolved trapezoid and an authored per-axis
 scale reaches its dimensions directly. `SdfProgramBuilder.Ellipse` nudges a
 perfect circle apart instead of refusing it; the difference is that a circle
 has a nearby non-degenerate ellipse to nudge toward, while a vanishing
@@ -78,6 +81,27 @@ what it is handed.
 
 The same reasoning governs a text run's right/up pair: the pen places glyphs
 along the raw axes while each glyph's geometry rides the derived rotation.
+
+A surface's two half-extents are the second degenerate-divisor case: the UV is
+`dot(local, right)/right.w` and `dot(local, up)/up.w`, so a zero half-extent
+maps every hit on a surface the sentinel band guarantees is reachable to a
+non-finite UV. Positivity is refused at the same three doors as the frame's
+orthogonality. The slab's depth half-extent stays unconstrained — nothing
+divides by it, and refusing it would ban a legitimately flat panel.
+
+## Operand lane finiteness
+
+Every operand lane packs into a GPU word bit-for-bit; nothing normalizes it on
+the way. A non-finite value therefore survives into the program-wide Lipschitz
+step scale, into the cull bounds derived from the same lanes, and through every
+blend downstream, so the packed constructor sweeps all eight lanes of every
+instruction rather than trusting the builder that usually produced them.
+
+The sweep is shape-specific because two shapes carry reinterpreted integer
+fields in float lanes: `Glyph`'s packed UV rect in `Data0.x`/`Data0.y` and
+`SampledRegion`'s packed dimensions and pool offset in `Data1.y`/`Data1.z`. A
+bit pattern there is data, and reads as NaN as often as not, so those lanes are
+skipped by name and no others are.
 
 ## Material identifier bands
 
